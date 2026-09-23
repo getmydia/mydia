@@ -28,6 +28,23 @@ async fn wait_for_ready(host: &Host) -> String {
     panic!("host never became ready");
 }
 
+/// Drain `host.event_rx` for the rest of the test.
+///
+/// `LOG_TX` is a single process-wide slot the most recently constructed
+/// `Host` in the whole test binary takes over, so a host that stops reading
+/// its events after `wait_for_ready` can still fill up on another test's log
+/// traffic. Once the 100-item channel is full, a blocking `Event::Connected`
+/// send inside `register_connection` has nothing to receive it and the event
+/// loop stalls, which then stalls every `Command` reply the stalled host owes.
+/// Mirrors the helper of the same name in `src/lib.rs`'s test module.
+fn spawn_event_drain(host: &Host) {
+    let event_rx = host.event_rx.clone();
+    tokio::spawn(async move {
+        let mut rx = event_rx.lock().await;
+        while rx.recv().await.is_some() {}
+    });
+}
+
 fn spawn_echo_responder(host: Arc<Host>) {
     tokio::spawn(async move {
         loop {
@@ -58,6 +75,7 @@ async fn ready_pair() -> (Arc<Host>, String, String, Host) {
     let (dialer, _dialer_id) = Host::new(test_config());
     let responder_addr = wait_for_ready(&responder).await;
     let _ = wait_for_ready(&dialer).await;
+    spawn_event_drain(&dialer);
     let responder = Arc::new(responder);
     spawn_echo_responder(responder.clone());
     (responder, responder_id, responder_addr, dialer)
@@ -140,6 +158,7 @@ async fn a_failed_dial_fails_every_waiter() {
     within_timeout(async {
         let (dialer, _id) = Host::new(test_config());
         let _ = wait_for_ready(&dialer).await;
+        spawn_event_drain(&dialer);
 
         // A real key nobody holds, with no addresses: lookup finds nothing.
         let nobody = iroh::SecretKey::generate().public().to_string();

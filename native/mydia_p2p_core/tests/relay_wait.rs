@@ -30,6 +30,23 @@ async fn wait_for_ready(host: &Host) -> String {
     panic!("host never became ready");
 }
 
+/// Drain `host.event_rx` for the rest of the test.
+///
+/// `LOG_TX` is a single process-wide slot the most recently constructed
+/// `Host` in the whole test binary takes over, so a host that never reads
+/// its events can still fill up on another test's log traffic. Once the
+/// 100-item channel is full, a blocking `Event::Connected` send inside
+/// `register_connection` has nothing to receive it and the event loop
+/// stalls, which then stalls every `Command` reply the stalled host owes.
+/// Mirrors the helper of the same name in `src/lib.rs`'s test module.
+fn spawn_event_drain(host: &Host) {
+    let event_rx = host.event_rx.clone();
+    tokio::spawn(async move {
+        let mut rx = event_rx.lock().await;
+        while rx.recv().await.is_some() {}
+    });
+}
+
 /// Answer `Custom` requests on `host`, echoing the payload back.
 fn spawn_echo_responder(host: Arc<Host>) {
     tokio::spawn(async move {
@@ -73,6 +90,7 @@ async fn a_host_waiting_for_its_relay_still_dials_and_sends_body() {
 
     // Dials over the responder's direct addresses: it has no relay to use.
     let (dialer, _dialer_id) = Host::new_without_relays(test_config());
+    spawn_event_drain(&dialer);
 
     let started = Instant::now();
     dialer
@@ -113,6 +131,7 @@ async fn shutdown_during_the_relay_wait_is_prompt() {
 
 async fn shutdown_during_the_relay_wait_is_prompt_body() {
     let (host, _id) = Host::new_without_relays(test_config());
+    spawn_event_drain(&host);
     let host = Arc::new(host);
 
     // Queued behind the wait, then released by the shutdown.
