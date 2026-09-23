@@ -16,6 +16,7 @@ import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -47,6 +48,11 @@ class _FakePlatformPlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(play);
+    // What mpv publishes as soon as it has probed the file. Without this,
+    // `awaitRealTracks` (see `tracks_ready.dart`) never sees a real track and
+    // every open waits out its full timeout.
+    state = state.copyWith(tracks: probedTracks());
+    tracksController.add(state.tracks);
   }
 
   @override
