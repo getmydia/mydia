@@ -26,7 +26,7 @@ defmodule Mydia.Playback.OnDeck do
 
   import Ecto.Query
 
-  alias Mydia.Library.MediaFile
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Playback.{Dismissal, NextEpisode, OnDeckEntry, Progress}
   alias Mydia.Repo
@@ -291,10 +291,21 @@ defmodule Mydia.Playback.OnDeck do
 
   # Only what `NextEpisode.determine/3` reads, in the order it requires, and
   # only episodes with an active file, which it also requires of its callers.
+  #
+  # The file test goes through `media_file_episodes` rather than
+  # `media_files.episode_id` directly: a multi-episode file (`S01E09E10`)
+  # names only its primary episode in `episode_id`, and the trailing episode
+  # is linked solely through the join table (see
+  # `lib/mydia/media/README.md`, "One file can cover several episodes"). A
+  # direct `episode_id` correlation would drop that trailing episode from
+  # ranking entirely, the same bug the many_to_many association exists to
+  # prevent for every other reader of `Episode.media_files`.
   defp load_playable_episodes(show_ids) do
     has_file =
-      from(mf in MediaFile.versions(),
-        where: mf.episode_id == parent_as(:episode).id,
+      from(mfe in MediaFileEpisode,
+        join: mf in ^MediaFile.versions(),
+        on: mf.id == mfe.media_file_id,
+        where: mfe.episode_id == parent_as(:episode).id,
         select: 1
       )
 

@@ -34,6 +34,41 @@ defmodule Mydia.Playback.OnDeckTest do
     {show, episodes}
   end
 
+  # A show with 3 episodes in season 1: e1 has its own file, and a single
+  # multi-episode release file (the shape a real `S01E02E03` grab takes)
+  # covers e2 and e3. `media_files.episode_id` names only e2 as the primary
+  # episode; e3 has no media_files row of its own and is reachable only
+  # through a second `media_file_episodes` row linking the same file to it.
+  defp show_with_multi_episode_file(title \\ nil) do
+    show =
+      MediaFixtures.media_item_fixture(%{
+        type: "tv_show",
+        title: title || "Show #{System.unique_integer([:positive])}"
+      })
+
+    [e1, e2, e3] =
+      for n <- 1..3 do
+        MediaFixtures.episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: n
+        })
+      end
+
+    MediaFixtures.media_file_fixture(%{episode_id: e1.id})
+    shared_file = MediaFixtures.media_file_fixture(%{episode_id: e2.id})
+
+    {:ok, _} =
+      %Mydia.Library.MediaFileEpisode{}
+      |> Mydia.Library.MediaFileEpisode.changeset(%{
+        media_file_id: shared_file.id,
+        episode_id: e3.id
+      })
+      |> Mydia.Repo.insert()
+
+    {show, [e1, e2, e3], shared_file}
+  end
+
   defp watch(user, episode, at) do
     {:ok, progress} =
       Playback.save_progress(
@@ -341,7 +376,7 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, e2]} = show_with_episodes(2)
       watch(ctx.user, e1, ago(60))
 
-      # The watched episode's only file goes to the trash. `load_episodes_with_files`
+      # The watched episode's only file goes to the trash. `load_playable_episodes`
       # then drops e1 entirely, so the progress map handed to `NextEpisode` is
       # empty and it answers `:start`, the same value it gives a show that was
       # never touched. Engagement was already established from the full row set,
@@ -356,6 +391,32 @@ defmodule Mydia.Playback.OnDeckTest do
       assert [entry] = OnDeck.list(ctx.user.id, now: now())
       assert entry.state == :next
       assert entry.episode.id == e2.id
+    end
+  end
+
+  describe "list/2 multi-episode files" do
+    test "an episode reachable only through media_file_episodes is a continue entry", ctx do
+      {_show, [e1, e2, e3], shared_file} = show_with_multi_episode_file()
+      watch(ctx.user, e1, ago(120))
+      watch(ctx.user, e2, ago(90))
+      start_watching(ctx.user, e3, 600, ago(60))
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert entry.kind == :episode
+      assert entry.state == :continue
+      assert entry.episode.id == e3.id
+      assert Enum.any?(entry.files, &(&1.id == shared_file.id))
+    end
+
+    test "the trailing episode of a multi-episode file surfaces as next", ctx do
+      {_show, [e1, e2, e3], _shared_file} = show_with_multi_episode_file()
+      watch(ctx.user, e1, ago(120))
+      watch(ctx.user, e2, ago(60))
+
+      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert entry.kind == :episode
+      assert entry.state == :next
+      assert entry.episode.id == e3.id
     end
   end
 
