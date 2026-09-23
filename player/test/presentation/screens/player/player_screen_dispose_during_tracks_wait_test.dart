@@ -124,6 +124,14 @@ void main() {
       );
 
       await pumpUntil(tester, () => fake.openCalled);
+      // `pumpUntil` gives up silently after its try budget instead of
+      // failing, so without this the test could unmount below having never
+      // actually reached `open()` -- and pass vacuously, having proven
+      // nothing about disposing mid-`awaitRealTracks`.
+      expect(fake.openCalled, isTrue,
+          reason: 'sanity check: open() must have run before this test '
+              'disposes the screen, or the rest of this test proves nothing '
+              'about the tracks-wait race');
       // A couple more pumps for the microtasks between `open()` returning
       // and `awaitRealTracks` subscribing to `player.stream.tracks` to
       // settle, without letting the (3s native) timeout resolve the wait
