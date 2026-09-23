@@ -87,9 +87,9 @@ Future<StartupOutcome> runStartup(
   }
 
   Future<(Object, StackTrace)?> rust() async {
-    final init = steps.rustInit;
-    if (init == null) return null;
     try {
+      final init = steps.rustInit;
+      if (init == null) return null;
       await init();
       debugPrint('[RustLib] Rust bridge initialized successfully');
       return null;

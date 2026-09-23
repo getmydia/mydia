@@ -23,6 +23,12 @@ class _LockError extends FileSystemException {
 
 StartupSteps _steps({
   Future<void> Function()? rustInit,
+
+  /// True for a build with no Rust bridge to load (web without p2p), which
+  /// `runStartup` sees as `StartupSteps.rustInit == null`. Plain `rustInit:
+  /// null` can't express this: the default below only applies when the
+  /// caller passes nothing at all.
+  bool noRustBridge = false,
   Future<void> Function()? hiveCache,
   Future<FetchLog> Function()? fetchLog,
   Future<void> Function()? downloadDb,
@@ -35,7 +41,7 @@ StartupSteps _steps({
         await (body?.call() ?? Future<void>.value());
       };
   return StartupSteps(
-    rustInit: rustInit ?? track('rust'),
+    rustInit: noRustBridge ? null : (rustInit ?? track('rust')),
     inputCapabilities: track('input'),
     hiveCache: hiveCache ?? track('hive'),
     fetchLog: fetchLog ?? () async => InMemoryFetchLog(),
@@ -122,5 +128,15 @@ void main() {
         'init_done'
       ]),
     );
+  });
+
+  test('a null Rust init still records rust_init and succeeds', () async {
+    final timeline = StartupTimeline('t');
+    final outcome = await runStartup(
+      _steps(noRustBridge: true),
+      timeline: timeline,
+    );
+    expect(timeline.marks.keys, contains('rust_init'));
+    expect(outcome, isA<StartupReady>());
   });
 }
