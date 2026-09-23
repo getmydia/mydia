@@ -136,6 +136,18 @@ class NodeRegistrationService {
     Object? clientScope,
   }) {
     if (_disposed) return;
+
+    // The driver calls this on every p2p status emit, and a launch emits a
+    // dozen (relay up, ready, each peer connect and upgrade) that change none
+    // of these. Bumping the generation for them made an in-flight
+    // registration discard its own confirmation and send it again.
+    if (controllable == _controllable &&
+        nodeId == _desiredNodeId &&
+        clientReady == _clientReady &&
+        identical(clientScope, _clientScope)) {
+      return;
+    }
+
     if (!identical(clientScope, _clientScope)) {
       _clientScope = clientScope;
       _registeredNodeId = null;
@@ -213,6 +225,7 @@ class NodeRegistrationService {
       if (generation != _generation) return true;
 
       attempt += 1;
+      final scope = _clientScope;
       _emit(RegistrationInFlight(nodeId, attempt));
 
       var confirmed = false;
@@ -224,13 +237,21 @@ class NodeRegistrationService {
         reason = 'could not reach the server';
       }
 
-      if (generation != _generation) return true;
+      if (_disposed) return false;
 
-      if (confirmed) {
+      // A confirmation for the node id and client still wanted is true
+      // whatever else moved meanwhile (a retryNow, a setting toggle), so keep
+      // it. Returning true when the generation moved still makes the caller
+      // re-read its inputs: an opt-out that arrived mid-attempt goes idle.
+      if (confirmed &&
+          nodeId == _desiredNodeId &&
+          identical(scope, _clientScope)) {
         _registeredNodeId = nodeId;
         _emit(RegistrationSucceeded(nodeId, _now()));
-        return false;
+        return generation != _generation;
       }
+
+      if (generation != _generation) return true;
 
       final wait = _backoff[min(attempt - 1, _backoff.length - 1)];
       _emit(RegistrationFailed(reason, attempt, _now().add(wait)));

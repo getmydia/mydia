@@ -295,5 +295,90 @@ void main() {
       expect(seen.last, isA<RegistrationSucceeded>(),
           reason: 'a listener attached before update must see the outcome');
     });
+
+    group('while a registration is in flight', () {
+      late List<Completer<bool>> pending;
+      late NodeRegistrationService service;
+
+      setUp(() {
+        pending = [];
+        service = serviceWith((_) {
+          final completer = Completer<bool>();
+          pending.add(completer);
+          return completer.future;
+        });
+      });
+
+      tearDown(() => service.dispose());
+
+      test('an identical update does not register twice', () async {
+        final scope = Object();
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: scope);
+        await pumpEventQueue();
+        expect(pending, hasLength(1));
+
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: scope);
+        pending.single.complete(true);
+        await pumpEventQueue();
+
+        expect(pending, hasLength(1));
+        expect(service.status, isA<RegistrationSucceeded>());
+      });
+
+      test('retryNow does not throw away a confirmation that is still wanted',
+          () async {
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+
+        service.retryNow();
+        pending.single.complete(true);
+        await pumpEventQueue();
+
+        expect(pending, hasLength(1));
+        expect(service.status, isA<RegistrationSucceeded>());
+      });
+
+      test('a client scope change still registers against the new scope',
+          () async {
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: Object());
+        await pumpEventQueue();
+
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: Object());
+        pending.first.complete(true);
+        await pumpEventQueue();
+
+        expect(pending, hasLength(2));
+        pending.last.complete(true);
+        await pumpEventQueue();
+        expect(service.status, isA<RegistrationSucceeded>());
+      });
+
+      test('opting out mid-attempt ends idle, not succeeded', () async {
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+
+        service.update(controllable: false, nodeId: 'abc', clientReady: true);
+        pending.single.complete(true);
+        await pumpEventQueue();
+
+        expect(service.status, isA<RegistrationIdle>());
+      });
+    });
   });
 }
