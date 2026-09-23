@@ -247,6 +247,21 @@ void main() {
       expect(messages, contains('Preparing stream... 33%'));
     });
 
+    test(
+        'a FULL session is still probed once: the probe is its first-fetch retry',
+        () async {
+      var polls = 0;
+      final link = _link(starts: [
+        startStreamingSessionResponse(sessionId: 's1', playlistMode: 'FULL'),
+      ]);
+      final controller = _controller(link, probe: (url, headers) async {
+        polls++;
+        return (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
+      });
+      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
+      expect(polls, 1);
+    });
+
     test('a playlist that never becomes ready ends its session', () async {
       final link =
           _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);

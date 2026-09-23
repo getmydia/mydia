@@ -240,6 +240,10 @@ class PlaybackController {
 
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
+      // Even though a FULL playlist is complete on arrival, the probe's retries
+      // absorb transient failures on the session URL (auth blip, proxy or relay
+      // hiccup) before the player opens it. Without it, these failures become
+      // hard errors. A dead session is ended here rather than surfacing downstream.
       await _awaitPlaylist(resolved.url,
           headers: resolved.probeHeaders,
           onProgress: onProgress,
