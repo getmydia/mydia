@@ -6,7 +6,9 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
+import 'core/auth/auth_storage.dart';
 import 'core/auth/device_info_service.dart';
+import 'core/connection/connection_provider.dart';
 import 'core/crash_reporting/crash_app_context.dart';
 import 'core/downloads/download_service.dart';
 import 'core/crash_reporting/crash_report.dart';
@@ -27,7 +29,9 @@ import 'core/relay/relay_api_client.dart' show metadataRelayBaseUrl;
 import 'core/storage/app_hive.dart';
 import 'core/window/desktop_window.dart';
 import 'core/startup/startup_error_app.dart';
-import 'core/startup/startup_lock.dart';
+import 'core/startup/startup_gate.dart';
+import 'core/startup/startup_init.dart';
+import 'core/startup/startup_timeline.dart';
 
 import 'package:player/native/frb_generated.dart';
 
@@ -64,6 +68,10 @@ const kWebP2pEnabled = bool.fromEnvironment('MYDIA_WEB_P2P');
 const _rustInitTimeout = Duration(seconds: 60);
 
 void main() async {
+  // Starts the cold-start timeline's stopwatch. First statement, so every
+  // later mark is relative to the true beginning of startup.
+  StartupTimeline.app.mark('main');
+
   // Records every debugPrint for the local log files and, when the user
   // shares them, the relay. First, so nothing logged at startup is missed.
   // See core/logging/log_sink.dart.
@@ -106,62 +114,23 @@ void main() async {
   );
 }
 
-/// Runs every startup step needed before [runApp], degrading gracefully
-/// where a failure allows it and falling back to [StartupErrorApp] where it
-/// doesn't.
+/// Hands `runApp` a [StartupGate] immediately, so the first frame is a
+/// splash rather than a black window, and runs the rest of startup behind it.
 ///
-/// Invariant: this function calls `runApp` exactly once, on every path.
-/// Nothing after `WidgetsFlutterBinding.ensureInitialized()` is allowed to
-/// throw its way out of here uncaught, because a second instance of this
-/// app pointed at the same user-data directory will otherwise leave the
-/// window completely black forever with no indication why (the bug this
-/// function exists to fix).
+/// Invariant: `runApp` is called exactly once, here. Every failure path the
+/// old sequential version reached through its own `runApp` call is now a
+/// child the gate swaps in. See `core/startup/startup_init.dart` for which
+/// steps run concurrently and why.
 Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
-  // Point the log sink at its files first, so the rest of startup is on disk.
-  // Never throws; see _attachLogStore.
-  final logStore = await _attachLogStore(logSink);
+  final timeline = StartupTimeline.app;
 
-  // Initialize the Rust bridge. This MUST complete before any p2p code runs.
-  //
-  // On native there is no reasonable degraded mode without it, so a failure
-  // goes straight to the last-resort error screen rather than continuing.
-  //
-  // On web it depends on which web build this is, and [kWebP2pEnabled] is
-  // exactly that distinction. A build without the module skips this block
-  // entirely; that is the bundle an instance serves at `/player`, which
-  // reaches its own origin over plain HTTP and never needed p2p.
-  //
-  // A build that ships the module is the public player at web.mydia.dev,
-  // where p2p is the only transport there is. Continuing after a failed init
-  // there boots the app into a pairing screen that cannot ever work, and the
-  // causes are all real deploy states: a missing COEP header, skew between
-  // main.dart.js and pkg/*.wasm, a truncated upload, a wrong base href. Each
-  // one presents as "pairing does nothing", or a 60s stall and then pairing
-  // does nothing. So it fails visibly instead, with the error on screen.
-  if (!kIsWeb || kWebP2pEnabled) {
-    try {
-      await RustLib.init().timeout(_rustInitTimeout);
-      debugPrint('[RustLib] Rust bridge initialized successfully');
-    } catch (e, st) {
-      debugPrint('[RustLib] Failed to initialize Rust bridge: $e');
-      debugPrint('Stack trace: $st');
-      // Never throws, so this path still reaches runApp. Null on web, where
-      // the screen shows no Send report button.
-      runApp(
-        StartupErrorApp.generic(
-          e,
-          report: crashReporter.reportStartupFailure(e, st),
-        ),
-      );
-      return;
-    }
-  } else {
-    debugPrint('[RustLib] Web build without the p2p wasm module; skipping');
-  }
+  // Point the log sink at its files first. Not awaited: the sink buffers its
+  // first records in memory until the store attaches, so opening the files
+  // can overlap the rest of startup. Never throws; see _attachLogStore.
+  final logStoreFuture = _attachLogStore(logSink);
+  LogStore? logStore;
 
-  // Initialize media_kit for video playback. Best-effort: the rest of the
-  // app (browsing, library management, etc.) works without it — only
-  // playback would be affected, and that fails on its own terms later.
+  // Initialize media_kit for video playback. Best-effort and synchronous.
   try {
     MediaKit.ensureInitialized();
   } catch (e, st) {
@@ -169,108 +138,83 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
     debugPrint('Stack trace: $st');
   }
 
-  // Resolve whether this device is a television, so `InputCapabilities`
-  // can answer synchronously from inside `build` methods afterwards. Runs
-  // before `runApp` because the first frame already branches on it: the
-  // player's gesture wiring and every focus ring read it.
-  //
-  // Cannot throw. `probeLeanback` swallows its own failures and answers
-  // false, so this cannot violate this function's invariant that `runApp`
-  // is called exactly once on every path.
-  await InputCapabilities.initialize();
-
-  // Prepare the OS window on native desktop: restore the size, position and
-  // maximized state from the last run, apply a minimum size, and enable
-  // hold-anywhere dragging. Runs before `runApp` so the window is already the
-  // right shape by the time the first frame paints.
-  //
-  // Best-effort and self-guarding: `initDesktopWindow` never throws and is a
-  // no-op off desktop, so this cannot violate this function's invariant that
-  // `runApp` is called exactly once on every path. It opens its own Hive box
-  // rather than depending on the GraphQL cache step further down, since
-  // geometry must be restored before the first frame. `initAppHive` is
-  // memoized, so whichever of the two runs first does the work.
+  // Stays ahead of `runApp`: it restores window geometry, which has to be in
+  // place before the first frame paints. A no-op off desktop, and it never
+  // throws. `initAppHive` is memoized, so its Hive init is shared with the
+  // cache step below.
   await initDesktopWindow();
+  timeline.mark('desktop_window');
 
-  // Everything below persists to Hive boxes under the same per-user data
-  // directory. A second instance of the app fails to open every one of them
-  // with the same lock error, so the first failure that looks like lock
-  // contention short-circuits straight to a dedicated, actionable screen
-  // instead of limping through the remaining steps degraded.
-  FetchLog fetchLog = InMemoryFetchLog();
-
-  try {
-    // Initialize GraphQL Hive cache for offline support. Best-effort: it's
-    // an optimisation for offline support, not a requirement to run.
-    //
-    // `initAppHive` plus an explicit `HiveStore.open` rather than
-    // graphql_flutter's `initHiveForFlutter`, which is the same two steps
-    // with the base path hard-wired to `getApplicationDocumentsDirectory()`
-    // -- the user's Documents folder on every desktop platform. See
-    // `core/storage/app_hive.dart`.
-    await initAppHive();
-    await HiveStore.open();
-  } catch (e, st) {
-    debugPrint('[Hive] Failed to initialize GraphQL cache: $e');
-    debugPrint('Stack trace: $st');
-    if (isLockContentionError(e)) {
-      runApp(StartupErrorApp.alreadyRunning(e));
-      return;
-    }
-    // Any other cause: continue without a persistent GraphQL cache.
-  }
-
-  try {
-    // Fetch log: when each query last reached the network. A missing entry
-    // is treated as infinitely stale, so an install upgrading from a build
-    // without this box performs a real network fetch on first launch.
-    fetchLog = await HiveFetchLog.open();
-  } catch (e, st) {
-    debugPrint('[Hive] Failed to open fetch log: $e');
-    debugPrint('Stack trace: $st');
-    if (isLockContentionError(e)) {
-      runApp(StartupErrorApp.alreadyRunning(e));
-      return;
-    }
-    // Any other cause: `fetchLog` stays the in-memory fallback assigned
-    // above, so every query is simply treated as stale this session.
-  }
-
-  // Initialize download database (only on native platforms).
-  if (isDownloadSupported) {
-    try {
-      final downloadDb = getDownloadDatabase();
-      await downloadDb.initialize();
-    } catch (e, st) {
-      debugPrint('[Downloads] Failed to initialize download database: $e');
-      debugPrint('Stack trace: $st');
-      if (isLockContentionError(e)) {
-        runApp(StartupErrorApp.alreadyRunning(e));
-        return;
-      }
-      // Any other cause: downloads are unavailable this session, the rest
-      // of the app still works.
-    }
-  }
-
-  final startupContainer = ProviderContainer();
-  final sidebarLayoutStore =
-      await startupContainer.read(sidebarLayoutStoreAsyncProvider.future);
-  startupContainer.dispose();
+  final startup = runStartup(
+    StartupSteps(
+      rustInit: (!kIsWeb || kWebP2pEnabled)
+          ? () => RustLib.init().timeout(_rustInitTimeout)
+          : null,
+      inputCapabilities: InputCapabilities.initialize,
+      hiveCache: () async {
+        // `initAppHive` plus an explicit `HiveStore.open` rather than
+        // graphql_flutter's `initHiveForFlutter`, which hard-wires the base
+        // path to the user's Documents folder. See `core/storage/app_hive.dart`.
+        await initAppHive();
+        await HiveStore.open();
+      },
+      fetchLog: HiveFetchLog.open,
+      downloadDb:
+          isDownloadSupported ? () => getDownloadDatabase().initialize() : null,
+      sidebarLayoutStore: () async {
+        final container = ProviderContainer();
+        try {
+          return await container.read(sidebarLayoutStoreAsyncProvider.future);
+        } finally {
+          container.dispose();
+        }
+      },
+      connection: () => loadStoredConnectionState(getAuthStorage()),
+    ),
+    timeline: timeline,
+  ).then((outcome) async {
+    logStore = await logStoreFuture;
+    return outcome;
+  });
 
   runApp(
-    ProviderScope(
-      overrides: [
-        crashReporterProvider.overrideWithValue(crashReporter),
-        fetchLogProvider.overrideWithValue(fetchLog),
-        sidebarLayoutStoreProvider.overrideWithValue(sidebarLayoutStore),
-        logUploaderProvider.overrideWithValue(
-          _buildLogUploader(logSink, logStore),
-        ),
-      ],
-      child: const MyApp(),
+    StartupGate(
+      startup: startup,
+      buildApp: (ready) => ProviderScope(
+        overrides: [
+          crashReporterProvider.overrideWithValue(crashReporter),
+          fetchLogProvider.overrideWithValue(ready.fetchLog),
+          sidebarLayoutStoreProvider
+              .overrideWithValue(ready.sidebarLayoutStore),
+          initialConnectionStateProvider
+              .overrideWithValue(ready.initialConnection),
+          logUploaderProvider.overrideWithValue(
+            _buildLogUploader(logSink, logStore),
+          ),
+        ],
+        child: const MyApp(),
+      ),
+      buildFailure: (failure) => switch (failure) {
+        StartupRustFailed(:final error, :final stackTrace) =>
+          StartupErrorApp.generic(
+            error,
+            report: crashReporter.reportStartupFailure(error, stackTrace),
+          ),
+        StartupFailed(:final error, :final stackTrace) =>
+          StartupErrorApp.generic(
+            error,
+            report: crashReporter.reportStartupFailure(error, stackTrace),
+          ),
+        StartupAlreadyRunning(:final error) =>
+          StartupErrorApp.alreadyRunning(error),
+        StartupReady() => throw StateError('unreachable'),
+      },
     ),
   );
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    timeline.mark('first_frame');
+  });
 }
 
 /// Opens the on-disk log and points [sink] at it.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
@@ -6,6 +8,37 @@ import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/core/graphql/watch/query_watcher.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
+
+/// A fetch log whose answer changes on each read: young on the first call,
+/// stale from then on. Used to simulate the early emit's age check (young)
+/// turning stale by the time `_start()` itself reads the log after the
+/// client resolves, so the watcher's own fetch is `networkOnly` even though
+/// the early emit fired.
+class _FlappingFetchLog implements FetchLog {
+  _FlappingFetchLog(this._reads);
+
+  final List<DateTime?> _reads;
+  int _calls = 0;
+
+  @override
+  DateTime? lastFetchedAt(QueryKey key) {
+    final index = _calls < _reads.length ? _calls : _reads.length - 1;
+    _calls++;
+    return _reads[index];
+  }
+
+  @override
+  Future<void> record(QueryKey key, DateTime when) async {}
+
+  @override
+  Future<void> clear(QueryKey key) async {}
+
+  @override
+  Future<void> clearFamily(String operationName) async {}
+
+  @override
+  Future<void> clearAll() async {}
+}
 
 const String _pingQuery = r'''
 query Ping {
@@ -405,6 +438,197 @@ void main() {
       await watcher.close();
 
       expect(watcher.stream, emitsDone);
+    });
+  });
+
+  group('early cache emit', () {
+    GraphQLCache warmCache(String value) {
+      final cache = GraphQLCache(store: InMemoryStore());
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+      cache.writeQuery(request, data: _pingData(value), broadcast: false);
+      return cache;
+    }
+
+    String parse(Map<String, dynamic> data) =>
+        (data['ping'] as Map<String, dynamic>)['value'] as String;
+
+    test('emits fresh cached data before the client resolves', () async {
+      final cache = warmCache('cached');
+      final client = Completer<GraphQLClient>();
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: client.future,
+        earlyCache: cache,
+        fetchLog:
+            InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))}),
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      final seen = <String>[];
+      watcher.stream.listen(seen.add);
+      await pumpEventQueue();
+      expect(seen, ['cached']);
+
+      client.complete(
+          stubClient(StubLink.responses([_pingData('network')]), cache: cache));
+      await pumpEventQueue();
+      expect(seen, ['cached', 'network']); // no duplicate 'cached'
+    });
+
+    test('a stale log entry does not emit early', () async {
+      final client = Completer<GraphQLClient>();
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: client.future,
+        earlyCache: warmCache('cached'),
+        fetchLog:
+            InMemoryFetchLog({_key: now.subtract(const Duration(hours: 1))}),
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      final seen = <String>[];
+      watcher.stream.listen(seen.add);
+      await pumpEventQueue();
+      expect(seen, isEmpty);
+    });
+
+    test('a failed client after an early emit surfaces as an error', () async {
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: Future<GraphQLClient>.error(Exception('Not authenticated')),
+        earlyCache: warmCache('cached'),
+        fetchLog:
+            InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))}),
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      await expectLater(
+        watcher.stream,
+        emitsInOrder([
+          'cached',
+          emitsError(isA<Exception>()),
+        ]),
+      );
+    });
+
+    test(
+        'suppression is cleared by any result, not only a cache-sourced one: '
+        'a later cache rebroadcast after a network-sourced first result is '
+        'still delivered', () async {
+      final cache = warmCache('cached');
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+
+      final client = stubClient(
+        StubLink.responses([_pingData('network')]),
+        cache: cache,
+      );
+
+      // Young on the early read (arms the early emit and
+      // `_suppressNextCacheData`); stale by the time `_start()` itself reads
+      // the log after the client resolves, so the watcher's own fetch policy
+      // is `networkOnly` and its first result from the client is
+      // `source: network`, never `source: cache`. That result must still
+      // clear `_suppressNextCacheData`, or a later independent cache write
+      // (a `fetchMore`, an unrelated normalized-entity write) would be
+      // silently swallowed forever.
+      final log = _FlappingFetchLog([
+        now.subtract(const Duration(minutes: 1)),
+        now.subtract(const Duration(hours: 1)),
+      ]);
+
+      // A pending client future, like the brief's first test: without it,
+      // nothing stops the network fetch from also completing inside the very
+      // first `pumpEventQueue()`, collapsing the two phases this test needs
+      // to keep apart.
+      final clientCompleter = Completer<GraphQLClient>();
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: clientCompleter.future,
+        earlyCache: cache,
+        fetchLog: log,
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      final seen = <String>[];
+      watcher.stream.listen(seen.add);
+
+      await pumpEventQueue();
+      expect(seen, ['cached']);
+
+      clientCompleter.complete(client);
+      await watcher.stream.firstWhere((value) => value == 'network');
+      expect(seen, ['cached', 'network']);
+
+      // A rebroadcast independent of this watcher's own fetch (e.g. another
+      // watcher writing an overlapping normalized entity). Default
+      // `broadcast: true` rebroadcasts to every watcher subscribed to this
+      // request, this one included, as `source: cache`.
+      client.writeQuery(request, data: _pingData('rebroadcast'));
+      await pumpEventQueue();
+
+      expect(seen, ['cached', 'network', 'rebroadcast']);
+    });
+
+    test(
+        'a shared-cache write that lands before the client resolves is not '
+        'dropped as a duplicate of the early emit', () async {
+      final cache = warmCache('cached');
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+
+      final clientCompleter = Completer<GraphQLClient>();
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: clientCompleter.future,
+        earlyCache: cache,
+        fetchLog:
+            InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))}),
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      final seen = <String>[];
+      watcher.stream.listen(seen.add);
+
+      await pumpEventQueue();
+      expect(seen, ['cached']);
+
+      // Another watcher writes a newer value into the SAME shared cache
+      // while this one is still waiting on the client -- e.g. a sibling
+      // query whose normalized write overlaps this one's entity. Not a
+      // rebroadcast (nothing is subscribed to this request yet): the
+      // client's own first cache read, once it resolves, sees this value
+      // directly.
+      cache.writeQuery(request, data: _pingData('newer'), broadcast: false);
+
+      clientCompleter.complete(
+          stubClient(StubLink.responses([_pingData('network')]), cache: cache));
+      await watcher.stream.firstWhere((value) => value == 'network');
+
+      // The client's first cache-sourced result carries 'newer', not the
+      // 'cached' value this watcher already emitted early. A suppression
+      // keyed on "a cache result landed" rather than "this exact data
+      // already went out" would silently drop it.
+      expect(seen, ['cached', 'newer', 'network']);
     });
   });
 }

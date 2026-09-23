@@ -237,12 +237,20 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      link: StubLink.responses([
-        movieDetailResponse(),
-        movieSegmentsResponse(),
-        subtitleTrackSettingsResponse(),
-        subtitlePreferenceResponse(),
-      ]),
+      // The "already downloaded, still online" branch reaches
+      // `_fetchProgressAndEpisodes`, whose queries now fire concurrently
+      // (see `runIsolated`), so an ordered `StubLink.responses` list can no
+      // longer script them -- dispatch on the operation instead.
+      link: StubLink((request, index) {
+        if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+        if (isOperation(request, 'MovieSegments')) {
+          return movieSegmentsResponse();
+        }
+        if (isOperation(request, 'SubtitleTrackSettings')) {
+          return subtitleTrackSettingsResponse();
+        }
+        return subtitlePreferenceResponse();
+      }),
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),

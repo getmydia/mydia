@@ -30,8 +30,11 @@ import '../../../core/player/video_output_config.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
+import '../../../core/player/tracks_ready.dart';
+import '../../../core/playback/isolated_fetches.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
+import '../../../core/startup/startup_timeline.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/fullscreen/fullscreen_controller.dart';
@@ -346,6 +349,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Play-to-first-frame marks for this screen's current load. Replaced on
+  /// every `_initializePlayer` run, so a source restart times itself.
+  StartupTimeline? _playTimeline;
+
+  /// Watches `player.stream.width` for the first positive width, marks
+  /// `first_frame` and logs the timeline, then cancels itself. Re-bound
+  /// every time `_openPlayerAndStart` runs for a new source, and cancelled
+  /// in `dispose` so it never outlives the screen.
+  StreamSubscription<int?>? _firstFrameSubscription;
 
   /// Captured in [initState] rather than read from `dispose()`, for the same
   /// reason as [_invalidator]: `remoteTargetControllerProvider` is a plain
@@ -1249,6 +1262,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _initializePlayer() async {
+    // Flushes whatever the *previous* load's timeline reached before this
+    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
+    // again after a cast session ends abandons the cast-era timeline, which
+    // would otherwise never print. A no-op on the very first call, when
+    // `_playTimeline` is still null.
+    _playTimeline?.logOnce();
+    _playTimeline = StartupTimeline('playback');
     _resetSegmentsIfMediaChanged();
 
     // Cleared up front so the branches that never reach a streaming session —
@@ -1500,16 +1520,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Initialize progress service
       _progressService = ProgressService(graphqlClient);
 
-      // Fetch saved progress and episode list for TV shows
-      await _fetchProgressAndEpisodes(graphqlClient);
-
-      // Fetch streaming candidates to determine optimal strategy
-      if (mounted) {
-        setState(() {
-          _loadingMessage = 'Checking file compatibility...';
-        });
-      }
-
       // Ask about the *file* the user picked. Keying this on mediaId left
       // the server to pick one of the item's files with no way to express the
       // user's choice, and its pick then won on the direct-play path below.
@@ -1521,11 +1531,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final byFile = widget.fileId != 'offline';
       final mediaContentType =
           widget.mediaType == 'movie' ? 'movie' : 'episode';
-      var candidatesFetch = await _fetchStreamingCandidates(
+      // Started now and awaited below: it shares nothing with the queries in
+      // `_fetchProgressAndEpisodes`, and never throws (it catches everything).
+      final candidatesFuture = _fetchStreamingCandidates(
         graphqlClient,
         byFile ? 'file' : mediaContentType,
         byFile ? widget.fileId : widget.mediaId,
       );
+
+      // Fetch saved progress and episode list for TV shows
+      await _fetchProgressAndEpisodes(graphqlClient);
+      _playTimeline?.mark('queries_done');
+
+      // Fetch streaming candidates to determine optimal strategy
+      if (mounted) {
+        setState(() {
+          _loadingMessage = 'Checking file compatibility...';
+        });
+      }
+
+      var candidatesFetch = await candidatesFuture;
 
       // A selected file can go missing out from under a live route: a
       // quality upgrade replaces an episode's file, writing a new
@@ -1629,6 +1654,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           'bitrateKbps=${inputs.fileBitrateKbps} '
           'path=${linkPath?.name ?? 'unknown'} '
           'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}');
+      _playTimeline?.mark('planned');
       _plan = playbackPlan;
       _planInputs = inputs;
       _rememberOriginalDeliverySubtitle(inputs);
@@ -2429,9 +2455,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       isWeb: kIsWeb,
     );
     await player.open(opening.media, play: false);
+    _playTimeline?.mark('opened');
 
-    // Wait for player to be ready
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Watches for the first real frame, marks it and logs the timeline's one
+    // summary line, then cancels itself -- an explicit subscription rather
+    // than `firstWhere(...).timeout(...)`, which never cancels its own
+    // subscription when the timeout fires and would leak one per source.
+    // `_disposePlayer` cancels this (and flushes whatever marks exist) before
+    // every later call to this method, so there is never more than one live.
+    final firstFrameTimeline = _playTimeline;
+    _firstFrameSubscription = player.stream.width.listen((width) {
+      if (width == null || width <= 0) return;
+      firstFrameTimeline?.mark('first_frame');
+      firstFrameTimeline?.logOnce();
+      unawaited(_firstFrameSubscription?.cancel());
+      _firstFrameSubscription = null;
+    });
+
+    // Wait for mpv to probe the media before reading tracks, capped so a
+    // source that never reports any still starts. Used to be a fixed 500 ms.
+    // media_kit 1.2.6's web backend never reports a track with a real id --
+    // `WebPlayer` only ever adds a bare `Tracks()`, in `stop()` -- so web
+    // would otherwise burn the full cap on every open and every source
+    // switch (`isSourceSwitch` only ever happens on web). Keep web at
+    // exactly its old 500 ms instead.
+    final tracksReady = await awaitRealTracks(
+      current: player.state.tracks,
+      updates: player.stream.tracks,
+      timeout: kIsWeb
+          ? const Duration(milliseconds: 500)
+          : const Duration(seconds: 3),
+    );
+    // `dispose()` may have run while this was suspended: it nulls `_player`
+    // and disposes both `player` and the progress service. `identical`
+    // also catches a newer `_openPlayerAndStart` call (a source switch)
+    // having replaced `_player` out from under this one. Bailing out here,
+    // before anything below touches `player` or `_progressService` again,
+    // is what keeps e.g. `player.play()` from throwing against a
+    // `PlatformPlayer` whose stream controllers `dispose()` already closed.
+    if (!mounted || !identical(_player, player)) return player;
+    if (!tracksReady && !kIsWeb) {
+      // Timing out on web is the expected path, not worth logging every time.
+      debugPrint(
+          '[PlayerScreen] No tracks reported before the cap; continuing');
+    }
+    _playTimeline?.mark('tracks_ready');
 
     // Detect available tracks from media_kit. Covers whatever mpv already
     // knew before the subscription above went live; anything discovered
@@ -2612,7 +2680,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) async {
+  /// Fetches the movie or episode detail document: saved progress, runtime,
+  /// and the subtitle tracks extracted from its files.
+  Future<void> _fetchDetail(GraphQLClient client) async {
     try {
       if (widget.mediaType == 'movie') {
         // Fetch movie progress
@@ -2654,30 +2724,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(episode?.files);
-
-          // If we have show and season info, fetch episode list for navigation
-          if (widget.showId != null && widget.seasonNumber != null) {
-            await _fetchSeasonEpisodes(client);
-          }
         }
       }
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
+  }
 
-    // Deliberately outside the block above: segments are their own query, and
-    // neither failure may take the other down with it.
-    await _fetchSegments(client);
-
-    // Same reasoning: subtitle offsets are their own standalone query, kept
-    // apart from MediaFileFragment for exactly the degrade-gracefully
-    // property this relies on.
-    await _loadSubtitleOffsets(client);
-
-    // And again for the per-show subtitle choice, which used to live in
-    // MediaFileFragment and took the resume position down with it on any
-    // server that did not know the field.
-    await _fetchSubtitlePreference(client);
+  /// Every pre-play query at once. All of them read only `widget.*`, and each
+  /// was already failure-isolated; they used to run one after another.
+  ///
+  /// The subtitle preference stays chained after the detail: applying it
+  /// reads the tracks `_extractSubtitlesFromFiles` builds from the detail.
+  /// Season episodes no longer waits for the detail to succeed, so a failed
+  /// detail now costs one extra query rather than skipping it.
+  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) {
+    return runIsolated({
+      'detail and subtitle preference': () async {
+        await _fetchDetail(client);
+        await _fetchSubtitlePreference(client);
+      },
+      if (widget.mediaType == 'episode' &&
+          widget.showId != null &&
+          widget.seasonNumber != null)
+        'season episodes': () => _fetchSeasonEpisodes(client),
+      'segments': () => _fetchSegments(client),
+      'subtitle offsets': () => _loadSubtitleOffsets(client),
+    });
   }
 
   /// Loads stored subtitle offsets for this media file.
@@ -5453,6 +5526,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _positionSubscription?.cancel();
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
+    _firstFrameSubscription?.cancel();
+    // Flush whatever marks this load reached; a no-op if a first frame (or
+    // `_disposePlayer`) already logged the one summary line for this timeline.
+    _playTimeline?.logOnce();
 
     // Cancel auto-play countdown
     _upNextCountdown?.dispose();
@@ -5824,6 +5901,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tracksSubscription = null;
     await _errorSubscription?.cancel();
     _errorSubscription = null;
+    // Precedes every later `_openPlayerAndStart` call (the web source-switch
+    // branch in `_attachSource`, and the error catch in `_initializePlayer`),
+    // so this is where a first-frame watch that never fired gets cancelled
+    // before the next one starts.
+    //
+    // Deliberately does *not* flush `_playTimeline` here: the web branch of
+    // `_attachSource` calls this and then `_openPlayerAndStart` again for
+    // the *same* timeline (an AdaptationPolicy fallback mid-load is the
+    // common case), so logging here would lock in a summary missing
+    // `first_frame` before the fallback source ever gets a chance to reach
+    // it -- `logOnce()`'s own guard would then make the real call a no-op.
+    // The timeline only genuinely ends in `State.dispose()` or at the top of
+    // the next `_initializePlayer` run, and only those flush it.
+    await _firstFrameSubscription?.cancel();
+    _firstFrameSubscription = null;
     _progressService?.stopSync();
     _stopStatsCollector();
 

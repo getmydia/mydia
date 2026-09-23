@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
+import '../../../core/startup/startup_timeline.dart';
 import '../../../domain/models/continue_watching_item.dart';
 import '../../../domain/models/home_data.dart';
 import '../continue_watching/continue_watching_actions.dart' as actions;
@@ -166,7 +167,12 @@ class HomeController extends _$HomeController {
       variables: homeScreenVariables,
       parse: HomeData.fromJson,
     );
-    return _watcher.stream;
+    return _watcher.stream.map((data) {
+      StartupTimeline.app
+        ..mark('home_first_data')
+        ..logOnce();
+      return data;
+    });
   }
 
   Future<void> refresh() => _watcher.refetch();

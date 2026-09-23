@@ -20,6 +20,7 @@ import 'package:player/presentation/widgets/playback_stats/stats_panel.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -48,6 +49,11 @@ class _FakePlatformPlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(play);
+    // What mpv publishes as soon as it has probed the file. Without this,
+    // `awaitRealTracks` (see `tracks_ready.dart`) never sees a real track and
+    // every open waits out its full timeout.
+    state = state.copyWith(tracks: probedTracks());
+    tracksController.add(state.tracks);
   }
 
   @override
@@ -101,12 +107,21 @@ Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
   final settings = SettingsService(storage: storage);
   final fake = _FakePlatformPlayer();
   final container = buildPlayerScreenContainer(
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // index-keyed dispatch can no longer script them -- dispatch on the
+    // operation instead.
     link: StubLink((request, index) {
-      if (index == 0) return movieDetailResponse(positionSeconds: 0);
-      if (index == 1) return movieSegmentsResponse();
-      if (index == 2) return subtitleTrackSettingsResponse();
-      if (index == 3) return subtitlePreferenceResponse();
-      if (index == 4) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 0);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (isOperation(request, 'StreamingCandidates')) {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;
@@ -355,13 +370,10 @@ void main() {
   // hands `createPlayer` a closure over a single `fake` shared for the
   // whole test, so the player `_initializePlayer` constructs afterwards
   // would reuse that already-closed instance and throw on its first
-  // `open()`. `StubLink`'s handler here is also positional
-  // (`index == 0..3`), scripted for exactly one startup sequence; a
-  // restart repeats the same four queries and would fall through to the
-  // catch-all `updateMovieProgress` response instead. Covering the restart
-  // needs a `createPlayer` that mints a fresh fake per call and a
-  // `StubLink` that answers by operation name instead of position, the way
-  // `player_screen_cast_skip_segments_test.dart`'s `_link` does -- real
-  // harness changes, not a two-line addition, so left for a follow-up
-  // rather than bent to fit here.
+  // `open()`. `StubLink`'s handler above now answers by operation name
+  // (the pre-play queries fire concurrently, see `runIsolated`), so a
+  // restart repeating the same four queries is no longer the blocker it
+  // once was; covering the restart still needs a `createPlayer` that mints
+  // a fresh fake per call -- a real harness change, not a two-line
+  // addition, so left for a follow-up rather than bent to fit here.
 }

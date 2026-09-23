@@ -30,6 +30,23 @@ import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor() {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400, directPlay: true);
+    });
+  }
+
   testWidgets('direct play streams the file the user selected', (tester) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
@@ -37,13 +54,7 @@ void main() {
     // `streamingCandidatesResponse` hardcodes fileId 'file-1'. Mounting with
     // 'file-2' makes the two disagree, which is exactly the production case:
     // the user picked one file, the server named another.
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    final link = linkFor();
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -75,13 +86,7 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    final link = linkFor();
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -92,13 +97,17 @@ void main() {
     addTearDown(container.dispose);
 
     await pumpPlayerScreen(tester, container, fileId: 'file-2');
-    await pumpUntil(tester, () => link.requests.length >= 5);
+    await pumpUntil(
+      tester,
+      () => link.requests.any((r) => r.variables.containsKey('contentType')),
+    );
 
-    // Fifth scripted call, matching the response order above: detail,
-    // segments, subtitle offsets, the preference, candidates. `StubLink` is
-    // index-based, so this ordering is the same one every other PlayerScreen
-    // test relies on.
-    final candidatesVariables = link.requests[4].variables;
+    // The pre-play queries now fire concurrently, so their position in
+    // `link.requests` is no longer fixed -- pick the `StreamingCandidates`
+    // call out by the variable unique to it instead.
+    final candidatesVariables = link.requests
+        .firstWhere((r) => r.variables.containsKey('contentType'))
+        .variables;
 
     expect(
       candidatesVariables['contentType'],
@@ -126,15 +135,23 @@ void main() {
     // transport failure takes, as opposed to the server answering with a
     // GraphQL error (see `player_screen_stale_candidates_test.dart`, the
     // case this one exists to be told apart from).
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      http.ClientException('Connection refused'),
-      startStreamingSessionResponse(duration: 5400),
-      endStreamingSessionResponse(),
-    ]);
+    final link = StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (request.variables.containsKey('contentType')) {
+        return http.ClientException('Connection refused');
+      }
+      if (request.variables.containsKey('strategy')) {
+        return startStreamingSessionResponse(duration: 5400);
+      }
+      return endStreamingSessionResponse();
+    });
 
     final container = buildPlayerScreenContainer(
       link: link,

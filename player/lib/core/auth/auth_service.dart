@@ -111,9 +111,8 @@ class AuthService {
 
   /// Check if user is authenticated (has both token and server URL).
   Future<bool> isAuthenticated() async {
-    final token = await getToken();
-    final serverUrl = await getServerUrl();
-    return token != null && serverUrl != null;
+    final values = await Future.wait([getToken(), getServerUrl()]);
+    return values[0] != null && values[1] != null;
   }
 
   /// Store complete session information.

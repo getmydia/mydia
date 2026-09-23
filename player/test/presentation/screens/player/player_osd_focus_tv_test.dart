@@ -16,6 +16,7 @@ import 'package:player/presentation/widgets/video_controls/control_button.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -47,6 +48,11 @@ class _FakePlatformPlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(play);
+    // What mpv publishes as soon as it has probed the file. Without this,
+    // `awaitRealTracks` (see `tracks_ready.dart`) never sees a real track and
+    // every open waits out its full timeout.
+    state = state.copyWith(tracks: probedTracks());
+    tracksController.add(state.tracks);
   }
 
   @override
@@ -111,12 +117,21 @@ FocusNode _playerSurfaceNode(WidgetTester tester) => tester
 Future<void> _mountPlayingScreen(WidgetTester tester) async {
   final fake = _FakePlatformPlayer();
   final container = buildPlayerScreenContainer(
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // index-keyed dispatch can no longer script them -- dispatch on the
+    // operation instead.
     link: StubLink((request, index) {
-      if (index == 0) return movieDetailResponse(positionSeconds: 0);
-      if (index == 1) return movieSegmentsResponse();
-      if (index == 2) return subtitleTrackSettingsResponse();
-      if (index == 3) return subtitlePreferenceResponse();
-      if (index == 4) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 0);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (isOperation(request, 'StreamingCandidates')) {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;

@@ -63,18 +63,29 @@ void main() {
     // GraphQL error instead of guessing, which is what the fallback below
     // keys off. The re-ask by media item is what the server ranks highest
     // today.
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      graphqlErrorResponse('file not found'),
-      streamingCandidatesResponse(
+    //
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // on the operation instead. The two `StreamingCandidates` calls share an
+    // operation name, so they are told apart by the id they ask about.
+    final link = StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (request.variables['id'] == 'file-old') {
+        return graphqlErrorResponse('file not found');
+      }
+      return streamingCandidatesResponse(
         duration: 5400,
         directPlay: true,
         fileId: 'file-new',
-      ),
-    ]);
+      );
+    });
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -106,14 +117,20 @@ void main() {
 
     // Pins the mechanism, not just the outcome: the first call has to ask
     // about the rejected file specifically, and only the retry may ask by
-    // media item. Fifth/sixth scripted calls, matching the response order
-    // above (detail, segments, subtitle offsets, the preference, then the two
-    // candidates calls) — `StubLink` is index-based, the same ordering every
-    // other PlayerScreen test relies on.
-    expect(link.requests[4].variables['contentType'], 'file');
-    expect(link.requests[4].variables['id'], 'file-old');
-    expect(link.requests[5].variables['contentType'], 'movie');
-    expect(link.requests[5].variables['id'], 'movie-1');
+    // media item. The pre-play queries now run concurrently, so their
+    // relative position in `link.requests` is no longer fixed; filtering to
+    // just the two `StreamingCandidates` calls keeps their own relative
+    // order, which the retry logic inside `_initializePlayer` still
+    // guarantees (the retry only fires once the first call's rejection comes
+    // back).
+    final candidatesRequests = link.requests
+        .where((r) => r.variables.containsKey('contentType'))
+        .toList();
+    expect(candidatesRequests, hasLength(2));
+    expect(candidatesRequests[0].variables['contentType'], 'file');
+    expect(candidatesRequests[0].variables['id'], 'file-old');
+    expect(candidatesRequests[1].variables['contentType'], 'movie');
+    expect(candidatesRequests[1].variables['id'], 'movie-1');
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
@@ -150,18 +167,25 @@ void main() {
           'otherwise the assertion below proves nothing',
     );
 
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    // The pre-play queries now fire concurrently (see `runIsolated`), so an
+    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // on the operation instead.
+    final link = StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
       // What the server says today, for the same file the cache answered.
-      streamingCandidatesResponse(
+      return streamingCandidatesResponse(
         duration: 5400,
         directPlay: true,
         fileId: 'file-1',
-      ),
-    ]);
+      );
+    });
 
     final container = buildPlayerScreenContainer(
       link: link,

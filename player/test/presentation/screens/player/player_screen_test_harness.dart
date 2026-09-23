@@ -452,12 +452,14 @@ Map<String, dynamic> preferredSubtitleObject({
 /// [root] says so.
 ///
 /// The preference is its own document rather than a field on
-/// `MediaFileFragment` -- see `subtitle_preference.graphql` for why -- so every
-/// ordered `StubLink.responses` script for this screen has to carry it in the
-/// slot right after [subtitleTrackSettingsResponse], and `index`-keyed handlers
-/// have to leave it one. The defaults are the movie all those scripts open on,
-/// with no stored choice on its one file, which is what every test that is not
-/// about the preference wants.
+/// `MediaFileFragment` -- see `subtitle_preference.graphql` for why. It fires
+/// chained after the detail query but concurrently with segments and subtitle
+/// offsets (see `_fetchProgressAndEpisodes`'s dartdoc), so an ordered
+/// `StubLink.responses` script can no longer carry it in a fixed slot --
+/// dispatch on the operation instead (see [movieSegmentsResponse]'s dartdoc).
+/// The defaults are the movie all those scripts open on, with no stored
+/// choice on its one file, which is what every test that is not about the
+/// preference wants.
 ///
 /// [preferences] maps a file id to its `preferredSubtitle` object; a file left
 /// out of it has no preference, which is the same answer as an explicit null.
@@ -485,10 +487,12 @@ Map<String, dynamic> subtitlePreferenceResponse({
 
 /// A well-formed `MovieSegments` response.
 ///
-/// `_fetchProgressAndEpisodes` issues this immediately after the detail query
-/// and before streaming candidates, so an ordered `StubLink.responses` script
-/// has to carry it in that slot. Segments travel in their own document on
-/// purpose, not inside `MediaFileFragment` — see
+/// `_fetchProgressAndEpisodes` fires this concurrently with the detail query,
+/// the subtitle offsets query, and (via `runIsolated`) streaming candidates,
+/// so an ordered `StubLink.responses` script can no longer carry it in a
+/// fixed slot -- dispatch a `StubLink((request, _) => ...)` on the operation
+/// instead (see `player/docs/testing.md`). Segments travel in their own
+/// document on purpose, not inside `MediaFileFragment` — see
 /// `player_screen_segments_isolation_test.dart` for why. The default is
 /// "detection found nothing", which is what every test that is not about
 /// segments wants.
@@ -515,12 +519,12 @@ Map<String, dynamic> movieSegmentsResponse({
 /// correction, which is the default every test that is not about subtitle
 /// delay wants.
 ///
-/// `_fetchProgressAndEpisodes` issues this right after segments and before
-/// streaming candidates -- see `movieSegmentsResponse`'s dartdoc for the
-/// same slot-shifting hazard this query introduces to every ordered
-/// `StubLink.responses` script for this screen. An empty list here leaves
-/// `_subtitleOffsetsLoaded` true and `_subtitleOffsets` empty, so nothing
-/// downstream (mpv's sub-delay, the sheet's delay row) departs from zero.
+/// `_fetchProgressAndEpisodes` fires this concurrently with the other
+/// pre-play queries -- see `movieSegmentsResponse`'s dartdoc for why an
+/// ordered `StubLink.responses` script can no longer carry it in a fixed
+/// slot. An empty list here leaves `_subtitleOffsetsLoaded` true and
+/// `_subtitleOffsets` empty, so nothing downstream (mpv's sub-delay, the
+/// sheet's delay row) departs from zero.
 Map<String, dynamic> subtitleTrackSettingsResponse({
   List<Map<String, dynamic>> settings = const [],
 }) {

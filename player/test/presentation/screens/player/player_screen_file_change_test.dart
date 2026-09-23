@@ -24,6 +24,7 @@ import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/subtitle_preference.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'player_screen_test_harness.dart';
@@ -69,7 +70,10 @@ class _ProbedPlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(false);
-    state = state.copyWith(tracks: const Tracks(subtitle: [_mpvSubtitleTrack]));
+    // `probedTracks` adds the video/audio tracks `awaitRealTracks` (see
+    // `tracks_ready.dart`) actually looks at; a subtitle-only `Tracks` never
+    // reads as probed and burns the full timeout on every open.
+    state = state.copyWith(tracks: probedTracks(subtitle: [_mpvSubtitleTrack]));
     tracksController.add(state.tracks);
   }
 

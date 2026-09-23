@@ -23,19 +23,32 @@ import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor({List<Map<String, dynamic>>? files}) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(files: files);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400);
+    });
+  }
+
   testWidgets(
       'hands the receiver the resolved runtime when casting short-circuits '
       'playback before any HLS session exists', (tester) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(files: [mediaFileWithSubtitle()]),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(files: [mediaFileWithSubtitle()]);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -102,15 +115,9 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(
-        files: [mediaFileWithSubtitle(url: null, deliverable: true)],
-      ),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(
+      files: [mediaFileWithSubtitle(url: null, deliverable: true)],
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -152,13 +159,7 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(files: [mediaFileWithSubtitle(trackId: 'mk_0')]),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(files: [mediaFileWithSubtitle(trackId: 'mk_0')]);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -190,13 +191,7 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     const uuid = '0f8fad5b-d9cb-469f-a165-70867728950e';
-    final link = StubLink.responses([
-      movieDetailResponse(files: [mediaFileWithSubtitle(trackId: uuid)]),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(files: [mediaFileWithSubtitle(trackId: uuid)]);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -229,13 +224,7 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor();
 
     final container = buildPlayerScreenContainer(
       link: link,

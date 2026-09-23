@@ -12,19 +12,32 @@ import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor({required int positionSeconds}) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: positionSeconds);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400);
+    });
+  }
+
   testWidgets('asks before casting, and carries the answer to the receiver',
       (tester) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
     // 45 minutes into a 90 minute movie.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 2700),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(positionSeconds: 2700);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -59,13 +72,7 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 2700),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(positionSeconds: 2700);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -91,13 +98,7 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // 12 seconds in, below kMinResumeThresholdSeconds.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 12),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-    ]);
+    final link = linkFor(positionSeconds: 12);
 
     final container = buildPlayerScreenContainer(
       link: link,

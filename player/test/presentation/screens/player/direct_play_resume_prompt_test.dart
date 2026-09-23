@@ -30,6 +30,25 @@ import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor({required int positionSeconds}) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: positionSeconds);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400, directPlay: true);
+    });
+  }
+
   testWidgets('direct play still asks whether to resume', (tester) async {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
@@ -37,13 +56,7 @@ void main() {
     // 45 minutes into a 90 minute movie: comfortably inside every bound
     // `shouldOfferResume` checks, so the only thing that can suppress the
     // dialog is the call site being gone.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 2700),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    final link = linkFor(positionSeconds: 2700);
 
     // P2P, so the direct-play URL comes from the stub proxy rather than the
     // real media-token service.
@@ -79,13 +92,7 @@ void main() {
 
     // 12 seconds in — below `kMinResumeThresholdSeconds`. The prompt must be
     // gated by `shouldOfferResume`, not shown unconditionally.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 12),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    final link = linkFor(positionSeconds: 12);
 
     final container = buildPlayerScreenContainer(
       link: link,

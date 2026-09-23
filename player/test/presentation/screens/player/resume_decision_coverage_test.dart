@@ -18,6 +18,25 @@ import 'player_screen_test_harness.dart';
 void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor(Object candidates) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 2700);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return candidates;
+    });
+  }
+
   // Each case sets up one source and asserts the resume dialog appears with a
   // position that comfortably clears every bound in `shouldOfferResume`. Each
   // case is responsible for pumping the screen and waiting for its own
@@ -32,13 +51,7 @@ void main() {
   final cases = <String, Future<void> Function(WidgetTester)>{
     'streaming, HLS': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: StubLink.responses([
-          movieDetailResponse(positionSeconds: 2700),
-          movieSegmentsResponse(),
-          subtitleTrackSettingsResponse(),
-          subtitlePreferenceResponse(),
-          streamingCandidatesResponse(duration: 5400),
-        ]),
+        link: linkFor(streamingCandidatesResponse(duration: 5400)),
         connectionState: conn.ConnectionState.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -49,13 +62,8 @@ void main() {
     },
     'streaming, direct play': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: StubLink.responses([
-          movieDetailResponse(positionSeconds: 2700),
-          movieSegmentsResponse(),
-          subtitleTrackSettingsResponse(),
-          subtitlePreferenceResponse(),
-          streamingCandidatesResponse(duration: 5400, directPlay: true),
-        ]),
+        link: linkFor(
+            streamingCandidatesResponse(duration: 5400, directPlay: true)),
         connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -66,13 +74,7 @@ void main() {
     },
     'cast target chosen before playback': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: StubLink.responses([
-          movieDetailResponse(positionSeconds: 2700),
-          movieSegmentsResponse(),
-          subtitleTrackSettingsResponse(),
-          subtitlePreferenceResponse(),
-          streamingCandidatesResponse(duration: 5400),
-        ]),
+        link: linkFor(streamingCandidatesResponse(duration: 5400)),
         connectionState: conn.ConnectionState.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),

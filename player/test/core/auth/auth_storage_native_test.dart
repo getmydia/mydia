@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_storage_native.dart';
 
@@ -36,6 +38,64 @@ class _FailingBackend implements SecretBackend {
     if (failDelete) throw Exception('keyring unavailable');
     stored.clear();
   }
+}
+
+class _CountingBackend implements SecretBackend {
+  _CountingBackend(Map<String, String> initial) : _data = {...initial};
+  final Map<String, String> _data;
+  final Map<String, int> reads = {};
+  bool failNextRead = false;
+
+  @override
+  Future<String?> read(String key) async {
+    reads[key] = (reads[key] ?? 0) + 1;
+    if (failNextRead) {
+      failNextRead = false;
+      throw StateError('keychain locked');
+    }
+    return _data[key];
+  }
+
+  @override
+  Future<void> write(String key, String value) async => _data[key] = value;
+
+  @override
+  Future<void> delete(String key) async => _data.remove(key);
+
+  @override
+  Future<void> deleteAll() async => _data.clear();
+}
+
+/// A backend whose first `read` hangs until the test completes [pending], so
+/// a test can land a write/delete/deleteAll while that read is still in
+/// flight. That first call resolves to whatever [pending] is completed
+/// with, mirroring a keychain read that already had its answer in hand
+/// before a concurrent mutation landed. Every later `read` answers
+/// immediately from [_data], which write/delete/deleteAll mutate the same
+/// way the real backend would, so a test can tell whether a *second*
+/// backend read happened and what it would have found.
+class _BlockingBackend implements SecretBackend {
+  _BlockingBackend(this.pending, Map<String, String> initial)
+      : _data = {...initial};
+  final Completer<String?> pending;
+  final Map<String, String> _data;
+  int readCount = 0;
+
+  @override
+  Future<String?> read(String key) async {
+    readCount++;
+    if (readCount == 1) return pending.future;
+    return _data[key];
+  }
+
+  @override
+  Future<void> write(String key, String value) async => _data[key] = value;
+
+  @override
+  Future<void> delete(String key) async => _data.remove(key);
+
+  @override
+  Future<void> deleteAll() async => _data.clear();
 }
 
 void main() {
@@ -130,6 +190,169 @@ void main() {
       await healthy.write('other', 'xyz');
 
       expect(healthy.degraded, isTrue);
+    });
+  });
+
+  group('read cache', () {
+    setUp(NativeAuthStorage.resetForTest);
+    tearDown(NativeAuthStorage.resetForTest);
+
+    test('repeated and concurrent reads reach the backend once', () async {
+      final backend = _CountingBackend({'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      final results = await Future.wait(
+          [storage.read('auth_token'), storage.read('auth_token')]);
+      await storage.read('auth_token');
+
+      expect(results, ['t1', 't1']);
+      expect(backend.reads['auth_token'], 1);
+    });
+
+    test('an absent key is cached as absent', () async {
+      final backend = _CountingBackend({});
+      final storage = NativeAuthStorage(backend: backend);
+      expect(await storage.read('server_url'), isNull);
+      expect(await storage.read('server_url'), isNull);
+      expect(backend.reads['server_url'], 1);
+    });
+
+    test('a delete is seen by the next read without a backend hit', () async {
+      final backend = _CountingBackend({'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+      await storage.read('auth_token');
+      await storage.delete('auth_token');
+      expect(await storage.read('auth_token'), isNull);
+      expect(backend.reads['auth_token'], 1);
+    });
+
+    test('a write is seen by a separate instance', () async {
+      final backend = _CountingBackend({'auth_token': 'old'});
+      await NativeAuthStorage(backend: backend).read('auth_token');
+      await NativeAuthStorage(backend: backend).write('auth_token', 'new');
+      expect(
+          await NativeAuthStorage(backend: backend).read('auth_token'), 'new');
+    });
+
+    test('deleteAll drops the cache', () async {
+      final backend = _CountingBackend({'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+      await storage.read('auth_token');
+      await storage.deleteAll();
+      expect(await storage.read('auth_token'), isNull);
+    });
+
+    test('a failed read is not cached', () async {
+      final backend = _CountingBackend({'auth_token': 't1'})
+        ..failNextRead = true;
+      final storage = NativeAuthStorage(backend: backend);
+      expect(await storage.read('auth_token'), isNull);
+      expect(await storage.read('auth_token'), 't1');
+    });
+
+    test(
+        'a delete that lands while a read is in flight is not overwritten '
+        'by that read', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      // The read reaches the backend synchronously and then suspends on
+      // `pending`, so by the time this line returns the backend has already
+      // been called once.
+      final firstRead = storage.read('auth_token');
+
+      await storage.delete('auth_token');
+      pending.complete('t1');
+
+      // The in-flight call still resolves with what the backend answered...
+      expect(await firstRead, 't1');
+      // ...but the delete that landed while it was in flight wins the cache,
+      // so the next read must see the deletion without hitting the backend
+      // again.
+      expect(await storage.read('auth_token'), isNull);
+      expect(backend.readCount, 1);
+    });
+
+    test(
+        'a deleteAll that lands while a read is in flight is not '
+        'overwritten by that read', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      // Same shape as the delete race above, but deleteAll clears the read
+      // cache outright instead of tombstoning the one key. A guard that only
+      // checked "is the key still absent from the cache" would see an empty
+      // map, treat that as agreement, and let the stale in-flight answer
+      // repopulate it.
+      final firstRead = storage.read('auth_token');
+
+      await storage.deleteAll();
+      pending.complete('t1');
+
+      // The in-flight call still resolves with what the backend answered...
+      expect(await firstRead, 't1');
+      // ...but the next read must not see that stale value. The cache has
+      // nothing cached for this key any more (deleteAll cleared it, not
+      // tombstoned it), so this read goes back to the backend, which
+      // deleteAll already cleared too.
+      expect(await storage.read('auth_token'), isNull);
+      expect(backend.readCount, 2);
+    });
+
+    test(
+        'a read started after deleteAll, while the pre-deletion backend read '
+        'is still pending, does not join that stale future', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      // Reaches the backend synchronously and then suspends on `pending`.
+      final firstRead = storage.read('auth_token');
+
+      await storage.deleteAll();
+
+      // Started before `pending` is completed, so the first backend read is
+      // still in flight. Without `deleteAll` clearing `_inflight`, this
+      // would find the stale pending future still keyed there and return
+      // whatever it resolves to instead of going back to the (now cleared)
+      // backend.
+      final secondRead = storage.read('auth_token');
+
+      pending.complete('t1');
+
+      expect(await firstRead, 't1');
+      expect(await secondRead, isNull,
+          reason: 'the backend was cleared by deleteAll; a read started '
+              'after it must not surface the pre-deletion value');
+      expect(backend.readCount, 2);
+    });
+
+    test(
+        'a read started after delete, while the pre-deletion backend read '
+        'is still pending, does not join that stale future', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      final firstRead = storage.read('auth_token');
+
+      await storage.delete('auth_token');
+
+      final secondRead = storage.read('auth_token');
+
+      pending.complete('t1');
+
+      expect(await firstRead, 't1');
+      expect(await secondRead, isNull,
+          reason: 'the key was deleted; a read started afterward must not '
+              'surface the pre-deletion value');
+      // The tombstoned read cache already answers the second read without a
+      // second backend hit; this pins that down so a future change to the
+      // cache-check ordering can't quietly start relying on `_inflight`
+      // alone to keep this correct.
+      expect(backend.readCount, 1);
     });
   });
 }

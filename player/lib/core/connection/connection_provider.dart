@@ -73,13 +73,35 @@ class ConnectionState {
   }
 }
 
+/// The connection mode read during startup, before the first frame of
+/// `MyApp`. Lets [ConnectionNotifier.build] start in p2p mode directly,
+/// so `graphqlClientProvider` is not built once in direct mode and then
+/// rebuilt when the stored credentials arrive. Null (the default, and in
+/// tests) keeps the old deferred load.
+final initialConnectionStateProvider =
+    Provider<ConnectionState?>((ref) => null);
+
+/// Reads the stored p2p credentials into a [ConnectionState], or null when
+/// this install was never paired over p2p.
+Future<ConnectionState?> loadStoredConnectionState(AuthStorage storage) async {
+  final values = await Future.wait([
+    storage.read(_ConnectionStorageKeys.serverNodeAddr),
+    storage.read(_ConnectionStorageKeys.relayUrl),
+  ]);
+  final serverNodeAddr = values[0];
+  if (serverNodeAddr == null) return null;
+  return ConnectionState.p2p(
+      serverNodeAddr: serverNodeAddr, relayUrl: values[1]);
+}
+
 /// Notifier for managing connection state.
 class ConnectionNotifier extends Notifier<ConnectionState> {
   @override
   ConnectionState build() {
-    // Initialize with direct connection by default
-    // The actual mode will be set after checking stored state or pairing
-    // Schedule the async load to run after build completes
+    final initial = ref.read(initialConnectionStateProvider);
+    if (initial != null) return initial;
+    // No startup read (tests, or a container built outside `main`): fall
+    // back to loading the stored state after build completes.
     Future.microtask(_loadStoredState);
     return ConnectionState.direct();
   }

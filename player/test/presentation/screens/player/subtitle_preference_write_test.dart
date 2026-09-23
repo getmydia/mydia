@@ -52,6 +52,7 @@ import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -124,7 +125,9 @@ class _ProbedPlayer extends PlatformPlayer {
     positionController.add(state.position);
     playingController.add(false);
     // What mpv publishes as soon as it has probed the file.
-    state = state.copyWith(tracks: const Tracks(subtitle: [_mpvSubtitleTrack]));
+    state = state.copyWith(
+      tracks: probedTracks(subtitle: const [_mpvSubtitleTrack]),
+    );
     tracksController.add(state.tracks);
   }
 

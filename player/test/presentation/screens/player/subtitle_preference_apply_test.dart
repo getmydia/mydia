@@ -33,6 +33,7 @@ import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
+import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 
@@ -109,8 +110,14 @@ class _ProbedPlayer extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(false);
-    // What mpv publishes as soon as it has probed the file.
-    publishSubtitleTracks(const [_mpvSubtitleTrack]);
+    // What mpv publishes as soon as it has probed the file: a real
+    // video/audio track too, not just the subtitle one, or `awaitRealTracks`
+    // (see `tracks_ready.dart`) never sees a real track and every open waits
+    // out its full timeout.
+    state = state.copyWith(
+      tracks: probedTracks(subtitle: const [_mpvSubtitleTrack]),
+    );
+    tracksController.add(state.tracks);
   }
 
   /// Stands in for media_kit revising the track list, which it does several
