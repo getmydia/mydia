@@ -100,7 +100,7 @@ void main() {
   });
 
   group('CrashReport', () {
-    test('serializes to the body both relays accept', () {
+    test('serializes to the body the relay accepts', () {
       final report = CrashReport.fromError(
         StateError('No element'),
         StackTrace.fromString(_releaseTrace),
@@ -109,7 +109,8 @@ void main() {
         occurredAt: DateTime.utc(2026, 9, 10, 12),
       );
 
-      // Mirrors PLAYER_REPORT in relay-worker/test/crashes/ingest.test.ts.
+      // Mirrors player_report/2 in
+      // metadata-relay/test/metadata_relay/crash_report_test.exs.
       expect(report.toJson(), {
         'source': 'player',
         'error_type': 'StateError',

@@ -10,7 +10,8 @@
 /// class name out of a function would break grouping on the relay.
 library;
 
-/// Longest `error_message` sent, matching relay-worker's `MAX_MESSAGE_CHARS`.
+/// Longest `error_message` sent. This is the player's own cap; the relay
+/// enforces no length limit of its own on a crash report's message.
 ///
 /// Applied after redaction, so a cut can never split a secret into a fragment
 /// the patterns no longer recognise.
