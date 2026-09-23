@@ -545,15 +545,20 @@ class P2pService {
       _isInitialized = true;
       _emitStatus();
 
-      // Get initial node address (async FFI call, runs on worker thread).
-      // Read through the local `host`, not `_host!`: a reset() during this
-      // await nulls the field, and the bang would then throw rather than
-      // letting the stale check below do its job.
-      final nodeAddr = await host.getNodeAddr();
-      if (stale()) return;
-
-      _nodeAddr = nodeAddr;
-      debugPrint('[P2P] Initial node addr: $_nodeAddr');
+      // Not awaited. The core answers getNodeAddr only once its home relay
+      // is up, up to 30s after start, and dials no longer wait for that:
+      // awaiting it here held every ensureConnected() behind the relay. The
+      // `ready:` event sets `_nodeAddr` too; this call covers a `ready:` that
+      // fired before the subscription above attached. Read through the local
+      // `host`, not `_host!`, so a reset() in the meantime cannot throw here.
+      unawaited(host.getNodeAddr().then((nodeAddr) {
+        if (stale()) return;
+        _nodeAddr = nodeAddr;
+        debugPrint('[P2P] Initial node addr: $_nodeAddr');
+        _emitStatus();
+      }, onError: (Object e) {
+        debugPrint('[P2P] Failed to read the initial node addr: $e');
+      }));
     } catch (e) {
       debugPrint('[P2P] Failed to initialize: $e');
       rethrow;
