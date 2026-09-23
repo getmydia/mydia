@@ -2260,7 +2260,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final read = await _switchGate.pass(stillCurrent, () async {
         indices = await subtitleStreamIndices(player);
       });
-      if (!read || !stillCurrent()) return null;
+      // A switch can land a new file on this same player while the read
+      // waits, leaving that file's pre-probe server fallback on screen.
+      // Matching it would fetch a stream mpv is about to offer natively; the
+      // settle that ends the probe re-runs this against mpv's own list.
+      if (!read ||
+          !stillCurrent() ||
+          _awaitingPlayerTracks ||
+          _switchingSource) {
+        return null;
+      }
     }
     return preferenceTarget(
       pref: preference,
