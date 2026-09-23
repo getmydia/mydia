@@ -8,7 +8,7 @@
 # Requires: GPG_KEY_ID in the environment.
 set -euo pipefail
 
-CHANNEL="${1:?channel required (stable or beta)}"
+CHANNEL="${1:?channel required (stable, beta or dev)}"
 STAGED="${2:?staged repo path required}"
 DEST="${3:?rclone destination required}"
 : "${GPG_KEY_ID:?GPG_KEY_ID must be set}"
@@ -16,7 +16,10 @@ DEST="${3:?rclone destination required}"
 case "$CHANNEL" in
   stable) PRUNE_DEPTH=5 ;;
   beta)   PRUNE_DEPTH=2 ;;
-  *) echo "::error::unknown channel '$CHANNEL', expected stable or beta" >&2; exit 1 ;;
+  # Dev builds are published on request from any ref and are superseded
+  # quickly, so keep no more history than beta.
+  dev)    PRUNE_DEPTH=2 ;;
+  *) echo "::error::unknown channel '$CHANNEL', expected stable, beta or dev" >&2; exit 1 ;;
 esac
 
 LIVE="${LIVE_REPO_DIR:-./live-repo}"
