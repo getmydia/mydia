@@ -55,6 +55,19 @@ class NativeAuthStorage implements AuthStorage {
   static bool _warnedAboutFallback = false;
   static bool _degraded = false;
 
+  /// Backend answers already fetched this process, including "absent" (null).
+  ///
+  /// Keychain and keystore reads are slow on some platforms, and startup used
+  /// to read the same token and server URL two or three times each through
+  /// separate providers. Static for the same reason [_memoryStorage] is:
+  /// `PairingService`, `SessionTeardown` and `AuthService` each hold their own
+  /// instance, and they must all see each other's writes.
+  static final Map<String, String?> _readCache = <String, String?>{};
+
+  /// Backend reads in flight, so concurrent reads of one key share a call.
+  static final Map<String, Future<String?>> _inflight =
+      <String, Future<String?>>{};
+
   /// Whether any write has failed to reach the platform keyring in this
   /// process.
   ///
@@ -71,6 +84,8 @@ class NativeAuthStorage implements AuthStorage {
     _memoryStorage.clear();
     _warnedAboutFallback = false;
     _degraded = false;
+    _readCache.clear();
+    _inflight.clear();
   }
 
   /// Runs [operation] against secure storage, degrading to an in-memory map
@@ -113,8 +128,30 @@ class NativeAuthStorage implements AuthStorage {
     // is how a failed token refresh would keep handing out the expired token
     // for the rest of the session.
     if (_memoryStorage.containsKey(key)) return _memoryStorage[key];
+    if (_readCache.containsKey(key)) return _readCache[key];
 
-    return _withFallback<String?>(() => _backend.read(key), () => null);
+    return _inflight[key] ??= _readBackend(key).whenComplete(() {
+      _inflight.remove(key);
+    });
+  }
+
+  /// Caches only a read the backend actually answered. A failed read falls
+  /// back to null for this call, as before, and the next read tries again.
+  /// Skips the cache write if a write or delete landed while it was in
+  /// flight: the overlay or the cached null from `delete` is newer.
+  Future<String?> _readBackend(String key) async {
+    var answered = false;
+    final value = await _withFallback<String?>(() async {
+      final v = await _backend.read(key);
+      answered = true;
+      return v;
+    }, () => null);
+    if (answered &&
+        !_memoryStorage.containsKey(key) &&
+        !_readCache.containsKey(key)) {
+      _readCache[key] = value;
+    }
+    return value;
   }
 
   @override
@@ -134,6 +171,7 @@ class NativeAuthStorage implements AuthStorage {
   @override
   Future<void> delete(String key) async {
     _memoryStorage.remove(key);
+    _readCache[key] = null;
 
     await _withFallback<void>(() => _backend.delete(key), () {});
   }
@@ -141,6 +179,7 @@ class NativeAuthStorage implements AuthStorage {
   @override
   Future<void> deleteAll() async {
     _memoryStorage.clear();
+    _readCache.clear();
 
     await _withFallback<void>(_backend.deleteAll, () {});
   }
