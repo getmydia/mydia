@@ -49,5 +49,9 @@ defmodule MetadataRelay.ClientConfigTest do
       defaults = ClientConfig.default_relay_urls()
       assert ClientConfig.parse(Enum.join(defaults, ",")) == {:ok, defaults}
     end
+
+    test "the built-in list carries both mydia relays" do
+      assert ClientConfig.default_relay_urls() == [@cae1_1, @cae1_2]
+    end
   end
 end

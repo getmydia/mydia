@@ -12,10 +12,9 @@ defmodule MetadataRelay.ClientConfig do
   has the steps. When it is unset, or any entry is invalid, the built-in list
   is served instead and `log_config/0` says why at boot.
 
-  The relay-worker serves the same document from KV
-  (`relay-worker/src/config/client_config.ts`), and
-  `relay-worker/test/contract/routes.json` includes this route, so the cutover
-  gate reports the two services being configured differently.
+  `relay.mydia.dev` serves this through Cloudflare's cache for up to an hour
+  (see the route in `MetadataRelay.Router`), so a list change reaches clients
+  within that window after the restart.
 
   Clients ignore keys they do not know, so a new key can be added here without
   a client change. There is deliberately no version field: an incompatible
@@ -25,7 +24,7 @@ defmodule MetadataRelay.ClientConfig do
 
   require Logger
 
-  @default_relay_urls ["https://cae1-1.relay.mydia.dev"]
+  @default_relay_urls ["https://cae1-1.relay.mydia.dev", "https://cae1-2.relay.mydia.dev"]
 
   @doc """
   The relays served when `CLIENT_CONFIG_RELAYS` is unset or rejected.

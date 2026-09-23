@@ -65,10 +65,12 @@ defmodule MetadataRelay.Router do
   end
 
   # Client configuration. Read by mydia servers and players at boot to learn
-  # which iroh relays to use. See MetadataRelay.ClientConfig.
+  # which iroh relays to use. See MetadataRelay.ClientConfig. Shared at the
+  # edge for an hour, so a relay list change lands within that window.
   get "/client-config" do
     conn
     |> put_resp_content_type("application/json")
+    |> put_resp_header("cache-control", MetadataRelay.Plug.Cache.public_cache_control(3600))
     |> send_resp(200, Jason.encode!(MetadataRelay.ClientConfig.document()))
   end
 
