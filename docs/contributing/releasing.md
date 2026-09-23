@@ -249,17 +249,21 @@ v0.12.0.
 
 ## Flatpak channels
 
-The player publishes to two self-hosted OSTree repositories on Cloudflare R2.
-The channel comes from the draft's prerelease flag, the same flag that decides
-between the `beta` and `latest` Docker tags.
+The player publishes to three self-hosted OSTree repositories on Cloudflare R2.
+A release picks stable or beta from the draft's prerelease flag, the same flag
+that decides between the `beta` and `latest` Docker tags. Dev is published
+only by `player-ondemand.yml` with `build_flatpak` enabled.
 
 | Remote | Repo file | Fed by | History kept |
 | --- | --- | --- | --- |
 | `mydia` | `https://flatpak.mydia.dev/mydia.flatpakrepo` | Published stable release | 5 commits |
 | `mydia-beta` | `https://flatpak.mydia.dev/mydia-beta.flatpakrepo` | Published prerelease | 2 commits |
+| `mydia-dev` | `https://flatpak.mydia.dev/mydia-dev.flatpakrepo` | On-demand build with `build_flatpak` | 2 commits |
 
-Both ship `dev.mydia.player`, distinguished by OSTree branch. `flatpak-publish`
-runs after `publish`, so a rehearsal never touches R2.
+All three ship `dev.mydia.player`, distinguished by OSTree branch. The build
+is `player-flatpak.yml` and the publish is `deploy-flatpak.yml`; both are
+shared by `release.yml` and `player-ondemand.yml`. `flatpak-publish` runs
+after `publish`, so a rehearsal never touches R2.
 
 The manifest pins `org.gnome.Platform` 50 and the `llvm21` SDK extension built
 for freedesktop 25.08. Those two move together: a newer GNOME runtime sits on a
@@ -419,8 +423,10 @@ with `releases.json` and the stored preference on what each track is called.
 build on each track. It is generated in the same run as the macOS appcast, by
 `scripts/appcast/generate.mjs` (deployed by `deploy-appcast.yml`), so the two
 outputs can never disagree with each other. A platform with nothing published
-on a track simply has no key for it; macOS and Flatpak have no `dev` key
-because neither publishes dev builds.
+on a track simply has no key for it; macOS has no `dev` key because it
+publishes no dev builds. Flatpak never appears in this feed at all: it
+switches tracks through the OSTree remotes in "Flatpak channels" above,
+never through a version check against this feed.
 
 **Selecting a lower track never downgrades an install.** The stored track
 only changes what the next check compares against; it never forces an install
@@ -433,7 +439,9 @@ this.
 ### Dev builds
 
 `player-ondemand.yml` is the only workflow that publishes to the dev track,
-and only for Android. Its Android job uploads the APK to the
+for Android and, with `build_flatpak`, for Flatpak. The Flatpak build goes to
+the `mydia-dev` OSTree remote described in "Flatpak channels" and needs
+nothing beyond the Flatpak secrets. Its Android job uploads the APK to the
 `mydia-dev-builds` R2 bucket (served at `https://dl.mydia.dev`) and rewrites
 the bucket's `index.json`, keeping the five newest builds per platform and
 deleting whatever falls out of that window in the same run. `deploy-appcast.yml`
@@ -457,7 +465,7 @@ publish step fails loudly instead of silently skipping.
 | --- | --- | --- |
 | Windows | Stable, Beta | In app, applies immediately |
 | Linux (tarball) | Stable, Beta | In app, applies immediately |
-| Linux (Flatpak) | Stable, Beta | Shown, but not switchable in app: it hands back a `flatpak install` command to run instead |
+| Linux (Flatpak) | Stable, Beta, Dev | Shown, but not switchable in app: it hands back a `flatpak install` command to run instead |
 | macOS | Stable, Beta | In app, through Sparkle's own channel setting |
 | Android (sideloaded) | Stable, Beta, Dev | In app, applies immediately |
 | Android (Play Store install) | None | No updater at all; see below |
@@ -499,7 +507,7 @@ gh workflow run player-ondemand.yml --repo getmydia/mydia -f ref=feat/my-feature
 # Build all platforms without uploading to stores
 gh workflow run player-ondemand.yml --repo getmydia/mydia \
   -f build_macos=true -f build_windows=true -f build_linux=true \
-  -f upload_to_stores=false
+  -f build_flatpak=true -f upload_to_stores=false
 
 # Test build and sign pipeline without uploading (dry run)
 gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
@@ -515,6 +523,7 @@ gh workflow run player-ondemand.yml --repo getmydia/mydia -f dry_run=true
 | `build_macos` | boolean | `false` | Build macOS (signed & notarized DMG). |
 | `build_windows` | boolean | `false` | Build Windows (Inno Setup installer). |
 | `build_linux` | boolean | `false` | Build Linux (`.tar.gz` bundle). |
+| `build_flatpak` | boolean | `false` | Build the Linux Flatpak and publish it to the `mydia-dev` channel (skipped on `dry_run`). |
 | `upload_to_stores` | boolean | `true` | Upload iOS build to TestFlight (internal testers). |
 | `version_override` | string | `""` | Custom version string (e.g. `0.14.0-dev.42`). If empty, auto-derived. |
 | `dry_run` | boolean | `false` | Build and sign without uploading to TestFlight. |
