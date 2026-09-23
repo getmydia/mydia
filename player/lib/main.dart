@@ -200,6 +200,11 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
             error,
             report: crashReporter.reportStartupFailure(error, stackTrace),
           ),
+        StartupFailed(:final error, :final stackTrace) =>
+          StartupErrorApp.generic(
+            error,
+            report: crashReporter.reportStartupFailure(error, stackTrace),
+          ),
         StartupAlreadyRunning(:final error) =>
           StartupErrorApp.alreadyRunning(error),
         StartupReady() => throw StateError('unreachable'),

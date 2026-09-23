@@ -31,9 +31,22 @@ class _StartupGateState extends State<StartupGate> {
   @override
   void initState() {
     super.initState();
-    widget.startup.then((outcome) {
-      if (mounted) setState(() => _outcome = outcome);
-    });
+    widget.startup.then(
+      (outcome) {
+        if (mounted) setState(() => _outcome = outcome);
+      },
+      // `runStartup` guards its own steps with try/catch, but a rejection
+      // straight from the `startup` future itself -- an unexpected throw
+      // from a step it does not wrap, such as `inputCapabilities()` or
+      // `sidebarLayoutStore()` -- has no `then` handler above to catch it.
+      // Without this, the splash stays up forever instead of swapping to a
+      // failure screen.
+      onError: (Object error, StackTrace stackTrace) {
+        if (mounted) {
+          setState(() => _outcome = StartupFailed(error, stackTrace));
+        }
+      },
+    );
   }
 
   @override

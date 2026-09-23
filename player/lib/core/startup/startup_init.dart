@@ -60,6 +60,18 @@ final class StartupAlreadyRunning extends StartupOutcome {
   final Object error;
 }
 
+/// The `startup` future [StartupGate] was handed rejected outright, rather
+/// than resolving to one of the outcomes above -- an unexpected throw from a
+/// step [runStartup] does not itself guard, such as
+/// [StartupSteps.inputCapabilities] or [StartupSteps.sidebarLayoutStore].
+/// Without converting the rejection into an outcome, [StartupGate] would
+/// have nothing to swap in and the splash would stay up forever.
+final class StartupFailed extends StartupOutcome {
+  const StartupFailed(this.error, this.stackTrace);
+  final Object error;
+  final StackTrace stackTrace;
+}
+
 /// Runs [steps] with every independent step in flight at once.
 ///
 /// Only two orderings are real dependencies: the fetch log opens after the

@@ -46,4 +46,33 @@ void main() {
     await tester.pump();
     expect(find.text('failed'), findsOneWidget);
   });
+
+  testWidgets(
+      'renders the failure app when the startup future rejects instead of '
+      'staying on the splash forever', (tester) async {
+    final startup = Completer<StartupOutcome>();
+    StartupOutcome? seen;
+    await tester.pumpWidget(StartupGate(
+      startup: startup.future,
+      buildApp: (_) => const MaterialApp(home: Text('app')),
+      buildFailure: (failure) {
+        seen = failure;
+        return const MaterialApp(home: Text('failed'));
+      },
+    ));
+    expect(find.byKey(const Key('startup-splash')), findsOneWidget);
+
+    startup.completeError(StateError('boom'), StackTrace.current);
+    // See the note above: pumpAndSettle hangs on the splash's indefinite
+    // spinner animation.
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('failed'), findsOneWidget);
+    expect(find.byKey(const Key('startup-splash')), findsNothing);
+    expect(seen, isA<StartupFailed>());
+    final failed = seen as StartupFailed;
+    expect(failed.error, isA<StateError>());
+    expect((failed.error as StateError).message, 'boom');
+  });
 }
