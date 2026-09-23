@@ -354,6 +354,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// every `_initializePlayer` run, so a source restart times itself.
   StartupTimeline? _playTimeline;
 
+  /// Watches `player.stream.width` for the first positive width, marks
+  /// `first_frame` and logs the timeline, then cancels itself. Re-bound
+  /// every time `_openPlayerAndStart` runs for a new source, and cancelled
+  /// in `dispose` so it never outlives the screen.
+  StreamSubscription<int?>? _firstFrameSubscription;
+
   /// Captured in [initState] rather than read from `dispose()`, for the same
   /// reason as [_invalidator]: `remoteTargetControllerProvider` is a plain
   /// (non-autoDispose) provider, so this stays the same live instance for
@@ -1642,6 +1648,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           'bitrateKbps=${inputs.fileBitrateKbps} '
           'path=${linkPath?.name ?? 'unknown'} '
           'stallCeilingKbps=${inputs.recentStall?.ceilingKbps}');
+      _playTimeline?.mark('planned');
       _plan = playbackPlan;
       _planInputs = inputs;
       _rememberOriginalDeliverySubtitle(inputs);
@@ -2442,6 +2449,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       isWeb: kIsWeb,
     );
     await player.open(opening.media, play: false);
+    _playTimeline?.mark('opened');
+
+    // Watches for the first real frame, marks it and logs the timeline's one
+    // summary line, then cancels itself -- an explicit subscription rather
+    // than `firstWhere(...).timeout(...)`, which never cancels its own
+    // subscription when the timeout fires and would leak one per source.
+    // `_disposePlayer` cancels this (and flushes whatever marks exist) before
+    // every later call to this method, so there is never more than one live.
+    final firstFrameTimeline = _playTimeline;
+    _firstFrameSubscription = player.stream.width.listen((width) {
+      if (width == null || width <= 0) return;
+      firstFrameTimeline?.mark('first_frame');
+      firstFrameTimeline?.logOnce();
+      unawaited(_firstFrameSubscription?.cancel());
+      _firstFrameSubscription = null;
+    });
 
     // Wait for mpv to probe the media before reading tracks, capped so a
     // source that never reports any still starts. Used to be a fixed 500 ms.
@@ -5489,6 +5512,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _positionSubscription?.cancel();
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
+    _firstFrameSubscription?.cancel();
+    // Flush whatever marks this load reached; a no-op if a first frame (or
+    // `_disposePlayer`) already logged the one summary line for this timeline.
+    _playTimeline?.logOnce();
 
     // Cancel auto-play countdown
     _upNextCountdown?.dispose();
@@ -5860,6 +5887,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tracksSubscription = null;
     await _errorSubscription?.cancel();
     _errorSubscription = null;
+    // Precedes every later `_openPlayerAndStart` call (the web source-switch
+    // branch in `_attachSource`, and the error catch in `_initializePlayer`),
+    // so this is where a first-frame watch that never fired gets cancelled
+    // and the timeline flushed before the next one starts.
+    await _firstFrameSubscription?.cancel();
+    _firstFrameSubscription = null;
+    _playTimeline?.logOnce();
     _progressService?.stopSync();
     _stopStatsCollector();
 
