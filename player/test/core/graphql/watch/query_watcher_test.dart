@@ -584,5 +584,51 @@ void main() {
 
       expect(seen, ['cached', 'network', 'rebroadcast']);
     });
+
+    test(
+        'a shared-cache write that lands before the client resolves is not '
+        'dropped as a duplicate of the early emit', () async {
+      final cache = warmCache('cached');
+      final request =
+          WatchQueryOptions<Map<String, dynamic>>(document: gql(_pingQuery))
+              .asRequest;
+
+      final clientCompleter = Completer<GraphQLClient>();
+      final watcher = QueryWatcher<String>(
+        key: _key,
+        client: clientCompleter.future,
+        earlyCache: cache,
+        fetchLog:
+            InMemoryFetchLog({_key: now.subtract(const Duration(minutes: 1))}),
+        document: gql(_pingQuery),
+        parse: parse,
+        clock: () => now,
+      );
+      addTearDown(watcher.close);
+
+      final seen = <String>[];
+      watcher.stream.listen(seen.add);
+
+      await pumpEventQueue();
+      expect(seen, ['cached']);
+
+      // Another watcher writes a newer value into the SAME shared cache
+      // while this one is still waiting on the client -- e.g. a sibling
+      // query whose normalized write overlaps this one's entity. Not a
+      // rebroadcast (nothing is subscribed to this request yet): the
+      // client's own first cache read, once it resolves, sees this value
+      // directly.
+      cache.writeQuery(request, data: _pingData('newer'), broadcast: false);
+
+      clientCompleter.complete(
+          stubClient(StubLink.responses([_pingData('network')]), cache: cache));
+      await watcher.stream.firstWhere((value) => value == 'network');
+
+      // The client's first cache-sourced result carries 'newer', not the
+      // 'cached' value this watcher already emitted early. A suppression
+      // keyed on "a cache result landed" rather than "this exact data
+      // already went out" would silently drop it.
+      expect(seen, ['cached', 'newer', 'network']);
+    });
   });
 }
