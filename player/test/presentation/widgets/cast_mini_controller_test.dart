@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
@@ -1212,6 +1213,44 @@ void main() {
       );
 
       expect(find.text('Silo - S02E01'), findsOneWidget);
+    });
+
+    testWidgets(
+        'a View that cannot reach the player says so in Mydia terms, not '
+        'LAN firewall terms', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+      mydiaBackend.failNextConnect(CastFailureKind.unreachable);
+
+      final ambientTarget = AmbientTarget(
+        device: const CastDevice(
+          id: 'node-tv',
+          name: 'node-tv',
+          protocol: CastProtocolKind.mydia,
+        ),
+        snapshot: _snapshot(title: 'The Lantern Keepers'),
+      );
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+        extraOverrides: [
+          ambientPlayingProvider
+              .overrideWith((ref) => Stream.value([ambientTarget])),
+          remoteDeviceNamesProvider
+              .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+        ],
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-open')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Could not reach the device'), findsOneWidget);
+      expect(find.textContaining('firewall'), findsNothing);
     });
   });
 }

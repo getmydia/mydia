@@ -322,7 +322,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.connectTo(device);
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showToast(context, castErrorMessage(e, ref: ref), kind: ToastKind.error);
+      showCastErrorToast(context, e, ref: ref, isMydiaTarget: true);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error opening $name: $e');
       if (!mounted) return;
@@ -341,7 +341,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await manager.connectTo(device);
     } on CastBackendException catch (e) {
       if (!mounted) return;
-      showToast(context, castErrorMessage(e, ref: ref), kind: ToastKind.error);
+      showCastErrorToast(context, e,
+          ref: ref, isMydiaTarget: device.protocol == CastProtocolKind.mydia);
     } catch (e) {
       debugPrint('[CastMiniController] Unexpected error reconnecting: $e');
       if (!mounted) return;
