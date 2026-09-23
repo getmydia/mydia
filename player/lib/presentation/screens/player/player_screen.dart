@@ -4465,12 +4465,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // A bitmap track's first pick waits on the server copying it out of
       // the whole source, which can take minutes, so its indicator says so
       // and stays up for as long as the fetch may take.
+      //
+      // Only when there is something to wait for. An mpv track, or a body
+      // this playback already fetched, resolves from
+      // [_mediaKitSubtitleTrackMap] with no network at all, and a toast for
+      // it would sit over a subtitle that is already showing.
       final preparingImage = !_isDirectPlay && isImageSubtitleTrack(selected);
-      final loadingToast = Toaster.of(context).show(
-        preparingImage ? kImageSubtitlePreparingMessage : 'Loading subtitle...',
-        kind: ToastKind.progress,
-        duration: preparingImage ? kImageSidecarTimeLimit : null,
-      );
+      final loadingToast = _mediaKitSubtitleTrackMap.containsKey(selected.id)
+          ? null
+          : Toaster.of(context).show(
+              preparingImage
+                  ? kImageSubtitlePreparingMessage
+                  : 'Loading subtitle...',
+              kind: ToastKind.progress,
+              duration: preparingImage ? kImageSidecarTimeLimit : null,
+            );
 
       final resolved = await _resolveMediaKitSubtitleTrack(
         selected,
@@ -4483,7 +4492,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // viewer left playback, until the 30s timeout. A no-op if this toast
       // was already dismissed (its own timeout, or a later pick replacing
       // it).
-      loadingToast.close();
+      loadingToast?.close();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than

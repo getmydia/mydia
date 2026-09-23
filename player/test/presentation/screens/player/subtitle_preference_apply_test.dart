@@ -32,6 +32,7 @@ import 'package:player/graphql/queries/subtitle_content.graphql.dart';
 import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/widgets/toast/toaster.dart';
 
 import '../../../test_utils/probed_tracks.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -698,5 +699,40 @@ void main() {
 
     expect(_subtitleContentRequests(link), 1,
         reason: "with no mpv list the server's copy is the only one there is");
+  });
+
+  testWidgets('selecting a track mpv already carries shows no loading toast',
+      (tester) async {
+    final player = _SlowProbePlayer(
+      mpvSubtitles: const [SubtitleTrack('1', 'English', 'eng')],
+    );
+    final link = _link(
+      preferredSubtitle:
+          preferredSubtitleObject(mode: 'TRACK', language: 'eng'),
+      file: _embeddedEnglishFile(),
+    );
+
+    await _mount(tester, link, player);
+
+    // Every message the toast layer is asked to show, however briefly. A
+    // toast shown and closed within one frame never paints, so asserting on
+    // `find.text` alone could pass while the code still shows it.
+    final controller = Toaster.maybeControllerOf(
+      tester.element(find.byType(PlayerScreen)),
+    )!;
+    final shown = <String>[];
+    void record() {
+      final message = controller.current?.message;
+      if (message != null) shown.add(message);
+    }
+
+    controller.addListener(record);
+    addTearDown(() => controller.removeListener(record));
+
+    player.probe();
+    await pumpUntil(tester, () => player.selectedSubtitleTracks.isNotEmpty);
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(shown, isNot(contains('Loading subtitle...')));
   });
 }
