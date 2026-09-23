@@ -1701,10 +1701,15 @@ async fn accept_inbound(
     disconnect_tx: &mpsc::Sender<(String, ConnectionId)>,
     hls_registry: &HlsStreamRegistry,
 ) {
+    // Paired with the client's "Dial to ... connected in" line, this splits a
+    // launch's connect time between the relay path and the handshake here.
+    let started = runtime::time::Instant::now();
+    tracing::info!("Incoming connection from {:?}", incoming.remote_addr());
+
     let mut accepting = match incoming.accept() {
         Ok(accepting) => accepting,
         Err(e) => {
-            tracing::warn!("Failed to accept connection: {}", e);
+            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
             return;
         }
     };
@@ -1713,7 +1718,7 @@ async fn accept_inbound(
     let alpn = match accepting.alpn().await {
         Ok(alpn) => alpn,
         Err(e) => {
-            tracing::warn!("Failed to get ALPN: {}", e);
+            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
             return;
         }
     };
@@ -1727,12 +1732,18 @@ async fn accept_inbound(
     let conn = match accepting.await {
         Ok(conn) => conn,
         Err(e) => {
-            tracing::warn!("Connection failed: {}", e);
+            tracing::warn!("Connection failed after {}ms: {}", started.elapsed().as_millis(), e);
             return;
         }
     };
 
     let peer_id = conn.remote_id().to_string();
+    tracing::info!(
+        "Accepted connection from {} in {}ms",
+        peer_id,
+        started.elapsed().as_millis()
+    );
+
     register_connection(
         conn,
         peer_id,
