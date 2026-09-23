@@ -259,6 +259,94 @@ defmodule Mydia.Library.ReleaseParser.ResolverTest do
     end
   end
 
+  describe "vocabulary words inside the title" do
+    test "a language word followed by a title word stays in the title" do
+      result = resolve("The.Italian.Harbor.2031.1080p.WEB-DL.x264")
+
+      assert result.title == "The Italian Harbor"
+      assert result.language == nil
+    end
+
+    test "a leading language word followed by a title word stays in the title" do
+      result = resolve("French.Harbor.2031.1080p.WEB-DL.x264")
+
+      assert result.title == "French Harbor"
+      assert result.language == nil
+    end
+
+    test "a TV title starting with Multi keeps it" do
+      result = resolve("Multi.Season.Show.S01.COMPLETE.1080p.WEB-DL.x264")
+
+      assert result.title == "Multi Season Show"
+      assert result.season == 1
+      assert result.language == nil
+    end
+
+    test "an audio word inside the title stays a tag" do
+      result = resolve("Quiet.Opus.Harbor.2031.1080p.WEB-DL.x264")
+
+      assert result.title == "Quiet Harbor"
+      assert Enum.any?(result.quality_tokens, &(&1.label == :audio))
+    end
+
+    test "a vocab word that ends the title zone stays a tag, even before a year" do
+      assert resolve("Quiet.Opus.2031.1080p.WEB-DL.x264").title == "Quiet"
+
+      result = resolve("Der.Film.Lantern.German.2031.PAL.DVDR")
+      assert result.title == "Der Film Lantern"
+      assert result.language == "German"
+    end
+
+    test "a quality word next to a title word does not leak release noise into the title" do
+      result = resolve("Series.10910.hdtv-lol")
+
+      refute result.title =~ "Hdtv"
+    end
+
+    test "a title-zone word does not displace a metadata-zone tag of its label" do
+      result = resolve("The.Italian.Harbor.2031.FRENCH.1080p.WEB-DL.x264")
+
+      assert result.title == "The Italian Harbor"
+      assert result.language == "French"
+    end
+
+    test "a tag at the end of the title zone stays a tag" do
+      result = resolve("Show.Name.S01.FRENCH.1080p.WEB-DL.x264")
+
+      assert result.title == "Show Name"
+      assert result.language == "French"
+    end
+
+    test "a tag after the year stays a tag" do
+      result = resolve("Movie.Name.2031.GERMAN.1080p.WEB-DL.x264")
+
+      assert result.title == "Movie Name"
+      assert result.language == "German"
+    end
+
+    test "a run of tags stays tags even when a stray word follows it" do
+      result = resolve("Movie.Name.MULTi.BluRay.x264.GRP")
+
+      refute result.title =~ "Multi"
+      refute result.title =~ "BluRay"
+      assert result.language == "Multi"
+    end
+
+    test "a single vocab word that is the whole title is the title" do
+      result = resolve("French.2031.1080p.WEB-DL.x264")
+
+      assert result.title == "French"
+      assert result.language == nil
+    end
+
+    test "a lone vocab word with no anchor is not reclaimed" do
+      result = resolve("FRENCH")
+
+      assert result.title == nil
+      assert result.language == "French"
+    end
+  end
+
   describe "empty / degenerate input" do
     test "empty token list returns :unknown without crashing" do
       result = Resolver.resolve([], nil)

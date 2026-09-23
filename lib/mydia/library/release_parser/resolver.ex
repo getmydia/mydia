@@ -113,6 +113,7 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
     {assignments, demoted_tokens} =
       tokens
       |> per_token_best()
+      |> reclaim_title_words(boundary)
       |> resolve_singleton_conflicts()
 
     assignments_map = group_assignments_by_token(assignments)
@@ -178,6 +179,85 @@ defmodule Mydia.Library.ReleaseParser.Resolver do
        do: true
 
   defp drop_weak_vocab?(_), do: false
+
+  # ---- Title-word reclamation ----
+  #
+  # A title word that is also a language tag ("Italian", "Multi") has only
+  # its language label left after per_token_best/1: the classifier gives a
+  # title fallback only to tokens no vocabulary matched, and the title-zone
+  # penalty leaves these above @vocab_min_confidence. A lone language word
+  # followed by a plain title word is part of the title
+  # ("The.Italian.Harbor"), and so is a single language word that is the
+  # whole title zone ("French.2031"). Reclaiming runs before singleton
+  # resolution, so a reclaimed word reports no language and cannot displace
+  # a real tag. A tag at the end of the title zone ("Show.S01.FRENCH.1080p")
+  # and words of a tag run ("MULTi.BluRay.x264") are not reclaimed here.
+  #
+  # Only language words are reclaimed, not the other vocab-derived labels
+  # (source, codec, hdr, audio, streaming_service, release_group). A
+  # quality word ("HDTV", "DVD", "x264") sitting next to a title word is
+  # usually not part of the title. It's release noise the parser has no
+  # vocabulary for ("Series.10910.hdtv-lol"), and reclaiming it folded that
+  # noise straight into already-wrong titles with no corresponding fix
+  # anywhere else.
+
+  @reclaimed_fallback_confidence 0.3
+
+  defp reclaim_title_words(per_token, boundary) do
+    {title_zone, rest} =
+      Enum.split_while(per_token, fn {token, _} -> in_title_zone?(token, boundary) end)
+
+    reclaim_zone(title_zone, boundary) ++ rest
+  end
+
+  defp reclaim_zone([{token, cands}], boundary) when boundary != :infinity do
+    case slate_kind(cands) do
+      :language -> [{token, [reclaimed_candidate(max_confidence(cands) * 0.5)]}]
+      _ -> [{token, cands}]
+    end
+  end
+
+  defp reclaim_zone(title_zone, _boundary) do
+    kinds = Enum.map(title_zone, fn {_, cands} -> slate_kind(cands) end)
+    previous_kinds = [nil | kinds]
+    next_entries = Enum.drop(title_zone, 1) ++ [nil]
+
+    # Enum.zip/1 truncates to the shortest list, aligning each token with its kind, prior kind, and next entry.
+    [title_zone, kinds, previous_kinds, next_entries]
+    |> Enum.zip()
+    |> Enum.map(&maybe_reclaim/1)
+  end
+
+  defp maybe_reclaim({{token, cands}, :language, previous_kind, {_, next_cands}})
+       when previous_kind != :language do
+    if slate_kind(next_cands) == :plain,
+      do: {token, [reclaimed_candidate(neighbor_confidence(next_cands))]},
+      else: {token, cands}
+  end
+
+  defp maybe_reclaim({entry, _kind, _previous_kind, _next}), do: entry
+
+  defp in_title_zone?(_token, :infinity), do: true
+  defp in_title_zone?(%Token{byte_offset: offset}, boundary), do: offset < boundary
+
+  defp slate_kind([]), do: :plain
+
+  defp slate_kind(cands) do
+    cond do
+      Enum.any?(cands, &(&1.label == :title_candidate)) -> :plain
+      Enum.all?(cands, &(&1.label == :language)) -> :language
+      true -> :other
+    end
+  end
+
+  defp reclaimed_candidate(confidence) do
+    %Candidate{label: :title_candidate, value: nil, confidence: confidence, zone: :title}
+  end
+
+  defp neighbor_confidence([]), do: @reclaimed_fallback_confidence
+  defp neighbor_confidence(cands), do: max_confidence(cands)
+
+  defp max_confidence(cands), do: cands |> Enum.map(& &1.confidence) |> Enum.max()
 
   # ---- Singleton-conflict resolution ----
   #
