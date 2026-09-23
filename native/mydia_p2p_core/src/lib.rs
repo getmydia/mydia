@@ -576,6 +576,19 @@ pub struct Host {
 
 impl Host {
     pub fn new(config: HostConfig) -> (Self, String) {
+        Self::spawn(config, false)
+    }
+
+    /// A host whose endpoint has relays disabled, so `endpoint.online()`
+    /// never resolves and the loop sits in its relay wait for the full 30s
+    /// cap. Test-only: it is how a test observes what the loop serves before
+    /// a home relay is chosen.
+    #[cfg(feature = "test-introspection")]
+    pub fn new_without_relays(config: HostConfig) -> (Self, String) {
+        Self::spawn(config, true)
+    }
+
+    fn spawn(config: HostConfig, relays_disabled: bool) -> (Self, String) {
         let secret_key = load_or_generate_keypair(&config);
         let node_id = secret_key.public().to_string();
         let node_id_str = node_id.clone();
@@ -598,6 +611,7 @@ impl Host {
             cmd_rx,
             shutdown_rx,
             event_tx,
+            relays_disabled,
         ));
 
         (
@@ -1097,6 +1111,7 @@ async fn run_event_loop(
     mut cmd_rx: mpsc::Receiver<Command>,
     mut shutdown_rx: watch::Receiver<bool>,
     event_tx: mpsc::Sender<Event>,
+    relays_disabled: bool,
 ) {
     // Initialize tracing to forward logs to Elixir
     init_tracing(event_tx.clone());
@@ -1120,7 +1135,9 @@ async fn run_event_loop(
     }
 
     // Configure relay
-    if let Some(mode) = build_relay_mode(&config) {
+    if relays_disabled {
+        builder = builder.relay_mode(RelayMode::Disabled);
+    } else if let Some(mode) = build_relay_mode(&config) {
         builder = builder.relay_mode(mode);
     }
 
@@ -1185,289 +1202,253 @@ async fn run_event_loop(
     // single dial rather than opening a connection each.
     let mut on_demand_dials: u64 = 0;
 
-    // Wait for the endpoint to come online (relay connected + local IP
-    // available), bounded by a timeout so an unreachable relay cannot block
-    // forever. Commands are read during this wait too: a `Shutdown` is
-    // answered at once instead of sitting unread until the wait ends, which
-    // otherwise made `terminate/2` hang for up to 30s right after the node
-    // started. Every other command is held, in arrival order, and served
-    // right after `Ready` is emitted below, so ordering stays exactly what
-    // it was before this wait could also drain the command channel.
+    // Wait for the endpoint to come online (a home relay connected), bounded
+    // so an unreachable relay cannot hold `Ready` forever. The wait is an arm
+    // of the loop below rather than a gate in front of it: a dial names the
+    // peer's relay and iroh opens that relay on demand, so nothing but
+    // `GetNodeAddr` needs our own home relay first. Holding every command
+    // here cost a player ~3s of launch time before its first request.
     tracing::info!("Waiting for relay connection...");
-    let mut shutting_down = false;
-    let mut held_commands: Vec<Command> = Vec::new();
     let online = runtime::time::timeout(std::time::Duration::from_secs(30), endpoint.online());
     let mut online = std::pin::pin!(online);
-    loop {
-        tokio::select! {
-            _ = shutdown_requested(&mut shutdown_rx) => {
-                shutting_down = true;
-                break;
-            }
-            result = &mut online => {
-                match result {
-                    Ok(()) => {
-                        relay_connected = true;
-                        tracing::info!("Relay connection established");
-                        let _ = event_tx.send(Event::RelayConnected).await;
-                    }
-                    Err(_) => {
-                        tracing::warn!("Relay connection timed out after 30s - continuing without relay");
-                    }
+    let mut online_done = false;
+    // `GetNodeAddr` asked before the wait ends, answered right after `Ready`:
+    // the address is what a server publishes, so it has to carry our relay.
+    let mut node_addr_waiters: Vec<oneshot::Sender<String>> = Vec::new();
+
+    let mut running = true;
+
+    while running {
+        // A host both accepts inbound connections and serves commands; a
+        // client only serves commands. `tokio::select!` takes no `#[cfg]` on
+        // a branch, so the two loop bodies are spelled out separately. Both
+        // call the same handlers, so only the set of arms differs.
+        // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
+        // every `Command` sender (all owned, directly or via clone, by the
+        // `Host` handle) has been dropped. That must end the loop on its
+        // own. It cannot be left to the `else` arm: `disconnect_rx` never
+        // observes closure while this function still holds `disconnect_tx`
+        // above, and `endpoint.accept()` simply stays pending with no more
+        // peers dialing in, so `else` would require both of those to also
+        // resolve to a non-matching value in the very same poll -- which
+        // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
+        // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
+        // arm on `None` rather than ending the loop) makes shutdown fire
+        // directly off that one authoritative signal.
+        //
+        // `Host::shutdown` also raises `shutdown_rx`, and every await
+        // below that can wait on a peer (a handshake, a command writing
+        // to a stalled stream) races it through `unless_shutdown`.
+        #[cfg(feature = "host")]
+        {
+            running = tokio::select! {
+                _ = shutdown_requested(&mut shutdown_rx) => false,
+
+                result = &mut online, if !online_done => {
+                    online_done = true;
+                    relay_connected = finish_relay_wait(
+                        result.is_ok(),
+                        &endpoint,
+                        &event_tx,
+                        &mut node_addr_waiters,
+                    )
+                    .await;
+                    true
                 }
-                break;
-            }
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(Command::Shutdown { reply }) => {
-                        shutdown_reply = Some(reply);
-                        shutting_down = true;
-                        break;
-                    }
-                    Some(cmd) => held_commands.push(cmd),
-                    None => {
-                        shutting_down = true;
-                        break;
-                    }
+
+                Some(incoming) = endpoint.accept() => {
+                    unless_shutdown(
+                        &mut shutdown_rx,
+                        accept_inbound(
+                            incoming,
+                            &mut connected_peers,
+                            &event_tx,
+                            &shared_state,
+                            &disconnect_tx,
+                            &hls_registry,
+                        ),
+                    )
+                    .await
                 }
-            }
-        }
-    }
 
-    if !shutting_down {
-        // Get endpoint address and emit Ready event
-        let addr = endpoint.addr();
-        let addr_json = endpoint_addr_to_json(&addr);
-        let _ = event_tx
-            .send(Event::Ready {
-                node_addr: addr_json,
-            })
-            .await;
-
-        let mut running = true;
-        for cmd in held_commands {
-            running = unless_shutdown(
-                &mut shutdown_rx,
-                handle_command(
-                    cmd,
-                    &endpoint,
-                    &mut connected_peers,
-                    &mut pending_requests,
-                    &mut on_demand_dials,
-                    &address_hints,
-                    &shared_state,
-                    relay_connected,
-                    &internal_tx,
-                    #[cfg(feature = "host")]
-                    &hls_registry,
-                ),
-            )
-            .await;
-            if !running {
-                break;
-            }
-        }
-
-        while running {
-            // A host both accepts inbound connections and serves commands; a
-            // client only serves commands. `tokio::select!` takes no `#[cfg]` on
-            // a branch, so the two loop bodies are spelled out separately. Both
-            // call the same handlers, so only the set of arms differs.
-            // `cmd_rx.recv()` returning `None` is the shutdown signal: it means
-            // every `Command` sender (all owned, directly or via clone, by the
-            // `Host` handle) has been dropped. That must end the loop on its
-            // own. It cannot be left to the `else` arm: `disconnect_rx` never
-            // observes closure while this function still holds `disconnect_tx`
-            // above, and `endpoint.accept()` simply stays pending with no more
-            // peers dialing in, so `else` would require both of those to also
-            // resolve to a non-matching value in the very same poll -- which
-            // they never do. Matching `cmd_rx.recv()`'s `Option` explicitly
-            // (instead of `Some(cmd) = cmd_rx.recv()`, which just disables the
-            // arm on `None` rather than ending the loop) makes shutdown fire
-            // directly off that one authoritative signal.
-            //
-            // `Host::shutdown` also raises `shutdown_rx`, and every await
-            // below that can wait on a peer (a handshake, a command writing
-            // to a stalled stream) races it through `unless_shutdown`.
-            #[cfg(feature = "host")]
-            {
-                running = tokio::select! {
-                    _ = shutdown_requested(&mut shutdown_rx) => false,
-
-                    Some(incoming) = endpoint.accept() => {
-                        unless_shutdown(
-                            &mut shutdown_rx,
-                            accept_inbound(
-                                incoming,
-                                &mut connected_peers,
-                                &event_tx,
-                                &shared_state,
-                                &disconnect_tx,
-                                &hls_registry,
-                            ),
-                        )
-                        .await
-                    }
-
-                    cmd = cmd_rx.recv() => {
-                        match cmd {
-                            Some(Command::Shutdown { reply }) => {
-                                shutdown_reply = Some(reply);
-                                false
-                            }
-                            Some(cmd) => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    handle_command(
-                                        cmd,
-                                        &endpoint,
-                                        &mut connected_peers,
-                                        &mut pending_requests,
-                                        &mut on_demand_dials,
-                                        &address_hints,
-                                        &shared_state,
-                                        relay_connected,
-                                        &internal_tx,
-                                        &hls_registry,
-                                    ),
-                                )
-                                .await
-                            }
-                            None => false,
+                cmd = cmd_rx.recv() => {
+                    match cmd {
+                        Some(Command::Shutdown { reply }) => {
+                            shutdown_reply = Some(reply);
+                            false
                         }
+                        Some(Command::GetNodeAddr { reply }) if !online_done => {
+                            node_addr_waiters.push(reply);
+                            true
+                        }
+                        Some(cmd) => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                handle_command(
+                                    cmd,
+                                    &endpoint,
+                                    &mut connected_peers,
+                                    &mut pending_requests,
+                                    &mut on_demand_dials,
+                                    &address_hints,
+                                    &shared_state,
+                                    relay_connected,
+                                    &internal_tx,
+                                    &hls_registry,
+                                ),
+                            )
+                            .await
+                        }
+                        None => false,
                     }
+                }
 
-                    Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                        prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                        true
-                    }
+                Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                    prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
+                    true
+                }
 
-                    Some(msg) = internal_rx.recv() => {
-                        match msg {
-                            InternalMessage::DialSucceeded {
-                                node_id,
-                                conn,
-                                reply,
-                            } => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    async {
-                                        register_connection(
-                                            conn,
-                                            node_id,
-                                            &mut connected_peers,
-                                            &event_tx,
-                                            &shared_state,
-                                            &disconnect_tx,
-                                            &hls_registry,
-                                        )
-                                        .await;
-                                        let _ = reply.send(Ok(()));
-                                    },
-                                )
-                                .await
-                            }
-                            InternalMessage::RequestDialFinished { node_id, result } => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    handle_request_dial_finished(
+                Some(msg) = internal_rx.recv() => {
+                    match msg {
+                        InternalMessage::DialSucceeded {
+                            node_id,
+                            conn,
+                            reply,
+                        } => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                async {
+                                    register_connection(
+                                        conn,
                                         node_id,
-                                        result,
                                         &mut connected_peers,
-                                        &mut pending_requests,
                                         &event_tx,
                                         &shared_state,
                                         &disconnect_tx,
                                         &hls_registry,
-                                    ),
-                                )
-                                .await
-                            }
+                                    )
+                                    .await;
+                                    let _ = reply.send(Ok(()));
+                                },
+                            )
+                            .await
+                        }
+                        InternalMessage::RequestDialFinished { node_id, result } => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                handle_request_dial_finished(
+                                    node_id,
+                                    result,
+                                    &mut connected_peers,
+                                    &mut pending_requests,
+                                    &event_tx,
+                                    &shared_state,
+                                    &disconnect_tx,
+                                    &hls_registry,
+                                ),
+                            )
+                            .await
                         }
                     }
-                };
-            }
+                }
+            };
+        }
 
-            #[cfg(not(feature = "host"))]
-            {
-                running = tokio::select! {
-                    _ = shutdown_requested(&mut shutdown_rx) => false,
+        #[cfg(not(feature = "host"))]
+        {
+            running = tokio::select! {
+                _ = shutdown_requested(&mut shutdown_rx) => false,
 
-                    cmd = cmd_rx.recv() => {
-                        match cmd {
-                            Some(Command::Shutdown { reply }) => {
-                                shutdown_reply = Some(reply);
-                                false
-                            }
-                            Some(cmd) => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    handle_command(
-                                        cmd,
-                                        &endpoint,
-                                        &mut connected_peers,
-                                        &mut pending_requests,
-                                        &mut on_demand_dials,
-                                        &address_hints,
-                                        &shared_state,
-                                        relay_connected,
-                                        &internal_tx,
-                                    ),
-                                )
-                                .await
-                            }
-                            None => false,
+                result = &mut online, if !online_done => {
+                    online_done = true;
+                    relay_connected = finish_relay_wait(
+                        result.is_ok(),
+                        &endpoint,
+                        &event_tx,
+                        &mut node_addr_waiters,
+                    )
+                    .await;
+                    true
+                }
+
+                cmd = cmd_rx.recv() => {
+                    match cmd {
+                        Some(Command::Shutdown { reply }) => {
+                            shutdown_reply = Some(reply);
+                            false
                         }
+                        Some(Command::GetNodeAddr { reply }) if !online_done => {
+                            node_addr_waiters.push(reply);
+                            true
+                        }
+                        Some(cmd) => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                handle_command(
+                                    cmd,
+                                    &endpoint,
+                                    &mut connected_peers,
+                                    &mut pending_requests,
+                                    &mut on_demand_dials,
+                                    &address_hints,
+                                    &shared_state,
+                                    relay_connected,
+                                    &internal_tx,
+                                ),
+                            )
+                            .await
+                        }
+                        None => false,
                     }
+                }
 
-                    Some((peer_id, stable_id)) = disconnect_rx.recv() => {
-                        prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
-                        true
-                    }
+                Some((peer_id, stable_id)) = disconnect_rx.recv() => {
+                    prune_disconnected_peer(&mut connected_peers, &event_tx, &peer_id, stable_id).await;
+                    true
+                }
 
-                    Some(msg) = internal_rx.recv() => {
-                        match msg {
-                            InternalMessage::DialSucceeded {
-                                node_id,
-                                conn,
-                                reply,
-                            } => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    async {
-                                        register_connection(
-                                            conn,
-                                            node_id,
-                                            &mut connected_peers,
-                                            &event_tx,
-                                            &shared_state,
-                                            &disconnect_tx,
-                                        )
-                                        .await;
-                                        let _ = reply.send(Ok(()));
-                                    },
-                                )
-                                .await
-                            }
-                            InternalMessage::RequestDialFinished { node_id, result } => {
-                                unless_shutdown(
-                                    &mut shutdown_rx,
-                                    handle_request_dial_finished(
+                Some(msg) = internal_rx.recv() => {
+                    match msg {
+                        InternalMessage::DialSucceeded {
+                            node_id,
+                            conn,
+                            reply,
+                        } => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                async {
+                                    register_connection(
+                                        conn,
                                         node_id,
-                                        result,
                                         &mut connected_peers,
-                                        &mut pending_requests,
                                         &event_tx,
                                         &shared_state,
                                         &disconnect_tx,
-                                    ),
-                                )
-                                .await
-                            }
+                                    )
+                                    .await;
+                                    let _ = reply.send(Ok(()));
+                                },
+                            )
+                            .await
+                        }
+                        InternalMessage::RequestDialFinished { node_id, result } => {
+                            unless_shutdown(
+                                &mut shutdown_rx,
+                                handle_request_dial_finished(
+                                    node_id,
+                                    result,
+                                    &mut connected_peers,
+                                    &mut pending_requests,
+                                    &event_tx,
+                                    &shared_state,
+                                    &disconnect_tx,
+                                ),
+                            )
+                            .await
                         }
                     }
-                };
-            }
+                }
+            };
         }
     }
 
@@ -1513,6 +1494,34 @@ async fn unless_shutdown(
         _ = shutdown_requested(shutdown_rx) => false,
         _ = work => true,
     }
+}
+
+/// Ends the relay wait: reports how it went, emits `Ready`, then answers
+/// every `GetNodeAddr` that arrived during it. Returns whether a home relay
+/// is connected.
+async fn finish_relay_wait(
+    online: bool,
+    endpoint: &Endpoint,
+    event_tx: &mpsc::Sender<Event>,
+    waiters: &mut Vec<oneshot::Sender<String>>,
+) -> bool {
+    if online {
+        tracing::info!("Relay connection established");
+        let _ = event_tx.send(Event::RelayConnected).await;
+    } else {
+        tracing::warn!("Relay connection timed out after 30s - continuing without relay");
+    }
+
+    let addr_json = endpoint_addr_to_json(&endpoint.addr());
+    let _ = event_tx
+        .send(Event::Ready {
+            node_addr: addr_json.clone(),
+        })
+        .await;
+    for reply in waiters.drain(..) {
+        let _ = reply.send(addr_json.clone());
+    }
+    online
 }
 
 /// Every live connection a peer currently holds, keyed by `ConnectionId`.
