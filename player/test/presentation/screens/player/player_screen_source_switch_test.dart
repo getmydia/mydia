@@ -166,20 +166,27 @@ _GatedLink _server({
   String playlistMode = 'WINDOW',
 }) {
   var sessionStarts = 0;
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // index-keyed dispatch can no longer script them -- dispatch on the
+  // operation instead.
   Object handler(Request request, int index) {
     if (request.operation.document == documentNodeQuerySubtitleContent) {
       return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
     }
-    if (index == 0) {
+    if (isOperation(request, 'MovieDetail')) {
       return movieDetailResponse(
         positionSeconds: 0,
         files: withSubtitle ? [mediaFileWithSubtitle()] : null,
       );
     }
-    if (index == 1) return movieSegmentsResponse();
-    if (index == 2) return subtitleTrackSettingsResponse();
-    if (index == 3) return subtitlePreferenceResponse();
-    if (index == 4) {
+    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+    if (isOperation(request, 'SubtitleTrackSettings')) {
+      return subtitleTrackSettingsResponse();
+    }
+    if (isOperation(request, 'MovieSubtitlePreference')) {
+      return subtitlePreferenceResponse();
+    }
+    if (isOperation(request, 'StreamingCandidates')) {
       return streamingCandidatesResponse(
         directPlay: directPlay,
         duration: 5400,

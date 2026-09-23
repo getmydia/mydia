@@ -42,6 +42,23 @@ import 'player_screen_test_harness.dart';
 void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead.
+  StubLink linkFor(Object candidates) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      return candidates;
+    });
+  }
+
   testWidgets(
       'a downloaded file missing from disk still reaches a real stream, '
       'not the offline sentinel', (tester) async {
@@ -60,13 +77,8 @@ void main() {
     // `streamingCandidatesResponse` hardcodes fileId 'file-1' — the id the
     // server ranked highest for the movie. Direct play must end up streaming
     // that id, never the literal string 'offline'.
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400, directPlay: true),
-    ]);
+    final link =
+        linkFor(streamingCandidatesResponse(duration: 5400, directPlay: true));
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -103,11 +115,12 @@ void main() {
           'ranked for the media item',
     );
 
-    // Fifth scripted call, matching the response order above: detail,
-    // segments, subtitle offsets, the preference, candidates. `StubLink` is
-    // index-based, so this ordering is the same one every other PlayerScreen
-    // test relies on.
-    final candidatesVariables = link.requests[4].variables;
+    // The pre-play queries now fire concurrently, so their position in
+    // `link.requests` is no longer fixed -- pick the `StreamingCandidates`
+    // call out by the variable unique to it instead.
+    final candidatesVariables = link.requests
+        .firstWhere((r) => r.variables.containsKey('contentType'))
+        .variables;
     expect(
       candidatesVariables['contentType'],
       'movie',
@@ -132,16 +145,10 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // Same detail/segments responses as the happy-path test above, but the
-    // third scripted response — the streaming candidates call this branch
-    // depends on to find anything to play — fails outright, standing in for
-    // a transient GraphQL error or an unreachable server.
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      graphqlErrorResponse('internal server error'),
-    ]);
+    // streaming candidates call this branch depends on to find anything to
+    // play fails outright, standing in for a transient GraphQL error or an
+    // unreachable server.
+    final link = linkFor(graphqlErrorResponse('internal server error'));
 
     final container = buildPlayerScreenContainer(
       link: link,

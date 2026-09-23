@@ -30,8 +30,10 @@ import '../../../core/player/video_output_config.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
+import '../../../core/playback/isolated_fetches.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
+import '../../../core/startup/startup_timeline.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
 import '../../../core/utils/web_lifecycle.dart' as web_lifecycle;
 import '../../../core/player/fullscreen/fullscreen_controller.dart';
@@ -346,6 +348,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Player? _player;
   VideoController? _videoController;
   ProgressService? _progressService;
+
+  /// Play-to-first-frame marks for this screen's current load. Replaced on
+  /// every `_initializePlayer` run, so a source restart times itself.
+  StartupTimeline? _playTimeline;
 
   /// Captured in [initState] rather than read from `dispose()`, for the same
   /// reason as [_invalidator]: `remoteTargetControllerProvider` is a plain
@@ -1249,6 +1255,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _initializePlayer() async {
+    _playTimeline = StartupTimeline('playback');
     _resetSegmentsIfMediaChanged();
 
     // Cleared up front so the branches that never reach a streaming session —
@@ -1500,16 +1507,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Initialize progress service
       _progressService = ProgressService(graphqlClient);
 
-      // Fetch saved progress and episode list for TV shows
-      await _fetchProgressAndEpisodes(graphqlClient);
-
-      // Fetch streaming candidates to determine optimal strategy
-      if (mounted) {
-        setState(() {
-          _loadingMessage = 'Checking file compatibility...';
-        });
-      }
-
       // Ask about the *file* the user picked. Keying this on mediaId left
       // the server to pick one of the item's files with no way to express the
       // user's choice, and its pick then won on the direct-play path below.
@@ -1521,11 +1518,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final byFile = widget.fileId != 'offline';
       final mediaContentType =
           widget.mediaType == 'movie' ? 'movie' : 'episode';
-      var candidatesFetch = await _fetchStreamingCandidates(
+      // Started now and awaited below: it shares nothing with the queries in
+      // `_fetchProgressAndEpisodes`, and never throws (it catches everything).
+      final candidatesFuture = _fetchStreamingCandidates(
         graphqlClient,
         byFile ? 'file' : mediaContentType,
         byFile ? widget.fileId : widget.mediaId,
       );
+
+      // Fetch saved progress and episode list for TV shows
+      await _fetchProgressAndEpisodes(graphqlClient);
+      _playTimeline?.mark('queries_done');
+
+      // Fetch streaming candidates to determine optimal strategy
+      if (mounted) {
+        setState(() {
+          _loadingMessage = 'Checking file compatibility...';
+        });
+      }
+
+      var candidatesFetch = await candidatesFuture;
 
       // A selected file can go missing out from under a live route: a
       // quality upgrade replaces an episode's file, writing a new
@@ -2612,7 +2624,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) async {
+  /// Fetches the movie or episode detail document: saved progress, runtime,
+  /// and the subtitle tracks extracted from its files.
+  Future<void> _fetchDetail(GraphQLClient client) async {
     try {
       if (widget.mediaType == 'movie') {
         // Fetch movie progress
@@ -2654,30 +2668,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
           // Extract subtitle tracks from files
           _extractSubtitlesFromFiles(episode?.files);
-
-          // If we have show and season info, fetch episode list for navigation
-          if (widget.showId != null && widget.seasonNumber != null) {
-            await _fetchSeasonEpisodes(client);
-          }
         }
       }
     } catch (e) {
       debugPrint('Error fetching progress: $e');
     }
+  }
 
-    // Deliberately outside the block above: segments are their own query, and
-    // neither failure may take the other down with it.
-    await _fetchSegments(client);
-
-    // Same reasoning: subtitle offsets are their own standalone query, kept
-    // apart from MediaFileFragment for exactly the degrade-gracefully
-    // property this relies on.
-    await _loadSubtitleOffsets(client);
-
-    // And again for the per-show subtitle choice, which used to live in
-    // MediaFileFragment and took the resume position down with it on any
-    // server that did not know the field.
-    await _fetchSubtitlePreference(client);
+  /// Every pre-play query at once. All of them read only `widget.*`, and each
+  /// was already failure-isolated; they used to run one after another.
+  ///
+  /// The subtitle preference stays chained after the detail: applying it
+  /// reads the tracks `_extractSubtitlesFromFiles` builds from the detail.
+  /// Season episodes no longer waits for the detail to succeed, so a failed
+  /// detail now costs one extra query rather than skipping it.
+  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) {
+    return runIsolated({
+      'detail and subtitle preference': () async {
+        await _fetchDetail(client);
+        await _fetchSubtitlePreference(client);
+      },
+      if (widget.mediaType == 'episode' &&
+          widget.showId != null &&
+          widget.seasonNumber != null)
+        'season episodes': () => _fetchSeasonEpisodes(client),
+      'segments': () => _fetchSegments(client),
+      'subtitle offsets': () => _loadSubtitleOffsets(client),
+    });
   }
 
   /// Loads stored subtitle offsets for this media file.

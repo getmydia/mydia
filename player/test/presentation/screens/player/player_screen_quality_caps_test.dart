@@ -62,17 +62,44 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Answers every pre-play query, which now fire concurrently (see
+  /// `runIsolated`) and so can no longer be scripted by an ordered
+  /// `StubLink.responses` list. [candidates] answers `StreamingCandidates`;
+  /// [session], when given, answers every `startStreamingSession`/legacy
+  /// call (`strategy` is the variable both carry), numbering attempts from 1
+  /// so a retry test can vary the reply. Anything else -- `endStreamingSession`
+  /// included -- gets `endStreamingSessionResponse()`, the same answer the
+  /// exhausted end of a `StubLink.responses` list used to repeat.
+  StubLink linkFor(
+    Object candidates, {
+    Object Function(int attempt)? session,
+  }) {
+    var attempts = 0;
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (isOperation(request, 'StreamingCandidates')) return candidates;
+      if (request.variables.containsKey('strategy')) {
+        attempts++;
+        return session?.call(attempts) ?? endStreamingSessionResponse();
+      }
+      return endStreamingSessionResponse();
+    });
+  }
+
   testWidgets('sends the stored rung as a bitrate and height cap',
       (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
-      startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) =>
+          startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -96,17 +123,12 @@ void main() {
   testWidgets(
       'falls back to Auto, transcoding at the source, when the source '
       'cannot offer the stored rung', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      // A 720p source: the 1080p rung would upscale, so it is not on this
-      // file's ladder at all.
+    // A 720p source: the 1080p rung would upscale, so it is not on this
+    // file's ladder at all.
+    final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 720),
-      startStreamingSessionResponse(),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) => startStreamingSessionResponse(),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -130,18 +152,14 @@ void main() {
 
   testWidgets('a chosen rung takes precedence over direct play',
       (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      // Direct play is on offer and would normally win on native, handing the
-      // file over untouched — with no encoder to apply the cap to.
+    // Direct play is on offer and would normally win on native, handing the
+    // file over untouched — with no encoder to apply the cap to.
+    final link = linkFor(
       streamingCandidatesResponse(
           duration: 5400, height: 2160, directPlay: true),
-      startStreamingSessionResponse(maxBitrate: 1500, maxHeight: 480),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) =>
+          startStreamingSessionResponse(maxBitrate: 1500, maxHeight: 480),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -163,22 +181,19 @@ void main() {
   testWidgets(
       'retries through the legacy document when the server does not '
       'know maxHeight', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
-      // Absinthe's verbatim text for an argument the schema does not declare.
-      graphqlErrorResponse(
-        'Unknown argument "maxHeight" on field "startStreamingSession" of '
-        'type "RootMutationType".',
-      ),
-      // The retry must survive a reply with no echoed caps at all, which is
-      // the only kind an old server can send.
-      legacyStartStreamingSessionResponse(),
-      endStreamingSessionResponse(),
-    ]);
+      session: (attempt) => attempt == 1
+          // Absinthe's verbatim text for an argument the schema does not
+          // declare.
+          ? graphqlErrorResponse(
+              'Unknown argument "maxHeight" on field "startStreamingSession" '
+              'of type "RootMutationType".',
+            )
+          // The retry must survive a reply with no echoed caps at all, which
+          // is the only kind an old server can send.
+          : legacyStartStreamingSessionResponse(),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -286,15 +301,10 @@ void main() {
   testWidgets(
       'an unreadable preference plays at Auto, transcoding at the '
       'source, rather than failing', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
-      startStreamingSessionResponse(),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) => startStreamingSessionResponse(),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -320,15 +330,10 @@ void main() {
   });
 
   testWidgets('does not retry a genuine failure', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
-      graphqlErrorResponse('Failed to start streaming session'),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) => graphqlErrorResponse('Failed to start streaming session'),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -355,16 +360,11 @@ void main() {
 
   testWidgets('a remembered decode failure keeps Auto from direct playing',
       (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(
           duration: 5400, height: 1080, directPlay: true),
-      startStreamingSessionResponse(),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) => startStreamingSessionResponse(),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -410,18 +410,14 @@ void main() {
   testWidgets(
       'Auto caps to the highest fitting rung after a recent stall on this '
       'path', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
-      // 720p needs 4000 * 1.3 = 5200 <= 6000.
+    // 20000000 bps = 20000 kbps. 1080p needs 8000 * 1.3 = 10400 > 6000;
+    // 720p needs 4000 * 1.3 = 5200 <= 6000.
+    final link = linkFor(
       streamingCandidatesResponse(
           duration: 5400, height: 2160, bitrate: 20000000),
-      startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
-      endStreamingSessionResponse(),
-    ]);
+      session: (_) =>
+          startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720),
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -455,15 +451,10 @@ void main() {
   testWidgets(
       'a stored Original direct plays despite a remembered decode failure',
       (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
+    final link = linkFor(
       streamingCandidatesResponse(
           duration: 5400, height: 1080, directPlay: true),
-      endStreamingSessionResponse(),
-    ]);
+    );
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -499,21 +490,14 @@ void main() {
   testWidgets(
       'a stored Original direct plays despite a recent stall below the file '
       'bitrate', (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
-      // would not direct play this file.
-      streamingCandidatesResponse(
-        duration: 1423,
-        height: 2160,
-        bitrate: 11872000,
-        directPlay: true,
-      ),
-      endStreamingSessionResponse(),
-    ]);
+    // 11872000 bps = 11872 kbps, and 11872 * 1.3 = 15434 > 10685, so Auto
+    // would not direct play this file.
+    final link = linkFor(streamingCandidatesResponse(
+      duration: 1423,
+      height: 2160,
+      bitrate: 11872000,
+      directPlay: true,
+    ));
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -552,21 +536,14 @@ void main() {
   testWidgets(
       'Auto direct plays when the only remembered stall is on another path',
       (tester) async {
-    final link = StubLink.responses([
-      movieDetailResponse(),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
-      // with this ceiling on the http path would stop Auto direct playing.
-      streamingCandidatesResponse(
-        duration: 1423,
-        height: 2160,
-        bitrate: 11700000,
-        directPlay: true,
-      ),
-      endStreamingSessionResponse(),
-    ]);
+    // 11700000 bps = 11700 kbps; 11700 * 1.3 = 15210 > 8000, so a stall
+    // with this ceiling on the http path would stop Auto direct playing.
+    final link = linkFor(streamingCandidatesResponse(
+      duration: 1423,
+      height: 2160,
+      bitrate: 11700000,
+      directPlay: true,
+    ));
 
     final container = buildPlayerScreenContainer(
       link: link,

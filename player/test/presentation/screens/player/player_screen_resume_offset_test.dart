@@ -52,6 +52,34 @@ void main() {
     await tester.pump();
   }
 
+  // The pre-play queries now fire concurrently (see `runIsolated`), so an
+  // ordered `StubLink.responses` list can no longer script them -- dispatch
+  // on the operation instead. `startStreamingSession` and
+  // `endStreamingSession` still fire well after the resume dialog is
+  // answered, so they are told apart by the variables only they carry.
+  StubLink linkFor({int? echoedStartPosition}) {
+    return StubLink((request, index) {
+      if (isOperation(request, 'MovieDetail')) {
+        return movieDetailResponse(positionSeconds: 2700);
+      }
+      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+      if (isOperation(request, 'SubtitleTrackSettings')) {
+        return subtitleTrackSettingsResponse();
+      }
+      if (isOperation(request, 'MovieSubtitlePreference')) {
+        return subtitlePreferenceResponse();
+      }
+      if (request.variables.containsKey('strategy')) {
+        return startStreamingSessionResponse(
+            startPosition: echoedStartPosition);
+      }
+      if (request.variables.containsKey('sessionId')) {
+        return endStreamingSessionResponse();
+      }
+      return streamingCandidatesResponse(duration: 5400);
+    });
+  }
+
   testWidgets(
       'builds the timeline from the echoed startPosition, not the requested '
       'one', (tester) async {
@@ -62,15 +90,7 @@ void main() {
     // different, simulating the server clamping to the nearest keyframe.
     // If a regression fed the *requested* value into the timeline instead,
     // the assertion below (looking for the 2695 offset) would fail.
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 2700),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-      startStreamingSessionResponse(startPosition: 2695),
-      endStreamingSessionResponse(),
-    ]);
+    final link = linkFor(echoedStartPosition: 2695);
 
     final container = buildPlayerScreenContainer(
       link: link,
@@ -113,16 +133,8 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = StubLink.responses([
-      movieDetailResponse(positionSeconds: 2700),
-      movieSegmentsResponse(),
-      subtitleTrackSettingsResponse(),
-      subtitlePreferenceResponse(),
-      streamingCandidatesResponse(duration: 5400),
-      // No `startPosition` key at all — the older-server case.
-      startStreamingSessionResponse(startPosition: null),
-      endStreamingSessionResponse(),
-    ]);
+    // No `startPosition` key at all — the older-server case.
+    final link = linkFor(echoedStartPosition: null);
 
     final container = buildPlayerScreenContainer(
       link: link,

@@ -55,6 +55,26 @@ GraphQLClient stubClient(Link link, {GraphQLCache? cache}) => GraphQLClient(
       queryRequestTimeout: null,
     );
 
+/// Whether [request] carries the GraphQL operation named [name].
+///
+/// `request.operation.operationName` is null for everything the player
+/// issues, because `QueryOptions`/`MutationOptions` never set it, and
+/// graphql_flutter does not re-export the `gql` AST node types a document
+/// walk would need. What `Operation.toString()` does give is the printed
+/// query/mutation text, which names the operation on its first line, so this
+/// looks for `query <Name>` or `mutation <Name>` there instead. The trailing
+/// `\b` keeps `StartStreamingSession` from matching
+/// `StartStreamingSessionLegacy`.
+///
+/// A screen that fires several independent queries at once (see
+/// `runIsolated`) can no longer be scripted by a `StubLink.responses` list
+/// keyed on call order -- concurrent dispatch does not preserve it. This is
+/// the per-operation replacement: build a `StubLink((request, _) => ...)`
+/// that branches on this instead.
+bool isOperation(Request request, String name) =>
+    RegExp(r'(?:query|mutation)\s+' + RegExp.escape(name) + r'\b')
+        .hasMatch(request.operation.toString());
+
 /// A GraphQL-level failure response (the shape a server error takes).
 Response graphqlErrorResponse(String message) => Response(
       errors: [GraphQLError(message: message)],
