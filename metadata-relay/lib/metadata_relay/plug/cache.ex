@@ -98,6 +98,20 @@ defmodule MetadataRelay.Plug.Cache do
   end
 
   @impl true
+  def call(
+        %Plug.Conn{method: "GET", request_path: "/api/v1/subtitles/download-url/" <> _rest} =
+          conn,
+        _opts
+      ) do
+    # Skip caching for subtitle download-url lookups. The response is computed
+    # locally from the id (FileId.decode/1 plus string formatting), with no
+    # upstream call and no quota to protect, so caching buys nothing and would
+    # occupy the count-capped entry pool the way the archive download above
+    # does not want to either.
+    conn
+  end
+
+  @impl true
   def call(%Plug.Conn{method: "GET"} = conn, _opts) do
     serve_or_cache(conn, build_cache_key(conn))
   end

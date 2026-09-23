@@ -277,6 +277,19 @@ defmodule MetadataRelay.Plug.CacheTest do
     end
   end
 
+  describe "GET /api/v1/subtitles/download-url/:id" do
+    test "is excluded from the cache, like the download route it points to" do
+      id = MetadataRelay.SubDL.FileId.encode("/subtitle/1-2.zip")
+      path = "/api/v1/subtitles/download-url/#{id}"
+
+      conn = Router.call(Plug.Test.conn(:get, path), @opts)
+
+      assert conn.status == 200
+      refute cache_control(conn) =~ "public"
+      assert entry_ttl_ms("GET:#{path}:") == nil
+    end
+  end
+
   describe "GET episode data" do
     test "a season still settling is cached for six hours, a settled one keeps the season TTL" do
       TMDBHelpers.set_tmdb_adapter(fn request ->
