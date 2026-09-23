@@ -240,15 +240,10 @@ class PlaybackController {
 
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
-      // A FULL playlist is built whole from the file's duration before the
-      // server answers StartStreamingSession, so there is nothing to wait
-      // for, and the player fetches the same manifest itself a moment later.
-      if (!full) {
-        await _awaitPlaylist(resolved.url,
-            headers: resolved.probeHeaders,
-            onProgress: onProgress,
-            lifetime: lifetime);
-      }
+      await _awaitPlaylist(resolved.url,
+          headers: resolved.probeHeaders,
+          onProgress: onProgress,
+          lifetime: lifetime);
       _requireActive(lifetime);
 
       return PlaybackSource(
