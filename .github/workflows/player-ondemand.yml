@@ -27,6 +27,10 @@ on:
         description: 'Build Linux (.tar.gz bundle)'
         type: boolean
         default: false
+      build_flatpak:
+        description: 'Build Linux Flatpak and publish it to the dev channel (mydia-dev)'
+        type: boolean
+        default: false
       upload_to_stores:
         description: 'Upload iOS build to TestFlight internal testers (Android test builds are distributed as direct APK artifacts)'
         type: boolean
@@ -72,6 +76,7 @@ jobs:
           INPUT_VERSION: ${{ inputs.version_override }}
           INPUT_UPLOAD_TO_STORES: ${{ inputs.upload_to_stores }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_BUILD_FLATPAK: ${{ inputs.build_flatpak }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
@@ -140,6 +145,7 @@ jobs:
             echo "- **Version Code:** \`$VERSION_CODE\`"
             echo "- **Store Upload:** \`$INPUT_UPLOAD_TO_STORES\`"
             echo "- **Dry Run:** \`$INPUT_DRY_RUN\`"
+            echo "- **Flatpak (dev channel):** \`$INPUT_BUILD_FLATPAK\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   player-ios:
@@ -242,6 +248,33 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
       version_code: ${{ needs.prepare.outputs.version_code }}
       dry_run: ${{ inputs.dry_run }}
+
+  player-flatpak:
+    name: Player / Flatpak
+    if: inputs.build_flatpak
+    needs: prepare
+    uses: ./.github/workflows/player-flatpak.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      channel: dev
+      dry_run: ${{ inputs.dry_run }}
+
+  flatpak-publish:
+    name: Publish Flatpak
+    needs:
+      - prepare
+      - player-flatpak
+    if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-flatpak.result == 'success' }}
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-flatpak.yml
+    with:
+      channel: dev
+      ref: ${{ needs.prepare.outputs.sha }}
+    secrets: inherit
 
   appcast:
     name: Deploy Appcast
