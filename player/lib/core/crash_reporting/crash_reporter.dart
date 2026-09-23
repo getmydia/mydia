@@ -4,8 +4,9 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../diagnostics/diagnostics_settings.dart';
+import '../logging/log_sink.dart';
 import '../relay/relay_api_client.dart' show metadataRelayBaseUrl;
-import '../settings/settings_service.dart';
 import 'crash_app_context.dart';
 import 'crash_report.dart';
 import 'crash_report_queue.dart';
@@ -28,14 +29,12 @@ class CrashReporter {
     required http.Client client,
     required Uri endpoint,
     required Future<bool> Function() loadConsent,
-    required Future<void> Function(bool enabled) saveConsent,
     required Future<CrashAppContext> Function() loadAppContext,
     this.isAvailable = true,
     DateTime Function()? now,
     void Function(FlutterErrorDetails details)? presentFlutterError,
     Duration consentTimeout = const Duration(seconds: 2),
   })  : _loadConsent = loadConsent,
-        _saveConsent = saveConsent,
         _loadAppContext = loadAppContext,
         _now = now ?? DateTime.now,
         _presentFlutterError = presentFlutterError ??
@@ -46,19 +45,17 @@ class CrashReporter {
 
   /// The reporter `main()` installs.
   ///
-  /// Consent lives in [SettingsService], built on first use so nothing
+  /// Consent lives in [DiagnosticsSettings], built on first use so nothing
   /// touches storage before the binding exists. Web builds install the
   /// handlers but send nothing: dart2js traces are minified, and neither
   /// relay answers CORS for `/crashes/report`.
   factory CrashReporter.production() {
-    SettingsService? settings;
-    SettingsService settingsService() => settings ??= SettingsService();
+    DiagnosticsSettings? settings;
+    DiagnosticsSettings diagnostics() => settings ??= DiagnosticsSettings();
     return CrashReporter(
       client: http.Client(),
       endpoint: Uri.parse('$metadataRelayBaseUrl/crashes/report'),
-      loadConsent: () => settingsService().getCrashReportingEnabled(),
-      saveConsent: (enabled) =>
-          settingsService().setCrashReportingEnabled(enabled),
+      loadConsent: () async => (await diagnostics().load()).crashesEnabled,
       loadAppContext: loadCrashAppContext,
       isAvailable: !kIsWeb,
     );
@@ -71,7 +68,6 @@ class CrashReporter {
         client: _NoNetworkClient(),
         endpoint: Uri(),
         loadConsent: () async => false,
-        saveConsent: (_) async {},
         loadAppContext: () async => const CrashAppContext(
           version: '',
           buildNumber: '',
@@ -88,7 +84,6 @@ class CrashReporter {
   final bool isAvailable;
 
   final Future<bool> Function() _loadConsent;
-  final Future<void> Function(bool enabled) _saveConsent;
   final Future<CrashAppContext> Function() _loadAppContext;
   final DateTime Function() _now;
   final void Function(FlutterErrorDetails details) _presentFlutterError;
@@ -97,8 +92,8 @@ class CrashReporter {
   final CrashReportQueue _queue;
   final Set<String> _seen = {};
   bool? _consent;
-  // Bumped by every setEnabled. A consent read or an earlier write that
-  // finishes after a newer choice was made must not overwrite it.
+  // Bumped by every applyConsent. A consent read that finishes after a
+  // newer choice was applied must not overwrite it.
   int _consentRevision = 0;
   CrashAppContext? _appContext;
 
@@ -118,6 +113,7 @@ class CrashReporter {
     debugPrint('Stack trace: ${details.stack}');
     // Flutter marks environmental failures, image loads among them, silent.
     if (details.silent) return;
+    LogSink.instance?.recordError(details.exception, details.stack);
     unawaited(
       report(
         details.exception,
@@ -131,6 +127,7 @@ class CrashReporter {
   bool handlePlatformError(Object error, StackTrace stack) {
     debugPrint('Platform error: $error');
     debugPrint('Stack trace: $stack');
+    LogSink.instance?.recordError(error, stack);
     unawaited(report(error, stack, capture: CrashCapture.platformDispatcher));
     return true;
   }
@@ -199,14 +196,14 @@ class CrashReporter {
   Future<bool> isEnabled() =>
       isAvailable ? _consentGranted() : Future<bool>.value(false);
 
-  /// Stores the user's choice and applies it from the next report on.
+  /// Applies a choice `DiagnosticsController` has already stored, from the
+  /// next report on.
   ///
-  /// Throws when the choice could not be stored, leaving the previous one in
-  /// force.
-  Future<void> setEnabled(bool enabled) async {
-    final revision = ++_consentRevision;
-    await _saveConsent(enabled);
-    if (revision == _consentRevision) _consent = enabled;
+  /// Bumping the revision means a consent read still in flight cannot
+  /// overwrite it.
+  void applyConsent(bool enabled) {
+    _consentRevision++;
+    _consent = enabled;
   }
 
   Future<bool> _consentGranted() async {

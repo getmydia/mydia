@@ -3,14 +3,15 @@ use crate::frb_generated::StreamSink;
 use flutter_rust_bridge::frb;
 use mydia_p2p_core::{
     runtime, Event, GraphQLRequest, HlsCancel, HlsRequest, HlsRequester, HlsResponseHeader,
-    HlsStreamResponse, Host, HostConfig, LoadContentRequest, MydiaRequest, MydiaResponse,
+    HlsStreamResponse, Host, HostConfig, LoadContentRequest, LogLevel, MydiaRequest, MydiaResponse,
     PairingRequest, PeerConnectionType, PlaybackSnapshot, PlaybackState, RemoteControlRequest,
     RemoteControlResponse, TargetCapabilities, TrackInfo,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 #[frb(init)]
 pub fn init_app() {
@@ -30,12 +31,20 @@ pub fn init_app() {
 
     init_logging();
 
-    log::info!("mydia_player_p2p initialized");
+    tracing::info!("mydia_player_p2p initialized");
 }
 
-/// Point `tracing` at the platform's log sink.
+/// Only these reach Dart, and through it the uploaded logs. The console keeps
+/// `mydia_p2p_core=debug`; uploading that would be most of every batch.
+#[cfg(not(target_arch = "wasm32"))]
+const FORWARDED_LOG_FILTER: &str = "info,iroh=info,noq=warn,rustls=warn";
+
+/// Point `tracing` at the platform's log sink, and at Dart.
 ///
-/// Must run before `Host::new`, so iroh's startup logs are captured.
+/// Must run before `Host::new`, so iroh's startup logs are captured. The
+/// forwarding layer is added here because this subscriber is installed first,
+/// which leaves `mydia_p2p_core::init_tracing` nothing to install; see
+/// `mydia_p2p_core::event_log_layer`.
 #[cfg(not(target_arch = "wasm32"))]
 fn init_logging() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
@@ -47,6 +56,7 @@ fn init_logging() {
         // On Android, use tracing-android to forward tracing events to logcat
         let _ = tracing_subscriber::registry()
             .with(filter)
+            .with(forwarded_layer())
             .with(tracing_android::layer("mydia_p2p").unwrap())
             .try_init();
     }
@@ -56,9 +66,22 @@ fn init_logging() {
         // On other platforms, use standard fmt subscriber
         let _ = tracing_subscriber::registry()
             .with(filter)
+            .with(forwarded_layer())
             .with(tracing_subscriber::fmt::layer())
             .try_init();
     }
+}
+
+/// The core's `Event::Log` layer, narrowed to [`FORWARDED_LOG_FILTER`].
+///
+/// Generic over the subscriber so the registry it is added to fixes the type;
+/// per-layer filtering needs a subscriber that can look up spans.
+#[cfg(not(target_arch = "wasm32"))]
+fn forwarded_layer<S>() -> impl Layer<S>
+where
+    S: tracing::Subscriber + for<'span> tracing_subscriber::registry::LookupSpan<'span>,
+{
+    mydia_p2p_core::event_log_layer().with_filter(EnvFilter::new(FORWARDED_LOG_FILTER))
 }
 
 /// A browser build deliberately installs no tracing subscriber.
@@ -90,6 +113,14 @@ pub struct P2pHost {
     /// Inbound control requests, routed here by the same `init` dispatcher.
     /// Drained by `remote_control_stream`.
     control_rx: Arc<Mutex<mpsc::Receiver<FlutterInboundControlRequest>>>,
+    /// How many `Event::Log` entries are currently sitting on
+    /// `generic_event_rx`, waiting for `event_stream` to drain them.
+    ///
+    /// Shared with the dispatcher spawned in `init`, which owns the only
+    /// increment (gated by `MAX_QUEUED_LOG_EVENTS`); `event_stream` owns the
+    /// only decrement. See `run_event_dispatcher` for why only log events are
+    /// counted here.
+    queued_log_events: Arc<AtomicUsize>,
 }
 
 pub struct FlutterPairingRequest {
@@ -661,6 +692,26 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
     }
 }
 
+/// How many `Event::Log` entries `run_event_dispatcher` will admit onto the
+/// unbounded `generic_tx` channel before it starts dropping new ones.
+///
+/// Logs are diagnostics and may be dropped under pressure; a connection or
+/// control event may not be, which is why only the `Event::Log` arm in
+/// `run_event_dispatcher` is gated by this and every other event keeps its
+/// existing unbounded path. Without this cap, a Dart subscriber that stops
+/// draining `event_stream` (its loop exits whenever `sink.add` fails, and a
+/// subscription can be cancelled while the host is still alive) would let
+/// log events from every dependency at info level accumulate on `generic_tx`
+/// forever.
+const MAX_QUEUED_LOG_EVENTS: usize = 1000;
+
+/// The gate's decision, factored out of `run_event_dispatcher` so it can be
+/// unit tested without driving channels: forward while under the cap, drop
+/// once at or over it.
+fn should_forward_log_event(queued: usize, cap: usize) -> bool {
+    queued < cap
+}
+
 /// Drains `event_rx`, routing an inbound `RemoteControl` request onto
 /// `control_tx` and every other event onto `generic_tx`. Spawned once,
 /// unconditionally, by `P2pHost::init` — see the comment at that call site
@@ -680,10 +731,17 @@ impl From<PlaybackSnapshot> for FlutterPlaybackSnapshot {
 /// thing operationally — nobody is currently able to receive this control
 /// request — so both are handled the same way: the request is dropped and
 /// logged, and the loop moves on to keep draining `event_rx`.
+///
+/// `queued_log_events` is shared with `event_stream`, which owns the only
+/// decrement; this function owns the only increment, made just before a log
+/// event is actually sent. Relaxed ordering is enough on both sides: this is
+/// a coarse back pressure gate on one counter, not a synchronization
+/// primitive protecting other memory.
 async fn run_event_dispatcher(
     event_rx: Arc<Mutex<mpsc::Receiver<Event>>>,
     control_tx: mpsc::Sender<FlutterInboundControlRequest>,
     generic_tx: mpsc::UnboundedSender<Event>,
+    queued_log_events: Arc<AtomicUsize>,
 ) {
     let mut event_rx = event_rx.lock().await;
     while let Some(event) = event_rx.recv().await {
@@ -706,8 +764,18 @@ async fn run_event_dispatcher(
                             "the control channel has no receiver"
                         }
                     };
-                    log::warn!("Dropping inbound control request: {reason}");
+                    tracing::warn!("Dropping inbound control request: {reason}");
                 }
+            }
+            event @ Event::Log { .. } => {
+                let queued = queued_log_events.load(Ordering::Relaxed);
+                if should_forward_log_event(queued, MAX_QUEUED_LOG_EVENTS) {
+                    queued_log_events.fetch_add(1, Ordering::Relaxed);
+                    let _ = generic_tx.send(event);
+                }
+                // Else: drop it. A dropped log is a log, not a bug; the
+                // counter is only ever incremented on a successful send here,
+                // so a persistently full queue never runs away.
             }
             other => {
                 // An error here just means no `event_stream` subscriber is
@@ -717,6 +785,21 @@ async fn run_event_dispatcher(
             }
         }
     }
+}
+
+/// `Event::Log` as `event_stream` sends it: `log:` and a JSON object that the
+/// Dart `LogSink.recordRustEvent` decodes.
+fn format_log_event(level: LogLevel, target: &str, message: &str) -> String {
+    let level = match level {
+        LogLevel::Trace | LogLevel::Debug => "debug",
+        LogLevel::Info => "info",
+        LogLevel::Warn => "warn",
+        LogLevel::Error => "error",
+    };
+    format!(
+        "log:{}",
+        serde_json::json!({ "l": level, "target": target, "msg": message })
+    )
 }
 
 impl P2pHost {
@@ -732,14 +815,14 @@ impl P2pHost {
     #[frb(sync)]
     pub fn init(relay_urls: Vec<String>, keypair_bytes: Option<Vec<u8>>) -> (Self, String) {
         let keypair_supplied = keypair_bytes.is_some();
-        log::info!(
+        tracing::info!(
             "P2pHost::init() called with relay_urls: {relay_urls:?}, keypair_supplied: {keypair_supplied}"
         );
         let keypair_bytes = keypair_bytes.and_then(|bytes| {
             let len = bytes.len();
             <[u8; 32]>::try_from(bytes.as_slice())
                 .inspect_err(|_| {
-                    log::warn!(
+                    tracing::warn!(
                         "Ignoring keypair_bytes of length {len} (expected 32); generating a new identity"
                     );
                 })
@@ -753,7 +836,7 @@ impl P2pHost {
         };
         let (host, node_id) = Host::new(config);
         let hls_requester = host.hls_requester();
-        log::info!("P2pHost created with node_id: {}", node_id);
+        tracing::info!("P2pHost created with node_id: {}", node_id);
 
         // Fan `inner.event_rx` out into two channels: one carrying inbound
         // control requests for `remote_control_stream`, the other carrying
@@ -794,10 +877,20 @@ impl P2pHost {
         // for why admission onto it has to be non-blocking despite that.
         let (generic_tx, generic_rx) = mpsc::unbounded_channel::<Event>();
         let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
+        // See `MAX_QUEUED_LOG_EVENTS` and the doc comment on the struct
+        // field: the dispatcher increments this, `event_stream` decrements
+        // it, and it is what keeps `generic_tx` from growing without bound
+        // when nobody is currently draining log events off it.
+        let queued_log_events = Arc::new(AtomicUsize::new(0));
 
         let event_rx = host.event_rx.clone();
         let _guard = runtime::enter();
-        runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+        runtime::spawn(run_event_dispatcher(
+            event_rx,
+            control_tx,
+            generic_tx,
+            queued_log_events.clone(),
+        ));
 
         (
             P2pHost {
@@ -805,6 +898,7 @@ impl P2pHost {
                 hls_requester,
                 generic_event_rx: Arc::new(Mutex::new(generic_rx)),
                 control_rx: Arc::new(Mutex::new(control_rx)),
+                queued_log_events,
             },
             node_id,
         )
@@ -817,14 +911,14 @@ impl P2pHost {
 
     /// Dial a peer using their EndpointAddr JSON.
     pub async fn dial(&self, endpoint_addr_json: String) -> anyhow::Result<()> {
-        log::info!("P2pHost::dial() called");
+        tracing::info!("P2pHost::dial() called");
         match self.inner.dial(endpoint_addr_json).await {
             Ok(_) => {
-                log::info!("dial() succeeded");
+                tracing::info!("dial() succeeded");
                 Ok(())
             }
             Err(e) => {
-                log::error!("dial() failed: {}", e);
+                tracing::error!("dial() failed: {}", e);
                 Err(anyhow::anyhow!("dial failed: {}", e))
             }
         }
@@ -847,8 +941,9 @@ impl P2pHost {
     /// required for `remote_control_stream` to work. See `init` for why that
     /// independence matters.
     pub fn event_stream(&self, sink: StreamSink<String>) -> anyhow::Result<()> {
-        log::info!("P2pHost::event_stream() called");
+        tracing::info!("P2pHost::event_stream() called");
         let rx = self.generic_event_rx.clone();
+        let queued_log_events = self.queued_log_events.clone();
 
         // Entering the core's runtime rather than spawning a thread with a
         // runtime of its own: this is called from the Dart isolate thread,
@@ -858,7 +953,7 @@ impl P2pHost {
         let _guard = runtime::enter();
         runtime::spawn(async move {
             let mut rx = rx.lock().await;
-            log::info!("event_stream listening for events");
+            tracing::info!("event_stream listening for events");
             while let Some(event) = rx.recv().await {
                 let msg = match event {
                     Event::Connected {
@@ -890,18 +985,36 @@ impl P2pHost {
                             connection_type.as_str()
                         )
                     }
-                    Event::Log { .. } => {
-                        // Logs are handled separately via android_logger/tracing
+                    Event::Log {
+                        level,
+                        target,
+                        message,
+                    } => {
+                        // Balances the increment in `run_event_dispatcher`,
+                        // done before this event is formatted or sent so the
+                        // count reflects what is still queued, not what has
+                        // been delivered.
+                        queued_log_events.fetch_sub(1, Ordering::Relaxed);
+                        // Sent without the `event_stream received` line below:
+                        // that line is a tracing event itself, and forwarding it
+                        // would echo every log line back through here.
+                        if sink
+                            .add(format_log_event(level, &target, &message))
+                            .is_err()
+                        {
+                            tracing::warn!("event_stream sink closed, exiting");
+                            break;
+                        }
                         continue;
                     }
                 };
-                log::debug!("event_stream received: {}", msg);
+                tracing::debug!("event_stream received: {}", msg);
                 if sink.add(msg).is_err() {
-                    log::warn!("event_stream sink closed, exiting");
+                    tracing::warn!("event_stream sink closed, exiting");
                     break;
                 }
             }
-            log::info!("event_stream loop ended");
+            tracing::info!("event_stream loop ended");
         });
         Ok(())
     }
@@ -927,7 +1040,7 @@ impl P2pHost {
             let mut rx = rx.lock().await;
             while let Some(inbound) = rx.recv().await {
                 if sink.add(inbound).is_err() {
-                    log::warn!("remote_control_stream sink closed, exiting");
+                    tracing::warn!("remote_control_stream sink closed, exiting");
                     break;
                 }
             }
@@ -981,7 +1094,7 @@ impl P2pHost {
         // Never log the claim code. It is a live pairing credential for five
         // minutes, so anyone reading client logs could pair a device with it.
         // Same class of leak as 518337412 on the Dart side.
-        log::info!("P2pHost::send_pairing_request() called for peer: {}", peer);
+        tracing::info!("P2pHost::send_pairing_request() called for peer: {}", peer);
         let core_req = PairingRequest {
             claim_code: req.claim_code,
             device_name: req.device_name,
@@ -995,7 +1108,7 @@ impl P2pHost {
             .await
         {
             Ok(MydiaResponse::Pairing(res)) => {
-                log::info!("send_pairing_request() succeeded: success={}", res.success);
+                tracing::info!("send_pairing_request() succeeded: success={}", res.success);
                 Ok(FlutterPairingResponse {
                     success: res.success,
                     media_token: res.media_token,
@@ -1006,18 +1119,18 @@ impl P2pHost {
                 })
             }
             Ok(MydiaResponse::Error(e)) => {
-                log::error!("send_pairing_request() server error: {}", e);
+                tracing::error!("send_pairing_request() server error: {}", e);
                 Err(anyhow::anyhow!("Server error: {}", e))
             }
             Ok(other) => {
-                log::error!(
+                tracing::error!(
                     "send_pairing_request() unexpected response type: {:?}",
                     other
                 );
                 Err(anyhow::anyhow!("Unexpected response type"))
             }
             Err(e) => {
-                log::error!("send_pairing_request() failed for peer {}: {}", peer, e);
+                tracing::error!("send_pairing_request() failed for peer {}: {}", peer, e);
                 Err(anyhow::anyhow!("send_pairing_request failed: {}", e))
             }
         }
@@ -1029,7 +1142,7 @@ impl P2pHost {
         peer: String,
         req: FlutterGraphQLRequest,
     ) -> anyhow::Result<FlutterGraphQLResponse> {
-        log::info!("P2pHost::send_graphql_request() called for peer: {}", peer);
+        tracing::info!("P2pHost::send_graphql_request() called for peer: {}", peer);
         let core_req = GraphQLRequest {
             query: req.query,
             variables: req.variables,
@@ -1044,25 +1157,25 @@ impl P2pHost {
             .await
         {
             Ok(MydiaResponse::GraphQL(res)) => {
-                log::info!("send_graphql_request() succeeded");
+                tracing::info!("send_graphql_request() succeeded");
                 Ok(FlutterGraphQLResponse {
                     data: res.data,
                     errors: res.errors,
                 })
             }
             Ok(MydiaResponse::Error(e)) => {
-                log::error!("send_graphql_request() server error: {}", e);
+                tracing::error!("send_graphql_request() server error: {}", e);
                 Err(anyhow::anyhow!("Server error: {}", e))
             }
             Ok(other) => {
-                log::error!(
+                tracing::error!(
                     "send_graphql_request() unexpected response type: {:?}",
                     other
                 );
                 Err(anyhow::anyhow!("Unexpected response type"))
             }
             Err(e) => {
-                log::error!("send_graphql_request() failed for peer {}: {}", peer, e);
+                tracing::error!("send_graphql_request() failed for peer {}: {}", peer, e);
                 Err(anyhow::anyhow!("send_graphql_request failed: {}", e))
             }
         }
@@ -1071,7 +1184,7 @@ impl P2pHost {
     /// Get network statistics.
     pub async fn get_network_stats(&self) -> FlutterNetworkStats {
         let stats = self.inner.get_network_stats().await;
-        log::info!("Network stats: connected_peers={}, relay_connected={}, relay_url={:?}, peer_conn_type={:?}",
+        tracing::info!("Network stats: connected_peers={}, relay_connected={}, relay_url={:?}, peer_conn_type={:?}",
             stats.connected_peers, stats.relay_connected, stats.relay_url, stats.peer_connection_type);
         FlutterNetworkStats {
             connected_peers: stats.connected_peers,
@@ -1091,7 +1204,7 @@ impl P2pHost {
     ) -> anyhow::Result<HlsStreamHandle> {
         // The session id stays out of this log: it identifies the stream, and
         // the proxy already logs it on the Dart side where it is needed.
-        log::info!(
+        tracing::info!(
             "P2pHost::open_hls_stream() called for peer: {}, path: {}",
             peer,
             req.path
@@ -1102,7 +1215,7 @@ impl P2pHost {
             .send_hls_request(peer.clone(), req.into())
             .await
             .map_err(|e| {
-                log::error!("HLS stream request failed for peer {}: {}", peer, e);
+                tracing::error!("HLS stream request failed for peer {}: {}", peer, e);
                 anyhow::anyhow!("HLS request failed: {}", e)
             })?;
 
@@ -1118,7 +1231,7 @@ impl P2pHost {
         peer: String,
         req: FlutterHlsRequest,
     ) -> anyhow::Result<FlutterHlsResponse> {
-        log::info!(
+        tracing::info!(
             "P2pHost::send_hls_request() called for peer: {}, session: {}, path: {}",
             peer,
             req.session_id,
@@ -1142,7 +1255,7 @@ impl P2pHost {
                     data.extend_from_slice(&chunk);
                 }
 
-                log::info!(
+                tracing::info!(
                     "HLS request completed for peer: {}, received {} bytes",
                     peer,
                     data.len()
@@ -1153,7 +1266,7 @@ impl P2pHost {
                 })
             }
             Err(e) => {
-                log::error!("send_hls_request failed for peer {}: {}", peer, e);
+                tracing::error!("send_hls_request failed for peer {}: {}", peer, e);
                 Err(anyhow::anyhow!("HLS request failed: {}", e))
             }
         }
@@ -1411,9 +1524,15 @@ mod event_dispatcher_tests {
             // to reproduce a full channel.
             let (control_tx, mut control_rx) = mpsc::channel::<FlutterInboundControlRequest>(2);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
 
             let _guard = runtime::enter();
-            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                generic_tx,
+                queued_log_events,
+            ));
 
             // Fill the control channel past capacity without ever draining
             // `control_rx` — the "Dart never subscribed" scenario the
@@ -1464,9 +1583,15 @@ mod event_dispatcher_tests {
             let (control_tx, control_rx) = mpsc::channel::<FlutterInboundControlRequest>(32);
             drop(control_rx);
             let (generic_tx, mut generic_rx) = mpsc::unbounded_channel::<Event>();
+            let queued_log_events = Arc::new(AtomicUsize::new(0));
 
             let _guard = runtime::enter();
-            runtime::spawn(run_event_dispatcher(event_rx, control_tx, generic_tx));
+            runtime::spawn(run_event_dispatcher(
+                event_rx,
+                control_tx,
+                generic_tx,
+                queued_log_events,
+            ));
 
             event_tx.send(control_event("req-1")).await.unwrap();
             event_tx.send(Event::RelayConnected).await.unwrap();
@@ -1477,5 +1602,55 @@ mod event_dispatcher_tests {
                 .expect("generic_tx must still be open");
             assert!(matches!(generic, Event::RelayConnected));
         });
+    }
+}
+
+#[cfg(test)]
+mod log_event_tests {
+    use super::*;
+
+    fn decode(line: &str) -> serde_json::Value {
+        serde_json::from_str(line.strip_prefix("log:").expect("log: prefix")).expect("json")
+    }
+
+    #[test]
+    fn encodes_level_target_and_message() {
+        let json = decode(&format_log_event(
+            LogLevel::Warn,
+            "iroh::magicsock",
+            "path \"relay\" lost",
+        ));
+        assert_eq!(json["l"], "warn");
+        assert_eq!(json["target"], "iroh::magicsock");
+        assert_eq!(json["msg"], "path \"relay\" lost");
+    }
+
+    #[test]
+    fn trace_and_debug_both_read_as_debug() {
+        assert_eq!(
+            decode(&format_log_event(LogLevel::Trace, "t", "m"))["l"],
+            "debug"
+        );
+        assert_eq!(
+            decode(&format_log_event(LogLevel::Debug, "t", "m"))["l"],
+            "debug"
+        );
+    }
+
+    #[test]
+    fn should_forward_log_event_gates_at_the_cap() {
+        assert!(should_forward_log_event(0, MAX_QUEUED_LOG_EVENTS));
+        assert!(should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS - 1,
+            MAX_QUEUED_LOG_EVENTS
+        ));
+        assert!(!should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS,
+            MAX_QUEUED_LOG_EVENTS
+        ));
+        assert!(!should_forward_log_event(
+            MAX_QUEUED_LOG_EVENTS + 1,
+            MAX_QUEUED_LOG_EVENTS
+        ));
     }
 }

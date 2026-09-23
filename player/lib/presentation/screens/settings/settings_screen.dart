@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
-import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/p2p/p2p_service.dart';
@@ -25,7 +24,6 @@ import '../../widgets/cast_button.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import 'settings_controller.dart';
-import 'widgets/crash_reporting_row.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -264,7 +262,7 @@ class _ManageSection extends ConsumerWidget {
         ),
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
-          title: 'Connection details',
+          title: 'Diagnostics',
           subtitle: connection.label,
           subtitleDotColor: connectionToneColor(connection.tone),
           onTap: () => context.push('/settings/diagnostics'),
@@ -288,10 +286,6 @@ class _ManageSection extends ConsumerWidget {
             onTap: () => ref.read(nodeRegistrationProvider.notifier).retry(),
           ),
         const UpdateTrackSection(),
-        // Hidden where nothing would be sent: web builds, and the inert
-        // reporter whole-app tests run with. See CrashReporter.isAvailable.
-        if (ref.watch(crashReporterProvider).isAvailable)
-          const CrashReportingRow(),
         if (updateState.manualCheck != ManualCheckBehaviour.unavailable)
           SettingsRow.action(
             key: const Key('check-for-updates-row'),

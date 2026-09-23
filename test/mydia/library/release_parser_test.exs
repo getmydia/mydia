@@ -338,4 +338,34 @@ defmodule Mydia.Library.ReleaseParserTest do
       refute result.type == :tv_show
     end
   end
+
+  describe "parse/1 - vocabulary words inside the title" do
+    test "keeps a language word that is part of the title" do
+      for {input, title} <- [
+            {"The.Italian.Harbor.2031.1080p.WEB-DL.x264-GROUP", "The Italian Harbor"},
+            {"French.Harbor.2031.1080p.WEB-DL.x264-GROUP", "French Harbor"},
+            {"German.Lantern.2031.1080p.WEB-DL.x264-GROUP", "German Lantern"},
+            {"Multi.Harbor.2031.1080p.WEB-DL.x264-GROUP", "Multi Harbor"},
+            {"French.2031.1080p.WEB-DL.x264-GROUP", "French"}
+          ] do
+        assert %ParsedFileInfo{title: ^title} = ReleaseParser.parse(input), input
+      end
+    end
+
+    test "keeps a language word leading a TV title" do
+      assert %ParsedFileInfo{title: "Spanish Ember", season: 1, episodes: [1]} =
+               ReleaseParser.parse("Spanish.Ember.S01E01.1080p.WEB-DL.x264-GROUP")
+
+      assert %ParsedFileInfo{title: "Multi Season Show", season: 1} =
+               ReleaseParser.parse("Multi Season Show.S01.COMPLETE.1080p.WEB-DL.x264-GROUP")
+    end
+
+    test "still strips a language tag outside the title" do
+      assert %ParsedFileInfo{title: "Show Name"} =
+               ReleaseParser.parse("Show.Name.S01.FRENCH.1080p.WEB-DL.x264-GROUP")
+
+      assert %ParsedFileInfo{title: "Movie Name"} =
+               ReleaseParser.parse("Movie.Name.2031.GERMAN.1080p.WEB-DL.x264-GROUP")
+    end
+  end
 end

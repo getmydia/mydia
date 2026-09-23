@@ -8,7 +8,7 @@
 # the historical `./dev` command vocabulary.
 #
 # Unchanged, intentionally NOT devenv-backed:
-#   - relay <build|push|restart|deploy>   (Docker + kubectl)
+#   - relay <build|push|restart|deploy|logs>   (Docker + kubectl; logs is curl)
 #   - player android <build|run|tv-run|shell>  (nix devShell .#android /
 #     .#android-tv, native Nix)
 #   - player macos <build|run>            (host Xcode/CocoaPods/rustup toolchain)
@@ -184,6 +184,10 @@ ${YELLOW}Metadata Relay (Docker + kubectl):${NC}
   relay build          Build :dev Docker image only
   relay push           Push :dev image to ghcr.io
   relay restart        Restart deployment (pull latest image)
+  relay logs <device|LOG-code> [--since 1h] [--until T] [--level warn]
+                       [--tag X] [--session S] [--grep text]
+                       Print a player's uploaded logs (MYDIA_RELAY_DASHBOARD_USER,
+                       MYDIA_RELAY_DASHBOARD_PASSWORD, optional MYDIA_RELAY_URL)
 
 ${YELLOW}Examples:${NC}
   ./dev up -d                    # Start the stack in the background
@@ -1042,9 +1046,61 @@ case "$COMMAND" in
                 fi
                 echo -e "${GREEN}Deployment complete!${NC}"
                 ;;
+            logs)
+                # Reads GET /logs/raw on the relay. See metadata-relay/README.md,
+                # "Player Log Ingestion".
+                shift
+                target="${1:-}"
+                if [ -z "$target" ]; then
+                    echo "Usage: ./dev relay logs <device-id|device-name|LOG-code> [--since 1h] [--until T] [--level warn] [--tag X] [--session S] [--grep text]"
+                    exit 1
+                fi
+                shift
+                if [ -z "${MYDIA_RELAY_DASHBOARD_USER:-}" ] || [ -z "${MYDIA_RELAY_DASHBOARD_PASSWORD:-}" ]; then
+                    echo -e "${RED}Set MYDIA_RELAY_DASHBOARD_USER and MYDIA_RELAY_DASHBOARD_PASSWORD to the relay's DASHBOARD_USERNAME and DASHBOARD_PASSWORD.${NC}"
+                    exit 1
+                fi
+                relay_url="${MYDIA_RELAY_URL:-https://relay.mydia.dev}"
+                query=()
+                case "$target" in
+                    LOG-*) query+=(--data-urlencode "code=$target") ;;
+                    *) query+=(--data-urlencode "device=$target") ;;
+                esac
+                tags=""
+                while [ $# -gt 0 ]; do
+                    case "$1" in
+                        --since|--until|--level|--session|--grep)
+                            if [ $# -lt 2 ]; then
+                                echo -e "${RED}$1 needs a value${NC}"
+                                exit 1
+                            fi
+                            query+=(--data-urlencode "${1#--}=$2")
+                            shift 2
+                            ;;
+                        --tag)
+                            if [ $# -lt 2 ]; then
+                                echo -e "${RED}--tag needs a value${NC}"
+                                exit 1
+                            fi
+                            tags="${tags:+$tags,}$2"
+                            shift 2
+                            ;;
+                        *)
+                            echo -e "${RED}Unknown option: $1${NC}"
+                            exit 1
+                            ;;
+                    esac
+                done
+                if [ -n "$tags" ]; then
+                    query+=(--data-urlencode "tag=$tags")
+                fi
+                exec curl --fail-with-body --silent --show-error --no-buffer --get \
+                    --user "$MYDIA_RELAY_DASHBOARD_USER:$MYDIA_RELAY_DASHBOARD_PASSWORD" \
+                    "${query[@]}" "$relay_url/logs/raw"
+                ;;
             *)
                 echo -e "${RED}Error: Unknown relay command: $1${NC}"
-                echo "Usage: ./dev relay <deploy|build|push|restart>"
+                echo "Usage: ./dev relay <deploy|build|push|restart|logs>"
                 exit 1
                 ;;
         esac

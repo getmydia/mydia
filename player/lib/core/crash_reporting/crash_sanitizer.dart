@@ -10,6 +10,8 @@
 /// class name out of a function would break grouping on the relay.
 library;
 
+import '../logging/secret_patterns.dart';
+
 /// Longest `error_message` sent. This is the player's own cap; the relay
 /// enforces no length limit of its own on a crash report's message.
 ///
@@ -39,13 +41,8 @@ final _hostAndPort = RegExp(r'^(\[[^\]]*\]|[^:]*)(:\d+)?$');
 final _hostLookup = RegExp(r"Failed host lookup: '([^']*)'");
 final _socketAddress = RegExp(r'address = ([^,\s)]+)');
 
-final _bearer = RegExp(r'Bearer\s+[a-zA-Z0-9_\-.]+');
-final _jwt = RegExp(r'eyJ[\w-]+\.[\w-]+\.[\w-]+');
 final _longToken = RegExp(r'[a-zA-Z0-9_-]{32,}');
 final _digit = RegExp(r'[0-9]');
-final _password = RegExp(r'''password["\s:=]+[^\s"]+''', caseSensitive: false);
-final _secret = RegExp(r'''secret["\s:=]+[^\s"]+''', caseSensitive: false);
-final _apiKey = RegExp(r'''api_key["\s:=]+[^\s"]+''', caseSensitive: false);
 
 const _sensitiveKeyParts = [
   'password',
@@ -106,8 +103,8 @@ String sanitizeString(String input) {
     _socketAddress,
     (m) => 'address = ${_redactHost(m[1]!)}',
   );
-  out = out.replaceAll(_bearer, 'Bearer [REDACTED]');
-  out = out.replaceAll(_jwt, '[REDACTED]');
+  out = out.replaceAll(bearerPattern, 'Bearer [REDACTED]');
+  out = out.replaceAll(jwtPattern, '[REDACTED]');
   // The server redacts every 32+ run. The player also requires a digit:
   // Dart class names run past 32 characters in most framework errors, while
   // keys, session tokens and node ids essentially always contain one.
@@ -115,9 +112,9 @@ String sanitizeString(String input) {
     _longToken,
     (m) => _digit.hasMatch(m[0]!) ? '[REDACTED]' : m[0]!,
   );
-  out = out.replaceAll(_password, 'password: [REDACTED]');
-  out = out.replaceAll(_secret, 'secret: [REDACTED]');
-  out = out.replaceAll(_apiKey, 'api_key: [REDACTED]');
+  out = out.replaceAll(passwordPattern, 'password: [REDACTED]');
+  out = out.replaceAll(secretPattern, 'secret: [REDACTED]');
+  out = out.replaceAll(apiKeyPattern, 'api_key: [REDACTED]');
   return out;
 }
 

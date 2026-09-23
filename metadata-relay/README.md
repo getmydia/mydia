@@ -147,6 +147,9 @@ The service is configured entirely via environment variables for maximum flexibi
 | `SMTP_USERNAME`   | No       | -                  | SMTP username. SMTP auth is enabled when both username and password are present                                          |
 | `SMTP_PASSWORD`   | No       | -                  | SMTP password. SMTP auth is enabled when both username and password are present                                          |
 | `CLIENT_CONFIG_RELAYS` | No     | `https://cae1-1.relay.mydia.dev,https://cae1-2.relay.mydia.dev` | Comma-separated iroh relay URLs served at `/client-config`. Each must be `https` with a host; an invalid value is ignored and logged at boot. See "Changing the relay list" |
+| `PLAYER_LOGS_DIR` | No | `player_logs/` beside `SQLITE_DB_PATH` | Where uploaded player log batches are stored, one gzipped NDJSON file per batch |
+| `PLAYER_LOGS_MAX_BYTES` | No | `2147483648` | Disk cap for player logs. Over it, the oldest stream batches are deleted first, then the oldest reports |
+| `PLAYER_LOGS_REPORT_BUDGET_BYTES` | No | `268435456` | Daily per-address byte budget for `kind: "report"` player log uploads only, shared across every device behind that address. See "Player Log Ingestion" |
 
 ### Changing the relay list
 
@@ -525,6 +528,41 @@ POST /crashes/report
 ```
 
 **Rate limiting:** 10 requests per minute per IP address.
+
+### Player Log Ingestion
+
+Mydia players upload their logs here when their user shares them from the
+player's Diagnostics screen: continuously for a chosen window, or once with
+"Send logs now", which returns a code like `LOG-7K2QX9`.
+
+```
+POST /player-logs
+Content-Type: application/x-ndjson
+Content-Encoding: gzip
+```
+
+The body is gzipped NDJSON. Line 1 is a meta object
+(`{"type":"meta","kind":"stream"|"report","device_id":<uuid>,"device_name",...,"report":<code|null>,"note":<string|null>}`),
+every other line a record (`{"t":<epoch ms>,"l":"info","tag":"P2P","msg":"...","sid":"...","src":"dart"}`).
+Streams answer `204`, reports `201 {"code":"LOG-..."}`. Limits: 1 MB compressed,
+8 MB decompressed, 120 requests a minute per address, 30 per device, 50 MB a
+day per device. `device_id` is client-controlled and only UUID-validated, so
+that per-device quota alone doesn't stop an address from rotating it; a
+`kind: "report"` upload additionally counts against a 256 MiB-a-day budget
+shared by every device behind its address (`PLAYER_LOGS_REPORT_BUDGET_BYTES`).
+Stream uploads keep only the per-address rate limit above -- a report is a
+deliberate, infrequent "Send logs now" upload of a few MB even from a shared
+Cloudflare edge, but a stream flood from a rotated device would otherwise be
+indistinguishable from many legitimate installs sharing that edge. Stream
+batches are kept 14 days, reports 90.
+
+**Reading them** (dashboard basic auth):
+
+- `GET /logs`: devices and reports.
+- `GET /logs/raw?device=<id or name>&since=1h&level=warn&tag=P2P,Auth&session=<sid>&grep=text`,
+  or `?code=LOG-...`: plain text, journalctl style.
+- `./dev relay logs "Work MacBook" --since 2h --level warn` from the repo root,
+  with `MYDIA_RELAY_DASHBOARD_USER` and `MYDIA_RELAY_DASHBOARD_PASSWORD` set.
 
 ## Project Structure
 

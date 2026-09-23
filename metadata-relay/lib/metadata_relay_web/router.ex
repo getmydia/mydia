@@ -19,11 +19,20 @@ defmodule MetadataRelayWeb.Router do
     plug(:dashboard_basic_auth)
   end
 
+  # Plain-text player logs for curl and agents (`./dev relay logs`). Not in
+  # :browser, whose accepts(["html"]) would refuse a text/plain request.
+  scope "/" do
+    pipe_through([:authed_dashboard])
+    get("/logs/raw", MetadataRelayWeb.LogsRawController, :show)
+  end
+
   # Maintainer dashboards
   scope "/" do
     pipe_through([:browser, :authed_dashboard])
     error_tracker_dashboard("/errors")
     live("/feedback", MetadataRelayWeb.FeedbackLive.Index, :index)
+    live("/logs", MetadataRelayWeb.LogsLive.Index, :index)
+    live("/logs/devices/:device_id", MetadataRelayWeb.LogsLive.Device, :show)
   end
 
   # Forward all other requests to the API router

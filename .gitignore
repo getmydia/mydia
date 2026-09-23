@@ -92,6 +92,7 @@ compose.override.yml
 
 # Metadata relay logs
 /metadata-relay/logs/
+/metadata-relay/player_logs/
 
 # Python virtual environment
 .venv/
