@@ -700,6 +700,34 @@ void main() {
     });
 
     testWidgets(
+        'the offline reconnect button says so in Mydia terms, not LAN '
+        'firewall terms, when the reconnect fails', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+      mydiaBackend.failNextConnect(CastFailureKind.unreachable);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(null),
+      );
+
+      container.read(castTargetProvider.notifier).set(_mydiaDevice);
+      await tester.pump();
+
+      expect(
+          find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-offline-reconnect')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('Could not reach the device'), findsOneWidget);
+      expect(find.textContaining('firewall'), findsNothing);
+    });
+
+    testWidgets(
         'the connecting cancel button tears down the in-flight connect '
         'instead of leaving it to resurrect a connected session',
         (tester) async {

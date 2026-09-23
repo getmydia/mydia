@@ -24,6 +24,7 @@ import 'cast_bar/cast_bar_parts.dart';
 import 'cast_bar/cast_pill.dart';
 import 'cast_bar/dock_extents.dart';
 import 'cast_subtitle_sheet.dart';
+import 'nav/dock_glass.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
 
@@ -89,7 +90,9 @@ class _CastBarLayerState extends State<CastBarLayer> {
                   // already includes the home indicator inset, so the bar
                   // drops its own SafeArea bottom in that case.
                   padding: EdgeInsets.only(
-                    bottom: hasDock ? _dock + DockExtents.gap : 12,
+                    bottom: hasDock
+                        ? _dock + DockExtents.gap
+                        : DockGlass.sideMargin,
                   ),
                   child: MediaQuery.removePadding(
                     context: context,
@@ -216,9 +219,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       icon: const Icon(Icons.close, size: 18),
       color: AppColors.textSecondary,
       // This bar is the only cast surface in the app, so an unlabelled icon
-      // here leaves a screen-reader user no route to the control at all —
-      // there is no longer a full-screen remote to fall back to. Same
-      // reasoning for every button below.
+      // here would leave a screen-reader user with no route to the control
+      // at all: there is no longer a full-screen remote to fall back to.
+      // Same reasoning for every button below.
       tooltip: tooltip,
       onPressed: onPressed,
     );
@@ -460,7 +463,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: AppColors.primary,
               inactiveTrackColor: AppColors.textPrimary.withValues(alpha: 0.1),
-              thumbColor: AppColors.textPrimary,
+              thumbColor: AppColors.primary,
               overlayColor: AppColors.primary.withValues(alpha: 0.12),
               trackHeight: 4,
             ),

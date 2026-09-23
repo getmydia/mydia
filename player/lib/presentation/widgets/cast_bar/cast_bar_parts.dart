@@ -71,7 +71,10 @@ class CastBarRow extends StatelessWidget {
             ],
           ),
         ),
-        ...actions,
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          actions[i],
+        ],
       ],
     );
   }
@@ -149,7 +152,9 @@ class CastThumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl;
     final fallback = CastIconTile(accent: true, child: Icon(fallbackIcon));
-    if (url == null || url.isEmpty) return fallback;
+    if (url == null || url.isEmpty) {
+      return Opacity(opacity: dimmed ? 0.5 : 1, child: fallback);
+    }
     return Opacity(
       opacity: dimmed ? 0.5 : 1,
       child: ClipRRect(

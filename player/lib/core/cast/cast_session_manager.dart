@@ -1774,9 +1774,11 @@ class CastSessionManager {
   /// Returns true when a session was restored. Anything that goes wrong
   /// clears the stored session rather than leaving a phantom in the UI, with
   /// one exception: a stored Mydia device with no Mydia backend yet (P2P
-  /// still starting) leaves the stored session alone and returns false, so a
-  /// later launch (or a later call once the host is up) can still restore
-  /// it.
+  /// still starting) leaves the stored session alone and returns false. The
+  /// record survives to disk untouched, so the next app launch, by which
+  /// time the P2P host has usually finished starting, can still restore it.
+  /// `app.dart` only calls this once per launch; nothing in this run of the
+  /// app retries it.
   ///
   /// The receiver is asked what it is playing *before* anything connects to
   /// it. `ChromecastSession.connect` sends `LAUNCH CC1AD845`, which evicts

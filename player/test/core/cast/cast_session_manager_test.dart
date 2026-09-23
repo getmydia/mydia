@@ -231,6 +231,7 @@ void main() {
     CastBackend? mydia,
     CastBackend? Function()? resolveMydia,
     required FakeStreamingSessionService sessions,
+    CastSessionStore? store,
   }) {
     final fakeClient = MockGraphQLClient();
     when(fakeClient.mutate(any)).thenAnswer(
@@ -245,7 +246,7 @@ void main() {
       backend: chromecast,
       mydiaBackend: resolveMydia == null ? mydia : null,
       resolveMydiaBackend: resolveMydia,
-      store: InMemoryCastSessionStore(),
+      store: store ?? InMemoryCastSessionStore(),
       progressService: ProgressService(fakeClient),
       streamingSessions: sessions,
       resolverFactory: () => CastRouteResolver(
@@ -1005,6 +1006,56 @@ void main() {
 
       expect((await store.load())?.selectedSubtitleTrackId, '3');
       expect(manager.persistedSession?.selectedSubtitleTrackId, '3');
+    });
+
+    test(
+        'a stored Mydia session survives restoreSession when no Mydia '
+        'backend exists yet, and is restored once one appears', () async {
+      const mydiaDevice = CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+      );
+      const mediaUrl = 'https://mydia.test/api/v1/stream/file/file-1';
+      final mydiaStore = InMemoryCastSessionStore();
+      await mydiaStore.save(PersistedCastSession(
+        device: mydiaDevice,
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'Arrival',
+        position: const Duration(minutes: 5),
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 7, 28, 11),
+        mediaUrl: mediaUrl,
+      ));
+
+      CastBackend? mydia;
+      final manager = buildManagerWithBackends(
+        chromecast: FakeCastBackend(),
+        resolveMydia: () => mydia,
+        sessions: FakeStreamingSessionService(),
+        store: mydiaStore,
+      );
+      addTearDown(manager.dispose);
+
+      // No Mydia backend registered yet (P2P still starting): the registry
+      // throws, and the stored session must be left alone rather than
+      // cleared like every other restore failure above.
+      expect(await manager.restoreSession(), isFalse);
+      expect(await mydiaStore.load(), isNotNull,
+          reason: 'a Mydia backend that is not ready yet must not cost the '
+              'user their stored session');
+
+      // The Mydia backend comes up (P2P host finished starting) and reports
+      // the receiver is still playing what was stored; a second restore call
+      // now succeeds.
+      final fakeMydia = FakeCastBackend()..receiverContentUrl = mediaUrl;
+      mydia = fakeMydia;
+
+      expect(await manager.restoreSession(), isTrue);
+      expect(fakeMydia.connectedDevice, mydiaDevice);
+      expect(manager.currentSession?.device.id, 'node-tv');
     });
   });
 
