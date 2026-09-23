@@ -370,13 +370,25 @@ void main() {
       });
 
       test('opting out mid-attempt ends idle, not succeeded', () async {
+        final seen = <RegistrationStatus>[];
+        final subscription = service.statuses.listen(seen.add);
+        addTearDown(subscription.cancel);
+
         service.update(controllable: true, nodeId: 'abc', clientReady: true);
         await pumpEventQueue();
+
+        // Everything emitted from here on must never include a transient
+        // RegistrationSucceeded: the device stopped wanting this
+        // registration before the server confirmed it.
+        final inFlightCount = seen.length;
 
         service.update(controllable: false, nodeId: 'abc', clientReady: true);
         pending.single.complete(true);
         await pumpEventQueue();
 
+        expect(seen.skip(inFlightCount),
+            isNot(contains(isA<RegistrationSucceeded>())));
+        expect(seen.last, isA<RegistrationIdle>());
         expect(service.status, isA<RegistrationIdle>());
       });
     });

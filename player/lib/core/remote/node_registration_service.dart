@@ -241,13 +241,18 @@ class NodeRegistrationService {
 
       // A confirmation for the node id and client still wanted is true
       // whatever else moved meanwhile (a retryNow, a setting toggle), so keep
-      // it. Returning true when the generation moved still makes the caller
-      // re-read its inputs: an opt-out that arrived mid-attempt goes idle.
+      // it -- recording it avoids a pointless re-register if the device opts
+      // back in. But only emit success while controllable/clientReady still
+      // hold: an opt-out or client-not-ready that arrived mid-attempt must
+      // not surface as a transient RegistrationSucceeded on `statuses`
+      // before the caller re-reads its inputs and corrects to Idle/Waiting.
       if (confirmed &&
           nodeId == _desiredNodeId &&
           identical(scope, _clientScope)) {
         _registeredNodeId = nodeId;
-        _emit(RegistrationSucceeded(nodeId, _now()));
+        if (_controllable && _clientReady) {
+          _emit(RegistrationSucceeded(nodeId, _now()));
+        }
         return generation != _generation;
       }
 
