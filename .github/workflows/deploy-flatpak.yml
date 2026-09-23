@@ -1,13 +1,26 @@
 name: Deploy Flatpak
 
-# Publishes a staged Flatpak build into the live channel repo on Cloudflare R2.
+# Publishes a staged Flatpak build into a live channel repo on Cloudflare R2.
 #
-# release.yml runs this as part of the release pipeline, but if a publish
-# step fails, is skipped, or needs to be backfilled from an existing release run,
-# this workflow can be dispatched manually with the run ID containing the
+# release.yml calls this for stable and beta, and player-ondemand.yml for dev.
+# If a publish fails, is skipped, or needs to be backfilled from an existing
+# run, dispatch it manually with the ID of the run holding the
 # flatpak-repo-staged artifact.
 
 on:
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+      ref:
+        description: 'Commit to check out for the publish scripts; empty means the caller''s ref'
+        type: string
+        default: ''
+      run_id:
+        description: 'Run holding flatpak-repo-staged; empty means the calling run'
+        type: string
+        default: ''
   workflow_dispatch:
     inputs:
       run_id:
@@ -15,17 +28,14 @@ on:
         required: true
         type: string
       channel:
-        description: 'Flatpak channel to publish into (beta or stable)'
+        description: 'Flatpak channel to publish into'
         required: true
         type: choice
         default: beta
         options:
           - beta
           - stable
-
-concurrency:
-  group: flatpak-publish-${{ inputs.channel }}
-  cancel-in-progress: false
+          - dev
 
 permissions:
   contents: read
@@ -35,9 +45,18 @@ jobs:
   publish:
     name: Publish Flatpak
     runs-on: ubuntu-latest
+    concurrency:
+      # Syncing down, committing and syncing back up is a read-modify-write
+      # against one shared repo, so two publishes into the same channel must
+      # never overlap, whichever workflow started them. Job level, so it
+      # holds under workflow_call as well as dispatch.
+      group: flatpak-publish-${{ inputs.channel }}
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Install tools
         run: |
@@ -49,10 +68,17 @@ jobs:
         with:
           name: flatpak-repo-staged
           path: staged-repo
-          run-id: ${{ inputs.run_id }}
+          run-id: ${{ inputs.run_id || github.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Restore the staged repo's empty directories
+        # upload-artifact does not preserve empty directories, and an ostree
+        # repo is full of them. See player/flatpak/ensure-skeleton.sh for why
+        # this is mkdir rather than `ostree init`.
+        #
+        # The dry run cannot catch a regression here. It rehearses against
+        # $PWD/staged-repo in the build job, which never goes through an
+        # artifact, so the skeleton is still intact there.
         run: ./player/flatpak/ensure-skeleton.sh staged-repo
 
       - name: Import the signing key
@@ -74,6 +100,11 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
+          # no_check_bucket is required, not a tuning knob. An R2 token scoped to
+          # object read/write on one bucket cannot ListBuckets, so rclone's
+          # existence probe fails and it falls back to CreateBucket, which the
+          # token also cannot do. Every upload then dies on a misleading
+          # "AccessDenied: CreateBucket" that reads like bad credentials.
           mkdir -p ~/.config/rclone
           cat > ~/.config/rclone/rclone.conf <<EOF
           [r2]
@@ -104,18 +135,28 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
-          if [ "$CHANNEL" = "beta" ]; then
-            REPOFILE="https://flatpak.mydia.dev/mydia-beta.flatpakrepo"
-            REMOTE="mydia-beta"
-          else
-            REPOFILE="https://flatpak.mydia.dev/mydia.flatpakrepo"
-            REMOTE="mydia"
-          fi
+          # Detection, not prevention: by now the build is already live. A
+          # failure here means running the rollback procedure in
+          # docs/contributing/releasing.md.
+          case "$CHANNEL" in
+            stable) REMOTE="mydia" ;;
+            beta)   REMOTE="mydia-beta" ;;
+            dev)    REMOTE="mydia-dev" ;;
+            *) echo "::error::unknown channel '$CHANNEL'" >&2; exit 1 ;;
+          esac
+          REPOFILE="https://flatpak.mydia.dev/${REMOTE}.flatpakrepo"
 
+          # The runtime comes from Flathub, and this job is a different runner
+          # from the one that built the Flatpak, so it has no remotes at all.
+          # Without this the install fails with "requires the runtime
+          # org.gnome.Platform/x86_64/50 which was not found", which says
+          # nothing about whether our own repo is sound. It is what the
+          # verification reported on v0.13.0-beta.6, whose repo was in fact
+          # published correctly and installable by anyone who has Flathub.
           flatpak remote-add --user --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
 
           flatpak remote-add --user --if-not-exists --from "$REMOTE" "$REPOFILE"
-          flatpak install --user -y "$REMOTE" dev.mydia.player
-          flatpak info --user dev.mydia.player
-          echo "Verified: dev.mydia.player installs from $REPOFILE"
+          flatpak install --user -y "$REMOTE" "dev.mydia.player//$CHANNEL"
+          flatpak info --user "dev.mydia.player//$CHANNEL"
+          echo "Verified: dev.mydia.player//$CHANNEL installs from $REPOFILE"

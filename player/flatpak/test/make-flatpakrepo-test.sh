@@ -23,7 +23,7 @@ gpg --export --armor throwaway@mydia.dev > "$WORK/pub.asc"
 
 FLATPAK_PUBKEY="$WORK/pub.asc" "$REPO_ROOT/player/flatpak/make-flatpakrepo.sh" "$WORK/out"
 
-for f in mydia.flatpakrepo mydia-beta.flatpakrepo; do
+for f in mydia.flatpakrepo mydia-beta.flatpakrepo mydia-dev.flatpakrepo; do
   [ -f "$WORK/out/$f" ] || { echo "FAIL: $f not generated"; exit 1; }
   grep -q '^\[Flatpak Repo\]$' "$WORK/out/$f" || { echo "FAIL: $f missing section header"; exit 1; }
   grep -q '^GPGKey=' "$WORK/out/$f" || { echo "FAIL: $f missing GPGKey"; exit 1; }
@@ -33,6 +33,8 @@ grep -q '^Url=https://flatpak.mydia.dev/stable/$' "$WORK/out/mydia.flatpakrepo" 
   || { echo "FAIL: stable Url wrong"; exit 1; }
 grep -q '^Url=https://flatpak.mydia.dev/beta/$' "$WORK/out/mydia-beta.flatpakrepo" \
   || { echo "FAIL: beta Url wrong"; exit 1; }
+grep -q '^Url=https://flatpak.mydia.dev/dev/$' "$WORK/out/mydia-dev.flatpakrepo" \
+  || { echo "FAIL: dev Url wrong"; exit 1; }
 
 # The GPGKey must be base64 of a binary keyring that gpg can read back. A
 # mangled key would still look fine to grep but break every client update.

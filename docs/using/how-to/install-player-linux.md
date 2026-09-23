@@ -43,6 +43,24 @@ old branch can go straight after. On a fresh install, stop after the second
 command. **Settings › Manage › Release track** in the app shows the same
 commands.
 
+## Dev
+
+Dev builds come straight from development, published when a maintainer asks
+for one. They are untested and can break without notice, so use them only to
+try a fix before it is released. Like beta, dev is the same application on
+its own remote and branch.
+
+To switch to dev from stable (from beta, uninstall `//beta` instead):
+
+```bash
+flatpak remote-add --if-not-exists --from mydia-dev https://flatpak.mydia.dev/mydia-dev.flatpakrepo
+flatpak install mydia-dev dev.mydia.player//dev
+flatpak uninstall dev.mydia.player//stable
+```
+
+To leave dev, install the stable or beta branch as shown above, then
+`flatpak uninstall dev.mydia.player//dev`.
+
 ## Tarball
 
 Every release also carries `mydia-player-linux-vX.Y.Z.tar.gz` for systems

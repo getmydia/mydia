@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Generates the two .flatpakrepo files users add as remotes. The embedded
+# Generates the three .flatpakrepo files users add as remotes. The embedded
 # GPGKey is the base64 of the binary OpenPGP keyring that `gpg --dearmor`
 # produces, which is the form flatpak expects.
 #
@@ -52,3 +52,8 @@ write_repo mydia-beta.flatpakrepo \
   "Mydia Beta" \
   "https://flatpak.mydia.dev/beta/" \
   "Mydia Player, prerelease builds"
+
+write_repo mydia-dev.flatpakrepo \
+  "Mydia Dev" \
+  "https://flatpak.mydia.dev/dev/" \
+  "Mydia Player, development builds"

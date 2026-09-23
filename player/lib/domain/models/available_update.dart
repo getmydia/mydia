@@ -79,7 +79,9 @@ final class FlatpakRemoteUpdate extends AvailableUpdate {
 ///
 /// The beta remote tracks prereleases, which the /latest endpoint deliberately
 /// skips, so beta gets the full list instead of a page for a release it is not
-/// running.
-String flatpakReleaseNotesUrl(String? branch) => branch == 'stable'
-    ? 'https://github.com/getmydia/mydia/releases/latest'
-    : 'https://github.com/getmydia/mydia/releases';
+/// running. Dev builds never become releases, so dev gets master's history.
+String flatpakReleaseNotesUrl(String? branch) => switch (branch) {
+      'stable' => 'https://github.com/getmydia/mydia/releases/latest',
+      'dev' => 'https://github.com/getmydia/mydia/commits/master',
+      _ => 'https://github.com/getmydia/mydia/releases',
+    };

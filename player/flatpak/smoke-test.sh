@@ -7,7 +7,7 @@
 # Usage: player/flatpak/smoke-test.sh <branch>
 set -euo pipefail
 
-BRANCH="${1:?branch required (stable or beta)}"
+BRANCH="${1:?branch required (stable, beta or dev)}"
 LOG="$(mktemp)"
 
 echo "Launching dev.mydia.player//${BRANCH} under Xvfb"

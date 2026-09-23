@@ -54,5 +54,12 @@ void main() {
         'https://github.com/getmydia/mydia/releases',
       );
     });
+
+    test('dev points at master, because dev builds have no release page', () {
+      expect(
+        flatpakReleaseNotesUrl('dev'),
+        'https://github.com/getmydia/mydia/commits/master',
+      );
+    });
   });
 }
