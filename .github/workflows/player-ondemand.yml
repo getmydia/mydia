@@ -266,7 +266,12 @@ jobs:
     needs:
       - prepare
       - player-flatpak
+    # Positive checks for the same reason as the appcast job below: a skipped
+    # build (build_flatpak off) must not publish, and neither must a dry run,
+    # whose staged repo was only rehearsed against a throwaway key.
     if: ${{ !inputs.dry_run && needs.prepare.result == 'success' && needs.player-flatpak.result == 'success' }}
+    # A called workflow cannot widen the caller's token, and the artifact
+    # download needs actions: read.
     permissions:
       contents: read
       actions: read
