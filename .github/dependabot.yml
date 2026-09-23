@@ -24,8 +24,7 @@ version: 2
 # Version updates matter even with security updates on. Without them a tree
 # drifts until the advisory fix is a major bump the security updater cannot
 # land cleanly. That is how 44 site alerts accumulated behind an Astro 5 tree
-# in August 2026, and how relay-worker's vitest went from 2.1.9 straight to
-# 5.0.0 in September.
+# in August 2026.
 #
 # `cooldown` gives a release a week to be yanked, or for its peers to catch
 # up, before it is proposed. Entries in a multi-ecosystem group need
@@ -110,10 +109,7 @@ updates:
     cooldown:
       default-days: 7
 
-  # --- relay: metadata-relay (Elixir) and relay-worker (Cloudflare Worker) ---
-  #
-  # Two different services despite the names. relay-worker had no entry here
-  # until 2026-09-06, so nothing kept it current between advisories.
+  # --- relay: metadata-relay (Elixir) ---------------------------------------
   - package-ecosystem: mix
     directory: /metadata-relay
     multi-ecosystem-group: relay
@@ -126,16 +122,6 @@ updates:
 
   - package-ecosystem: npm
     directory: /metadata-relay/assets
-    multi-ecosystem-group: relay
-    patterns: ["*"]
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-    cooldown:
-      default-days: 7
-
-  - package-ecosystem: npm
-    directory: /relay-worker
     multi-ecosystem-group: relay
     patterns: ["*"]
     ignore:

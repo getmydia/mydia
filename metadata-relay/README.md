@@ -161,7 +161,7 @@ kubectl -n metadata-relay patch configmap metadata-relay-config --type merge \
   -p '{"data":{"CLIENT_CONFIG_RELAYS":"https://cae1-1.relay.mydia.dev,https://cae1-2.relay.mydia.dev"}}'
 kubectl -n metadata-relay rollout restart deploy/metadata-relay
 kubectl -n metadata-relay logs deploy/metadata-relay | grep CLIENT_CONFIG_RELAYS
-curl -sS https://relay.mydia.dev/client-config   # only reaches this service while client_config routes to origin
+curl -sS https://relay.mydia.dev/client-config   # Cloudflare edge-caches this response; see "Edge caching" below
 ```
 
 Keep it in the ConfigMap, not `metadata-relay-secrets`: `infra/deploy`
@@ -274,6 +274,35 @@ The service automatically determines cache TTL based on content type:
 - TTL-based expiration (automatic)
 - No size limits (managed by Redis configuration)
 - Configurable via Redis `maxmemory-policy` setting
+
+### Edge caching
+
+Cloudflare sits in front of `relay.mydia.dev` and caches whatever the origin
+marks cacheable, via this Cache Rule:
+
+```json
+{
+  "description": "relay.mydia.dev: cache what the origin marks cacheable",
+  "expression": "(http.host eq \"relay.mydia.dev\")",
+  "action": "set_cache_settings",
+  "action_parameters": {
+    "cache": true,
+    "edge_ttl": { "mode": "bypass_by_default" },
+    "browser_ttl": { "mode": "respect_origin" }
+  }
+}
+```
+
+It lives in the `mydia.dev` zone's `http_request_cache_settings` entrypoint
+ruleset and is appended to existing rules, never replacing them.
+`bypass_by_default` means a response without a cacheable `Cache-Control` is
+not cached, so a route that forgets a header stays uncached. Headers are set
+by `MetadataRelay.Plug.Cache` (public on successful cached GETs, with the
+entry's remaining TTL) and `MetadataRelayWeb.Plug.PrivateByDefault`
+(everything else `private, no-store`).
+
+Use `max-age`, never `s-maxage`: Cloudflare treats `s-maxage` as
+`proxy-revalidate`, which disables stale serving.
 
 ### Production Configuration
 

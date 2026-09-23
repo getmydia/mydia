@@ -3,7 +3,6 @@ defmodule MetadataRelay.Cache.SettlingTest do
 
   alias MetadataRelay.Cache.Settling
 
-  # Mirrored case for case by relay-worker/test/cache/key.test.ts.
   @today ~D[2026-09-14]
   @six_hours :timer.hours(6)
 

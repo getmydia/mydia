@@ -700,53 +700,6 @@ The `src/lib.rs` test itself timed out on its first dial once (2026-09-13); it
 now also waits for the first client before starting the second under the same
 key.
 
-## relay-worker (vitest-pool-workers)
-
-**`test/obs/ratelimit.test.ts`, "returns 429 with a Retry-After header once
-the budget is spent" and "logs the final 429 status..."**, `expected 500 to
-be 429`. Both loop a real `SELF.fetch` against `PROXY_LIMITER` (`limit: 300,
-period: 60` in `wrangler.jsonc`) until a 429 appears, capped at a fixed
-iteration count. Seen in two independent review sessions at roughly once in
-four to six full-suite runs.
-
-Root cause is the local simulator, not the Worker: `miniflare`'s rate-limit
-worker resets a period's counts on wall-clock time rather than on
-consumption. That bookkeeping moved out of
-`node_modules/miniflare/dist/src/workers/ratelimit/ratelimit.worker.js` and
-into the `RateLimiterObject` Durable Object next to it, in the miniflare that
-`@cloudflare/vitest-pool-workers` 0.22.0 bundles (its own copy, under
-`node_modules/@cloudflare/vitest-pool-workers/node_modules/miniflare`) --
-`.../workers/ratelimit/ratelimit-object.worker.js`:
-
-```js
-// from the request handler, which computes a fresh wall-clock epoch:
-let { key, limit, period } = await req.json(),
-    epoch = Math.floor(Date.now() / (period * 1e3)), ...
-// and the statement that expires every bucket from another epoch:
-`DELETE FROM _mf_ratelimit_buckets WHERE period = :period AND epoch != :epoch`
-```
-
-The original loop cap was 305 -- five iterations of margin over the 300
-threshold. If a real 60-second wall-clock boundary falls anywhere inside the
-loop, the expiry wipes the in-flight count to zero and the budget can
-no longer reach 300 within the remaining five iterations, so the loop
-exhausts with the route's own unthrottled response (500, from this test's
-intentionally-unmocked upstream) instead of a 429.
-
-Mitigated (not eliminated -- two resets in one loop would still lose) by
-raising the cap to `2 * limit + margin` (610), which survives exactly one
-mid-loop reset: up to `limit - 1` requests before it, a full `limit + 1`
-after. `if (last.status === 429) break` keeps the ordinary (no-reset) case at
-its original ~301 iterations and cost. Production is unaffected either way --
-real rate limiting there is Cloudflare's own service, not this
-fixed-window-per-process approximation.
-
-**Generalise from this.** A loop that drives a counter-based simulator to its
-threshold needs margin against the simulator's own reset behavior, not just
-against the threshold itself. Margin sized only to the limit ("five over 300
-is plenty") is a coin flip against any reset condition the simulator can hit
-independently of the test's own request count.
-
 ## E2E
 
 **`MydiaWeb.Features.AuthTest`** raising `(RuntimeError) invalid session id` from

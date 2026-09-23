@@ -240,7 +240,7 @@ actions:
 | Group | Covers |
 |---|---|
 | `backend` | mix `/`, npm `/assets` |
-| `relay` | mix and npm under `/metadata-relay`, npm `/relay-worker` |
+| `relay` | mix and npm under `/metadata-relay` |
 | `player` | pub, the player's Rust crate, both fastlane Gemfiles |
 | `rust` | `/server`, `native/*`, `plugins/*` |
 | `tooling` | `/site`, `/docs` |

@@ -777,8 +777,7 @@ defmodule MetadataRelay.Router do
 
   # Which client sent the report. Mydia.CrashReporter never sends `source`, so
   # its absence means a server; the Flutter player sends "player". A closed set
-  # because this endpoint is unauthenticated. Mirrors crashSourceOf in
-  # relay-worker/src/crashes/ingest.ts.
+  # because this endpoint is unauthenticated.
   defp crash_source("player"), do: "player"
   defp crash_source(_), do: "server"
 

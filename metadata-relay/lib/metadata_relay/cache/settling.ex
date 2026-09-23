@@ -12,9 +12,6 @@ defmodule MetadataRelay.Cache.Settling do
   days, airs in the future, or has no air date and a placeholder name.
   Settling responses are cached for six hours; everything else keeps its
   path-based TTL.
-
-  `relay-worker/src/cache/key.ts` mirrors this rule (`settlingTtlSeconds`).
-  Change both together.
   """
 
   @settling_ttl :timer.hours(6)
