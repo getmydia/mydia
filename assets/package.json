@@ -20,9 +20,9 @@
   "devDependencies": {
     "@catppuccin/daisyui": "^2.1.1",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^26.5.1",
-    "autoprefixer": "^10.6.0",
-    "daisyui": "^5.7.37",
+    "@types/node": "^26.6.1",
+    "autoprefixer": "^10.6.1",
+    "daisyui": "^5.7.38",
     "postcss": "^8.5.28",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.3.3",
