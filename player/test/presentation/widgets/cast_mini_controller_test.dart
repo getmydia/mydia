@@ -220,6 +220,15 @@ FlutterPlaybackSnapshot _snapshot({
       sequence: BigInt.one,
     );
 
+AmbientTarget _ambient(String nodeId, String title) => AmbientTarget(
+      device: CastDevice(
+        id: nodeId,
+        name: nodeId,
+        protocol: CastProtocolKind.mydia,
+      ),
+      snapshot: _snapshot(title: title),
+    );
+
 /// Like [_pump], but backs `castSessionManagerProvider` with a real manager
 /// over a [FakeCastBackend] and lets the caller push more than one session
 /// onto `castSessionProvider` (a plain `Stream.value` can only ever emit
@@ -1251,6 +1260,64 @@ void main() {
 
       expect(find.textContaining('Could not reach the device'), findsOneWidget);
       expect(find.textContaining('firewall'), findsNothing);
+    });
+
+    testWidgets('the close button hides the banner', (tester) async {
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+      ]);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+    });
+
+    testWidgets('comes back when that player moves on to something else',
+        (tester) async {
+      final playing = StreamController<List<AmbientTarget>>();
+      addTearDown(playing.close);
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) => playing.stream),
+      ]);
+      playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
+      await tester.pump();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing);
+
+      playing.add([_ambient('node-tv', 'Harbour of Glass')]);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsOneWidget);
+    });
+
+    testWidgets('a dismissed player does not hide a different one',
+        (tester) async {
+      final playing = StreamController<List<AmbientTarget>>();
+      addTearDown(playing.close);
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) => playing.stream),
+      ]);
+      playing.add([_ambient('node-tv', 'The Lantern Keepers')]);
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('cast-bar-ambient-dismiss')));
+      await tester.pump();
+
+      playing.add([
+        _ambient('node-tv', 'The Lantern Keepers'),
+        _ambient('node-den', 'Harbour of Glass'),
+      ]);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('node-den'), findsOneWidget,
+          reason: 'the second player is shown once the first is dismissed');
     });
   });
 }

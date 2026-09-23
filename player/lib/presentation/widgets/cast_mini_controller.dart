@@ -8,6 +8,7 @@ import '../../core/cast/cast_seek.dart';
 import '../../core/cast/cast_session_manager.dart' show PulledSession;
 import '../../core/cast/cast_target.dart';
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/remote/ambient_dismissals.dart';
 import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
@@ -254,18 +255,21 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// Only ever one row, the first target held: a user with more than one
   /// other device mid-watch at once is a corner the picker already covers,
   /// and this banner's whole point is a glanceable nudge, not a second
-  /// picker.
+  /// picker. Shows the first held target that is neither this device nor
+  /// dismissed.
   Widget? _buildAmbient() {
     final held = ref.watch(ambientPlayingProvider).value ?? const [];
-    if (held.isEmpty) return null;
-
-    final ambientTarget = held.first;
+    final dismissed = ref.watch(ambientDismissalsProvider);
     final selfNodeId =
         ref.watch(p2pStatusNotifierProvider.select((s) => s.nodeId));
-    if (selfNodeId != null &&
-        ambientTarget.device.id.toLowerCase() == selfNodeId.toLowerCase()) {
-      return null;
-    }
+
+    final ambientTarget = held
+        .where((t) =>
+            selfNodeId == null ||
+            t.device.id.toLowerCase() != selfNodeId.toLowerCase())
+        .where((t) => !dismissed.contains(AmbientDismissal.of(t)))
+        .firstOrNull;
+    if (ambientTarget == null) return null;
 
     // `AmbientTarget.device.name` is the bare node id — the probe this came
     // from carries no display names (see that field's own dartdoc) — so
@@ -283,6 +287,14 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           key: const Key('cast-bar-ambient-open'),
           onPressed: () => _openAmbientTarget(ambientTarget, name),
           child: const Text('View'),
+        ),
+        IconButton(
+          key: const Key('cast-bar-ambient-dismiss'),
+          icon: const Icon(Icons.close),
+          tooltip: 'Hide Playing on $name',
+          onPressed: () => ref
+              .read(ambientDismissalsProvider.notifier)
+              .dismiss(ambientTarget),
         ),
       ],
     );
