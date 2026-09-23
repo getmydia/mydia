@@ -50,8 +50,10 @@ class QueryWatcher<T> {
     this.maxAge = kFreshnessThreshold,
     this.onFreshness,
     this.canRefetch,
+    GraphQLCache? earlyCache,
     DateTime Function() clock = DateTime.now,
   })  : _clientFuture = client,
+        _earlyCache = earlyCache,
         _clock = clock {
     _started = _start();
   }
@@ -82,6 +84,17 @@ class QueryWatcher<T> {
 
   final Future<GraphQLClient> _clientFuture;
   final DateTime Function() _clock;
+
+  /// The persisted GraphQL cache, readable before [_clientFuture] resolves.
+  ///
+  /// The client future waits on auth, the server URL and connection mode, and
+  /// on a cold start that chain kept the home skeleton up even when a fresh
+  /// cached answer was sitting on disk. Null skips the early read.
+  final GraphQLCache? _earlyCache;
+
+  /// Set when an early cached value went out, so the client's own emission
+  /// of that same cached value is not delivered a second time.
+  bool _suppressNextCacheData = false;
 
   /// Owned deliberately: an `async*` generator forwarding the observable's
   /// stream would terminate on the first error, permanently closing the pipe.
@@ -117,7 +130,26 @@ class QueryWatcher<T> {
       _downgraded ? (fallbackDocument ?? document) : document;
 
   Future<void> _start() async {
+    // Marks [_clientFuture] as having a listener, synchronously, in the same
+    // microtask as construction. A future that already completed with an
+    // error at construction time (`Future<GraphQLClient>.error(...)`, used
+    // by callers that reject synchronously) schedules its own "was anyone
+    // listening?" check for that same microtask; without this, the `await`
+    // below arrives one microtask late (behind the `_emitEarlyCache` gap)
+    // and Dart's zone reports the error as unhandled before this method ever
+    // gets to catch it. `ignore()` only suppresses that report -- it does
+    // not consume the future, so the `await` below still sees the value or
+    // error normally.
+    _clientFuture.ignore();
     try {
+      // One microtask first: the constructor runs `_start()` synchronously,
+      // and the owning notifier only subscribes to [stream] after build
+      // returns. The existing path's first emit also comes after an await, so
+      // this is the same point it has always been safe to emit from.
+      await Future<void>.value();
+      if (_closed) return;
+      _emitEarlyCache();
+
       final client = await _clientFuture;
       if (_closed) return;
 
@@ -180,6 +212,43 @@ class QueryWatcher<T> {
     }
   }
 
+  /// Reads [_earlyCache] directly and, if it holds a fresh enough answer,
+  /// emits it before [_clientFuture] has even resolved. Runs the same age
+  /// gate as the normal start path, against the same fetch log, so it never
+  /// paints an answer old enough that the real start would have gone
+  /// `networkOnly` for.
+  void _emitEarlyCache() {
+    final cache = _earlyCache;
+    if (cache == null) return;
+
+    final request = WatchQueryOptions<Map<String, dynamic>>(
+      document: _activeDocument,
+      variables: variables,
+    ).asRequest;
+
+    Map<String, dynamic>? data;
+    try {
+      data = cache.readQuery(request, optimistic: true);
+    } catch (_) {
+      return; // A partial or unreadable entry is not usable data.
+    }
+
+    final policy = selectFetchPolicy(
+      lastFetchedAt: fetchLog.lastFetchedAt(key),
+      cacheHasData: data != null,
+      maxAge: maxAge,
+      now: _clock(),
+    );
+    if (policy != FetchPolicy.cacheAndNetwork || data == null) return;
+
+    try {
+      _add(parse(data));
+      _suppressNextCacheData = true;
+    } catch (_) {
+      // Leave it to the normal path, which reports parse failures.
+    }
+  }
+
   /// The central mapping rule from a [QueryResult] onto the stream:
   ///
   /// - data present: emit it, publish freshness separately
@@ -199,6 +268,15 @@ class QueryWatcher<T> {
     if (result.source != QueryResultSource.cache) {
       _awaitingInitialNetworkResult = false;
     }
+
+    // Cleared by *any* result, cache-sourced or not: a network-sourced first
+    // result (e.g. the age gate picked `networkOnly` after all) must disarm
+    // this just as surely as the matching cache echo would, or a later
+    // independent cache-sourced rebroadcast (`fetchMore`, an unrelated
+    // normalized-entity write) would be silently swallowed forever.
+    final suppressData =
+        _suppressNextCacheData && result.source == QueryResultSource.cache;
+    _suppressNextCacheData = false;
 
     // A failed network round-trip still arrives with `source: network`
     // (`QueryManager._resolveQueryOnNetwork`'s catch path builds the result
@@ -227,6 +305,7 @@ class QueryWatcher<T> {
 
     final data = result.data;
     if (data != null) {
+      if (suppressData) return;
       try {
         _add(parse(data));
       } catch (error, stackTrace) {

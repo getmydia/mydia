@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gql/ast.dart' show DocumentNode;
 
 import '../graphql_provider.dart';
+import 'early_cache.dart';
 import 'fetch_log.dart';
 import 'freshness.dart';
 import 'query_key.dart';
@@ -44,6 +45,7 @@ QueryWatcher<T> createWatcher<T>(
     maxAge: maxAge,
     onFreshness: (value) => freshness.publish(key, value),
     canRefetch: canRefetch,
+    earlyCache: ref.read(earlyGraphqlCacheProvider),
   );
 
   registry.register(key, watcher);
