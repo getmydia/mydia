@@ -1,0 +1,147 @@
+name: Player / Flatpak
+
+# Builds the Flatpak into a staged OSTree repo and uploads it as the
+# flatpak-repo-staged artifact. Publishing is deploy-flatpak.yml's job.
+# Called by release.yml (stable or beta) and player-ondemand.yml (dev).
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      version_code:
+        type: string
+        required: true
+      channel:
+        description: 'OSTree branch to build: stable, beta or dev'
+        type: string
+        required: true
+      dry_run:
+        type: boolean
+        default: false
+    outputs:
+      channel:
+        value: ${{ jobs.build.outputs.channel }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    # mpv, libplacebo and libass are roughly a third of this; the Flutter
+    # build and its Rust cdylib are the rest.
+    timeout-minutes: 90
+    outputs:
+      channel: ${{ inputs.channel }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: Check the channel
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          case "$CHANNEL" in
+            stable|beta|dev) ;;
+            *) echo "::error::unknown channel '$CHANNEL', expected stable, beta or dev" >&2; exit 1 ;;
+          esac
+
+      - name: Install flatpak-builder
+        run: |
+          sudo apt-get update
+          # appstream provides appstreamcli, which flatpak-builder shells out to
+          # on the host during export. Without it the build fails at the very
+          # last step, after everything has already compiled.
+          sudo apt-get install -y flatpak flatpak-builder xvfb appstream
+
+      - name: Allow unprivileged user namespaces
+        # Ubuntu 24.04 restricts these through AppArmor, which breaks the
+        # bubblewrap sandbox flatpak-builder needs.
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Add Flathub and install the runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.gnome.Platform//50 org.gnome.Sdk//50 \
+            org.freedesktop.Sdk.Extension.llvm21//25.08
+
+      - name: Stamp the version
+        run: |
+          ./player/flatpak/stamp-version.sh \
+            "${{ inputs.version }}" \
+            "${{ inputs.version_code }}" \
+            "$(date -u +%Y-%m-%d)"
+
+      - name: Build
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse \
+            --repo=staged-repo \
+            --default-branch=${{ inputs.channel }} \
+            build-dir player/flatpak/dev.mydia.player.yml
+
+      - name: Install and smoke test
+        run: |
+          flatpak remote-add --user --no-gpg-verify --if-not-exists \
+            staged "$PWD/staged-repo"
+          flatpak install --user -y --reinstall staged dev.mydia.player
+          ./player/flatpak/smoke-test.sh ${{ inputs.channel }}
+
+      - name: Rehearse signing and install (dry run only)
+        if: inputs.dry_run
+        run: |
+          set -euo pipefail
+          # flatpak-publish is skipped on a dry run because it needs `publish`,
+          # which carries !inputs.dry_run. So the rehearsal of signing and of
+          # installing from a signed repo has to happen here, with a throwaway
+          # key. The real key never enters this job in either mode.
+          sudo apt-get install -y ostree rclone
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
+          # --pinentry-mode loopback is required even for an unprotected key,
+          # or gpg-agent fails with "No pinentry" on a headless runner.
+          gpg --batch --pinentry-mode loopback --passphrase '' \
+            --quick-generate-key "Dry Run <dryrun@mydia.dev>" rsa2048 sign never
+          KEYID=$(gpg --list-keys --with-colons dryrun@mydia.dev | awk -F: '/^fpr:/ {print $10; exit}')
+
+          # The destination is a local directory, which rclone treats like any
+          # other backend. Nothing leaves the runner.
+          #
+          # It has to exist first. publish.sh opens with `rclone sync $DEST
+          # $LIVE` to read the live repo down, and rclone's local backend fails
+          # that with "directory not found" when the source root is missing,
+          # where the S3 backend the real publish uses returns an empty listing
+          # for a prefix that holds no objects. So the real first publish is
+          # fine and only the rehearsal needs this.
+          mkdir -p "$PWD/dryrun-dest"
+          GPG_KEY_ID="$KEYID" LIVE_REPO_DIR="$PWD/dryrun-live" \
+            ./player/flatpak/publish.sh \
+              "${{ inputs.channel }}" \
+              "$PWD/staged-repo" "$PWD/dryrun-dest"
+
+          # Replace the unsigned staged install with one that came through the
+          # real signing and publishing path.
+          flatpak uninstall --user -y dev.mydia.player
+          flatpak remote-add --user --no-gpg-verify --if-not-exists \
+            dryrun "$PWD/dryrun-dest"
+          flatpak install --user -y dryrun dev.mydia.player
+          ./player/flatpak/smoke-test.sh ${{ inputs.channel }}
+          echo "Dry run rehearsal complete. Nothing was uploaded."
+
+      - name: Upload staged repo
+        uses: actions/upload-artifact@v7
+        with:
+          # Deliberately not named mydia-player-*: the publish job downloads
+          # that pattern and has no use for a multi-hundred-megabyte repo.
+          name: flatpak-repo-staged
+          path: staged-repo
+          retention-days: 30
