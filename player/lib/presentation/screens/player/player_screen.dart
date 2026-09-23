@@ -1904,10 +1904,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       position: playerTarget,
       isWeb: kIsWeb,
     );
+    // A new open on the same `Player`: its track list is not mpv's own until
+    // the probe below settles, exactly like a fresh `_openPlayerAndStart`.
+    // Without this a switch landing on direct play would leave the previous
+    // source's `true` in place, and a preference not yet applied could match
+    // this file's pre-probe server fallback and fetch a stream mpv is about
+    // to report itself.
+    _playerTracksSettled = false;
     await player.open(opening.media, play: false);
     _detectTracks();
     if (opening.seekAfterOpen) await player.seek(playerTarget);
     await player.play();
+    // Not awaited: unlike `_openPlayerAndStart`, this switch must not wait on
+    // mpv's probe before returning. `_detectTracks()` above already read
+    // whatever mpv knew synchronously; this only re-runs it once the probe
+    // actually settles, so a preference still waiting on `_awaitingPlayerTracks`
+    // gets its chance through `_onTracksChanged` instead of being stuck behind
+    // the outgoing source's flag for the rest of the playback. The identity
+    // check is enough to drop a stale wait: a later switch or open resets
+    // `_playerTracksSettled` itself and this callback would otherwise clobber
+    // that reset.
+    unawaited(awaitRealTracks(
+      current: player.state.tracks,
+      updates: player.stream.tracks,
+    ).then((_) {
+      if (!mounted || !identical(_player, player)) return;
+      _playerTracksSettled = true;
+      _detectTracks();
+    }));
     return player.stream.position;
   }
 
