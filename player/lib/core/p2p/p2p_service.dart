@@ -641,12 +641,15 @@ class P2pService {
     return null;
   }
 
+  /// The node ID for [peer], which can be a bare node ID or an EndpointAddr
+  /// JSON string -- extracting it from the JSON in the latter case.
+  String? _nodeIdFor(String peer) =>
+      peer.startsWith('{') ? _extractNodeIdFromEndpointAddr(peer) : peer;
+
   /// Check if we're currently connected to a peer.
   /// The peer can be specified as either a bare node ID or an EndpointAddr JSON.
   bool isConnectedToPeer(String peer) {
-    // If it looks like JSON, extract the node ID
-    final nodeId =
-        peer.startsWith('{') ? _extractNodeIdFromEndpointAddr(peer) : peer;
+    final nodeId = _nodeIdFor(peer);
     if (nodeId == null) return false;
     return _connectedPeers.contains(nodeId);
   }
@@ -679,9 +682,7 @@ class P2pService {
     // Returns as soon as the 'connected:' event is processed, capped at the
     // 100 ms this used to sleep unconditionally. Not connected by then is not
     // an error here: senders wait for the peer themselves.
-    final nodeId = endpointAddrJson.startsWith('{')
-        ? _extractNodeIdFromEndpointAddr(endpointAddrJson)
-        : endpointAddrJson;
+    final nodeId = _nodeIdFor(endpointAddrJson);
     if (nodeId != null) {
       await waitForPeer(
         nodeId: nodeId,
@@ -950,9 +951,7 @@ class P2pService {
     String peer,
   ) async {
     final endpointAddrJson = peer.startsWith('{') ? peer : null;
-    final nodeId = endpointAddrJson != null
-        ? _extractNodeIdFromEndpointAddr(endpointAddrJson)
-        : peer;
+    final nodeId = _nodeIdFor(peer);
 
     if (nodeId == null || nodeId.isEmpty) {
       throw Exception('Invalid peer address');
