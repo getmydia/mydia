@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import '../../../core/app_menu/now_playing.dart';
 import '../../../core/auth/auth_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
@@ -987,6 +988,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// coupling [UpNextCountdown] was built without.
   StreamSubscription<bool>? _upNextPlayingSub;
 
+  /// Reports this screen's playback to the macOS Dock menu. Claimed in
+  /// [initState] so a newer screen's claim supersedes this one before this
+  /// one disposes; see [NowPlayingPublisher].
+  late final NowPlayingPublisher _nowPlaying;
+
+  /// Re-bound per `Player`, like [_errorSubscription].
+  StreamSubscription<bool>? _nowPlayingSubscription;
+
   /// Reshapes the OS window to the video's aspect on desktop. A no-op
   /// everywhere else, so no platform check is needed at the call sites.
   ///
@@ -1019,6 +1028,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _mediaProxy = ref.read(mediaProxyProvider);
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
     _remoteTargetController.attachPlayer(this);
+    _nowPlaying = ref.read(nowPlayingPublisherProvider)..claim(this);
     final localPlaybackNotifier =
         ref.read(localPlaybackActiveProvider.notifier);
     _localPlaybackNotifier = localPlaybackNotifier;
@@ -2395,6 +2405,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _furthestPosition = Duration.zero;
     await _errorSubscription?.cancel();
     _errorSubscription = player.stream.error.listen(_onPlaybackError);
+    await _nowPlayingSubscription?.cancel();
+    _nowPlayingSubscription =
+        player.stream.playing.listen((_) => _publishNowPlaying());
 
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
     // source switch, a session restart, or a fresh `PlayerScreen` state for
@@ -3457,6 +3470,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             _currentEpisodeIndex =
                 _seasonEpisodes?.indexWhere((ep) => ep.id == widget.mediaId);
           });
+          _publishNowPlaying();
         }
       }
     } catch (e) {
@@ -5458,6 +5472,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // disposes) is never clobbered by this late detach — see
     // `detachPlayer`'s own dartdoc.
     _remoteTargetController.detachPlayer(this);
+    _nowPlaying.clear(this);
     final playbackNotifier = _localPlaybackNotifier;
     final acquired = _acquiredPlayback;
     if (playbackNotifier != null && acquired) {
@@ -5526,6 +5541,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _positionSubscription?.cancel();
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
+    _nowPlayingSubscription?.cancel();
     _firstFrameSubscription?.cancel();
     // Flush whatever marks this load reached; a no-op if a first frame (or
     // `_disposePlayer`) already logged the one summary line for this timeline.
@@ -5702,6 +5718,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         nextPrevious: _hasNextEpisode || _hasPreviousEpisode,
       ),
       sequence: BigInt.from(sequence),
+    );
+  }
+
+  /// Sends what the Dock menu should show. The title is the same string
+  /// [describe] gives remote controllers.
+  void _publishNowPlaying() {
+    if (!mounted) return;
+    _nowPlaying.publish(
+      this,
+      NowPlaying(
+        title: widget.title ?? 'Untitled',
+        isPlaying: _player?.state.playing ?? false,
+        hasNext: _hasNextEpisode,
+      ),
     );
   }
 
@@ -5901,6 +5931,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tracksSubscription = null;
     await _errorSubscription?.cancel();
     _errorSubscription = null;
+    await _nowPlayingSubscription?.cancel();
     // Precedes every later `_openPlayerAndStart` call (the web source-switch
     // branch in `_attachSource`, and the error catch in `_initializePlayer`),
     // so this is where a first-frame watch that never fired gets cancelled
