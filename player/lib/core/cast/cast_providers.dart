@@ -60,19 +60,15 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 /// on both `initialize()` and `reset()`, so that swap does trigger a rebuild
 /// here and the backend this provider hands out is refreshed.
 ///
-/// What is still broken: `castSessionManagerProvider` below reads this
-/// provider only once, baking whatever it returned at that moment into its
-/// `CastSessionManager`'s `CastBackendRegistry` for that manager's whole
-/// lifetime. A rebuild here after the manager already exists does not
-/// reach it. The old host is never explicitly torn down either (the Rust
-/// side only drops it on GC). A real fix needs `CastSessionManager` to
-/// re-resolve its Mydia backend live instead of capturing it once, which
-/// means changing what `CastBackendRegistry` holds, or, short of that,
-/// invalidating `castSessionManagerProvider` itself on every relay change,
-/// which would tear down *any* live cast session (Chromecast/DLNA included,
-/// not just Mydia) as a side effect of an unrelated P2P setting change. Both
-/// are bigger than this provider; noted here rather than silently patched
-/// half-way.
+/// `castSessionManagerProvider` below reads this provider through a resolver
+/// it calls on every connect, not once at construction — so a rebuild here,
+/// whether the first-run timing gap closing or a later relay-URL reset,
+/// reaches the manager on the next connect attempt without needing
+/// `castSessionManagerProvider` itself to be invalidated (which would tear
+/// down *any* live cast session, Chromecast/DLNA included, as a side effect
+/// of an unrelated P2P setting change). The old host is still never
+/// explicitly torn down (the Rust side only drops it on GC), which is
+/// unrelated to this and remains as is.
 ///
 /// Overridden in tests with a fake; the real construction path (a live iroh
 /// host, a real roster fetch) is not exercised by this build's test suite.
@@ -254,18 +250,12 @@ final castSessionManagerProvider =
 
   final manager = CastSessionManager(
     backend: ref.read(castBackendProvider),
-    // Same `read`-not-`watch` reasoning as the client above: this is
-    // captured once, at construction. A P2P host that finishes initializing
-    // *after* this provider has already built will not retroactively add
-    // Mydia routing to this manager instance — see `mydiaCastBackendProvider`'s
-    // dartdoc. In normal use the host is already up by the time anything
-    // needs a `CastSessionManager`, so on first build this is a narrow
-    // startup-ordering gap. It stops being narrow the moment the P2P host is
-    // ever reset and rebuilt later in the same app session (relay URL
-    // changed while this manager was already alive) — see
-    // `mydiaCastBackendProvider`'s dartdoc for why that path is real and
-    // left as a known gap rather than fixed here.
-    mydiaBackend: ref.read(mydiaCastBackendProvider),
+    // Looked up on every connect rather than captured here. This provider is
+    // built as soon as auth resolves at launch, usually before the P2P host
+    // is up, and a captured null used to route Mydia devices to the
+    // Chromecast backend for the rest of the session. `read`, not `watch`:
+    // rebuilding the manager would drop a live cast.
+    resolveMydiaBackend: () => ref.read(mydiaCastBackendProvider),
     capabilities: ref.read(castCapabilitiesProvider),
     store: store,
     progressService: ProgressService(client),

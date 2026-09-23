@@ -186,6 +186,12 @@ void main() {
   CastSessionManager build({bool isP2pMode = false}) {
     return CastSessionManager(
       backend: backend,
+      // The single fake doubles as the Mydia backend too: every test built
+      // through this helper but targeting a `CastProtocolKind.mydia` device
+      // (see 'reconnectStoredSession') needs `CastBackendRegistry.forProtocol`
+      // to actually find one now that it throws instead of falling back to
+      // `backend` as primary.
+      mydiaBackend: backend,
       store: store,
       progressService: ProgressService(client),
       streamingSessions: sessions,
@@ -223,6 +229,7 @@ void main() {
   CastSessionManager buildManagerWithBackends({
     required CastBackend chromecast,
     CastBackend? mydia,
+    CastBackend? Function()? resolveMydia,
     required FakeStreamingSessionService sessions,
   }) {
     final fakeClient = MockGraphQLClient();
@@ -236,7 +243,8 @@ void main() {
 
     return CastSessionManager(
       backend: chromecast,
-      mydiaBackend: mydia,
+      mydiaBackend: resolveMydia == null ? mydia : null,
+      resolveMydiaBackend: resolveMydia,
       store: InMemoryCastSessionStore(),
       progressService: ProgressService(fakeClient),
       streamingSessions: sessions,
@@ -2218,11 +2226,12 @@ void main() {
       expect(chromecast.calls, isEmpty);
     });
 
-    test('a device with no distinct backend falls back to the primary one',
-        () async {
+    test(
+        'a device with no distinct backend throws instead of falling back '
+        'to the primary one', () async {
       // A manager built with no Mydia backend at all (P2P not ready — see
-      // `mydiaCastBackendProvider`) must not crash on a Mydia device; it
-      // just cannot reach it, same as any other unreachable target.
+      // `mydiaCastBackendProvider`) must not silently hand a Mydia device to
+      // the Chromecast/DLNA backend, which cannot reach it.
       final chromecast = FakeBackend(devices: const []);
       final manager = buildManagerWithBackends(
         chromecast: chromecast,
@@ -2230,14 +2239,72 @@ void main() {
       );
       addTearDown(manager.dispose);
 
+      await expectLater(
+        manager.connectTo(const CastDevice(
+          id: 'node-tv',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-tv'},
+        )),
+        throwsA(isA<CastBackendException>()
+            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
+            .having((e) => e.message, 'message', kMydiaNotReadyMessage)),
+      );
+      expect(chromecast.calls, isEmpty);
+    });
+
+    test(
+        'reaches a Mydia backend that became available after the manager was '
+        'built', () async {
+      // The iPhone repro: the manager is built at launch, before P2P is up,
+      // so a backend captured at construction would stay null forever.
+      final chromecast = FakeCastBackend();
+      final mydia = FakeMydiaCastBackend();
+      CastBackend? available;
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        resolveMydia: () => available,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      available = mydia;
       await manager.connectTo(const CastDevice(
-        id: 'node-tv',
-        name: 'Living Room',
+        id: 'node-den',
+        name: 'Den',
         protocol: CastProtocolKind.mydia,
-        metadata: {'nodeId': 'node-tv'},
+        metadata: {'nodeId': 'node-den'},
       ));
 
-      expect(chromecast.calls, contains('connect'));
+      expect(mydia.connectAttempts.map((d) => d.id), ['node-den']);
+      expect(chromecast.connectAttempts, isEmpty);
+    });
+
+    test(
+        'refuses a Mydia device while no Mydia backend exists instead of '
+        'handing it to the Chromecast backend', () async {
+      final chromecast = FakeCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: chromecast,
+        resolveMydia: () => null,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await expectLater(
+        manager.connectTo(const CastDevice(
+          id: 'node-den',
+          name: 'Den',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-den'},
+        )),
+        throwsA(isA<CastBackendException>()
+            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)
+            .having((e) => e.message, 'message', kMydiaNotReadyMessage)),
+      );
+      expect(chromecast.connectAttempts, isEmpty);
+      expect(manager.currentSession, isNull,
+          reason: 'a refused connect must not leave a connecting row behind');
     });
   });
 
@@ -2585,21 +2652,19 @@ void main() {
     test(
         'stays a no-op for a session adopted on a backend with no snapshot '
         'bridge', () async {
-      // A device flagged adoptable by its own metadata, but this manager has
-      // no distinct Mydia backend (P2P not ready) — `connectTo` still takes
-      // the adopted branch, since `isPlayingMydiaTarget` only reads the
-      // device, and lands on the chromecast/primary backend via
-      // `CastBackendRegistry.forProtocol`'s fallback. The snapshot bridge
-      // must degrade gracefully there rather than crash.
+      // A Mydia backend that is not a `MydiaSnapshotSource`: the snapshot
+      // bridge must degrade gracefully rather than crash.
       final chromecast = FakeCastBackend();
+      final plainMydia = FakeCastBackend();
       final manager = buildManagerWithBackends(
         chromecast: chromecast,
+        mydia: plainMydia,
         sessions: FakeStreamingSessionService(),
       );
       addTearDown(manager.dispose);
 
       await manager.connectTo(playingDevice);
-      chromecast.emitDuration(const Duration(hours: 1));
+      plainMydia.emitDuration(const Duration(hours: 1));
       await Future<void>.delayed(Duration.zero);
 
       expect(manager.currentSession?.mediaInfo?.imageUrl, isNull);

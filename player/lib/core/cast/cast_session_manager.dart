@@ -80,6 +80,10 @@ DateTime? _snapshotCapturedAtFrom(CastBackend backend) =>
         ? (backend as MydiaSnapshotSource).lastSnapshotAt
         : null;
 
+/// What [CastBackendRegistry.forProtocol] throws for a Mydia device while
+/// no Mydia backend exists yet (P2P still starting).
+const kMydiaNotReadyMessage = 'Remote control is not ready yet.';
+
 /// Chooses which backend owns a device's protocol, and fans discovery out
 /// across every backend registered.
 ///
@@ -96,27 +100,40 @@ DateTime? _snapshotCapturedAtFrom(CastBackend backend) =>
 /// distinct backend.
 class CastBackendRegistry {
   final CastBackend primary;
-  final CastBackend? mydia;
+  final CastBackend? Function() _mydia;
 
-  const CastBackendRegistry({required this.primary, this.mydia});
+  /// [mydia] is read on every lookup, not once. The manager is built as soon
+  /// as auth resolves at launch, which is usually before the P2P host is up,
+  /// and it must still find the Mydia backend once the host arrives.
+  CastBackendRegistry({
+    required this.primary,
+    required CastBackend? Function() mydia,
+  }) : _mydia = mydia;
+
+  CastBackend? get mydia => _mydia();
 
   /// The backend that owns [protocol].
   ///
-  /// Falls back to [primary] for a protocol this build has no distinct
-  /// backend for, rather than throwing — today that only matters when
-  /// [mydia] itself is unconfigured (P2P not ready yet; see
-  /// `mydiaCastBackendProvider`). A Mydia device then simply cannot be
-  /// reached, which the connect attempt reports as an ordinary failure
-  /// instead of a crash.
+  /// A Mydia device with no Mydia backend throws instead of falling back to
+  /// [primary]. The Chromecast/DLNA backend cannot reach a Mydia node, and
+  /// its failure reads as a LAN firewall problem, which sent users
+  /// debugging the wrong thing.
   CastBackend forProtocol(CastProtocolKind protocol) {
     return switch (protocol) {
-      CastProtocolKind.mydia => mydia ?? primary,
+      CastProtocolKind.mydia => mydia ??
+          (throw const CastBackendException(
+            kMydiaNotReadyMessage,
+            CastFailureKind.unreachable,
+          )),
       CastProtocolKind.chromecast || CastProtocolKind.dlna => primary,
     };
   }
 
   /// Every distinct backend, for fan-out operations like discovery.
-  List<CastBackend> get all => [primary, if (mydia != null) mydia!];
+  List<CastBackend> get all {
+    final mydia = this.mydia;
+    return [primary, if (mydia != null) mydia];
+  }
 }
 
 /// Merges every backend's discovery stream into one combined device list,
@@ -415,6 +432,7 @@ class CastSessionManager {
   CastSessionManager({
     required CastBackend backend,
     CastBackend? mydiaBackend,
+    CastBackend? Function()? resolveMydiaBackend,
     required CastSessionStore store,
     required ProgressService progressService,
     required CastRouteResolver Function() resolverFactory,
@@ -422,7 +440,12 @@ class CastSessionManager {
     required Future<void> Function(bool enabled) setLanAccess,
     DateTime Function()? clock,
     CastCapabilities? capabilities,
-  })  : _registry = CastBackendRegistry(primary: backend, mydia: mydiaBackend),
+  })  : assert(mydiaBackend == null || resolveMydiaBackend == null,
+            'pass a Mydia backend or a resolver, not both'),
+        _registry = CastBackendRegistry(
+          primary: backend,
+          mydia: resolveMydiaBackend ?? () => mydiaBackend,
+        ),
         _backend = backend,
         _store = store,
         _progressService = progressService,
@@ -452,6 +475,14 @@ class CastSessionManager {
     required CastDevice device,
     required CastLaunchRequest request,
   }) async {
+    // Resolved from `device.protocol`, not read off `_backend`: a concurrent
+    // call for a different protocol could have repointed that field between
+    // here and whenever this call last touched it. Everything below uses
+    // this local until the connection is confirmed to belong to this call,
+    // at which point it is committed to `_backend` for the rest of the
+    // session (see that field's dartdoc).
+    final backend = _registry.forProtocol(device.protocol);
+
     // Invalidates any `connectTo` still awaiting `_backend.connect` — see
     // `_connectGeneration`'s dartdoc. Must happen before anything else here,
     // the same way `stopCast` bumps it first: a user can pick a device via
@@ -504,14 +535,6 @@ class CastSessionManager {
         );
       }
     }
-
-    // Resolved from `device.protocol`, not read off `_backend`: a concurrent
-    // call for a different protocol could have repointed that field between
-    // here and whenever this call last touched it. Everything below uses
-    // this local until the connection is confirmed to belong to this call,
-    // at which point it is committed to `_backend` for the rest of the
-    // session (see that field's dartdoc).
-    final backend = _registry.forProtocol(device.protocol);
 
     // Reuse an open connection instead of rebuilding it. `connectTo` may
     // already own this receiver because the user chose it while browsing, and
@@ -758,13 +781,16 @@ class CastSessionManager {
   /// keeps the chosen device, so the UI lands on "chosen, not connected" and
   /// can offer a reconnect.
   Future<void> connectTo(CastDevice device) async {
-    final generation = ++_connectGeneration;
-
+    // Resolved first: a refusal (no Mydia backend yet) must not bump the
+    // generation, which would cancel an unrelated in-flight connect, and
+    // must not publish a connecting row.
+    //
     // Resolved locally rather than read off `_backend`: this call's own
     // cleanup below re-reads whichever backend it itself connected, even if
     // a concurrent call for a different protocol commits a different one to
     // `_backend` in the meantime. See that field's dartdoc.
     final backend = _registry.forProtocol(device.protocol);
+    final generation = ++_connectGeneration;
 
     _publish(CastSession(
       device: device,
@@ -1746,7 +1772,11 @@ class CastSessionManager {
   /// Reattach to a session left running by a previous app launch.
   ///
   /// Returns true when a session was restored. Anything that goes wrong
-  /// clears the stored session rather than leaving a phantom in the UI.
+  /// clears the stored session rather than leaving a phantom in the UI, with
+  /// one exception: a stored Mydia device with no Mydia backend yet (P2P
+  /// still starting) leaves the stored session alone and returns false, so a
+  /// later launch — or a later call once the host is up — can still restore
+  /// it.
   ///
   /// The receiver is asked what it is playing *before* anything connects to
   /// it. `ChromecastSession.connect` sends `LAUNCH CC1AD845`, which evicts
@@ -1765,7 +1795,14 @@ class CastSessionManager {
       return false;
     }
 
-    final backend = _registry.forProtocol(stored.device.protocol);
+    final CastBackend backend;
+    try {
+      backend = _registry.forProtocol(stored.device.protocol);
+    } on CastBackendException {
+      // P2P not up yet. Keep the stored session rather than clearing it: the
+      // receiver may well still be playing, and the next launch can adopt it.
+      return false;
+    }
 
     if (!await _receiverStillPlaying(stored, backend)) {
       await _store.clear();

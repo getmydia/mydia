@@ -164,6 +164,11 @@ _ManagerHarness _buildMydiaManagerHarness() {
 
   final manager = CastSessionManager(
     backend: backend,
+    // The harness's only backend doubles as the Mydia one too:
+    // `CastBackendRegistry.forProtocol` no longer falls back to the primary
+    // backend for a Mydia device, so `_mydiaDevice` below needs one wired up
+    // even though this harness has no separate Chromecast/DLNA fake.
+    mydiaBackend: backend,
     store: InMemoryCastSessionStore(),
     progressService: ProgressService(client),
     resolverFactory: () => CastRouteResolver(
