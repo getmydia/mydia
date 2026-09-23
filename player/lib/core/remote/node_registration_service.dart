@@ -239,20 +239,22 @@ class NodeRegistrationService {
 
       if (_disposed) return false;
 
-      // A confirmation for the node id and client still wanted is true
-      // whatever else moved meanwhile (a retryNow, a setting toggle), so keep
-      // it -- recording it avoids a pointless re-register if the device opts
-      // back in. But only emit success while controllable/clientReady still
-      // hold: an opt-out or client-not-ready that arrived mid-attempt must
-      // not surface as a transient RegistrationSucceeded on `statuses`
-      // before the caller re-reads its inputs and corrects to Idle/Waiting.
+      // A confirmation only counts when node id, client scope, controllable
+      // and clientReady are ALL still what the caller wants. Recording
+      // _registeredNodeId on a partial match (say, opted out mid-attempt)
+      // would make the next opt-in's fast path (`_registeredNodeId ==
+      // nodeId` below) skip re-registering forever, even though the server
+      // was never told while this device actually wanted it -- so record
+      // nothing on a partial match and let the next opt-in pay for one more
+      // register call instead. Falls through to the generation check below
+      // when it doesn't match, same as a failure would.
       if (confirmed &&
           nodeId == _desiredNodeId &&
-          identical(scope, _clientScope)) {
+          identical(scope, _clientScope) &&
+          _controllable &&
+          _clientReady) {
         _registeredNodeId = nodeId;
-        if (_controllable && _clientReady) {
-          _emit(RegistrationSucceeded(nodeId, _now()));
-        }
+        _emit(RegistrationSucceeded(nodeId, _now()));
         return generation != _generation;
       }
 

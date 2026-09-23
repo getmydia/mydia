@@ -391,6 +391,32 @@ void main() {
         expect(seen.last, isA<RegistrationIdle>());
         expect(service.status, isA<RegistrationIdle>());
       });
+
+      test(
+          'opting back in after a mid-attempt opt-out registers again and '
+          'reports success', () async {
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+
+        service.update(controllable: false, nodeId: 'abc', clientReady: true);
+        pending.single.complete(true);
+        await pumpEventQueue();
+
+        expect(service.status, isA<RegistrationIdle>());
+
+        service.update(controllable: true, nodeId: 'abc', clientReady: true);
+        await pumpEventQueue();
+
+        expect(pending, hasLength(2),
+            reason: 'a confirmation that arrived while opted out must not '
+                'be treated as already registered, or opting back in would '
+                'never re-register');
+
+        pending.last.complete(true);
+        await pumpEventQueue();
+
+        expect(service.status, isA<RegistrationSucceeded>());
+      });
     });
   });
 }
