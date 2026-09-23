@@ -386,6 +386,9 @@ Map<String, dynamic> movieDetailResponse({
 /// for is present — a normalized-cache write rejects the whole query
 /// (`PartialDataException`) if any selected field is missing from the
 /// response, not just the ones a given test happens to read back.
+///
+/// [embedded] makes the track an in-container stream whose id is its ffprobe
+/// stream index, as `trackId` then should be.
 Map<String, dynamic> mediaFileWithSubtitle({
   String fileId = 'file-1',
   String trackId = '3',
@@ -397,6 +400,7 @@ Map<String, dynamic> mediaFileWithSubtitle({
   bool deliverable = true,
   bool forced = false,
   bool hearingImpaired = false,
+  bool embedded = false,
 }) {
   return {
     '__typename': 'MediaFile',
@@ -417,7 +421,7 @@ Map<String, dynamic> mediaFileWithSubtitle({
         'language': language,
         'title': title,
         'format': 'vtt',
-        'embedded': false,
+        'embedded': embedded,
         'deliverable': deliverable,
         'forced': forced,
         'hearingImpaired': hearingImpaired,

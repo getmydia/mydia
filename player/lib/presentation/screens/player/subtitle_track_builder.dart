@@ -388,6 +388,30 @@ final class RestoreUnavailable extends SubtitleRestore {
   const RestoreUnavailable(this.message);
 }
 
+/// mpv's own track for embedded [serverTrack], found by ffprobe stream
+/// index, or null.
+///
+/// The server numbers embedded tracks by stream index; mpv numbers its own
+/// tracks by its own ids, and [streamIndexByMpvId] (`subtitleStreamIndices`)
+/// is the bridge. Languages must also agree, because mpv documents
+/// `ff-index` as only usually right for its own mkv demuxer. A sidecar, a
+/// non-numeric id or an unread index has no twin.
+SubtitleTrack? nativeTwinOf(
+  SubtitleTrack serverTrack, {
+  required List<SubtitleTrack> tracks,
+  required Map<String, int> streamIndexByMpvId,
+}) {
+  if (!serverTrack.embedded) return null;
+  final streamIndex = int.tryParse(serverTrack.id);
+  if (streamIndex == null) return null;
+  return tracks.where((t) {
+    final mpvId = mpvIdOfSubtitleTrack(t.id);
+    return mpvId != null &&
+        streamIndexByMpvId[mpvId] == streamIndex &&
+        subtitleLanguagesCompatible(t.language, serverTrack.language);
+  }).firstOrNull;
+}
+
 /// Finds [intent] on the source that just landed.
 ///
 /// [tracks] is `_subtitleTracks` derived for the new source, so it holds
@@ -415,14 +439,11 @@ SubtitleRestore resolveSubtitleIntent({
       if (same != null) return RestoreTrack(same);
 
       if (track.embedded) {
-        final streamIndex = int.tryParse(track.id);
-        final native = tracks.where((t) {
-          final mpvId = mpvIdOfSubtitleTrack(t.id);
-          return mpvId != null &&
-              streamIndex != null &&
-              streamIndexByMpvId[mpvId] == streamIndex &&
-              subtitleLanguagesCompatible(t.language, track.language);
-        }).firstOrNull;
+        final native = nativeTwinOf(
+          track,
+          tracks: tracks,
+          streamIndexByMpvId: streamIndexByMpvId,
+        );
         if (native != null) return RestoreTrack(native);
 
         final onNativeSource =

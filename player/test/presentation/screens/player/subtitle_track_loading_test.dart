@@ -1076,4 +1076,55 @@ void main() {
       );
     });
   });
+
+  group('nativeTwinOf', () {
+    const serverEnglish = SubtitleTrack(
+      id: '5',
+      language: 'eng',
+      title: 'SDH',
+      embedded: true,
+      hearingImpaired: true,
+    );
+    const mpvTracks = [
+      SubtitleTrack(id: 'mk_1', language: 'eng', embedded: true),
+      SubtitleTrack(id: 'mk_2', language: 'eng', embedded: true),
+      SubtitleTrack(id: 'mk_3', language: 'spa', embedded: true),
+    ];
+
+    test('finds the mpv track carrying the same stream index', () {
+      expect(
+        nativeTwinOf(
+          serverEnglish,
+          tracks: mpvTracks,
+          streamIndexByMpvId: const {'1': 4, '2': 5, '3': 6},
+        ),
+        mpvTracks[1],
+      );
+    });
+
+    test('refuses a stream index whose language disagrees', () {
+      expect(
+        nativeTwinOf(
+          serverEnglish,
+          tracks: mpvTracks,
+          streamIndexByMpvId: const {'3': 5},
+        ),
+        isNull,
+      );
+    });
+
+    test('a sidecar or an unread index has no twin', () {
+      const sidecar = SubtitleTrack(id: 'a1b2', language: 'eng');
+      expect(
+        nativeTwinOf(sidecar,
+            tracks: mpvTracks, streamIndexByMpvId: const {'1': 5}),
+        isNull,
+      );
+      expect(
+        nativeTwinOf(serverEnglish,
+            tracks: mpvTracks, streamIndexByMpvId: const {}),
+        isNull,
+      );
+    });
+  });
 }

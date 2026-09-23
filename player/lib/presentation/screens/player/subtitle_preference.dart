@@ -8,11 +8,14 @@
 /// Deliberately separate from `subtitle_track_builder.dart`, which reconciles
 /// two track lists and carries a choice across a source switch. Those are a
 /// different problem, and keeping this file free of the player lets it be
-/// tested without one.
+/// tested without one. It borrows only [nativeTwinOf] from there, to find a
+/// server track on mpv's list.
 library;
 
 import '../../../core/language/language_equivalents.dart';
 import '../../../domain/models/subtitle_track.dart';
+
+import 'subtitle_track_builder.dart' show nativeTwinOf;
 
 export '../../../core/language/language_equivalents.dart'
     show subtitlePreferenceLanguageEquals;
@@ -109,6 +112,40 @@ SubtitleTrack? matchSubtitlePreference(
   return candidates.first;
 }
 
+/// The track to select for [pref] on the list now on screen, [tracks].
+///
+/// Matched against [serverTracks] first, because only the server's tracks
+/// carry forced and hearing-impaired flags: in native direct play [tracks]
+/// is mpv's own list, which reports neither, so ranking on it cannot tell a
+/// signs-only track from full dialogue. The server's pick is then found on
+/// screen: as itself (streaming, or a sidecar in direct play), or as mpv's
+/// own track by stream index ([nativeTwinOf]). Selecting mpv's own track
+/// costs nothing; selecting the server's copy of the same stream makes the
+/// server extract it with ffmpeg, which is what used to keep "Loading
+/// subtitle..." up for seconds over a subtitle already showing.
+///
+/// Falls back to ranking [tracks] directly, today's behaviour, when the
+/// server's pick is not on screen and has no twin.
+SubtitleTrack? preferenceTarget({
+  required PreferTrack pref,
+  required List<SubtitleTrack> serverTracks,
+  required List<SubtitleTrack> tracks,
+  required Map<String, int> streamIndexByMpvId,
+}) {
+  final serverMatch = matchSubtitlePreference(pref, serverTracks);
+  if (serverMatch != null) {
+    final onScreen = tracks.where((t) => t.id == serverMatch.id).firstOrNull;
+    if (onScreen != null) return onScreen;
+    final twin = nativeTwinOf(
+      serverMatch,
+      tracks: tracks,
+      streamIndexByMpvId: streamIndexByMpvId,
+    );
+    if (twin != null) return twin;
+  }
+  return matchSubtitlePreference(pref, tracks);
+}
+
 /// Whether the stored preference may be applied to the playback right now.
 ///
 /// Every input blocks for its own reason, and the check has to be all of them
@@ -124,15 +161,20 @@ SubtitleTrack? matchSubtitlePreference(
 ///    playback, and each revision reaches this path. Without the flag, a
 ///    revision landing after a viewer pick would stomp it.
 ///  - [hasTracks]: there is nothing to match against yet.
+///  - [awaitingPlayerTracks]: native direct play whose open has not passed
+///    mpv's probe yet. The list on screen is still the server's fallback,
+///    and a match there fetches from the server a stream mpv is about to
+///    offer, and usually show, on its own.
 bool shouldApplySubtitlePreference({
   required bool viewerChose,
   required bool switchInFlight,
   required bool intentPending,
   required bool alreadyApplied,
   required bool hasTracks,
+  required bool awaitingPlayerTracks,
 }) {
   if (viewerChose || switchInFlight || intentPending) return false;
-  if (alreadyApplied || !hasTracks) return false;
+  if (alreadyApplied || !hasTracks || awaitingPlayerTracks) return false;
   return true;
 }
 

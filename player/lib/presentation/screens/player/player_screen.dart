@@ -638,6 +638,47 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// revision landing after a viewer pick would silently undo it.
   bool _preferenceAppliedForPlayback = false;
 
+  /// Whether the open now on screen has passed its wait for mpv's probe
+  /// (`awaitRealTracks` in [_openPlayerAndStart]), whether tracks arrived or
+  /// the cap ran out. Until then, in native direct play, the subtitle list is
+  /// the server's fallback and [_applySubtitlePreference] holds off.
+  bool _playerTracksSettled = false;
+
+  /// The generation of the wait now filling in [_playerTracksSettled].
+  ///
+  /// `_attachSource`'s native branch reuses the same `Player` across a
+  /// switch, so `identical(_player, player)` alone cannot tell a wait an
+  /// earlier switch started from the current one -- both share it. Every
+  /// open bumps this and hands the new value to its own wait as a token; a
+  /// wait may only mark [_playerTracksSettled] true when the token it holds
+  /// still matches, i.e. nothing newer has started since. See
+  /// [_beginTracksSettle] and [_settleTracks].
+  int _tracksSettleEpoch = 0;
+
+  bool get _awaitingPlayerTracks =>
+      !kIsWeb && _isDirectPlay && !_playerTracksSettled;
+
+  /// Closes the gate for a new open and returns the token its own wait must
+  /// carry to be allowed to reopen it. See [_tracksSettleEpoch].
+  int _beginTracksSettle() {
+    _playerTracksSettled = false;
+    return ++_tracksSettleEpoch;
+  }
+
+  /// Reopens the gate for the open [epoch] was handed by
+  /// [_beginTracksSettle], and reports whether it did.
+  ///
+  /// Declines when [player] is no longer the live one, the screen is gone,
+  /// or a later open has since bumped [_tracksSettleEpoch] out from under
+  /// this wait -- in which case this wait is stale and the newer open's own
+  /// wait is the one that gets to decide.
+  bool _settleTracks(int epoch, Player player) {
+    if (!mounted || !identical(_player, player)) return false;
+    if (epoch != _tracksSettleEpoch) return false;
+    _playerTracksSettled = true;
+    return true;
+  }
+
   /// How many times [_applySubtitlePreference] has retaken its one-shot after
   /// a revision superseded the apply.
   ///
@@ -1905,10 +1946,48 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       position: playerTarget,
       isWeb: kIsWeb,
     );
+    // A new open on the same `Player`: its track list is not mpv's own until
+    // the probe below settles, exactly like a fresh `_openPlayerAndStart`.
+    // Without this a switch landing on direct play would leave the previous
+    // source's `true` in place, and a preference not yet applied could match
+    // this file's pre-probe server fallback and fetch a stream mpv is about
+    // to report itself.
+    final tracksSettleEpoch = _beginTracksSettle();
     await player.open(opening.media, play: false);
     _detectTracks();
     if (opening.seekAfterOpen) await player.seek(playerTarget);
     await player.play();
+    // Not awaited: unlike `_openPlayerAndStart`, this switch must not wait on
+    // mpv's probe before returning. `_detectTracks()` above already read
+    // whatever mpv knew synchronously; this only re-runs it once the probe
+    // actually settles, so a preference still waiting on `_awaitingPlayerTracks`
+    // gets its chance through `_onTracksChanged` instead of being stuck behind
+    // the outgoing source's flag for the rest of the playback.
+    //
+    // `player.state.tracks` is the right `current` to hand `awaitRealTracks`
+    // even though `player` is reused across the switch: media_kit's native
+    // `open()` resets it to `const Tracks()` through its own internal
+    // `stop(open: true)` before it loads anything (media_kit 1.2.6
+    // `lib/src/player/native/player/real.dart`, `open()`'s call to `stop()`
+    // around line 173; `stop()`'s `state = PlayerState().copyWith(...)`
+    // there does not carry `tracks` forward, so it reverts to the
+    // `PlayerState()` default). By the time `await player.open(...)` above
+    // returns, `player.state.tracks` already reflects that reset, or real
+    // tracks mpv reported just as fast -- never the outgoing file's list.
+    //
+    // `_settleTracks` (not the plain identity check `_openPlayerAndStart`
+    // gets away with) is what makes this safe to fire late: two switches on
+    // the same `Player` share both `_player` and `player`, so a stale wait
+    // from a switch a second one already superseded would otherwise pass an
+    // identity check and mark a newer, still-probing file settled. The
+    // epoch `_beginTracksSettle` handed this wait is what tells the two
+    // apart.
+    unawaited(awaitRealTracks(
+      current: player.state.tracks,
+      updates: player.stream.tracks,
+    ).then((_) {
+      if (_settleTracks(tracksSettleEpoch, player)) _detectTracks();
+    }));
     return player.stream.position;
   }
 
@@ -2085,7 +2164,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// arriving before there is a player spends
   /// [_preferenceAppliedForPlayback], so the next revision still gets its
   /// chance -- which is what stops a direct-play file whose track list is
-  /// already complete from losing the preference for the whole playback.
+  /// already complete from losing the preference for the whole playback. In
+  /// native direct play it also waits for the open to pass mpv's probe, and
+  /// matches on the server's tracks before translating to mpv's own (see
+  /// [preferenceTarget]), so a stream the file already carries is never
+  /// fetched from the server.
   Future<void> _applySubtitlePreference() async {
     final preference = _subtitlePreference;
     if (preference == null) return;
@@ -2096,9 +2179,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       intentPending: _subtitleIntentAcrossSwitch != null,
       alreadyApplied: _preferenceAppliedForPlayback,
       hasTracks: _subtitleTracks.isNotEmpty,
+      awaitingPlayerTracks: _awaitingPlayerTracks,
     )) {
       return;
     }
+
+    // A selection with no player behind it goes nowhere: the fetch and the
+    // `setSubtitleTrack` are both behind `_applySubtitleSelection`'s own
+    // `_player == null` bailout. Spending the one-shot here would leave the
+    // preference permanently unapplied for a playback whose track list is
+    // already complete, so this waits for a revision that has one.
+    final player = _player;
+    if (player == null) return;
+
+    // Set before the first await, not after: a second track-list revision can
+    // land while the target below is still resolving, and two concurrent
+    // applies of the same preference would race each other's generation.
+    // Given back below whenever nothing ends up selected.
+    _preferenceAppliedForPlayback = true;
 
     // Null is "Off", and Off is applied like any other selection rather than
     // skipped: mpv switches on whichever track the container flagged default,
@@ -2108,23 +2206,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       case PreferOff():
         target = null;
       case PreferTrack():
-        target = matchSubtitlePreference(preference, _subtitleTracks);
+        target = await _preferenceTrackTarget(preference, player);
         // Nothing to select, and nothing to say about it here; see the
         // dartdoc above for why this stays quiet.
-        if (target == null) return;
+        if (target == null) {
+          _preferenceAppliedForPlayback = false;
+          return;
+        }
     }
-
-    // A selection with no player behind it goes nowhere: the fetch and the
-    // `setSubtitleTrack` are both behind `_applySubtitleSelection`'s own
-    // `_player == null` bailout. Spending the one-shot here would leave the
-    // preference permanently unapplied for a playback whose track list is
-    // already complete, so this waits for a revision that has one.
-    if (_player == null) return;
-
-    // Set before the await, not after: a second track-list revision can land
-    // while the selection below is still resolving, and two concurrent
-    // applies of the same preference would race each other's generation.
-    _preferenceAppliedForPlayback = true;
 
     final generation = await _applySubtitleSelection(target);
 
@@ -2151,6 +2240,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             'preference after $_preferenceApplyRetries retries');
       }
     }
+
+    if (generation == _subtitleSelectionGeneration &&
+        _selectedSubtitleTrack?.id == target?.id) {
+      debugPrint(target == null
+          ? '[PlayerScreen] Subtitle preference applied: Off'
+          : '[PlayerScreen] Subtitle preference applied: '
+              '${target.displayName} via '
+              '${isMpvNativeSubtitleTrackId(target.id) ? 'mpv' : 'server'}');
+    }
+  }
+
+  /// The track [preference] names on the list now on screen; see
+  /// [preferenceTarget].
+  ///
+  /// Reads mpv's stream indices only when mpv's own tracks are on screen,
+  /// and through [_switchGate] for the same reason [_restoreSubtitleIntent]
+  /// does: an index has to come from the file it will be applied to. Null
+  /// when nothing matches, or when the player changed or the viewer picked
+  /// while the read was waiting.
+  Future<app_models.SubtitleTrack?> _preferenceTrackTarget(
+    PreferTrack preference,
+    Player player,
+  ) async {
+    var indices = const <String, int>{};
+    if (_subtitleTracks.any((t) => isMpvNativeSubtitleTrackId(t.id))) {
+      bool stillCurrent() =>
+          mounted && identical(_player, player) && !_subtitleChosenThisPlayback;
+      final read = await _switchGate.pass(stillCurrent, () async {
+        indices = await subtitleStreamIndices(player);
+      });
+      // A switch can land a new file on this same player while the read
+      // waits, leaving that file's pre-probe server fallback on screen.
+      // Matching it would fetch a stream mpv is about to offer natively; the
+      // settle that ends the probe re-runs this against mpv's own list.
+      if (!read ||
+          !stillCurrent() ||
+          _awaitingPlayerTracks ||
+          _switchingSource) {
+        return null;
+      }
+    }
+    return preferenceTarget(
+      pref: preference,
+      serverTracks: _serverSubtitleTracks,
+      tracks: _subtitleTracks,
+      streamIndexByMpvId: indices,
+    );
   }
 
   /// Monitors a source and lets the policy decide when to replace it.
@@ -2418,6 +2554,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the previous subscription itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
+    // A new open: its track list is not mpv's until the probe below.
+    // `_openPlayerAndStart` always gets a brand new `Player` (`_attachSource`
+    // is what reuses one across a switch), so the plain `identical(_player,
+    // player)` check below is already enough on its own; the epoch is taken
+    // anyway for consistency with `_attachSource`'s native branch, which
+    // needs it.
+    final tracksSettleEpoch = _beginTracksSettle();
+
     // Subscribe before opening. `player.stream.tracks` is a plain broadcast
     // stream with no replay, so a revision published between `open()` and the
     // detection pass below would otherwise be lost — which is the whole
@@ -2507,6 +2651,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // is what keeps e.g. `player.play()` from throwing against a
     // `PlatformPlayer` whose stream controllers `dispose()` already closed.
     if (!mounted || !identical(_player, player)) return player;
+    _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
       debugPrint(
@@ -4343,12 +4488,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // A bitmap track's first pick waits on the server copying it out of
       // the whole source, which can take minutes, so its indicator says so
       // and stays up for as long as the fetch may take.
+      //
+      // Only when there is something to wait for. An mpv track, or a body
+      // this playback already fetched, resolves from
+      // [_mediaKitSubtitleTrackMap] with no network at all, and a toast for
+      // it would sit over a subtitle that is already showing.
       final preparingImage = !_isDirectPlay && isImageSubtitleTrack(selected);
-      final loadingToast = Toaster.of(context).show(
-        preparingImage ? kImageSubtitlePreparingMessage : 'Loading subtitle...',
-        kind: ToastKind.progress,
-        duration: preparingImage ? kImageSidecarTimeLimit : null,
-      );
+      final loadingToast = _mediaKitSubtitleTrackMap.containsKey(selected.id)
+          ? null
+          : Toaster.of(context).show(
+              preparingImage
+                  ? kImageSubtitlePreparingMessage
+                  : 'Loading subtitle...',
+              kind: ToastKind.progress,
+              duration: preparingImage ? kImageSidecarTimeLimit : null,
+            );
 
       final resolved = await _resolveMediaKitSubtitleTrack(
         selected,
@@ -4361,7 +4515,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // viewer left playback, until the 30s timeout. A no-op if this toast
       // was already dismissed (its own timeout, or a later pick replacing
       // it).
-      loadingToast.close();
+      loadingToast?.close();
 
       // Superseded while the fetch was in flight (a re-tap, "Off", or the
       // screen/player went away): drop this result silently rather than
