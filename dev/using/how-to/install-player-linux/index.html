@@ -1299,6 +1299,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dev
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tarball" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2957,6 +2968,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#dev" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dev
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tarball" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3028,18 +3050,30 @@ settings and sign-in live outside the install and carry over either way.</p>
 old branch can go straight after. On a fresh install, stop after the second
 command. <strong>Settings › Manage › Release track</strong> in the app shows the same
 commands.</p>
+<h2 id="dev">Dev</h2>
+<p>Dev builds come straight from development, published when a maintainer asks
+for one. They are untested and can break without notice, so use them only to
+try a fix before it is released. Like beta, dev is the same application on
+its own remote and branch.</p>
+<p>To switch to dev from stable (from beta, uninstall <code>//beta</code> instead):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>flatpak<span class="w"> </span>remote-add<span class="w"> </span>--if-not-exists<span class="w"> </span>--from<span class="w"> </span>mydia-dev<span class="w"> </span>https://flatpak.mydia.dev/mydia-dev.flatpakrepo
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>flatpak<span class="w"> </span>install<span class="w"> </span>mydia-dev<span class="w"> </span>dev.mydia.player//dev
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>flatpak<span class="w"> </span>uninstall<span class="w"> </span>dev.mydia.player//stable
+</code></pre></div>
+<p>To leave dev, install the stable or beta branch as shown above, then
+<code>flatpak uninstall dev.mydia.player//dev</code>.</p>
 <h2 id="tarball">Tarball</h2>
 <p>Every release also carries <code>mydia-player-linux-vX.Y.Z.tar.gz</code> for systems
 without Flatpak. Unlike the Flatpak, it links your system libmpv, so install
 that first or the binary will not start.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Debian and Ubuntu</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>libmpv2
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Fedora</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>mpv-libs
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Arch</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>mpv
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Debian and Ubuntu</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>libmpv2
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Fedora</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>sudo<span class="w"> </span>dnf<span class="w"> </span>install<span class="w"> </span>mpv-libs
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Arch</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>sudo<span class="w"> </span>pacman<span class="w"> </span>-S<span class="w"> </span>mpv
 </code></pre></div>
 <p>Then unpack the archive and run <code>./mydia-player</code>.</p>
 <h2 id="troubleshooting">Troubleshooting</h2>
@@ -3048,8 +3082,8 @@ message naming a missing shared library means you are on the tarball without
 libmpv installed, and the Flatpak is the fix.</p>
 <p>If video plays but a particular file shows a black screen, the codec extension
 may not have installed. Check for it and add it if missing:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>flatpak<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>codecs-extra
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>flatpak<span class="w"> </span>install<span class="w"> </span>org.freedesktop.Platform.codecs-extra//25.08-extra
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>flatpak<span class="w"> </span>list<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>codecs-extra
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>flatpak<span class="w"> </span>install<span class="w"> </span>org.freedesktop.Platform.codecs-extra//25.08-extra
 </code></pre></div>
 
 

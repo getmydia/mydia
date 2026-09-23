@@ -3787,9 +3787,10 @@ is the SQLite build.</p>
 v0.12.0 applies <code>0.11.2</code> and <code>0.11</code>, and leaves <code>latest</code> and <code>0</code> pointing at
 v0.12.0.</p>
 <h2 id="flatpak-channels">Flatpak channels</h2>
-<p>The player publishes to two self-hosted OSTree repositories on Cloudflare R2.
-The channel comes from the draft's prerelease flag, the same flag that decides
-between the <code>beta</code> and <code>latest</code> Docker tags.</p>
+<p>The player publishes to three self-hosted OSTree repositories on Cloudflare R2.
+A release picks stable or beta from the draft's prerelease flag, the same flag
+that decides between the <code>beta</code> and <code>latest</code> Docker tags. Dev is published
+only by <code>player-ondemand.yml</code> with <code>build_flatpak</code> enabled.</p>
 <table>
 <thead>
 <tr>
@@ -3812,10 +3813,18 @@ between the <code>beta</code> and <code>latest</code> Docker tags.</p>
 <td>Published prerelease</td>
 <td>2 commits</td>
 </tr>
+<tr>
+<td><code>mydia-dev</code></td>
+<td><code>https://flatpak.mydia.dev/mydia-dev.flatpakrepo</code></td>
+<td>On-demand build with <code>build_flatpak</code></td>
+<td>2 commits</td>
+</tr>
 </tbody>
 </table>
-<p>Both ship <code>dev.mydia.player</code>, distinguished by OSTree branch. <code>flatpak-publish</code>
-runs after <code>publish</code>, so a rehearsal never touches R2.</p>
+<p>All three ship <code>dev.mydia.player</code>, distinguished by OSTree branch. The build
+is <code>player-flatpak.yml</code> and the publish is <code>deploy-flatpak.yml</code>; both are
+shared by <code>release.yml</code> and <code>player-ondemand.yml</code>. <code>flatpak-publish</code> runs
+after <code>publish</code>, so a rehearsal never touches R2.</p>
 <p>The manifest pins <code>org.gnome.Platform</code> 50 and the <code>llvm21</code> SDK extension built
 for freedesktop 25.08. Those two move together: a newer GNOME runtime sits on a
 newer freedesktop base and needs the matching LLVM extension. The pinned
@@ -3872,7 +3881,7 @@ the wrapper handles:</p>
    <code>FLATPAK_GPG_KEY_ID</code> (the fingerprint), <code>R2_ACCOUNT_ID</code>, <code>R2_ACCESS_KEY_ID</code>
    and <code>R2_SECRET_ACCESS_KEY</code>.</li>
 <li>Commit <code>player/flatpak/flatpak-signing-key.pub.asc</code>. The public half is not
-   a secret, and <code>make-flatpakrepo.sh</code> embeds it in both repo files.</li>
+   a secret, and <code>make-flatpakrepo.sh</code> embeds it in every repo file.</li>
 </ol>
 <p>The existing <code>CLOUDFLARE_API_TOKEN</code> is a Pages deploy token and cannot do S3
 auth against R2.</p>
@@ -3980,8 +3989,10 @@ with <code>releases.json</code> and the stored preference on what each track is 
 build on each track. It is generated in the same run as the macOS appcast, by
 <code>scripts/appcast/generate.mjs</code> (deployed by <code>deploy-appcast.yml</code>), so the two
 outputs can never disagree with each other. A platform with nothing published
-on a track simply has no key for it; macOS and Flatpak have no <code>dev</code> key
-because neither publishes dev builds.</p>
+on a track simply has no key for it; macOS has no <code>dev</code> key because it
+publishes no dev builds. Flatpak never appears in this feed at all: it
+switches tracks through the OSTree remotes in "Flatpak channels" above,
+never through a version check against this feed.</p>
 <p><strong>Selecting a lower track never downgrades an install.</strong> The stored track
 only changes what the next check compares against; it never forces an install
 by itself, and on Android the OS enforces the rest, since <code>versionCode</code> only
@@ -3991,7 +4002,9 @@ says as much, in the running build's own version number, whenever it detects
 this.</p>
 <h3 id="dev-builds">Dev builds</h3>
 <p><code>player-ondemand.yml</code> is the only workflow that publishes to the dev track,
-and only for Android. Its Android job uploads the APK to the
+for Android and, with <code>build_flatpak</code>, for Flatpak. The Flatpak build goes to
+the <code>mydia-dev</code> OSTree remote described in "Flatpak channels" and needs
+nothing beyond the Flatpak secrets. Its Android job uploads the APK to the
 <code>mydia-dev-builds</code> R2 bucket (served at <code>https://dl.mydia.dev</code>) and rewrites
 the bucket's <code>index.json</code>, keeping the five newest builds per platform and
 deleting whatever falls out of that window in the same run. <code>deploy-appcast.yml</code>
@@ -4029,7 +4042,7 @@ publish step fails loudly instead of silently skipping.</p>
 </tr>
 <tr>
 <td>Linux (Flatpak)</td>
-<td>Stable, Beta</td>
+<td>Stable, Beta, Dev</td>
 <td>Shown, but not switchable in app: it hands back a <code>flatpak install</code> command to run instead</td>
 </tr>
 <tr>
@@ -4087,7 +4100,7 @@ distributing player binaries on demand across any combination of supported platf
 <a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Build all platforms without uploading to stores</span>
 <a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_macos</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_windows</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">build_linux</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span>-f<span class="w"> </span><span class="nv">build_flatpak</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>-f<span class="w"> </span><span class="nv">upload_to_stores</span><span class="o">=</span><span class="nb">false</span>
 <a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>
 <a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="c1"># Test build and sign pipeline without uploading (dry run)</span>
 <a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>gh<span class="w"> </span>workflow<span class="w"> </span>run<span class="w"> </span>player-ondemand.yml<span class="w"> </span>--repo<span class="w"> </span>getmydia/mydia<span class="w"> </span>-f<span class="w"> </span><span class="nv">dry_run</span><span class="o">=</span><span class="nb">true</span>
@@ -4138,6 +4151,12 @@ distributing player binaries on demand across any combination of supported platf
 <td>boolean</td>
 <td><code>false</code></td>
 <td>Build Linux (<code>.tar.gz</code> bundle).</td>
+</tr>
+<tr>
+<td><code>build_flatpak</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>Build the Linux Flatpak and publish it to the <code>mydia-dev</code> channel. On <code>dry_run</code> it builds and rehearses signing but publishes nothing.</td>
 </tr>
 <tr>
 <td><code>upload_to_stores</code></td>
