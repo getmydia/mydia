@@ -61,10 +61,14 @@ defmodule Mydia.Playback.OnDeck do
 
     dismissals = load_dismissals(user_id)
 
-    (movie_entries(counting) ++ show_entries(counting, user_id, min_position))
+    # Ranked on lean rows, then hydrated: only the entries that make the rail
+    # get their full episode and file rows. Loading them for every episode of
+    # every engaged show cost ~200ms and 8MB on a real library to return ten.
+    (movie_candidates(counting) ++ show_candidates(counting, user_id, min_position))
     |> Enum.reject(&dismissed?(&1, dismissals))
     |> Enum.sort_by(&sort_key/1, :desc)
     |> Enum.take(limit)
+    |> hydrate()
   end
 
   # Rejected before `Enum.take/2`, so a hidden title does not silently eat one
@@ -103,7 +107,9 @@ defmodule Mydia.Playback.OnDeck do
     real_viewing? and DateTime.compare(progress.last_watched_at, cutoff) != :lt
   end
 
-  defp movie_entries(counting) do
+  # Candidates carry `files: []` until `hydrate/1`. The has-a-file test that
+  # used to read the loaded files is a membership check on ids instead.
+  defp movie_candidates(counting) do
     candidates =
       Enum.filter(counting, fn progress ->
         not is_nil(progress.media_item_id) and progress.watched == false and
@@ -112,25 +118,23 @@ defmodule Mydia.Playback.OnDeck do
 
     ids = Enum.map(candidates, & &1.media_item_id)
     movies = ids |> load_media_items() |> Map.new(&{&1.id, &1})
-    files = load_movie_files(ids)
+    playable = movie_ids_with_files(ids)
 
     for progress <- candidates,
         movie = Map.get(movies, progress.media_item_id),
         not is_nil(movie),
-        movie_files = Map.get(files, progress.media_item_id, []),
-        movie_files != [] do
+        MapSet.member?(playable, movie.id) do
       %OnDeckEntry{
         kind: :movie,
         state: :continue,
         media_item: movie,
         progress: progress,
-        files: movie_files,
         sort_at: progress.last_watched_at
       }
     end
   end
 
-  defp show_entries(counting, user_id, min_position) do
+  defp show_candidates(counting, user_id, min_position) do
     episode_rows = Enum.filter(counting, &(not is_nil(&1.episode_id)))
     episode_ids = Enum.map(episode_rows, & &1.episode_id)
     episode_to_show = load_episode_show_ids(episode_ids)
@@ -145,7 +149,7 @@ defmodule Mydia.Playback.OnDeck do
 
     show_ids = Map.keys(sort_at_by_show)
     shows = show_ids |> load_media_items() |> Map.new(&{&1.id, &1})
-    episodes_by_show = load_episodes_with_files(show_ids)
+    episodes_by_show = load_playable_episodes(show_ids)
 
     all_episode_ids =
       episodes_by_show |> Map.values() |> List.flatten() |> Enum.map(& &1.id)
@@ -196,6 +200,8 @@ defmodule Mydia.Playback.OnDeck do
     end
   end
 
+  # `episode` is a lean row from `load_playable_episodes/1` here; `hydrate/1`
+  # swaps in the full struct and its files for the entries that survive.
   defp episode_entry(show, episode, state, progress, sort_at) do
     %OnDeckEntry{
       kind: :episode,
@@ -203,9 +209,42 @@ defmodule Mydia.Playback.OnDeck do
       episode: episode,
       show: show,
       progress: progress,
-      files: episode.media_files,
       sort_at: sort_at
     }
+  end
+
+  # Two queries at most, whatever the rail length. An entry whose episode or
+  # files vanished between ranking and here (a file trashed mid-request) is
+  # dropped rather than shipped with no playable file.
+  defp hydrate(entries) do
+    episodes =
+      entries
+      |> Enum.filter(&(&1.kind == :episode))
+      |> Enum.map(& &1.episode.id)
+      |> load_episodes_with_files()
+
+    movie_files =
+      entries
+      |> Enum.filter(&(&1.kind == :movie))
+      |> Enum.map(& &1.media_item.id)
+      |> load_movie_files()
+
+    Enum.flat_map(entries, fn
+      %OnDeckEntry{kind: :episode} = entry ->
+        case Map.get(episodes, entry.episode.id) do
+          %Episode{media_files: [_ | _] = files} = episode ->
+            [%{entry | episode: episode, files: files}]
+
+          _ ->
+            []
+        end
+
+      %OnDeckEntry{kind: :movie} = entry ->
+        case Map.get(movie_files, entry.media_item.id, []) do
+          [] -> []
+          files -> [%{entry | files: files}]
+        end
+    end)
   end
 
   # One query for the whole user, never one per entry: the rail's query count
@@ -226,13 +265,50 @@ defmodule Mydia.Playback.OnDeck do
     Repo.all(from(m in MediaItem, where: m.id in ^ids))
   end
 
+  defp movie_ids_with_files([]), do: MapSet.new()
+
+  defp movie_ids_with_files(ids) do
+    # is_nil(extra_kind), via MediaFile.versions/0, so a bonus feature never
+    # makes a movie playable on deck.
+    from(mf in MediaFile.versions(),
+      where: mf.media_item_id in ^ids,
+      distinct: true,
+      select: mf.media_item_id
+    )
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   defp load_movie_files([]), do: %{}
 
   defp load_movie_files(ids) do
-    # is_nil(extra_kind) so a bonus feature never surfaces as a playable
-    # on-deck entry.
-    from(mf in MediaFile,
-      where: mf.media_item_id in ^ids and is_nil(mf.trashed_at) and is_nil(mf.extra_kind)
+    from(mf in MediaFile.versions(), where: mf.media_item_id in ^ids)
+    |> Repo.all()
+    |> Enum.group_by(& &1.media_item_id)
+  end
+
+  defp load_playable_episodes([]), do: %{}
+
+  # Only what `NextEpisode.determine/3` reads, in the order it requires, and
+  # only episodes with an active file, which it also requires of its callers.
+  defp load_playable_episodes(show_ids) do
+    has_file =
+      from(mf in MediaFile.versions(),
+        where: mf.episode_id == parent_as(:episode).id,
+        select: 1
+      )
+
+    from(e in Episode,
+      as: :episode,
+      where: e.media_item_id in ^show_ids,
+      where: exists(has_file),
+      order_by: [asc: e.season_number, asc: e.episode_number],
+      select: %{
+        id: e.id,
+        media_item_id: e.media_item_id,
+        season_number: e.season_number,
+        episode_number: e.episode_number
+      }
     )
     |> Repo.all()
     |> Enum.group_by(& &1.media_item_id)
@@ -248,17 +324,13 @@ defmodule Mydia.Playback.OnDeck do
 
   defp load_episodes_with_files([]), do: %{}
 
-  defp load_episodes_with_files(show_ids) do
-    active_files = MediaFile.versions()
-
+  defp load_episodes_with_files(ids) do
     from(e in Episode,
-      where: e.media_item_id in ^show_ids,
-      order_by: [asc: e.season_number, asc: e.episode_number],
-      preload: [media_files: ^active_files]
+      where: e.id in ^ids,
+      preload: [media_files: ^MediaFile.versions()]
     )
     |> Repo.all()
-    |> Enum.filter(&(&1.media_files != []))
-    |> Enum.group_by(& &1.media_item_id)
+    |> Map.new(&{&1.id, &1})
   end
 
   defp load_progress_for_episodes(_user_id, []), do: %{}

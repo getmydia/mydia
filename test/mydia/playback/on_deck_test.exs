@@ -507,5 +507,24 @@ defmodule Mydia.Playback.OnDeckTest do
       progress = Playback.get_progress(ctx.user.id, media_item_id: movie.id)
       assert progress.position_seconds == 900
     end
+
+    test "a movie whose only file is an extra stays off the rail", ctx do
+      kept = in_progress_movie(ctx.user, ago(100))
+
+      extra_only = MediaFixtures.media_item_fixture(%{type: "movie"})
+      MediaFixtures.media_file_fixture(%{media_item_id: extra_only.id, extra_kind: "trailer"})
+
+      {:ok, _} =
+        Playback.save_progress(
+          ctx.user.id,
+          [media_item_id: extra_only.id],
+          %{position_seconds: 900, duration_seconds: 7200, last_watched_at: ago(50)}
+        )
+
+      assert [%OnDeckEntry{kind: :movie, media_item: %{id: id}, files: [_]}] =
+               OnDeck.list(ctx.user.id, now: now())
+
+      assert id == kept.id
+    end
   end
 end
