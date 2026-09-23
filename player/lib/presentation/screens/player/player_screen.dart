@@ -1262,6 +1262,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _initializePlayer() async {
+    // Flushes whatever the *previous* load's timeline reached before this
+    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
+    // again after a cast session ends abandons the cast-era timeline, which
+    // would otherwise never print. A no-op on the very first call, when
+    // `_playTimeline` is still null.
+    _playTimeline?.logOnce();
     _playTimeline = StartupTimeline('playback');
     _resetSegmentsIfMediaChanged();
 
@@ -5890,10 +5896,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Precedes every later `_openPlayerAndStart` call (the web source-switch
     // branch in `_attachSource`, and the error catch in `_initializePlayer`),
     // so this is where a first-frame watch that never fired gets cancelled
-    // and the timeline flushed before the next one starts.
+    // before the next one starts.
+    //
+    // Deliberately does *not* flush `_playTimeline` here: the web branch of
+    // `_attachSource` calls this and then `_openPlayerAndStart` again for
+    // the *same* timeline (an AdaptationPolicy fallback mid-load is the
+    // common case), so logging here would lock in a summary missing
+    // `first_frame` before the fallback source ever gets a chance to reach
+    // it -- `logOnce()`'s own guard would then make the real call a no-op.
+    // The timeline only genuinely ends in `State.dispose()` or at the top of
+    // the next `_initializePlayer` run, and only those flush it.
     await _firstFrameSubscription?.cancel();
     _firstFrameSubscription = null;
-    _playTimeline?.logOnce();
     _progressService?.stopSync();
     _stopStatsCollector();
 

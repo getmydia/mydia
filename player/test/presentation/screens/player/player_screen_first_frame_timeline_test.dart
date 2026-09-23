@@ -62,6 +62,48 @@ class _FakePlatformPlayer extends PlatformPlayer {
   void emitWidth(int width) => widthController.add(width);
 }
 
+/// A player whose `open` always throws, so `_initializePlayer` reaches its
+/// own catch block and calls `_disposePlayer` -- with nothing after that
+/// ever calling `_initializePlayer` again for this screen. Mirrors
+/// `player_screen_source_switch_test.dart`'s `_Decoder(throwFirstOpen:
+/// true)`, trimmed to just this one behaviour.
+class _ThrowingOpenPlayer extends PlatformPlayer {
+  _ThrowingOpenPlayer() : super(configuration: const PlayerConfiguration());
+
+  final _handle = Completer<int>();
+
+  @override
+  Future<int> get handle => _handle.future;
+
+  bool disposed = false;
+
+  @override
+  Future<void> open(Playable playable, {bool play = true}) async {
+    // Emitted before the throw, matching `_Decoder(throwFirstOpen: true)` in
+    // `player_screen_source_switch_test.dart`: `_tracksSubscription` was
+    // already subscribed to `player.stream.tracks` before this call, and a
+    // subscription cancelled having never seen a value resolves far less
+    // predictably than one that has.
+    state = state.copyWith(tracks: probedTracks());
+    tracksController.add(state.tracks);
+    throw StateError('boom: open failed');
+  }
+
+  // `_onTracksChanged` (driven by the emission above) can reach this for the
+  // default probed subtitle tracks. `PlatformPlayer`'s own default throws
+  // `UnimplementedError`, which -- reached from an `unawaited` call --
+  // becomes an unhandled async error instead of surfacing where a test could
+  // see it.
+  @override
+  Future<void> setSubtitleTrack(SubtitleTrack track) async {}
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+    await super.dispose();
+  }
+}
+
 /// A direct-play movie load with no HLS session, no subtitle preference and
 /// no segments -- the same minimal script `player_screen_stats_panel_test.dart`
 /// uses to reach a playing screen with the least ceremony.
@@ -186,5 +228,62 @@ void main() {
     final summaries = logged.where((l) => l.startsWith('playback:')).toList();
     expect(summaries, hasLength(1));
     expect(summaries.single, isNot(contains('first_frame=')));
+  });
+
+  // Regression coverage for the fix-round bug: `_disposePlayer` (called from
+  // `_initializePlayer`'s own catch block on a failed open) must not flush
+  // the timeline itself. It is also called from the web branch of
+  // `_attachSource` right before reopening *the same* `_playTimeline` for a
+  // mid-load fallback -- not reachable from a native `flutter test` run,
+  // since that branch is gated on `kIsWeb` -- so a premature flush there
+  // would lock in a summary missing `first_frame` before the fallback
+  // source ever gets a chance to reach it. Nothing re-initializes this
+  // screen after a failed open, so this is the one scenario a native test
+  // can use to prove `_disposePlayer` alone stays silent: if it still
+  // called `logOnce()`, the summary would appear right after the failure,
+  // before this screen is ever disposed.
+  testWidgets(
+      '_disposePlayer alone does not flush the timeline; only dispose() '
+      'does, once, afterward', (tester) async {
+    final fake = _ThrowingOpenPlayer();
+    final container = buildPlayerScreenContainer(
+      link: _link(),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+
+    final logged = <String>[];
+    await withCapturedDebugPrint(logged, () async {
+      await pumpPlayerScreen(
+        tester,
+        container,
+        createPlayer: () => Player(platformPlayer: fake),
+      );
+      // `pumpUntil`'s virtual-clock pumps alone never resolve
+      // `_tracksSubscription?.cancel()` here -- cancelling a subscription on
+      // media_kit's `distinct()`-wrapped tracks stream needs real event-loop
+      // progress, the same reason `pumpUntilReal` exists (see its own
+      // dartdoc). `runAsync` is required for that: without it, this line
+      // would silently never observe `fake.disposed` becoming true, and the
+      // `isEmpty` check below would pass vacuously regardless of whether
+      // `_disposePlayer` actually flushed the timeline.
+      await tester.runAsync(() => pumpUntilReal(tester, () => fake.disposed));
+
+      expect(logged.where((l) => l.startsWith('playback:')), isEmpty,
+          reason: '_disposePlayer must not flush the timeline on its own');
+
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    });
+
+    final summaries = logged.where((l) => l.startsWith('playback:')).toList();
+    expect(summaries, hasLength(1),
+        reason: 'State.dispose() must still flush exactly once, whatever '
+            'the load reached before the failed open');
+    expect(summaries.single, isNot(contains('opened=')),
+        reason: 'open() itself threw, so this load never reached the '
+            'opened mark');
   });
 }
