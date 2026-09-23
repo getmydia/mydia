@@ -53,21 +53,24 @@ class P2pGraphQLLink extends Link {
 
   @override
   Stream<Response> request(Request request, [NextLink? forward]) async* {
+    // Generated documents leave operationName null, so take it from the
+    // document. Every player document holds one operation, so naming it
+    // is always valid for the server too.
+    final operationName = request.operation.operationName ??
+        request.operation.document.definitions
+            .whereType<OperationDefinitionNode>()
+            .firstOrNull
+            ?.name
+            ?.value;
+    // Includes retries and a token refresh: what the caller waited.
+    final stopwatch = Stopwatch()..start();
+
     try {
       // Get the current auth token
       final authToken = await _getAuthToken();
 
       // Convert the request document to a query string using gql's built-in printer
       final query = printNode(request.operation.document);
-      // Generated documents leave operationName null, so take it from the
-      // document. Every player document holds one operation, so naming it
-      // is always valid for the server too.
-      final operationName = request.operation.operationName ??
-          request.operation.document.definitions
-              .whereType<OperationDefinitionNode>()
-              .firstOrNull
-              ?.name
-              ?.value;
       final variables = request.variables;
 
       debugPrint('[P2pGraphQLLink] Sending request: $operationName');
@@ -89,7 +92,8 @@ class P2pGraphQLLink extends Link {
         deviceProfile: deviceProfile,
       );
 
-      debugPrint('[P2pGraphQLLink] Received response');
+      debugPrint('[P2pGraphQLLink] Received $operationName '
+          'in ${stopwatch.elapsedMilliseconds}ms');
 
       // Create the response
       yield Response(
@@ -98,7 +102,8 @@ class P2pGraphQLLink extends Link {
         response: const {},
       );
     } catch (e, stackTrace) {
-      debugPrint('[P2pGraphQLLink] Error: $e');
+      debugPrint('[P2pGraphQLLink] $operationName failed after '
+          '${stopwatch.elapsedMilliseconds}ms: $e');
       debugPrint('[P2pGraphQLLink] Stack: $stackTrace');
 
       // Yield an error response
