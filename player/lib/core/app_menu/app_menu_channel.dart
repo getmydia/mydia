@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import '../../native/lib.dart' show FlutterPlaybackState;
 import '../remote/remote_control_intent.dart';
 import '../remote/remote_target_controller.dart';
+import 'now_playing.dart';
 
 /// The channel between Dart and `macos/Runner/AppMenu.swift`, which owns the
 /// menu bar and the Dock menu.
@@ -32,19 +32,25 @@ bool get appMenuSupported =>
 ///
 /// Playback commands go through [RemoteTargetController], the same seam a
 /// remote control uses, so the Dock needs no player callbacks of its own and
-/// inherits its handling of "no player attached".
+/// inherits its handling of "no player attached". The play/pause toggle acts
+/// on exactly the state the Dock label shows, not on the player's own
+/// playback state, since the two can disagree (see [handle]'s
+/// `togglePlayPause` case).
 class AppMenuCommands {
   AppMenuCommands({
     required void Function(String route) go,
     required void Function() back,
     required RemoteTargetController remote,
+    required NowPlaying? Function() nowPlaying,
   })  : _go = go,
         _back = back,
-        _remote = remote;
+        _remote = remote,
+        _nowPlaying = nowPlaying;
 
   final void Function(String route) _go;
   final void Function() _back;
   final RemoteTargetController _remote;
+  final NowPlaying? Function() _nowPlaying;
 
   void attach({MethodChannel channel = kAppMenuChannel}) =>
       channel.setMethodCallHandler(handle);
@@ -65,12 +71,10 @@ class AppMenuCommands {
       case 'back':
         _back();
       case 'togglePlayPause':
-        final snapshot = _remote.snapshot();
-        if (snapshot == null) return null;
+        final current = _nowPlaying();
+        if (current == null) return null;
         _remote.submit(TransportIntent(
-          snapshot.state == FlutterPlaybackState.playing
-              ? TransportAction.pause
-              : TransportAction.play,
+          current.isPlaying ? TransportAction.pause : TransportAction.play,
         ));
       case 'nextEpisode':
         _remote.submit(const EpisodeStepIntent(EpisodeStep.next));

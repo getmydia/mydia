@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/app_menu/app_menu_channel.dart';
+import 'package:player/core/app_menu/now_playing.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/native/lib.dart';
@@ -71,16 +72,19 @@ void main() {
   late List<String> routes;
   late int backs;
   late RemoteTargetController remote;
+  late NowPlaying? published;
   late AppMenuCommands commands;
 
   setUp(() {
     routes = [];
     backs = 0;
     remote = RemoteTargetController();
+    published = null;
     commands = AppMenuCommands(
       go: routes.add,
       back: () => backs++,
       remote: remote,
+      nowPlaying: () => published,
     );
   });
 
@@ -108,9 +112,14 @@ void main() {
     expect(backs, 1);
   });
 
-  test('togglePlayPause pauses a playing player', () async {
+  test('togglePlayPause pauses when the Dock label shows Pause', () async {
     final binding = _Binding(playing: true);
     remote.attachPlayer(binding);
+    published = const NowPlaying(
+      title: 'The Long Aurora',
+      isPlaying: true,
+      hasNext: false,
+    );
 
     await commands.handle(const MethodCall('togglePlayPause'));
     await settle();
@@ -118,14 +127,40 @@ void main() {
     expect(binding.calls, ['pause']);
   });
 
-  test('togglePlayPause plays a paused player', () async {
+  test('togglePlayPause plays when the Dock label shows Play', () async {
     final binding = _Binding(playing: false);
     remote.attachPlayer(binding);
+    published = const NowPlaying(
+      title: 'The Long Aurora',
+      isPlaying: false,
+      hasNext: false,
+    );
 
     await commands.handle(const MethodCall('togglePlayPause'));
     await settle();
 
     expect(binding.calls, ['play']);
+  });
+
+  test(
+      'togglePlayPause pauses a buffering player when the Dock label still '
+      'shows Pause', () async {
+    // The snapshot's playback state is not `playing` here (this is what a
+    // buffering player looks like), but the Dock label the host is showing
+    // says isPlaying. The toggle must act on the label, not the snapshot, or
+    // "Pause" is silently a no-op while buffering.
+    final binding = _Binding(playing: false);
+    remote.attachPlayer(binding);
+    published = const NowPlaying(
+      title: 'The Long Aurora',
+      isPlaying: true,
+      hasNext: false,
+    );
+
+    await commands.handle(const MethodCall('togglePlayPause'));
+    await settle();
+
+    expect(binding.calls, ['pause']);
   });
 
   test('nextEpisode steps forward', () async {
@@ -139,6 +174,7 @@ void main() {
   });
 
   test('playback commands with no player attached do nothing', () async {
+    published = null;
     await expectLater(
       commands.handle(const MethodCall('togglePlayPause')),
       completes,

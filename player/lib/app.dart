@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/app_menu/app_menu_channel.dart';
+import 'core/app_menu/now_playing.dart';
 import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/layout/tv_canvas.dart';
@@ -179,6 +180,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           if (router.canPop()) router.pop();
         },
         remote: ref.read(remoteTargetControllerProvider),
+        nowPlaying: () => ref.read(nowPlayingPublisherProvider).current,
       )..attach();
     }
     // Applies the Diagnostics choice for the app's lifetime, so continuous log
