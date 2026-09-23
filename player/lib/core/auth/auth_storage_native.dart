@@ -143,9 +143,23 @@ class NativeAuthStorage implements AuthStorage {
     if (_memoryStorage.containsKey(key)) return _memoryStorage[key];
     if (_readCache.containsKey(key)) return _readCache[key];
 
-    return _inflight[key] ??= _readBackend(key).whenComplete(() {
-      _inflight.remove(key);
+    final joined = _inflight[key];
+    if (joined != null) return joined;
+
+    // Assigned to `_inflight[key]` below, and captured here so the
+    // `whenComplete` cleanup can check it is still the entry it created
+    // before removing it. `delete`/`deleteAll` clear `_inflight` outright on
+    // a mutation; a read that starts afterward installs its own future under
+    // the same key, and without this identity check this call's belated
+    // cleanup would remove that newer entry instead of leaving it alone.
+    late final Future<String?> started;
+    started = _readBackend(key).whenComplete(() {
+      if (identical(_inflight[key], started)) {
+        _inflight.remove(key);
+      }
     });
+    _inflight[key] = started;
+    return started;
   }
 
   /// Caches only a read the backend actually answered. A failed read falls
@@ -189,6 +203,7 @@ class NativeAuthStorage implements AuthStorage {
   Future<void> delete(String key) async {
     _memoryStorage.remove(key);
     _readCache[key] = null;
+    _inflight.remove(key);
     _generation++;
 
     await _withFallback<void>(() => _backend.delete(key), () {});
@@ -198,6 +213,7 @@ class NativeAuthStorage implements AuthStorage {
   Future<void> deleteAll() async {
     _memoryStorage.clear();
     _readCache.clear();
+    _inflight.clear();
     _generation++;
 
     await _withFallback<void>(_backend.deleteAll, () {});

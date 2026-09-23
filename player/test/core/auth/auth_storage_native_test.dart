@@ -300,5 +300,59 @@ void main() {
       expect(await storage.read('auth_token'), isNull);
       expect(backend.readCount, 2);
     });
+
+    test(
+        'a read started after deleteAll, while the pre-deletion backend read '
+        'is still pending, does not join that stale future', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      // Reaches the backend synchronously and then suspends on `pending`.
+      final firstRead = storage.read('auth_token');
+
+      await storage.deleteAll();
+
+      // Started before `pending` is completed, so the first backend read is
+      // still in flight. Without `deleteAll` clearing `_inflight`, this
+      // would find the stale pending future still keyed there and return
+      // whatever it resolves to instead of going back to the (now cleared)
+      // backend.
+      final secondRead = storage.read('auth_token');
+
+      pending.complete('t1');
+
+      expect(await firstRead, 't1');
+      expect(await secondRead, isNull,
+          reason: 'the backend was cleared by deleteAll; a read started '
+              'after it must not surface the pre-deletion value');
+      expect(backend.readCount, 2);
+    });
+
+    test(
+        'a read started after delete, while the pre-deletion backend read '
+        'is still pending, does not join that stale future', () async {
+      final pending = Completer<String?>();
+      final backend = _BlockingBackend(pending, {'auth_token': 't1'});
+      final storage = NativeAuthStorage(backend: backend);
+
+      final firstRead = storage.read('auth_token');
+
+      await storage.delete('auth_token');
+
+      final secondRead = storage.read('auth_token');
+
+      pending.complete('t1');
+
+      expect(await firstRead, 't1');
+      expect(await secondRead, isNull,
+          reason: 'the key was deleted; a read started afterward must not '
+              'surface the pre-deletion value');
+      // The tombstoned read cache already answers the second read without a
+      // second backend hit; this pins that down so a future change to the
+      // cache-check ordering can't quietly start relying on `_inflight`
+      // alone to keep this correct.
+      expect(backend.readCount, 1);
+    });
   });
 }
