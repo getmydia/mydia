@@ -2486,6 +2486,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ? const Duration(milliseconds: 500)
           : const Duration(seconds: 3),
     );
+    // `dispose()` may have run while this was suspended: it nulls `_player`
+    // and disposes both `player` and the progress service. `identical`
+    // also catches a newer `_openPlayerAndStart` call (a source switch)
+    // having replaced `_player` out from under this one. Bailing out here,
+    // before anything below touches `player` or `_progressService` again,
+    // is what keeps e.g. `player.play()` from throwing against a
+    // `PlatformPlayer` whose stream controllers `dispose()` already closed.
+    if (!mounted || !identical(_player, player)) return player;
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
       debugPrint(
