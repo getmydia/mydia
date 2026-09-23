@@ -33,7 +33,11 @@ Future<bool> waitForPeer({
 
   subscription = connected.listen(
     (id) {
-      if (id == nodeId) finish(true);
+      // A queued broadcast event can be delivered after the peer has already
+      // disconnected again, or the service reset -- matching on the id alone
+      // would then finish(true) for a peer that is not actually connected
+      // any more. isConnected() re-checks the live state at delivery time.
+      if (id == nodeId && isConnected()) finish(true);
     },
     onDone: () => finish(isConnected()),
     onError: (_) => finish(isConnected()),

@@ -18,13 +18,18 @@ void main() {
 
   test('returns on the matching connected event, ignoring others', () async {
     final events = StreamController<String>.broadcast();
+    var connected = false;
     final result = waitForPeer(
       nodeId: 'n1',
-      isConnected: () => false,
+      isConnected: () => connected,
       connected: events.stream,
       timeout: const Duration(seconds: 10),
     );
     events.add('other');
+    // The peer is actually connected by the time its matching event is
+    // delivered -- see the disconnected-event tests below for the case
+    // where it is not.
+    connected = true;
     events.add('n1');
     expect(await result, isTrue);
     // No subscription should outlive a resolved call.
@@ -69,5 +74,51 @@ void main() {
     connected = true;
     await events.close();
     expect(await result, isTrue);
+  });
+
+  test(
+      'a matching event does not succeed the wait while the peer is '
+      'reported disconnected', () async {
+    final events = StreamController<String>.broadcast();
+    var connected = false;
+    final result = waitForPeer(
+      nodeId: 'n1',
+      isConnected: () => connected,
+      connected: events.stream,
+      timeout: const Duration(milliseconds: 20),
+    );
+
+    // The id matches, but the peer service reports it disconnected -- e.g.
+    // the peer dropped, or the service reset, between the event being
+    // queued and delivered. Must not resolve the wait.
+    events.add('n1');
+
+    expect(await result, isFalse);
+    await events.close();
+  });
+
+  test(
+      'succeeds on a later matching event once the peer is actually '
+      'connected', () async {
+    final events = StreamController<String>.broadcast();
+    var connected = false;
+    final result = waitForPeer(
+      nodeId: 'n1',
+      isConnected: () => connected,
+      connected: events.stream,
+      timeout: const Duration(seconds: 10),
+    );
+
+    // Stale event while disconnected: ignored, not a false success.
+    events.add('n1');
+    await Future<void>.delayed(Duration.zero);
+
+    // The peer is genuinely connected by the time the next matching event
+    // arrives.
+    connected = true;
+    events.add('n1');
+
+    expect(await result, isTrue);
+    await events.close();
   });
 }
