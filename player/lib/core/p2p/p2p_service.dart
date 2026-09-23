@@ -9,6 +9,7 @@ import 'package:player/core/p2p/p2p_range_stream.dart';
 import 'package:player/native/lib.dart';
 
 import '../logging/log_sink.dart';
+import 'peer_wait.dart';
 import 'relay_list.dart';
 
 /// The iroh relay compiled into this build.
@@ -675,9 +676,20 @@ class P2pService {
     debugPrint('[P2P] Not connected, dialing peer...');
     await dial(endpointAddrJson);
 
-    // Wait briefly for the connection event to be processed
-    // This gives time for the 'connected:' event to be received
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Returns as soon as the 'connected:' event is processed, capped at the
+    // 100 ms this used to sleep unconditionally. Not connected by then is not
+    // an error here: senders wait for the peer themselves.
+    final nodeId = endpointAddrJson.startsWith('{')
+        ? _extractNodeIdFromEndpointAddr(endpointAddrJson)
+        : endpointAddrJson;
+    if (nodeId != null) {
+      await waitForPeer(
+        nodeId: nodeId,
+        isConnected: () => _connectedPeers.contains(nodeId),
+        connected: onPeerConnected,
+        timeout: const Duration(milliseconds: 100),
+      );
+    }
 
     // Reset reconnect counter on successful dial
     _autoReconnectAttempts = 0;
@@ -960,13 +972,14 @@ class P2pService {
 
   Future<void> _waitForConnectedPeer(String nodeId,
       {Duration timeout = const Duration(seconds: 10)}) async {
-    final deadline = DateTime.now().add(timeout);
-    while (!isConnectedToPeer(nodeId)) {
-      if (DateTime.now().isAfter(deadline)) {
-        throw TimeoutException(
-            'Timed out waiting for peer connection: $nodeId');
-      }
-      await Future.delayed(const Duration(milliseconds: 100));
+    final connected = await waitForPeer(
+      nodeId: nodeId,
+      isConnected: () => isConnectedToPeer(nodeId),
+      connected: onPeerConnected,
+      timeout: timeout,
+    );
+    if (!connected) {
+      throw TimeoutException('Timed out waiting for peer connection: $nodeId');
     }
   }
 
