@@ -7,6 +7,7 @@ import '../../../domain/navigation/nav_destination.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
+import 'dock_glass.dart';
 import 'nav_badges.dart';
 
 /// Mobile bottom navigation bar
@@ -28,7 +29,8 @@ class BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: const EdgeInsets.fromLTRB(DockGlass.sideMargin, 0,
+            DockGlass.sideMargin, DockGlass.sideMargin),
         child: ToastObstruction(
           edge: ToastEdge.bottom,
           child: DecoratedBox(
@@ -37,22 +39,13 @@ class BottomNav extends StatelessWidget {
             // ambient backdrop instead of a near-opaque surface.
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 16,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              boxShadow: DockGlass.shadow,
             ),
             child: GlassSurface(
-              blurSigma: 10,
-              fillColor: AppColors.surface.withValues(alpha: 0.7),
+              blurSigma: DockGlass.blurSigma,
+              fillColor: DockGlass.fill,
               borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: AppColors.border.withValues(alpha: 0.2),
-              ),
+              border: DockGlass.border,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: Row(

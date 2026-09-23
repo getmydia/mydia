@@ -21,6 +21,7 @@ import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/core/playback/local_playback_state.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -417,7 +418,8 @@ void main() {
     container.read(castTargetProvider.notifier).set(_device);
     await tester.pump();
 
-    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.text(_device.name), findsOneWidget);
+    expect(find.text('Not connected'), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-scrubber')), findsNothing);
@@ -440,7 +442,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(castTargetProvider), isNull);
-    expect(find.textContaining('not connected'), findsNothing);
+    expect(find.text('Not connected'), findsNothing);
   });
 
   testWidgets(
@@ -607,7 +609,8 @@ void main() {
       ),
     );
 
-    expect(find.text('${_device.name} — not connected'), findsOneWidget);
+    expect(find.text(_device.name), findsOneWidget);
+    expect(find.text('Not connected'), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-reconnect')), findsOneWidget);
     expect(find.byKey(const Key('cast-bar-offline-clear')), findsOneWidget);
     expect(find.byKey(const Key('cast-stale-reconnect')), findsNothing,
@@ -1318,6 +1321,65 @@ void main() {
 
       expect(find.textContaining('node-den'), findsOneWidget,
           reason: 'the second player is shown once the first is dismissed');
+    });
+  });
+
+  group('cast bar chrome', () {
+    Future<void> expectPill(WidgetTester tester, Key key) async {
+      expect(
+        find.ancestor(of: find.byKey(key), matching: find.byType(CastPill)),
+        findsOneWidget,
+        reason: '$key must render inside the glass pill',
+      );
+    }
+
+    testWidgets('idle, connecting and offline rows are pills', (tester) async {
+      await _pump(tester,
+          session: const CastSession(
+              device: _device, playbackState: CastPlaybackState.idle));
+      await expectPill(tester, const Key('cast-bar-idle-clear'));
+
+      await _pump(tester,
+          session: const CastSession(
+              device: _device,
+              playbackState: CastPlaybackState.idle,
+              connectionState: CastConnectionState.connecting));
+      await expectPill(tester, const Key('cast-bar-connecting-cancel'));
+
+      await _pump(tester,
+          session: const CastSession(
+              device: _device,
+              playbackState: CastPlaybackState.idle,
+              connectionState: CastConnectionState.lost));
+      await expectPill(tester, const Key('cast-bar-offline-reconnect'));
+    });
+
+    testWidgets('playing and stale rows are pills', (tester) async {
+      await _pump(tester,
+          session: _session(duration: const Duration(minutes: 40)));
+      await expectPill(tester, const Key('cast-bar-play-pause'));
+      expect(find.text('Casting to ${_device.name}'), findsOneWidget);
+
+      await _pump(tester,
+          session:
+              _session(duration: const Duration(minutes: 40), isStale: true));
+      await expectPill(tester, const Key('cast-stale-reconnect'));
+    });
+
+    testWidgets('the ambient row shows the title and where it plays',
+        (tester) async {
+      await _pump(tester, extraOverrides: [
+        ambientPlayingProvider.overrideWith((ref) =>
+            Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+        remoteDeviceNamesProvider
+            .overrideWith((ref) async => {'node-tv': 'Living Room'}),
+      ]);
+      await tester.pump();
+      await tester.pump();
+
+      await expectPill(tester, const Key('cast-bar-ambient-open'));
+      expect(find.text('The Lantern Keepers'), findsOneWidget);
+      expect(find.text('Playing on Living Room'), findsOneWidget);
     });
   });
 }

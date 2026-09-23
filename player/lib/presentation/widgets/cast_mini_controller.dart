@@ -13,12 +13,15 @@ import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
 import '../../core/remote/remote_control_intent.dart';
 import '../../core/router/navigator_keys.dart';
+import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import '../../core/p2p/p2p_service.dart' show p2pStatusNotifierProvider;
 import '../../core/playback/local_playback_state.dart';
 import '../screens/episode/episode_detail_controller.dart';
 import '../screens/movie/movie_detail_controller.dart';
 import 'cast_actions.dart';
+import 'cast_bar/cast_bar_parts.dart';
+import 'cast_bar/cast_pill.dart';
 import 'cast_subtitle_sheet.dart';
 import 'toast/toast_obstruction.dart';
 import 'toast/toaster.dart';
@@ -150,101 +153,91 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     );
   }
 
-  /// Shared chrome for the three text-only rows.
-  Widget _barRow({
-    required Widget leading,
-    required String label,
-    required List<Widget> actions,
+  /// Shared close/cancel control for the idle, connecting, offline and
+  /// ambient rows.
+  Widget _closeButton({
+    required Key key,
+    required String tooltip,
+    required VoidCallback onPressed,
   }) {
-    return Material(
-      elevation: 8,
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            leading,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            ...actions,
-          ],
-        ),
-      ),
+    return IconButton(
+      key: key,
+      icon: const Icon(Icons.close, size: 18),
+      color: AppColors.textSecondary,
+      // This bar is the only cast surface in the app, so an unlabelled icon
+      // here leaves a screen-reader user no route to the control at all —
+      // there is no longer a full-screen remote to fall back to. Same
+      // reasoning for every button below.
+      tooltip: tooltip,
+      onPressed: onPressed,
     );
   }
 
   /// Connected, nothing loaded. "Ready to play on" rather than "Will play on":
   /// this is a statement about a connection that exists, not a promise about
   /// the future.
-  Widget _buildIdle(CastDevice device) {
-    return _barRow(
-      leading: const Icon(Icons.cast_connected, color: Colors.blue, size: 24),
-      label: 'Ready to play on ${device.name}',
-      actions: [
-        IconButton(
-          key: const Key('cast-bar-idle-clear'),
-          icon: const Icon(Icons.close),
-          // This bar is the only cast surface in the app, so an unlabelled
-          // icon here leaves a screen-reader user no route to the control at
-          // all — there is no longer a full-screen remote to fall back to.
-          // Same reasoning for every button below.
-          tooltip: 'Stop casting to ${device.name}',
-          onPressed: _stopCasting,
+  Widget _buildIdle(CastDevice device) => CastPill(
+        child: CastBarRow(
+          leading: const CastIconTile(
+              accent: true, child: Icon(Icons.cast_connected)),
+          title: 'Ready to play on ${device.name}',
+          status: 'Connected',
+          dot: CastDot.live,
+          actions: [
+            _closeButton(
+              key: const Key('cast-bar-idle-clear'),
+              tooltip: 'Stop casting to ${device.name}',
+              onPressed: _stopCasting,
+            ),
+          ],
         ),
-      ],
-    );
-  }
+      );
 
-  Widget _buildConnecting(CastDevice device) {
-    return _barRow(
-      leading: const SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue),
-      ),
-      label: 'Connecting to ${device.name}…',
-      actions: [
-        IconButton(
-          key: const Key('cast-bar-connecting-cancel'),
-          icon: const Icon(Icons.close),
-          tooltip: 'Cancel connecting to ${device.name}',
-          // Tears down whatever the in-flight connect established rather than
-          // merely forgetting the device.
-          onPressed: _stopCasting,
+  Widget _buildConnecting(CastDevice device) => CastPill(
+        child: CastBarRow(
+          leading: const CastIconTile(
+            child: SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppColors.primary),
+            ),
+          ),
+          title: 'Connecting to ${device.name}…',
+          actions: [
+            _closeButton(
+              key: const Key('cast-bar-connecting-cancel'),
+              tooltip: 'Cancel connecting to ${device.name}',
+              // Tears down whatever the in-flight connect established rather
+              // than merely forgetting the device.
+              onPressed: _stopCasting,
+            ),
+          ],
         ),
-      ],
-    );
-  }
+      );
 
   /// A device is remembered but nothing is connected — a failed connect, or a
   /// receiver that idle-timed-out while the user browsed.
-  Widget _buildOffline(CastDevice device) {
-    return _barRow(
-      leading: const Icon(Icons.cast, color: Colors.blue, size: 24),
-      label: '${device.name} — not connected',
-      actions: [
-        FilledButton(
-          key: const Key('cast-bar-offline-reconnect'),
-          onPressed: () => _reconnectIdle(device),
-          child: const Text('Reconnect'),
+  Widget _buildOffline(CastDevice device) => CastPill(
+        child: CastBarRow(
+          leading: const CastIconTile(child: Icon(Icons.cast)),
+          title: device.name,
+          status: 'Not connected',
+          dot: CastDot.idle,
+          actions: [
+            CastPrimaryAction(
+              key: const Key('cast-bar-offline-reconnect'),
+              label: 'Reconnect',
+              onPressed: () => _reconnectIdle(device),
+            ),
+            _closeButton(
+              key: const Key('cast-bar-offline-clear'),
+              tooltip: 'Forget ${device.name}',
+              onPressed: _stopCasting,
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        IconButton(
-          key: const Key('cast-bar-offline-clear'),
-          icon: const Icon(Icons.close),
-          tooltip: 'Forget ${device.name}',
-          onPressed: _stopCasting,
-        ),
-      ],
-    );
-  }
+      );
 
   /// "Playing on Living Room" for a paired player already mid-watch that
   /// nobody asked this device to track — from [ambientPlayingProvider]
@@ -279,24 +272,27 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final names = ref.watch(remoteDeviceNamesProvider).value ?? const {};
     final name = names[ambientTarget.device.id] ?? ambientTarget.device.id;
 
-    return _barRow(
-      leading: const Icon(Icons.cast, color: Colors.blue, size: 24),
-      label: 'Playing on $name',
-      actions: [
-        TextButton(
-          key: const Key('cast-bar-ambient-open'),
-          onPressed: () => _openAmbientTarget(ambientTarget, name),
-          child: const Text('View'),
-        ),
-        IconButton(
-          key: const Key('cast-bar-ambient-dismiss'),
-          icon: const Icon(Icons.close),
-          tooltip: 'Hide Playing on $name',
-          onPressed: () => ref
-              .read(ambientDismissalsProvider.notifier)
-              .dismiss(ambientTarget),
-        ),
-      ],
+    return CastPill(
+      child: CastBarRow(
+        leading: CastThumb(imageUrl: ambientTarget.snapshot.imageUrl),
+        title: ambientTarget.snapshot.title,
+        status: 'Playing on $name',
+        dot: CastDot.live,
+        actions: [
+          CastPrimaryAction(
+            key: const Key('cast-bar-ambient-open'),
+            label: 'View',
+            onPressed: () => _openAmbientTarget(ambientTarget, name),
+          ),
+          _closeButton(
+            key: const Key('cast-bar-ambient-dismiss'),
+            tooltip: 'Hide Playing on $name',
+            onPressed: () => ref
+                .read(ambientDismissalsProvider.notifier)
+                .dismiss(ambientTarget),
+          ),
+        ],
+      ),
     );
   }
 
@@ -362,43 +358,33 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     }
   }
 
-  Widget _buildStale(CastSession session) {
-    return Material(
-      elevation: 8,
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            const Icon(Icons.cast_outlined, color: Colors.grey, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Lost connection to ${session.device.name}',
-                style: Theme.of(context).textTheme.bodyMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            FilledButton(
+  Widget _buildStale(CastSession session) => CastPill(
+        child: CastBarRow(
+          leading: CastThumb(
+            imageUrl: session.mediaInfo?.imageUrl,
+            fallbackIcon: Icons.cast,
+            dimmed: true,
+          ),
+          title: session.mediaInfo?.title ?? session.device.name,
+          status: 'Lost connection to ${session.device.name}',
+          dot: CastDot.lost,
+          actions: [
+            // Re-cast what the *stale session* was playing. Anything else
+            // here would silently start whatever this screen happens to be
+            // showing instead.
+            CastPrimaryAction(
               key: const Key('cast-stale-reconnect'),
-              // Re-cast what the *stale session* was playing. Anything else
-              // here would silently start whatever this screen happens to
-              // be showing instead.
+              label: 'Reconnect',
               onPressed: _reconnectStaleSession,
-              child: const Text('Reconnect'),
             ),
-            const SizedBox(width: 8),
-            TextButton(
+            CastGhostAction(
               key: const Key('cast-stale-stop'),
+              label: 'Stop',
               onPressed: _stopCasting,
-              child: const Text('Stop'),
             ),
           ],
         ),
-      ),
-    );
-  }
+      );
 
   Widget _buildPlaying(CastSession session) {
     final info = session.mediaInfo;
@@ -409,82 +395,68 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         _dragFraction ?? castProgressFraction(info.position, info.duration);
     final isPlaying = session.playbackState == CastPlaybackState.playing;
 
-    return Material(
-      elevation: 8,
-      color: Theme.of(context).colorScheme.surface,
+    return CastPill(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              children: [
-                const Icon(Icons.cast_connected, color: Colors.blue, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        info.title,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'Casting to ${session.device.name}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+          CastBarRow(
+            leading: CastThumb(imageUrl: info.imageUrl),
+            title: info.title,
+            status: 'Casting to ${session.device.name}',
+            dot: CastDot.live,
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                Text(
-                  _formatDuration(info.position),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Expanded(
-                  child: Slider(
-                    key: const Key('cast-bar-scrubber'),
-                    value: value,
-                    // Null disables the control outright. Leaving it live
-                    // against an unknown duration resolves every drag to
-                    // `fraction * -1s`, i.e. the start.
-                    onChanged: durationKnown
-                        ? (v) => setState(() => _dragFraction = v)
-                        : null,
-                    onChangeEnd: durationKnown
-                        ? (v) async {
-                            final target =
-                                seekTargetForFraction(v, info.duration);
-                            setState(() => _dragFraction = null);
-                            if (target == null) return;
-                            final manager = await ref
-                                .read(castSessionManagerProvider.future);
-                            await manager.seek(target);
-                          }
-                        : null,
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: AppColors.primary,
+              inactiveTrackColor: AppColors.textPrimary.withValues(alpha: 0.1),
+              thumbColor: AppColors.textPrimary,
+              overlayColor: AppColors.primary.withValues(alpha: 0.12),
+              trackHeight: 4,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Text(
+                    _formatDuration(info.position),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.textSecondary),
                   ),
-                ),
-                Text(
-                  key: const Key('cast-bar-duration'),
-                  durationKnown ? _formatDuration(info.duration) : '--:--',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+                  Expanded(
+                    child: Slider(
+                      key: const Key('cast-bar-scrubber'),
+                      value: value,
+                      // Null disables the control outright. Leaving it live
+                      // against an unknown duration resolves every drag to
+                      // `fraction * -1s`, i.e. the start.
+                      onChanged: durationKnown
+                          ? (v) => setState(() => _dragFraction = v)
+                          : null,
+                      onChangeEnd: durationKnown
+                          ? (v) async {
+                              final target =
+                                  seekTargetForFraction(v, info.duration);
+                              setState(() => _dragFraction = null);
+                              if (target == null) return;
+                              final manager = await ref
+                                  .read(castSessionManagerProvider.future);
+                              await manager.seek(target);
+                            }
+                          : null,
+                    ),
+                  ),
+                  Text(
+                    key: const Key('cast-bar-duration'),
+                    durationKnown ? _formatDuration(info.duration) : '--:--',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -495,6 +467,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
+                  color: AppColors.textPrimary,
                   tooltip: 'Back 10 seconds',
                   onPressed: () async {
                     final manager =
@@ -505,11 +478,15 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     ));
                   },
                 ),
-                IconButton(
+                IconButton.filled(
                   key: const Key('cast-bar-play-pause'),
                   icon: Icon(
                     isPlaying ? Icons.pause : Icons.play_arrow,
                     size: 28,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.onPrimary,
                   ),
                   tooltip: isPlaying ? 'Pause' : 'Play',
                   onPressed: () async {
@@ -525,6 +502,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
+                  color: AppColors.textPrimary,
                   tooltip: 'Forward 10 seconds',
                   onPressed: () async {
                     final manager =
@@ -539,6 +517,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   IconButton(
                     key: const Key('cast-bar-subtitles'),
                     tooltip: 'Subtitles',
+                    color: AppColors.textPrimary,
                     icon: Icon(
                       session.selectedSubtitle == null
                           ? Icons.closed_caption_off
@@ -555,12 +534,14 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   IconButton(
                     key: const Key('cast-bar-pull'),
                     icon: const Icon(Icons.phone_iphone),
+                    color: AppColors.textPrimary,
                     tooltip: 'Play on this device',
                     onPressed: _pullToLocal,
                   ),
                 IconButton(
                   key: const Key('cast-bar-stop'),
                   icon: const Icon(Icons.stop, size: 28),
+                  color: AppColors.textPrimary,
                   tooltip: 'Stop casting',
                   onPressed: _confirmStop,
                 ),
