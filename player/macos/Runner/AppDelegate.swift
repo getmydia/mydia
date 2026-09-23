@@ -72,6 +72,9 @@ class AppDelegate: FlutterAppDelegate {
   // Held here because SPUStandardUpdaterController does not retain its delegate.
   private let updaterDelegate = UpdaterDelegate()
 
+  // Held here because menu items do not retain their target.
+  private var appMenu: AppMenu?
+
   override func applicationDidFinishLaunching(_ notification: Notification) {
     updaterController = SPUStandardUpdaterController(
       startingUpdater: true,
@@ -137,6 +140,12 @@ class AppDelegate: FlutterAppDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    let menu = AppMenu(messenger: controller.engine.binaryMessenger, window: mainFlutterWindow)
+    if let mainMenu = NSApp.mainMenu {
+      menu.install(in: mainMenu, updater: updaterController)
+    }
+    appMenu = menu
   }
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -145,5 +154,9 @@ class AppDelegate: FlutterAppDelegate {
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
     return true
+  }
+
+  override func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    return appMenu?.dockMenu()
   }
 }
