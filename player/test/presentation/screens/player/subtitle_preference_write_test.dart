@@ -63,6 +63,24 @@ const _trackTitle = 'English (Signs & Songs)';
 /// what media_kit exposes: a title, a language, and an id of its own.
 const _mpvSubtitleTrack = SubtitleTrack('1', 'Japanese', 'jpn');
 
+/// What mpv reports once it has probed a file: the `auto`/`no` pseudo-tracks,
+/// one real video/audio track, and the subtitle track above. `awaitRealTracks`
+/// (see `tracks_ready.dart`) only looks at video/audio, so without the first
+/// two this fake never reads as probed and every open waits out its timeout.
+const _probedTracks = Tracks(
+  video: [
+    VideoTrack('auto', null, null),
+    VideoTrack('no', null, null),
+    VideoTrack('1', null, null),
+  ],
+  audio: [
+    AudioTrack('auto', null, null),
+    AudioTrack('no', null, null),
+    AudioTrack('1', null, 'eng'),
+  ],
+  subtitle: [_mpvSubtitleTrack],
+);
+
 /// Whether [request] carries the document [node].
 ///
 /// By document, not by `operationName`: `QueryOptions`/`MutationOptions` never
@@ -124,7 +142,7 @@ class _ProbedPlayer extends PlatformPlayer {
     positionController.add(state.position);
     playingController.add(false);
     // What mpv publishes as soon as it has probed the file.
-    state = state.copyWith(tracks: const Tracks(subtitle: [_mpvSubtitleTrack]));
+    state = state.copyWith(tracks: _probedTracks);
     tracksController.add(state.tracks);
   }
 

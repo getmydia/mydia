@@ -20,6 +20,21 @@ import '../../../test_utils/stub_graphql_client.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'player_screen_test_harness.dart';
 
+/// What mpv reports once it has probed a file: the `auto`/`no` pseudo-tracks
+/// plus one real video and audio track.
+const _probedTracks = Tracks(
+  video: [
+    VideoTrack('auto', null, null),
+    VideoTrack('no', null, null),
+    VideoTrack('1', null, null),
+  ],
+  audio: [
+    AudioTrack('auto', null, null),
+    AudioTrack('no', null, null),
+    AudioTrack('1', null, 'eng'),
+  ],
+);
+
 /// Keeps the media_kit Player and its real streams; only the native decoder
 /// and video-output handle are replaced. No mpv/FFI is available in widget tests.
 class _Decoder extends PlatformPlayer {
@@ -52,6 +67,11 @@ class _Decoder extends PlatformPlayer {
     durationController.add(state.duration);
     positionController.add(state.position);
     playingController.add(false);
+    // What mpv publishes as soon as it has probed the file. Without this,
+    // `awaitRealTracks` (see `tracks_ready.dart`) never sees a real track and
+    // every open waits out its full timeout.
+    state = state.copyWith(tracks: _probedTracks);
+    tracksController.add(state.tracks);
     if (throwFirstOpen && opened.length == 1) {
       throw StateError('open failed');
     }

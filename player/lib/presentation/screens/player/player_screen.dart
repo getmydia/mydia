@@ -30,6 +30,7 @@ import '../../../core/player/video_output_config.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
+import '../../../core/player/tracks_ready.dart';
 import '../../../core/playback/isolated_fetches.dart';
 import '../../../core/playback/playback_progress_providers.dart';
 import '../../../core/playback/playback_progress_store.dart';
@@ -2442,8 +2443,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
     await player.open(opening.media, play: false);
 
-    // Wait for player to be ready
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Wait for mpv to probe the media before reading tracks, capped so a
+    // source that never reports any still starts. Used to be a fixed 500 ms.
+    final tracksReady = await awaitRealTracks(
+      current: player.state.tracks,
+      updates: player.stream.tracks,
+    );
+    if (!tracksReady) {
+      debugPrint(
+          '[PlayerScreen] No tracks reported before the cap; continuing');
+    }
+    _playTimeline?.mark('tracks_ready');
 
     // Detect available tracks from media_kit. Covers whatever mpv already
     // knew before the subscription above went live; anything discovered
