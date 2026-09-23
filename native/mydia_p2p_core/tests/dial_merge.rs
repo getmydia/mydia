@@ -155,3 +155,37 @@ async fn a_failed_dial_fails_every_waiter() {
     })
     .await;
 }
+
+/// A `Dial` carrying a full address must replace an addressless on-demand
+/// dial already in flight for the same peer, rather than just join it: the
+/// addressless attempt relies on discovery lookup and can fail or time out
+/// even though the `Dial`'s address would have worked, and adding the
+/// address as a hint does not help a connect already under way.
+#[tokio::test]
+async fn a_dial_with_addresses_replaces_an_addressless_dial_in_flight() {
+    within_timeout(async {
+        let (_responder, id, addr, dialer) = ready_pair().await;
+
+        // No address hint added. `join!` polls its arguments in order, so
+        // the request's on-demand (addressless) dial is queued first; the
+        // `dial` that carries the address arrives while it is still
+        // running and must supersede it.
+        let (response, dialed) = tokio::join!(
+            dialer.send_request(id, MydiaRequest::Custom(b"probe".to_vec())),
+            dialer.dial(addr),
+        );
+
+        dialed.expect("the address-carrying dial should succeed");
+        assert_eq!(
+            response.expect("the queued request should complete"),
+            MydiaResponse::Custom(b"probe".to_vec())
+        );
+
+        // The responder also publishes to discovery, so the addressless
+        // connect might succeed on its own via pkarr -- the assertions
+        // above hold either way. Either way two attempts were started: the
+        // addressless one and the address-carrying replacement.
+        assert_eq!(dialer.debug_dial_count().await, 2);
+    })
+    .await;
+}
