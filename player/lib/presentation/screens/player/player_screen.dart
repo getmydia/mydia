@@ -643,8 +643,40 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// the server's fallback and [_applySubtitlePreference] holds off.
   bool _playerTracksSettled = false;
 
+  /// The generation of the wait now filling in [_playerTracksSettled].
+  ///
+  /// `_attachSource`'s native branch reuses the same `Player` across a
+  /// switch, so `identical(_player, player)` alone cannot tell a wait an
+  /// earlier switch started from the current one -- both share it. Every
+  /// open bumps this and hands the new value to its own wait as a token; a
+  /// wait may only mark [_playerTracksSettled] true when the token it holds
+  /// still matches, i.e. nothing newer has started since. See
+  /// [_beginTracksSettle] and [_settleTracks].
+  int _tracksSettleEpoch = 0;
+
   bool get _awaitingPlayerTracks =>
       !kIsWeb && _isDirectPlay && !_playerTracksSettled;
+
+  /// Closes the gate for a new open and returns the token its own wait must
+  /// carry to be allowed to reopen it. See [_tracksSettleEpoch].
+  int _beginTracksSettle() {
+    _playerTracksSettled = false;
+    return ++_tracksSettleEpoch;
+  }
+
+  /// Reopens the gate for the open [epoch] was handed by
+  /// [_beginTracksSettle], and reports whether it did.
+  ///
+  /// Declines when [player] is no longer the live one, the screen is gone,
+  /// or a later open has since bumped [_tracksSettleEpoch] out from under
+  /// this wait -- in which case this wait is stale and the newer open's own
+  /// wait is the one that gets to decide.
+  bool _settleTracks(int epoch, Player player) {
+    if (!mounted || !identical(_player, player)) return false;
+    if (epoch != _tracksSettleEpoch) return false;
+    _playerTracksSettled = true;
+    return true;
+  }
 
   /// How many times [_applySubtitlePreference] has retaken its one-shot after
   /// a revision superseded the apply.
@@ -1910,7 +1942,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // source's `true` in place, and a preference not yet applied could match
     // this file's pre-probe server fallback and fetch a stream mpv is about
     // to report itself.
-    _playerTracksSettled = false;
+    final tracksSettleEpoch = _beginTracksSettle();
     await player.open(opening.media, play: false);
     _detectTracks();
     if (opening.seekAfterOpen) await player.seek(playerTarget);
@@ -1920,17 +1952,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // whatever mpv knew synchronously; this only re-runs it once the probe
     // actually settles, so a preference still waiting on `_awaitingPlayerTracks`
     // gets its chance through `_onTracksChanged` instead of being stuck behind
-    // the outgoing source's flag for the rest of the playback. The identity
-    // check is enough to drop a stale wait: a later switch or open resets
-    // `_playerTracksSettled` itself and this callback would otherwise clobber
-    // that reset.
+    // the outgoing source's flag for the rest of the playback.
+    //
+    // `player.state.tracks` is the right `current` to hand `awaitRealTracks`
+    // even though `player` is reused across the switch: media_kit's native
+    // `open()` resets it to `const Tracks()` through its own internal
+    // `stop(open: true)` before it loads anything (media_kit 1.2.6
+    // `lib/src/player/native/player/real.dart`, `open()`'s call to `stop()`
+    // around line 173; `stop()`'s `state = PlayerState().copyWith(...)`
+    // there does not carry `tracks` forward, so it reverts to the
+    // `PlayerState()` default). By the time `await player.open(...)` above
+    // returns, `player.state.tracks` already reflects that reset, or real
+    // tracks mpv reported just as fast -- never the outgoing file's list.
+    //
+    // `_settleTracks` (not the plain identity check `_openPlayerAndStart`
+    // gets away with) is what makes this safe to fire late: two switches on
+    // the same `Player` share both `_player` and `player`, so a stale wait
+    // from a switch a second one already superseded would otherwise pass an
+    // identity check and mark a newer, still-probing file settled. The
+    // epoch `_beginTracksSettle` handed this wait is what tells the two
+    // apart.
     unawaited(awaitRealTracks(
       current: player.state.tracks,
       updates: player.stream.tracks,
     ).then((_) {
-      if (!mounted || !identical(_player, player)) return;
-      _playerTracksSettled = true;
-      _detectTracks();
+      if (_settleTracks(tracksSettleEpoch, player)) _detectTracks();
     }));
     return player.stream.position;
   }
@@ -2487,7 +2533,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // A new open: its track list is not mpv's until the probe below.
-    _playerTracksSettled = false;
+    // `_openPlayerAndStart` always gets a brand new `Player` (`_attachSource`
+    // is what reuses one across a switch), so the plain `identical(_player,
+    // player)` check below is already enough on its own; the epoch is taken
+    // anyway for consistency with `_attachSource`'s native branch, which
+    // needs it.
+    final tracksSettleEpoch = _beginTracksSettle();
 
     // Subscribe before opening. `player.stream.tracks` is a plain broadcast
     // stream with no replay, so a revision published between `open()` and the
@@ -2578,7 +2629,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // is what keeps e.g. `player.play()` from throwing against a
     // `PlatformPlayer` whose stream controllers `dispose()` already closed.
     if (!mounted || !identical(_player, player)) return player;
-    _playerTracksSettled = true;
+    _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
       debugPrint(
