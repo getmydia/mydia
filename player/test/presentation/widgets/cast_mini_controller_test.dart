@@ -352,7 +352,7 @@ void main() {
       expect(bar.width, layer.width);
       // With no dock reporting into DockExtents (this harness mounts no
       // AppShell), the bar floats 12 above the window edge rather than
-      // sitting flush against it — see CastBarLayer's own dartdoc.
+      // sitting flush against it. See CastBarLayer's own dartdoc.
       expect(bar.bottom, layer.bottom - 12);
     });
 
@@ -1395,7 +1395,7 @@ void main() {
 
     // A real phone width (390, iPhone-mini class) overflows BottomNav's Row
     // here: `flutter test` does not load the app's own `Inter` font (a
-    // long-documented Flutter gotcha — nothing loads it without a
+    // long-documented Flutter gotcha; nothing loads it without a
     // `flutter_test_config.dart` calling something like `loadAppFonts()`,
     // which this repo has none of), so every label measures under whatever
     // fallback font the test binding substitutes, and that fallback is wide
@@ -1493,6 +1493,37 @@ void main() {
 
       final bar = tester.getRect(find.byType(CastPill));
       expect(bar.bottom, closeTo(900 - 12, 1));
+    });
+
+    testWidgets(
+        'stops floating at dock height once a route covers the dock, and '
+        'resumes once popped', (tester) async {
+      await pumpShell(tester, size: phoneSize, withDock: true, onInset: (_) {});
+
+      // A route pushed on top of the shell (the immersive player, in
+      // production) keeps the dock mounted underneath but no longer current.
+      // `CastBarLayer` sits above this Navigator entirely, so the ambient bar
+      // stays visible; only the dock's own reported height should drop.
+      final navigator = Navigator.of(tester.element(find.byKey(dockKey)));
+      navigator.push(MaterialPageRoute(
+        builder: (_) => const Scaffold(body: SizedBox.expand()),
+      ));
+      await tester.pumpAndSettle();
+
+      final coveredBar = tester.getRect(find.byType(CastPill));
+      expect(coveredBar.bottom, closeTo(phoneSize.height - 12, 2),
+          reason: 'the dock is covered, so the bar must fall back to '
+              'floating clear of the window edge rather than hovering at '
+              'the now-invisible dock\'s height');
+
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      final bar = tester.getRect(find.byType(CastPill));
+      final dock = tester.getRect(find.byKey(dockKey));
+      expect(bar.bottom, lessThanOrEqualTo(dock.top),
+          reason: 'popping the covering route must restore the bar above '
+              'the dock');
     });
   });
 }
