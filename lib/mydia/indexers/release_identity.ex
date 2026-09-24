@@ -18,10 +18,13 @@ defmodule Mydia.Indexers.ReleaseIdentity do
   @type verdict :: :match | {:mismatch, :title | :year}
 
   # ReleaseParser keeps a leading "[Group]" tag in the title it returns.
-  # Chinese trackers write the same tag in fullwidth brackets,
-  # "【Site www.host.com】" or "［www.host.com］". `u` is needed for the
-  # multibyte bracket characters; the pattern has no \w for UCP to widen.
-  @leading_tags ~r/^\s*(?:(?:\[[^\]]*\]|【[^】]*】|［[^］]*］)\s*)+/u
+  # Chinese trackers stamp their site in fullwidth brackets,
+  # "【Site www.host.com】" or "［www.host.com］". Only a fullwidth group
+  # naming a www. host is a tag: some releases put the title itself in
+  # 【】, and a CJK group name is already trimmed as a non-Latin word.
+  # `u` is needed for the multibyte bracket characters; the pattern has no
+  # \w for UCP to widen.
+  @leading_tags ~r/^\s*(?:(?:\[[^\]]*\]|【[^】]*www\.[^】]*】|［[^］]*www\.[^］]*］)\s*)+/iu
   # Same intent as @leading_tags, ASCII-bracket-only and without `u`. The
   # `u` modifier requires the *subject* to be valid UTF-8 or Erlang's `re`
   # raises `ArgumentError`; malformed byte sequences in release titles are a
