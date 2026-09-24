@@ -162,12 +162,33 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
         # about-to-be-replaced tuple and is discarded along with it, so it
         # bumps the fresh bucket instead and is still counted in the new
         # window rather than lost.
+        #
+        # `select_replace/2` also returns 0 when the bucket was deleted
+        # entirely between the increment above and this call (by a
+        # concurrent `reset_rate_limit/1` or `cleanup_expired/0`), not only
+        # when another caller won the replace race. The 3-arity
+        # `update_counter/3` fallback used here previously had no default
+        # tuple, so it raised `ArgumentError` in that case instead of
+        # falling through to `{:error, :rate_limited}` or `:ok`. Passing a
+        # default (the same shape and window start the fresh-bucket path
+        # above uses) makes both cases safe: if the key still exists (the
+        # race case), the default is ignored and the existing tuple is
+        # bumped; if the key is gone (the delete case), it is inserted
+        # fresh, counted as this attempt.
         case :ets.select_replace(@table_name, [
                {{storage_key, :_, first_attempt_at, :_}, [],
                 [{{{:const, storage_key}, 1, now, window_seconds}}]}
              ]) do
-          1 -> 1
-          0 -> :ets.update_counter(@table_name, storage_key, {2, 1})
+          1 ->
+            1
+
+          0 ->
+            :ets.update_counter(
+              @table_name,
+              storage_key,
+              {2, 1},
+              {storage_key, 0, now, window_seconds}
+            )
         end
       else
         attempts

@@ -137,6 +137,30 @@ defmodule Mydia.Accounts.ApiKeyRateLimiterTest do
       assert :ok = ApiKeyRateLimiter.reserve_attempt(ip, opts)
       assert {:error, :rate_limited} = ApiKeyRateLimiter.reserve_attempt(ip, opts)
     end
+
+    test "still admits and counts the attempt against a bucket that was just reset" do
+      # reserve_attempt/2's window-expiry fallback used to call
+      # :ets.update_counter/3 with no default tuple when it lost the
+      # select_replace race, which raises ArgumentError against a bucket
+      # that no longer exists (e.g. a concurrent reset_rate_limit/1 or
+      # cleanup_expired/0 deleted it between reserve_attempt/2's own read
+      # and its replace attempt). That exact interleaving cannot be forced
+      # deterministically from a test -- it depends on two processes
+      # racing inside a few consecutive ETS calls -- so this instead proves
+      # the documented, reachable case: reserve_attempt/2 must not crash
+      # and must still count the attempt when called against an absent
+      # bucket.
+      ip = "192.168.1.55"
+      storage_key = "api_key_validation:#{ip}"
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+      refute :ets.member(:api_key_rate_limiter, storage_key)
+
+      assert :ok = ApiKeyRateLimiter.reserve_attempt(ip)
+
+      assert [{^storage_key, 1, _first_attempt_at, _window_seconds}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+    end
   end
 
   describe "reserve_attempt/2 under concurrency" do
