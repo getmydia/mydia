@@ -110,4 +110,18 @@ defmodule MydiaWeb.Schema.AuthResolverTotpTest do
     assert {:ok, %{errors: [%{message: "Sign-in expired, please try again"}]}} =
              verify(stale, code, caller())
   end
+
+  test "verifyTotp code failures share login's rate-limit bucket for an email login", %{
+    user: user
+  } do
+    {:ok, %{data: %{"login" => %{"challengeToken" => challenge}}}} =
+      login(user.email, caller())
+
+    for _ <- 1..10 do
+      assert {:ok, %{errors: [%{message: "Invalid code"}]}} = verify(challenge, "abc", caller())
+    end
+
+    assert {:ok, %{errors: [%{message: message}]}} = login(user.email, caller())
+    assert message =~ "Too many login attempts"
+  end
 end

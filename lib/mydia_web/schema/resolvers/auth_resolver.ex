@@ -62,11 +62,7 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
           if Accounts.totp_enabled?(user) do
             {:ok, totp_challenge(user, input)}
           else
-            Accounts.reset_login_rate_limit(ip_address, input.username)
-            # Update last login timestamp
-            Accounts.update_last_login(user)
-
-            issue_login_token(user, input)
+            finish_login(user, ip_address, input.username, input)
           end
         else
           Accounts.record_login_failure(ip_address, input.username)
@@ -104,29 +100,38 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
 
   @doc """
   Completes a login that returned `totp_required`. The challenge token carries
-  the user and the device fields from the original `login` call, so the device
-  row and token are produced exactly as a password-only login would produce them.
+  the user, the typed login name and the device fields from the original
+  `login` call, so the rate-limit bucket, the device row and the token are all
+  produced exactly as a password-only login would produce them.
   """
   def verify_totp(_parent, %{input: %{challenge_token: token, code: code}}, %{context: context}) do
     if Config.get().auth.local_enabled do
       ip_address = Map.get(context, :remote_ip, "unknown")
 
-      with {:ok, user, device} <- challenge_user(token),
-           :ok <- totp_rate_limit(ip_address, user),
-           :ok <- second_factor(ip_address, user, code) do
-        Accounts.reset_login_rate_limit(ip_address, rate_limit_name(user))
-        Accounts.update_last_login(user)
-        issue_login_token(user, device)
+      with {:ok, user, login_name, device} <- challenge_user(token),
+           :ok <- totp_rate_limit(ip_address, login_name),
+           :ok <- second_factor(ip_address, login_name, user, code) do
+        finish_login(user, ip_address, login_name, device)
       end
     else
       {:error, "Local authentication is disabled"}
     end
   end
 
+  # Shared tail of a successful login, whether it took one step (password
+  # only) or two (password then TOTP): clear the rate-limit bucket, stamp the
+  # login, and mint the device-scoped token.
+  defp finish_login(user, ip_address, rate_limit_key, input_or_device) do
+    Accounts.reset_login_rate_limit(ip_address, rate_limit_key)
+    Accounts.update_last_login(user)
+    issue_login_token(user, input_or_device)
+  end
+
   defp totp_challenge(user, input) do
     token =
       Phoenix.Token.sign(MydiaWeb.Endpoint, @totp_challenge_salt, %{
         "user_id" => user.id,
+        "login_name" => input.username,
         "device_id" => input.device_id,
         "device_name" => input.device_name,
         "platform" => input.platform
@@ -135,6 +140,11 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
     %{totp_required: true, challenge_token: token}
   end
 
+  # The `login` mutation keys the rate-limit bucket on whatever the caller
+  # typed, which may be an email rather than the stored username. The
+  # challenge token carries that same typed string forward so a password
+  # failure and a code failure against one login attempt share a bucket,
+  # instead of each auth step getting its own guessing budget.
   defp challenge_user(token) do
     with {:ok, claims} <-
            Phoenix.Token.verify(MydiaWeb.Endpoint, @totp_challenge_salt, token,
@@ -142,7 +152,7 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
            ),
          %User{} = user <- Accounts.get_user_by_id(claims["user_id"]),
          true <- Accounts.totp_enabled?(user) do
-      {:ok, user,
+      {:ok, user, claims["login_name"],
        %{
          device_id: claims["device_id"],
          device_name: claims["device_name"],
@@ -153,27 +163,21 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
     end
   end
 
-  defp totp_rate_limit(ip_address, user) do
-    case Accounts.check_login_rate_limit(ip_address, rate_limit_name(user)) do
+  defp totp_rate_limit(ip_address, login_name) do
+    case Accounts.check_login_rate_limit(ip_address, login_name) do
       :ok -> :ok
       {:error, :rate_limited} -> {:error, "Too many login attempts. Please try again later."}
     end
   end
 
-  defp second_factor(ip_address, user, code) do
+  defp second_factor(ip_address, login_name, user, code) do
     case Accounts.verify_second_factor(user, code) do
       :ok ->
         :ok
 
       {:error, :invalid_code} ->
-        Accounts.record_login_failure(ip_address, rate_limit_name(user))
+        Accounts.record_login_failure(ip_address, login_name)
         {:error, "Invalid code"}
     end
   end
-
-  # The `login` mutation keys the username bucket on whatever the caller typed,
-  # which may be an email. The challenge only knows the account, so it keys on
-  # the account's own name.
-  defp rate_limit_name(%User{username: username}) when is_binary(username), do: username
-  defp rate_limit_name(%User{email: email}), do: email
 end
