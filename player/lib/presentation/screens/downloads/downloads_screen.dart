@@ -6,6 +6,7 @@ import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
@@ -158,9 +159,15 @@ class DownloadsScreen extends ConsumerWidget {
           appBar: header(context, ref),
           body: CustomScrollView(
             slivers: [
-              // Top padding for app bar
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 100),
+              // Top padding for the app bar. Computed here, outside the
+              // Scaffold, for the same reason browse_scaffold.dart/
+              // library_screen.dart do: `topSpacerHeight` reads
+              // `MediaQuery.paddingOf(context)`, and the body of a
+              // `Scaffold(extendBodyBehindAppBar: true)` rewrites that to the
+              // app bar's own rendered height, so reading it from inside the
+              // body would count the header twice.
+              SliverToBoxAdapter(
+                child: SizedBox(height: topSpacerHeight(context)),
               ),
 
               // Storage usage section
@@ -861,6 +868,39 @@ class DownloadsScreen extends ConsumerWidget {
       await manager.cancelAllQueued();
     }
   }
+
+  /// Breathing room between the header's bottom edge and the storage
+  /// section, on top of the header's own height.
+  ///
+  /// Before Task 5 the header was always a flat `kToolbarHeight` (56) and the
+  /// space above the storage section was a flat `100`, so this gap was baked
+  /// into that literal rather than named: `100 - 56 == 44`. Once the header's
+  /// height started varying by platform (40 on macOS, 36 on Linux, still 56
+  /// with no window chrome), a flat `100` stopped tracking it: the gap grew
+  /// from 44 to 60 on macOS purely because the header shrank underneath an
+  /// unchanged spacer. Naming the 44 and adding it to the header's real
+  /// height (see [topSpacerHeight]) keeps the gap itself constant instead.
+  @visibleForTesting
+  static const double storageSectionGap = 44;
+
+  /// Height of the blank sliver above the storage section.
+  ///
+  /// [context] must be read inside the same `WindowChromeInsets.removeBand`
+  /// builder [build] evaluates this from (see the call site): `removeBand`
+  /// has already taken the band back out of `MediaQuery.paddingOf(context)`,
+  /// so adding the header's own height here counts it exactly once, the same
+  /// way every other converted screen's `chromeTop`/`scrollTopPadding` does.
+  /// On mobile (zero window-chrome insets) this reduces to the pre-Task-5
+  /// value: `statusBar + kToolbarHeight (56) + storageSectionGap (44)`, which
+  /// is exactly the old flat `100` whenever the status bar is 0 (the
+  /// `flutter_test` default), and now also correctly grows with a real
+  /// device's status bar instead of ignoring it, matching every other
+  /// screen's own chrome math.
+  @visibleForTesting
+  static double topSpacerHeight(BuildContext context) =>
+      freshnessTopInset(context,
+          appBarHeight: WindowTitleRow.heightOf(context)) +
+      storageSectionGap;
 
   /// Builds the screen's title-bar header.
   ///
