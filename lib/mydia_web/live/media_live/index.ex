@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Collections.SmartRules
   alias Mydia.Downloads.DownloadService
   alias Mydia.Search
+  alias Mydia.Settings.LibraryPath
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.MediaLive.DiskRemovalFlash
@@ -31,8 +32,12 @@ defmodule MydiaWeb.MediaLive.Index do
   # library with a handful of stray titles is left alone.
   @anime_nudge_threshold 10
 
-  # Library path types that can hold each page's media. :mixed serves both.
-  @library_types %{movies: [:movies, :mixed], tv_shows: [:series, :mixed]}
+  # Library path types that can hold each page's media, from LibraryPath's own
+  # movie/series type lists so a third type never has to be kept in sync here.
+  @library_types %{
+    movies: LibraryPath.movie_library_types(),
+    tv_shows: LibraryPath.series_library_types()
+  }
 
   @impl true
   def mount(_params, _session, socket) do

@@ -72,6 +72,30 @@ defmodule MydiaWeb.MediaLive.LibraryFilterTest do
     assert has_element?(view, "#media_items-#{in_b.id}")
   end
 
+  test "the library filter resets when navigating from movies to tv", %{conn: conn} do
+    a = library_path_fixture(%{type: "movies"})
+    library_path_fixture(%{type: "movies"})
+    s = library_path_fixture(%{type: "series"})
+    t = library_path_fixture(%{type: "series"})
+
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    view
+    |> element("#library-filter-form")
+    |> render_change(%{"library" => a.id})
+
+    # /movies and /tv both route to MediaLive.Index, so LiveView patches the
+    # existing process (handle_params/apply_action only) instead of
+    # remounting it. render_patch/2 exercises that same in-process path.
+    render_patch(view, ~p"/tv")
+
+    assert has_element?(view, "#library-filter-select")
+    assert has_element?(view, "#library-filter-select option[value='#{s.id}']")
+    assert has_element?(view, "#library-filter-select option[value='#{t.id}']")
+    refute has_element?(view, "#library-filter-select option[value='#{a.id}']")
+    assert has_element?(view, "#library-filter-select option[value=''][selected]")
+  end
+
   test "the library filter clears when navigating to a section", %{conn: conn, user: user} do
     a = library_path_fixture(%{type: "movies"})
     b = library_path_fixture(%{type: "movies"})
