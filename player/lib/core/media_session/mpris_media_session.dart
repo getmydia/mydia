@@ -133,12 +133,15 @@ class _MprisObject extends DBusObject {
       return false;
     }
     // A buffering stall is still reported as MediaSessionStatus.playing (MPRIS
-    // has no separate status for it), so its wall-clock time must not count
-    // toward elapsed playback or the next real update looks like a seek.
-    final elapsed =
-        previous.status == MediaSessionStatus.playing && !previous.buffering
-            ? now().difference(previousAt)
-            : Duration.zero;
+    // has no separate status for it) with Rate 1.0, so MPRIS clients (GNOME
+    // Shell, KDE) extrapolate the progress bar forward through the stall.
+    // Counting the stall's wall-clock time as elapsed makes the real position
+    // land far enough behind that extrapolation to look like a jump, and
+    // Seeked is exactly how MPRIS tells clients to resync when the position
+    // changed in a way the current playing state doesn't explain.
+    final elapsed = previous.status == MediaSessionStatus.playing
+        ? now().difference(previousAt)
+        : Duration.zero;
     final expected = previous.position + elapsed;
     return (next.position - expected).abs() > _seekedThreshold;
   }

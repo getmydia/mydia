@@ -41,7 +41,6 @@ class MediaSessionState {
     this.canSeek = false,
     this.canGoNext = false,
     this.canGoPrevious = false,
-    this.buffering = false,
   });
 
   static const stopped =
@@ -65,11 +64,6 @@ class MediaSessionState {
   final bool canGoNext;
   final bool canGoPrevious;
 
-  /// Set while the player is rebuffering. Status stays [MediaSessionStatus.playing]
-  /// (MPRIS has no separate buffering status), but this stops [MprisMediaSession]
-  /// from treating the stall's wall-clock time as elapsed playback.
-  final bool buffering;
-
   @override
   bool operator ==(Object other) =>
       other is MediaSessionState &&
@@ -83,12 +77,11 @@ class MediaSessionState {
       other.volume == volume &&
       other.canSeek == canSeek &&
       other.canGoNext == canGoNext &&
-      other.canGoPrevious == canGoPrevious &&
-      other.buffering == buffering;
+      other.canGoPrevious == canGoPrevious;
 
   @override
   int get hashCode => Object.hash(status, trackId, title, subtitle, artworkPath,
-      duration, position, volume, canSeek, canGoNext, canGoPrevious, buffering);
+      duration, position, volume, canSeek, canGoNext, canGoPrevious);
 
   @override
   String toString() =>
@@ -131,6 +124,5 @@ MediaSessionState mediaSessionStateFrom(
     canSeek: duration > Duration.zero && status != MediaSessionStatus.stopped,
     canGoNext: nextPrevious,
     canGoPrevious: nextPrevious,
-    buffering: snapshot.state == FlutterPlaybackState.buffering,
   );
 }

@@ -67,20 +67,6 @@ void main() {
       expect(statusOf(FlutterPlaybackState.error), MediaSessionStatus.stopped);
     });
 
-    test('buffering sets the buffering flag; playing does not', () {
-      final buffering = mediaSessionStateFrom(
-          buildSnapshot(state: FlutterPlaybackState.buffering));
-      expect(buffering.status, MediaSessionStatus.playing);
-      expect(buffering.buffering, isTrue);
-
-      final playing = mediaSessionStateFrom(
-          buildSnapshot(state: FlutterPlaybackState.playing));
-      expect(playing.status, MediaSessionStatus.playing);
-      expect(playing.buffering, isFalse);
-
-      expect(MediaSessionState.stopped.buffering, isFalse);
-    });
-
     test('no duration means not seekable', () {
       final state =
           mediaSessionStateFrom(buildSnapshot(duration: Duration.zero));

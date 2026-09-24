@@ -240,25 +240,25 @@ void main() {
     await sub.cancel();
   });
 
-  test('a buffering stall does not count toward elapsed time', () async {
+  test(
+      'a buffering stall longer than the threshold resyncs clients with Seeked',
+      () async {
     final seeked = <int>[];
     final sub = DBusSignalStream(testClient,
             interface: _player, name: 'Seeked', path: _path)
         .listen((s) => seeked.add(s.values.single.asInt64()));
     await sync();
 
-    await session.update(_playing); // 10s at t0, not buffering
-    await session
-        .update(_withPosition(const Duration(seconds: 10), buffering: true));
+    await session.update(_playing); // 10s at t0
+    await session.update(_withPosition(const Duration(seconds: 10)));
     expect((await remote.getProperty(_player, 'PlaybackStatus')).asString(),
         'Playing');
     await sync();
-    expect(seeked, isEmpty);
 
     clock = clock.add(const Duration(seconds: 6));
     await session.update(_withPosition(const Duration(milliseconds: 10500)));
     await sync();
-    expect(seeked, isEmpty);
+    expect(seeked, [10500 * 1000]);
     await sub.cancel();
   });
 
@@ -287,8 +287,7 @@ void main() {
   });
 }
 
-MediaSessionState _withPosition(Duration position, {bool buffering = false}) =>
-    MediaSessionState(
+MediaSessionState _withPosition(Duration position) => MediaSessionState(
       status: _playing.status,
       trackId: _playing.trackId,
       title: _playing.title,
@@ -300,7 +299,6 @@ MediaSessionState _withPosition(Duration position, {bool buffering = false}) =>
       canSeek: _playing.canSeek,
       canGoNext: _playing.canGoNext,
       canGoPrevious: _playing.canGoPrevious,
-      buffering: buffering,
     );
 
 String _describe(RemoteControlIntent intent) => switch (intent) {
