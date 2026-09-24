@@ -262,6 +262,52 @@ void main() {
     await sub.cancel();
   });
 
+  test('applies updates in call order even when their awaits race', () async {
+    final seeked = <int>[];
+    final sub = DBusSignalStream(testClient,
+            interface: _player, name: 'Seeked', path: _path)
+        .listen((s) => seeked.add(s.values.single.asInt64()));
+    await session.update(_playing); // 10s at t0, volume 0.5
+    await sync();
+
+    // a changes Volume (so it awaits emitPropertiesChanged before its
+    // Seeked) and jumps to 300s. b is a pure position jump on top of a: no
+    // MPRIS property differs, so it has no PropertiesChanged to await and
+    // would reach the bus first if apply() were not serialized.
+    final a = MediaSessionState(
+      status: _playing.status,
+      trackId: _playing.trackId,
+      title: _playing.title,
+      subtitle: _playing.subtitle,
+      artworkPath: _playing.artworkPath,
+      duration: _playing.duration,
+      position: const Duration(seconds: 300),
+      volume: 0.8,
+      canSeek: _playing.canSeek,
+      canGoNext: _playing.canGoNext,
+      canGoPrevious: _playing.canGoPrevious,
+    );
+    final b = MediaSessionState(
+      status: a.status,
+      trackId: a.trackId,
+      title: a.title,
+      subtitle: a.subtitle,
+      artworkPath: a.artworkPath,
+      duration: a.duration,
+      position: const Duration(seconds: 305),
+      volume: a.volume,
+      canSeek: a.canSeek,
+      canGoNext: a.canGoNext,
+      canGoPrevious: a.canGoPrevious,
+    );
+    unawaited(session.update(a));
+    unawaited(session.update(b));
+    await sync();
+
+    expect(seeked, [300 * 1000000, 305 * 1000000]);
+    await sub.cancel();
+  });
+
   test('falls back to an instance name when the primary name is taken',
       () async {
     // setUp's session already owns the primary name.

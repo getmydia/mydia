@@ -96,12 +96,27 @@ class _MprisObject extends DBusObject {
   MediaSessionState _state = MediaSessionState.stopped;
   DateTime? _stateAt;
 
+  // apply() awaits DBus IO (emitPropertiesChanged, then emitSignal), so two
+  // calls started back to back race: whichever one's IO happens to settle
+  // first lands on the bus first, even when it was the newer state. Chaining
+  // every apply onto this future serializes them in call order regardless of
+  // how their individual awaits interleave. catchError keeps a failed apply
+  // from wedging the chain for everyone after it; the failure still reaches
+  // that apply's own caller through the Future apply() returns.
+  Future<void> _applying = Future.value();
+
   Future<void> close() async {
     await commands.close();
     await raises.close();
   }
 
-  Future<void> apply(MediaSessionState next) async {
+  Future<void> apply(MediaSessionState next) {
+    final result = _applying.then((_) => _applyNow(next));
+    _applying = result.catchError((_) {});
+    return result;
+  }
+
+  Future<void> _applyNow(MediaSessionState next) async {
     final previous = _state;
     final previousAt = _stateAt;
     final before = _playerProperties(previous);
