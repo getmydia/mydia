@@ -60,7 +60,9 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
       user ->
         if Accounts.verify_password(user, input.password) do
           if Accounts.totp_enabled?(user) do
-            {:ok, totp_challenge(user, input)}
+            with :ok <- validate_challenge_device(user, input) do
+              {:ok, totp_challenge(user, input)}
+            end
           else
             finish_login(user, ip_address, input.username, input)
           end
@@ -68,6 +70,22 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
           Accounts.record_login_failure(ip_address, input.username)
           {:error, "Invalid username or password"}
         end
+    end
+  end
+
+  # Validates the device fields before the challenge token is signed, so a
+  # bad device field (e.g. an over-long device name) is rejected up front
+  # instead of surfacing only once the challenge is redeemed with a correct
+  # code, which would otherwise burn that code on a device error.
+  defp validate_challenge_device(user, input) do
+    case RemoteAccess.validate_login_device(%{
+           user_id: user.id,
+           client_device_id: input.device_id,
+           device_name: input.device_name,
+           platform: input.platform
+         }) do
+      :ok -> :ok
+      {:error, %Ecto.Changeset{}} -> {:error, "Failed to register this device"}
     end
   end
 

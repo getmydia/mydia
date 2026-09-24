@@ -45,6 +45,21 @@ defmodule MydiaWeb.Schema.AuthResolverTotpTest do
     )
   end
 
+  defp login_with_device_name(username, device_name, context) do
+    Absinthe.run(@login, MydiaWeb.Schema,
+      variables: %{
+        "input" => %{
+          "username" => username,
+          "password" => @password,
+          "deviceId" => "totp-device-#{System.unique_integer([:positive])}",
+          "deviceName" => device_name,
+          "platform" => "web"
+        }
+      },
+      context: context
+    )
+  end
+
   test "a password-only account gets a token and totpRequired false", %{conn: _conn} do
     plain = user_fixture(%{password: @password})
 
@@ -62,6 +77,13 @@ defmodule MydiaWeb.Schema.AuthResolverTotpTest do
     assert result["token"] == nil
     assert result["user"] == nil
     assert result["expiresIn"] == nil
+  end
+
+  test "login rejects an invalid device field before issuing a challenge", %{user: user} do
+    over_long_name = String.duplicate("a", 101)
+
+    assert {:ok, %{errors: [%{message: "Failed to register this device"}]}} =
+             login_with_device_name(user.username, over_long_name, caller())
   end
 
   test "verifyTotp issues a device token", %{user: user, secret: secret} do

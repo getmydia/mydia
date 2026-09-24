@@ -170,6 +170,31 @@ defmodule Mydia.RemoteAccess do
   end
 
   @doc """
+  Validates login device attributes against the same changeset
+  `find_or_create_login_device/1` applies, without persisting anything.
+
+  A TOTP login signs a challenge token before the device is ever inserted,
+  and the device is only created once the challenge is redeemed with a
+  correct code (see `issue_login_token/2` in `AuthResolver`). Without this
+  check, a bad device field (e.g. an over-long device name) would only
+  surface at that point, an `Ecto.Changeset` insert error the caller turns
+  into "Failed to register this device" -- burning a correct code for a
+  device problem the server could have caught before ever issuing the
+  challenge. Call this at challenge issuance instead, with the caller
+  already required to pass `:user_id`.
+  """
+  @spec validate_login_device(map()) :: :ok | {:error, Ecto.Changeset.t()}
+  def validate_login_device(attrs) do
+    changeset = RemoteDevice.login_changeset(%RemoteDevice{}, Map.put(attrs, :token, "unused"))
+
+    if changeset.valid? do
+      :ok
+    else
+      {:error, changeset}
+    end
+  end
+
+  @doc """
   Finds or creates the device row for a password login.
 
   Pairing mints a device token and goes through `create_device/1`; a password
