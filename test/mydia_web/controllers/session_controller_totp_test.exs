@@ -79,6 +79,34 @@ defmodule MydiaWeb.SessionControllerTotpTest do
     refute signed_in?(conn)
   end
 
+  test "a non-map totp param re-renders with an error instead of crashing", %{
+    conn: conn,
+    user: user
+  } do
+    conn =
+      conn
+      |> submit_password(user)
+      |> post(~p"/auth/login/totp", %{"totp" => "abc"})
+
+    html = html_response(conn, 200)
+    assert html =~ "Invalid code"
+    refute signed_in?(conn)
+  end
+
+  test "a non-binary code param re-renders with an error instead of crashing", %{
+    conn: conn,
+    user: user
+  } do
+    conn =
+      conn
+      |> submit_password(user)
+      |> post(~p"/auth/login/totp", %{"totp" => %{"code" => ["x"]}})
+
+    html = html_response(conn, 200)
+    assert html =~ "Invalid code"
+    refute signed_in?(conn)
+  end
+
   test "an expired challenge returns to the login page", %{conn: conn, user: user} do
     conn =
       conn

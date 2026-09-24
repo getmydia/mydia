@@ -138,13 +138,20 @@ defmodule MydiaWeb.SessionController do
   Accepts a TOTP code or recovery code and completes the pending sign-in.
   """
   def totp_create(conn, params) do
-    code = get_in(params, ["totp", "code"]) || ""
+    code = totp_code_param(params)
 
     case pending_totp_user(conn) do
       {:ok, user} -> verify_totp(conn, user, code)
       {:error, reason} -> abandon_totp(conn, reason)
     end
   end
+
+  # `params["totp"]` is client-controlled and this endpoint parses JSON
+  # bodies, so it can be anything: a map without "code", a bare string, a
+  # list, etc. Pattern match instead of `get_in/2`, which raises inside
+  # `Access.get/3` when an intermediate value isn't a map.
+  defp totp_code_param(%{"totp" => %{"code" => code}}) when is_binary(code), do: code
+  defp totp_code_param(_params), do: ""
 
   defp verify_totp(conn, user, code) do
     ip_address = remote_ip(conn)
