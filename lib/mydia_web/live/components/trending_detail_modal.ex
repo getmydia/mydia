@@ -61,6 +61,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
   """
   use MydiaWeb, :live_component
 
+  alias Mydia.Media.ShowStatus
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.Video
 
@@ -121,6 +122,21 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <%= if year(@item, @metadata) do %>
                       <span class="badge badge-ghost">{year(@item, @metadata)}</span>
                     <% end %>
+                    <.content_rating_badge
+                      id="trending-detail-content-rating"
+                      rating={@metadata && @metadata.content_rating}
+                    />
+                    <span
+                      :if={release_label(@metadata)}
+                      id="trending-detail-release-date"
+                      class="badge badge-ghost"
+                    >
+                      {release_label(@metadata)}
+                    </span>
+                    <.show_status_badge
+                      id="trending-detail-show-status"
+                      status={ShowStatus.for_metadata(@metadata)}
+                    />
                     <%= if vote_average(@item, @metadata) do %>
                       <span class="badge badge-warning gap-1">
                         <.icon name="hero-star-solid" class="w-3 h-3" />
@@ -335,6 +351,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
 
   defp seasons(nil), do: nil
   defp seasons(metadata), do: metadata.number_of_seasons
+
+  defp release_label(nil), do: nil
+  defp release_label(metadata), do: format_release_date(release_date(metadata))
 
   defp genres(nil), do: []
   defp genres(metadata), do: metadata.genres || []
