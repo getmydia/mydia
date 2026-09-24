@@ -110,6 +110,26 @@ defmodule Mydia.ImportLists.Provider.CustomURLTest do
       assert {:ok, items} = CustomURL.fetch_items(list)
       assert [%{tmdb_id: 555, title: "Basalt Overture"}] = items
     end
+
+    test "parses a bare array with type fields (no filtering outside Mydia envelope)",
+         %{bypass: bypass} do
+      body =
+        Jason.encode!([
+          %{"type" => "show", "tmdb_id" => 601, "title" => "Type Show Item"},
+          %{"type" => "movie", "tmdb_id" => 602, "title" => "Type Movie Item"}
+        ])
+
+      Bypass.expect_once(bypass, "GET", "/list.json", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      list = import_list("http://localhost:#{bypass.port}/list.json", "tv_show")
+
+      assert {:ok, items} = CustomURL.fetch_items(list)
+      assert items |> Enum.map(& &1.tmdb_id) |> Enum.sort() == [601, 602]
+    end
   end
 
   describe "fetch_items/1 redirect revalidation (guard relaxed via Bypass)" do
