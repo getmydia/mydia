@@ -35,11 +35,21 @@ class RemoteTargetController {
   int _sequence = 0;
 
   final _intents = StreamController<RemoteControlIntent>.broadcast();
+  final _changes = StreamController<void>.broadcast();
 
   /// Intents the app layer must handle. Today that is `LoadContent` only.
   Stream<RemoteControlIntent> get intents => _intents.stream;
 
-  void attachPlayer(RemotePlayerBinding binding) => _binding = binding;
+  /// Fires whenever what [snapshot] would report may have changed: a player
+  /// attaching or detaching, or the attached player calling [notifyChanged].
+  /// Carries no payload; listeners read [snapshot] themselves.
+  Stream<void> get changes => _changes.stream;
+
+  void attachPlayer(RemotePlayerBinding binding) {
+    if (identical(_binding, binding)) return;
+    _binding = binding;
+    notifyChanged();
+  }
 
   /// Detaches [binding] — or, if none is given, whatever is currently
   /// attached (for callers with nothing to identify themselves by).
@@ -54,7 +64,9 @@ class RemoteTargetController {
   /// "not playing" while a player is actually on screen.
   void detachPlayer([RemotePlayerBinding? binding]) {
     if (binding != null && !identical(_binding, binding)) return;
+    if (_binding == null) return;
     _binding = null;
+    notifyChanged();
   }
 
   /// Current playback state, or null when no player is mounted.
@@ -66,6 +78,11 @@ class RemoteTargetController {
     if (binding == null) return null;
     _sequence += 1;
     return binding.describe(_sequence);
+  }
+
+  /// Called by the attached player when its playback state changes.
+  void notifyChanged() {
+    if (!_changes.isClosed) _changes.add(null);
   }
 
   void submit(RemoteControlIntent intent) {
@@ -117,7 +134,10 @@ class RemoteTargetController {
     }
   }
 
-  void dispose() => _intents.close();
+  void dispose() {
+    _intents.close();
+    _changes.close();
+  }
 }
 
 /// One controller for the app's lifetime. `app.dart` subscribes to
