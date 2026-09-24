@@ -9,6 +9,8 @@ defmodule Mydia.Accounts.UserPreference do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Accounts.PosterFields
+
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -84,6 +86,14 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def grid_density(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "grid_density", @defaults["grid_density"])
+  end
+
+  @doc """
+  Which parts of a library poster card to render, as atoms in card order.
+  See `Mydia.Accounts.PosterFields`.
+  """
+  def poster_fields(%__MODULE__{preferences: prefs}) do
+    PosterFields.resolve(Map.get(prefs || %{}, "poster_fields"))
   end
 
   @doc """
@@ -224,6 +234,59 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("hide_player", [true, false])
     |> validate_preference_value("player_banner_dismissed", [true, false])
     |> validate_home_widgets()
+    |> validate_poster_fields()
+  end
+
+  # A stored `poster_fields` value that a later release removes from
+  # `PosterFields`'s catalog must not fail every subsequent unrelated save
+  # (theme, grid_density, ...). `update_preferences_changeset/2` merges the
+  # stored map with the delta before validating, so an untouched stale value
+  # would otherwise be re-validated on every write. Skip validation when the
+  # value is unchanged from what is already on the row; only a new or changed
+  # value is checked against the current catalog.
+  defp validate_poster_fields(changeset) do
+    case get_change(changeset, :preferences) do
+      nil ->
+        changeset
+
+      prefs when is_map(prefs) ->
+        value = Map.get(prefs, "poster_fields")
+        stored_value = Map.get(changeset.data.preferences || %{}, "poster_fields")
+
+        cond do
+          is_nil(value) ->
+            changeset
+
+          value == stored_value ->
+            changeset
+
+          is_list(value) ->
+            valid_keys = PosterFields.valid_key_strings()
+            all_strings? = Enum.all?(value, &is_binary/1)
+            all_known? = Enum.all?(value, &(&1 in valid_keys))
+            no_duplicates? = length(value) == length(Enum.uniq(value))
+
+            if all_strings? and all_known? and no_duplicates? do
+              changeset
+            else
+              add_error(
+                changeset,
+                :preferences,
+                "invalid value for poster_fields: #{inspect(value)}"
+              )
+            end
+
+          true ->
+            add_error(
+              changeset,
+              :preferences,
+              "invalid value for poster_fields: #{inspect(value)}"
+            )
+        end
+
+      _ ->
+        changeset
+    end
   end
 
   defp validate_home_widgets(changeset) do

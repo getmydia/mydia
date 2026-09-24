@@ -95,6 +95,8 @@ defmodule MydiaWeb do
       import MydiaWeb.AdminComponents
       # Poster card body: shared title box and bottom-pinned metadata
       import MydiaWeb.PosterCardComponents
+      # Content rating and show status badges: library card, detail hero, trending modal
+      import MydiaWeb.MediaBadgeComponents
       # One-of-N button groups (view mode, grid density, filters)
       import MydiaWeb.SegmentedControl
 

@@ -145,4 +145,60 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       assert html =~ "Go to Show"
     end
   end
+
+  describe "preview badges" do
+    test "a TV show renders its content rating, show status and full release date" do
+      html =
+        render_modal(
+          item(),
+          metadata(%{
+            media_type: :tv_show,
+            content_rating: "TV-14",
+            status: "Returning Series",
+            first_air_date: ~D[2031-05-02]
+          })
+        )
+
+      fragment = LazyHTML.from_fragment(html)
+
+      assert fragment
+             |> LazyHTML.query("#trending-detail-content-rating")
+             |> LazyHTML.text() =~ "TV-14"
+
+      assert fragment
+             |> LazyHTML.query("#trending-detail-show-status")
+             |> LazyHTML.text() =~ "Continuing"
+
+      assert fragment
+             |> LazyHTML.query("#trending-detail-release-date")
+             |> LazyHTML.text() =~ "May 2, 2031"
+    end
+
+    test "a movie renders the release date but no rating or status badge" do
+      html =
+        render_modal(
+          item(%{media_type: :movie}),
+          metadata(%{media_type: :movie, release_date: ~D[2030-01-09], status: "Released"})
+        )
+
+      fragment = LazyHTML.from_fragment(html)
+
+      assert fragment
+             |> LazyHTML.query("#trending-detail-release-date")
+             |> LazyHTML.text() =~ "Jan 9, 2030"
+
+      assert fragment |> LazyHTML.query("#trending-detail-show-status") |> Enum.empty?()
+      assert fragment |> LazyHTML.query("#trending-detail-content-rating") |> Enum.empty?()
+    end
+
+    test "no fetched metadata renders none of the three badges" do
+      html = render_modal(item(), nil)
+
+      fragment = LazyHTML.from_fragment(html)
+
+      assert fragment |> LazyHTML.query("#trending-detail-content-rating") |> Enum.empty?()
+      assert fragment |> LazyHTML.query("#trending-detail-show-status") |> Enum.empty?()
+      assert fragment |> LazyHTML.query("#trending-detail-release-date") |> Enum.empty?()
+    end
+  end
 end

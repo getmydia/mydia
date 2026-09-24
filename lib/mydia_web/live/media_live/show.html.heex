@@ -148,9 +148,17 @@
             <% end %>
 
             <div class="flex flex-wrap items-center gap-2 md:gap-3 text-sm md:text-base text-base-content/70">
-              <%= if @media_item.year do %>
-                <span class="font-semibold">{@media_item.year}</span>
+              <% release = release_date(@media_item.metadata) %>
+              <%= if @media_item.year || release do %>
+                <span id="media-release-date" class="font-semibold">
+                  {format_release_date(release) || @media_item.year}
+                </span>
               <% end %>
+
+              <.content_rating_badge
+                id="media-content-rating"
+                rating={Mydia.Metadata.Access.get_field(@media_item, :content_rating)}
+              />
 
               <%= if rating = get_rating(@media_item) do %>
                 <span class="flex items-center gap-1">
@@ -162,6 +170,11 @@
               <%= if runtime = get_runtime(@media_item) do %>
                 <span>{runtime}</span>
               <% end %>
+
+              <.show_status_badge
+                id="media-show-status"
+                status={ShowStatus.for_item(@media_item)}
+              />
 
               <button
                 type="button"
@@ -189,6 +202,24 @@
                 <span :for={genre <- genres} class="badge badge-outline">{genre}</span>
               </div>
             <% end %>
+
+            <% links = external_links(@media_item) %>
+            <div
+              :if={links != []}
+              id="media-external-links"
+              class="flex flex-wrap items-center gap-2 mt-3"
+            >
+              <a
+                :for={{key, label, url} <- links}
+                id={"media-link-#{key}"}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn btn-ghost btn-xs gap-1"
+              >
+                {label} <.icon name="hero-arrow-top-right-on-square" class="w-3 h-3" />
+              </a>
+            </div>
           </div>
           <%!-- Active Download / Grab Status --%>
           <%= if download = get_download_status(@downloads_with_status) do %>
