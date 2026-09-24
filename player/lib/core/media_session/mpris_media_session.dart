@@ -132,9 +132,13 @@ class _MprisObject extends DBusObject {
         previous.trackId != next.trackId) {
       return false;
     }
-    final elapsed = previous.status == MediaSessionStatus.playing
-        ? now().difference(previousAt)
-        : Duration.zero;
+    // A buffering stall is still reported as MediaSessionStatus.playing (MPRIS
+    // has no separate status for it), so its wall-clock time must not count
+    // toward elapsed playback or the next real update looks like a seek.
+    final elapsed =
+        previous.status == MediaSessionStatus.playing && !previous.buffering
+            ? now().difference(previousAt)
+            : Duration.zero;
     final expected = previous.position + elapsed;
     return (next.position - expected).abs() > _seekedThreshold;
   }
