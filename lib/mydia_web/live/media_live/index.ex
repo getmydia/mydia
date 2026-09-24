@@ -112,8 +112,14 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:page_title, collection.name)
         # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
         # The library scan handlers read it unguarded, and their existing
-        # {nil, _} clause is the right behaviour for a section.
+        # {nil, _} clause is the right behaviour for a section. Likewise
+        # :filter_library/:library_options: /movies, /tv and /sections/:id
+        # share this module and live_session, so navigating between them
+        # patches the existing process instead of remounting it, and a
+        # library chosen on /movies would otherwise leak into a section.
         |> assign(:filter_type, nil)
+        |> assign(:filter_library, nil)
+        |> assign(:library_options, [])
         |> assign(:section, collection)
         |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
         |> load_section(collection)
