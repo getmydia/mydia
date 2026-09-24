@@ -85,6 +85,8 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   @default_language "en-US"
 
+  @tvdb_alias_year_suffix ~r/\s*\((19|20)\d{2}\)\s*$/
+
   # Resolves the language to use for a request: explicit per-call opt wins,
   # then the language configured on the provider config (typically populated
   # from `Mydia.Metadata.metadata_language/0`), then the module default.
@@ -449,11 +451,12 @@ defmodule Mydia.Metadata.Provider.Relay do
       LanguageCode.select_translation(translations["overviewTranslations"], "overview", preferred)
 
     remote_ids = List.wrap(data["remoteIds"])
+    name = localized_name || data["name"]
 
     # Build TMDB-like response
     %{
       "id" => data["id"],
-      "name" => localized_name || data["name"],
+      "name" => name,
       "original_name" => data["originalName"] || data["name"],
       "overview" => localized_overview || data["overview"],
       "first_air_date" => data["firstAired"],
@@ -480,11 +483,34 @@ defmodule Mydia.Metadata.Provider.Relay do
       "external_ids" => %{
         "tmdb_id" => find_remote_id(remote_ids, "TheMovieDB.com"),
         "imdb_id" => find_remote_id(remote_ids, "IMDB")
-      }
+      },
+      # Release groups name a show by its TVDB aliases (a short name, a
+      # romanization) and its localized titles as often as by its primary
+      # title. Emitted in TMDB's movie shape so MediaMetadata has one parser.
+      "alternative_titles" => tvdb_alternative_titles(data, translations, name)
     }
   end
 
   defp transform_tvdb_to_tmdb_format(data, _media_type, _language, _opts), do: data
+
+  defp tvdb_alternative_titles(data, translations, name) do
+    names =
+      Enum.map(List.wrap(data["aliases"]), & &1["name"]) ++
+        Enum.map(List.wrap(translations["nameTranslations"]), & &1["name"])
+
+    # TVDB suffixes some aliases with a disambiguating year, "Name (2012)",
+    # which release names never carry. Every consumer of alternative titles
+    # compares them with release names, so the suffix is dropped here once.
+    titles =
+      names
+      |> Enum.filter(&is_binary/1)
+      |> Enum.map(&String.replace(&1, @tvdb_alias_year_suffix, ""))
+      |> Enum.reject(&(String.trim(&1) == "" or &1 == name))
+      |> Enum.uniq()
+      |> Enum.map(&%{"title" => &1})
+
+    %{"titles" => titles}
+  end
 
   defp extract_tvdb_year(%{"year" => year}) when is_binary(year) do
     case Integer.parse(year) do

@@ -18,13 +18,31 @@ defmodule Mydia.Indexers.ReleaseIdentity do
   @type verdict :: :match | {:mismatch, :title | :year}
 
   # ReleaseParser keeps a leading "[Group]" tag in the title it returns.
-  @leading_tags ~r/^\s*(\[[^\]]*\]\s*)+/
+  # Chinese trackers stamp their site in fullwidth brackets,
+  # "【Site www.host.com】" or "［www.host.com］". Only a fullwidth group
+  # naming a www. host is a tag: some releases put the title itself in
+  # 【】, and a CJK group name is already trimmed as a non-Latin word.
+  # `u` is needed for the multibyte bracket characters; the pattern has no
+  # \w for UCP to widen.
+  @leading_tags ~r/^\s*(?:(?:\[[^\]]*\]|【[^】]*www\.[^】]*】|［[^］]*www\.[^］]*］)\s*)+/iu
+  # Same intent as @leading_tags, ASCII-bracket-only and without `u`. The
+  # `u` modifier requires the *subject* to be valid UTF-8 or Erlang's `re`
+  # raises `ArgumentError`; malformed byte sequences in release titles are a
+  # real category (older filesystems, mis-declared tracker encodings), and
+  # this runs unconditionally on every candidate, so an invalid-UTF-8 title
+  # falls back to this pattern rather than crashing the whole ranking pass.
+  @leading_tags_ascii ~r/^\s*(\[[^\]]*\]\s*)+/
   @year_token ~r/^(19|20)\d{2}$/
   @aka ~r/\s+a\.?k\.?a\.?\s+/i
 
   @spec check(String.t(), Target.t()) :: verdict()
   def check(release_title, %Target{} = target) when is_binary(release_title) do
-    name = String.replace(release_title, @leading_tags, "")
+    name =
+      if String.valid?(release_title) do
+        String.replace(release_title, @leading_tags, "")
+      else
+        String.replace(release_title, @leading_tags_ascii, "")
+      end
 
     case ReleaseParser.parse(name) do
       %ParsedFileInfo{title: title, year: year} when is_binary(title) and title != "" ->

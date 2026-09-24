@@ -40,6 +40,24 @@ defmodule Mydia.Indexers.ReleaseIdentity.TargetTest do
       assert target.keys == ["ledgerus"]
     end
 
+    test "drops a trailing year from an alternative title too" do
+      item = %MediaItem{
+        type: "tv_show",
+        title: "Some Show",
+        metadata: %MediaMetadata{
+          provider_id: "1",
+          provider: :tvdb,
+          media_type: :tv,
+          alternative_titles: ["Other Name (2031)"]
+        }
+      }
+
+      target = Target.from_media_item(item)
+
+      assert "othername" in target.keys
+      refute Enum.any?(target.keys, &(&1 =~ "2031"))
+    end
+
     test "drops keys that are empty or repeated" do
       item = %MediaItem{
         type: "movie",

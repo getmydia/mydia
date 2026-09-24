@@ -255,11 +255,29 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.year == 2020
     end
 
+    test "strips a fullwidth-bracketed site prefix" do
+      result =
+        ReleaseParser.parse(
+          "【高清影视之家发布 www.example.com】Movie.Name.2020.1080p.AMZN.WEB-DL.H.264-GRP"
+        )
+
+      assert result.title == "Movie Name"
+      assert result.year == 2020
+    end
+
     test "strips a dotted site prefix with no separator" do
       result = ReleaseParser.parse("www.1TamilMV.world - Movie.Name.2020.1080p.BluRay.x264")
 
       assert result.title == "Movie Name"
       assert result.year == 2020
+    end
+
+    test "does not raise on invalid UTF-8 bytes in the filename" do
+      bad = "Movie.Name.2020.1080p" <> <<0xFF>> <> ".mkv"
+
+      result = ReleaseParser.parse(bad)
+
+      assert %ParsedFileInfo{} = result
     end
 
     test "leaves a title that merely contains www alone" do
