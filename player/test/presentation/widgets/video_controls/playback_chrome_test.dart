@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/player/input_capabilities.dart';
 import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/core/player/subtitle_position.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
@@ -35,6 +37,14 @@ class _FakePlatformPlayer extends PlatformPlayer {
 
   @override
   Future<void> seek(Duration duration) async {}
+}
+
+class _RecordingSubtitleLift implements SubtitleLift {
+  final bottoms = <double>[];
+
+  @override
+  void apply(double bottom, {required Duration duration}) =>
+      bottoms.add(bottom);
 }
 
 double _opacity(WidgetTester tester) => tester
@@ -982,5 +992,41 @@ void main() {
             ? 'covers the pointer and touch tiers; '
                 'playback_chrome_tv_test.dart covers the remote one'
             : false);
+  });
+
+  group('PlaybackChrome subtitle lift', () {
+    late Player player;
+
+    setUp(() {
+      player = Player(platformPlayer: _FakePlatformPlayer());
+    });
+
+    tearDown(() => player.dispose());
+
+    testWidgets('lifts subtitles above the panel, and drops them on hide',
+        (tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final lift = _RecordingSubtitleLift();
+      final visibility = ChromeVisibilityController();
+      await tester.pumpWidget(_host(PlaybackChrome(
+        player: player,
+        timeline: StreamTimeline.zero,
+        onSeekToReal: (_) async {},
+        chromeVisibility: visibility,
+        subtitleLift: lift,
+      )));
+      await tester.pumpAndSettle();
+
+      final panelTop = tester.getTopLeft(find.byType(ChromeSubtitleLift)).dy;
+      expect(lift.bottoms.last,
+          closeTo(900 - panelTop + ChromeSubtitleLift.gap, 0.5));
+
+      visibility.hide();
+      await tester.pumpAndSettle();
+      expect(lift.bottoms.last, kSubtitleRestPadding);
+    });
   });
 }

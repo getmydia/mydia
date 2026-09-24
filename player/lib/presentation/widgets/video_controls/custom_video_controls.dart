@@ -4,6 +4,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
+import 'chrome_subtitle_lift.dart';
 import 'playback_chrome.dart';
 
 /// Builder for media_kit's `Video(controls: ...)` parameter.
@@ -55,6 +56,7 @@ Widget Function(VideoState) customVideoControlsBuilderWithCallback({
         scrub: scrub,
         scrubberFocusNode: scrubberFocusNode,
         scrubThumbnails: scrubThumbnails,
+        subtitleLift: VideoStateSubtitleLift(state),
         timeline: timeline,
         onSeekToReal: onSeekToReal,
         title: title,
