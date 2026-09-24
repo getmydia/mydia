@@ -44,6 +44,7 @@ import 'package:player/presentation/screens/settings/devices_screen.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
+import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
@@ -382,6 +383,48 @@ void main() {
               context,
               id: 'c1',
               itemsData: const AsyncValue.data(<RecentlyAddedItem>[]),
+            ),
+          ),
+        );
+
+        expect(
+          tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
+          _kWidth - insets.trailing - _kEndGutter,
+        );
+      });
+    }
+  });
+
+  group('detailHeroAppBar cast alignment', () {
+    // The movie, show and episode detail screens all build their hero via
+    // `detailHeroAppBar` rather than a `Scaffold.appBar` seam, so there is no
+    // per-screen `.header` to pump here. `detailHeroAppBar` itself is the
+    // seam: it needs no provider graph, and it is the exact sliver each of
+    // those three screens puts first in its `CustomScrollView`. Those
+    // screens own `WindowChromeInsets.removeBand` themselves (they are
+    // full-window routes), so this test reproduces that wrapping rather than
+    // relying on `pumpWithInsets`, which -- unlike the browse screens above
+    // -- never adds it for a bare sliver.
+    for (final MapEntry(key: name, value: insets) in _cases.entries) {
+      testWidgets('aligns on $name', (tester) async {
+        await pumpWithInsets(
+          tester,
+          insets,
+          width: _kWidth,
+          child: WindowChromeInsets.removeBand(
+            child: Builder(
+              builder: (context) => Scaffold(
+                body: CustomScrollView(
+                  slivers: [
+                    detailHeroAppBar(
+                      context: context,
+                      expandedHeight: 380,
+                      back: const SizedBox.shrink(),
+                      background: const ColoredBox(color: Colors.blue),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );

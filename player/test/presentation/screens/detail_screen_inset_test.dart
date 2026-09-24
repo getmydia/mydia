@@ -1,94 +1,149 @@
-// Pins a LAYOUT CONTRACT: how a pinned `SliverAppBar`'s `leading` widget
-// responds when the ambient `MediaQuery` carries a reserved top strip,
-// including across scroll as the app bar collapses. `_detailScreenLike`
-// below reproduces the `CustomScrollView` + pinned `SliverAppBar` shape
-// shared by `movie_detail_screen.dart`, `show_detail_screen.dart` and
-// `episode_detail_screen.dart`, rather than mounting any of them directly —
-// those screens need a provider graph, a GraphQL client and a router
-// location this suite does not construct. That means this file proves the
-// contract `SliverAppBar` already honours, not that the three real screens
-// still build this exact shape.
+// Pins a LAYOUT CONTRACT for `detailHeroAppBar`, the shared hero builder the
+// movie, show and episode detail screens all use: the hero art runs to the
+// window's true top edge (behind the traffic lights / Linux buttons), and
+// the back button plus cast button sit in the title-bar band drawn on top of
+// it. `_detailScreenLike` reproduces the `CustomScrollView` + pinned
+// `SliverAppBar` shape each real screen builds via `detailHeroAppBar`, but
+// pumps that shared function directly rather than mounting a screen: the
+// screens need a provider graph, a GraphQL client and a router location this
+// suite does not construct, while the header layout contract is the same
+// function call in each of them.
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
+
+import '../../helpers/cast_test_overrides.dart';
 
 const Key _backKey = Key('detail-back');
+const Key _heroKey = Key('detail-hero');
 
 /// The structure every detail screen shares: a `CustomScrollView` whose first
-/// sliver is a pinned `SliverAppBar` carrying the back button as `leading`.
-/// Mirrors `movie_detail_screen.dart`, `show_detail_screen.dart` and
+/// sliver is `detailHeroAppBar`, pinned, carrying the back button in its
+/// title row and the hero art in its flexible space. Mirrors
+/// `movie_detail_screen.dart`, `show_detail_screen.dart` and
 /// `episode_detail_screen.dart`, none of which can be mounted here without
 /// their provider graphs.
-Widget _detailScreenLike({required EdgeInsets padding}) => MediaQuery(
-      data: MediaQueryData(padding: padding),
-      child: const MaterialApp(
-        home: Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                expandedHeight: 380,
-                pinned: true,
-                leading: Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.arrow_back_rounded, key: _backKey),
-                ),
-                flexibleSpace: FlexibleSpaceBar(
-                  background: ColoredBox(color: Colors.blue),
+Widget _detailScreenLike({
+  required WindowChromeInsets insets,
+  double statusBar = 0,
+}) =>
+    ProviderScope(
+      overrides: castCapableOverrides(),
+      child: MediaQuery(
+        data: MediaQueryData(
+          size: const Size(1300, 800),
+          padding: EdgeInsets.only(top: statusBar + insets.height),
+        ),
+        child: WindowChromeInsets.scope(
+          insets: insets,
+          child: MaterialApp(
+            home: WindowChromeInsets.removeBand(
+              child: Builder(
+                builder: (context) => Scaffold(
+                  body: CustomScrollView(
+                    slivers: [
+                      detailHeroAppBar(
+                        context: context,
+                        expandedHeight: 380,
+                        back:
+                            const Icon(Icons.arrow_back_rounded, key: _backKey),
+                        background:
+                            const ColoredBox(color: Colors.blue, key: _heroKey),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 2000)),
+                    ],
+                  ),
                 ),
               ),
-              SliverToBoxAdapter(child: SizedBox(height: 2000)),
-            ],
+            ),
           ),
         ),
       ),
     );
 
+const _mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
+
+/// Resizes the real test surface to 1300x800 before pumping.
+///
+/// `flutter_test`'s default surface is a fixed 800x600, independent of
+/// whatever `MediaQueryData` a widget tree nests further down -- nesting
+/// only changes what `MediaQuery.of(context)` *reports*, not the real
+/// constraints the render tree lays out with. `Breakpoints` and
+/// `WindowTitleRow.endGutter` read the former; `Scaffold`'s actual pixel
+/// width comes from the latter, which is why the two would disagree on
+/// where the trailing edge actually is without this. Mirrors
+/// `window_title_row_test.dart`'s `_pump` helper.
+Future<void> _pump(
+  WidgetTester tester, {
+  required WindowChromeInsets insets,
+  double statusBar = 0,
+}) async {
+  tester.view.physicalSize = const Size(1300, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+
+  await tester.pumpWidget(
+    _detailScreenLike(insets: insets, statusBar: statusBar),
+  );
+}
+
 void main() {
-  group('detail screen back button vs the macOS traffic lights', () {
+  group('detailHeroAppBar under the macOS traffic lights', () {
     testWidgets(
-        'REGRESSION WITNESS: with no reserved strip the back icon lands '
-        'inside the traffic light zone', (tester) async {
-      await tester.pumpWidget(_detailScreenLike(padding: EdgeInsets.zero));
+        'the hero runs to the window top edge and the back button centers '
+        'in the band, clear of the lights', (tester) async {
+      await _pump(tester, insets: _mac);
 
-      // Measured: (8, 8) - (48, 48). The lights occupy x 12-71,
-      // y 13-26, so this is the bug this whole change exists to fix. The test
-      // documents it rather than asserting the app ships it.
-      expect(
-        tester.getRect(find.byKey(_backKey)).top,
-        lessThan(kMacTitleBarOverlap),
-      );
+      // Full-bleed: the hero paints from the window's true top, behind the
+      // band, not below a reserved strip.
+      expect(tester.getRect(find.byKey(_heroKey)).top, 0);
+
+      final backRect = tester.getRect(find.byKey(_backKey));
+      expect(backRect.left, greaterThanOrEqualTo(80));
+      // Vertically centered in the 40pt band (center at y=20).
+      expect((backRect.center.dy - 20).abs(), lessThan(1));
     });
 
-    testWidgets('the reserved strip moves the back icon clear', (tester) async {
-      await tester.pumpWidget(
-        _detailScreenLike(
-          padding: const EdgeInsets.only(top: kMacTitleBarOverlap),
-        ),
-      );
-
-      // Measured: (8, 36) - (48, 76).
-      expect(
-        tester.getRect(find.byKey(_backKey)).top,
-        greaterThanOrEqualTo(kMacTitleBarOverlap),
-      );
-    });
-
-    testWidgets('it still clears once the hero collapses under scroll',
+    testWidgets('the cast button lands at the shared trailing gutter',
         (tester) async {
-      await tester.pumpWidget(
-        _detailScreenLike(
-          padding: const EdgeInsets.only(top: kMacTitleBarOverlap),
-        ),
-      );
+      await _pump(tester, insets: _mac);
 
+      final cast = tester.getRect(find.byKey(WindowTitleRow.castKey));
+      expect(cast.right, 1300 - 24);
+    });
+
+    testWidgets(
+        'the pinned title row keeps the back button clear of the lights '
+        'once the hero collapses under scroll', (tester) async {
+      await _pump(tester, insets: _mac);
+
+      // The scroll view fills the viewport; its center sits well below the
+      // 40pt band, so this drag never touches the drag band underneath the
+      // title row.
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
       await tester.pumpAndSettle();
+      // Drains the drag band's double-tap recognizer in case the drag's
+      // start or end point ever lands inside the band; harmless when it
+      // didn't.
+      await tester.pump(kDoubleTapTimeout);
+
+      final backRect = tester.getRect(find.byKey(_backKey));
+      expect(backRect.left, greaterThanOrEqualTo(80));
+      expect(backRect.top, inInclusiveRange(0, 40));
+    });
+  });
+
+  group('detailHeroAppBar with no window chrome', () {
+    testWidgets('the back button clears a phone status bar', (tester) async {
+      await _pump(tester, insets: WindowChromeInsets.zero, statusBar: 24);
 
       expect(
-        tester.getRect(find.byKey(_backKey)).top,
-        greaterThanOrEqualTo(kMacTitleBarOverlap),
-      );
+          tester.getRect(find.byKey(_backKey)).top, greaterThanOrEqualTo(24));
     });
   });
 }

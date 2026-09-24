@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import 'episode_detail_controller.dart';
 import '../../../domain/models/episode_detail.dart';
+import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -14,8 +16,6 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
 import '../../widgets/toast/toaster.dart';
@@ -32,22 +32,28 @@ class EpisodeDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final episodeAsync = ref.watch(episodeDetailControllerProvider(id));
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.episodeDetail(id)],
-            topInset: freshnessTopInset(context, appBarHeight: 0),
-          ),
-          Expanded(
-            child: episodeAsync.when(
-              data: (episode) => _buildContent(context, ref, episode),
-              loading: () => _buildLoadingState(context),
-              error: (error, stack) => _buildErrorState(context, ref, error),
+    // This is a full-window route (pushed outside the shell), and so the sole
+    // owner of the title-bar band here: the body has to sit under
+    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+    // band on top of the hero's own title row a second time.
+    return WindowChromeInsets.removeBand(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        body: Column(
+          children: [
+            FreshnessHeader(
+              queryKeys: [QueryKeys.episodeDetail(id)],
+              topInset: freshnessTopInset(context, appBarHeight: 0),
             ),
-          ),
-        ],
+            Expanded(
+              child: episodeAsync.when(
+                data: (episode) => _buildContent(context, ref, episode),
+                loading: () => _buildLoadingState(context),
+                error: (error, stack) => _buildErrorState(context, ref, error),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -59,7 +65,14 @@ class EpisodeDetailScreen extends ConsumerWidget {
           expandedHeight: 300,
           pinned: true,
           backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
+          // A plain leading slot, not the window-chrome-aware title row: this
+          // transient loading state never had the hero's full title row, so
+          // it keeps the button's own edge padding instead of relying on
+          // `WindowTitleRow`'s inset-aware gutter.
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: _buildBackButton(context),
+          ),
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               color: AppColors.surface,
@@ -123,7 +136,12 @@ class EpisodeDetailScreen extends ConsumerWidget {
           expandedHeight: 200,
           pinned: true,
           backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
+          // See the loading state's leading above: plain edge padding, not
+          // the title row's inset-aware gutter.
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: _buildBackButton(context),
+          ),
         ),
         SliverFillRemaining(
           child: Center(
@@ -186,7 +204,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, EpisodeDetail episode) {
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, episode),
+        _buildHeroSection(context, episode),
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,76 +250,52 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// The hero's back affordance: a translucent pill, sized and positioned by
+  /// [detailHeroAppBar]'s title row rather than its own padding, so it lands
+  /// clear of the traffic lights / Linux buttons instead of baking in a flat
+  /// 8px edge inset that knows nothing about the window chrome.
   Widget _buildBackButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.3),
+    return Material(
+      color: Colors.black.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.arrow_back_rounded, color: Colors.white),
-          ),
+        onTap: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        },
+        child: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
       ),
     );
   }
 
-  Widget _buildHeroSection(
-      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
+  Widget _buildHeroSection(BuildContext context, EpisodeDetail episode) {
     // Use episode thumbnail if available, otherwise fall back to show backdrop
     final imageUrl = episode.thumbnailUrl ?? episode.show.artwork.backdropUrl;
 
-    return SliverAppBar(
+    return detailHeroAppBar(
+      context: context,
       expandedHeight: 300,
-      pinned: true,
-      stretch: true,
-      backgroundColor: AppColors.background,
-      leading: _buildBackButton(context),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
-        ),
-        const SizedBox(width: 8),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        stretchModes: const [
-          StretchMode.zoomBackground,
-          StretchMode.blurBackground,
-        ],
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Background image
-            if (imageUrl != null)
-              CachedNetworkImage(
-                imageUrl: imageUrl,
-                fit: BoxFit.cover,
-                cacheManager: EpisodeThumbnailCacheManager(),
-                placeholder: (context, url) => Container(
-                  color: AppColors.surface,
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: AppColors.surface,
-                  child: const Icon(
-                    Icons.movie_rounded,
-                    size: 64,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              )
-            else
-              Container(
+      back: _buildBackButton(context),
+      background: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background image
+          if (imageUrl != null)
+            CachedNetworkImage(
+              imageUrl: imageUrl,
+              fit: BoxFit.cover,
+              cacheManager: EpisodeThumbnailCacheManager(),
+              placeholder: (context, url) => Container(
+                color: AppColors.surface,
+              ),
+              errorWidget: (context, url, error) => Container(
                 color: AppColors.surface,
                 child: const Icon(
                   Icons.movie_rounded,
@@ -309,43 +303,52 @@ class EpisodeDetailScreen extends ConsumerWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
-
-            // Gradient overlay
+            )
+          else
             Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.5),
-                    AppColors.background.withValues(alpha: 0.95),
-                    AppColors.background,
-                  ],
-                  stops: const [0.0, 0.5, 0.8, 1.0],
-                ),
+              color: AppColors.surface,
+              child: const Icon(
+                Icons.movie_rounded,
+                size: 64,
+                color: AppColors.textSecondary,
               ),
             ),
 
-            // Progress indicator at bottom
-            if (episode.progress != null && episode.progress!.percentage > 0)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: LinearProgressIndicator(
-                  value: episode.progress!.percentage / 100,
-                  backgroundColor: Colors.transparent,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    episode.progress!.watched
-                        ? AppColors.success
-                        : AppColors.primary,
-                  ),
-                  minHeight: 3,
-                ),
+          // Gradient overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  AppColors.background.withValues(alpha: 0.5),
+                  AppColors.background.withValues(alpha: 0.95),
+                  AppColors.background,
+                ],
+                stops: const [0.0, 0.5, 0.8, 1.0],
               ),
-          ],
-        ),
+            ),
+          ),
+
+          // Progress indicator at bottom
+          if (episode.progress != null && episode.progress!.percentage > 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: LinearProgressIndicator(
+                value: episode.progress!.percentage / 100,
+                backgroundColor: Colors.transparent,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  episode.progress!.watched
+                      ? AppColors.success
+                      : AppColors.primary,
+                ),
+                minHeight: 3,
+              ),
+            ),
+        ],
       ),
     );
   }

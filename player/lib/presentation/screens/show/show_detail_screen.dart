@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
@@ -15,14 +16,13 @@ import '../../../domain/models/season_info.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/watch_status.dart';
+import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/episode_rail.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
@@ -68,25 +68,31 @@ class ShowDetailScreen extends ConsumerWidget {
     final showAsync = ref.watch(showDetailControllerProvider(id));
     final selectedSeason = ref.watch(selectedSeasonProvider(id));
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [
-              QueryKeys.showDetail(id),
-              QueryKeys.seasonEpisodes(id, selectedSeason),
-            ],
-            topInset: freshnessTopInset(context, appBarHeight: 0),
-          ),
-          Expanded(
-            child: showAsync.when(
-              data: (show) => _buildContent(context, ref, show),
-              loading: () => _buildLoadingState(context),
-              error: (error, stack) => _buildErrorState(context, ref, error),
+    // This is a full-window route (pushed outside the shell), and so the sole
+    // owner of the title-bar band here: the body has to sit under
+    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+    // band on top of the hero's own title row a second time.
+    return WindowChromeInsets.removeBand(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        body: Column(
+          children: [
+            FreshnessHeader(
+              queryKeys: [
+                QueryKeys.showDetail(id),
+                QueryKeys.seasonEpisodes(id, selectedSeason),
+              ],
+              topInset: freshnessTopInset(context, appBarHeight: 0),
             ),
-          ),
-        ],
+            Expanded(
+              child: showAsync.when(
+                data: (show) => _buildContent(context, ref, show),
+                loading: () => _buildLoadingState(context),
+                error: (error, stack) => _buildErrorState(context, ref, error),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -98,7 +104,14 @@ class ShowDetailScreen extends ConsumerWidget {
           expandedHeight: 350,
           pinned: true,
           backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
+          // A plain leading slot, not the window-chrome-aware title row: this
+          // transient loading state never had the hero's full title row, so
+          // it keeps the button's own edge padding instead of relying on
+          // `WindowTitleRow`'s inset-aware gutter.
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: _buildBackButton(context),
+          ),
           flexibleSpace: FlexibleSpaceBar(
             background: Container(
               color: AppColors.surface,
@@ -153,7 +166,12 @@ class ShowDetailScreen extends ConsumerWidget {
           expandedHeight: 200,
           pinned: true,
           backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
+          // See the loading state's leading above: plain edge padding, not
+          // the title row's inset-aware gutter.
+          leading: Padding(
+            padding: const EdgeInsets.all(8),
+            child: _buildBackButton(context),
+          ),
         ),
         SliverFillRemaining(
           child: Center(
@@ -277,7 +295,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, show, selectedEpisode),
+        _buildHeroSection(context, show, selectedEpisode),
         SliverToBoxAdapter(
           child: _buildEpisodeHeroBody(context, ref, show, selectedEpisode),
         ),
@@ -326,25 +344,26 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// The hero's back affordance: a translucent pill, sized and positioned by
+  /// [detailHeroAppBar]'s title row rather than its own padding, so it lands
+  /// clear of the traffic lights / Linux buttons instead of baking in a flat
+  /// 8px edge inset that knows nothing about the window chrome.
   Widget _buildBackButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.3),
+    return Material(
+      color: Colors.black.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.arrow_back_rounded, color: Colors.white),
-          ),
+        onTap: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        },
+        child: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
       ),
     );
@@ -352,122 +371,106 @@ class ShowDetailScreen extends ConsumerWidget {
 
   Widget _buildHeroSection(
     BuildContext context,
-    WidgetRef ref,
     ShowDetail show,
     Episode? selectedEpisode,
   ) {
-    return SliverAppBar(
+    return detailHeroAppBar(
+      context: context,
       expandedHeight: 380,
-      pinned: true,
-      stretch: true,
-      backgroundColor: AppColors.background,
-      leading: _buildBackButton(context),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
-        ),
-        const SizedBox(width: 8),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        stretchModes: const [
-          StretchMode.zoomBackground,
-          StretchMode.blurBackground,
-        ],
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Background image
-            if (show.artwork.backdropUrl != null)
-              CachedNetworkImage(
-                imageUrl: show.artwork.backdropUrl!,
-                fit: BoxFit.cover,
-                cacheManager: BackdropCacheManager(),
-                placeholder: (context, url) => Container(
-                  color: AppColors.surface,
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: AppColors.surface,
-                ),
-              )
-            else
-              Container(color: AppColors.surface),
+      back: _buildBackButton(context),
+      background: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background image
+          if (show.artwork.backdropUrl != null)
+            CachedNetworkImage(
+              imageUrl: show.artwork.backdropUrl!,
+              fit: BoxFit.cover,
+              cacheManager: BackdropCacheManager(),
+              placeholder: (context, url) => Container(
+                color: AppColors.surface,
+              ),
+              errorWidget: (context, url, error) => Container(
+                color: AppColors.surface,
+              ),
+            )
+          else
+            Container(color: AppColors.surface),
 
-            // Gradient overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.5),
-                    AppColors.background.withValues(alpha: 0.95),
-                    AppColors.background,
-                  ],
-                  stops: const [0.0, 0.5, 0.8, 1.0],
-                ),
+          // Gradient overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  AppColors.background.withValues(alpha: 0.5),
+                  AppColors.background.withValues(alpha: 0.95),
+                  AppColors.background,
+                ],
+                stops: const [0.0, 0.5, 0.8, 1.0],
               ),
             ),
+          ),
 
-            // Content overlay
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+          // Content overlay
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        show.title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (show.yearDisplay.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Text(
-                          show.title,
+                          show.yearDisplay,
                           style: Theme.of(context)
                               .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.8),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                              .bodyMedium
+                              ?.copyWith(color: AppColors.textSecondary),
                         ),
-                        if (show.yearDisplay.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            show.yearDisplay,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
-                        if (selectedEpisode != null) ...[
-                          const SizedBox(height: 8),
-                          _buildEpisodeContextPill(show, selectedEpisode),
-                        ],
                       ],
-                    ),
+                      if (selectedEpisode != null) ...[
+                        const SizedBox(height: 8),
+                        _buildEpisodeContextPill(show, selectedEpisode),
+                      ],
+                    ],
                   ),
-                  // Gap and control are emitted together so a null episode
-                  // leaves no dangling spacer.
-                  if (selectedEpisode != null) ...[
-                    const SizedBox(width: 16),
-                    _buildHeroPlayControl(context, show, selectedEpisode),
-                  ],
+                ),
+                // Gap and control are emitted together so a null episode
+                // leaves no dangling spacer.
+                if (selectedEpisode != null) ...[
+                  const SizedBox(width: 16),
+                  _buildHeroPlayControl(context, show, selectedEpisode),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -498,7 +501,8 @@ class ShowDetailScreen extends ConsumerWidget {
 
   /// The hero's Play affordance, extracted (like the other `_buildX` helpers
   /// in this file) for readability: the overlay `Row` it lives in is already
-  /// deeply nested inside the `SliverAppBar`'s `FlexibleSpaceBar`/`Stack`.
+  /// deeply nested inside the `background` `Stack` passed to
+  /// `detailHeroAppBar`.
   Widget _buildHeroPlayControl(
     BuildContext context,
     ShowDetail show,
