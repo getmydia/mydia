@@ -33,6 +33,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbAlternativeTitlesTest do
         %{"language" => "eng", "name" => "Quiet Harbor"},
         %{"language" => "fra", "name" => "Le Port Tranquille"},
         %{"language" => "jpn", "name" => "Quiet Harbor"},
+        %{"language" => "ara", "name" => "Quiet Harbor (2031)"},
         %{"language" => "eng", "name" => ""},
         %{"language" => "eng", "name" => nil}
       ],

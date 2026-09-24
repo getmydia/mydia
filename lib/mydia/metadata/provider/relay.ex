@@ -85,6 +85,8 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   @default_language "en-US"
 
+  @tvdb_alias_year_suffix ~r/\s*\((19|20)\d{2}\)\s*$/
+
   # Resolves the language to use for a request: explicit per-call opt wins,
   # then the language configured on the provider config (typically populated
   # from `Mydia.Metadata.metadata_language/0`), then the module default.
@@ -496,10 +498,14 @@ defmodule Mydia.Metadata.Provider.Relay do
       Enum.map(List.wrap(data["aliases"]), & &1["name"]) ++
         Enum.map(List.wrap(translations["nameTranslations"]), & &1["name"])
 
+    # TVDB suffixes some aliases with a disambiguating year, "Name (2012)",
+    # which release names never carry. Every consumer of alternative titles
+    # compares them with release names, so the suffix is dropped here once.
     titles =
       names
-      |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
-      |> Enum.reject(&(&1 == name))
+      |> Enum.filter(&is_binary/1)
+      |> Enum.map(&String.replace(&1, @tvdb_alias_year_suffix, ""))
+      |> Enum.reject(&(String.trim(&1) == "" or &1 == name))
       |> Enum.uniq()
       |> Enum.map(&%{"title" => &1})
 
