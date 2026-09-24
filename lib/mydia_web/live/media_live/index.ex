@@ -31,6 +31,9 @@ defmodule MydiaWeb.MediaLive.Index do
   # library with a handful of stray titles is left alone.
   @anime_nudge_threshold 10
 
+  # Library path types that can hold each page's media. :mixed serves both.
+  @library_types %{movies: [:movies, :mixed], tv_shows: [:series, :mixed]}
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -46,6 +49,8 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_progress, nil)
      |> assign(:filter_monitored, nil)
      |> assign(:filter_quality, nil)
+     |> assign(:filter_library, nil)
+     |> assign(:library_options, [])
      |> assign(:sort_by, "title_asc")
      |> assign(:page, 0)
      |> assign(:has_more, false)
@@ -87,6 +92,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
+    |> assign_library_options(:movies)
     |> load_media_items_when_connected()
   end
 
@@ -95,6 +101,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
+    |> assign_library_options(:tv_shows)
     |> load_media_items_when_connected()
   end
 
@@ -153,6 +160,25 @@ defmodule MydiaWeb.MediaLive.Index do
     end
   end
 
+  # Runtime-config entries carry a "runtime::" id that never appears on a file,
+  # and LibraryPathSync normally persists them as real rows anyway. A selection
+  # that no longer fits (a disabled library, or the other page's type) resets.
+  defp assign_library_options(socket, action) do
+    types = Map.fetch!(@library_types, action)
+
+    options =
+      Enum.filter(
+        Settings.list_library_paths(),
+        &(&1.type in types and not Settings.runtime_config?(&1))
+      )
+
+    selected = socket.assigns.filter_library
+
+    socket
+    |> assign(:library_options, options)
+    |> assign(:filter_library, if(Enum.any?(options, &(&1.id == selected)), do: selected))
+  end
+
   @impl true
   def handle_event("toggle_view", %{"mode" => mode}, socket) do
     view_mode = String.to_existing_atom(mode)
@@ -207,6 +233,11 @@ defmodule MydiaWeb.MediaLive.Index do
         _ -> nil
       end
 
+    library =
+      Enum.find_value(socket.assigns.library_options, fn lp ->
+        if lp.id == params["library"], do: lp.id
+      end)
+
     sort_by = params["sort_by"] || socket.assigns.sort_by
     Logger.debug("Sort by: #{inspect(sort_by)}")
 
@@ -215,6 +246,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_progress, progress)
      |> assign(:filter_monitored, monitored)
      |> assign(:filter_quality, quality)
+     |> assign(:filter_library, library)
      |> assign(:sort_by, sort_by)
      |> assign(:page, 0)
      |> assign(:selected_ids, MapSet.new())
@@ -877,6 +909,7 @@ defmodule MydiaWeb.MediaLive.Index do
     )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
+    |> maybe_add_filter(:library_path_id, assigns[:filter_library])
     |> Keyword.merge(
       user_id: assigns.current_user.id,
       search: assigns.search_query,
