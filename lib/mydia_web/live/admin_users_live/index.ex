@@ -341,6 +341,15 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     end
   end
 
+  def handle_event("reset_totp", %{"id" => id}, socket) do
+    {:ok, _user} = id |> Accounts.get_user!() |> Accounts.admin_reset_totp()
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Two-factor authentication turned off.")
+     |> load_users()}
+  end
+
   ## Private Helpers
 
   defp apply_filters(socket, params) do
@@ -583,4 +592,6 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
   defp auth_type_text(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: "OIDC"
   defp auth_type_text(_user), do: "Local"
+
+  defp totp_enabled?(user), do: Accounts.totp_enabled?(user)
 end

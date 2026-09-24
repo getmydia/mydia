@@ -60,4 +60,21 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       assert has_element?(view, "#delete-modal-prompt", "Robin Vega")
     end
   end
+
+  describe "two-factor reset" do
+    setup do
+      totp_user_fixture()
+    end
+
+    test "shows a 2FA badge and resets it", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+
+      assert has_element?(view, "#totp-badge-#{user.id}")
+
+      view |> element("#reset-2fa-#{user.id}") |> render_click()
+
+      refute Mydia.Accounts.totp_enabled?(Mydia.Accounts.get_user!(user.id))
+      refute has_element?(view, "#totp-badge-#{user.id}")
+    end
+  end
 end

@@ -16,7 +16,7 @@ Mydia CLI
 Usage: mydia-cli <command> [args...]
 
 Commands:
-    user <subcommand>     User management (list, add, delete, reset-password)
+    user <subcommand>     User management (list, add, delete, reset-password, reset-2fa)
     eval <code>           Evaluate Elixir code
     rpc <code>            Run code via RPC on running node
     remote                Connect to running node via IEx
@@ -27,6 +27,7 @@ Examples:
     mydia-cli user add user@example.com myuser --password=secret --role=admin
     mydia-cli user delete user@example.com
     mydia-cli user reset-password admin --password=newpass
+    mydia-cli user reset-2fa admin
     mydia-cli eval 'IO.puts("hello")'
     mydia-cli remote
 EOF

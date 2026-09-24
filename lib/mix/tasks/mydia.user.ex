@@ -29,6 +29,14 @@ defmodule Mix.Tasks.Mydia.User do
   Options:
     --password=PASSWORD  New password (will prompt if not provided)
 
+  ### Reset two-factor authentication
+
+      mix mydia.user reset-2fa <email_or_username>
+
+  Turns off TOTP and deletes the user's recovery codes, for someone who lost
+  their authenticator. They sign in with their password alone until they set
+  it up again.
+
   ## Examples
 
       mix mydia.user list
@@ -36,11 +44,12 @@ defmodule Mix.Tasks.Mydia.User do
       mix mydia.user add user@example.com myuser --password=secret123 --role=admin
       mix mydia.user delete user@example.com
       mix mydia.user reset-password admin --password=newpassword
+      mix mydia.user reset-2fa admin
 
   """
   use Mix.Task
 
-  @shortdoc "Manages users (list, add, delete, reset-password)"
+  @shortdoc "Manages users (list, add, delete, reset-password, reset-2fa)"
 
   @valid_roles ~w(admin user readonly guest)
 
@@ -56,6 +65,7 @@ defmodule Mix.Tasks.Mydia.User do
       ["add" | rest] -> add_user(rest)
       ["delete" | rest] -> delete_user(rest)
       ["reset-password" | rest] -> reset_password(rest)
+      ["reset-2fa" | rest] -> reset_2fa(rest)
       _ -> show_usage()
     end
   end
@@ -220,6 +230,33 @@ defmodule Mix.Tasks.Mydia.User do
           "Usage: mix mydia.user reset-password <email_or_username> [--password=pw]"
         )
 
+        exit({:shutdown, 1})
+    end
+  end
+
+  defp reset_2fa(args) do
+    alias Mydia.Accounts
+
+    case args do
+      [identifier] ->
+        case find_user(identifier) do
+          nil ->
+            Mix.shell().error("✗ User not found: #{identifier}")
+            exit({:shutdown, 1})
+
+          user ->
+            display = user.email || user.username
+
+            if Accounts.totp_enabled?(user) do
+              {:ok, _} = Accounts.admin_reset_totp(user)
+              Mix.shell().info("✓ Two-factor authentication turned off for: #{display}")
+            else
+              Mix.shell().info("#{display} does not have two-factor authentication enabled")
+            end
+        end
+
+      _ ->
+        Mix.shell().error("Usage: mix mydia.user reset-2fa <email_or_username>")
         exit({:shutdown, 1})
     end
   end
