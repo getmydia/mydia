@@ -25,6 +25,7 @@ Future<void> _pump(
   ),
   ValueListenable<bool>? fullscreen,
   ValueListenable<bool>? buttonsHidden,
+  Widget child = const ColoredBox(color: Color(0xFF000000)),
   Future<void> Function()? body,
 }) async {
   debugDefaultTargetPlatformOverride = platform;
@@ -36,7 +37,7 @@ Future<void> _pump(
           controller: window,
           fullscreen: fullscreen ?? ValueNotifier(false),
           buttonsHidden: buttonsHidden ?? ValueNotifier(false),
-          child: const ColoredBox(color: Color(0xFF000000)),
+          child: child,
         ),
       ),
     );
@@ -104,16 +105,65 @@ void main() {
   });
 
   group('DesktopWindowChrome', () {
-    testWidgets('draws buttons, a drag band and resize edges on Linux',
-        (tester) async {
+    testWidgets('draws buttons and resize edges on Linux', (tester) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
         window: FakeWindowController(),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNWidgets(3));
-          expect(find.byType(WindowDragBand), findsOneWidget);
           expect(find.byType(WindowResizeEdges), findsOneWidget);
+        },
+      );
+    });
+
+    testWidgets('draws no drag band of its own; title rows own dragging',
+        (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        body: () async {
+          expect(find.byType(WindowDragBand), findsNothing);
+        },
+      );
+    });
+
+    testWidgets('buttons occupy only their corner', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        body: () async {
+          final close = tester.getRect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+          );
+          final minimize = tester.getRect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+          );
+          expect(close.right, lessThanOrEqualTo(800 - kLinuxChromeEdgePadding));
+          expect(
+            minimize.left,
+            greaterThanOrEqualTo(800 - linuxButtonGroupReserve(3)),
+          );
+        },
+      );
+    });
+
+    testWidgets('a tap in the middle of the top edge reaches the app',
+        (tester) async {
+      var tapped = false;
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        child: GestureDetector(
+          onTap: () => tapped = true,
+          child: const ColoredBox(color: Color(0xFF000000)),
+        ),
+        body: () async {
+          await tester.tapAt(const Offset(400, kLinuxWindowChromeHeight / 2));
+          expect(tapped, isTrue);
         },
       );
     });
@@ -150,7 +200,6 @@ void main() {
         fullscreen: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowDragBand), findsNothing);
           expect(find.byType(WindowResizeEdges), findsNothing);
         },
       );
@@ -158,7 +207,7 @@ void main() {
 
     testWidgets(
         'hides the buttons but KEEPS the resize edges while playback chrome '
-        'is hidden — losing the ability to resize mid-playback would be a '
+        'is hidden. Losing the ability to resize mid-playback would be a '
         'regression', (tester) async {
       await _pump(
         tester,
@@ -167,7 +216,6 @@ void main() {
         buttonsHidden: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowDragBand), findsOneWidget);
           expect(find.byType(WindowResizeEdges), findsOneWidget);
         },
       );
@@ -190,20 +238,6 @@ void main() {
             find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
           );
           expect(close.dx, lessThan(minimize.dx));
-        },
-      );
-    });
-
-    testWidgets('reserves exactly the band the inset reserves', (tester) async {
-      await _pump(
-        tester,
-        platform: TargetPlatform.linux,
-        window: FakeWindowController(),
-        body: () async {
-          expect(
-            tester.getSize(find.byType(WindowDragBand)).height,
-            kLinuxWindowChromeHeight,
-          );
         },
       );
     });

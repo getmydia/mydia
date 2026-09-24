@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -67,6 +68,12 @@ final _linux = WindowChromeInsets(
     height: 36, leading: 0, trailing: linuxButtonGroupReserve(3));
 
 void main() {
+  test(
+      'the Linux button reserve matches the button widget it has to clear, '
+      'so the two cannot drift apart', () {
+    expect(kLinuxWindowButtonExtent, WindowButtonWidget.size + 4);
+  });
+
   testWidgets('on macOS the row is the band, starting at the window top',
       (tester) async {
     await _pump(

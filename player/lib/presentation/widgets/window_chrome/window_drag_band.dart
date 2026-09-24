@@ -7,8 +7,14 @@ import '../../../core/window/window_maximized.dart';
 /// The strip along the top of an undecorated window that behaves like a
 /// title bar: drag to move, double-click to toggle maximize.
 ///
-/// Full width rather than only the gap beside the buttons. See
-/// `kLinuxWindowChromeHeight` for why the band is uniform.
+/// Full width rather than only the gap beside the buttons, so any empty
+/// space in the row that mounts it is a drag handle. `DesktopWindowChrome`
+/// no longer mounts one of these itself: dragging is `WindowTitleRow`'s job
+/// now, one per screen, sized to `WindowChromeInsets.height` rather than the
+/// fixed `kLinuxWindowChromeHeight` this file used to reserve, so the same
+/// band also fits the macOS title bar. The Linux button corners it used to
+/// share the strip with are drawn separately, in `DesktopWindowChrome`, and
+/// no longer need this widget at all.
 ///
 /// Paints nothing. App content runs underneath it, which is the whole point
 /// of moving the decorations inside the window, so this only collects
