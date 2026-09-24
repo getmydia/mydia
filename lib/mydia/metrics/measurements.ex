@@ -13,7 +13,7 @@ defmodule Mydia.Metrics.Measurements do
 
   require Logger
 
-  alias Mydia.{Downloads, Jobs, Library, Media, Streaming}
+  alias Mydia.{Downloads, Jobs, Library, Media, Settings, Streaming}
   alias Mydia.Downloads.ClientHealth
 
   @memory_kinds [:total, :processes, :binary, :ets, :atom]
@@ -82,13 +82,29 @@ defmodule Mydia.Metrics.Measurements do
 
   def download_clients do
     safely(:download_clients, fn ->
-      for {client, %{status: status}} <- ClientHealth.status_map(),
-          status in [:healthy, :unhealthy] do
-        emit(:download_client_up, if(status == :healthy, do: 1, else: 0), %{
-          client: to_string(client)
-        })
+      configs = Settings.list_download_client_configs()
+      status_map = ClientHealth.status_map(configs)
+
+      for {value, name} <- client_up_values(configs, status_map) do
+        emit(:download_client_up, value, %{client: name})
       end
     end)
+  end
+
+  # Pairs each config's health with its configured `name`, never its id, so
+  # the Prometheus label survives a delete/recreate instead of growing
+  # without bound (`config.id` is a `:binary_id` primary key). `:unknown` and
+  # `:disabled` clients have no up/down answer to give, so they're left out
+  # rather than reported as either.
+  @doc false
+  @spec client_up_values([struct()], %{String.t() => %{status: atom()}}) ::
+          [{0 | 1, String.t()}]
+  def client_up_values(configs, status_map) do
+    for config <- configs,
+        {:ok, %{status: status}} <- [Map.fetch(status_map, config.id)],
+        status in [:healthy, :unhealthy] do
+      {if(status == :healthy, do: 1, else: 0), config.name}
+    end
   end
 
   def oban do

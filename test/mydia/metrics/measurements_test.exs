@@ -99,6 +99,26 @@ defmodule Mydia.Metrics.MeasurementsTest do
     assert Measurements.download_clients() == :ok
   end
 
+  test "client_up_values/2 labels by name, not id, and drops unknown/disabled" do
+    healthy = %{id: "11111111-1111-1111-1111-111111111111", name: "Attic Seedbox"}
+    unhealthy = %{id: "22222222-2222-2222-2222-222222222222", name: "Basement Usenet"}
+    unknown = %{id: "33333333-3333-3333-3333-333333333333", name: "Garage Seedbox"}
+    disabled = %{id: "44444444-4444-4444-4444-444444444444", name: "Attic Usenet"}
+
+    status_map = %{
+      healthy.id => %{status: :healthy},
+      unhealthy.id => %{status: :unhealthy},
+      unknown.id => %{status: :unknown},
+      disabled.id => %{status: :disabled}
+    }
+
+    values =
+      Measurements.client_up_values([healthy, unhealthy, unknown, disabled], status_map)
+
+    assert Enum.sort(values) == [{0, "Basement Usenet"}, {1, "Attic Seedbox"}]
+    refute Enum.any?(values, fn {_value, name} -> name in [healthy.id, unhealthy.id] end)
+  end
+
   test "a failing family logs a warning and returns :ok instead of raising" do
     log =
       capture_log(fn ->
