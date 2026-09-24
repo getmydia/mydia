@@ -35,7 +35,41 @@ class _FakeLoginController extends LoginController {
   }
 }
 
-Widget _buildTestWidget(_FakeLoginController controller) => ProviderScope(
+/// Simulates the "Sign-in expired" path: `submitTotpCode` clears the
+/// challenge on its own, without the user touching the Back button.
+class _ExpiringLoginController extends LoginController {
+  @override
+  LoginState build() => const LoginState(
+        mode: ConnectionMode.direct,
+        totpChallenge: TotpChallenge(
+          serverUrl: 'https://mydia.test',
+          challengeToken: 'challenge',
+          username: 'someone',
+        ),
+      );
+
+  @override
+  Future<void> submitTotpCode(String code) async {
+    state = state.copyWith(
+      clearTotpChallenge: true,
+      error: 'Sign-in expired, please try again',
+    );
+  }
+
+  /// Simulates the server issuing a fresh challenge after the credential
+  /// form is resubmitted.
+  void reissueChallenge() {
+    state = state.copyWith(
+      totpChallenge: const TotpChallenge(
+        serverUrl: 'https://mydia.test',
+        challengeToken: 'challenge-2',
+        username: 'someone',
+      ),
+    );
+  }
+}
+
+Widget _buildTestWidget(LoginController controller) => ProviderScope(
       overrides: [
         authServiceProvider
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
@@ -90,5 +124,29 @@ void main() {
 
     expect(controller.cancelled, isTrue);
     expect(find.text('Password'), findsOneWidget);
+  });
+
+  testWidgets('clears the code field when the challenge expires mid-submit',
+      (tester) async {
+    final controller = _ExpiringLoginController();
+    await tester.pumpWidget(_buildTestWidget(controller));
+    await tester.pumpAndSettle();
+    await _switchToDirectServerTab(tester);
+
+    await tester.enterText(find.byKey(const Key('totp-code-field')), '123456');
+    await tester.tap(find.byKey(const Key('totp-verify-button')));
+    await tester.pumpAndSettle();
+
+    // The expired challenge drops back to the credential fields.
+    expect(find.text('Password'), findsOneWidget);
+
+    // A fresh challenge (e.g. after resubmitting the password) must not
+    // prefill the code left over from the expired attempt.
+    controller.reissueChallenge();
+    await tester.pumpAndSettle();
+
+    final field =
+        tester.widget<TextFormField>(find.byKey(const Key('totp-code-field')));
+    expect(field.controller!.text, isEmpty);
   });
 }

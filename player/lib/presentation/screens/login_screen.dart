@@ -326,6 +326,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // A challenge that goes from set to cleared without the Back button
+    // (e.g. "Sign-in expired" during submitTotpCode) drops the user back on
+    // the password step. Without this, the stale code stays in the field
+    // and is prefilled on the next challenge.
+    ref.listen(loginControllerProvider, (previous, next) {
+      if (previous?.totpChallenge != null && next.totpChallenge == null) {
+        _totpController.clear();
+      }
+    });
+
     final loginState = ref.watch(loginControllerProvider);
     final size = MediaQuery.of(context).size;
     final isCompact = size.height < 700;
