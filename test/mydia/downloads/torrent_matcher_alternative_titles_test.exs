@@ -1,8 +1,11 @@
 defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
   use Mydia.DataCase, async: true
 
+  import Mydia.Factory
+
   alias Mydia.Downloads.TorrentMatcher
   alias Mydia.Media
+  alias Mydia.Metadata.Structs.MediaMetadata
 
   describe "alternative title matching" do
     setup do
@@ -265,6 +268,72 @@ defmodule Mydia.Downloads.TorrentMatcherAlternativeTitlesTest do
       assert {:ok, match} = TorrentMatcher.find_match(torrent_info)
       assert match.media_item.id == movie.id
       assert match.confidence >= 0.8
+    end
+  end
+
+  describe "TV show short TVDB alias matching" do
+    # A short alias ("Quiet Harbor" for the show's full "Quiet Harbor: The
+    # Long Tide") is exactly the shape TVDB now contributes as an
+    # alternative title. It has to still let a release named by that alias
+    # match the show...
+    setup do
+      show =
+        insert(:media_item, %{
+          type: "tv_show",
+          title: "Quiet Harbor: The Long Tide",
+          monitored: true,
+          metadata: %MediaMetadata{
+            provider_id: "1",
+            provider: :tvdb,
+            media_type: :tv_show,
+            alternative_titles: ["Quiet Harbor", "Harbor"]
+          }
+        })
+
+      episode =
+        insert(:episode, %{
+          media_item: show,
+          season_number: 1,
+          episode_number: 3,
+          title: "The Long Tide"
+        })
+
+      %{show: show, episode: episode}
+    end
+
+    test "matches a release named by the show's short alias", %{show: show, episode: episode} do
+      torrent_info = %{
+        type: :tv,
+        title: "Quiet Harbor",
+        season: 1,
+        episode: 3
+      }
+
+      assert {:ok, match} = TorrentMatcher.find_match(torrent_info)
+      assert match.media_item.id == show.id
+      assert match.episode.id == episode.id
+    end
+
+    # ...but must not, at the same time, let an unrelated show that merely
+    # shares one word with a short alias ("Harbor") clear the confidence bar
+    # UntrackedMatcher uses to auto-adopt a file (0.9, higher than the
+    # matcher's own 0.8 default because adoption relocates a file the
+    # operator owns). "Harbor Watch" belongs to no item in this library.
+    test "does not clear the auto-adoption confidence for an unrelated title sharing one alias word" do
+      torrent_info = %{
+        type: :tv,
+        title: "Harbor Watch",
+        season: 1,
+        episode: 3
+      }
+
+      case TorrentMatcher.find_match(torrent_info, confidence_threshold: 0.9) do
+        {:error, _reason} ->
+          :ok
+
+        {:ok, match} ->
+          assert match.confidence < 0.9
+      end
     end
   end
 end
