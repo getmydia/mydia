@@ -22,6 +22,7 @@ defmodule Mydia.Media do
   alias Mydia.Metadata.Access, as: MetadataAccess
   alias Mydia.Events
   alias Mydia.MediaRequests
+  alias Mydia.Library.{MediaFile, MediaFileEpisode}
 
   ## Media Items
 
@@ -1003,17 +1004,22 @@ defmodule Mydia.Media do
   def episode_state_counts do
     today = Date.utc_today()
 
-    # EXISTS as a fragment, as list_episodes_by_air_date/3 does: Ecto does not
-    # accept `in subquery(...)` inside select. This one goes through
-    # media_file_episodes rather than media_files.episode_id, so the trailing
-    # episodes of a multi-episode file count as downloaded.
+    # This goes through media_file_episodes rather than media_files.episode_id,
+    # so the trailing episodes of a multi-episode file count as downloaded, and
+    # through MediaFile.versions/0 so the trash/extra rule lives in the one
+    # place that already owns it.
+    linked =
+      from(mf in MediaFile.versions(),
+        join: mfe in MediaFileEpisode,
+        on: mfe.media_file_id == mf.id,
+        distinct: true,
+        select: %{episode_id: mfe.episode_id}
+      )
+
     Episode
-    |> select([e], %{
-      downloaded:
-        fragment(
-          "EXISTS (SELECT 1 FROM media_file_episodes mfe JOIN media_files mf ON mf.id = mfe.media_file_id WHERE mfe.episode_id = ? AND mf.trashed_at IS NULL AND mf.extra_kind IS NULL)",
-          e.id
-        ),
+    |> join(:left, [e], l in subquery(linked), on: l.episode_id == e.id)
+    |> select([e, l], %{
+      downloaded: not is_nil(l.episode_id),
       tba: is_nil(e.air_date),
       upcoming: e.air_date > ^today,
       monitored: e.monitored

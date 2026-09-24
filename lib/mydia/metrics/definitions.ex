@@ -54,7 +54,12 @@ defmodule Mydia.Metrics.Definitions do
 
   defp oban do
     [
-      gauge("mydia.oban.jobs", :oban_jobs, [:queue, :state], "Pending Oban jobs"),
+      gauge(
+        "mydia.oban.jobs",
+        :oban_jobs,
+        [:queue, :state],
+        "Oban jobs waiting, scheduled, running or retrying, by queue and state"
+      ),
       distribution("mydia.oban.job.duration.milliseconds",
         event_name: [:oban, :job, :stop],
         measurement: :duration,

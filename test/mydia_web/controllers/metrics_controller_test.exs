@@ -29,6 +29,7 @@ defmodule MydiaWeb.MetricsControllerTest do
       body = response(conn, 200)
       assert [content_type] = get_resp_header(conn, "content-type")
       assert content_type =~ "text/plain"
+      assert content_type =~ "version=0.0.4"
       assert body =~ "# TYPE mydia_vm_memory_bytes gauge"
       assert body =~ ~s(mydia_downloads{state="active"})
     end

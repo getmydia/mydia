@@ -97,8 +97,10 @@ defmodule Mydia.Metrics.Measurements do
   # `:disabled` clients have no up/down answer to give, so they're left out
   # rather than reported as either.
   @doc false
-  @spec client_up_values([struct()], %{String.t() => %{status: atom()}}) ::
-          [{0 | 1, String.t()}]
+  @spec client_up_values(
+          [%{required(:id) => term(), required(:name) => String.t(), optional(atom()) => term()}],
+          %{String.t() => %{status: atom()}}
+        ) :: [{0 | 1, String.t()}]
   def client_up_values(configs, status_map) do
     for config <- configs,
         {:ok, %{status: status}} <- [Map.fetch(status_map, config.id)],
