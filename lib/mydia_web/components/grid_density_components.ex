@@ -23,6 +23,7 @@ defmodule MydiaWeb.GridDensityComponents do
 
   use Phoenix.Component
 
+  import MydiaWeb.CoreComponents, only: [icon: 1]
   import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
 
   @default "comfortable"
@@ -88,6 +89,74 @@ defmodule MydiaWeb.GridDensityComponents do
         icon={icon_name}
       />
     </.segmented_control>
+    """
+  end
+
+  @doc """
+  The eye-icon dropdown that picks which parts of a library poster card render.
+
+  Every change submits the whole checked set, so the handler never tracks
+  individual toggles. The hidden empty `fields[]` makes "everything off"
+  submit `[""]` instead of the key being omitted entirely, which
+  `PosterFields.resolve/1` would otherwise read as "never set" (defaults)
+  rather than "none".
+
+  Uses daisyUI's `.filter` component rather than a hand-rolled `flex
+  flex-wrap` row. `lib/mydia_web/components/README.md` measured the
+  stylesheet Tailwind actually builds (not the stale vendored
+  `daisyui.js`) and found 5.7.7 excludes checkboxes from `.filter`'s
+  single-choice collapse trigger
+  (`:has(:checked:not(.filter-reset, [type="checkbox"]))`), so a multi-select
+  checkbox row stays fully visible once one is checked.
+  `MydiaWeb.MediaLive.Show.SubtitleModal`'s language chips already rely on the
+  same behaviour.
+  """
+  attr :id, :string, default: "poster-fields-menu"
+  attr :fields, :list, required: true
+
+  def poster_fields_menu(assigns) do
+    assigns = assign(assigns, :catalog, Mydia.Accounts.PosterFields.catalog())
+
+    ~H"""
+    <div id={@id} class="dropdown dropdown-end">
+      <div
+        tabindex="0"
+        role="button"
+        class="btn btn-ghost btn-sm btn-square"
+        aria-label="Poster display"
+      >
+        <.icon name="hero-eye" class="w-5 h-5" />
+      </div>
+      <div
+        tabindex="0"
+        class="dropdown-content z-30 mt-2 w-64 rounded-box bg-base-100 p-3 shadow-lg border border-base-300"
+      >
+        <p class="text-xs font-semibold text-base-content/70 mb-2">Show on posters</p>
+        <form id="poster-fields-form" phx-change="set_poster_fields">
+          <input type="hidden" name="fields[]" value="" />
+          <div class="filter" role="group" aria-label="Poster fields">
+            <input
+              :for={{key, label} <- @catalog}
+              type="checkbox"
+              class="btn btn-xs"
+              name="fields[]"
+              value={key}
+              aria-label={label}
+              id={"poster-field-#{key}"}
+              checked={key in @fields}
+            />
+          </div>
+        </form>
+        <button
+          id="poster-fields-reset"
+          type="button"
+          phx-click="reset_poster_fields"
+          class="btn btn-link btn-xs px-0 mt-2"
+        >
+          Reset to default
+        </button>
+      </div>
+    </div>
     """
   end
 end

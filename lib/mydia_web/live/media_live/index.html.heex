@@ -133,6 +133,7 @@
           id="library-density-toggle"
           density={@grid_density}
         />
+        <.poster_fields_menu :if={@view_mode == :grid} fields={@poster_fields} />
       </div>
     </div>
 
@@ -447,8 +448,16 @@
                       <%!-- Playback status and quality, stacked in one top-right container --%>
                       <.poster_badges
                         id={"poster-badges-#{item.id}"}
-                        progress={progress}
-                        quality={get_quality_badge(row)}
+                        progress={
+                          if PosterFields.show?(@poster_fields, :playback),
+                            do: progress,
+                            else: nil
+                        }
+                        quality={
+                          if PosterFields.show?(@poster_fields, :quality),
+                            do: get_quality_badge(row),
+                            else: nil
+                        }
                         class="hide-on-select"
                       />
                     </:overlay>
@@ -478,18 +487,22 @@
               </div>
               <% status = get_media_item_status(row) %>
               <.poster_card_body title={item.title}>
-                <:meta>
+                <:meta :if={any_poster_meta_field?(@poster_fields)}>
                   <%!-- Status badge and year --%>
                   <div class="flex flex-col gap-1">
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center gap-1">
-                        <div class="tooltip tooltip-right" data-tip={media_status_label(status)}>
+                        <div
+                          :if={PosterFields.show?(@poster_fields, :status)}
+                          class="tooltip tooltip-right"
+                          data-tip={media_status_label(status)}
+                        >
                           <span class={["badge badge-xs", media_status_color(status)]}>
                             <.icon name={media_status_icon(status)} class="w-3 h-3" />
                           </span>
                         </div>
                         <%!-- Category badge --%>
-                        <%= if item.category do %>
+                        <%= if PosterFields.show?(@poster_fields, :category) and item.category do %>
                           <div>
                             <.category_badge
                               category={item.category}
@@ -499,11 +512,47 @@
                           </div>
                         <% end %>
                       </div>
-                      <span class="text-xs text-base-content/70">{format_year(item.year)}</span>
+                      <div class="flex items-center gap-1">
+                        <.content_rating_badge
+                          :if={PosterFields.show?(@poster_fields, :content_rating)}
+                          id={"content-rating-#{item.id}"}
+                          rating={Mydia.Metadata.Access.get_field(item, :content_rating)}
+                          size="xs"
+                        />
+                        <span
+                          :if={PosterFields.show?(@poster_fields, :year)}
+                          id={"card-year-#{item.id}"}
+                          class="text-xs text-base-content/70"
+                        >
+                          {format_year(item.year)}
+                        </span>
+                      </div>
                     </div>
-                    <%= if episode_count = format_episode_count(status) do %>
-                      <span class="text-xs text-base-content/70">{episode_count}</span>
-                    <% end %>
+                    <% episode_count =
+                      PosterFields.show?(@poster_fields, :episodes) &&
+                        format_episode_count(status) %>
+                    <% show_status = ShowStatus.for_item(item) %>
+                    <div
+                      :if={
+                        episode_count ||
+                          (PosterFields.show?(@poster_fields, :show_status) && show_status)
+                      }
+                      class="flex items-center gap-1 text-xs text-base-content/70"
+                    >
+                      <span :if={episode_count}>{episode_count}</span>
+                      <span :if={
+                        episode_count && PosterFields.show?(@poster_fields, :show_status) &&
+                          show_status
+                      }>
+                        ·
+                      </span>
+                      <.show_status_badge
+                        :if={PosterFields.show?(@poster_fields, :show_status)}
+                        id={"show-status-#{item.id}"}
+                        status={show_status}
+                        size="xs"
+                      />
+                    </div>
                   </div>
                 </:meta>
               </.poster_card_body>

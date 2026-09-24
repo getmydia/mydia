@@ -1,11 +1,13 @@
 defmodule MydiaWeb.MediaLive.Index do
   use MydiaWeb, :live_view
   alias Mydia.Accounts
+  alias Mydia.Accounts.PosterFields
   alias Mydia.Media
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.DiskRemoval
   alias Mydia.Media.LibraryListing
   alias Mydia.Media.LibraryRow
+  alias Mydia.Media.ShowStatus
   alias Mydia.Settings
   alias Mydia.Collections
   alias Mydia.Collections.Collection
@@ -14,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Search
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
+  alias MydiaWeb.Live.Helpers.PosterFields, as: PosterFieldsPref
   alias MydiaWeb.MediaLive.DiskRemovalFlash
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
@@ -42,6 +45,7 @@ defmodule MydiaWeb.MediaLive.Index do
      socket
      |> assign(:view_mode, :grid)
      |> GridDensity.assign_current()
+     |> PosterFieldsPref.assign_current()
      |> assign(:search_query, "")
      |> assign(:filter_progress, nil)
      |> assign(:filter_monitored, nil)
@@ -166,6 +170,32 @@ defmodule MydiaWeb.MediaLive.Index do
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
     {:noreply, GridDensity.put(socket, density)}
+  end
+
+  # A stream's already-rendered items are never re-diffed just because another
+  # assign they read (here, @poster_fields) changed; `phx-update="stream"`
+  # only reconciles items that are explicitly inserted or deleted in the
+  # current diff (see toggle_item_monitored's own explicit stream_insert
+  # below). Re-running the same load the "search"/"filter" events use is the
+  # existing way this LiveView forces every visible card to re-render.
+  def handle_event("set_poster_fields", params, socket) do
+    fields = params |> Map.get("fields", []) |> List.wrap() |> Enum.reject(&(&1 == ""))
+
+    {:noreply,
+     socket
+     |> PosterFieldsPref.put(fields)
+     |> assign(:page, 0)
+     |> load_media_items(reset: true)}
+  end
+
+  def handle_event("reset_poster_fields", _params, socket) do
+    defaults = Enum.map(PosterFields.default_keys(), &Atom.to_string/1)
+
+    {:noreply,
+     socket
+     |> PosterFieldsPref.put(defaults)
+     |> assign(:page, 0)
+     |> load_media_items(reset: true)}
   end
 
   def handle_event("search", params, socket) do
@@ -940,6 +970,16 @@ defmodule MydiaWeb.MediaLive.Index do
 
   defp maybe_add_attr(attrs, key, value) do
     Map.put(attrs, key, value)
+  end
+
+  # Gates the grid card's whole :meta slot. Checked against the catalog keys
+  # that render inside it (playback and quality live in poster_badges, in the
+  # figure overlay, not here) so an all-off preference drops the wrapper
+  # entirely instead of leaving `poster_card_body/1` with an empty div.
+  @poster_meta_keys [:status, :category, :year, :episodes, :content_rating, :show_status]
+
+  defp any_poster_meta_field?(poster_fields) do
+    Enum.any?(@poster_meta_keys, &PosterFields.show?(poster_fields, &1))
   end
 
   defp get_media_item_status(%LibraryRow{status: status}), do: status
