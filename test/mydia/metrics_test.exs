@@ -33,6 +33,17 @@ defmodule Mydia.MetricsTest do
     assert slow.id == Mydia.Metrics.SlowPoller
   end
 
+  test "each poller child includes init_delay equal to its period" do
+    assert [_peep, fast, slow] = Mydia.Metrics.Supervisor.children()
+
+    # Extract the keyword list from the :start tuple
+    {_, _, [fast_opts]} = fast.start
+    {_, _, [slow_opts]} = slow.start
+
+    assert Keyword.get(fast_opts, :init_delay) == 15_000
+    assert Keyword.get(slow_opts, :init_delay) == 60_000
+  end
+
   test "export/0 renders Prometheus text once Peep is running" do
     start_supervised!({Peep, name: Mydia.Metrics.Peep, metrics: Mydia.Metrics.Definitions.all()})
 

@@ -41,9 +41,15 @@ defmodule Mydia.Metrics.Supervisor do
   end
 
   defp poller(name, period, functions) do
+    # init_delay delays the first measurement tick until one period after start.
+    # This avoids errors on cold boot when the session registry or database
+    # connections aren't ready yet (both come later in the supervision tree).
     Supervisor.child_spec(
       {:telemetry_poller,
-       name: name, period: period, measurements: Enum.map(functions, &{Measurements, &1, []})},
+       name: name,
+       period: period,
+       init_delay: period,
+       measurements: Enum.map(functions, &{Measurements, &1, []})},
       id: name
     )
   end
