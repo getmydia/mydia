@@ -75,8 +75,8 @@ Future<void> initDesktopWindow() async {
   }
 
   // Separate try from the geometry listener above: a failure to track
-  // fullscreen costs a 28pt inset in fullscreen, which must not also cost
-  // geometry persistence, and vice versa.
+  // fullscreen costs a `kMacTitleBarOverlap` inset in fullscreen, which must
+  // not also cost geometry persistence, and vice versa.
   try {
     final fullscreen = WindowFullscreenController(
       window: const WindowManagerController(),

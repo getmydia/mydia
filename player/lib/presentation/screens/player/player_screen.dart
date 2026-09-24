@@ -231,12 +231,12 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// windowed, `WindowChromeInset` folds `kMacTitleBarOverlap` into
   /// `MediaQuery.padding.top` app-wide so `SafeArea`/`AppBar` clear the
   /// traffic lights for free; a bare `SafeArea` here would consume that same
-  /// strip a second time, pushing the media_kit `Video` down by 28pt and
-  /// putting a black band above every video — `NativePlayerWindowSizer` then
-  /// snaps the window to the video's aspect ratio *without* that 28pt, so
-  /// media_kit adds side pillars too. `playback_chrome.dart`'s own
-  /// `SafeArea` is what insets the on-screen chrome (back pill, transport)
-  /// instead; it is unaffected by this.
+  /// strip a second time, pushing the media_kit `Video` down by
+  /// `kMacTitleBarOverlap` and putting a black band above every video —
+  /// `NativePlayerWindowSizer` then snaps the window to the video's aspect
+  /// ratio *without* that inset, so media_kit adds side pillars too.
+  /// `playback_chrome.dart`'s own `SafeArea` is what insets the on-screen
+  /// chrome (back pill, transport) instead; it is unaffected by this.
   ///
   /// On iOS this also puts the video full-bleed under the notch, which is
   /// intentional, not a side effect: this is an immersive video player, the

@@ -3,10 +3,10 @@
 // `SafeArea`. That was a no-op while `WindowChromeInset` never touched
 // `MediaQuery.padding.top`, but once it started folding `kMacTitleBarOverlap`
 // in on macOS windowed, the bare `SafeArea` ate that strip a second time,
-// pushing the video down by 28pt and putting a black band above every video.
-// It compounds: `NativePlayerWindowSizer` then snaps the window to the
-// video's aspect ratio *without* that 28pt, so media_kit adds side pillars
-// too.
+// pushing the video down by `kMacTitleBarOverlap` and putting a black band
+// above every video. It compounds: `NativePlayerWindowSizer` then snaps the
+// window to the video's aspect ratio *without* that inset, so media_kit adds
+// side pillars too.
 //
 // This exercises `PlayerScreen.playerFrame` directly — the same
 // `@visibleForTesting` seam `_PlayerScreenState.build` routes through (see
