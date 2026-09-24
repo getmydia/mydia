@@ -379,6 +379,16 @@ defmodule Mydia.Downloads do
   @spec count_completed() :: non_neg_integer()
   defdelegate count_completed(), to: Mydia.Downloads.History
 
+  @doc """
+  Counts downloads by derived state (`:active`, `:failed`, `:awaiting_import`), for metrics.
+  """
+  @spec count_by_state() :: %{
+          active: non_neg_integer(),
+          failed: non_neg_integer(),
+          awaiting_import: non_neg_integer()
+        }
+  defdelegate count_by_state(), to: Mydia.Downloads.History
+
   @spec count_downloads_for_client(String.t()) :: non_neg_integer()
   defdelegate count_downloads_for_client(client_name), to: Mydia.Downloads.History
 

@@ -518,6 +518,10 @@ config :mydia, Mydia.Perf,
   flush_interval_ms: 300_000,
   retention_days: 14
 
+# Prometheus scrape endpoint at GET /metrics. See Mydia.Metrics.
+# MYDIA_METRICS_ENABLED=true in runtime.exs turns it on.
+config :mydia, Mydia.Metrics, enabled: false
+
 # Configure downloads and transcoding
 config :mydia, :downloads,
   transcode_cache_dir: "priv/data/transcodes",

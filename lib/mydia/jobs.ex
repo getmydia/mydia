@@ -218,6 +218,29 @@ defmodule Mydia.Jobs do
     |> Repo.aggregate(:count, :id)
   end
 
+  @pending_states ~w(available scheduled executing retryable)
+
+  @doc """
+  Counts pending jobs grouped by queue and state, for metrics.
+
+  Only `available`, `scheduled`, `executing` and `retryable` jobs are counted.
+  Only non-empty combinations are returned.
+  """
+  @spec count_by_queue_and_state() :: %{{String.t(), String.t()} => non_neg_integer()}
+  def count_by_queue_and_state do
+    from(j in Job,
+      where: j.state in ^@pending_states,
+      group_by: [j.queue, j.state],
+      select: {j.queue, j.state, count(j.id)}
+    )
+    |> Repo.all()
+    |> Map.new(fn {queue, state, count} -> {{queue, to_string(state)}, count} end)
+  end
+
+  @doc "The job states `count_by_queue_and_state/0` reports."
+  @spec pending_states() :: [String.t()]
+  def pending_states, do: @pending_states
+
   @doc """
   Resets stale executing jobs to available state.
 

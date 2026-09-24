@@ -180,6 +180,23 @@
       <%!-- Filters and Sort --%>
       <.form for={%{}} phx-change="filter" id="library-filter-form" class="join">
         <select
+          :if={length(@library_options) >= 2}
+          id="library-filter-select"
+          name="library"
+          class="select select-bordered join-item"
+          title="Library"
+        >
+          <option value="" selected={is_nil(@filter_library)}>All libraries</option>
+          <option
+            :for={lp <- @library_options}
+            value={lp.id}
+            selected={@filter_library == lp.id}
+          >
+            {lp.path}
+          </option>
+        </select>
+
+        <select
           name="progress"
           class="select select-bordered join-item"
         >
