@@ -872,11 +872,12 @@ class DownloadsScreen extends ConsumerWidget {
   /// Breathing room between the header's bottom edge and the storage
   /// section, on top of the header's own height.
   ///
-  /// Before Task 5 the header was always a flat `kToolbarHeight` (56) and the
-  /// space above the storage section was a flat `100`, so this gap was baked
-  /// into that literal rather than named: `100 - 56 == 44`. Once the header's
-  /// height started varying by platform (40 on macOS, 36 on Linux, still 56
-  /// with no window chrome), a flat `100` stopped tracking it: the gap grew
+  /// Before the title row drew into the band, the header was always a flat
+  /// `kToolbarHeight` (56) and the space above the storage section was a flat
+  /// `100`, so this gap was baked into that literal rather than named:
+  /// `100 - 56 == 44`. Once the header's height started varying by platform
+  /// (40 on macOS, 36 on Linux, still 56 with no window chrome), a flat
+  /// `100` stopped tracking it: the gap grew
   /// from 44 to 60 on macOS purely because the header shrank underneath an
   /// unchanged spacer. Naming the 44 and adding it to the header's real
   /// height (see [topSpacerHeight]) keeps the gap itself constant instead.
@@ -890,9 +891,9 @@ class DownloadsScreen extends ConsumerWidget {
   /// has already taken the band back out of `MediaQuery.paddingOf(context)`,
   /// so adding the header's own height here counts it exactly once, the same
   /// way every other converted screen's `chromeTop`/`scrollTopPadding` does.
-  /// On mobile (zero window-chrome insets) this reduces to the pre-Task-5
-  /// value: `statusBar + kToolbarHeight (56) + storageSectionGap (44)`, which
-  /// is exactly the old flat `100` whenever the status bar is 0 (the
+  /// On mobile (zero window-chrome insets) this reduces to the header's old
+  /// flat value: `statusBar + kToolbarHeight (56) + storageSectionGap (44)`,
+  /// which is exactly the old flat `100` whenever the status bar is 0 (the
   /// `flutter_test` default), and now also correctly grows with a real
   /// device's status bar instead of ignoring it, matching every other
   /// screen's own chrome math.

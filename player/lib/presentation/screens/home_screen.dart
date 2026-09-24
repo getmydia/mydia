@@ -84,8 +84,8 @@ class HomeScreen extends ConsumerWidget {
   ///
   /// Home used to suppress its app bar entirely on desktop and rely on the
   /// shell's floating cast overlay for the only affordance there. That
-  /// overlay is gone (Task 5): every screen's cast button now lives in its
-  /// own [WindowTitleRow], so Home keeps a (transparent, on desktop) bar on
+  /// overlay is gone: every screen's cast button now lives in its own
+  /// [WindowTitleRow], so Home keeps a (transparent, on desktop) bar on
   /// every platform purely to host it. Desktop gets no leading control,
   /// title or decoration, since the hero content is the desktop identity;
   /// mobile keeps its menu button, logo lockup, search shortcut and glass

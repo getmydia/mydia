@@ -61,9 +61,11 @@ class WindowTitleRow extends ConsumerWidget {
   /// `title_bar_double_click.dart`). Flutter has to run the user's System
   /// Settings double-click action itself in exchange, but only when the
   /// double-click actually reaches this band, i.e. only on empty band
-  /// space -- the same arena rules that keep a drag off the cast button
-  /// keep this off it too. Every other platform keeps `WindowDragBand`'s
-  /// own maximize toggle by passing null through.
+  /// space -- the `Stack` hit-test stops at the cast button, so the band's
+  /// recognizer underneath it never enters the gesture arena for a tap on
+  /// the button, keeping both a drag and this off it too. Every other
+  /// platform keeps `WindowDragBand`'s own maximize toggle by passing null
+  /// through.
   VoidCallback? _bandDoubleTap() =>
       onBandDoubleTap ??
       (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS

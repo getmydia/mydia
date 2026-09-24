@@ -923,8 +923,8 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                       // `TransportSurface.compact`'s dartdoc for the
                                       // full layout reasoning). `onPreviousEpisode`/
                                       // `onNextEpisode` above are still passed
-                                      // through unconditionally — `compact` ignores
-                                      // them regardless — rather than gated to null
+                                      // through unconditionally (`compact` ignores
+                                      // them regardless), rather than gated to null
                                       // here, so they reappear the moment the
                                       // breakpoint is crossed without this widget
                                       // needing to know why.
@@ -960,7 +960,7 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                                       onAudioTap: widget.onAudioTap,
                                       // Passed through `metrics.showQuality` rather
                                       // than bare, even though every tier shows it
-                                      // today: see that field's dartdoc — it stays a
+                                      // today: see that field's dartdoc; it stays a
                                       // real per-tier lever for the tier that can't
                                       // absorb a future 5th control.
                                       onQualityTap: metrics.showQuality

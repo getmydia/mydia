@@ -54,6 +54,17 @@ const double kLinuxChromeEdgePadding = 6.0;
 /// starts past the reserved corner.
 const double kLinuxChromeGap = 8.0;
 
+/// Fallback [DecorationLayout] used by [WindowChromeInset.build] when no real
+/// signal is injected. Only Linux ever consults it, and `app.dart` always
+/// passes the real signal there, so in practice this only feeds tests.
+///
+/// A single top-level instance, never mutated: the value it holds never
+/// changes, so allocating a fresh `ValueNotifier` on every `build` would only
+/// create and immediately discard a `ChangeNotifier` on every rebuild for no
+/// reason. Holding one instance here avoids that churn.
+final ValueNotifier<DecorationLayout> _fallbackDecorationLayout =
+    ValueNotifier(parseDecorationLayout(kFallbackDecorationLayout));
+
 /// How much room the OS window controls need: a band height, plus the width
 /// kept clear at each edge of that band for the controls themselves.
 @immutable
@@ -153,8 +164,8 @@ double linuxButtonGroupReserve(int buttonCount) => buttonCount == 0
 /// unit-tested for every input combination without actually running on each
 /// platform.
 ///
-/// `kIsWeb` is a compile-time constant baked in per build target — it is
-/// always `false` under `flutter test`, so a regression that deleted the web
+/// `kIsWeb` is a compile-time constant baked in per build target (it is
+/// always `false` under `flutter test`), so a regression that deleted the web
 /// check from [WindowChromeInset.build] would pass every test unless the
 /// underlying logic is tested independently of the real `kIsWeb` value.
 /// Mirrors `PlatformFeatures.computeSupportsKeyboardShortcuts` in
@@ -251,8 +262,7 @@ class WindowChromeInset extends StatelessWidget {
       valueListenable: _fullscreen ?? windowFullscreen,
       builder: (context, isFullscreen, child) {
         return ValueListenableBuilder<DecorationLayout>(
-          valueListenable: _decorationLayout ??
-              ValueNotifier(parseDecorationLayout(kFallbackDecorationLayout)),
+          valueListenable: _decorationLayout ?? _fallbackDecorationLayout,
           builder: (context, decorationLayout, child) {
             final insets = windowChromeInsetsFor(
               isWeb: isWeb,
