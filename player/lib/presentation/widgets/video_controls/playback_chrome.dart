@@ -12,8 +12,10 @@ import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/stream_timeline.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/window_buttons_bridge.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../toast/toast_obstruction.dart';
+import '../window_chrome/window_title_row.dart';
 import 'buffering_indicator.dart';
 import 'center_play_button.dart';
 import 'chrome_panel.dart';
@@ -569,6 +571,52 @@ class _ChromeToastObstructionState extends State<ChromeToastObstruction> {
       );
 }
 
+/// Places the player's top bar. On a windowed desktop it sits in the
+/// title-bar band, level with the window controls and clear of the corner
+/// they occupy. Otherwise it keeps its 16px inset below the safe area.
+///
+/// Both [PlaybackChrome] (the playing state's back/title/cast pills) and
+/// `player_screen.dart`'s `_withCastAffordance` (the loading and error
+/// states' cast-only pill) build their top bar through this widget, so the
+/// two can never drift apart. `@visibleForTesting` because that second use
+/// lives in another file's production code, not a test, but this is still
+/// the shared seam the layout contract is pinned against in
+/// `playback_chrome_inset_test.dart`.
+@visibleForTesting
+class PlayerTopBarSlot extends StatelessWidget {
+  const PlayerTopBarSlot({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final insets = WindowChromeInsets.of(context);
+    final gutter = WindowTitleRow.endGutter(context);
+    if (insets.isZero) {
+      // No window chrome to clear (mobile, web, TV, fullscreen): the old
+      // fixed 16px inset below whatever safe-area padding the platform
+      // reports (a phone's status bar or notch). `PlaybackChrome`'s own
+      // `SafeArea` no longer consumes that padding (`top: false`), so it is
+      // added back here instead of relying on the ambient inset.
+      return PositionedDirectional(
+        top: MediaQuery.paddingOf(context).top + 16,
+        start: 16,
+        end: 16,
+        child: child,
+      );
+    }
+    // Windowed desktop: sit inside the reserved band, vertically centred on
+    // it (so a 36px `GlassPill` lands level with the traffic lights /
+    // window buttons), clear of whichever corner the controls occupy.
+    return PositionedDirectional(
+      top: (insets.height - GlassPill.defaultHeight) / 2,
+      start: insets.leading + gutter,
+      end: insets.trailing + gutter,
+      child: child,
+    );
+  }
+}
+
 /// All playback chrome: the top pill row and the bottom control panel.
 ///
 /// Replaces four independently-positioned floating elements — the top bar and
@@ -801,13 +849,17 @@ class _PlaybackChromeState extends State<PlaybackChrome> {
                   ? startWindowDrag
                   : null,
               onActivity: widget.onActivity,
+              // `top: false`: the top bar is placed by `PlayerTopBarSlot`
+              // below, which reads `WindowChromeInsets` itself rather than
+              // relying on `SafeArea` consuming `padding.top`. Everything
+              // else in this stack (the centre play button, the bottom
+              // panel) still wants the ordinary left/right/bottom insets, so
+              // only `top` opts out.
               child: SafeArea(
+                top: false,
                 child: Stack(
                   children: [
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      right: 16,
+                    PlayerTopBarSlot(
                       child: ChromeSlide(
                         hiddenOffsetY: -6,
                         child: ChromeTopBar(
