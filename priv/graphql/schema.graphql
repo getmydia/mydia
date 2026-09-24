@@ -1119,19 +1119,19 @@ input VerifyTotpInput {
 
 "Result of login mutation"
 type LoginResult {
-  "JWT authentication token. Null when totp_required is true"
+  "JWT authentication token. Null when totpRequired is true"
   token: String
 
-  "Authenticated user information. Null when totp_required is true"
+  "Authenticated user information. Null when totpRequired is true"
   user: User
 
-  "Token expiration in seconds. Null when totp_required is true"
+  "Token expiration in seconds. Null when totpRequired is true"
   expiresIn: Int
 
-  "True when the account needs a TOTP or recovery code; pass challenge_token to verifyTotp"
+  "True when the account needs a TOTP or recovery code; pass challengeToken to verifyTotp"
   totpRequired: Boolean!
 
-  "Short-lived token for verifyTotp. Set only when totp_required is true"
+  "Short-lived token for verifyTotp. Set only when totpRequired is true"
   challengeToken: String
 }
 

@@ -396,21 +396,20 @@ defmodule MydiaWeb.Schema.CommonTypes do
 
   @desc "Result of login mutation"
   object :login_result do
-    field :token, :string,
-      description: "JWT authentication token. Null when totp_required is true"
+    field :token, :string, description: "JWT authentication token. Null when totpRequired is true"
 
     field :user, :user,
-      description: "Authenticated user information. Null when totp_required is true"
+      description: "Authenticated user information. Null when totpRequired is true"
 
     field :expires_in, :integer,
-      description: "Token expiration in seconds. Null when totp_required is true"
+      description: "Token expiration in seconds. Null when totpRequired is true"
 
     field :totp_required, non_null(:boolean),
       description:
-        "True when the account needs a TOTP or recovery code; pass challenge_token to verifyTotp"
+        "True when the account needs a TOTP or recovery code; pass challengeToken to verifyTotp"
 
     field :challenge_token, :string,
-      description: "Short-lived token for verifyTotp. Set only when totp_required is true"
+      description: "Short-lived token for verifyTotp. Set only when totpRequired is true"
   end
 
   @desc "User information"
