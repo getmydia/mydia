@@ -89,13 +89,13 @@ void main() {
             'it, so the click lands on nothing',
       );
 
-      // The corner's own `MouseRegion` is `opaque: false` and there is no
-      // longer a full-width drag band sitting opaque underneath it, so
-      // nothing blocks `PlaybackSurface`'s full-bleed hit test from still
-      // reaching the player even while the cursor rests on a button. The
-      // player never believes the pointer left in the first place, so there
-      // is nothing for the corner to have to override here.
-      expect(windowButtonsHidden.value, isFalse);
+      // The player is entitled to consider its own chrome hidden here: from
+      // where it sits, under the button, the pointer did leave (the button
+      // is a plain positioned child that absorbs its own hit test, so the
+      // tap and the hover both stop there and never reach the player's own
+      // full-area MouseRegion underneath). What it is not entitled to do is
+      // take the window buttons with it.
+      expect(windowButtonsHidden.value, isTrue);
     });
   });
 

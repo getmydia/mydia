@@ -146,35 +146,80 @@ class _WindowChromeState extends State<_WindowChrome> {
     );
   }
 
-  /// One `Positioned` per side that actually carries buttons, sized to
-  /// exactly the corner `linuxButtonGroupReserve` clears for it and no
-  /// further. An empty side gets no widget at all: nothing there needs a hit
-  /// area, and drawing one would just be more surface for a stray tap or
-  /// hover to hit for no reason.
+  /// Two `Positioned` per side that actually carries buttons (none for an
+  /// empty side: nothing there needs a hit area, and drawing one would just
+  /// be more surface for a stray tap or hover to hit for no reason), each
+  /// covering the same rect at exactly `_cornerWidth` and
+  /// `kLinuxWindowChromeHeight`:
+  ///
+  /// - The buttons themselves, a plain positioned child with nothing wrapping
+  ///   it that could steal its hit test. A tap on a button has to return
+  ///   `true` all the way up through this entry so the `Stack` stops right
+  ///   here, the same as it always did before this widget grew corners: a
+  ///   click on close or minimize must never also reach whatever the corner
+  ///   happens to be drawn over (the resize edges, and beyond them the app's
+  ///   own content, one layer of which is `WindowTitleRow`'s drag band).
+  /// - A hover-tracking `MouseRegion`, listed after (so painted on top of)
+  ///   the buttons entry, with no child of its own and `opaque: false`. See
+  ///   its own comment below for why it is a separate sibling rather than a
+  ///   wrapper around the buttons.
   List<Widget> _corners(DecorationLayout layout) => [
         for (final (isStart, buttons) in [
           (true, layout.start),
           (false, layout.end),
         ])
-          if (buttons.isNotEmpty)
+          if (buttons.isNotEmpty) ...[
             PositionedDirectional(
               top: 0,
               start: isStart ? 0 : null,
               end: isStart ? null : 0,
               height: kLinuxWindowChromeHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: kLinuxChromeEdgePadding,
+                ),
+                child: _buttons(buttons),
+              ),
+            ),
+
+            // Topmost so nothing can shadow it, and `opaque: false` so it
+            // shadows nothing in turn. `RenderMouseRegion.hitTest` returns
+            // `super.hitTest(...) && opaque`, which still records the region
+            // for the mouse tracker while answering false, so the hit test
+            // carries on into the buttons entry beneath and every gesture
+            // there behaves exactly as it would with no hover region here at
+            // all. Wrapping the buttons in this `MouseRegion` instead of
+            // stacking it as a sibling, as an earlier version of this widget
+            // did, would make the *buttons'* own successful hit test return
+            // false too (the whole point of `opaque: false` is to always
+            // answer false), letting the tap fall through to whatever the
+            // corner sits over. That silently doubled every button press
+            // into a click on `WindowTitleRow`'s drag band underneath, which
+            // holds the gesture arena for `kDoubleTapTimeout` waiting to see
+            // if it becomes a double-click-to-maximize.
+            PositionedDirectional(
+              top: 0,
+              start: isStart ? 0 : null,
+              end: isStart ? null : 0,
+              height: kLinuxWindowChromeHeight,
+              width: _cornerWidth(buttons.length),
               child: MouseRegion(
                 opaque: false,
                 onEnter: (_) => _setPointerOverButtons(true),
                 onExit: (_) => _setPointerOverButtons(false),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: kLinuxChromeEdgePadding,
-                  ),
-                  child: _buttons(buttons),
-                ),
               ),
             ),
+          ],
       ];
+
+  /// Width of one side's button group exactly as `_buttons` draws it: edge
+  /// padding on both sides of the row, plus the buttons themselves, the same
+  /// whether they are actually visible or standing in as the hidden-state
+  /// placeholder. Deliberately not `linuxButtonGroupReserve`, which also
+  /// budgets `kLinuxChromeGap` for content clearance elsewhere and does not
+  /// describe what is drawn here.
+  static double _cornerWidth(int buttonCount) =>
+      2 * kLinuxChromeEdgePadding + buttonCount * kLinuxWindowButtonExtent;
 
   /// The buttons fade out with the playback chrome, while the resize edges
   /// stay live. They are invisible either way, and losing the ability to
@@ -186,10 +231,12 @@ class _WindowChromeState extends State<_WindowChrome> {
   /// viewer to hunt for controls that are not drawn.
   ///
   /// Hidden state keeps a `SizedBox` the width the buttons would occupy
-  /// rather than `SizedBox.shrink()`: shrinking to nothing would shrink the
-  /// corner's `MouseRegion` right along with it, and a pointer aimed at
-  /// where the buttons used to be would land past the hover region that is
-  /// supposed to bring them back.
+  /// rather than `SizedBox.shrink()`, so this entry's rendered size always
+  /// matches `_cornerWidth`, the fixed size the sibling hover `MouseRegion`
+  /// in `_corners` covers regardless of hidden state. The hover region does
+  /// not actually read this widget's size (it is a sibling, not a wrapper,
+  /// precisely so a hit on a real button is never swallowed), but keeping
+  /// the two in agreement is what makes `_cornerWidth`'s doc comment true.
   Widget _buttons(List<WindowButton> buttons) {
     return ValueListenableBuilder<bool>(
       valueListenable: widget.buttonsHidden,
