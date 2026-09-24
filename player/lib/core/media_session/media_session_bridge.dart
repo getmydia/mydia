@@ -1,10 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../cache/poster_cache_manager.dart';
 import '../remote/remote_target_controller.dart';
+import '../window/desktop_window.dart';
 import 'media_session_state.dart';
 import 'now_playing_metadata_resolver.dart';
+import 'platform_media_session.dart';
 import 'system_media_session.dart';
 
 /// Downloads a poster and returns an absolute local path, or null.
@@ -109,3 +113,24 @@ class MediaSessionBridge {
     await _session.dispose();
   }
 }
+
+/// One bridge for the app's lifetime; `app.dart` starts it.
+final mediaSessionBridgeProvider = Provider<MediaSessionBridge>((ref) {
+  final controller = ref.read(remoteTargetControllerProvider);
+  final bridge = MediaSessionBridge(
+    controller: controller,
+    createSession: () => createPlatformMediaSession(
+      position: () => Duration(
+          milliseconds: controller.snapshot()?.positionMs.toInt() ?? 0),
+    ),
+    resolver: ref.read(nowPlayingMetadataResolverProvider),
+    // The same cache and fetch the poster grid uses, so a poster the user
+    // just saw is already on disk. Flatpak keeps it under
+    // ~/.var/app/dev.mydia.player/cache, which the host shell can read.
+    loadArtwork: (url) async =>
+        (await PosterCacheManager().getSingleFile(url)).path,
+    raiseWindow: raiseDesktopWindow,
+  );
+  ref.onDispose(() => unawaited(bridge.dispose()));
+  return bridge;
+});

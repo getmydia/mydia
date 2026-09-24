@@ -1037,6 +1037,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Re-bound per `Player`, like [_errorSubscription].
   StreamSubscription<bool>? _nowPlayingSubscription;
 
+  /// Player events that change what the OS media session shows but that
+  /// [_publishNowPlaying] does not already cover.
+  final List<StreamSubscription<Object?>> _mediaSessionSubscriptions = [];
+
+  Future<void> _cancelMediaSessionSubscriptions() async {
+    final subscriptions = List.of(_mediaSessionSubscriptions);
+    _mediaSessionSubscriptions.clear();
+    for (final sub in subscriptions) {
+      await sub.cancel();
+    }
+  }
+
   /// Reshapes the OS window to the video's aspect on desktop. A no-op
   /// everywhere else, so no platform check is needed at the call sites.
   ///
@@ -2545,6 +2557,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _nowPlayingSubscription =
         player.stream.playing.listen((_) => _publishNowPlaying());
 
+    await _cancelMediaSessionSubscriptions();
+    void announce(Object? _) => _remoteTargetController.notifyChanged();
+    _mediaSessionSubscriptions.addAll([
+      player.stream.buffering.listen(announce),
+      player.stream.completed.listen(announce),
+      player.stream.volume.listen(announce),
+      player.stream.duration.listen(announce),
+    ]);
+
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
     // source switch, a session restart, or a fresh `PlayerScreen` state for
     // a new queue item. It is *not* re-bound by navigating to the next
@@ -3753,6 +3774,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // comes straight back.
         _error = null;
       });
+      _remoteTargetController.notifyChanged();
       return;
     }
 
@@ -3760,6 +3782,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _error = playbackErrorMessage(message);
       _isLoading = false;
     });
+    _remoteTargetController.notifyChanged();
   }
 
   /// Start the playback the browser declined to start on its own.
@@ -4200,6 +4223,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // mpv rebuffers after a seek, which is no evidence about the link.
     _monitor?.noteInterruption();
     await player.seek(seekTarget);
+    // MPRIS clients extrapolate position; a jump needs announcing.
+    _remoteTargetController.notifyChanged();
   }
 
   /// Switches the audio track, noting the switch with the monitor first.
@@ -5696,6 +5721,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tracksSubscription?.cancel();
     _errorSubscription?.cancel();
     _nowPlayingSubscription?.cancel();
+    unawaited(_cancelMediaSessionSubscriptions());
     _firstFrameSubscription?.cancel();
     // Flush whatever marks this load reached; a no-op if a first frame (or
     // `_disposePlayer`) already logged the one summary line for this timeline.
@@ -5879,6 +5905,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [describe] gives remote controllers.
   void _publishNowPlaying() {
     if (!mounted) return;
+    // Same moments the Dock cares about (play/pause, episode list loaded)
+    // matter to the OS media session.
+    _remoteTargetController.notifyChanged();
     _nowPlaying.publish(
       this,
       NowPlaying(
@@ -6086,6 +6115,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await _errorSubscription?.cancel();
     _errorSubscription = null;
     await _nowPlayingSubscription?.cancel();
+    await _cancelMediaSessionSubscriptions();
     // Precedes every later `_openPlayerAndStart` call (the web source-switch
     // branch in `_attachSource`, and the error catch in `_initializePlayer`),
     // so this is where a first-frame watch that never fired gets cancelled

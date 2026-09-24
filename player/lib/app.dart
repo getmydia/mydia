@@ -10,6 +10,7 @@ import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
+import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
@@ -172,6 +173,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         .read(remoteTargetControllerProvider)
         .intents
         .listen(_handleRemoteIntent);
+    // Mirrors playback onto the OS media session (MPRIS on Linux).
+    unawaited(ref.read(mediaSessionBridgeProvider).start());
     if (appMenuSupported) {
       final router = ref.read(appRouterProvider);
       _appMenu = AppMenuCommands(
