@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/window/title_bar_double_click.dart';
 import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_controller_native.dart';
 import '../cast_actions.dart';
@@ -27,6 +29,7 @@ class WindowTitleRow extends ConsumerWidget {
     this.actions = const [],
     this.showCast = true,
     this.controller,
+    @visibleForTesting this.onBandDoubleTap,
   });
 
   final Widget? leading;
@@ -37,7 +40,35 @@ class WindowTitleRow extends ConsumerWidget {
   /// Injected by tests. Defaults to the real window.
   final WindowController? controller;
 
+  /// Overrides the band's default double-tap handling.
+  ///
+  /// Exposed only so `window_title_row_test.dart` can substitute a call
+  /// counter for the real native channel call `_bandDoubleTap` resolves to
+  /// on macOS. Production code always gets that computed default; nothing
+  /// in the app passes this.
+  @visibleForTesting
+  final VoidCallback? onBandDoubleTap;
+
   static const Key castKey = Key('window-title-row-cast');
+
+  /// The band's double-tap handler: [onBandDoubleTap] if a test supplied
+  /// one, otherwise the platform default.
+  ///
+  /// AppKit already zooms the window on every double-click that lands in
+  /// the title bar band, including one that hits a Flutter control drawn
+  /// there (back, cast), so `MainFlutterWindow` on macOS routes those
+  /// clicks to Flutter alone instead of letting AppKit act on them too (see
+  /// `title_bar_double_click.dart`). Flutter has to run the user's System
+  /// Settings double-click action itself in exchange, but only when the
+  /// double-click actually reaches this band, i.e. only on empty band
+  /// space -- the same arena rules that keep a drag off the cast button
+  /// keep this off it too. Every other platform keeps `WindowDragBand`'s
+  /// own maximize toggle by passing null through.
+  VoidCallback? _bandDoubleTap() =>
+      onBandDoubleTap ??
+      (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS
+          ? performMacTitleBarDoubleClick
+          : null);
 
   static double heightOf(BuildContext context) {
     final insets = WindowChromeInsets.of(context);
@@ -103,6 +134,7 @@ class WindowTitleRow extends ConsumerWidget {
                         controller:
                             controller ?? const WindowManagerController(),
                         height: insets.height,
+                        onDoubleTap: _bandDoubleTap(),
                       ),
                     ),
                     Positioned.fill(child: row),

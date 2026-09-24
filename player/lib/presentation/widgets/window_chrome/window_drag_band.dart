@@ -25,6 +25,7 @@ class WindowDragBand extends StatelessWidget {
     required this.controller,
     required this.height,
     ValueListenable<bool>? maximized,
+    this.onDoubleTap,
   }) : _maximized = maximized;
 
   final WindowController controller;
@@ -32,6 +33,18 @@ class WindowDragBand extends StatelessWidget {
 
   /// Injected by tests. Defaults to the app-wide [windowMaximized] signal.
   final ValueListenable<bool>? _maximized;
+
+  /// Overrides the band's own double-tap handling.
+  ///
+  /// Null keeps this widget's maximize/unmaximize toggle, which is what
+  /// every platform without a competing native double-click handler wants
+  /// (Linux, where this widget's own gesture is the only thing that ever
+  /// sees the click). `WindowTitleRow` passes a non-null callback on macOS,
+  /// where AppKit already zooms the window on every double-click in the
+  /// title bar band on its own; running this widget's toggle *as well*
+  /// would fight that native zoom instead of replacing it. See
+  /// `title_bar_double_click.dart`.
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -45,10 +58,13 @@ class WindowDragBand extends StatelessWidget {
           // which is all of it: this widget paints nothing.
           behavior: HitTestBehavior.opaque,
           onPanStart: (_) => _run(controller.startDragging(), 'drag'),
-          onDoubleTap: () => _run(
-            isMaximized ? controller.unmaximize() : controller.maximize(),
-            'double-tap maximize',
-          ),
+          onDoubleTap: onDoubleTap ??
+              () => _run(
+                    isMaximized
+                        ? controller.unmaximize()
+                        : controller.maximize(),
+                    'double-tap maximize',
+                  ),
         ),
       ),
     );

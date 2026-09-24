@@ -10,6 +10,7 @@ Future<void> _pump(
   WidgetTester tester, {
   required FakeWindowController window,
   ValueListenable<bool>? maximized,
+  VoidCallback? onDoubleTap,
 }) {
   return tester.pumpWidget(
     MaterialApp(
@@ -19,6 +20,7 @@ Future<void> _pump(
           controller: window,
           height: 36,
           maximized: maximized,
+          onDoubleTap: onDoubleTap,
         ),
       ),
     ),
@@ -75,6 +77,29 @@ void main() {
 
       expect(window.unmaximizeCalls, 1);
       expect(window.maximizeCalls, 0);
+    });
+
+    testWidgets(
+        'when onDoubleTap is supplied, a double-tap calls it instead of '
+        'toggling maximize', (tester) async {
+      final window = FakeWindowController();
+      var calls = 0;
+      await _pump(
+        tester,
+        window: window,
+        maximized: ValueNotifier(false),
+        onDoubleTap: () => calls++,
+      );
+
+      final centre = tester.getCenter(find.byType(WindowDragBand));
+      await tester.tapAt(centre);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(centre);
+      await tester.pump(kDoubleTapTimeout);
+
+      expect(calls, 1);
+      expect(window.maximizeCalls, 0);
+      expect(window.unmaximizeCalls, 0);
     });
 
     testWidgets('is exactly as tall as asked', (tester) async {

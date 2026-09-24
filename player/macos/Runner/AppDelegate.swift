@@ -136,6 +136,9 @@ class AppDelegate: FlutterAppDelegate {
         self?.mainFlutterWindow?.standardWindowButton(.miniaturizeButton)?.isHidden = hidden
         self?.mainFlutterWindow?.standardWindowButton(.zoomButton)?.isHidden = hidden
         result(nil)
+      case "performTitleBarDoubleClick":
+        (self?.mainFlutterWindow as? MainFlutterWindow)?.performTitleBarDoubleClick()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
@@ -41,7 +43,16 @@ Future<void> _pump(
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: castCapableOverrides(),
+      overrides: [
+        ...castCapableOverrides(),
+        // The macOS double-tap tests tap the real cast button, which opens
+        // the real device picker. Without this, that starts real multicast
+        // discovery (mDNS/DLNA), which arms a real ten-second sweep Timer
+        // that outlives every test that never lets it fire, and
+        // `flutter_test` fails any test that ends with a Timer still
+        // pending. Mirrors `cast_device_picker_test.dart`.
+        castDiscoveryProvider.overrideWith((ref) => const Stream.empty()),
+      ],
       child: MaterialApp(
         home: Directionality(
           textDirection: dir,
@@ -157,6 +168,87 @@ void main() {
     await tester.pump(kDoubleTapTimeout);
 
     expect(controller.startDraggingCalls, 1);
+  });
+
+  testWidgets(
+      'on macOS, a double-tap on empty band space asks native code to run '
+      'the title bar action, instead of toggling maximize itself',
+      (tester) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      final controller = FakeWindowController();
+      var calls = 0;
+      await _pump(
+        tester,
+        insets: _mac,
+        child: WindowTitleRow(
+          controller: controller,
+          onBandDoubleTap: () => calls++,
+        ),
+      );
+
+      // Same point the drag test above uses: empty band space, clear of the
+      // leading inset and the cast button on the trailing edge.
+      const point = Offset(600, 20);
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(point);
+      await tester.pump(kDoubleTapTimeout);
+
+      expect(calls, 1);
+      expect(controller.maximizeCalls, 0);
+      expect(controller.unmaximizeCalls, 0);
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
+  });
+
+  testWidgets(
+      'on macOS, a double-tap on the cast button never reaches the band '
+      'underneath it', (tester) async {
+    final previousPlatform = debugDefaultTargetPlatformOverride;
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    try {
+      final controller = FakeWindowController();
+      var calls = 0;
+      await _pump(
+        tester,
+        insets: _mac,
+        child: WindowTitleRow(
+          controller: controller,
+          onBandDoubleTap: () => calls++,
+        ),
+      );
+
+      final cast = tester.getCenter(find.byKey(WindowTitleRow.castKey));
+      await tester.tapAt(cast);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(cast);
+      await tester.pump(kDoubleTapTimeout);
+
+      expect(
+        calls,
+        0,
+        reason: 'the cast button wins the gesture arena, so the band '
+            'recognizer underneath it never fires',
+      );
+      expect(controller.maximizeCalls, 0);
+      expect(controller.unmaximizeCalls, 0);
+
+      // Each tap opened the real cast device picker (WindowTitleRow wires
+      // the button to the live pickCastDevice, not a fake), which starts a
+      // real search-timeout Timer and an indeterminate spinner. Both taps
+      // stacked a dialog; pop every route the taps pushed so neither
+      // outlives the test.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      while (navigator.canPop()) {
+        navigator.pop();
+      }
+      await tester.pumpAndSettle();
+    } finally {
+      debugDefaultTargetPlatformOverride = previousPlatform;
+    }
   });
 
   testWidgets('showCast: false draws no cast button', (tester) async {
