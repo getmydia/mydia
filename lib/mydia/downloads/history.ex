@@ -109,6 +109,50 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
+  Counts downloads by derived state, for metrics.
+
+  `downloads` has no status column, so state is derived from `Download.occupying/1` -
+  the same in-flight/terminal distinction used to decide whether a target can be
+  re-grabbed - so the rule lives in one place:
+
+    * `active` - occupying and not yet completed (still downloading).
+    * `awaiting_import` - occupying and completed: waiting to be imported, or an
+      import retry is still scheduled (`import_next_retry_at` set).
+    * `failed` - not imported, and terminal: the client-side download failed, or
+      the import failed with no further retries scheduled.
+
+  Imported rows are not counted. Every key is present.
+  """
+  @spec count_by_state() :: %{
+          active: non_neg_integer(),
+          failed: non_neg_integer(),
+          awaiting_import: non_neg_integer()
+        }
+  def count_by_state do
+    %{
+      active: count_downloads(where(Download.occupying(), [d], is_nil(d.completed_at))),
+      awaiting_import:
+        count_downloads(where(Download.occupying(), [d], not is_nil(d.completed_at))),
+      failed: count_downloads(failed_query())
+    }
+  end
+
+  # The terminal complement of `Download.occupying/1`, restricted to rows that
+  # were never imported: the client-side download failed, or the import failed
+  # with no further retries scheduled.
+  defp failed_query do
+    where(
+      Download,
+      [d],
+      is_nil(d.imported_at) and
+        (not is_nil(d.error_message) or
+           (not is_nil(d.import_failed_at) and is_nil(d.import_next_retry_at)))
+    )
+  end
+
+  defp count_downloads(query), do: Repo.aggregate(query, :count)
+
+  @doc """
   Counts the downloads still waiting on `client_name`: rows assigned to it that
   have not been imported.
 
