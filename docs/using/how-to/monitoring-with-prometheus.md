@@ -11,6 +11,11 @@ library size, download counts and which queues are busy. Scrape it over your
 LAN or container network, and do not route `/metrics` through a public reverse
 proxy. With Traefik, Caddy or nginx in front, block the path there.
 
+If the player is enabled, Mydia also starts an HTTPS listener on `HTTPS_PORT`
+(default 4443) that serves the same router, so `/metrics` is reachable there
+too. Do not publish or forward that port while metrics are on, unless
+something in front of it blocks `/metrics`.
+
 ## Scrape it
 
 ```yaml

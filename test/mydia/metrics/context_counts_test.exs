@@ -63,6 +63,23 @@ defmodule Mydia.Metrics.ContextCountsTest do
     test "returns zeros for an empty table" do
       assert Downloads.count_by_state() == %{active: 0, failed: 0, awaiting_import: 0}
     end
+
+    test "counts nowhere, failed and awaiting_import per Download.occupying/1" do
+      now = DateTime.utc_now() |> DateTime.truncate(:second)
+      future = DateTime.add(now, 3600, :second) |> DateTime.truncate(:second)
+
+      # Imported and later marked with an error message: imported_at wins, so
+      # this is not occupying and not failed either. Counts nowhere.
+      download_fixture(%{completed_at: now, imported_at: now, error_message: "tracker said no"})
+
+      # Import failed terminally (no retry scheduled): terminal, not occupying.
+      download_fixture(%{completed_at: now, import_failed_at: now, import_next_retry_at: nil})
+
+      # Import failed but a retry is scheduled: still occupying its target.
+      download_fixture(%{completed_at: now, import_failed_at: now, import_next_retry_at: future})
+
+      assert Downloads.count_by_state() == %{active: 0, failed: 1, awaiting_import: 1}
+    end
   end
 
   describe "Jobs.count_by_queue_and_state/0" do
