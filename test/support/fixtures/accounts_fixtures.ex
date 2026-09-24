@@ -78,4 +78,27 @@ defmodule Mydia.AccountsFixtures do
       role: Map.get(attrs, :role, "user")
     })
   end
+
+  @doc """
+  Generate a local user with TOTP enabled.
+
+  Returns the plaintext secret and recovery codes so tests can produce codes
+  with `NimbleTOTP.verification_code/1`. Enrollment marks the current 30-second
+  step as used; this clears it so the test can sign in with a code from that
+  same step instead of waiting for the next one.
+  """
+  def totp_user_fixture(attrs \\ %{}) do
+    user = user_fixture(attrs)
+    %{secret: secret} = Accounts.begin_totp_enrollment(user)
+
+    {:ok, user, recovery_codes} =
+      Accounts.confirm_totp_enrollment(user, secret, NimbleTOTP.verification_code(secret))
+
+    user =
+      user
+      |> Mydia.Accounts.User.totp_changeset(%{totp_last_used_at: nil})
+      |> Mydia.Repo.update!()
+
+    %{user: user, secret: secret, recovery_codes: recovery_codes}
+  end
 end
