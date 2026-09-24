@@ -51,6 +51,13 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
          |> assign(step: :show_codes, recovery_codes: codes, secret: nil, qr_svg: nil, error: nil)
          |> load_status(socket.assigns.user_id)}
 
+      {:error, :already_enabled} ->
+        {:noreply,
+         socket
+         |> reset_flow()
+         |> put_flash(:error, "Two-factor authentication is already on.")
+         |> load_status(socket.assigns.user_id)}
+
       {:error, :invalid_code} ->
         {:noreply,
          assign(socket,

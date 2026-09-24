@@ -590,30 +590,45 @@ defmodule Mydia.Accounts do
   @doc """
   Enables TOTP once `code` matches `secret`, and issues a fresh set of
   recovery codes. The plaintext codes are returned exactly once.
+
+  Reloads the user inside the transaction and refuses with `{:error,
+  :already_enabled}` if TOTP is already on, rather than trusting the `user`
+  struct the caller holds. Two concurrent enrollment confirmations (e.g. the
+  same "Turn on" click submitted twice) would otherwise both pass, and the
+  second to write would silently replace the first's secret and recovery
+  codes with its own -- whichever authenticator app enrolled first stops
+  working with no error shown.
   """
   @spec confirm_totp_enrollment(User.t(), binary(), String.t()) ::
-          {:ok, User.t(), [String.t()]} | {:error, :invalid_code}
+          {:ok, User.t(), [String.t()]} | {:error, :invalid_code | :already_enabled}
   def confirm_totp_enrollment(%User{} = user, secret, code) do
     case Totp.valid_code?(secret, Totp.normalize_code(code), nil) do
       {:ok, step} ->
         codes = Totp.generate_recovery_codes()
 
-        {:ok, user} =
-          Repo.transaction(fn ->
-            user =
-              user
-              |> User.totp_changeset(%{
-                totp_secret_encrypted: Totp.encrypt(secret),
-                totp_enabled_at: DateTime.utc_now() |> DateTime.truncate(:second),
-                totp_last_used_at: step
-              })
-              |> Repo.update!()
+        Repo.transaction(fn ->
+          case Repo.get!(User, user.id) do
+            %User{totp_enabled_at: %DateTime{}} ->
+              Repo.rollback(:already_enabled)
 
-            replace_recovery_codes!(user, codes)
-            user
-          end)
+            current_user ->
+              updated_user =
+                current_user
+                |> User.totp_changeset(%{
+                  totp_secret_encrypted: Totp.encrypt(secret),
+                  totp_enabled_at: DateTime.utc_now() |> DateTime.truncate(:second),
+                  totp_last_used_at: step
+                })
+                |> Repo.update!()
 
-        {:ok, user, codes}
+              replace_recovery_codes!(updated_user, codes)
+              {updated_user, codes}
+          end
+        end)
+        |> case do
+          {:ok, {updated_user, codes}} -> {:ok, updated_user, codes}
+          {:error, :already_enabled} -> {:error, :already_enabled}
+        end
 
       :error ->
         {:error, :invalid_code}

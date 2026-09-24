@@ -41,6 +41,31 @@ defmodule Mydia.AccountsTotpTest do
       assert {:error, :invalid_code} = Accounts.confirm_totp_enrollment(user, secret, wrong)
       refute Accounts.totp_enabled?(Accounts.get_user!(user.id))
     end
+
+    test "confirm_totp_enrollment/3 refuses to overwrite an already-enabled secret" do
+      user = user_fixture()
+      %{secret: first_secret} = Accounts.begin_totp_enrollment(user)
+
+      assert {:ok, user, _codes} =
+               Accounts.confirm_totp_enrollment(
+                 user,
+                 first_secret,
+                 NimbleTOTP.verification_code(first_secret)
+               )
+
+      %{secret: second_secret} = Accounts.begin_totp_enrollment(user)
+
+      assert {:error, :already_enabled} =
+               Accounts.confirm_totp_enrollment(
+                 user,
+                 second_secret,
+                 NimbleTOTP.verification_code(second_secret)
+               )
+
+      reloaded = Accounts.get_user!(user.id)
+      assert Accounts.totp_enabled?(reloaded)
+      assert {:ok, ^first_secret} = Totp.decrypt(reloaded.totp_secret_encrypted)
+    end
   end
 
   describe "verify_second_factor/2" do
