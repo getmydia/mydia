@@ -8,8 +8,6 @@ defmodule Mydia.Library.ExportTest do
   alias Mydia.Library.Export
   alias Mydia.Library.Export.Row
 
-  defp row_for(rows, id_title), do: Enum.find(rows, &(&1.title == id_title))
-
   describe "rows/0" do
     test "returns an empty list for an empty library" do
       assert Export.rows() == []
