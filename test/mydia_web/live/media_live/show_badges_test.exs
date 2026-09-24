@@ -10,7 +10,7 @@ defmodule MydiaWeb.MediaLive.ShowBadgesTest do
     %{conn: log_in_user(conn, admin_user_fixture())}
   end
 
-  test "tv show shows rating, status, provider links and a full-date tooltip", %{conn: conn} do
+  test "tv show shows rating, status, provider links and the full release date", %{conn: conn} do
     item =
       media_item_fixture(%{
         type: "tv_show",
@@ -35,7 +35,7 @@ defmodule MydiaWeb.MediaLive.ShowBadgesTest do
 
     assert has_element?(view, "#media-content-rating", "TV-MA")
     assert has_element?(view, "#media-show-status", "Continuing")
-    assert has_element?(view, "#media-release-date[title='Mar 4, 2019']")
+    assert element(view, "#media-release-date") |> render() =~ "Mar 4, 2019"
 
     assert has_element?(
              view,
@@ -66,6 +66,7 @@ defmodule MydiaWeb.MediaLive.ShowBadgesTest do
     refute has_element?(view, "#media-content-rating")
     refute has_element?(view, "#media-show-status")
     refute has_element?(view, "#media-external-links")
+    assert element(view, "#media-release-date") |> render() =~ "2021"
   end
 
   test "movie with a tmdb id links to the movie page and never shows a tvdb link", %{

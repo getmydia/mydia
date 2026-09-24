@@ -237,21 +237,34 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_poster_fields()
   end
 
+  # A stored `poster_fields` value that a later release removes from
+  # `PosterFields`'s catalog must not fail every subsequent unrelated save
+  # (theme, grid_density, ...). `update_preferences_changeset/2` merges the
+  # stored map with the delta before validating, so an untouched stale value
+  # would otherwise be re-validated on every write. Skip validation when the
+  # value is unchanged from what is already on the row; only a new or changed
+  # value is checked against the current catalog.
   defp validate_poster_fields(changeset) do
     case get_change(changeset, :preferences) do
       nil ->
         changeset
 
       prefs when is_map(prefs) ->
-        case Map.get(prefs, "poster_fields") do
-          nil ->
+        value = Map.get(prefs, "poster_fields")
+        stored_value = Map.get(changeset.data.preferences || %{}, "poster_fields")
+
+        cond do
+          is_nil(value) ->
             changeset
 
-          fields when is_list(fields) ->
+          value == stored_value ->
+            changeset
+
+          is_list(value) ->
             valid_keys = PosterFields.valid_key_strings()
-            all_strings? = Enum.all?(fields, &is_binary/1)
-            all_known? = Enum.all?(fields, &(&1 in valid_keys))
-            no_duplicates? = length(fields) == length(Enum.uniq(fields))
+            all_strings? = Enum.all?(value, &is_binary/1)
+            all_known? = Enum.all?(value, &(&1 in valid_keys))
+            no_duplicates? = length(value) == length(Enum.uniq(value))
 
             if all_strings? and all_known? and no_duplicates? do
               changeset
@@ -259,15 +272,15 @@ defmodule Mydia.Accounts.UserPreference do
               add_error(
                 changeset,
                 :preferences,
-                "invalid value for poster_fields: #{inspect(fields)}"
+                "invalid value for poster_fields: #{inspect(value)}"
               )
             end
 
-          invalid ->
+          true ->
             add_error(
               changeset,
               :preferences,
-              "invalid value for poster_fields: #{inspect(invalid)}"
+              "invalid value for poster_fields: #{inspect(value)}"
             )
         end
 

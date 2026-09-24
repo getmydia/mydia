@@ -6,6 +6,7 @@ defmodule Mydia.Accounts.PosterFieldsPreferenceTest do
   alias Mydia.Accounts
   alias Mydia.Accounts.PosterFields
   alias Mydia.Accounts.UserPreference
+  alias Mydia.Repo
 
   test "defaults when never set" do
     pref = user_fixture() |> Accounts.get_user_preference!()
@@ -35,5 +36,26 @@ defmodule Mydia.Accounts.PosterFieldsPreferenceTest do
   test "a stale stored key is ignored on read" do
     pref = %UserPreference{preferences: %{"poster_fields" => ["year", "retired_field"]}}
     assert UserPreference.poster_fields(pref) == [:year]
+  end
+
+  test "an unrelated save survives a stored poster_fields key removed from the catalog" do
+    user = user_fixture()
+    pref = Accounts.get_user_preference!(user)
+
+    # Bypass changeset validation to simulate a row written before
+    # "retired_field" was dropped from PosterFields' catalog.
+    {:ok, pref} =
+      pref
+      |> Ecto.Changeset.change(preferences: %{"poster_fields" => ["year", "retired_field"]})
+      |> Repo.update()
+
+    assert {:ok, updated} = Accounts.update_preference(pref, %{"theme" => "dark"})
+    assert UserPreference.theme(updated) == "dark"
+    assert Map.get(updated.preferences, "poster_fields") == ["year", "retired_field"]
+
+    assert {:error, changeset} =
+             Accounts.update_preference(updated, %{"poster_fields" => ["bogus"]})
+
+    assert %{preferences: [_ | _]} = errors_on(changeset)
   end
 end

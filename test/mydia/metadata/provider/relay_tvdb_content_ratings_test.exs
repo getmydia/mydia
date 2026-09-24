@@ -64,6 +64,20 @@ defmodule Mydia.Metadata.Provider.RelayTvdbContentRatingsTest do
     assert metadata.content_rating == "K-12"
   end
 
+  test "skips a non-binary country instead of crashing", ctx do
+    stub_tvdb(ctx, %{
+      "contentRatings" => [
+        %{"name" => "TV-PG", "country" => 840},
+        %{"name" => "TV-14", "country" => "usa"}
+      ]
+    })
+
+    assert {:ok, metadata} =
+             Relay.fetch_by_ref(ctx.config, {:tvdb, ctx.tvdb_id}, media_type: :tv_show)
+
+    assert metadata.content_rating == "TV-14"
+  end
+
   test "is nil when TVDB has no ratings", ctx do
     for ratings <- [nil, [], [%{"name" => "", "country" => "usa"}]] do
       id = 900_000_000 + System.unique_integer([:positive])

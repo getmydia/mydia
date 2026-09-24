@@ -150,12 +150,8 @@
             <div class="flex flex-wrap items-center gap-2 md:gap-3 text-sm md:text-base text-base-content/70">
               <% release = release_date(@media_item.metadata) %>
               <%= if @media_item.year || release do %>
-                <span
-                  id="media-release-date"
-                  class="font-semibold"
-                  title={format_release_date(release)}
-                >
-                  {@media_item.year || format_release_date(release)}
+                <span id="media-release-date" class="font-semibold">
+                  {format_release_date(release) || @media_item.year}
                 </span>
               <% end %>
 

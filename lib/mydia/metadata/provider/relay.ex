@@ -799,8 +799,7 @@ defmodule Mydia.Metadata.Provider.Relay do
           country = rating["country"]
 
           %{
-            "iso_3166_1" =>
-              Map.get(@tvdb_country_alpha2, country, country && String.upcase(country)),
+            "iso_3166_1" => Map.get(@tvdb_country_alpha2, country, upcased_country(country)),
             "rating" => name
           }
         end
@@ -808,6 +807,13 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   defp transform_tvdb_content_ratings(_ratings), do: %{"results" => []}
+
+  # TVDB's `country` is documented as a string but the relay only forwards
+  # whatever TVDB sent; a malformed upstream payload has shipped a non-binary
+  # value here before. `String.upcase/1` would raise on it, turning one bad
+  # rating entry into a failed fetch for the whole series.
+  defp upcased_country(country) when is_binary(country), do: String.upcase(country)
+  defp upcased_country(_country), do: nil
 
   # TVDB returns originalCountry as a string, convert to list for consistency with TMDB
   defp transform_tvdb_origin_country(nil), do: []
