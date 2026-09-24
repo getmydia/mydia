@@ -388,12 +388,29 @@ defmodule MydiaWeb.Schema.CommonTypes do
     field :platform, non_null(:string), description: "Platform (ios, android, web)"
   end
 
+  @desc "Input for verifyTotp mutation"
+  input_object :verify_totp_input do
+    field :challenge_token, non_null(:string), description: "challengeToken from login"
+    field :code, non_null(:string), description: "6-digit TOTP code or a recovery code"
+  end
+
   @desc "Result of login mutation"
   object :login_result do
-    field :token, non_null(:string), description: "JWT authentication token"
+    field :token, :string,
+      description: "JWT authentication token. Null when totp_required is true"
 
-    field :user, non_null(:user), description: "Authenticated user information"
-    field :expires_in, non_null(:integer), description: "Token expiration in seconds"
+    field :user, :user,
+      description: "Authenticated user information. Null when totp_required is true"
+
+    field :expires_in, :integer,
+      description: "Token expiration in seconds. Null when totp_required is true"
+
+    field :totp_required, non_null(:boolean),
+      description:
+        "True when the account needs a TOTP or recovery code; pass challenge_token to verifyTotp"
+
+    field :challenge_token, :string,
+      description: "Short-lived token for verifyTotp. Set only when totp_required is true"
   end
 
   @desc "User information"
