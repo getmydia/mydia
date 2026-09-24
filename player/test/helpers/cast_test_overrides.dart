@@ -11,7 +11,7 @@ import 'package:player/core/cast/cast_providers.dart';
 /// `CastCapabilities.forCurrentPlatform()`, which is `.web()` (no protocol
 /// capable) under `flutter test`'s host platform, and `CastButton` shrinks to
 /// nothing whenever `.any` is false. Any widget test that needs the button to
-/// actually render — rather than specifically exercising its hidden state —
+/// actually render (rather than specifically exercising its hidden state)
 /// pulls this in instead of repeating the override inline.
 List<Override> castCapableOverrides() => [
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
