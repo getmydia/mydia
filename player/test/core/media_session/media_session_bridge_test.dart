@@ -106,6 +106,27 @@ void main() {
     await bridge.dispose();
   });
 
+  test('retries artwork after a failed load', () async {
+    artworkResult = null;
+    final bridge =
+        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    await bridge.start();
+    controller.attachPlayer(FakeBinding(buildSnapshot()));
+    await settle();
+    expect(session.updates.last.artworkPath, isNull);
+
+    artworkResult = '/cache/orchard.jpg';
+    controller.notifyChanged();
+    await settle();
+
+    expect(artworkRequests, [
+      'https://img.example/orchard.jpg',
+      'https://img.example/orchard.jpg',
+    ]);
+    expect(session.updates.last.artworkPath, '/cache/orchard.jpg');
+    await bridge.dispose();
+  });
+
   test('detaching returns to stopped', () async {
     final bridge = build();
     await bridge.start();

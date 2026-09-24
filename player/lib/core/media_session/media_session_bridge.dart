@@ -75,7 +75,14 @@ class MediaSessionBridge {
           mediaItemId: first.mediaItemId, episodeId: first.episodeId);
       final url = metadata?.posterUrl;
       if (url != null) {
-        artworkPath = await _artwork.putIfAbsent(url, () => _safeLoad(url));
+        final load = _artwork.putIfAbsent(url, () => _safeLoad(url));
+        artworkPath = await load;
+        // A transient failure must not be cached forever: drop it so the
+        // next change event retries, unless a newer load already replaced
+        // this entry.
+        if (artworkPath == null && _artwork[url] == load) {
+          _artwork.remove(url);
+        }
       }
     }
     // A newer change arrived while this one awaited; it will push instead.
