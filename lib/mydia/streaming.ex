@@ -116,6 +116,31 @@ defmodule Mydia.Streaming do
   end
 
   @doc """
+  Counts running playback sessions by kind, for metrics.
+
+  Reads only the registry: no call into any session process, so a busy or
+  stuck session cannot stall a metrics scrape. Every key is present.
+  """
+  @spec session_counts() :: %{
+          hls_copy: non_neg_integer(),
+          hls_transcode: non_neg_integer(),
+          direct: non_neg_integer(),
+          remux: non_neg_integer()
+        }
+  def session_counts do
+    zero = %{hls_copy: 0, hls_transcode: 0, direct: 0, remux: 0}
+
+    Enum.reduce(HlsSessionSupervisor.list_sessions(), zero, fn {key, _pid, meta}, acc ->
+      Map.update!(acc, session_kind(key, meta), &(&1 + 1))
+    end)
+  end
+
+  defp session_kind({:direct_session, _, _}, _meta), do: :direct
+  defp session_kind({:remux_session, _, _}, _meta), do: :remux
+  defp session_kind({:hls_session, _, _}, %{mode: :copy}), do: :hls_copy
+  defp session_kind({:hls_session, _, _}, _meta), do: :hls_transcode
+
+  @doc """
   Records that a play started on this server.
 
   Sessions are the truthful signal for a play: a media-server sync writes
