@@ -697,6 +697,19 @@ let
       beamDeps = [ libgraph ];
     };
 
+    nimble_csv = buildMix rec {
+      name = "nimble_csv";
+      version = "1.3.0";
+
+      src = fetchHex {
+        pkg = "nimble_csv";
+        version = "${version}";
+        sha256 = "41ccdc18f7c8f8bb06e84164fc51635321e80d5a3b450761c4997d620925d619";
+      };
+
+      beamDeps = [];
+    };
+
     nimble_options = buildMix rec {
       name = "nimble_options";
       version = "1.1.1";
@@ -967,7 +980,7 @@ let
         sha256 = "4b192d63253e8dcc6221ef992ea9ebef7d3555166e8423aa5b553e86bc3c69a2";
       };
 
-      beamDeps = [ finch jason mime plug ];
+      beamDeps = [ finch jason mime nimble_csv plug ];
     };
 
     rustler = buildMix rec {

@@ -26,6 +26,16 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Returns the number of media files not in the trash.
+  """
+  @spec media_file_count() :: non_neg_integer()
+  def media_file_count do
+    MediaFile
+    |> where([f], is_nil(f.trashed_at))
+    |> Repo.aggregate(:count)
+  end
+
+  @doc """
   Returns the list of media files.
 
   ## Options

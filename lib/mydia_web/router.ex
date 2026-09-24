@@ -112,6 +112,13 @@ defmodule MydiaWeb.Router do
     get "/health", HealthController, :check
   end
 
+  # Prometheus scrape endpoint (no authentication, off unless
+  # MYDIA_METRICS_ENABLED). No pipeline: :api's accepts ["json"] would answer
+  # Prometheus's Accept header with 406.
+  scope "/", MydiaWeb do
+    get "/metrics", MetricsController, :index
+  end
+
   # First-time setup (no authentication required)
   scope "/", MydiaWeb do
     pipe_through :browser
@@ -360,6 +367,9 @@ defmodule MydiaWeb.Router do
     put "/config/:key", ConfigController, :update
     delete "/config/:key", ConfigController, :delete
     post "/config/test-connection", ConfigController, :test_connection
+
+    # Library catalog export (JSON/CSV download)
+    get "/library/export", LibraryExportController, :show
   end
 
   # GraphQL API - authentication handled at resolver level

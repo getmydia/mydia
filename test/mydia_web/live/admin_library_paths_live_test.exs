@@ -196,6 +196,15 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
         Enum.each([tmdb_series, tvdb_series, movie], &Mydia.Settings.delete_library_path/1)
       end)
     end
+
+    test "offers JSON and CSV library export links", %{view: view} do
+      assert has_element?(
+               view,
+               ~s|#library-export-json[href="/api/v1/library/export?format=json"]|
+             )
+
+      assert has_element?(view, ~s|#library-export-csv[href="/api/v1/library/export?format=csv"]|)
+    end
   end
 
   describe "Automatic scanning" do
