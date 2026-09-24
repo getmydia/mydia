@@ -234,3 +234,22 @@ Two in-repo examples: `guard_unique_active_path/1` in
 `(library_path_id, relative_path) WHERE trashed_at IS NULL`) and
 `guard_single_active_run/1` in `lib/mydia/library/import_run.ex` (the
 partial unique index enforcing one active import run per library path).
+
+## A data migration must not read a whole schema
+
+A migration that calls application code runs against the table as it stood at
+that migration, while the Ecto schema describes the table after every migration.
+`Repo.all(User)` selects every schema field, so once a later migration adds a
+column, the old migration's read names a column that does not exist yet on any
+install still upgrading through it, and on every fresh database.
+
+On SQLite that read fails on its own. On PostgreSQL the failed statement aborts
+the migrator's transaction, and the next write (`schema_migrations`) raises
+`25P02 in_failed_sql_transaction`. Because `lib/mydia/application.ex` runs the
+migrator in the supervision tree, that is a boot failure, and it only shows up
+once some later branch adds a column to the same table.
+
+Select the columns the migration needs: `select([u], struct(u, ^fields))`, or a
+schemaless `from(u in "users", ...)`. `Mydia.Accounts.UsernameBackfill` is the
+worked example, with a test that drops a newer column inside the sandbox to
+recreate the old table.
