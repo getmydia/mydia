@@ -9,18 +9,57 @@
 // `PlayerTopBarSlot` is also what `player_screen.dart`'s
 // `_withCastAffordance` builds the loading/error cast pill through (see
 // `player_screen_frame_inset_test.dart` for the outer frame contract this
-// sits inside), so the last group here proves that seam directly: two very
+// sits inside), so a middle group here proves that seam directly: two very
 // different `ChromeTopBar` configurations, placed through the same slot,
 // land their cast pill on the exact same rect.
+//
+// The final group mounts the real `PlaybackChrome`, not a mirror: moving the
+// top bar out of `SafeArea` (so it can be placed independently, per the
+// class doc above) must not change what every *other* child of that stack
+// gets from its own, still-all-sides `SafeArea`. A `SafeArea(top: false)`
+// wrapping everything, which is what an earlier version of this file had, is
+// exactly the regression that group is pinned against: it would leave the
+// centre play button and the bottom panel un-inset from the platform's top
+// safe-area padding (a phone's status bar or notch) while still correctly
+// consuming left/right/bottom, an easy thing to miss since only one edge is
+// wrong.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_panel.dart';
+import 'package:player/presentation/widgets/video_controls/chrome_subtitle_lift.dart';
 import 'package:player/presentation/widgets/video_controls/chrome_top_bar.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 const Key _videoSurfaceKey = Key('stand-in-video-surface');
+
+/// A [PlatformPlayer] that never touches native mpv/web bindings, safe to
+/// construct inside `flutter test`. Same shape as
+/// `playback_chrome_episode_nav_test.dart`'s fake (kept separate, not
+/// shared, since neither file exports it and duplicating ~15 lines is
+/// cheaper than introducing a new shared test-only import).
+class _FakePlatformPlayer extends PlatformPlayer {
+  _FakePlatformPlayer() : super(configuration: const PlayerConfiguration());
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> playOrPause() async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> seek(Duration duration) async {}
+}
 
 const _macInsets = WindowChromeInsets(
   height: kMacTitleBarOverlap,
@@ -232,6 +271,89 @@ void main() {
       );
 
       expect(loadingOrError, playing);
+    });
+  });
+
+  group('PlaybackChrome: the rest of the chrome keeps its old SafeArea insets',
+      () {
+    late Player player;
+
+    setUp(() {
+      player = Player(platformPlayer: _FakePlatformPlayer());
+    });
+
+    tearDown(() => player.dispose());
+
+    const padding = EdgeInsets.fromLTRB(44, 24, 44, 0);
+    const width = 1200.0;
+    const height = 700.0;
+
+    // `MediaQuery.of(context).copyWith(padding: padding)`, not a bare
+    // `MediaQueryData(padding: padding)`: the latter defaults every other
+    // field, including `size`, to its class default (`Size.zero`), which
+    // would make `PanelMetrics.resolve`'s width-driven `bottomOffset` branch
+    // in `PlaybackChrome.build` resolve against 0 instead of the resized
+    // view. `copyWith` keeps the real, resized `size` and overrides only
+    // `padding`.
+    Widget chromeHost() => MaterialApp(
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(padding: padding),
+              child: Scaffold(
+                body: PlaybackChrome(
+                  player: player,
+                  timeline: StreamTimeline.zero,
+                  onSeekToReal: (_) async {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+    Future<void> pump(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(width, height);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(chromeHost());
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'the safe-area content layer keeps the box a single all-sides '
+        'SafeArea always gave it, consumed on every side and not just '
+        'left/right/bottom', (tester) async {
+      await pump(tester);
+
+      final content = tester.getRect(find.byKey(PlaybackChrome.safeContentKey));
+      expect(content.left, padding.left);
+      expect(content.top, padding.top);
+      expect(content.right, width - padding.right);
+      expect(content.bottom, height - padding.bottom);
+    });
+
+    testWidgets(
+        'the bottom transport panel keeps its old rect, unaffected by the '
+        'top bar now sitting outside the SafeArea', (tester) async {
+      await pump(tester);
+
+      final panel = tester.getRect(find.byType(ChromeSubtitleLift));
+      // Desktop-tier width (>= 900), matching the resized view above, so
+      // `bottomOffset` is 48 -- see `PanelMetrics.resolve`.
+      final metrics = PanelMetrics.resolve(width: width, touchPrimary: false);
+
+      expect(panel.left, padding.left);
+      expect(panel.right, width - padding.right);
+      expect(panel.bottom, height - padding.bottom - metrics.bottomOffset);
+    });
+
+    testWidgets(
+        'the top bar still clears the same left inset the old SafeArea gave '
+        "it, proving PlayerTopBarSlot's own left/right padding compensation "
+        'end to end against the real widget', (tester) async {
+      await pump(tester);
+
+      final back = tester.getRect(find.byKey(ChromeTopBar.backKey));
+      expect(back.left, padding.left + 16);
     });
   });
 }
