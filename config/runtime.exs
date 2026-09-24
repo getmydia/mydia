@@ -47,6 +47,12 @@ if not perf_metrics_enabled? do
   config :mydia, Mydia.Perf, enabled: false
 end
 
+# The Prometheus endpoint is off by default: it is unauthenticated, so the
+# operator opts in knowing to keep it off the public reverse proxy.
+if System.get_env("MYDIA_METRICS_ENABLED") in ~w(true 1 yes on) do
+  config :mydia, Mydia.Metrics, enabled: true
+end
+
 # Database adapter is configured at compile time only
 # The adapter cannot be changed at runtime - it's baked into the compiled release
 # Each Docker image is built for a specific database type

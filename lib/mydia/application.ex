@@ -155,6 +155,9 @@ defmodule Mydia.Application do
         # terminate/2, so it must stop before the repo does. Returns :ignore
         # when disabled.
         Mydia.Perf.Supervisor,
+        # Prometheus endpoint. Returns :ignore unless MYDIA_METRICS_ENABLED.
+        # Its slow poller queries the repo, so it starts after it.
+        Mydia.Metrics.Supervisor,
         Mydia.Downloads.Client.Registry,
         # Owns the ETS table holding the derived set of client torrents Mydia
         # does not manage. init/1 only creates the table (no I/O), so unlike
