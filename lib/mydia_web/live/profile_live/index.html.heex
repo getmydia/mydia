@@ -309,6 +309,13 @@
               >
                 <.icon name="hero-key" class="w-4 h-4" /> Change Password
               </button>
+
+              <.live_component
+                :if={@current_user.password_hash}
+                module={MydiaWeb.ProfileLive.TwoFactorComponent}
+                id="two-factor"
+                user_id={@current_user.id}
+              />
             <% end %>
           </div>
         </div>
