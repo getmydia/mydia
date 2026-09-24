@@ -60,6 +60,13 @@ defmodule Mydia.Accounts do
   end
 
   @doc """
+  Gets a user by id, or nil.
+  """
+  @spec get_user_by_id(binary()) :: User.t() | nil
+  def get_user_by_id(id) when is_binary(id), do: Repo.get(User, id)
+  def get_user_by_id(_id), do: nil
+
+  @doc """
   Gets a user by username.
   """
   def get_user_by_username(username, opts \\ []) do

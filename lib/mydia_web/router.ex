@@ -127,6 +127,8 @@ defmodule MydiaWeb.Router do
     get "/login", SessionController, :new
     get "/local/login", SessionController, :new
     post "/local/login", SessionController, :create
+    get "/login/totp", SessionController, :totp_new
+    post "/login/totp", SessionController, :totp_create
 
     # Auto-login (for first-time setup)
     get "/auto-login", AuthController, :auto_login
