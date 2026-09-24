@@ -12,6 +12,8 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
 
   alias Mydia.Accounts
 
+  @rate_limited_message "Too many login attempts. Please try again later."
+
   @impl true
   def update(%{user_id: user_id} = assigns, socket) do
     {:ok,
@@ -64,12 +66,17 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   end
 
   def handle_event("regenerate", %{"totp" => %{"code" => code}}, socket) do
-    case Accounts.regenerate_recovery_codes(socket.assigns.user, code) do
+    user = socket.assigns.user
+
+    case rate_limited(user, fn -> Accounts.regenerate_recovery_codes(user, code) end) do
       {:ok, codes} ->
         {:noreply,
          socket
          |> assign(step: :show_codes, recovery_codes: codes, error: nil)
          |> load_status(socket.assigns.user_id)}
+
+      {:error, :rate_limited} ->
+        {:noreply, assign(socket, error: @rate_limited_message)}
 
       {:error, :invalid_code} ->
         {:noreply, assign(socket, error: "Invalid code", form: code_form())}
@@ -90,13 +97,18 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
         %{"disable_totp" => %{"password" => password, "code" => code}},
         socket
       ) do
-    case Accounts.disable_totp(socket.assigns.user, password, code) do
+    user = socket.assigns.user
+
+    case rate_limited(user, fn -> Accounts.disable_totp(user, password, code) end) do
       {:ok, _user} ->
         {:noreply,
          socket
          |> reset_flow()
          |> put_flash(:info, "Two-factor authentication turned off.")
          |> load_status(socket.assigns.user_id)}
+
+      {:error, :rate_limited} ->
+        {:noreply, assign(socket, error: @rate_limited_message)}
 
       {:error, :invalid_password} ->
         {:noreply, assign(socket, error: "Current password is incorrect")}
@@ -112,6 +124,33 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
 
   defp reset_flow(socket) do
     assign(socket, step: :idle, secret: nil, qr_svg: nil, recovery_codes: [], error: nil)
+  end
+
+  # Wraps an authenticated second-factor check with the same throttle as
+  # login: an authenticated LiveView session could otherwise brute-force a
+  # 6-digit code straight through `regenerate` or `disable` with no rate
+  # limit. LiveView has no reliable client IP, so the account itself stands
+  # in for it; the username bucket is the real username, so profile-page
+  # failures spend the same per-account budget as password-login failures.
+  defp rate_limited(user, fun) do
+    ip_key = "profile:#{user.id}"
+    username = user.username
+
+    case Accounts.check_login_rate_limit(ip_key, username) do
+      :ok ->
+        case fun.() do
+          {:ok, _} = ok ->
+            Accounts.reset_login_rate_limit(ip_key, username)
+            ok
+
+          {:error, reason} = error when reason in [:invalid_code, :invalid_password] ->
+            Accounts.record_login_failure(ip_key, username)
+            error
+        end
+
+      {:error, :rate_limited} = error ->
+        error
+    end
   end
 
   defp load_status(socket, user_id) do

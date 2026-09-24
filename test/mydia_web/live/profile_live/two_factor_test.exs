@@ -61,6 +61,12 @@ defmodule MydiaWeb.ProfileLive.TwoFactorTest do
       user =
         user |> Accounts.User.totp_changeset(%{totp_last_used_at: nil}) |> Mydia.Repo.update!()
 
+      # Defensive: the rate limiter's ETS table is shared across the whole
+      # test run, not reset per-test like the sandbox. Usernames are unique
+      # per test already, but clear this user's buckets anyway so no earlier
+      # test's failures can leak into these assertions.
+      Accounts.reset_login_rate_limit("profile:#{user.id}", user.username)
+
       %{user: user, secret: secret, recovery_codes: codes}
     end
 
@@ -74,6 +80,51 @@ defmodule MydiaWeb.ProfileLive.TwoFactorTest do
       |> render_submit()
 
       assert has_element?(view, "#recovery-codes li")
+    end
+
+    test "rate limits repeated wrong codes on regenerate", %{
+      conn: conn,
+      user: user,
+      secret: secret
+    } do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      view |> element("#totp-regenerate-btn") |> render_click()
+
+      for _ <- 1..10 do
+        view
+        |> form("#totp-regenerate-form", totp: %{code: "000000"})
+        |> render_submit()
+      end
+
+      view
+      |> form("#totp-regenerate-form", totp: %{code: NimbleTOTP.verification_code(secret)})
+      |> render_submit()
+
+      assert has_element?(view, "#totp-modal-error", "Too many login attempts")
+      refute has_element?(view, "#recovery-codes")
+      assert Accounts.recovery_codes_remaining(Accounts.get_user!(user.id)) > 0
+    end
+
+    test "rate limits repeated wrong codes on disable", %{conn: conn, user: user, secret: secret} do
+      {:ok, view, _html} = live(conn, ~p"/profile")
+
+      view |> element("#totp-disable-btn") |> render_click()
+
+      for _ <- 1..10 do
+        view
+        |> form("#totp-disable-form", disable_totp: %{password: "password123", code: "000000"})
+        |> render_submit()
+      end
+
+      view
+      |> form("#totp-disable-form",
+        disable_totp: %{password: "password123", code: NimbleTOTP.verification_code(secret)}
+      )
+      |> render_submit()
+
+      assert has_element?(view, "#totp-modal-error", "Too many login attempts")
+      assert Accounts.totp_enabled?(Accounts.get_user!(user.id))
     end
 
     test "disables with password and a recovery code", %{
