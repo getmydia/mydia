@@ -49,6 +49,16 @@ require_arg --device=dri \
 require_arg --talk-name=org.freedesktop.secrets \
   "every credential write fails, so a pairing does not survive a restart"
 
+# The default Flatpak session-bus policy already lets the app own
+# org.mpris.MediaPlayer2.$FLATPAK_ID, which is the name the player's MPRIS
+# session claims. An explicit grant is redundant, and a wildcard one would let
+# the app impersonate other players.
+if printf '%s\n' "$finish_args" | grep -q -- '--own-name=org\.mpris'; then
+  echo "FAIL: finish-args grants an MPRIS --own-name"
+  echo "      Remove it: the sandbox already allows org.mpris.MediaPlayer2.dev.mydia.player"
+  fail=1
+fi
+
 [ "$fail" -eq 0 ] || exit 1
 
 echo "PASS"

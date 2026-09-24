@@ -184,6 +184,18 @@ void setWindowAlwaysOnTop(bool value) {
   }
 }
 
+/// Brings the window forward, e.g. for an MPRIS Raise. No-op off desktop.
+/// Never throws.
+Future<void> raiseDesktopWindow() async {
+  if (!PlatformFeatures.isDesktop) return;
+  try {
+    await windowManager.show();
+    await windowManager.focus();
+  } catch (e) {
+    debugPrint('[DesktopWindow] Failed to raise window: $e');
+  }
+}
+
 /// A sizer for the player screen, or a no-op when there is no window to size.
 PlayerWindowSizer createPlayerWindowSizer() {
   final geometry = _geometry;

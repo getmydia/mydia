@@ -196,5 +196,75 @@ void main() {
 
       expect(controller.snapshot(), isNull);
     });
+
+    group('changes', () {
+      Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+      test('attach and detach each announce a change', () async {
+        final controller = RemoteTargetController();
+        var count = 0;
+        final sub = controller.changes.listen((_) => count++);
+        final binding = FakePlayerBinding();
+
+        controller.attachPlayer(binding);
+        await settle();
+        expect(count, 1);
+
+        controller.detachPlayer(binding);
+        await settle();
+        expect(count, 2);
+
+        await sub.cancel();
+        controller.dispose();
+      });
+
+      test('a late detach from a replaced binding announces nothing', () async {
+        final controller = RemoteTargetController();
+        final first = FakePlayerBinding();
+        final second = FakePlayerBinding();
+        controller.attachPlayer(first);
+        controller.attachPlayer(second);
+        await settle();
+
+        var count = 0;
+        final sub = controller.changes.listen((_) => count++);
+        controller.detachPlayer(first);
+        await settle();
+        expect(count, 0);
+        expect(controller.snapshot(), isNotNull);
+
+        await sub.cancel();
+        controller.dispose();
+      });
+
+      test('re-attaching the same binding announces nothing', () async {
+        final controller = RemoteTargetController();
+        final binding = FakePlayerBinding();
+        controller.attachPlayer(binding);
+        await settle();
+
+        var count = 0;
+        final sub = controller.changes.listen((_) => count++);
+        controller.attachPlayer(binding);
+        await settle();
+        expect(count, 0);
+
+        await sub.cancel();
+        controller.dispose();
+      });
+
+      test('notifyChanged announces and is safe after dispose', () async {
+        final controller = RemoteTargetController();
+        var count = 0;
+        final sub = controller.changes.listen((_) => count++);
+        controller.notifyChanged();
+        await settle();
+        expect(count, 1);
+
+        await sub.cancel();
+        controller.dispose();
+        controller.notifyChanged(); // must not throw
+      });
+    });
   });
 }

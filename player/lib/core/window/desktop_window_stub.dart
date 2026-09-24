@@ -7,3 +7,5 @@ void startWindowDrag() {}
 void setWindowAlwaysOnTop(bool value) {}
 
 PlayerWindowSizer createPlayerWindowSizer() => const NoopPlayerWindowSizer();
+
+Future<void> raiseDesktopWindow() async {}
