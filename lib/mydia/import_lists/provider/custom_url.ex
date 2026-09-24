@@ -25,6 +25,16 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
      [{"tmdbId": 123, "title": "..."}, ...]
      ```
 
+  4. A Mydia library export (`GET /api/v1/library/export`):
+     ```json
+     {"format": "mydia-library", "version": 1,
+      "items": [{"type": "movie", "tmdb_id": 123, "title": "..."}]}
+     ```
+     Items whose `"type"` differs from the list's `media_type` (`movie` or
+     `tv_show`) are skipped, so one hosted export can feed a movie list and a
+     TV list. Shows known only by TVDB ID have no `tmdb_id` and are skipped,
+     like any other item without one.
+
   Required fields: tmdb_id (or tmdbId)
   Optional fields: title, year, poster_path
 
@@ -340,6 +350,19 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
 
     Logger.info("[CustomURL] Parsed #{length(parsed)} items from #{length(items)} entries")
     {:ok, parsed}
+  end
+
+  # A Mydia library export mixes movies and shows; an import list has one
+  # media_type. Items that say which type they are must match it. Items with
+  # no "type" key are kept, as before.
+  defp parse_item(%{"type" => type}, media_type)
+       when is_binary(type) and type != media_type do
+    Logger.debug("[CustomURL] Skipping item of another media type",
+      item_type: type,
+      list_media_type: media_type
+    )
+
+    nil
   end
 
   defp parse_item(item, media_type) when is_map(item) do

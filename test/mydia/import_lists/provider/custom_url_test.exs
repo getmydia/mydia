@@ -11,6 +11,10 @@ defmodule Mydia.ImportLists.Provider.CustomURLTest do
     %{type: "custom_url", config: %{"list_url" => url}, media_type: "movie"}
   end
 
+  defp import_list(url, media_type) do
+    %{type: "custom_url", config: %{"list_url" => url}, media_type: media_type}
+  end
+
   # Bypass only ever binds to loopback, which the guard blocks by default, so
   # every Bypass-backed test needs the escape hatch just to reach the server at
   # all. Restored via on_exit so later tests see the secure default again.
@@ -206,6 +210,44 @@ defmodule Mydia.ImportLists.Provider.CustomURLTest do
     test "still enforces the scheme allowlist" do
       assert {:error, reason} = CustomURL.validate_url("file:///etc/passwd")
       assert reason =~ "scheme"
+    end
+  end
+
+  describe "fetch_items/1 with a Mydia library export (guard relaxed via Bypass)" do
+    setup do
+      allow_private_destinations!()
+      bypass = Bypass.open()
+
+      body =
+        Jason.encode!(%{
+          "format" => "mydia-library",
+          "version" => 1,
+          "items" => [
+            %{"type" => "movie", "tmdb_id" => 501, "title" => "Lantern Bay", "year" => 2019},
+            %{"type" => "tv_show", "tmdb_id" => 502, "title" => "Ridge Line", "year" => 2020},
+            %{"type" => "tv_show", "tmdb_id" => nil, "tvdb_id" => 77, "title" => "Tvdb Only"},
+            %{"tmdb_id" => 503, "title" => "Untyped Entry"}
+          ]
+        })
+
+      Bypass.stub(bypass, "GET", "/export.json", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, body)
+      end)
+
+      %{url: "http://localhost:#{bypass.port}/export.json"}
+    end
+
+    test "a movie list keeps movies and untyped items", %{url: url} do
+      assert {:ok, items} = CustomURL.fetch_items(import_list(url, "movie"))
+      assert items |> Enum.map(& &1.tmdb_id) |> Enum.sort() == [501, 503]
+    end
+
+    test "a tv_show list keeps shows and untyped items, skipping shows without a tmdb_id",
+         %{url: url} do
+      assert {:ok, items} = CustomURL.fetch_items(import_list(url, "tv_show"))
+      assert items |> Enum.map(& &1.tmdb_id) |> Enum.sort() == [502, 503]
     end
   end
 end
