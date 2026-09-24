@@ -3,6 +3,10 @@ import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
   override func awakeFromNib() {
+    // Set app-wide state here because MainMenu.xib instantiates this window,
+    // so awakeFromNib runs during main nib load, before
+    // AppDelegate.applicationDidFinishLaunching builds Sparkle and the menus.
+
     // The app is dark-only. Without this, AppKit-drawn pieces (Sparkle's
     // update windows, menus, alerts, the title bar during live resize and
     // fullscreen transitions) follow the system appearance and render light
@@ -42,9 +46,9 @@ class MainFlutterWindow: NSWindow {
     // kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart must
     // match the band height.
     let toolbar = NSToolbar(identifier: "MainToolbar")
-    toolbar.showsBaselineSeparator = false
     self.toolbar = toolbar
     self.toolbarStyle = .unifiedCompact
+    self.titlebarSeparatorStyle = .none
 
     // In fullscreen the empty toolbar would appear as a blank strip when the
     // menu bar slides down. WindowChromeInset already drops the inset there.
