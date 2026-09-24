@@ -749,6 +749,19 @@ let
       beamDeps = [];
     };
 
+    nimble_totp = buildMix rec {
+      name = "nimble_totp";
+      version = "1.0.0";
+
+      src = fetchHex {
+        pkg = "nimble_totp";
+        version = "${version}";
+        sha256 = "6ce5e4c068feecdb782e85b18237f86f66541523e6bad123e02ee1adbe48eda9";
+      };
+
+      beamDeps = [];
+    };
+
     oban = buildMix rec {
       name = "oban";
       version = "2.24.1";
