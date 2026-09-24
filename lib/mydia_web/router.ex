@@ -358,6 +358,9 @@ defmodule MydiaWeb.Router do
     put "/config/:key", ConfigController, :update
     delete "/config/:key", ConfigController, :delete
     post "/config/test-connection", ConfigController, :test_connection
+
+    # Library catalog export (JSON/CSV download)
+    get "/library/export", LibraryExportController, :show
   end
 
   # GraphQL API - authentication handled at resolver level

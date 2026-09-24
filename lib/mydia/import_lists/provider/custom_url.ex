@@ -25,6 +25,17 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
      [{"tmdbId": 123, "title": "..."}, ...]
      ```
 
+  4. A Mydia library export (`GET /api/v1/library/export`):
+     ```json
+     {"format": "mydia-library", "version": 1,
+      "items": [{"type": "movie", "tmdb_id": 123, "title": "..."}]}
+     ```
+     Only for this envelope, items whose `"type"` differs from the list's
+     `media_type` (`movie` or `tv_show`) are skipped, so one hosted export can
+     feed a movie list and a TV list. This type filtering applies only to
+     Mydia exports; other feeds are parsed as before. Shows known only by TVDB
+     ID have no `tmdb_id` and are skipped, like any other item without one.
+
   Required fields: tmdb_id (or tmdbId)
   Optional fields: title, year, poster_path
 
@@ -208,6 +219,26 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
 
   defp handle_response(%{status: 200, body: body}, media_type) when is_list(body) do
     parse_items(body, media_type)
+  end
+
+  # A Mydia library export mixes movies and shows; an import list has one
+  # media_type. Only for that envelope, keep the items whose "type" matches.
+  defp handle_response(
+         %{status: 200, body: %{"format" => "mydia-library", "items" => items}},
+         media_type
+       )
+       when is_list(items) do
+    {kept, skipped} =
+      Enum.split_with(items, &(is_map(&1) and Map.get(&1, "type") in [nil, media_type]))
+
+    if skipped != [] do
+      Logger.debug("[CustomURL] Skipped items of another media type",
+        skipped: length(skipped),
+        list_media_type: media_type
+      )
+    end
+
+    parse_items(kept, media_type)
   end
 
   defp handle_response(%{status: 200, body: %{"items" => items}}, media_type)
