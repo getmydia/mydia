@@ -77,24 +77,33 @@ Widget _host(
   required double paddingTop,
 }) =>
     MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(padding: EdgeInsets.only(top: paddingTop)),
-        child: WindowChromeInsets.scope(
-          insets: insets,
-          child: Scaffold(
-            body: Stack(
-              children: [
-                const Positioned.fill(
-                  child: ColoredBox(
-                    key: _videoSurfaceKey,
-                    color: Colors.black,
+      home: Builder(
+        builder: (context) => MediaQuery(
+          // `MediaQuery.of(context).copyWith`, not a bare `MediaQueryData(...)`:
+          // the latter defaults every other field, including `size`, to its
+          // class default (`Size.zero`), which would keep the macOS group's
+          // resized `tester.view.physicalSize` from ever reaching
+          // `Breakpoints.isDesktop` -- see `chromeHost` below, which has the
+          // same fix for the same reason.
+          data: MediaQuery.of(context)
+              .copyWith(padding: EdgeInsets.only(top: paddingTop)),
+          child: WindowChromeInsets.scope(
+            insets: insets,
+            child: Scaffold(
+              body: Stack(
+                children: [
+                  const Positioned.fill(
+                    child: ColoredBox(
+                      key: _videoSurfaceKey,
+                      color: Colors.black,
+                    ),
                   ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Stack(children: [topBarSlot]),
-                ),
-              ],
+                  SafeArea(
+                    top: false,
+                    child: Stack(children: [topBarSlot]),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -284,7 +293,11 @@ void main() {
 
     tearDown(() => player.dispose());
 
-    const padding = EdgeInsets.fromLTRB(44, 24, 44, 0);
+    // A nonzero bottom is load-bearing: the content and panel assertions
+    // below check `rect.bottom` against `height - padding.bottom`, which a
+    // zero bottom cannot tell apart from a `PlaybackChrome` that dropped the
+    // bottom `SafeArea` inset entirely -- both give the same rect.
+    const padding = EdgeInsets.fromLTRB(44, 24, 44, 20);
     const width = 1200.0;
     const height = 700.0;
 
