@@ -110,7 +110,7 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
 
       with {:ok, user, login_name, device} <- challenge_user(token),
            :ok <- totp_rate_limit(ip_address, login_name),
-           :ok <- second_factor(ip_address, login_name, user, code) do
+           :ok <- second_factor(user, code) do
         finish_login(user, ip_address, login_name, device)
       end
     else
@@ -163,21 +163,22 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
     end
   end
 
+  # Reserves this attempt atomically, before the code is checked, so parallel
+  # requests cannot all pass a read-only check before any of them counted.
+  # See `Accounts.reserve_second_factor_attempt/2`.
   defp totp_rate_limit(ip_address, login_name) do
-    case Accounts.check_login_rate_limit(ip_address, login_name) do
+    case Accounts.reserve_second_factor_attempt(ip_address, login_name) do
       :ok -> :ok
       {:error, :rate_limited} -> {:error, "Too many login attempts. Please try again later."}
     end
   end
 
-  defp second_factor(ip_address, login_name, user, code) do
+  # No separate `record_login_failure/2` on a wrong code: `totp_rate_limit/2`
+  # already counted this attempt when it reserved it.
+  defp second_factor(user, code) do
     case Accounts.verify_second_factor(user, code) do
-      :ok ->
-        :ok
-
-      {:error, :invalid_code} ->
-        Accounts.record_login_failure(ip_address, login_name)
-        {:error, "Invalid code"}
+      :ok -> :ok
+      {:error, :invalid_code} -> {:error, "Invalid code"}
     end
   end
 end

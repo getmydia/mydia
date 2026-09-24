@@ -107,6 +107,80 @@ defmodule Mydia.Accounts.ApiKeyRateLimiter do
   end
 
   @doc """
+  Atomically reserves an attempt against a key (bucket) and reports whether it
+  may proceed.
+
+  `check_rate_limit/2` only reads the bucket, so a caller that checks first
+  and records the attempt only once it turns out to be a failure leaves a
+  window open: N requests arriving concurrently can all read "under the
+  limit" before any of them has recorded anything, and all N get admitted
+  even past `max_attempts`. This closes that window by incrementing the
+  counter first, with the same atomic `:ets.update_counter/4`
+  `record_failed_attempt/2` uses, and only then deciding whether the
+  resulting count is still within `max_attempts` -- so the admission
+  decision is made against a count that already includes this caller's own
+  attempt, and concurrent callers against the same bucket serialize on the
+  counter instead of racing a separate read.
+
+  Returns `:ok` when the attempt is admitted (and now counted against the
+  bucket). Returns `{:error, :rate_limited}` when the bucket was already at
+  or over `max_attempts` before this call; the attempt is still counted in
+  that case, on purpose, so repeatedly calling this while locked out cannot
+  be used to dodge contributing to the count.
+
+  Use this for attempts that must count on issuance rather than only on
+  failure (a second-factor code check, where a correct code should not
+  retroactively "un-spend" the attempt it used). A caller whose attempt
+  ultimately succeeds calls `reset_rate_limit/1` afterward to clear the
+  bucket.
+
+  Accepts the same `:max_attempts` and `:window_seconds` options as
+  `check_rate_limit/2` and `record_failed_attempt/2`.
+  """
+  @spec reserve_attempt(String.t(), keyword()) :: :ok | {:error, :rate_limited}
+  def reserve_attempt(key, opts \\ []) when is_binary(key) do
+    max_attempts = Keyword.get(opts, :max_attempts, @max_attempts)
+    window_seconds = Keyword.get(opts, :window_seconds, @window_seconds)
+    storage_key = rate_limit_key(key)
+    now = System.system_time(:second)
+
+    [attempts, first_attempt_at] =
+      :ets.update_counter(
+        @table_name,
+        storage_key,
+        [{2, 1}, {3, 0}],
+        {storage_key, 0, now, window_seconds}
+      )
+
+    attempts =
+      if now - first_attempt_at > window_seconds do
+        # The window elapsed before this attempt. Restart it here, counted as
+        # the first attempt of the new window. Guarded on the expired
+        # `first_attempt_at` still being the stored one, so when several
+        # callers observe the same expiry concurrently only the first
+        # replaces the bucket. A loser's own increment above landed on the
+        # about-to-be-replaced tuple and is discarded along with it, so it
+        # bumps the fresh bucket instead and is still counted in the new
+        # window rather than lost.
+        case :ets.select_replace(@table_name, [
+               {{storage_key, :_, first_attempt_at, :_}, [],
+                [{{{:const, storage_key}, 1, now, window_seconds}}]}
+             ]) do
+          1 -> 1
+          0 -> :ets.update_counter(@table_name, storage_key, {2, 1})
+        end
+      else
+        attempts
+      end
+
+    if attempts <= max_attempts do
+      :ok
+    else
+      {:error, :rate_limited}
+    end
+  end
+
+  @doc """
   Resets the rate limit for a key (bucket) (e.g., after successful validation).
   """
   def reset_rate_limit(key) when is_binary(key) do

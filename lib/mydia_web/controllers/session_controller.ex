@@ -156,7 +156,12 @@ defmodule MydiaWeb.SessionController do
   defp verify_totp(conn, user, code) do
     ip_address = remote_ip(conn)
 
-    with :ok <- Accounts.check_login_rate_limit(ip_address, user.username),
+    # `reserve_second_factor_attempt/2` counts this attempt atomically before
+    # the code is even checked, closing the race where parallel requests could
+    # all pass a read-only check before any of them recorded a failure. A
+    # wrong code needs no separate `record_login_failure/2`: the reservation
+    # already counted it.
+    with :ok <- Accounts.reserve_second_factor_attempt(ip_address, user.username),
          :ok <- Accounts.verify_second_factor(user, code) do
       Accounts.reset_login_rate_limit(ip_address, user.username)
 
@@ -169,7 +174,6 @@ defmodule MydiaWeb.SessionController do
         render_totp(conn, "Too many login attempts. Please try again later.")
 
       {:error, :invalid_code} ->
-        Accounts.record_login_failure(ip_address, user.username)
         render_totp(conn, "Invalid code")
     end
   end

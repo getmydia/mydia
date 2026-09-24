@@ -470,6 +470,38 @@ defmodule Mydia.Accounts do
     :ok
   end
 
+  @doc """
+  Atomically reserves a second-factor attempt against both the IP and
+  username login rate-limit buckets.
+
+  A second-factor check (a TOTP or recovery code) must count on issuance,
+  not only on failure. `check_login_rate_limit/2` plus `record_login_failure/2`
+  -- the password path's shape -- leaves a window where N concurrent code
+  checks can all pass the read-only check before any of them records a
+  failure, letting more than the configured limit of guesses through per
+  username. This reserves in both buckets up front through
+  `ApiKeyRateLimiter.reserve_attempt/2`, which increments the counter and
+  only admits the caller if the resulting count is still within the limit,
+  so concurrent callers serialize on the counter instead of racing a shared
+  read.
+
+  If either bucket is already over its limit, returns `{:error,
+  :rate_limited}` without the caller ever checking the code. A caller does
+  not call `record_login_failure/2` afterward: this reservation already
+  counted the attempt, whether the code turns out right or wrong. A caller
+  whose code is valid should still call `reset_login_rate_limit/2` -- they
+  are past the point the limit exists to protect, and clearing other
+  in-flight reservations for the same account is an acceptable trade for not
+  leaving a legitimate user locked out by their own earlier typos.
+  """
+  @spec reserve_second_factor_attempt(String.t(), String.t()) :: :ok | {:error, :rate_limited}
+  def reserve_second_factor_attempt(ip_or_key, username) do
+    with :ok <-
+           ApiKeyRateLimiter.reserve_attempt(login_ip_key(ip_or_key), login_ip_rate_opts()) do
+      ApiKeyRateLimiter.reserve_attempt(login_username_key(username), login_username_rate_opts())
+    end
+  end
+
   defp login_ip_rate_opts do
     [
       max_attempts: @login_ip_rate_limit_max_attempts,

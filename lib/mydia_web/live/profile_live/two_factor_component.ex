@@ -132,11 +132,16 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   # limit. LiveView has no reliable client IP, so the account itself stands
   # in for it; the username bucket is the real username, so profile-page
   # failures spend the same per-account budget as password-login failures.
+  #
+  # The attempt is reserved atomically before `fun` runs (see
+  # `Accounts.reserve_second_factor_attempt/2`), so it is counted whether
+  # `fun` succeeds or fails; a failure needs no separate
+  # `record_login_failure/2` call.
   defp rate_limited(user, fun) do
     ip_key = "profile:#{user.id}"
     username = user.username
 
-    case Accounts.check_login_rate_limit(ip_key, username) do
+    case Accounts.reserve_second_factor_attempt(ip_key, username) do
       :ok ->
         case fun.() do
           {:ok, _} = ok ->
@@ -144,7 +149,6 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
             ok
 
           {:error, reason} = error when reason in [:invalid_code, :invalid_password] ->
-            Accounts.record_login_failure(ip_key, username)
             error
         end
 
