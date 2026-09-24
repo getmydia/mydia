@@ -120,6 +120,14 @@ defmodule Mydia.Indexers.ReleaseIdentityTest do
              ) == :match
     end
 
+    test "does not raise on invalid UTF-8 bytes in the release title" do
+      bad = "Movie.Name.2020.1080p" <> <<0xFF>>
+
+      result = ReleaseIdentity.check(bad, movie("Movie Name", 2020))
+
+      assert result == :match or match?({:mismatch, _}, result)
+    end
+
     test "matches a season pack named by a show's alias" do
       target = show("Quiet Harbor: The Long Tide", ["Quiet Harbor"])
 

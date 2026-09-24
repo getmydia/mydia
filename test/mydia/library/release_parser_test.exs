@@ -272,6 +272,14 @@ defmodule Mydia.Library.ReleaseParserTest do
       assert result.year == 2020
     end
 
+    test "does not raise on invalid UTF-8 bytes in the filename" do
+      bad = "Movie.Name.2020.1080p" <> <<0xFF>> <> ".mkv"
+
+      result = ReleaseParser.parse(bad)
+
+      assert %ParsedFileInfo{} = result
+    end
+
     test "leaves a title that merely contains www alone" do
       # Only a leading site prefix is stripped. A title is never emptied.
       result = ReleaseParser.parse("Movie.Name.2020.1080p.BluRay.x264-GRP")

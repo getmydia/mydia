@@ -173,12 +173,29 @@ defmodule Mydia.Library.ReleaseParser do
   defp strip_site_prefix(filename) do
     stripped =
       filename
-      |> then(&Regex.replace(@fullwidth_site_prefix_re, &1, "", global: false))
+      |> maybe_strip_fullwidth_site_prefix()
       |> then(&Regex.replace(@site_prefix_re, &1, "", global: false))
 
     # A name that is *nothing but* a site tag has no release information to
     # recover, so keep the original rather than handing the tokenizer "".
     if String.trim(stripped) == "", do: filename, else: stripped
+  end
+
+  # `@fullwidth_site_prefix_re` needs the `u` modifier for its multibyte
+  # brackets, which requires the subject to be valid UTF-8 or Erlang's `re`
+  # raises `ArgumentError`. Malformed byte sequences are a real category in
+  # release filenames (older filesystems, mis-declared tracker encodings),
+  # and this runs unconditionally on every scanned/imported file, so an
+  # invalid-UTF-8 filename skips this step. `@site_prefix_re` has no
+  # multibyte literals and needs no `u`, so it still runs and the tokenizer
+  # still gets a shot at the rest. That is the safe failure: a title we
+  # decline to clean, never a title we destroy.
+  defp maybe_strip_fullwidth_site_prefix(filename) do
+    if String.valid?(filename) do
+      Regex.replace(@fullwidth_site_prefix_re, filename, "", global: false)
+    else
+      filename
+    end
   end
 
   defp tokenize_classify_resolve(filename, target) do
