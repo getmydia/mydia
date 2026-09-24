@@ -388,6 +388,7 @@ incompatible 4K file would otherwise ask of it. Also settable under **Admin > Sy
 |----------|-------------|---------|
 | `LOG_LEVEL` | Log level (debug, info, warning, error) | `info` |
 | `MYDIA_PERF_METRICS` | Records hourly performance timings (page loads, API calls, database queries, background jobs) in the database, kept 14 days, for diagnosing slowness. Set to `false`, `0`, `no`, or `off` to turn off | `true` |
+| `MYDIA_METRICS_ENABLED` | Serves Prometheus metrics at `/metrics`: memory, request latency, background jobs, library size, downloads and active streams. The endpoint has no authentication, so keep it off your public reverse proxy. Accepts `true`, `1`, `yes`, `on`. See [Monitoring with Prometheus](../how-to/monitoring-with-prometheus.md) | `false` |
 | `SKIP_BACKUPS` | Skip the automatic database snapshot Mydia takes before applying pending migrations. SQLite only, since PostgreSQL has no automatic backup to skip. Accepts `true`, `1`, `yes`, `on` | `false` |
 
 See [Backing Up and Restoring](../how-to/backup-restore.md) for what the automatic backup does, where it writes, and what it does not protect you from.
