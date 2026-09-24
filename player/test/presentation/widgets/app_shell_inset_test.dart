@@ -90,7 +90,7 @@ void main() {
       );
 
       // This is the path every out-of-shell detail screen takes. Measured:
-      // 56 + 28 = 84.
+      // 56 + 38 = 94.
       expect(
         tester.getRect(find.byType(AppBar)).height,
         kToolbarHeight + kMacTitleBarOverlap,

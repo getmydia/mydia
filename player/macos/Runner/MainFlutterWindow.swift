@@ -37,6 +37,25 @@ class MainFlutterWindow: NSWindow {
     self.backgroundColor = appBackground
     flutterViewController.backgroundColor = appBackground
 
+    // An empty unified compact toolbar gives the title bar the taller band
+    // sidebar apps use, with the traffic lights inset from the corner.
+    // kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart must
+    // match the band height.
+    let toolbar = NSToolbar(identifier: "MainToolbar")
+    toolbar.showsBaselineSeparator = false
+    self.toolbar = toolbar
+    self.toolbarStyle = .unifiedCompact
+
+    // In fullscreen the empty toolbar would appear as a blank strip when the
+    // menu bar slides down. WindowChromeInset already drops the inset there.
+    let center = NotificationCenter.default
+    center.addObserver(
+      forName: NSWindow.willEnterFullScreenNotification, object: self, queue: .main
+    ) { [weak self] _ in self?.toolbar?.isVisible = false }
+    center.addObserver(
+      forName: NSWindow.didExitFullScreenNotification, object: self, queue: .main
+    ) { [weak self] _ in self?.toolbar?.isVisible = true }
+
     super.awakeFromNib()
   }
 }

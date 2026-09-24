@@ -3,18 +3,19 @@ import 'package:flutter/widgets.dart';
 
 import '../window/window_fullscreen.dart';
 
-/// Height of the macOS title bar strip the traffic light window controls
+/// Height of the macOS title bar band the traffic light window controls
 /// float in.
 ///
 /// `MainFlutterWindow.swift` sets `titlebarAppearsTransparent`, hides the
-/// title and inserts `.fullSizeContentView`, so the Flutter view runs under
-/// the title bar and AppKit draws the close/minimize/zoom buttons on top of
-/// it at roughly x 7-75, y 8-28. The embedder reports no safe-area inset for
-/// that strip, so the app has to reserve it.
+/// title, inserts `.fullSizeContentView` and attaches an empty toolbar with
+/// the `.unifiedCompact` style, so the Flutter view runs under a 38pt band
+/// with AppKit's close/minimize/zoom buttons centred in it, the proportions
+/// of Music, TV and Finder. The embedder reports no safe-area inset for that
+/// band, so the app has to reserve it.
 ///
-/// 28 is the standard regular-height title bar. The buttons span roughly
-/// y14-y26, so this clears them with a few points to spare.
-const double kMacTitleBarOverlap = 28.0;
+/// If the toolbar style changes, remeasure: `window.frame.height -
+/// window.contentLayoutRect.height` in a debug build gives the band height.
+const double kMacTitleBarOverlap = 38.0;
 
 /// Height of the band reserved at the top of the Linux window for the
 /// Flutter-drawn window buttons.
