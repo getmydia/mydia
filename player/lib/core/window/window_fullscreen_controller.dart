@@ -28,8 +28,8 @@ class WindowFullscreenController with WindowListener {
   /// launched into an already-fullscreen window and no event ever fires.
   ///
   /// Never throws: startup must not fail over window chrome, and a failed read
-  /// leaves the signal at `false`, which only costs a 28pt inset that the next
-  /// real event corrects.
+  /// leaves the signal at `false`, which only costs a `kMacTitleBarOverlap`
+  /// inset that the next real event corrects.
   Future<void> seed() async {
     try {
       _signal.value = await _window.isFullScreen();
