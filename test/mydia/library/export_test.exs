@@ -114,4 +114,89 @@ defmodule Mydia.Library.ExportTest do
              ]
     end
   end
+
+  describe "to_json/1" do
+    setup do
+      media_item_fixture(%{type: "movie", title: "Northwind, \"Redux\"", tmdb_id: 900_010})
+      %{rows: Export.rows()}
+    end
+
+    test "wraps rows in a versioned envelope", %{rows: rows} do
+      decoded = rows |> Export.to_json() |> IO.iodata_to_binary() |> Jason.decode!()
+
+      assert decoded["format"] == "mydia-library"
+      assert decoded["version"] == 1
+      assert decoded["mydia_version"] == Mydia.System.app_version()
+      assert {:ok, _, _} = DateTime.from_iso8601(decoded["exported_at"])
+      assert [item] = decoded["items"]
+      assert item["type"] == "movie"
+      assert item["tmdb_id"] == 900_010
+      assert Map.has_key?(item, "tvdb_id") and is_nil(item["tvdb_id"])
+      assert {:ok, _, _} = DateTime.from_iso8601(item["added_at"])
+    end
+
+    test "emits keys in column order", %{rows: rows} do
+      json = rows |> Export.to_json() |> IO.iodata_to_binary()
+
+      {:ok, envelope} = Jason.decode(json, objects: :ordered_objects)
+
+      assert Enum.map(envelope.values, &elem(&1, 0)) ==
+               ["format", "version", "exported_at", "mydia_version", "items"]
+
+      [item] = envelope["items"]
+      assert Enum.map(item.values, &elem(&1, 0)) == Enum.map(Row.fields(), &Atom.to_string/1)
+    end
+
+    test "an empty library is a valid envelope" do
+      decoded = [] |> Export.to_json() |> IO.iodata_to_binary() |> Jason.decode!()
+      assert decoded["items"] == []
+    end
+  end
+
+  describe "to_csv/1" do
+    test "header row matches the column order and round-trips awkward values" do
+      media_item_fixture(%{type: "movie", title: "Northwind, \"Redux\"\nPart Two"})
+      media_item_fixture(%{type: "movie", title: "Été à Kyōto"})
+
+      csv = Export.rows() |> Export.to_csv() |> IO.iodata_to_binary()
+
+      refute String.starts_with?(csv, "﻿")
+      assert String.contains?(csv, "\r\n")
+
+      [header | rows] = NimbleCSV.RFC4180.parse_string(csv, skip_headers: false)
+      assert header == Enum.map(Row.fields(), &Atom.to_string/1)
+
+      titles = Enum.map(rows, &Enum.at(&1, 1))
+      assert "Northwind, \"Redux\"\nPart Two" in titles
+      assert "Été à Kyōto" in titles
+    end
+
+    test "nil is an empty cell and booleans are true/false" do
+      media_item_fixture(%{type: "movie", title: "Glass Harbor", monitored: false})
+
+      [_header, row] =
+        Export.rows()
+        |> Export.to_csv()
+        |> IO.iodata_to_binary()
+        |> NimbleCSV.RFC4180.parse_string(skip_headers: false)
+
+      by_col = Enum.zip(Enum.map(Row.fields(), &Atom.to_string/1), row) |> Map.new()
+      assert by_col["tmdb_id"] == ""
+      assert by_col["monitored"] == "false"
+      assert by_col["episode_count"] == ""
+    end
+
+    test "an empty library is a header-only CSV" do
+      csv = [] |> Export.to_csv() |> IO.iodata_to_binary()
+      assert csv == Enum.map_join(Row.fields(), ",", &Atom.to_string/1) <> "\r\n"
+    end
+  end
+
+  describe "filename/2" do
+    test "uses the UTC date and the format extension" do
+      at = ~U[2026-09-24 23:30:00Z]
+      assert Export.filename(:json, at) == "mydia-library-2026-09-24.json"
+      assert Export.filename(:csv, at) == "mydia-library-2026-09-24.csv"
+    end
+  end
 end

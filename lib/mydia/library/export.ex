@@ -16,11 +16,15 @@ defmodule Mydia.Library.Export do
 
   import Ecto.Query
 
+  alias Jason.OrderedObject
   alias Mydia.Library.{MediaFile, MediaFileEpisode}
   alias Mydia.Library.Export.Row
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
   alias Mydia.Settings.{LibraryPath, QualityProfile}
+
+  @format "mydia-library"
+  @version 1
 
   @doc "Every media item as an export row, sorted by type, title, year."
   @spec rows() :: [Row.t()]
@@ -34,6 +38,51 @@ defmodule Mydia.Library.Export do
     |> Enum.map(&to_row(&1, files, episodes, covered))
     |> Enum.sort_by(&{&1.type, String.downcase(&1.title), &1.year})
   end
+
+  @doc "JSON envelope with ordered keys; `items` is readable by the Custom URL import list."
+  @spec to_json([Row.t()]) :: iodata()
+  def to_json(rows) do
+    OrderedObject.new([
+      {"format", @format},
+      {"version", @version},
+      {"exported_at", DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601()},
+      {"mydia_version", Mydia.System.app_version()},
+      {"items", Enum.map(rows, &json_item/1)}
+    ])
+    |> Jason.encode_to_iodata!()
+  end
+
+  @doc "RFC 4180 CSV with a header row. UTF-8, no BOM, CRLF."
+  @spec to_csv([Row.t()]) :: iodata()
+  def to_csv(rows) do
+    header = Enum.map(Row.fields(), &Atom.to_string/1)
+    Mydia.Library.Export.CSV.dump_to_iodata([header | Enum.map(rows, &csv_cells/1)])
+  end
+
+  @doc "Download filename for the given format, dated in UTC."
+  @spec filename(:json | :csv, DateTime.t()) :: String.t()
+  def filename(format, %DateTime{} = at) when format in [:json, :csv] do
+    "mydia-library-#{at |> DateTime.shift_zone!("Etc/UTC") |> DateTime.to_date() |> Date.to_iso8601()}.#{format}"
+  end
+
+  defp json_item(%Row{} = row) do
+    row
+    |> ordered_values()
+    |> Enum.map(fn {k, v} -> {Atom.to_string(k), json_value(v)} end)
+    |> OrderedObject.new()
+  end
+
+  defp csv_cells(%Row{} = row), do: Enum.map(ordered_values(row), fn {_k, v} -> csv_value(v) end)
+
+  defp ordered_values(row), do: Enum.map(Row.fields(), &{&1, Map.fetch!(row, &1)})
+
+  defp json_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp json_value(v), do: v
+
+  defp csv_value(nil), do: ""
+  defp csv_value(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
+  defp csv_value(v) when is_binary(v), do: v
+  defp csv_value(v), do: to_string(v)
 
   defp items_query do
     from(m in MediaItem,
