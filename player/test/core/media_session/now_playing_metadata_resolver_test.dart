@@ -93,6 +93,31 @@ void main() {
       expect(calls, isEmpty);
     });
 
+    test('a fetch that could not reach the server yet retries next time',
+        () async {
+      error = NowPlayingFetchUnavailable();
+      final resolver = build();
+      final first = await resolver.resolve(mediaItemId: 'movie-1');
+      expect(first, isNull);
+
+      error = null;
+      response = {
+        'movie': {
+          'year': 2031,
+          'artwork': {'posterUrl': 'https://img.example/orchard.jpg'},
+        },
+      };
+      final second = await resolver.resolve(mediaItemId: 'movie-1');
+      expect(
+        second,
+        const NowPlayingMetadata(
+          subtitle: '2031',
+          posterUrl: 'https://img.example/orchard.jpg',
+        ),
+      );
+      expect(calls, hasLength(2));
+    });
+
     test('memoises per item, including failures', () async {
       error = Exception('offline');
       final resolver = build();

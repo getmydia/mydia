@@ -9,6 +9,13 @@ import 'media_session_state.dart';
 typedef NowPlayingFetch = Future<Map<String, dynamic>?> Function(
     String document, Map<String, dynamic> variables);
 
+/// Thrown by a [NowPlayingFetch] when there is currently no way to reach the
+/// server (no GraphQL client yet, e.g. playback started during startup or a
+/// reconnect) rather than a real, terminal failure. The resolver treats this
+/// as unmemoisable so the next [NowPlayingMetadataResolver.resolve] call for
+/// the same ids fetches again instead of returning a permanently cached null.
+class NowPlayingFetchUnavailable implements Exception {}
+
 const _episodeQuery = r'''
 query NowPlayingEpisode($id: ID!) {
   episode(id: $id) {
@@ -46,12 +53,12 @@ class NowPlayingMetadataResolver {
   Future<NowPlayingMetadata?> resolve(
       {String? mediaItemId, String? episodeId}) {
     if (mediaItemId == null && episodeId == null) return Future.value(null);
-    return _cache.putIfAbsent(
-        '$mediaItemId|$episodeId', () => _load(mediaItemId, episodeId));
+    final key = '$mediaItemId|$episodeId';
+    return _cache.putIfAbsent(key, () => _load(mediaItemId, episodeId, key));
   }
 
   Future<NowPlayingMetadata?> _load(
-      String? mediaItemId, String? episodeId) async {
+      String? mediaItemId, String? episodeId, String key) async {
     try {
       if (episodeId != null) {
         final data = await _fetch(_episodeQuery, {'id': episodeId});
@@ -61,6 +68,11 @@ class NowPlayingMetadataResolver {
       final data = await _fetch(_movieQuery, {'id': mediaItemId});
       final movie = data?['movie'];
       return movie is Map<String, dynamic> ? _movie(movie) : null;
+    } on NowPlayingFetchUnavailable {
+      // No server connection yet, not a terminal failure: let the next
+      // resolve for the same ids try again instead of memoising this null.
+      _cache.remove(key);
+      return null;
     } catch (e) {
       debugPrint('[MediaSession] metadata lookup failed: $e');
       return null;
@@ -97,7 +109,7 @@ final nowPlayingMetadataResolverProvider =
     // Read per call, not captured: the client is rebuilt on reconnect and
     // token refresh.
     final client = ref.read(graphqlClientProvider);
-    if (client == null) return null;
+    if (client == null) throw NowPlayingFetchUnavailable();
     final result = await client.query(QueryOptions(
       document: gql(document),
       variables: variables,
