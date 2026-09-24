@@ -45,7 +45,7 @@ defmodule Mydia.Media.LibraryListing do
   # in memory, and :search in particular must stay out: Media's own :search
   # filter matches titles only, while the listing also matches original title,
   # year and overview.
-  @filter_keys [:base_query, :exclude_categories, :type, :monitored]
+  @filter_keys [:base_query, :exclude_categories, :type, :monitored, :library_path_id]
 
   # Sort sentinels. Air dates are Dates, so these stay Dates: sorting a mix of
   # Date and NaiveDateTime raises.
@@ -70,8 +70,9 @@ defmodule Mydia.Media.LibraryListing do
   page, so a filtered listing can report what the filter actually costs.
 
   Filter options go to `Mydia.Media.media_items_query/1`: `:base_query`,
-  `:exclude_categories`, `:type`, `:monitored`. Applied in memory: `:search`,
-  `:quality`, `:progress`, `:sort_by`, then `:offset` (default 0) and `:limit`.
+  `:exclude_categories`, `:type`, `:monitored`, `:library_path_id`. Applied in
+  memory: `:search`, `:quality`, `:progress`, `:sort_by`, then `:offset`
+  (default 0) and `:limit`.
   """
   @spec page(keyword()) :: page()
   def page(opts) do

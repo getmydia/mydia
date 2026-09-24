@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias Mydia.Collections.SmartRules
   alias Mydia.Downloads.DownloadService
   alias Mydia.Search
+  alias Mydia.Settings.LibraryPath
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.MediaLive.DiskRemovalFlash
@@ -31,6 +32,13 @@ defmodule MydiaWeb.MediaLive.Index do
   # library with a handful of stray titles is left alone.
   @anime_nudge_threshold 10
 
+  # Library path types that can hold each page's media, from LibraryPath's own
+  # movie/series type lists so a third type never has to be kept in sync here.
+  @library_types %{
+    movies: LibraryPath.movie_library_types(),
+    tv_shows: LibraryPath.series_library_types()
+  }
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
@@ -46,6 +54,8 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_progress, nil)
      |> assign(:filter_monitored, nil)
      |> assign(:filter_quality, nil)
+     |> assign(:filter_library, nil)
+     |> assign(:library_options, [])
      |> assign(:sort_by, "title_asc")
      |> assign(:page, 0)
      |> assign(:has_more, false)
@@ -87,6 +97,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "Movies")
     |> assign(:filter_type, "movie")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
+    |> assign_library_options(:movies)
     |> load_media_items_when_connected()
   end
 
@@ -95,6 +106,7 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:page_title, "TV Shows")
     |> assign(:filter_type, "tv_show")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
+    |> assign_library_options(:tv_shows)
     |> load_media_items_when_connected()
   end
 
@@ -105,8 +117,14 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:page_title, collection.name)
         # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
         # The library scan handlers read it unguarded, and their existing
-        # {nil, _} clause is the right behaviour for a section.
+        # {nil, _} clause is the right behaviour for a section. Likewise
+        # :filter_library/:library_options: /movies, /tv and /sections/:id
+        # share this module and live_session, so navigating between them
+        # patches the existing process instead of remounting it, and a
+        # library chosen on /movies would otherwise leak into a section.
         |> assign(:filter_type, nil)
+        |> assign(:filter_library, nil)
+        |> assign(:library_options, [])
         |> assign(:section, collection)
         |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
         |> load_section(collection)
@@ -151,6 +169,28 @@ defmodule MydiaWeb.MediaLive.Index do
       Enum.any?(anime, &(&1 in pinned)) -> false
       true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
     end
+  end
+
+  # Runtime-config entries carry a "runtime::" id that never appears on a file,
+  # and LibraryPathSync normally persists them as real rows anyway. A selection
+  # that no longer fits (a disabled library, or the other page's type) resets,
+  # and so does one on a page with fewer than two options, where the select is
+  # hidden and the user could not clear it.
+  defp assign_library_options(socket, action) do
+    types = Map.fetch!(@library_types, action)
+
+    options =
+      Enum.filter(
+        Settings.list_library_paths(),
+        &(&1.type in types and not Settings.runtime_config?(&1))
+      )
+
+    selected = socket.assigns.filter_library
+    keep? = length(options) >= 2 and Enum.any?(options, &(&1.id == selected))
+
+    socket
+    |> assign(:library_options, options)
+    |> assign(:filter_library, if(keep?, do: selected))
   end
 
   @impl true
@@ -207,6 +247,11 @@ defmodule MydiaWeb.MediaLive.Index do
         _ -> nil
       end
 
+    library =
+      Enum.find_value(socket.assigns.library_options, fn lp ->
+        if lp.id == params["library"], do: lp.id
+      end)
+
     sort_by = params["sort_by"] || socket.assigns.sort_by
     Logger.debug("Sort by: #{inspect(sort_by)}")
 
@@ -215,6 +260,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:filter_progress, progress)
      |> assign(:filter_monitored, monitored)
      |> assign(:filter_quality, quality)
+     |> assign(:filter_library, library)
      |> assign(:sort_by, sort_by)
      |> assign(:page, 0)
      |> assign(:selected_ids, MapSet.new())
@@ -877,6 +923,7 @@ defmodule MydiaWeb.MediaLive.Index do
     )
     |> maybe_add_filter(:type, assigns.filter_type)
     |> maybe_add_filter(:monitored, assigns.filter_monitored)
+    |> maybe_add_filter(:library_path_id, assigns[:filter_library])
     |> Keyword.merge(
       user_id: assigns.current_user.id,
       search: assigns.search_query,
