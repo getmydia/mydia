@@ -16,6 +16,40 @@ class _RecordingLift implements SubtitleLift {
   }
 }
 
+/// A lift with value equality on [id], so a freshly-constructed instance
+/// with the same id compares `==` to a previous one -- the shape
+/// `VideoStateSubtitleLift(state)` takes when it is built inline on every
+/// `PlaybackChrome` rebuild.
+class _EqualLift implements SubtitleLift {
+  _EqualLift(this.id, this.calls);
+
+  final int id;
+  final List<double> calls;
+
+  @override
+  void apply(double bottom, {required Duration duration}) => calls.add(bottom);
+
+  @override
+  bool operator ==(Object other) => other is _EqualLift && other.id == id;
+
+  @override
+  int get hashCode => id;
+}
+
+/// A child with its own State, to prove [ChromeSubtitleLift] never changes
+/// the element shape above it (which would remount and drop this State).
+class _CountingChild extends StatefulWidget {
+  const _CountingChild();
+
+  @override
+  State<_CountingChild> createState() => _CountingChildState();
+}
+
+class _CountingChildState extends State<_CountingChild> {
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+
 final _reference = GlobalKey();
 
 RenderBox? _referenceBox() =>
@@ -27,6 +61,7 @@ Widget _host({
   required SubtitleLift? lift,
   Animation<double>? chrome,
   double panelHeight = 120,
+  Widget? child,
 }) {
   final stack = Stack(
     key: _reference,
@@ -39,7 +74,7 @@ Widget _host({
         child: ChromeSubtitleLift(
           lift: lift,
           referenceBox: _referenceBox,
-          child: SizedBox(height: panelHeight),
+          child: child ?? SizedBox(height: panelHeight),
         ),
       ),
     ],
@@ -149,5 +184,73 @@ void main() {
 
     expect(find.byType(SizedBox), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('swapping lift non-null -> null resets the old lift to rest',
+      (tester) async {
+    _view(tester);
+    final lift = _RecordingLift();
+    await tester.pumpWidget(_host(lift: lift, chrome: chrome));
+    await tester.pump();
+    expect(lift.bottoms, [_shownLift]);
+
+    await tester.pumpWidget(_host(lift: null, chrome: chrome));
+    await tester.pump();
+
+    expect(lift.bottoms, [_shownLift, kSubtitleRestPadding]);
+    expect(lift.durations.last, DepthTokens.motionMedium);
+  });
+
+  testWidgets(
+      'swapping lift null -> non-null picks up the shown lift, then rest on hide',
+      (tester) async {
+    _view(tester);
+    await tester.pumpWidget(_host(lift: null, chrome: chrome));
+    await tester.pump();
+
+    final lift = _RecordingLift();
+    await tester.pumpWidget(_host(lift: lift, chrome: chrome));
+    await tester.pump();
+    expect(lift.bottoms, [_shownLift]);
+
+    chrome.reverse();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(chrome.status, AnimationStatus.reverse);
+    expect(lift.bottoms.last, kSubtitleRestPadding);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'rebuilding with an equal-but-different lift instance does not re-apply',
+      (tester) async {
+    _view(tester);
+    final calls = <double>[];
+    await tester.pumpWidget(_host(lift: _EqualLift(1, calls), chrome: chrome));
+    await tester.pump();
+    expect(calls, [_shownLift]);
+
+    await tester.pumpWidget(_host(lift: _EqualLift(1, calls), chrome: chrome));
+    await tester.pump();
+
+    expect(calls, [_shownLift]);
+  });
+
+  testWidgets('toggling lift null <-> non-null keeps the child State',
+      (tester) async {
+    _view(tester);
+    const child = _CountingChild();
+    await tester.pumpWidget(_host(lift: null, chrome: chrome, child: child));
+    await tester.pump();
+    final before =
+        tester.state<_CountingChildState>(find.byType(_CountingChild));
+
+    final lift = _RecordingLift();
+    await tester.pumpWidget(_host(lift: lift, chrome: chrome, child: child));
+    await tester.pump();
+    final after =
+        tester.state<_CountingChildState>(find.byType(_CountingChild));
+
+    expect(identical(before, after), isTrue);
   });
 }

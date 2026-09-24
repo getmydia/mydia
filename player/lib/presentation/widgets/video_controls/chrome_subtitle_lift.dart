@@ -60,8 +60,10 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final animation =
-        widget.lift == null ? null : ChromeAnimation.maybeOf(context);
+    // Always registered, lift or no lift: a null lift can still turn
+    // non-null later (`didUpdateWidget`), and by then it is too late to
+    // start depending on `ChromeAnimation` -- this build already happened.
+    final animation = ChromeAnimation.maybeOf(context);
     if (!identical(animation, _animation)) {
       _animation?.removeStatusListener(_handleStatus);
       _animation = animation;
@@ -73,7 +75,9 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
   @override
   void didUpdateWidget(ChromeSubtitleLift oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.lift, widget.lift)) {
+    if (oldWidget.lift != widget.lift) {
+      final oldLift = oldWidget.lift;
+      if (oldLift != null) _resetToRest(oldLift);
       _applied = null;
       _scheduleSync();
     }
@@ -83,16 +87,25 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
   void dispose() {
     _animation?.removeStatusListener(_handleStatus);
     final lift = widget.lift;
-    final applied = _applied;
-    if (lift != null && applied != null && applied > kSubtitleRestPadding) {
-      // Unmounting locks the tree, and `SubtitleView.setPadding` calls
-      // `setState`. The frame's end is the first safe moment.
-      WidgetsBinding.instance.addPostFrameCallback((_) => lift.apply(
-            kSubtitleRestPadding,
-            duration: DepthTokens.motionMedium,
-          ));
-    }
+    if (lift != null) _resetToRest(lift);
     super.dispose();
+  }
+
+  /// Schedules [lift] back to rest after the frame, if the last value we
+  /// applied to it was above rest. Shared by [dispose] (this widget is
+  /// unmounting) and [didUpdateWidget] (this widget is switching to a
+  /// different [SubtitleLift] and the departing one must not keep the
+  /// subtitle lifted with nothing left to bring it back down).
+  void _resetToRest(SubtitleLift lift) {
+    final applied = _applied;
+    if (applied == null || applied <= kSubtitleRestPadding) return;
+    // The tree may be locked (dispose) or mid-rebuild (didUpdateWidget);
+    // the frame's end is the first safe moment either way, since `apply`
+    // calls `setState` on `SubtitleView`.
+    WidgetsBinding.instance.addPostFrameCallback((_) => lift.apply(
+          kSubtitleRestPadding,
+          duration: DepthTokens.motionMedium,
+        ));
   }
 
   void _handleStatus(AnimationStatus status) => _scheduleSync();
@@ -139,14 +152,15 @@ class _ChromeSubtitleLiftState extends State<ChromeSubtitleLift> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (widget.lift == null) return widget.child;
-    return _PaintedRectReporter(
-      referenceBox: widget.referenceBox,
-      onPainted: _handlePainted,
-      child: widget.child,
-    );
-  }
+  Widget build(BuildContext context) => _PaintedRectReporter(
+        // Always wrapped, lift or no lift: swapping the element shape when
+        // a lift arrives or leaves would remount `widget.child`'s subtree,
+        // dropping its State. `_handlePainted` is harmless with no lift --
+        // `_scheduleSync` no-ops on a null one.
+        referenceBox: widget.referenceBox,
+        onPainted: _handlePainted,
+        child: widget.child,
+      );
 }
 
 class _PaintedRectReporter extends SingleChildRenderObjectWidget {
@@ -204,6 +218,17 @@ class VideoStateSubtitleLift implements SubtitleLift {
   VideoStateSubtitleLift(this.state);
 
   final VideoState state;
+
+  // `PlaybackChrome` builds a fresh `VideoStateSubtitleLift(state)` on every
+  // rebuild. Value equality on the underlying `state` lets
+  // `ChromeSubtitleLift.didUpdateWidget` recognise that as "the same lift",
+  // not a swap, so an unchanged target is not re-applied every rebuild.
+  @override
+  bool operator ==(Object other) =>
+      other is VideoStateSubtitleLift && identical(other.state, state);
+
+  @override
+  int get hashCode => identityHashCode(state);
 
   @override
   void apply(double bottom, {required Duration duration}) {
