@@ -198,6 +198,7 @@ defmodule Mydia.MixProject do
       {:guardian, "~> 2.3"},
       # Password hashing for users
       {:bcrypt_elixir, "~> 3.0"},
+      {:nimble_totp, "~> 1.0"},
       # Password hashing for API keys
       {:argon2_elixir, "~> 4.0"},
 
