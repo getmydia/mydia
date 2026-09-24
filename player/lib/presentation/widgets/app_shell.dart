@@ -73,9 +73,25 @@ class AppShell extends ConsumerStatefulWidget {
   /// The shell's banners sit above the screen, so they have to clear the
   /// band themselves, but only while one is showing: an idle banner area
   /// must not push the screen's title row down out of the band.
+  ///
+  /// `_PadTopWhenNonEmpty` reads the ambient `MediaQuery.padding.top` (via
+  /// its own element, still above this `Builder`) to know how far to shift
+  /// [child] down, but [child] itself gets that same top padding removed
+  /// first. Without the removal, a banner that wraps its own content in
+  /// `SafeArea(bottom: false)` -- `CompatibilityBanner` and `UpdateBanner`
+  /// both do -- would apply the band inset a second time on top of the shift
+  /// this widget already gives it, doubling the empty space above the
+  /// banner's text.
   @visibleForTesting
-  static Widget bannerArea({required Widget child}) =>
-      _PadTopWhenNonEmpty(child: child);
+  static Widget bannerArea({required Widget child}) => Builder(
+        builder: (context) => _PadTopWhenNonEmpty(
+          child: MediaQuery.removePadding(
+            context: context,
+            removeTop: true,
+            child: child,
+          ),
+        ),
+      );
 
   /// Wraps the bottom dock so it disappears while the nav drawer is open.
   ///
