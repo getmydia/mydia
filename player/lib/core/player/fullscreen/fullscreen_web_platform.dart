@@ -12,7 +12,7 @@ import 'fullscreen_failure.dart';
 /// to read.
 ///
 /// The same reasoning as `resolveWebMode`, `PlatformFeatures.
-/// computeSupportsKeyboardShortcuts` and `windowChromeInsetFor`, applied to
+/// computeSupportsKeyboardShortcuts` and `windowChromeInsetsFor`, applied to
 /// state rather than to a single pure decision.
 abstract interface class WebFullscreenPlatform {
   /// `document.fullscreenEnabled`. False when the read threw, in which case the

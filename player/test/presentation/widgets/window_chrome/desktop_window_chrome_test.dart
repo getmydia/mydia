@@ -47,7 +47,7 @@ Future<void> _pump(
 }
 
 void main() {
-  // Same reasoning as `windowChromeInsetFor`: `kIsWeb` is always false under
+  // Same reasoning as `windowChromeInsetsFor`: `kIsWeb` is always false under
   // `flutter test`, so the web branch is only reachable through the pure
   // predicate.
   group('shouldShowWindowChrome', () {

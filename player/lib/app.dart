@@ -563,6 +563,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         child: DesktopWindowChrome(
           layout: _decorationLayout.layout,
           child: WindowChromeInset(
+            decorationLayout: _decorationLayout.layout,
             child: ToastLayer(
               child: CastBarLayer(child: child ?? const SizedBox.shrink()),
             ),

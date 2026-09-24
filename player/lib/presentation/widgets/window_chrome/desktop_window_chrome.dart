@@ -217,7 +217,7 @@ class _WindowChromeState extends State<_WindowChrome> {
 /// under `flutter test`, so a regression deleting the web check from
 /// [DesktopWindowChrome.build] would pass every widget test unless the
 /// underlying logic is tested on explicit inputs. Same reasoning as
-/// `windowChromeInsetFor`.
+/// `windowChromeInsetsFor`.
 @visibleForTesting
 bool shouldShowWindowChrome({
   required bool isWeb,
