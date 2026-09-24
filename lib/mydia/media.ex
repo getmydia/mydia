@@ -991,6 +991,53 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Counts episodes by availability state and monitored flag, for metrics.
+
+  States follow `Mydia.Media.EpisodeStatus.get_episode_status/1`: `"downloaded"`
+  when a non-trashed, non-extra file is linked through `media_file_episodes`
+  (the association the episode page uses), else `"tba"` without an air date,
+  `"upcoming"` when it airs after today, otherwise `"missing"`. Only non-empty
+  combinations are returned.
+  """
+  @spec episode_state_counts() :: %{{String.t(), boolean()} => non_neg_integer()}
+  def episode_state_counts do
+    today = Date.utc_today()
+
+    # EXISTS as a fragment, as list_episodes_by_air_date/3 does: Ecto does not
+    # accept `in subquery(...)` inside select. This one goes through
+    # media_file_episodes rather than media_files.episode_id, so the trailing
+    # episodes of a multi-episode file count as downloaded.
+    Episode
+    |> select([e], %{
+      downloaded:
+        fragment(
+          "EXISTS (SELECT 1 FROM media_file_episodes mfe JOIN media_files mf ON mf.id = mfe.media_file_id WHERE mfe.episode_id = ? AND mf.trashed_at IS NULL AND mf.extra_kind IS NULL)",
+          e.id
+        ),
+      tba: is_nil(e.air_date),
+      upcoming: e.air_date > ^today,
+      monitored: e.monitored
+    })
+    |> subquery()
+    |> group_by([s], [s.downloaded, s.tba, s.upcoming, s.monitored])
+    |> select([s], {s.downloaded, s.tba, s.upcoming, s.monitored, count()})
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn {downloaded, tba, upcoming, monitored, count}, acc ->
+      state = episode_state(truthy?(downloaded), truthy?(tba), truthy?(upcoming))
+      Map.update(acc, {state, truthy?(monitored)}, count, &(&1 + count))
+    end)
+  end
+
+  defp episode_state(true, _tba, _upcoming), do: "downloaded"
+  defp episode_state(false, true, _upcoming), do: "tba"
+  defp episode_state(false, false, true), do: "upcoming"
+  defp episode_state(false, false, _upcoming), do: "missing"
+
+  # SQLite returns boolean expressions as 0/1 integers, PostgreSQL as booleans.
+  # A NULL comparison (upcoming on a NULL air_date) comes back as nil.
+  defp truthy?(value), do: value in [true, 1]
+
+  @doc """
   Returns a map of `{type, provider, provider_id}` to library status for
   efficient lookup.
 

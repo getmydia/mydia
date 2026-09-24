@@ -109,6 +109,36 @@ defmodule Mydia.Downloads.History do
   end
 
   @doc """
+  Counts downloads by derived state, for metrics.
+
+  `downloads` has no status column: a row with an `error_message` is failed; a
+  completed row not yet imported is awaiting import; an incomplete row without
+  an error is active. Imported rows are not counted. Every key is present.
+  """
+  @spec count_by_state() :: %{
+          active: non_neg_integer(),
+          failed: non_neg_integer(),
+          awaiting_import: non_neg_integer()
+        }
+  def count_by_state do
+    %{
+      active:
+        count_downloads(where(Download, [d], is_nil(d.completed_at) and is_nil(d.error_message))),
+      failed: count_downloads(where(Download, [d], not is_nil(d.error_message))),
+      awaiting_import:
+        count_downloads(
+          where(
+            Download,
+            [d],
+            not is_nil(d.completed_at) and is_nil(d.imported_at) and is_nil(d.error_message)
+          )
+        )
+    }
+  end
+
+  defp count_downloads(query), do: Repo.aggregate(query, :count)
+
+  @doc """
   Counts the downloads still waiting on `client_name`: rows assigned to it that
   have not been imported.
 
