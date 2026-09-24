@@ -42,11 +42,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _passwordController = TextEditingController();
   final _claimCodeController = TextEditingController();
   final _relayUrlController = TextEditingController();
+  final _totpController = TextEditingController();
   final _serverUrlFocus = FocusNode();
   final _usernameFocus = FocusNode();
   final _passwordFocus = FocusNode();
   final _claimCodeFocus = FocusNode();
   final _relayUrlFocus = FocusNode();
+  final _totpFocus = FocusNode();
   final _tvSettingsFocusNode = FocusNode(debugLabel: 'tv-settings-button');
   final _closeSettingsFocusNode =
       FocusNode(debugLabel: 'settings-close-button');
@@ -172,11 +174,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _passwordController.dispose();
     _claimCodeController.dispose();
     _relayUrlController.dispose();
+    _totpController.dispose();
     _serverUrlFocus.dispose();
     _usernameFocus.dispose();
     _passwordFocus.dispose();
     _claimCodeFocus.dispose();
     _relayUrlFocus.dispose();
+    _totpFocus.dispose();
     _tvSettingsFocusNode.dispose();
     _closeSettingsFocusNode.dispose();
     _settingsOverlayScopeNode.dispose();
@@ -1179,6 +1183,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildDirectConnectionForm(LoginState loginState, bool isCompact) {
+    if (loginState.totpChallenge != null) {
+      return _buildTotpForm(loginState, isCompact);
+    }
     return Form(
       key: _formKey,
       child: Column(
@@ -1276,6 +1283,102 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildTotpForm(LoginState loginState, bool isCompact) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Two-factor authentication',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Enter the 6-digit code from your authenticator app, or one of your recovery codes.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          key: const Key('totp-code-field'),
+          controller: _totpController,
+          focusNode: _totpFocus,
+          autofocus: true,
+          enabled: !loginState.isLoading,
+          autofillHints: const [AutofillHints.oneTimeCode],
+          keyboardType: TextInputType.visiblePassword,
+          autocorrect: false,
+          enableSuggestions: false,
+          textAlign: TextAlign.center,
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _handleTotpSubmit(),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+            letterSpacing: 3,
+          ),
+          decoration: InputDecoration(
+            labelText: 'Authentication code',
+            filled: true,
+            fillColor: AppColors.surfaceVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        if (loginState.error != null) ...[
+          const SizedBox(height: 14),
+          _buildErrorMessage(loginState.error!),
+        ],
+        SizedBox(height: isCompact ? 20 : 24),
+        SizedBox(
+          height: 44,
+          child: ElevatedButton(
+            key: const Key('totp-verify-button'),
+            onPressed: loginState.isLoading ? null : _handleTotpSubmit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: loginState.isLoading
+                ? const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('Verify'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextButton(
+          key: const Key('totp-back-button'),
+          onPressed: loginState.isLoading
+              ? null
+              : () {
+                  _totpController.clear();
+                  ref.read(loginControllerProvider.notifier).cancelTotp();
+                },
+          child: const Text('Back'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleTotpSubmit() async {
+    final code = _totpController.text.trim();
+    if (code.isEmpty) return;
+
+    await ref.read(loginControllerProvider.notifier).submitTotpCode(code);
+    await _completePairing();
   }
 
   Widget _buildClaimCodeInput(LoginState loginState) {

@@ -1,0 +1,13 @@
+mutation VerifyTotp($challengeToken: String!, $code: String!) {
+  verifyTotp(input: { challengeToken: $challengeToken, code: $code }) {
+    token
+    user {
+      id
+      username
+      email
+      displayName
+    }
+    expiresIn
+    totpRequired
+  }
+}

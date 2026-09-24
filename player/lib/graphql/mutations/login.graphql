@@ -22,5 +22,7 @@ mutation Login(
       displayName
     }
     expiresIn
+    totpRequired
+    challengeToken
   }
 }
