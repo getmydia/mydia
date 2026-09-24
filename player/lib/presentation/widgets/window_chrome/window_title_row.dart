@@ -29,7 +29,7 @@ class WindowTitleRow extends ConsumerWidget {
     this.actions = const [],
     this.showCast = true,
     this.controller,
-    @visibleForTesting this.onBandDoubleTap,
+    @visibleForTesting this.onBandPointerDown,
   });
 
   final Widget? leading;
@@ -40,36 +40,40 @@ class WindowTitleRow extends ConsumerWidget {
   /// Injected by tests. Defaults to the real window.
   final WindowController? controller;
 
-  /// Overrides the band's default double-tap handling.
+  /// Overrides the band's default pointer-down reporting on macOS.
   ///
   /// Exposed only so `window_title_row_test.dart` can substitute a call
-  /// counter for the real native channel call `_bandDoubleTap` resolves to
-  /// on macOS. Production code always gets that computed default; nothing
-  /// in the app passes this.
+  /// counter for the real native channel call `_onBandPointerDown` resolves
+  /// to. Production code always gets that computed default; nothing in the
+  /// app passes this.
   @visibleForTesting
-  final VoidCallback? onBandDoubleTap;
+  final VoidCallback? onBandPointerDown;
 
   static const Key castKey = Key('window-title-row-cast');
 
-  /// The band's double-tap handler: [onBandDoubleTap] if a test supplied
-  /// one, otherwise the platform default.
+  /// The band's pointer-down reporter: [onBandPointerDown] if a test
+  /// supplied one, otherwise the platform default.
   ///
   /// AppKit already zooms the window on every double-click that lands in
   /// the title bar band, including one that hits a Flutter control drawn
   /// there (back, cast), so `MainFlutterWindow` on macOS routes those
   /// clicks to Flutter alone instead of letting AppKit act on them too (see
   /// `title_bar_double_click.dart`). Flutter has to run the user's System
-  /// Settings double-click action itself in exchange, but only when the
-  /// double-click actually reaches this band, i.e. only on empty band
-  /// space -- the `Stack` hit-test stops at the cast button, so the band's
-  /// recognizer underneath it never enters the gesture arena for a tap on
-  /// the button, keeping both a drag and this off it too. Every other
-  /// platform keeps `WindowDragBand`'s own maximize toggle by passing null
-  /// through.
-  VoidCallback? _bandDoubleTap() =>
-      onBandDoubleTap ??
+  /// Settings double-click action itself in exchange, but AppKit's
+  /// `NSEvent.clickCount` -- not Flutter's gesture arena -- is the only
+  /// thing allowed to decide when two clicks are a double-click, since it is
+  /// timed against the user's own System Settings interval rather than
+  /// Flutter's fixed `kDoubleTapTimeout`/`kDoubleTapSlop`. So on macOS the
+  /// band reports every pointer-down instead of waiting on its own
+  /// double-tap gesture, and only when the down reaches this band, i.e. only
+  /// on empty band space -- the `Stack` hit-test stops at the cast button,
+  /// so the band's `Listener` underneath it never sees a down on the button,
+  /// keeping both a drag and this off it too. Every other platform keeps
+  /// `WindowDragBand`'s own maximize toggle by passing null through.
+  VoidCallback? _onBandPointerDown() =>
+      onBandPointerDown ??
       (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS
-          ? performMacTitleBarDoubleClick
+          ? reportMacTitleBarPointerDown
           : null);
 
   static double heightOf(BuildContext context) {
@@ -136,7 +140,7 @@ class WindowTitleRow extends ConsumerWidget {
                         controller:
                             controller ?? const WindowManagerController(),
                         height: insets.height,
-                        onDoubleTap: _bandDoubleTap(),
+                        onPointerDown: _onBandPointerDown(),
                       ),
                     ),
                     Positioned.fill(child: row),

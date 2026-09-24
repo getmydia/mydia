@@ -172,9 +172,8 @@ void main() {
   });
 
   testWidgets(
-      'on macOS, a double-tap on empty band space asks native code to run '
-      'the title bar action, instead of toggling maximize itself',
-      (tester) async {
+      'on macOS, a pointer-down on empty band space reports it to native '
+      'immediately, without waiting on a double-tap gesture', (tester) async {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     try {
@@ -185,17 +184,17 @@ void main() {
         insets: _mac,
         child: WindowTitleRow(
           controller: controller,
-          onBandDoubleTap: () => calls++,
+          onBandPointerDown: () => calls++,
         ),
       );
 
       // Same point the drag test above uses: empty band space, clear of the
-      // leading inset and the cast button on the trailing edge.
+      // leading inset and the cast button on the trailing edge. A single
+      // down-up is enough: native code, not this widget, decides whether it
+      // was part of a double-click worth acting on.
       const point = Offset(600, 20);
       await tester.tapAt(point);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tapAt(point);
-      await tester.pump(kDoubleTapTimeout);
+      await tester.pump();
 
       expect(calls, 1);
       expect(controller.maximizeCalls, 0);
@@ -206,7 +205,7 @@ void main() {
   });
 
   testWidgets(
-      'on macOS, a double-tap on the cast button never reaches the band '
+      'on macOS, a pointer-down on the cast button never reaches the band '
       'underneath it', (tester) async {
     final previousPlatform = debugDefaultTargetPlatformOverride;
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
@@ -218,30 +217,27 @@ void main() {
         insets: _mac,
         child: WindowTitleRow(
           controller: controller,
-          onBandDoubleTap: () => calls++,
+          onBandPointerDown: () => calls++,
         ),
       );
 
       final cast = tester.getCenter(find.byKey(WindowTitleRow.castKey));
       await tester.tapAt(cast);
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tapAt(cast);
-      await tester.pump(kDoubleTapTimeout);
+      await tester.pump();
 
       expect(
         calls,
         0,
         reason: 'the Stack hit-test stops at the cast button, so the band '
-            'recognizer underneath it never enters the gesture arena',
+            "listener underneath it never sees the button's own down",
       );
       expect(controller.maximizeCalls, 0);
       expect(controller.unmaximizeCalls, 0);
 
-      // Each tap opened the real cast device picker (WindowTitleRow wires
+      // The tap opened the real cast device picker (WindowTitleRow wires
       // the button to the live pickCastDevice, not a fake), which starts a
-      // real search-timeout Timer and an indeterminate spinner. Both taps
-      // stacked a dialog; pop every route the taps pushed so neither
-      // outlives the test.
+      // real search-timeout Timer and an indeterminate spinner. Pop the
+      // route the tap pushed so it does not outlive the test.
       final navigator = tester.state<NavigatorState>(find.byType(Navigator));
       while (navigator.canPop()) {
         navigator.pop();
