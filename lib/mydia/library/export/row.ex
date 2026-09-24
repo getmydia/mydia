@@ -1,7 +1,7 @@
 defmodule Mydia.Library.Export.Row do
   @moduledoc """
   One media item in a library export. Field order here is the export's column
-  order; `Mydia.Library.Export.columns/0` reads it from `@fields`.
+  order; `fields/0` exposes it to the JSON and CSV encoders in `Mydia.Library.Export`.
   """
 
   @fields [

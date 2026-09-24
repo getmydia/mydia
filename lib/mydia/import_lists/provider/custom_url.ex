@@ -228,9 +228,17 @@ defmodule Mydia.ImportLists.Provider.CustomURL do
          media_type
        )
        when is_list(items) do
-    items
-    |> Enum.filter(&(is_map(&1) and Map.get(&1, "type") in [nil, media_type]))
-    |> parse_items(media_type)
+    {kept, skipped} =
+      Enum.split_with(items, &(is_map(&1) and Map.get(&1, "type") in [nil, media_type]))
+
+    if skipped != [] do
+      Logger.debug("[CustomURL] Skipped items of another media type",
+        skipped: length(skipped),
+        list_media_type: media_type
+      )
+    end
+
+    parse_items(kept, media_type)
   end
 
   defp handle_response(%{status: 200, body: %{"items" => items}}, media_type)
