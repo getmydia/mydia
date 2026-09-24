@@ -6,6 +6,24 @@ class MainFlutterWindow: NSWindow {
   /// kMacTitleBarOverlap in lib/core/layout/window_chrome_inset.dart.
   private let titleBandHeight: CGFloat = 40
 
+  /// Whether the left-click gesture currently in progress was diverted to
+  /// Flutter at its `leftMouseDown`.
+  ///
+  /// Diversion is an all-or-nothing decision made once, at the down, not
+  /// re-evaluated per event: `sendEvent` sees a `leftMouseDown`, zero or more
+  /// `leftMouseDragged`, and a matching `leftMouseUp` as one gesture, and a
+  /// gesture split across Flutter and AppKit is exactly the bug this guards
+  /// against. Re-checking `isInTitleBand`/`clickCount` on the drag and the up
+  /// (as an earlier version of this method did) let a drag wander out of the
+  /// band, or the pointer come up somewhere `isOverTrafficLight` would now
+  /// answer true for, and hand AppKit a `leftMouseDragged`/`leftMouseUp` with
+  /// no matching down of its own -- enough for AppKit's own title bar to
+  /// start a stray native window drag while Flutter is left holding a
+  /// mouseDown that never gets its mouseUp. Set true on a qualifying down,
+  /// stays true for every event until the matching up, which always reaches
+  /// Flutter and always clears it, wherever the pointer ended up.
+  private var routingClickToFlutter = false
+
   override func awakeFromNib() {
     // Set app-wide state here because MainMenu.xib instantiates this window,
     // so awakeFromNib runs during main nib load, before
@@ -72,20 +90,41 @@ class MainFlutterWindow: NSWindow {
   /// double-clicks to Flutter only; Flutter decides whether the click hit
   /// empty band space and, if so, asks for the native action over the
   /// window_chrome channel (performTitleBarDoubleClick).
+  ///
+  /// A qualifying `leftMouseDown` starts the diversion and every event up to
+  /// and including its matching `leftMouseUp` follows it, regardless of
+  /// where the pointer is by then -- see `routingClickToFlutter`.
   override func sendEvent(_ event: NSEvent) {
-    if (event.type == .leftMouseDown || event.type == .leftMouseUp),
+    guard let flutter = contentViewController else {
+      super.sendEvent(event)
+      return
+    }
+
+    if event.type == .leftMouseDown,
       event.clickCount >= 2,
       !styleMask.contains(.fullScreen),
       isInTitleBand(event.locationInWindow),
-      !isOverTrafficLight(event.locationInWindow),
-      let flutter = contentViewController {
-      if event.type == .leftMouseDown {
-        flutter.mouseDown(with: event)
-      } else {
-        flutter.mouseUp(with: event)
-      }
-      return
+      !isOverTrafficLight(event.locationInWindow) {
+      routingClickToFlutter = true
     }
+
+    if routingClickToFlutter {
+      switch event.type {
+      case .leftMouseDown:
+        flutter.mouseDown(with: event)
+        return
+      case .leftMouseDragged:
+        flutter.mouseDragged(with: event)
+        return
+      case .leftMouseUp:
+        routingClickToFlutter = false
+        flutter.mouseUp(with: event)
+        return
+      default:
+        break
+      }
+    }
+
     super.sendEvent(event)
   }
 
