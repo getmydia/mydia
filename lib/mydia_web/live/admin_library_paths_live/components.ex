@@ -58,12 +58,31 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
     """
   end
 
-  @doc "The page header's New button."
+  @doc "The page header's Export menu and New button."
   def header_actions(assigns) do
     ~H"""
-    <button class="btn btn-sm btn-primary" phx-click="new_library_path">
-      <.icon name="hero-plus" class="w-4 h-4" /> New
-    </button>
+    <div class="flex items-center gap-2">
+      <div class="dropdown md:dropdown-end">
+        <div tabindex="0" role="button" id="library-export-menu" class="btn btn-sm btn-ghost">
+          <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Export
+        </div>
+        <ul tabindex="0" class="dropdown-content menu bg-base-200 rounded-box z-10 w-40 p-2 shadow">
+          <li>
+            <a id="library-export-json" href={~p"/api/v1/library/export?format=json"} download>
+              JSON
+            </a>
+          </li>
+          <li>
+            <a id="library-export-csv" href={~p"/api/v1/library/export?format=csv"} download>
+              CSV
+            </a>
+          </li>
+        </ul>
+      </div>
+      <button class="btn btn-sm btn-primary" phx-click="new_library_path">
+        <.icon name="hero-plus" class="w-4 h-4" /> New
+      </button>
+    </div>
     """
   end
 
