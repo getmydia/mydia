@@ -53,6 +53,11 @@ class MediaSessionBridge {
       await _session.dispose();
       return;
     }
+    // No OS session to mirror onto (every non-Linux platform today, or a
+    // Linux session that failed to connect): skip subscribing to player
+    // changes entirely, so a no-op session never triggers metadata lookups
+    // or artwork downloads for a "now playing" surface nobody can see.
+    if (_session is NoopMediaSession) return;
     _subscriptions
       ..add(_controller.changes.listen((_) => unawaited(_refresh())))
       ..add(_session.commands.listen(_controller.submit))

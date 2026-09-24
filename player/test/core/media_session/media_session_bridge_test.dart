@@ -158,6 +158,25 @@ void main() {
     await bridge.dispose();
   });
 
+  test('a no-op session skips metadata and artwork lookups entirely', () async {
+    final fetchCalls = <String>[];
+    final noopResolver =
+        NowPlayingMetadataResolver((document, variables) async {
+      fetchCalls.add(document);
+      return null;
+    });
+    final bridge = build(
+      createSession: () async => NoopMediaSession(),
+      metadata: noopResolver,
+    );
+    await bridge.start();
+    controller.attachPlayer(FakeBinding(buildSnapshot()));
+    await settle();
+    expect(fetchCalls, isEmpty);
+    expect(artworkRequests, isEmpty);
+    await bridge.dispose();
+  });
+
   test('dispose disposes the session and stops listening', () async {
     final bridge = build();
     await bridge.start();
