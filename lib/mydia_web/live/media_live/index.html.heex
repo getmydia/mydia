@@ -490,8 +490,8 @@
                 <:meta :if={any_poster_meta_field?(@poster_fields)}>
                   <%!-- Status badge and year --%>
                   <div class="flex flex-col gap-1">
-                    <div class="flex items-center justify-between gap-2">
-                      <div class="flex items-center gap-1">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="flex items-center gap-1 min-w-0">
                         <div
                           :if={PosterFields.show?(@poster_fields, :status)}
                           class="tooltip tooltip-right"
@@ -512,17 +512,21 @@
                           </div>
                         <% end %>
                       </div>
-                      <div class="flex items-center gap-1">
-                        <.content_rating_badge
+                      <div class="flex items-center gap-1 shrink-0">
+                        <div
                           :if={PosterFields.show?(@poster_fields, :content_rating)}
-                          id={"content-rating-#{item.id}"}
-                          rating={Mydia.Metadata.Access.get_field(item, :content_rating)}
-                          size="xs"
-                        />
+                          class="shrink-0 whitespace-nowrap"
+                        >
+                          <.content_rating_badge
+                            id={"content-rating-#{item.id}"}
+                            rating={Mydia.Metadata.Access.get_field(item, :content_rating)}
+                            size="xs"
+                          />
+                        </div>
                         <span
                           :if={PosterFields.show?(@poster_fields, :year)}
                           id={"card-year-#{item.id}"}
-                          class="text-xs text-base-content/70"
+                          class="text-xs text-base-content/70 shrink-0 whitespace-nowrap"
                         >
                           {format_year(item.year)}
                         </span>
