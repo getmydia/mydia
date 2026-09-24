@@ -70,7 +70,9 @@ defmodule MydiaWeb.MediaBadgeComponents do
   defp badge_size_class("md"), do: "badge-md"
 
   defp status_color_class(:continuing), do: "status-success"
-  defp status_color_class(:ended), do: "status-neutral"
+  # daisyUI's status-neutral is nearly invisible on badge-ghost in the light
+  # theme, so the ended dot uses a literal muted color instead.
+  defp status_color_class(:ended), do: "bg-base-content/40"
   defp status_color_class(:canceled), do: "status-error"
   defp status_color_class(:upcoming), do: "status-info"
 

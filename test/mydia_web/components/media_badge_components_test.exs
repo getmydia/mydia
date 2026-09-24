@@ -79,7 +79,7 @@ defmodule MydiaWeb.MediaBadgeComponentsTest do
       assert html =~ ~s(data-status="continuing")
     end
 
-    test "ended renders the label and a neutral status dot" do
+    test "ended renders the label and a visible muted status dot" do
       assigns = %{}
 
       html =
@@ -88,7 +88,7 @@ defmodule MydiaWeb.MediaBadgeComponentsTest do
         """)
 
       assert html =~ "Ended"
-      assert html =~ "status-neutral"
+      assert html =~ "bg-base-content/40"
     end
 
     test "canceled renders the label and an error status dot" do

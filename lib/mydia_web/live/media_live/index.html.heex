@@ -541,21 +541,19 @@
                         episode_count ||
                           (PosterFields.show?(@poster_fields, :show_status) && show_status)
                       }
-                      class="flex items-center gap-1 text-xs text-base-content/70"
+                      class="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-xs text-base-content/70"
                     >
-                      <span :if={episode_count}>{episode_count}</span>
-                      <span :if={
-                        episode_count && PosterFields.show?(@poster_fields, :show_status) &&
-                          show_status
-                      }>
-                        ·
-                      </span>
-                      <.show_status_badge
+                      <span :if={episode_count} class="whitespace-nowrap">{episode_count}</span>
+                      <div
                         :if={PosterFields.show?(@poster_fields, :show_status)}
-                        id={"show-status-#{item.id}"}
-                        status={show_status}
-                        size="xs"
-                      />
+                        class="shrink-0 whitespace-nowrap"
+                      >
+                        <.show_status_badge
+                          id={"show-status-#{item.id}"}
+                          status={show_status}
+                          size="xs"
+                        />
+                      </div>
                     </div>
                   </div>
                 </:meta>
