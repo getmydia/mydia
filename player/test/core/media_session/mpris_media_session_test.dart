@@ -262,6 +262,52 @@ void main() {
     await sub.cancel();
   });
 
+  test(
+      'accumulated drift against the client sync point resyncs once, not per update',
+      () async {
+    final seeked = <int>[];
+    final sub = DBusSignalStream(testClient,
+            interface: _player, name: 'Seeked', path: _path)
+        .listen((s) => seeked.add(s.values.single.asInt64()));
+    await sync();
+
+    // Establishes the client-sync baseline at 10s, t0.
+    await session.update(_playing);
+
+    // Three updates 1.5s apart, all reporting a stuck 10s (a buffering
+    // stall). Individually each is under the 2s threshold measured against
+    // the previous update, but measured against the baseline (unmoving
+    // since PlaybackStatus hasn't changed) the second update's 3s of drift
+    // crosses it, so exactly one Seeked fires there. That Seeked resyncs the
+    // baseline to (10s, t0+3s), so the third update's 1.5s of drift from the
+    // new baseline stays under threshold and emits nothing further.
+    clock = clock.add(const Duration(milliseconds: 1500));
+    await session.update(_withPosition(const Duration(seconds: 10)));
+    await sync();
+    expect(seeked, isEmpty);
+
+    clock = clock.add(const Duration(milliseconds: 1500));
+    await session.update(_withPosition(const Duration(seconds: 10)));
+    await sync();
+    expect(seeked, [10 * 1000000]);
+
+    clock = clock.add(const Duration(milliseconds: 1500));
+    await session.update(_withPosition(const Duration(seconds: 10)));
+    await sync();
+    expect(seeked, [10 * 1000000]);
+
+    // Buffering ends and playback resumes normally: position now advances
+    // with the clock from the resynced baseline, so no further Seeked.
+    clock = clock.add(const Duration(milliseconds: 1500));
+    await session.update(_withPosition(const Duration(milliseconds: 11500)));
+    await sync();
+    clock = clock.add(const Duration(milliseconds: 1500));
+    await session.update(_withPosition(const Duration(seconds: 13)));
+    await sync();
+    expect(seeked, [10 * 1000000]);
+    await sub.cancel();
+  });
+
   test('applies updates in call order even when their awaits race', () async {
     final seeked = <int>[];
     final sub = DBusSignalStream(testClient,

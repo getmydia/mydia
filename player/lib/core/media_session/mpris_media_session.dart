@@ -96,6 +96,18 @@ class _MprisObject extends DBusObject {
   MediaSessionState _state = MediaSessionState.stopped;
   DateTime? _stateAt;
 
+  // The position and time MPRIS clients (GNOME Shell, KDE, playerctl) are
+  // known to have last synchronised against: the last Seeked signal we sent,
+  // or the last update where PlaybackStatus or the track changed, since
+  // clients re-read Position on both of those. _jumped extrapolates from
+  // this baseline rather than from the immediately preceding update, because
+  // during a buffering stall several updates less than the threshold apart
+  // each look like small drift on their own even though, measured from the
+  // client's actual (unmoving) sync point, the drift accumulates.
+  Duration? _syncPosition;
+  DateTime? _syncAt;
+  bool _syncPlaying = false;
+
   // apply() awaits DBus IO (emitPropertiesChanged, then emitSignal), so two
   // calls started back to back race: whichever one's IO happens to settle
   // first lands on the bus first, even when it was the newer state. Chaining
@@ -118,7 +130,6 @@ class _MprisObject extends DBusObject {
 
   Future<void> _applyNow(MediaSessionState next) async {
     final previous = _state;
-    final previousAt = _stateAt;
     final before = _playerProperties(previous);
     _state = next;
     _stateAt = now();
@@ -132,32 +143,48 @@ class _MprisObject extends DBusObject {
       await emitPropertiesChanged(_playerInterface, changedProperties: changed);
     }
 
-    if (_jumped(previous, previousAt, next)) {
+    final jumped = _jumped(previous, next);
+    if (jumped) {
       await emitSignal(_playerInterface, 'Seeked',
           [DBusInt64(next.position.inMicroseconds)]);
     }
+
+    // Resync the baseline whenever a client is known to re-read Position:
+    // right after we tell it to (Seeked), when the track changes, when
+    // PlaybackStatus changes, or on the very first update (no baseline yet).
+    if (jumped ||
+        _syncAt == null ||
+        previous.trackId != next.trackId ||
+        previous.status != next.status) {
+      _syncPosition = next.position;
+      _syncAt = _stateAt;
+      _syncPlaying = next.status == MediaSessionStatus.playing;
+    }
   }
 
-  /// True when [next] is the same track at a position the previous state's
-  /// clock cannot explain.
-  bool _jumped(MediaSessionState previous, DateTime? previousAt,
-      MediaSessionState next) {
-    if (previousAt == null ||
+  /// True when [next] is the same track at a position the client-sync
+  /// baseline cannot explain.
+  bool _jumped(MediaSessionState previous, MediaSessionState next) {
+    final syncAt = _syncAt;
+    final syncPosition = _syncPosition;
+    if (syncAt == null ||
+        syncPosition == null ||
         previous.trackId == null ||
         previous.trackId != next.trackId) {
       return false;
     }
     // A buffering stall is still reported as MediaSessionStatus.playing (MPRIS
     // has no separate status for it) with Rate 1.0, so MPRIS clients (GNOME
-    // Shell, KDE) extrapolate the progress bar forward through the stall.
-    // Counting the stall's wall-clock time as elapsed makes the real position
-    // land far enough behind that extrapolation to look like a jump, and
-    // Seeked is exactly how MPRIS tells clients to resync when the position
-    // changed in a way the current playing state doesn't explain.
-    final elapsed = previous.status == MediaSessionStatus.playing
-        ? now().difference(previousAt)
-        : Duration.zero;
-    final expected = previous.position + elapsed;
+    // Shell, KDE) extrapolate the progress bar forward through the stall from
+    // their own last sync point (the last Seeked, or the last time
+    // PlaybackStatus or the track changed), not from our previous update.
+    // During a stall, updates less than the threshold apart each look like
+    // small drift measured against each other, but measured against the
+    // client's unmoving sync point the drift accumulates, and Seeked is
+    // exactly how MPRIS tells clients to resync when the position changed in
+    // a way the current playing state doesn't explain.
+    final elapsed = _syncPlaying ? now().difference(syncAt) : Duration.zero;
+    final expected = syncPosition + elapsed;
     return (next.position - expected).abs() > _seekedThreshold;
   }
 
