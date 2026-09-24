@@ -58,27 +58,42 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// Exposes [_buildLoadingState] for
+  /// `detail_screen_inset_test.dart`: that test proves the back button
+  /// clears the window chrome in this transient state too, not only in the
+  /// loaded hero, without needing `episodeDetailControllerProvider`'s
+  /// GraphQL stream to reach the loading branch.
+  @visibleForTesting
+  Widget loadingStateForTest(BuildContext context) =>
+      _buildLoadingState(context);
+
+  /// Exposes [_buildErrorState] for the same reason as
+  /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
+  /// button reads `episodeDetailControllerProvider(id).notifier` from it,
+  /// even though nothing is watched during build.
+  @visibleForTesting
+  Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
+      _buildErrorState(context, ref, error);
+
   Widget _buildLoadingState(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        // The same title row as the loaded hero, so the back button (and the
+        // cast button) clear the traffic lights / Linux buttons here too:
+        // this state sits under the same `WindowChromeInsets.removeBand` as
+        // the rest of the screen, so a plain `leading` slot with its own flat
+        // padding has nothing left to push it clear of the band with.
+        // `topScrim: false` because the spinner background never had a top
+        // darkening gradient and this state does not need one added.
+        detailHeroAppBar(
+          context: context,
           expandedHeight: 300,
-          pinned: true,
-          backgroundColor: AppColors.background,
-          // A plain leading slot, not the window-chrome-aware title row: this
-          // transient loading state never had the hero's full title row, so
-          // it keeps the button's own edge padding instead of relying on
-          // `WindowTitleRow`'s inset-aware gutter.
-          leading: Padding(
-            padding: const EdgeInsets.all(8),
-            child: _buildBackButton(context),
-          ),
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              color: AppColors.surface,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+          back: _buildBackButton(context),
+          topScrim: false,
+          background: Container(
+            color: AppColors.surface,
+            child: const Center(
+              child: CircularProgressIndicator(),
             ),
           ),
         ),
@@ -132,16 +147,14 @@ class EpisodeDetailScreen extends ConsumerWidget {
   Widget _buildErrorState(BuildContext context, WidgetRef ref, Object error) {
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        // See the loading state's header above: the same title row as the
+        // loaded hero, so the back button clears the window chrome here too.
+        detailHeroAppBar(
+          context: context,
           expandedHeight: 200,
-          pinned: true,
-          backgroundColor: AppColors.background,
-          // See the loading state's leading above: plain edge padding, not
-          // the title row's inset-aware gutter.
-          leading: Padding(
-            padding: const EdgeInsets.all(8),
-            child: _buildBackButton(context),
-          ),
+          back: _buildBackButton(context),
+          topScrim: false,
+          background: Container(color: AppColors.background),
         ),
         SliverFillRemaining(
           child: Center(

@@ -14,6 +14,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
+import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
+import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
@@ -145,5 +148,77 @@ void main() {
       expect(
           tester.getRect(find.byKey(_backKey)).top, greaterThanOrEqualTo(24));
     });
+  });
+
+  group('loading and error states clear the macOS traffic lights', () {
+    // Regression coverage: before this fix, `_buildLoadingState` and
+    // `_buildErrorState` in all three screens put the back button in a bare
+    // `SliverAppBar`'s `leading` slot, padded by a flat `EdgeInsets.all(8)`.
+    // That relied on `AppBar` folding the ambient `MediaQuery.padding.top`
+    // into its own top offset to clear the traffic lights -- the same
+    // padding `WindowChromeInsets.removeBand` (needed so the *loaded* hero
+    // can draw its own title row into the band) strips out for these states
+    // too, so the flat `Padding(8)` leading landed the back icon squarely
+    // under the lights (measured: (8,8)-(48,48), inside the lights' own
+    // (12,13)-(71,26)). Routing these states through `detailHeroAppBar`,
+    // like the loaded hero, is the fix; this pins the contract for every
+    // screen's loading and error branches via each screen's
+    // `@visibleForTesting` seam, rather than mirroring the shape (a plain
+    // `Object error` stands in for a real GraphQL failure since only the
+    // header, not the error message body, is under test).
+    final cases = <String, Widget Function(BuildContext, WidgetRef)>{
+      'MovieDetailScreen loading': (context, ref) =>
+          const MovieDetailScreen(id: 'm1').loadingStateForTest(context),
+      'MovieDetailScreen error': (context, ref) =>
+          const MovieDetailScreen(id: 'm1')
+              .errorStateForTest(context, ref, 'boom'),
+      'ShowDetailScreen loading': (context, ref) =>
+          const ShowDetailScreen(id: 's1').loadingStateForTest(context),
+      'ShowDetailScreen error': (context, ref) =>
+          const ShowDetailScreen(id: 's1')
+              .errorStateForTest(context, ref, 'boom'),
+      'EpisodeDetailScreen loading': (context, ref) =>
+          const EpisodeDetailScreen(id: 'e1').loadingStateForTest(context),
+      'EpisodeDetailScreen error': (context, ref) =>
+          const EpisodeDetailScreen(id: 'e1')
+              .errorStateForTest(context, ref, 'boom'),
+    };
+
+    for (final MapEntry(key: name, value: builder) in cases.entries) {
+      testWidgets(name, (tester) async {
+        tester.view.physicalSize = const Size(1300, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: castCapableOverrides(),
+            child: MediaQuery(
+              data: MediaQueryData(
+                size: const Size(1300, 800),
+                padding: EdgeInsets.only(top: _mac.height),
+              ),
+              child: WindowChromeInsets.scope(
+                insets: _mac,
+                child: MaterialApp(
+                  home: WindowChromeInsets.removeBand(
+                    child: Consumer(
+                      builder: (context, ref, _) =>
+                          Scaffold(body: builder(context, ref)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final backRect = tester.getRect(find.byIcon(Icons.arrow_back_rounded));
+        expect(backRect.left, greaterThanOrEqualTo(80));
+        // Vertically centered in the 40pt band (center at y=20), same as the
+        // loaded hero's back button.
+        expect((backRect.center.dy - 20).abs(), lessThan(1));
+      });
+    }
   });
 }
