@@ -694,4 +694,24 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
       numbers -> "#{Enum.min(numbers)}-#{Enum.max(numbers)}"
     end
   end
+
+  @doc "Provider pages for the item, in display order, skipping missing ids."
+  def external_links(media_item) do
+    tv_show? = media_item.type == "tv_show"
+    tmdb_kind = if tv_show?, do: "tv", else: "movie"
+
+    [
+      {:tmdb, "TMDB",
+       media_item.tmdb_id && "https://www.themoviedb.org/#{tmdb_kind}/#{media_item.tmdb_id}"},
+      {:tvdb, "TVDB",
+       tv_show? && media_item.tvdb_id &&
+         "https://thetvdb.com/?tab=series&id=#{media_item.tvdb_id}"},
+      {:imdb, "IMDb",
+       presence(media_item.imdb_id) && "https://www.imdb.com/title/#{media_item.imdb_id}/"}
+    ]
+    |> Enum.filter(fn {_key, _label, url} -> url end)
+  end
+
+  defp presence(value) when is_binary(value) and value != "", do: value
+  defp presence(_value), do: nil
 end

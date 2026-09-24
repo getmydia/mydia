@@ -1,6 +1,7 @@
 defmodule MydiaWeb.MediaLive.Show do
   use MydiaWeb, :live_view
   alias Mydia.Media
+  alias Mydia.Media.ShowStatus
   alias Mydia.Metadata.Ref
   alias Mydia.Settings
   alias MydiaWeb.MediaLive.Show.Modals
