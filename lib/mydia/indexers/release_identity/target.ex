@@ -26,18 +26,25 @@ defmodule Mydia.Indexers.ReleaseIdentity.Target do
 
   @spec from_media_item(MediaItem.t()) :: t()
   def from_media_item(%MediaItem{} = item) do
-    title = String.replace(item.title || "", @year_suffix, "")
-
     %__MODULE__{
       type: type(item.type),
       year: item.year,
       keys:
-        [title | TargetContext.alt_titles(item)]
+        [item.title | TargetContext.alt_titles(item)]
+        |> Enum.map(&strip_year_suffix/1)
         |> Enum.map(&Text.match_key/1)
         |> Enum.reject(&(&1 == ""))
         |> Enum.uniq()
     }
   end
+
+  # TVDB disambiguates same-title reboots with a trailing premiere year,
+  # "Dark Lantern (2024)" next to an unrelated older show of the same name.
+  # Aliases and translations pulled from the same TVDB record carry the same
+  # suffix, so every candidate key needs it stripped, not just the primary
+  # title, or a release matching the alias's title with its year written the
+  # normal way never reduces to the same key.
+  defp strip_year_suffix(title), do: String.replace(title || "", @year_suffix, "")
 
   defp type("movie"), do: :movie
   defp type("tv_show"), do: :tv_show
