@@ -216,6 +216,7 @@ class AuthService {
             deviceName: deviceName,
             platform: platform,
           ).toJson(),
+          fetchPolicy: FetchPolicy.noCache,
         ),
       );
 
@@ -269,6 +270,7 @@ class AuthService {
             challengeToken: challenge.challengeToken,
             code: code,
           ).toJson(),
+          fetchPolicy: FetchPolicy.noCache,
         ),
       );
 
