@@ -591,13 +591,17 @@ defmodule Mydia.Accounts do
   Enables TOTP once `code` matches `secret`, and issues a fresh set of
   recovery codes. The plaintext codes are returned exactly once.
 
-  Reloads the user inside the transaction and refuses with `{:error,
-  :already_enabled}` if TOTP is already on, rather than trusting the `user`
-  struct the caller holds. Two concurrent enrollment confirmations (e.g. the
-  same "Turn on" click submitted twice) would otherwise both pass, and the
-  second to write would silently replace the first's secret and recovery
-  codes with its own -- whichever authenticator app enrolled first stops
-  working with no error shown.
+  Guards concurrent confirmations with a conditional `UPDATE ... WHERE
+  totp_enabled_at IS NULL` inside the transaction, not a reload-then-branch.
+  A reload only protects against a race under `SERIALIZABLE`; under
+  PostgreSQL's default READ COMMITTED, two concurrent confirmations (e.g.
+  the same "Turn on" click submitted twice) can both read `totp_enabled_at:
+  nil` before either commits, so both unconditional writes would go
+  through, the second replacing the first's secret and recovery codes with
+  no error shown. The conditional UPDATE is a single atomic statement at
+  the row level regardless of isolation level, so only one of two
+  concurrent confirmations can ever match and update the row; the other
+  affects zero rows and rolls back with `{:error, :already_enabled}`.
   """
   @spec confirm_totp_enrollment(User.t(), binary(), String.t()) ::
           {:ok, User.t(), [String.t()]} | {:error, :invalid_code | :already_enabled}
@@ -605,24 +609,25 @@ defmodule Mydia.Accounts do
     case Totp.valid_code?(secret, Totp.normalize_code(code), nil) do
       {:ok, step} ->
         codes = Totp.generate_recovery_codes()
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
 
         Repo.transaction(fn ->
-          case Repo.get!(User, user.id) do
-            %User{totp_enabled_at: %DateTime{}} ->
-              Repo.rollback(:already_enabled)
+          {count, _} =
+            Repo.update_all(
+              from(u in User, where: u.id == ^user.id and is_nil(u.totp_enabled_at)),
+              set: [
+                totp_secret_encrypted: Totp.encrypt(secret),
+                totp_enabled_at: now,
+                totp_last_used_at: step
+              ]
+            )
 
-            current_user ->
-              updated_user =
-                current_user
-                |> User.totp_changeset(%{
-                  totp_secret_encrypted: Totp.encrypt(secret),
-                  totp_enabled_at: DateTime.utc_now() |> DateTime.truncate(:second),
-                  totp_last_used_at: step
-                })
-                |> Repo.update!()
-
-              replace_recovery_codes!(updated_user, codes)
-              {updated_user, codes}
+          if count == 0 do
+            Repo.rollback(:already_enabled)
+          else
+            updated_user = Repo.get!(User, user.id)
+            replace_recovery_codes!(updated_user, codes)
+            {updated_user, codes}
           end
         end)
         |> case do
