@@ -97,6 +97,12 @@ void main() {
       );
     });
 
+    test('the macOS strip matches the unified compact title bar', () {
+      // MainFlutterWindow.swift attaches an empty .unifiedCompact toolbar,
+      // which makes the title bar band 40pt tall instead of the plain 28pt.
+      expect(kMacTitleBarOverlap, 40.0);
+    });
+
     test('the button band on windowed Linux', () {
       expect(
         windowChromeInsetFor(

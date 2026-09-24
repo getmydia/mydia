@@ -51,8 +51,8 @@ void main() {
         'inside the traffic light zone', (tester) async {
       await tester.pumpWidget(_detailScreenLike(padding: EdgeInsets.zero));
 
-      // Measured: (8, 8) - (48, 48). The lights occupy roughly x 7-75,
-      // y 8-28, so this is the bug this whole change exists to fix. The test
+      // Measured: (8, 8) - (48, 48). The lights occupy x 12-71,
+      // y 13-26, so this is the bug this whole change exists to fix. The test
       // documents it rather than asserting the app ships it.
       expect(
         tester.getRect(find.byKey(_backKey)).top,
