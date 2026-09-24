@@ -87,6 +87,28 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   @tvdb_alias_year_suffix ~r/\s*\((19|20)\d{2}\)\s*$/
 
+  # TVDB names countries by lowercase ISO 3166-1 alpha-3; TMDB's
+  # `content_ratings` uses alpha-2, and `MediaMetadata.parse_content_rating/2`
+  # prefers "US" then "GB" by that code. Only the countries the preference and
+  # common libraries need are mapped. Anything else is upcased and kept, so it
+  # still reaches the parser's "first non-blank" fallback.
+  @tvdb_country_alpha2 %{
+    "usa" => "US",
+    "gbr" => "GB",
+    "can" => "CA",
+    "aus" => "AU",
+    "nzl" => "NZ",
+    "irl" => "IE",
+    "deu" => "DE",
+    "fra" => "FR",
+    "esp" => "ES",
+    "ita" => "IT",
+    "nld" => "NL",
+    "bra" => "BR",
+    "jpn" => "JP",
+    "kor" => "KR"
+  }
+
   # Resolves the language to use for a request: explicit per-call opt wins,
   # then the language configured on the provider config (typically populated
   # from `Mydia.Metadata.metadata_language/0`), then the module default.
@@ -462,6 +484,7 @@ defmodule Mydia.Metadata.Provider.Relay do
       "first_air_date" => data["firstAired"],
       "last_air_date" => data["lastAired"],
       "status" => get_in(data, ["status", "name"]),
+      "content_ratings" => transform_tvdb_content_ratings(data["contentRatings"]),
       "poster_path" => transform_tvdb_image(data["image"]),
       "backdrop_path" => transform_tvdb_artwork(data["artworks"], "background"),
       "genres" => genres,
@@ -768,6 +791,23 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   defp transform_tvdb_genres(_), do: []
+
+  defp transform_tvdb_content_ratings(ratings) when is_list(ratings) do
+    %{
+      "results" =>
+        for %{"name" => name} = rating <- ratings, is_binary(name) do
+          country = rating["country"]
+
+          %{
+            "iso_3166_1" =>
+              Map.get(@tvdb_country_alpha2, country, country && String.upcase(country)),
+            "rating" => name
+          }
+        end
+    }
+  end
+
+  defp transform_tvdb_content_ratings(_ratings), do: %{"results" => []}
 
   # TVDB returns originalCountry as a string, convert to list for consistency with TMDB
   defp transform_tvdb_origin_country(nil), do: []
