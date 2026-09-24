@@ -18,7 +18,10 @@ defmodule Mydia.Indexers.ReleaseIdentity do
   @type verdict :: :match | {:mismatch, :title | :year}
 
   # ReleaseParser keeps a leading "[Group]" tag in the title it returns.
-  @leading_tags ~r/^\s*(\[[^\]]*\]\s*)+/
+  # Chinese trackers write the same tag in fullwidth brackets,
+  # "【Site www.host.com】" or "［www.host.com］". `u` is needed for the
+  # multibyte bracket characters; the pattern has no \w for UCP to widen.
+  @leading_tags ~r/^\s*(?:(?:\[[^\]]*\]|【[^】]*】|［[^］]*］)\s*)+/u
   @year_token ~r/^(19|20)\d{2}$/
   @aka ~r/\s+a\.?k\.?a\.?\s+/i
 

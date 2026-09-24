@@ -143,6 +143,7 @@ defmodule Mydia.Library.ReleaseParser do
   #   (a) bracketed          `[ www.Torrenting.org ] Movie...`
   #   (b) separator glyph    `www.SiteName.org    -    Example Show...`
   #   (c) bare `www.host.tld` then whitespace   `www.Torrenting.org Movie...`
+  #   (d) fullwidth-bracketed  【Site www.host.com】Movie...  (see @fullwidth_site_prefix_re)
   #
   # A greedy `(?:\.[\w-]+)*` label run with a mere "next char is a delimiter"
   # check is NOT safe: in `www.example.com.The Matrix.1999`, `.The` matches as
@@ -163,8 +164,17 @@ defmodule Mydia.Library.ReleaseParser do
     )
   /ix
 
+  # Fullwidth-bracketed site branding, "【高清影视之家发布 www.host.com】" or
+  # "［www.host.com］", often with site text before the host. Kept apart from
+  # @site_prefix_re because it needs `u` for the multibyte brackets, and `u`
+  # would switch that pattern's \w to Unicode word characters.
+  @fullwidth_site_prefix_re ~r/^\s*(?:【[^】]*www\.[^】]*】|［[^］]*www\.[^］]*］)\s*/iu
+
   defp strip_site_prefix(filename) do
-    stripped = Regex.replace(@site_prefix_re, filename, "", global: false)
+    stripped =
+      filename
+      |> then(&Regex.replace(@fullwidth_site_prefix_re, &1, "", global: false))
+      |> then(&Regex.replace(@site_prefix_re, &1, "", global: false))
 
     # A name that is *nothing but* a site tag has no release information to
     # recover, so keep the original rather than handing the tokenizer "".

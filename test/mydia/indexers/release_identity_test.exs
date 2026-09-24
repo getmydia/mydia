@@ -100,6 +100,39 @@ defmodule Mydia.Indexers.ReleaseIdentityTest do
                movie("Lantern", 2031)
              ) == {:mismatch, :title}
     end
+
+    test "ignores a leading fullwidth-bracket site tag" do
+      target = movie("You and Me Against the Tide", 2031)
+
+      assert ReleaseIdentity.check(
+               "【高清影视之家发布 www.example.com】You.and.Me.Against.the.Tide.2031.1080p.AMZN.WEB-DL.H.264-GRP",
+               target
+             ) == :match
+
+      assert ReleaseIdentity.check(
+               "【高清影视之家发布 www.example.com】你我对抗潮水[简繁英字幕].You.and.Me.Against.the.Tide.2031.1080p.AMZN.WEB-DL.H.264-GRP",
+               target
+             ) == :match
+
+      assert ReleaseIdentity.check(
+               "［www.example.com］You.and.Me.Against.the.Tide.2031.1080p.WEB-DL-GRP",
+               target
+             ) == :match
+    end
+
+    test "matches a season pack named by a show's alias" do
+      target = show("Quiet Harbor: The Long Tide", ["Quiet Harbor"])
+
+      assert ReleaseIdentity.check(
+               "Quiet.Harbor.S02.1080p.BluRay.REMUX.Dual-Audio.AVC.FLAC2.0-GRP",
+               target
+             ) == :match
+
+      assert ReleaseIdentity.check(
+               "Quiet.Harbor.Nights.S02.1080p.WEB-DL-GRP",
+               target
+             ) == {:mismatch, :title}
+    end
   end
 
   describe "check/2 without a parsed title" do
