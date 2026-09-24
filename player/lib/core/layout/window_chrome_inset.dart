@@ -8,14 +8,15 @@ import '../window/window_fullscreen.dart';
 ///
 /// `MainFlutterWindow.swift` sets `titlebarAppearsTransparent`, hides the
 /// title, inserts `.fullSizeContentView` and attaches an empty toolbar with
-/// the `.unifiedCompact` style, so the Flutter view runs under a 38pt band
+/// the `.unifiedCompact` style, so the Flutter view runs under a 40pt band
 /// with AppKit's close/minimize/zoom buttons centred in it, the proportions
-/// of Music, TV and Finder. The embedder reports no safe-area inset for that
+/// of Music, TV and Finder. Measured on macOS: the buttons span x 12-71,
+/// y 13-26. The embedder reports no safe-area inset for that
 /// band, so the app has to reserve it.
 ///
 /// If the toolbar style changes, remeasure: `window.frame.height -
 /// window.contentLayoutRect.height` in a debug build gives the band height.
-const double kMacTitleBarOverlap = 38.0;
+const double kMacTitleBarOverlap = 40.0;
 
 /// Height of the band reserved at the top of the Linux window for the
 /// Flutter-drawn window buttons.
