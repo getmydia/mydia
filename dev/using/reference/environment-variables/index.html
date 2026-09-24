@@ -675,6 +675,8 @@
       
         
       
+        
+      
     
     
     
@@ -1167,6 +1169,34 @@
     
   
     Monitoring and Logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/monitoring-with-prometheus/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Monitoring with Prometheus
   
 
     
@@ -4285,6 +4315,11 @@ incompatible 4K file would otherwise ask of it. Also settable under <strong>Admi
 <td><code>MYDIA_PERF_METRICS</code></td>
 <td>Records hourly performance timings (page loads, API calls, database queries, background jobs) in the database, kept 14 days, for diagnosing slowness. Set to <code>false</code>, <code>0</code>, <code>no</code>, or <code>off</code> to turn off</td>
 <td><code>true</code></td>
+</tr>
+<tr>
+<td><code>MYDIA_METRICS_ENABLED</code></td>
+<td>Serves Prometheus metrics at <code>/metrics</code>: memory, request latency, background jobs, library size, downloads and active streams. The endpoint has no authentication, so keep it off your public reverse proxy, including the HTTPS player port when the player is enabled. Accepts <code>true</code>, <code>1</code>, <code>yes</code>, <code>on</code>. See <a href="../../how-to/monitoring-with-prometheus/">Monitoring with Prometheus</a></td>
+<td><code>false</code></td>
 </tr>
 <tr>
 <td><code>SKIP_BACKUPS</code></td>
