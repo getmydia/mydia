@@ -88,66 +88,6 @@ void main() {
     }
   });
 
-  group('CastOverlayButton', () {
-    /// [CastOverlayButton] returns a bare [Positioned], so it is only valid
-    /// as a direct child of a [Stack] — matching how `AppShell` mounts it as
-    /// the last child of its own Stack.
-    Widget host({double topInset = 40}) {
-      return ProviderScope(
-        overrides: [
-          castCapabilitiesProvider.overrideWithValue(
-            const CastCapabilities.full(),
-          ),
-        ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: Stack(
-              children: [
-                CastOverlayButton(topInset: topInset),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    testWidgets('positions the cast button at the given top inset',
-        (tester) async {
-      await tester.pumpWidget(host(topInset: 52));
-      await tester.pump();
-
-      expect(find.byKey(const Key('cast-button')), findsOneWidget);
-
-      final positioned = tester.widget<Positioned>(find.ancestor(
-        of: find.byKey(const Key('cast-button')),
-        matching: find.byType(Positioned),
-      ));
-      expect(positioned.top, 52);
-      expect(positioned.right, 12);
-    });
-
-    testWidgets('shows a remembered device as chosen, not connected',
-        (tester) async {
-      await tester.pumpWidget(host());
-      await tester.pump();
-
-      final container = ProviderScope.containerOf(
-        tester.element(find.byKey(const Key('cast-button'))),
-      );
-      container.read(castTargetProvider.notifier).set(_device);
-      await tester.pump();
-
-      final icon = tester.widget<Icon>(find.descendant(
-        of: find.byKey(const Key('cast-button')),
-        matching: find.byType(Icon),
-      ));
-      expect(icon.icon, Icons.cast,
-          reason: 'a remembered device with no live connection must not claim '
-              'the cast_connected glyph');
-      expect(icon.color, Colors.blue);
-    });
-  });
-
   group('pickCastDevice connects on select', () {
     // Real widget-level coverage: drives `pickCastDevice` through an actual
     // picker dialog tap rather than calling `CastSessionManager.connectTo`
@@ -171,10 +111,9 @@ void main() {
       );
     }
 
-    /// Mounts a bare button whose `onPressed` calls `pickCastDevice` — the
-    /// same shape every real caller (`CastOverlayButton`, `CastButton`,
-    /// screen app bars) uses — with the manager and picker's device list
-    /// under test control.
+    /// Mounts a bare button whose `onPressed` calls `pickCastDevice`, the
+    /// same shape every real caller (`CastButton`, screen app bars) uses,
+    /// with the manager and picker's device list under test control.
     Widget host({
       required CastSessionManager manager,
       required List<CastDevice> devices,

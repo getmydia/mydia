@@ -8,7 +8,6 @@ import '../../core/cast/cast_target.dart';
 import '../../core/p2p/local_proxy_service.dart';
 import '../../core/player/platform_features.dart';
 import '../../domain/models/cast_device.dart';
-import 'cast_button.dart';
 import 'cast_device_picker.dart';
 import 'local_network_settings_button.dart';
 import 'toast/toaster.dart';
@@ -232,33 +231,5 @@ Future<void> _connectToDevice(
     debugPrint('[cast_actions] Unexpected error connecting to device: $e');
     if (!context.mounted) return;
     showToast(context, 'Failed to connect: $e', kind: ToastKind.error);
-  }
-}
-
-/// The cast affordance for screens with no app bar to put it in.
-///
-/// `AppShell` has no app bar of its own, and on desktop the browse screens
-/// deliberately suppress theirs (`HomeScreen` passes `appBar: null`;
-/// `UnwatchedScreen` and friends return a zero-height `SizedBox.shrink()`).
-/// An app-bar-only affordance would therefore be invisible on macOS across
-/// most of the app, so the shell pins this into its existing `Stack`.
-class CastOverlayButton extends ConsumerWidget {
-  /// Distance from the top of the safe area.
-  ///
-  /// Mobile browse screens *do* render an app bar with its own actions, so
-  /// this clears it rather than sitting on top of it.
-  final double topInset;
-
-  const CastOverlayButton({super.key, required this.topInset});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Positioned(
-      top: topInset,
-      right: 12,
-      child: SafeArea(
-        child: CastButton(onPressed: () => pickCastDevice(context, ref)),
-      ),
-    );
   }
 }

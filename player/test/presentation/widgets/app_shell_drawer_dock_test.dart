@@ -7,8 +7,8 @@
 // the shell fades the dock out while the drawer is open.
 //
 // These tests call the REAL `AppShell.dockChrome` seam, the same
-// `@visibleForTesting` pattern `AppShell.castOverlay` and
-// `AppShell.contentGutter` use. A hand-rolled mirror of the shell's shape
+// `@visibleForTesting` pattern `AppShell.contentInsets` and
+// `AppShell.bannerArea` use. A hand-rolled mirror of the shell's shape
 // would stay green if the shell dropped the fade entirely.
 
 import 'package:flutter/material.dart';

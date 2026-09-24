@@ -17,9 +17,11 @@ import '../widgets/glass_surface.dart';
 import 'home/home_loading_skeleton.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/dock_insets.dart';
+import '../../core/layout/window_chrome_inset.dart';
 import '../../core/theme/colors.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/mydia_logo.dart';
+import '../widgets/window_chrome/window_title_row.dart';
 import 'home/home_controller.dart';
 
 String _resumeSuffix({
@@ -71,6 +73,78 @@ String playerRouteForContinueWatching(
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
+
+  /// Builds Home's title-bar header.
+  ///
+  /// A static, `@visibleForTesting` seam rather than inlined in [build]:
+  /// `build` also wires up `homeControllerProvider`, whose GraphQL-backed
+  /// stream is expensive to satisfy in a widget test that only wants to
+  /// check where the cast button lands. This is the exact widget [build]
+  /// puts in `Scaffold.appBar`, not a mirror of it.
+  ///
+  /// Home used to suppress its app bar entirely on desktop and rely on the
+  /// shell's floating cast overlay for the only affordance there. That
+  /// overlay is gone (Task 5): every screen's cast button now lives in its
+  /// own [WindowTitleRow], so Home keeps a (transparent, on desktop) bar on
+  /// every platform purely to host it. Desktop gets no leading control,
+  /// title or decoration, since the hero content is the desktop identity;
+  /// mobile keeps its menu button, logo lockup, search shortcut and glass
+  /// background exactly as the deleted `_ModernAppBar` built them.
+  @visibleForTesting
+  static PreferredSizeWidget header(
+    BuildContext context, {
+    required bool isDesktop,
+    required double barHeight,
+  }) {
+    return WindowTitleBar(
+      height: barHeight,
+      leading: isDesktop
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              onPressed: () {
+                AppShell.scaffoldKey.currentState?.openDrawer();
+              },
+              tooltip: 'Menu',
+            ),
+      title: isDesktop
+          ? null
+          : const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MydiaLogo(size: 32),
+                SizedBox(width: 10),
+                Text(
+                  'Mydia Player',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+      actions: isDesktop
+          ? const []
+          : [
+              IconButton(
+                icon: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.search_rounded, size: 20),
+                ),
+                onPressed: () {
+                  context.push('/search');
+                },
+                tooltip: 'Search',
+              ),
+              const SizedBox(width: 8),
+            ],
+      decorate: isDesktop ? null : (row) => GlassSurface.appBar(child: row),
+    );
+  }
 
   void _handleItemTap(BuildContext context, String id, String type) {
     final normalizedType = type.toLowerCase();
@@ -139,139 +213,149 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeData = ref.watch(homeControllerProvider);
-    final isDesktop = Breakpoints.isDesktop(context);
-    // On desktop, no bottom nav so less padding needed
-    final bottomPadding = DockInsets.bottomOf(context);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: isDesktop ? null : _ModernAppBar(),
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.home],
-            topInset: freshnessTopInset(
-              context,
-              appBarHeight: isDesktop ? null : kToolbarHeight,
+    // Home's own `WindowTitleRow` (via `WindowTitleBar`, below) draws into
+    // the title-bar band on every platform now, so the body has to sit under
+    // `removeBand`: otherwise the ambient `MediaQuery.padding.top` still
+    // carries the band and `freshnessTopInset` double-counts it.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) {
+          final isDesktop = Breakpoints.isDesktop(context);
+          // On desktop, no bottom nav so less padding needed
+          final bottomPadding = DockInsets.bottomOf(context);
+          final barHeight = WindowTitleRow.heightOf(context);
+
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            extendBodyBehindAppBar: true,
+            appBar: header(context, isDesktop: isDesktop, barHeight: barHeight),
+            body: Column(
+              children: [
+                FreshnessHeader(
+                  queryKeys: [QueryKeys.home],
+                  topInset: freshnessTopInset(context, appBarHeight: barHeight),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await ref.read(homeControllerProvider.notifier).refresh();
+                    },
+                    child: homeData.when(
+                      loading: () {
+                        // No hero pick yet -> calm static fallback.
+                        publishBackdropSource(ref, BackdropSource.none);
+                        return const HomeLoadingSkeleton();
+                      },
+                      error: (error, stackTrace) {
+                        publishBackdropSource(ref, BackdropSource.none);
+                        return _buildErrorView(context, error, ref);
+                      },
+                      data: (data) {
+                        if (data.isEmpty) {
+                          publishBackdropSource(ref, BackdropSource.none);
+                          return _buildEmptyState(context);
+                        }
+
+                        // Feed the shell ambient backdrop from the hero pick:
+                        // continueWatching.first ?? recentlyAdded.first, using
+                        // backdropUrl ?? posterUrl (plan U5 / AE1). Branch by
+                        // concrete type so the getters resolve (the two lists
+                        // hold different types).
+                        final BackdropSource heroSource;
+                        if (data.continueWatching.isNotEmpty) {
+                          final item = data.continueWatching.first;
+                          heroSource = BackdropSource(
+                            imageUrl: item.backdropUrl ?? item.posterUrl,
+                            id: item.id,
+                          );
+                        } else if (data.recentlyAdded.isNotEmpty) {
+                          final item = data.recentlyAdded.first;
+                          heroSource = BackdropSource(
+                            imageUrl: item.backdropUrl ?? item.posterUrl,
+                            id: item.id,
+                          );
+                        } else {
+                          heroSource = BackdropSource.none;
+                        }
+                        publishBackdropSource(ref, heroSource);
+
+                        return CustomScrollView(
+                          slivers: [
+                            // Hero section with featured content
+                            if (data.continueWatching.isNotEmpty ||
+                                data.recentlyAdded.isNotEmpty)
+                              SliverToBoxAdapter(
+                                // UP from the first rail lands on the hero's
+                                // buttons, which sit at its bottom. On a television
+                                // this reveals the whole hero, not just the button.
+                                child: FocusRevealSection(
+                                  child: Builder(builder: (context) {
+                                    if (data.continueWatching.isNotEmpty) {
+                                      final item = data.continueWatching.first;
+                                      return _HeroSection(
+                                        item: item,
+                                        onTap: () => _handleItemTap(
+                                            context, item.id, item.type),
+                                      );
+                                    } else {
+                                      final item = data.recentlyAdded.first;
+                                      return _HeroSection(
+                                        item: item,
+                                        onTap: () => _handleItemTap(
+                                            context, item.id, item.type),
+                                      );
+                                    }
+                                  }),
+                                ),
+                              ),
+
+                            // Content rails
+                            SliverList(
+                              delegate: SliverChildListDelegate([
+                                if (data.continueWatching.isNotEmpty)
+                                  ContentRail(
+                                    title: 'Continue Watching',
+                                    items: data.continueWatching,
+                                    showProgress: true,
+                                    onItemTap: (id, type) =>
+                                        _handleItemTap(context, id, type),
+                                    onItemActivate: (item) =>
+                                        _handlePlay(context, item),
+                                    onRemoveFromContinueWatching: (item) =>
+                                        _handleRemove(context, ref, item),
+                                  ),
+                                if (data.recentlyAdded.isNotEmpty)
+                                  ContentRail(
+                                    title: 'Recently Added',
+                                    items: data.recentlyAdded,
+                                    onItemTap: (id, type) =>
+                                        _handleItemTap(context, id, type),
+                                    onSeeAllTap: () =>
+                                        context.push('/recently-added'),
+                                  ),
+                                if (data.favorites.isNotEmpty)
+                                  ContentRail(
+                                    title: 'Favorites',
+                                    items: data.favorites,
+                                    onItemTap: (id, type) =>
+                                        _handleItemTap(context, id, type),
+                                    onSeeAllTap: () =>
+                                        context.push('/favorites'),
+                                  ),
+                                SizedBox(height: bottomPadding),
+                              ]),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref.read(homeControllerProvider.notifier).refresh();
-              },
-              child: homeData.when(
-                loading: () {
-                  // No hero pick yet -> calm static fallback.
-                  publishBackdropSource(ref, BackdropSource.none);
-                  return const HomeLoadingSkeleton();
-                },
-                error: (error, stackTrace) {
-                  publishBackdropSource(ref, BackdropSource.none);
-                  return _buildErrorView(context, error, ref);
-                },
-                data: (data) {
-                  if (data.isEmpty) {
-                    publishBackdropSource(ref, BackdropSource.none);
-                    return _buildEmptyState(context);
-                  }
-
-                  // Feed the shell ambient backdrop from the hero pick:
-                  // continueWatching.first ?? recentlyAdded.first, using
-                  // backdropUrl ?? posterUrl (plan U5 / AE1). Branch by
-                  // concrete type so the getters resolve (the two lists
-                  // hold different types).
-                  final BackdropSource heroSource;
-                  if (data.continueWatching.isNotEmpty) {
-                    final item = data.continueWatching.first;
-                    heroSource = BackdropSource(
-                      imageUrl: item.backdropUrl ?? item.posterUrl,
-                      id: item.id,
-                    );
-                  } else if (data.recentlyAdded.isNotEmpty) {
-                    final item = data.recentlyAdded.first;
-                    heroSource = BackdropSource(
-                      imageUrl: item.backdropUrl ?? item.posterUrl,
-                      id: item.id,
-                    );
-                  } else {
-                    heroSource = BackdropSource.none;
-                  }
-                  publishBackdropSource(ref, heroSource);
-
-                  return CustomScrollView(
-                    slivers: [
-                      // Hero section with featured content
-                      if (data.continueWatching.isNotEmpty ||
-                          data.recentlyAdded.isNotEmpty)
-                        SliverToBoxAdapter(
-                          // UP from the first rail lands on the hero's
-                          // buttons, which sit at its bottom. On a television
-                          // this reveals the whole hero, not just the button.
-                          child: FocusRevealSection(
-                            child: Builder(builder: (context) {
-                              if (data.continueWatching.isNotEmpty) {
-                                final item = data.continueWatching.first;
-                                return _HeroSection(
-                                  item: item,
-                                  onTap: () => _handleItemTap(
-                                      context, item.id, item.type),
-                                );
-                              } else {
-                                final item = data.recentlyAdded.first;
-                                return _HeroSection(
-                                  item: item,
-                                  onTap: () => _handleItemTap(
-                                      context, item.id, item.type),
-                                );
-                              }
-                            }),
-                          ),
-                        ),
-
-                      // Content rails
-                      SliverList(
-                        delegate: SliverChildListDelegate([
-                          if (data.continueWatching.isNotEmpty)
-                            ContentRail(
-                              title: 'Continue Watching',
-                              items: data.continueWatching,
-                              showProgress: true,
-                              onItemTap: (id, type) =>
-                                  _handleItemTap(context, id, type),
-                              onItemActivate: (item) =>
-                                  _handlePlay(context, item),
-                              onRemoveFromContinueWatching: (item) =>
-                                  _handleRemove(context, ref, item),
-                            ),
-                          if (data.recentlyAdded.isNotEmpty)
-                            ContentRail(
-                              title: 'Recently Added',
-                              items: data.recentlyAdded,
-                              onItemTap: (id, type) =>
-                                  _handleItemTap(context, id, type),
-                              onSeeAllTap: () =>
-                                  context.push('/recently-added'),
-                            ),
-                          if (data.favorites.isNotEmpty)
-                            ContentRail(
-                              title: 'Favorites',
-                              items: data.favorites,
-                              onItemTap: (id, type) =>
-                                  _handleItemTap(context, id, type),
-                              onSeeAllTap: () => context.push('/favorites'),
-                            ),
-                          SizedBox(height: bottomPadding),
-                        ]),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -366,60 +450,6 @@ class HomeScreen extends ConsumerWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ModernAppBar extends StatelessWidget implements PreferredSizeWidget {
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassSurface.appBar(
-      child: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        titleSpacing: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.menu_rounded),
-          onPressed: () {
-            AppShell.scaffoldKey.currentState?.openDrawer();
-          },
-          tooltip: 'Menu',
-        ),
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            MydiaLogo(size: 32),
-            SizedBox(width: 10),
-            Text(
-              'Mydia Player',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.search_rounded, size: 20),
-            ),
-            onPressed: () {
-              context.push('/search');
-            },
-            tooltip: 'Search',
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
     );
   }

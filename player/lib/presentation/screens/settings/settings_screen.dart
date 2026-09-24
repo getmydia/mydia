@@ -68,8 +68,9 @@ class SettingsScreen extends ConsumerWidget {
         backgroundColor: Colors.transparent,
         title: const Text('Settings'),
         // SettingsScreen's app bar is always visible (no desktop
-        // suppression), so it carries its own cast affordance instead of
-        // the shell's overlay. See AppShell.needsCastOverlay.
+        // suppression), so it carries its own cast affordance rather than
+        // going through `WindowTitleRow` (Task 5 converted the shell's
+        // other in-shell screens; Settings keeps its plain `AppBar`).
         actions: [
           CastButton(onPressed: () => pickCastDevice(context, ref)),
           const SizedBox(width: 8),

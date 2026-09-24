@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/navigation/media_filter.dart';
@@ -10,10 +11,9 @@ import '../../../domain/navigation/nav_destination.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../filter/filter_editor_sheet.dart';
 import '../../widgets/app_shell.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../library/library_grid_body.dart';
 
 class FilterScreen extends ConsumerStatefulWidget {
@@ -32,7 +32,7 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
   final ScrollController _scrollController = ScrollController();
   LibraryViewMode _viewMode = LibraryViewMode.grid;
 
-  static const double _barHeight = kToolbarHeight;
+  double _barHeight(BuildContext context) => WindowTitleRow.heightOf(context);
 
   @override
   void dispose() {
@@ -51,53 +51,66 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
   @override
   Widget build(BuildContext context) {
     final layoutAsync = ref.watch(sidebarLayoutProvider);
-    final isDesktop = Breakpoints.isDesktop(context);
-    final chromeTop = freshnessTopInset(context, appBarHeight: _barHeight);
-    final scrollTopPadding = chromeTop + 8;
 
     publishBackdropSource(ref, BackdropSource.none);
 
-    return layoutAsync.when(
-      loading: () => const Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (error, _) => Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Center(child: Text(error.toString())),
-      ),
-      data: (layout) {
-        final destination = layout.filters[widget.filterId];
-        if (destination == null) {
-          return const Scaffold(
-            backgroundColor: Colors.transparent,
-            body: _FilterNotFoundBody(),
+    // This screen's own `WindowTitleRow` (built by `_buildAppBar`) draws into
+    // the title-bar band, so the body has to sit under `removeBand`:
+    // otherwise the ambient `MediaQuery.padding.top` still carries the band
+    // and every inset below double-counts it.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) {
+          final isDesktop = Breakpoints.isDesktop(context);
+          final barHeight = _barHeight(context);
+          final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
+          final scrollTopPadding = chromeTop + 8;
+
+          return layoutAsync.when(
+            loading: () => const Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Center(child: CircularProgressIndicator()),
+            ),
+            error: (error, _) => Scaffold(
+              backgroundColor: Colors.transparent,
+              body: Center(child: Text(error.toString())),
+            ),
+            data: (layout) {
+              final destination = layout.filters[widget.filterId];
+              if (destination == null) {
+                return const Scaffold(
+                  backgroundColor: Colors.transparent,
+                  body: _FilterNotFoundBody(),
+                );
+              }
+
+              final filter = destination.filter;
+              final emptyCopy = _emptyCopyFor(filter);
+
+              return Scaffold(
+                backgroundColor: Colors.transparent,
+                extendBodyBehindAppBar: true,
+                appBar: _buildAppBar(
+                  context,
+                  destination,
+                  isDesktop,
+                  barHeight,
+                ),
+                body: LibraryMediaBody(
+                  filter: filter,
+                  scrollController: _scrollController,
+                  chromeTop: chromeTop,
+                  scrollTopPadding: scrollTopPadding,
+                  viewMode: _viewMode,
+                  emptyTitle: emptyCopy.title,
+                  emptySubtitle: emptyCopy.subtitle,
+                  emptyIcon: emptyCopy.icon,
+                ),
+              );
+            },
           );
-        }
-
-        final filter = destination.filter;
-        final emptyCopy = _emptyCopyFor(filter);
-
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          extendBodyBehindAppBar: true,
-          appBar: _buildAppBar(
-            context,
-            destination,
-            isDesktop,
-          ),
-          body: LibraryMediaBody(
-            filter: filter,
-            scrollController: _scrollController,
-            chromeTop: chromeTop,
-            scrollTopPadding: scrollTopPadding,
-            viewMode: _viewMode,
-            emptyTitle: emptyCopy.title,
-            emptySubtitle: emptyCopy.subtitle,
-            emptyIcon: emptyCopy.icon,
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 
@@ -105,102 +118,86 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
     BuildContext context,
     FilterDestination destination,
     bool isDesktop,
+    double barHeight,
   ) {
     final title = destination.label;
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
 
     return PreferredSize(
-      preferredSize: const Size.fromHeight(_barHeight),
+      preferredSize: Size.fromHeight(barHeight),
       child: GlassSurface.appBar(
         opacity: 0.85,
-        child: SafeArea(
-          child: SizedBox(
-            height: kToolbarHeight,
-            child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: isDesktop ? horizontalPadding - 8 : 8,
-              ),
-              child: Row(
-                children: [
-                  if (!isDesktop)
-                    IconButton(
-                      icon: const Icon(Icons.menu_rounded),
-                      onPressed: () {
-                        AppShell.scaffoldKey.currentState?.openDrawer();
-                      },
-                      tooltip: 'Menu',
-                    ),
-                  Padding(
-                    padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.filter_alt_rounded,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          title,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -0.3,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(),
-                  _FilterActionButton(
-                    icon: _viewMode == LibraryViewMode.grid
-                        ? Icons.view_list_rounded
-                        : Icons.grid_view_rounded,
-                    onPressed: _toggleViewMode,
-                    tooltip: 'Toggle view',
-                  ),
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    icon: const Icon(
-                      Icons.more_vert_rounded,
-                      color: AppColors.textSecondary,
-                      size: 22,
-                    ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 40,
-                      minHeight: 40,
-                    ),
-                    color: AppColors.surface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    onSelected: (value) {
-                      if (value == 'save_filter') {
-                        showFilterEditor(
-                          context: context,
-                          ref: ref,
-                          initialFilter: destination.filter,
-                        );
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'save_filter',
-                        child: Text('Save this view as a filter'),
+        child: WindowTitleRow(
+          leading: isDesktop
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  onPressed: () {
+                    AppShell.scaffoldKey.currentState?.openDrawer();
+                  },
+                  tooltip: 'Menu',
+                ),
+          title: Padding(
+            padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.filter_alt_rounded,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.3,
                       ),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-                  CastButton(
-                    onPressed: () => pickCastDevice(context, ref),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+          actions: [
+            _FilterActionButton(
+              icon: _viewMode == LibraryViewMode.grid
+                  ? Icons.view_list_rounded
+                  : Icons.grid_view_rounded,
+              onPressed: _toggleViewMode,
+              tooltip: 'Toggle view',
+            ),
+            const SizedBox(width: 4),
+            PopupMenuButton<String>(
+              icon: const Icon(
+                Icons.more_vert_rounded,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 40,
+                minHeight: 40,
+              ),
+              color: AppColors.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              onSelected: (value) {
+                if (value == 'save_filter') {
+                  showFilterEditor(
+                    context: context,
+                    ref: ref,
+                    initialFilter: destination.filter,
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'save_filter',
+                  child: Text('Save this view as a filter'),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
       ),
     );

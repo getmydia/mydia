@@ -1,114 +1,97 @@
-// Regression guard for the shell's content gutter: `AppShell.contentGutter`
-// is the `SafeArea` both the desktop and mobile branches wrap their main
-// content column in (see app_shell.dart), the same `@visibleForTesting` seam
-// `AppShell.castOverlay` established for the cast button. Because the first
-// two tests below call the real seam instead of hand-rolling a `SafeArea`
-// that mirrors its shape, a regression that drops the gutter entirely (or
-// changes which edges it insets) is caught here without any mirror to keep
-// in sync by hand.
+// Regression guards for the shell's two remaining inset seams now that each
+// screen draws its own title row into the title-bar band:
 //
-// The third test is a deliberate CONTROL with no gutter at all, showing what
-// an `AppBar` does when nothing above it has already consumed the strip.
+//  * `AppShell.contentInsets` narrows the desktop content column's leading
+//    reserve to what `DesktopSidebar` does not already cover, so the column
+//    is not padding for window controls the sidebar already sits under.
+//  * `AppShell.bannerArea` pads the offline/compatibility/update banner trio
+//    down below the band, but only while one of them is actually showing: an
+//    idle banner area must not push a screen's own `WindowTitleRow` down out
+//    of the band it draws into.
+//
+// Both are `@visibleForTesting` seams the shell itself calls (see
+// app_shell.dart), the same pattern established for `AppShell.dockChrome`: a
+// test that exercises the seam directly is not a mirror that could stay
+// green if the shell dropped the wiring entirely.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 
-/// The gutter's child, marked so the test can measure where it starts.
-const Key _childKey = Key('shell-child');
-
 void main() {
-  group('AppShell.contentGutter under a reserved window chrome strip', () {
-    testWidgets('pushes its child clear of the strip', (tester) async {
-      await tester.pumpWidget(
-        const MediaQuery(
-          data: MediaQueryData(
-            padding: EdgeInsets.only(top: kMacTitleBarOverlap),
-          ),
-          child: Directionality(
-            textDirection: TextDirection.ltr,
-            child: SizedBox(
-              // AppShell.contentGutter is a static method, not a const
-              // constructor, so it cannot be built inside a `const` widget
-              // tree; wrap it via a builder-shaped subtree instead.
-              child: _ContentGutterProbe(),
-            ),
-          ),
+  test(
+      'the desktop content column does not reserve the lights the sidebar '
+      'covers', () {
+    const mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
+    expect(AppShell.contentInsets(mac).leading, 0);
+
+    final linux = WindowChromeInsets(height: 36, leading: 0, trailing: 110);
+    expect(AppShell.contentInsets(linux), linux);
+  });
+
+  testWidgets('banners still clear the band', (tester) async {
+    const bannerKey = Key('banner');
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          padding: EdgeInsets.only(top: kMacTitleBarOverlap),
         ),
-      );
-
-      expect(
-        tester.getRect(find.byKey(_childKey)).top,
-        greaterThanOrEqualTo(kMacTitleBarOverlap),
-      );
-    });
-
-    testWidgets(
-        'consumes the inset, so a nested AppBar does not inset a second '
-        'time', (tester) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            padding: EdgeInsets.only(top: kMacTitleBarOverlap),
-          ),
-          child: MaterialApp(
-            home: AppShell.contentGutter(
-              child: Scaffold(
-                appBar: AppBar(title: const Text('probe')),
-                body: const SizedBox(key: _childKey),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: WindowChromeInsets.scope(
+            insets: const WindowChromeInsets(
+              height: kMacTitleBarOverlap,
+              leading: 80,
+              trailing: 0,
+            ),
+            // `Align` loosens the constraints `_PadTopWhenNonEmpty` receives:
+            // `pumpWidget` otherwise hands the root a size tight to the test
+            // surface, and this widget's own layout logic (sizing itself to
+            // `child.height + top` rather than the incoming constraint) needs
+            // room to do that, exactly as it gets from the real `Column` the
+            // shell mounts it in.
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: AppShell.bannerArea(
+                child: const SizedBox(height: 30, width: 100, key: bannerKey),
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      // The app bar starts at the gutter, not at gutter + inset. If the
-      // gutter's SafeArea did not remove the padding it consumed, this
-      // would be 2x the overlap.
-      expect(
-        tester.getRect(find.byType(AppBar)).top,
-        kMacTitleBarOverlap,
-      );
-    });
+    expect(tester.getRect(find.byKey(bannerKey)).top, kMacTitleBarOverlap);
+  });
 
-    testWidgets(
-        'CONTROL: with no gutter above it, an AppBar insets itself by '
-        'growing', (tester) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: const MediaQueryData(
-            padding: EdgeInsets.only(top: kMacTitleBarOverlap),
-          ),
-          child: MaterialApp(
-            home: Scaffold(
-              appBar: AppBar(title: const Text('probe')),
-              body: const SizedBox(key: _childKey),
+  testWidgets('an empty banner area takes no space', (tester) async {
+    const areaKey = Key('banner-area');
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          padding: EdgeInsets.only(top: kMacTitleBarOverlap),
+        ),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            // `AppShell.bannerArea` returns a private render object widget,
+            // so it cannot be found by type from outside app_shell.dart.
+            // `KeyedSubtree` is transparent to layout (`build` just returns
+            // `child`), so its element's `renderObject` resolves straight
+            // through to the area's own, letting the key measure it.
+            child: KeyedSubtree(
+              key: areaKey,
+              child: AppShell.bannerArea(child: const SizedBox.shrink()),
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      // This is the path every out-of-shell detail screen takes. Measured:
-      // 56 + 40 = 96.
-      expect(
-        tester.getRect(find.byType(AppBar)).height,
-        kToolbarHeight + kMacTitleBarOverlap,
-      );
-    });
+    expect(tester.getSize(find.byKey(areaKey)).height, 0);
   });
-}
-
-/// Builds `AppShell.contentGutter` around the keyed probe child.
-///
-/// A plain widget (not a `const` literal in the test body) purely so the
-/// static-method call can sit inside the otherwise-`const` `MediaQuery` /
-/// `Directionality` tree used by the first test.
-class _ContentGutterProbe extends StatelessWidget {
-  const _ContentGutterProbe();
-
-  @override
-  Widget build(BuildContext context) => AppShell.contentGutter(
-        child: const SizedBox(key: _childKey, height: 100, width: 100),
-      );
 }

@@ -1,4 +1,7 @@
+import 'dart:math' show max;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_status.dart';
@@ -9,13 +12,13 @@ import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
+import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
 import 'ambient_backdrop.dart';
 import 'ambient_backdrop_provider.dart';
-import 'cast_actions.dart';
 import 'cast_bar/dock_extents.dart';
 import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
@@ -40,96 +43,39 @@ class AppShell extends ConsumerStatefulWidget {
     required this.location,
   });
 
-  /// Whether the shell must paint [CastOverlayButton] over [location].
+  /// Narrows [insets] to what the desktop content column still has to keep
+  /// clear once [DesktopSidebar] is in the picture.
   ///
-  /// [CastOverlayButton] exists only for screens with nowhere else to put the
-  /// affordance: ones that suppress their app bar on desktop and so have no
-  /// top-right band of their own. Home is the last such destination.
+  /// The sidebar sits to the leading edge of the content column and is wider
+  /// (`Breakpoints.sidebarWidth`, 260) than either platform's leading
+  /// reserve (macOS's traffic lights, 80; a Linux button group, well under
+  /// 260), so it already covers whatever the window controls need there. A
+  /// screen's own [WindowTitleRow] still reserves that space for the strip
+  /// that actually runs across the sidebar *and* the content column, but the
+  /// content column itself must not reserve it a second time as a left
+  /// margin, or every browse header would show a dead gap the sidebar
+  /// already accounts for. The trailing edge has no such neighbour, so it is
+  /// passed through untouched.
   ///
-  /// This used to be the opposite question, `hasOwnCastButton`, answered by an
-  /// allowlist of every route that carries its own [CastButton]. That list was
-  /// a maintenance trap and it drifted twice: `/calendar` and `/filter/:id`
-  /// both grew a real app bar with a [CastButton] in it, neither was added,
-  /// and both ended up with two cast buttons stacked in the same corner:
-  /// the overlay floating above the screen's own bar, which reads as a
-  /// doubled header.
-  ///
-  /// Inverting it makes the safe answer the default. Every in-shell browse
-  /// screen now goes through `BrowseScaffold`, which always renders a glass
-  /// bar with a trailing [CastButton] on every platform, so a new route is
-  /// correct without touching this function. Only a screen that deliberately
-  /// suppresses its bar needs naming here, and adding one is a conscious act.
-  ///
-  /// Public (rather than a private helper on [_AppShellState]) and annotated
-  /// `@visibleForTesting` purely so a test can assert the routing decision
-  /// directly, without reconstructing the shell's full provider graph.
+  /// Public and `@visibleForTesting` so a test can exercise the exact
+  /// arithmetic the desktop branch applies, rather than a mirror that would
+  /// stay green if the subtraction were dropped.
   @visibleForTesting
-  static bool needsCastOverlay(String location) => location == '/';
+  static WindowChromeInsets contentInsets(WindowChromeInsets insets) => insets
+      .copyWith(leading: max(0, insets.leading - Breakpoints.sidebarWidth));
 
-  /// Builds the shell's cast overlay for the desktop or mobile branch.
-  ///
-  /// [CastOverlayButton] wraps its child in its own `SafeArea`, which already
-  /// consumes whatever the ambient `MediaQuery.padding.top` carries (the
-  /// macOS title bar strip, on macOS windowed). `topInset` must therefore be
-  /// the plain pre-strip offset — 12 below the desktop content, or below the
-  /// mobile app bar — never `MediaQuery.paddingOf(context).top` folded in on
-  /// top of that, or the button sits under the strip twice.
-  ///
-  /// Public (rather than inlined in [castOverlaySlot]) and annotated
-  /// `@visibleForTesting` so a test can exercise the exact value this shell
-  /// computes for each branch directly, instead of re-declaring the numbers
-  /// in a mirror that can silently drift from the real call sites.
+  /// The content column's top edge is the window's: each screen's
+  /// [WindowTitleRow] draws into the title-bar band. Only [bannerArea]
+  /// clears it.
   @visibleForTesting
-  static Widget castOverlay({required bool isDesktop}) => CastOverlayButton(
-        topInset: isDesktop ? 12 : kToolbarHeight + 8,
-      );
+  static Widget contentGutter({required Widget child}) => child;
 
-  /// The overlay slot both branches drop into their `Stack`: the real
-  /// [castOverlay] on a route that needs one, an inert zero-size box
-  /// otherwise.
-  ///
-  /// The routing decision lives in here, rather than as an `if` at the two
-  /// call sites, so that a test can exercise it for real. When the `if` was
-  /// at the call sites, the only way to cover it was for the test to rebuild
-  /// the same conditional around [needsCastOverlay], a mirror, which proves
-  /// the mirror works and nothing about the shell. Reviewing #645, CodeRabbit
-  /// caught exactly that: the `/calendar` case would have passed even if this
-  /// widget still used the old predicate. Calling the seam removes the mirror,
-  /// the same way [castOverlay] already removed the one around its `topInset`
-  /// arithmetic.
-  ///
-  /// `SizedBox.shrink()` rather than omitting the child: [CastOverlayButton]
-  /// builds a `Positioned`, so the slot is a `Stack` child either way, and a
-  /// zero-size unpositioned child cannot grow a loose `Stack` or paint
-  /// anything.
+  /// The shell's banners sit above the screen, so they have to clear the
+  /// band themselves, but only while one is showing: an idle banner area
+  /// must not push the screen's title row down out of the band.
   @visibleForTesting
-  static Widget castOverlaySlot({
-    required String location,
-    required bool isDesktop,
-  }) =>
-      needsCastOverlay(location)
-          ? castOverlay(isDesktop: isDesktop)
-          : const SizedBox.shrink();
-
-  /// The gutter both the desktop and mobile branches wrap their main content
-  /// column in: a `SafeArea` that consumes the ambient `MediaQuery.padding`
-  /// on top only, leaving the sidebar/drawer chrome and bottom nav to handle
-  /// their own edges.
-  ///
-  /// Public (rather than inlined at each call site) and annotated
-  /// `@visibleForTesting`, mirroring [castOverlay], so a test can exercise
-  /// the exact widget both branches build directly, instead of hand-rolling
-  /// a `SafeArea` that can silently drift out of sync with the real call
-  /// sites — the shell's actual gutter could lose its `SafeArea` entirely
-  /// and a mirror-based test would stay green.
-  @visibleForTesting
-  static Widget contentGutter({required Widget child}) => SafeArea(
-        top: true,
-        bottom: false,
-        left: false,
-        right: false,
-        child: child,
-      );
+  static Widget bannerArea({required Widget child}) =>
+      _PadTopWhenNonEmpty(child: child);
 
   /// Wraps the bottom dock so it disappears while the nav drawer is open.
   ///
@@ -154,8 +100,8 @@ class AppShell extends ConsumerStatefulWidget {
   /// Also reports the dock's height to `DockExtents` so the floating cast bar
   /// can sit above it instead of painting over it.
   ///
-  /// Public and `@visibleForTesting` for the reason [castOverlay] and
-  /// [contentGutter] are: a test can exercise the exact widget the shell
+  /// Public and `@visibleForTesting` for the reason [contentInsets] and
+  /// [bannerArea] are: a test can exercise the exact widget the shell
   /// builds, instead of a mirror that silently drifts from the real call site
   /// and would stay green if this wrapper were deleted.
   @visibleForTesting
@@ -187,8 +133,8 @@ class AppShell extends ConsumerStatefulWidget {
   /// while closed, so without this the drawer reopens in whatever mode it was
   /// left in. Order changes persist on every drop, so exiting loses nothing.
   ///
-  /// Public and `@visibleForTesting` for the reason [castOverlay] and
-  /// [contentGutter] are: a test can exercise the exact call the shell makes,
+  /// Public and `@visibleForTesting` for the reason [contentInsets] and
+  /// [bannerArea] are: a test can exercise the exact call the shell makes,
   /// rather than a mirror that would stay green if the wiring below were
   /// deleted.
   @visibleForTesting
@@ -428,21 +374,35 @@ class _AppShellState extends ConsumerState<AppShell>
                     onExit: (direction) => direction == TraversalDirection.left
                         ? _focusBoundary.focusSidebar()
                         : false,
-                    child: AppShell.contentGutter(
-                      child: Column(
-                        children: [
-                          if (isOffline) const OfflineBanner(),
-                          const CompatibilityBanner(),
-                          const UpdateBanner(),
-                          Expanded(child: widget.child),
-                        ],
+                    // The sidebar already covers the leading window-control
+                    // reserve, so the content column narrows what it keeps
+                    // clear to `AppShell.contentInsets` before its own screen
+                    // (via `WindowTitleRow`) reads `WindowChromeInsets.of`.
+                    child: WindowChromeInsets.scope(
+                      insets: AppShell.contentInsets(
+                          WindowChromeInsets.of(context)),
+                      child: AppShell.contentGutter(
+                        child: Column(
+                          children: [
+                            AppShell.bannerArea(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isOffline) const OfflineBanner(),
+                                  const CompatibilityBanner(),
+                                  const UpdateBanner(),
+                                ],
+                              ),
+                            ),
+                            Expanded(child: widget.child),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-            AppShell.castOverlaySlot(location: location, isDesktop: true),
           ],
         ),
       );
@@ -469,17 +429,26 @@ class _AppShellState extends ConsumerState<AppShell>
       body: Stack(
         children: [
           Positioned.fill(child: backdrop),
+          // Insets pass through unchanged here: a narrow mobile/macOS window
+          // has no sidebar to cover the window-control reserve, so the row
+          // still needs the full ambient value.
           AppShell.contentGutter(
             child: Column(
               children: [
-                if (isOffline) const OfflineBanner(),
-                const CompatibilityBanner(),
-                const UpdateBanner(),
+                AppShell.bannerArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isOffline) const OfflineBanner(),
+                      const CompatibilityBanner(),
+                      const UpdateBanner(),
+                    ],
+                  ),
+                ),
                 Expanded(child: widget.child),
               ],
             ),
           ),
-          AppShell.castOverlaySlot(location: location, isDesktop: false),
         ],
       ),
       bottomNavigationBar: AppShell.dockChrome(
@@ -492,5 +461,66 @@ class _AppShellState extends ConsumerState<AppShell>
         ),
       ),
     );
+  }
+}
+
+/// Pads [child] by the ambient `MediaQuery.padding.top` (the title-bar band
+/// plus any status bar), but only while [child] actually renders something.
+///
+/// [AppShell.bannerArea] wraps the offline/compatibility/update banner
+/// trio, which is usually empty (`SizedBox.shrink()` all the way down). A
+/// plain `Padding` would reserve the top inset unconditionally, leaving a
+/// dead gap above the content column even with no banner in it. This area
+/// sits above a screen's own [WindowTitleRow], so that gap would shove the
+/// row itself down out of the band it is supposed to draw into. Only padding
+/// when the child has a nonzero height keeps the idle case truly zero-height,
+/// while a real banner still clears the band.
+class _PadTopWhenNonEmpty extends SingleChildRenderObjectWidget {
+  const _PadTopWhenNonEmpty({required Widget child}) : super(child: child);
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderPadTopWhenNonEmpty(top: MediaQuery.paddingOf(context).top);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _RenderPadTopWhenNonEmpty renderObject,
+  ) {
+    renderObject.top = MediaQuery.paddingOf(context).top;
+  }
+}
+
+class _RenderPadTopWhenNonEmpty extends RenderShiftedBox {
+  _RenderPadTopWhenNonEmpty({required double top, RenderBox? child})
+      : _top = top,
+        super(child);
+
+  double _top;
+
+  set top(double value) {
+    if (_top == value) return;
+    _top = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+
+    child.layout(constraints.loosen(), parentUsesSize: true);
+    if (child.size.height == 0) {
+      // Nothing to clear the band for: stay zero-height rather than
+      // reserving `_top` of dead space above an idle banner area.
+      size = Size(constraints.maxWidth, 0);
+      return;
+    }
+
+    (child.parentData as BoxParentData).offset = Offset(0, _top);
+    size = Size(constraints.maxWidth, child.size.height + _top);
   }
 }
