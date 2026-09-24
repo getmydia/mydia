@@ -67,6 +67,22 @@ defmodule Mydia.Accounts.UsernameBackfillTest do
     assert Repo.reload(user).username == "robin"
   end
 
+  test "still names accounts when users lacks columns added by later migrations" do
+    # The backfill runs from migration 20260905143001, against a users table
+    # without any column a later migration adds. Reading the full User schema
+    # there selected those columns, and on PostgreSQL the failed read aborted
+    # the migrator's transaction. Dropping one such column inside the sandbox
+    # recreates that table; the transaction rolls the drop back.
+    _user = nameless_user_fixture(%{email: "robin.vega@example.test"})
+    Repo.query!("ALTER TABLE users DROP COLUMN totp_last_used_at")
+
+    assert UsernameBackfill.run() == :ok
+
+    # Schemaless, since the User schema can no longer be read from this table.
+    named = from(u in "users", where: u.username == "robin.vega", select: count())
+    assert Repo.one(named) == 1
+  end
+
   test "returns :ok even when the read that finds nameless rows fails" do
     # Renaming the table out from under the query is the cleanest way to make
     # Repo.all/1 raise inside a sandboxed test: both SQLite and PostgreSQL
