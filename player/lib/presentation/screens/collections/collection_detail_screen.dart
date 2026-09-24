@@ -14,8 +14,10 @@ import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/recently_added_item.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
   final String id;
@@ -31,79 +33,113 @@ class CollectionDetailScreen extends ConsumerWidget {
     }
   }
 
+  /// Builds Collection detail's title-bar header.
+  ///
+  /// A static, `@visibleForTesting` seam rather than inlined in [build]:
+  /// `build` also watches `collectionDetailControllerProvider(id)`, a
+  /// GraphQL-backed stream, expensive to satisfy in a widget test that only
+  /// wants to check where the cast button lands. This is the exact widget
+  /// [build] puts in `Scaffold.appBar`, taking [itemsData] already resolved
+  /// rather than watching the provider itself.
+  @visibleForTesting
+  static PreferredSizeWidget header(
+    BuildContext context, {
+    required String id,
+    required AsyncValue<List<RecentlyAddedItem>> itemsData,
+  }) {
+    return WindowTitleBar(
+      height: WindowTitleRow.heightOf(context),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded),
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/collections');
+          }
+        },
+      ),
+      title: const Text(
+        'Collection',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: -0.5,
+        ),
+      ),
+      actions: [
+        if (isDownloadSupported)
+          itemsData.whenOrNull(
+                data: (items) => items.isNotEmpty
+                    ? _CollectionDownloadButton(
+                        collectionId: id,
+                        items: items,
+                      )
+                    : null,
+              ) ??
+              const SizedBox.shrink(),
+      ],
+      // The blur and translucent fill this screen always had, kept exactly:
+      // only the leading/title/actions now flow through the shared row
+      // instead of a plain `AppBar`. The cast button is new here --
+      // `WindowTitleRow` always appends one, and this screen never had one
+      // before.
+      decorate: (row) => ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: ColoredBox(
+            color: AppColors.background.withValues(alpha: 0.8),
+            child: row,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final itemsData = ref.watch(collectionDetailControllerProvider(id));
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: AppBar(
-              backgroundColor: AppColors.background.withValues(alpha: 0.8),
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/collections');
-                  }
-                },
-              ),
-              title: const Text(
-                'Collection',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
+    // This is a full-window route (pushed outside the shell), and so the sole
+    // owner of the title-bar band here: the body has to sit under
+    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+    // band on top of the app bar's own reserved height.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) {
+          final barHeight = WindowTitleRow.heightOf(context);
+          return Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: header(context, id: id, itemsData: itemsData),
+            body: Column(
+              children: [
+                FreshnessHeader(
+                  queryKeys: [QueryKeys.collectionItems(id)],
+                  topInset: freshnessTopInset(context, appBarHeight: barHeight),
                 ),
-              ),
-              actions: [
-                if (isDownloadSupported)
-                  itemsData.whenOrNull(
-                        data: (items) => items.isNotEmpty
-                            ? _CollectionDownloadButton(
-                                collectionId: id,
-                                items: items,
-                              )
-                            : null,
-                      ) ??
-                      const SizedBox.shrink(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await ref
+                          .read(collectionDetailControllerProvider(id).notifier)
+                          .refresh();
+                    },
+                    child: itemsData.when(
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (error, _) => _buildErrorView(context, error, ref),
+                      data: (items) {
+                        if (items.isEmpty) {
+                          return _buildEmptyState(context);
+                        }
+                        return _buildGridView(context, items);
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.collectionItems(id)],
-            topInset: freshnessTopInset(context, appBarHeight: kToolbarHeight),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(collectionDetailControllerProvider(id).notifier)
-                    .refresh();
-              },
-              child: itemsData.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _buildErrorView(context, error, ref),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return _buildEmptyState(context);
-                  }
-                  return _buildGridView(context, items);
-                },
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

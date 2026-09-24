@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -26,9 +27,11 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/recently_added_item.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
+import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/screens/filter/filter_screen.dart';
 import 'package:player/presentation/screens/home_screen.dart';
@@ -36,10 +39,14 @@ import 'package:player/presentation/screens/library/library_controller.dart'
     show LibraryType;
 import 'package:player/presentation/screens/library/library_screen.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
+import 'package:player/presentation/screens/login_screen.dart';
+import 'package:player/presentation/screens/settings/devices_screen.dart';
+import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
+import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 
@@ -329,5 +336,103 @@ void main() {
         );
       });
     }
+  });
+
+  group('SettingsScreen cast alignment', () {
+    // SettingsScreen.build wires up settingsControllerProvider,
+    // connectionProvider, p2pStatusNotifierProvider (a real native P2P node)
+    // and updateProvider. `SettingsScreen.header` is the exact widget `build`
+    // puts in `Scaffold.appBar`, extracted as a `@visibleForTesting static`
+    // seam that needs no providers at all: the cast button is
+    // `WindowTitleRow`'s own.
+    for (final MapEntry(key: name, value: insets) in _cases.entries) {
+      testWidgets('aligns on $name', (tester) async {
+        await pumpWithInsets(
+          tester,
+          insets,
+          width: _kWidth,
+          child: const Builder(builder: SettingsScreen.header),
+        );
+
+        expect(
+          tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
+          _kWidth - insets.trailing - _kEndGutter,
+        );
+      });
+    }
+  });
+
+  group('CollectionDetailScreen cast alignment', () {
+    // CollectionDetailScreen.build watches
+    // collectionDetailControllerProvider(id), a GraphQL-backed stream.
+    // `CollectionDetailScreen.header` is the exact widget `build` puts in
+    // `Scaffold.appBar`, extracted as a `@visibleForTesting static` seam that
+    // takes the already-resolved items rather than watching the provider
+    // itself. The cast button is new on this screen (it never had one
+    // before), which is exactly what this loop guards.
+    for (final MapEntry(key: name, value: insets) in _cases.entries) {
+      testWidgets('aligns on $name', (tester) async {
+        await pumpWithInsets(
+          tester,
+          insets,
+          width: _kWidth,
+          child: Builder(
+            builder: (context) => CollectionDetailScreen.header(
+              context,
+              id: 'c1',
+              itemsData: const AsyncValue.data(<RecentlyAddedItem>[]),
+            ),
+          ),
+        );
+
+        expect(
+          tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
+          _kWidth - insets.trailing - _kEndGutter,
+        );
+      });
+    }
+  });
+
+  group('DevicesScreen title row', () {
+    // Devices is a full-window route (pushed outside the shell), so it owns
+    // `Scaffold.appBar` itself rather than going through a seam: nothing here
+    // reads a GraphQL stream during the build that constructs the row.
+    testWidgets(
+        'draws into the band on macOS, with no cast button (there never was '
+        'one)', (tester) async {
+      await pumpWithInsets(
+        tester,
+        _cases['macOS']!,
+        width: _kWidth,
+        child: const DevicesScreen(),
+      );
+
+      expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+      expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
+    });
+  });
+
+  group('LoginScreen title row', () {
+    // LoginScreen has no `Scaffold.appBar` slot to put a row in (the card
+    // layout has nowhere to host one), so it overlays a bare `WindowTitleRow`
+    // instead, just to keep the window draggable and the corners clear.
+    // There is no signed-in device yet to cast to, hence no cast button.
+    testWidgets('draws a bare row on macOS with no cast button',
+        (tester) async {
+      await pumpWithInsets(
+        tester,
+        _cases['macOS']!,
+        width: _kWidth,
+        extraOverrides: [
+          authServiceProvider
+              .overrideWithValue(AuthService(storage: MockAuthStorage())),
+        ],
+        child: const LoginScreen(),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WindowTitleRow), findsOneWidget);
+      expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+    });
   });
 }

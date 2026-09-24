@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../core/layout/window_chrome_inset.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
 import '../widgets/focus_highlight.dart';
@@ -15,6 +16,7 @@ import '../widgets/pin_code_display.dart';
 import '../widgets/storage_unavailable_dialog.dart';
 import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
+import '../widgets/window_chrome/window_title_row.dart';
 import 'login/login_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -363,59 +365,80 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             _handleTvDeletePressed();
           }
         },
-        child: Scaffold(
-          body: Container(
-            width: size.width,
-            height: size.height,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppColors.background,
-                  Color(0xFF0F172A),
-                  Color(0xFF0A0F1D),
-                ],
+        // No `Scaffold.appBar` here (the card layout has nowhere to put one),
+        // so the window's traffic-light band is drawn by an overlaid
+        // `WindowTitleRow` instead, below. `removeBand` still has to wrap the
+        // `Scaffold`: without it, the body's own `SafeArea` would reserve the
+        // full band as if it were unsafe content area, pushing the centred
+        // card down by the band's height for no reason, when the row already
+        // owns that strip.
+        child: WindowChromeInsets.removeBand(
+          child: Scaffold(
+            body: Container(
+              width: size.width,
+              height: size.height,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppColors.background,
+                    Color(0xFF0F172A),
+                    Color(0xFF0A0F1D),
+                  ],
+                ),
               ),
-            ),
-            child: Stack(
-              children: [
-                _buildBackgroundDecoration(),
-                ExcludeFocus(
-                  excluding: _showAdvancedSettings || _showQrScanner,
-                  child: SafeArea(
-                    child: Center(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: isCompact ? 16 : 24,
-                        ),
-                        child: FadeTransition(
-                          opacity: _fadeAnimation,
-                          child: SlideTransition(
-                            position: _slideAnimation,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!InputCapabilities.directionalPrimary) ...[
-                                  _buildLogo(isCompact),
-                                  SizedBox(height: isCompact ? 24 : 32),
+              child: Stack(
+                children: [
+                  _buildBackgroundDecoration(),
+                  ExcludeFocus(
+                    excluding: _showAdvancedSettings || _showQrScanner,
+                    child: SafeArea(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: isCompact ? 16 : 24,
+                          ),
+                          child: FadeTransition(
+                            opacity: _fadeAnimation,
+                            child: SlideTransition(
+                              position: _slideAnimation,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!InputCapabilities
+                                      .directionalPrimary) ...[
+                                    _buildLogo(isCompact),
+                                    SizedBox(height: isCompact ? 24 : 32),
+                                  ],
+                                  _buildContent(loginState, isCompact),
+                                  const SizedBox(height: 16),
+                                  _buildFooter(loginState),
                                 ],
-                                _buildContent(loginState, isCompact),
-                                const SizedBox(height: 16),
-                                _buildFooter(loginState),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                if (_showQrScanner) _buildQrScannerOverlay(),
-                if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
-              ],
+                  if (_showQrScanner) _buildQrScannerOverlay(),
+                  if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
+                  // No signed-in device to cast to yet, so no cast button.
+                  // Nothing else sits under the traffic lights either: this
+                  // is just enough to make the window draggable and to keep
+                  // the corners clear, matching every other screen now that
+                  // Linux has no other drag area at all.
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: WindowTitleRow(showCast: false),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

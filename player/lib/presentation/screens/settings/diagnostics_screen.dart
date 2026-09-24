@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/crash_reporting/crash_reporter_provider.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/fullscreen/fullscreen_report.dart';
 import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
@@ -12,6 +13,7 @@ import '../../../core/theme/colors.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/toast/toaster.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import 'widgets/diagnostics_sharing_section.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -43,82 +45,108 @@ class DiagnosticsScreen extends ConsumerWidget {
       isInitialized: status.isInitialized,
     );
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Diagnostics')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          // Hidden where nothing would be sent: web builds, and the inert
-          // reporter whole-app tests run with. See CrashReporter.isAvailable.
-          if (ref.watch(crashReporterProvider).isAvailable) ...[
-            const DiagnosticsSharingSection(),
-            const SizedBox(height: 18),
-          ],
-          SettingsSection(
-            label: 'Transport',
-            children: [
-              SettingsRow.action(
-                icon: Icons.lan_outlined,
-                title: summary.label,
-                subtitle: summary.detail,
-                trailing: _Dot(color: connectionToneColor(summary.tone)),
-              ),
-              SettingsRow.action(
-                icon: Icons.dns_outlined,
-                title: 'Relay',
-                trailing: _Value(
-                  status.isRelayConnected ? 'Connected' : 'Not connected',
-                ),
-              ),
-              if (status.relayUrl != null)
-                SettingsRow.action(
-                  icon: Icons.link,
-                  title: 'Relay server',
-                  subtitle: status.relayUrl,
-                ),
-            ],
+    // A full-window route (pushed outside the shell), and so the sole owner
+    // of the title-bar band here: the body has to sit under `removeBand`, or
+    // the ambient `MediaQuery.padding.top` still carries the band on top of
+    // the app bar's own reserved height.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) => Scaffold(
+          appBar: WindowTitleBar(
+            height: WindowTitleRow.heightOf(context),
+            leading: const BackButton(),
+            title: Text(
+              'Diagnostics',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            // Read-only diagnostics, nothing to cast to from here. Kept as
+            // close to the old plain `AppBar` look as the row allows: a flat
+            // fill in the theme's app-bar colour, since that AppBar had no
+            // transparency or blur of its own.
+            showCast: false,
+            decorate: (row) => ColoredBox(
+              color: Theme.of(context).appBarTheme.backgroundColor ??
+                  AppColors.background,
+              child: row,
+            ),
           ),
-          const SizedBox(height: 18),
-          SettingsSection(
-            label: 'Peers',
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
-              SettingsRow.action(
-                icon: Icons.hub_outlined,
-                title: 'Connected peers',
-                trailing: _Value(
-                  status.connectedPeersCount == 0
-                      ? 'None connected'
-                      : '${status.connectedPeersCount}',
-                ),
+              // Hidden where nothing would be sent: web builds, and the inert
+              // reporter whole-app tests run with. See CrashReporter.isAvailable.
+              if (ref.watch(crashReporterProvider).isAvailable) ...[
+                const DiagnosticsSharingSection(),
+                const SizedBox(height: 18),
+              ],
+              SettingsSection(
+                label: 'Transport',
+                children: [
+                  SettingsRow.action(
+                    icon: Icons.lan_outlined,
+                    title: summary.label,
+                    subtitle: summary.detail,
+                    trailing: _Dot(color: connectionToneColor(summary.tone)),
+                  ),
+                  SettingsRow.action(
+                    icon: Icons.dns_outlined,
+                    title: 'Relay',
+                    trailing: _Value(
+                      status.isRelayConnected ? 'Connected' : 'Not connected',
+                    ),
+                  ),
+                  if (status.relayUrl != null)
+                    SettingsRow.action(
+                      icon: Icons.link,
+                      title: 'Relay server',
+                      subtitle: status.relayUrl,
+                    ),
+                ],
               ),
-            ],
-          ),
-          if (status.nodeAddr != null) ...[
-            const SizedBox(height: 18),
-            SettingsSection(
-              label: 'Identity',
-              children: [
-                SettingsRow.action(
-                  icon: Icons.fingerprint,
-                  title: 'Node address',
-                  subtitle: status.nodeAddr,
+              const SizedBox(height: 18),
+              SettingsSection(
+                label: 'Peers',
+                children: [
+                  SettingsRow.action(
+                    icon: Icons.hub_outlined,
+                    title: 'Connected peers',
+                    trailing: _Value(
+                      status.connectedPeersCount == 0
+                          ? 'None connected'
+                          : '${status.connectedPeersCount}',
+                    ),
+                  ),
+                ],
+              ),
+              if (status.nodeAddr != null) ...[
+                const SizedBox(height: 18),
+                SettingsSection(
+                  label: 'Identity',
+                  children: [
+                    SettingsRow.action(
+                      icon: Icons.fingerprint,
+                      title: 'Node address',
+                      subtitle: status.nodeAddr,
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          const SizedBox(height: 18),
-          ValueListenableBuilder<FullscreenReport?>(
-            valueListenable: fullscreenReport,
-            builder: (context, report, _) => _PlaybackSection(report: report),
+              const SizedBox(height: 18),
+              ValueListenableBuilder<FullscreenReport?>(
+                valueListenable: fullscreenReport,
+                builder: (context, report, _) =>
+                    _PlaybackSection(report: report),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                key: const Key('copy-diagnostics'),
+                onPressed: () => _copy(context, summary, status, version),
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy diagnostics'),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            key: const Key('copy-diagnostics'),
-            onPressed: () => _copy(context, summary, status, version),
-            icon: const Icon(Icons.copy, size: 18),
-            label: const Text('Copy diagnostics'),
-          ),
-        ],
+        ),
       ),
     );
   }
