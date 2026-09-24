@@ -338,6 +338,38 @@ void main() {
         );
       });
     }
+
+    testWidgets(
+        'on mobile, the search action is present and the cast button is '
+        'the last control', (tester) async {
+      const width = 400.0;
+      await pumpWithInsets(
+        tester,
+        WindowChromeInsets.zero,
+        width: width,
+        child: Builder(
+          builder: (context) => Scaffold(
+            appBar: HomeScreen.header(
+              context,
+              isDesktop: false,
+              barHeight: WindowTitleRow.heightOf(context),
+            ),
+            body: const SizedBox.shrink(),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Search'), findsOneWidget);
+      expect(
+        tester.getRect(find.byTooltip('Search')).right,
+        lessThanOrEqualTo(
+            tester.getRect(find.byKey(WindowTitleRow.castKey)).left),
+      );
+      expect(
+        tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
+        width - 8,
+      );
+    });
   });
 
   group('SettingsScreen cast alignment', () {

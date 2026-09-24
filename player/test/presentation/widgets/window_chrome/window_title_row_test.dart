@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/presentation/widgets/cast_device_picker.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
@@ -230,8 +231,8 @@ void main() {
       expect(
         calls,
         0,
-        reason: 'the cast button wins the gesture arena, so the band '
-            'recognizer underneath it never fires',
+        reason: 'the Stack hit-test stops at the cast button, so the band '
+            'recognizer underneath it never enters the gesture arena',
       );
       expect(controller.maximizeCalls, 0);
       expect(controller.unmaximizeCalls, 0);
@@ -258,5 +259,70 @@ void main() {
       child: const WindowTitleRow(showCast: false),
     );
     expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+  });
+
+  testWidgets(
+      'with non-zero insets, a tap on the cast button reaches it instead of '
+      'starting a window drag', (tester) async {
+    final controller = FakeWindowController();
+    await _pump(
+      tester,
+      insets: _mac,
+      child: WindowTitleRow(controller: controller),
+    );
+
+    await tester.tap(find.byKey(WindowTitleRow.castKey));
+    await tester.pump();
+
+    expect(
+      find.byType(CastDevicePickerDialog),
+      findsOneWidget,
+      reason: 'the tap reached the cast button and opened its picker',
+    );
+    expect(controller.startDraggingCalls, 0);
+
+    // The tap opened the real cast device picker (WindowTitleRow wires the
+    // button to the live pickCastDevice, not a fake), which starts a real
+    // search-timeout Timer and an indeterminate spinner. Pop the route it
+    // pushed so neither outlives the test, mirroring the double-tap test
+    // above.
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    while (navigator.canPop()) {
+      navigator.pop();
+    }
+    await tester.pumpAndSettle();
+  });
+
+  group('WindowTitleBar', () {
+    test('preferredSize.height matches the given height', () {
+      const bar = WindowTitleBar(height: 48);
+      expect(bar.preferredSize.height, 48);
+    });
+
+    testWidgets('decorate wraps the row', (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: castCapableOverrides(),
+          child: MaterialApp(
+            home: WindowTitleBar(
+              height: 40,
+              decorate: (row) => ColoredBox(
+                key: const Key('decorated'),
+                color: Colors.black,
+                child: row,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('decorated')),
+          matching: find.byType(WindowTitleRow),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }
