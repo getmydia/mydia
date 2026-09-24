@@ -173,7 +173,9 @@ defmodule MydiaWeb.MediaLive.Index do
 
   # Runtime-config entries carry a "runtime::" id that never appears on a file,
   # and LibraryPathSync normally persists them as real rows anyway. A selection
-  # that no longer fits (a disabled library, or the other page's type) resets.
+  # that no longer fits (a disabled library, or the other page's type) resets,
+  # and so does one on a page with fewer than two options, where the select is
+  # hidden and the user could not clear it.
   defp assign_library_options(socket, action) do
     types = Map.fetch!(@library_types, action)
 
@@ -184,10 +186,11 @@ defmodule MydiaWeb.MediaLive.Index do
       )
 
     selected = socket.assigns.filter_library
+    keep? = length(options) >= 2 and Enum.any?(options, &(&1.id == selected))
 
     socket
     |> assign(:library_options, options)
-    |> assign(:filter_library, if(Enum.any?(options, &(&1.id == selected)), do: selected))
+    |> assign(:filter_library, if(keep?, do: selected))
   end
 
   @impl true

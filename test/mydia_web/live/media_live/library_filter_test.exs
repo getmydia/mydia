@@ -96,6 +96,25 @@ defmodule MydiaWeb.MediaLive.LibraryFilterTest do
     assert has_element?(view, "#library-filter-select option[value=''][selected]")
   end
 
+  test "a selection is dropped when the next page hides the select", %{conn: conn} do
+    library_path_fixture(%{type: "movies"})
+    mixed = library_path_fixture(%{type: "mixed"})
+    show = media_item_fixture(%{type: "tv_show", title: "Cinder Parish"})
+
+    {:ok, view, _html} = live(conn, ~p"/movies")
+
+    view
+    |> element("#library-filter-form")
+    |> render_change(%{"library" => mixed.id})
+
+    # The mixed library is the only one that fits /tv, so the select is hidden
+    # there. A filter the user can no longer see or clear must not stay on.
+    render_patch(view, ~p"/tv")
+
+    refute has_element?(view, "#library-filter-select")
+    assert has_element?(view, "#media_items-#{show.id}")
+  end
+
   test "the library filter clears when navigating to a section", %{conn: conn, user: user} do
     a = library_path_fixture(%{type: "movies"})
     b = library_path_fixture(%{type: "movies"})
