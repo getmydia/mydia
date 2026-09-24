@@ -367,32 +367,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         },
         // No `Scaffold.appBar` here (the card layout has nowhere to put one),
         // so the window's traffic-light band is drawn by an overlaid
-        // `WindowTitleRow` instead, below. `removeBand` still has to wrap the
-        // `Scaffold`: without it, the body's own `SafeArea` would reserve the
-        // full band as if it were unsafe content area, pushing the centred
-        // card down by the band's height for no reason, when the row already
-        // owns that strip.
-        child: WindowChromeInsets.removeBand(
-          child: Scaffold(
-            body: Container(
-              width: size.width,
-              height: size.height,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColors.background,
-                    Color(0xFF0F172A),
-                    Color(0xFF0A0F1D),
-                  ],
-                ),
+        // `WindowTitleRow` instead, below. The `Scaffold` itself is NOT under
+        // `removeBand`: the QR scanner and advanced-settings overlays are its
+        // direct `Stack` siblings, and each needs the real band still present
+        // in its `MediaQuery` so its own `SafeArea` keeps their close buttons
+        // clear of the traffic lights. Only the centred card's `SafeArea`
+        // removes the band, since that card's own row already reserves the
+        // strip.
+        child: Scaffold(
+          body: Container(
+            width: size.width,
+            height: size.height,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.background,
+                  Color(0xFF0F172A),
+                  Color(0xFF0A0F1D),
+                ],
               ),
-              child: Stack(
-                children: [
-                  _buildBackgroundDecoration(),
-                  ExcludeFocus(
-                    excluding: _showAdvancedSettings || _showQrScanner,
+            ),
+            child: Stack(
+              children: [
+                _buildBackgroundDecoration(),
+                ExcludeFocus(
+                  excluding: _showAdvancedSettings || _showQrScanner,
+                  child: WindowChromeInsets.removeBand(
                     child: SafeArea(
                       child: Center(
                         child: SingleChildScrollView(
@@ -424,21 +426,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                     ),
                   ),
-                  if (_showQrScanner) _buildQrScannerOverlay(),
-                  if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
-                  // No signed-in device to cast to yet, so no cast button.
-                  // Nothing else sits under the traffic lights either: this
-                  // is just enough to make the window draggable and to keep
-                  // the corners clear, matching every other screen now that
-                  // Linux has no other drag area at all.
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: WindowTitleRow(showCast: false),
-                  ),
-                ],
-              ),
+                ),
+                // Mounted before the overlays below, so a click anywhere the
+                // overlays paint (including their own close buttons, in the
+                // same corner the drag band's hit-test would otherwise claim)
+                // lands on the overlay and not on this empty-space drag
+                // handle. No signed-in device to cast to yet, so no cast
+                // button. Nothing else sits under the traffic lights either:
+                // this is just enough to make the window draggable and to
+                // keep the corners clear, matching every other screen now
+                // that Linux has no other drag area at all.
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: WindowTitleRow(showCast: false),
+                ),
+                if (_showQrScanner) _buildQrScannerOverlay(),
+                if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
+              ],
             ),
           ),
         ),
