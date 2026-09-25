@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/colors.dart';
 import 'window_chrome/window_title_row.dart';
@@ -76,4 +77,30 @@ SliverAppBar detailHeroAppBar({
       ),
     ),
   );
+}
+
+/// The back control for [detailHeroAppBar]'s title row on the movie, show
+/// and episode screens.
+///
+/// Flat like the rest of the title row: the top scrim [detailHeroAppBar]
+/// paints keeps the white glyph legible over bright art. Pops when the
+/// screen was pushed, otherwise goes home (a deep link has nothing to pop).
+class DetailHeroBackButton extends StatelessWidget {
+  const DetailHeroBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back_rounded),
+      color: Colors.white,
+      tooltip: 'Back',
+      onPressed: () {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/');
+        }
+      },
+    );
+  }
 }

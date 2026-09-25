@@ -127,7 +127,7 @@ class ShowDetailScreen extends ConsumerWidget {
         detailHeroAppBar(
           context: context,
           expandedHeight: 350,
-          back: _buildBackButton(context),
+          back: const DetailHeroBackButton(),
           topScrim: false,
           background: Container(
             color: AppColors.surface,
@@ -182,7 +182,7 @@ class ShowDetailScreen extends ConsumerWidget {
         detailHeroAppBar(
           context: context,
           expandedHeight: 200,
-          back: _buildBackButton(context),
+          back: const DetailHeroBackButton(),
           topScrim: false,
           background: Container(color: AppColors.background),
         ),
@@ -357,31 +357,6 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// The hero's back affordance: a translucent pill, sized and positioned by
-  /// [detailHeroAppBar]'s title row rather than its own padding, so it lands
-  /// clear of the traffic lights / Linux buttons instead of baking in a flat
-  /// 8px edge inset that knows nothing about the window chrome.
-  Widget _buildBackButton(BuildContext context) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.3),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/');
-          }
-        },
-        child: const Padding(
-          padding: EdgeInsets.all(8),
-          child: Icon(Icons.arrow_back_rounded, color: Colors.white),
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeroSection(
     BuildContext context,
     ShowDetail show,
@@ -390,7 +365,7 @@ class ShowDetailScreen extends ConsumerWidget {
     return detailHeroAppBar(
       context: context,
       expandedHeight: 380,
-      back: _buildBackButton(context),
+      back: const DetailHeroBackButton(),
       background: Stack(
         fit: StackFit.expand,
         children: [
