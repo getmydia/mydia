@@ -10,6 +10,15 @@ class FakeWindowController implements WindowController {
   bool fullScreen;
   Size? minimumSize;
 
+  /// The lock currently applied; `0` is none.
+  double aspectRatio = 0;
+
+  /// Every value passed to [setAspectRatio], in order.
+  final List<double> setAspectRatioCalls = [];
+
+  /// When set, [setAspectRatio] throws this instead of recording the call.
+  Object? setAspectRatioError;
+
   /// Every rect passed to [setBounds], in order.
   final List<Rect> setBoundsCalls = [];
 
@@ -66,6 +75,15 @@ class FakeWindowController implements WindowController {
   Future<void> setMinimumSize(Size size) async {
     minimumSize = size;
     callLog.add('setMinimumSize');
+  }
+
+  @override
+  Future<void> setAspectRatio(double value) async {
+    final error = setAspectRatioError;
+    if (error != null) throw error;
+    setAspectRatioCalls.add(value);
+    callLog.add('setAspectRatio');
+    aspectRatio = value;
   }
 
   @override

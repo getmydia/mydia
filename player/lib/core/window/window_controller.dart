@@ -38,6 +38,10 @@ abstract interface class WindowController {
   Future<void> close();
   Future<void> setMinimumSize(Size size);
 
+  /// Constrains user resizes to [aspectRatio] (width / height). `0` removes
+  /// the constraint.
+  Future<void> setAspectRatio(double aspectRatio);
+
   /// Hands the drag to the window manager, which keeps its own edge snapping.
   Future<void> startDragging();
 

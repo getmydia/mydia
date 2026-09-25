@@ -31,6 +31,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../player/platform_features.dart';
 import '../storage/app_hive.dart';
+import 'player_window_session.dart';
 import 'player_window_sizer.dart';
 import 'player_window_sizer_native.dart';
 import 'window_controller_native.dart';
@@ -43,6 +44,10 @@ import 'window_maximized_controller.dart';
 /// Retained so [createPlayerWindowSizer] can pause and resume it. Null until
 /// [initDesktopWindow] succeeds, and on every non-desktop platform.
 WindowGeometryController? _geometry;
+
+/// Shared by every player screen's sizer; see [PlayerWindowSession]. Null
+/// until [initDesktopWindow] succeeds, and on every non-desktop platform.
+PlayerWindowSession? _playerSession;
 
 /// Prepares the OS window: minimum size, restored geometry, drag support, and
 /// change tracking.
@@ -72,6 +77,19 @@ Future<void> initDesktopWindow() async {
     _geometry = controller;
   } catch (e) {
     debugPrint('[DesktopWindow] Failed to track window geometry: $e');
+  }
+
+  final session = PlayerWindowSession(
+    window: const WindowManagerController(),
+    geometry: controller,
+  );
+  _playerSession = session;
+  try {
+    // Without the listener a fullscreen exit is only noticed by the
+    // session's timeout, which still ends it, just later.
+    windowManager.addListener(session);
+  } catch (e) {
+    debugPrint('[DesktopWindow] Failed to watch fullscreen exit: $e');
   }
 
   // Separate try from the geometry listener above: a failure to track
@@ -198,15 +216,15 @@ Future<void> raiseDesktopWindow() async {
 
 /// A sizer for the player screen, or a no-op when there is no window to size.
 PlayerWindowSizer createPlayerWindowSizer() {
-  final geometry = _geometry;
-  if (!PlatformFeatures.isDesktop || geometry == null) {
+  final session = _playerSession;
+  if (!PlatformFeatures.isDesktop || _geometry == null || session == null) {
     return const NoopPlayerWindowSizer();
   }
 
   late final NativePlayerWindowSizer sizer;
   sizer = NativePlayerWindowSizer(
     window: const WindowManagerController(),
-    geometry: geometry,
+    session: session,
     readWorkAreas: _readWorkAreas,
     onDetached: () {
       try {
@@ -220,8 +238,8 @@ PlayerWindowSizer createPlayerWindowSizer() {
   try {
     windowManager.addListener(sizer);
   } catch (e) {
-    // Without the listener the aspect snap still works; it just cannot notice
-    // a manual resize. Better than no sizing at all.
+    // Without the listener the aspect snap still works; the lock just is not
+    // dropped on maximize or fullscreen.
     debugPrint('[DesktopWindow] Failed to watch for manual resize: $e');
   }
   return sizer;
