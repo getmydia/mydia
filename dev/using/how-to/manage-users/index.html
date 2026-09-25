@@ -1121,6 +1121,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#passkeys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Passkeys
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3109,6 +3120,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#passkeys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Passkeys
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3272,6 +3294,34 @@ shield icon on their row). With no other admin available, use the command line:<
 Changing <code>SECRET_KEY_BASE</code> stops authenticator codes from working; recovery
 codes keep working, and the user can set two-factor authentication up again.</p>
 <p>SSO users do not see this option. Their identity provider handles second factors.</p>
+<h3 id="passkeys">Passkeys</h3>
+<p>A passkey lets you sign in with your fingerprint, face, or device PIN
+instead of typing a password. Add one from <strong>Profile → Security →
+Passkeys</strong>. Mydia asks for your current password first.</p>
+<p>Once you have a passkey you can:</p>
+<ul>
+<li><strong>Sign in without a password.</strong> Click <strong>Sign in with a passkey</strong> on the
+  login page, or pick the passkey your browser offers in the username field.</li>
+<li><strong>Use it as your second factor.</strong> Signing in with your password now also
+  asks for your passkey (or your authenticator app code, if you set one up).</li>
+</ul>
+<p>Things to know:</p>
+<ul>
+<li><strong>Passkeys need HTTPS.</strong> Browsers only allow them on a secure address
+  (<code>https://</code>, or <code>http://localhost</code>), and never on a bare IP address such
+  as <code>https://192.168.1.10</code>. If you reach Mydia over plain HTTP on your
+  network, put it behind a reverse proxy with a certificate first (see
+  <a href="../reverse-proxy/">Reverse proxy</a>).</li>
+<li><strong>A passkey works at one address.</strong> A passkey added at
+  <code>mydia.example.com</code> is not offered at <code>mydia.home.lan</code>. Add one at each
+  address you use.</li>
+<li><strong>The player app still uses your password.</strong> If your only second factor is
+  a passkey, the player cannot sign in: set up an authenticator app (TOTP)
+  as well.</li>
+<li><strong>Lost your passkey?</strong> An admin can reset two-factor authentication from
+  <strong>Admin → Users</strong>, or run <code>mydia-cli user reset-2fa &lt;username&gt;</code>. This
+  removes the authenticator app and every passkey for that account.</li>
+</ul>
 <p>Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See <a href="../sso-oidc/">SSO/OIDC Configuration</a> for supported providers, setup, and role assignment.</p>
 <h2 id="request-system">Request System</h2>
 <p>Guest users can request media:</p>
