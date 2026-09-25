@@ -42,9 +42,10 @@ import 'toast/toaster.dart';
 /// tooltips have somewhere to lay out; an Overlay only as tall as the bar
 /// clamps them back on top of it.
 ///
-/// Also owns the [DockExtents] both the bar and `AppShell`'s dock report
-/// their heights into: the bar sits above the dock rather than painting over
-/// it, and floats at the window edge when there is no dock at all.
+/// Also owns the [DockExtents] the bar, `AppShell`'s dock and its desktop
+/// sidebar report into: the bar sits above the dock rather than painting over
+/// it, beside the sidebar at most [CastPill.maxWidth] wide, and floats at the
+/// window edge when there is neither.
 class CastBarLayer extends StatefulWidget {
   const CastBarLayer({super.key, required this.child});
 
@@ -57,6 +58,7 @@ class CastBarLayer extends StatefulWidget {
 class _CastBarLayerState extends State<CastBarLayer> {
   double _dock = 0;
   double _castBar = 0;
+  double _sidebar = 0;
 
   void _setDock(double height) {
     if (!mounted || height == _dock) return;
@@ -68,14 +70,21 @@ class _CastBarLayerState extends State<CastBarLayer> {
     setState(() => _castBar = height);
   }
 
+  void _setSidebar(double width) {
+    if (!mounted || width == _sidebar) return;
+    setState(() => _sidebar = width);
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasDock = _dock > 0;
     return DockExtents(
       dock: _dock,
       castBar: _castBar,
+      sidebar: _sidebar,
       onDock: _setDock,
       onCastBar: _setCastBar,
+      onSidebar: _setSidebar,
       child: Stack(
         children: [
           widget.child,
@@ -83,21 +92,35 @@ class _CastBarLayerState extends State<CastBarLayer> {
           // so everything outside the bar still reaches `child` below.
           Positioned.fill(
             child: Overlay.wrap(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: Padding(
-                  // Above the dock when there is one. The dock's height
-                  // already includes the home indicator inset, so the bar
-                  // drops its own SafeArea bottom in that case.
-                  padding: EdgeInsets.only(
-                    bottom: hasDock
-                        ? _dock + DockExtents.gap
-                        : DockGlass.sideMargin,
-                  ),
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeBottom: hasDock,
-                    child: const CastMiniController(),
+              // Beside the desktop sidebar when one is showing, so the bar
+              // never covers its bottom rows (Settings); 0 everywhere else.
+              child: Padding(
+                padding: EdgeInsetsDirectional.only(start: _sidebar),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    // Above the dock when there is one. The dock's height
+                    // already includes the home indicator inset, so the bar
+                    // drops its own SafeArea bottom in that case.
+                    padding: EdgeInsets.only(
+                      bottom: hasDock
+                          ? _dock + DockExtents.gap
+                          : DockGlass.sideMargin,
+                    ),
+                    child: ConstrainedBox(
+                      // Capped only beside the sidebar: without one (phones,
+                      // screens outside the shell) the bar keeps its full
+                      // width.
+                      constraints: BoxConstraints(
+                        maxWidth:
+                            _sidebar > 0 ? CastPill.maxWidth : double.infinity,
+                      ),
+                      child: MediaQuery.removePadding(
+                        context: context,
+                        removeBottom: hasDock,
+                        child: const CastMiniController(),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -196,8 +219,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   @override
   Widget build(BuildContext context) {
     final content = _buildContent();
-    return ReportedHeight(
-      onHeight: DockExtents.reporterOf(context)?.onCastBar,
+    return ReportedExtent(
+      onExtent: DockExtents.reporterOf(context)?.onCastBar,
       child: content == null
           ? const SizedBox.shrink()
           : ToastObstruction(
@@ -226,6 +249,18 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       onPressed: onPressed,
     );
   }
+
+  /// Width of each outer transport-row slot. Fixed rather than the button's
+  /// own size so the row stays symmetric at every visual density: an
+  /// IconButton is 48 wide on a phone but 40 on desktop (compact density).
+  static const double _transportSlot = 48;
+
+  /// One outer transport slot. An absent control still takes its width, so
+  /// play/pause stays centered whichever optional controls apply.
+  Widget _slot(Widget? child) => SizedBox(
+        width: _transportSlot,
+        child: child == null ? null : Center(child: child),
+      );
 
   /// Connected, nothing loaded. "Ready to play on" rather than "Will play on":
   /// this is a statement about a connection that exists, not a promise about
@@ -458,6 +493,27 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
             title: info.title,
             status: 'Casting to ${session.device.name}',
             dot: CastDot.live,
+            actions: [
+              // Mydia only: its disconnect is local bookkeeping and sends
+              // nothing to the target. Whether a Chromecast receiver keeps
+              // playing once dart_cast closes its session is unverified.
+              if (session.device.protocol == CastProtocolKind.mydia)
+                IconButton(
+                  key: const Key('cast-bar-detach'),
+                  icon: const Icon(Icons.link_off, size: 18),
+                  color: AppColors.textSecondary,
+                  tooltip:
+                      'Disconnect, keep playing on ${session.device.name}',
+                  onPressed: () => _detach(session),
+                ),
+              // Confirmed, unlike the idle/connecting close: media is
+              // actively playing here.
+              _closeButton(
+                key: const Key('cast-bar-stop'),
+                tooltip: 'Stop casting',
+                onPressed: () => _confirmStop(session.device),
+              ),
+            ],
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
@@ -516,9 +572,23 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(
+              key: const Key('cast-bar-transport'),
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
+                _slot(session.subtitles.isEmpty
+                    ? null
+                    : IconButton(
+                        key: const Key('cast-bar-subtitles'),
+                        tooltip: 'Subtitles',
+                        color: AppColors.textPrimary,
+                        icon: Icon(
+                          session.selectedSubtitle == null
+                              ? Icons.closed_caption_off
+                              : Icons.closed_caption,
+                        ),
+                        onPressed: () => _pickSubtitle(session),
+                      )),
+                _slot(IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
                   color: AppColors.textPrimary,
@@ -531,7 +601,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                       info.duration,
                     ));
                   },
-                ),
+                )),
                 IconButton.filled(
                   key: const Key('cast-bar-play-pause'),
                   icon: Icon(
@@ -553,7 +623,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     }
                   },
                 ),
-                IconButton(
+                _slot(IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
                   color: AppColors.textPrimary,
@@ -566,51 +636,21 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                       info.duration,
                     ));
                   },
-                ),
-                if (session.subtitles.isNotEmpty)
-                  IconButton(
-                    key: const Key('cast-bar-subtitles'),
-                    tooltip: 'Subtitles',
-                    color: AppColors.textPrimary,
-                    icon: Icon(
-                      session.selectedSubtitle == null
-                          ? Icons.closed_caption_off
-                          : Icons.closed_caption,
-                    ),
-                    onPressed: () => _pickSubtitle(session),
-                  ),
+                )),
                 // Pull: only a Mydia target runs this same app, so only one
                 // can hand playback back to this device at its exact
                 // position. Shown for a self-started cast too, not just an
-                // adopted one — bringing your own cast back is exactly as
+                // adopted one: bringing your own cast back is exactly as
                 // valid a thing to want as pulling someone else's.
-                if (session.device.protocol == CastProtocolKind.mydia) ...[
-                  IconButton(
-                    key: const Key('cast-bar-pull'),
-                    icon: const Icon(Icons.phone_iphone),
-                    color: AppColors.textPrimary,
-                    tooltip: 'Play on this device',
-                    onPressed: _pullToLocal,
-                  ),
-                  // Mydia only: its disconnect is local bookkeeping and sends
-                  // nothing to the target. Whether a Chromecast receiver keeps
-                  // playing once dart_cast closes its session is unverified.
-                  IconButton(
-                    key: const Key('cast-bar-detach'),
-                    icon: const Icon(Icons.link_off),
-                    color: AppColors.textPrimary,
-                    tooltip:
-                        'Disconnect, keep playing on ${session.device.name}',
-                    onPressed: () => _detach(session),
-                  ),
-                ],
-                IconButton(
-                  key: const Key('cast-bar-stop'),
-                  icon: const Icon(Icons.stop, size: 28),
-                  color: AppColors.textPrimary,
-                  tooltip: 'Stop casting',
-                  onPressed: () => _confirmStop(session.device),
-                ),
+                _slot(session.device.protocol == CastProtocolKind.mydia
+                    ? IconButton(
+                        key: const Key('cast-bar-pull'),
+                        icon: const Icon(Icons.phone_iphone),
+                        color: AppColors.textPrimary,
+                        tooltip: 'Play on this device',
+                        onPressed: _pullToLocal,
+                      )
+                    : null),
               ],
             ),
           ),
