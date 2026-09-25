@@ -101,7 +101,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Stop Casting'), findsOneWidget,
+    expect(find.text('Stop playback?'), findsOneWidget,
         reason: 'the confirm dialog needs a Navigator reachable from the '
             'cast bar');
   });

@@ -584,7 +584,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                 // position. Shown for a self-started cast too, not just an
                 // adopted one — bringing your own cast back is exactly as
                 // valid a thing to want as pulling someone else's.
-                if (session.device.protocol == CastProtocolKind.mydia)
+                if (session.device.protocol == CastProtocolKind.mydia) ...[
                   IconButton(
                     key: const Key('cast-bar-pull'),
                     icon: const Icon(Icons.phone_iphone),
@@ -592,12 +592,24 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     tooltip: 'Play on this device',
                     onPressed: _pullToLocal,
                   ),
+                  // Mydia only: its disconnect is local bookkeeping and sends
+                  // nothing to the target. Whether a Chromecast receiver keeps
+                  // playing once dart_cast closes its session is unverified.
+                  IconButton(
+                    key: const Key('cast-bar-detach'),
+                    icon: const Icon(Icons.link_off),
+                    color: AppColors.textPrimary,
+                    tooltip:
+                        'Disconnect, keep playing on ${session.device.name}',
+                    onPressed: () => _detach(session),
+                  ),
+                ],
                 IconButton(
                   key: const Key('cast-bar-stop'),
                   icon: const Icon(Icons.stop, size: 28),
                   color: AppColors.textPrimary,
                   tooltip: 'Stop casting',
-                  onPressed: _confirmStop,
+                  onPressed: () => _confirmStop(session.device),
                 ),
               ],
             ),
@@ -731,7 +743,33 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     }
   }
 
-  Future<void> _confirmStop() async {
+  /// Stops controlling the target and leaves it playing.
+  ///
+  /// The dismissal goes in before `detach()` publishes null. The other way
+  /// round, the ambient "Playing on" row for this same item can flash up for
+  /// a frame in between.
+  Future<void> _detach(CastSession session) async {
+    if (!mounted) return;
+    final title = session.mediaInfo?.title;
+    if (title != null) {
+      final nodeId = session.device.metadata['nodeId'] ?? session.device.id;
+      ref
+          .read(ambientDismissalsProvider.notifier)
+          .dismissKey(AmbientDismissal(nodeId.toLowerCase(), title));
+    }
+    try {
+      final manager = await ref.read(castSessionManagerProvider.future);
+      await manager.detach();
+      if (!mounted) return;
+      ref.read(castTargetProvider.notifier).clear();
+    } catch (e) {
+      debugPrint('[CastMiniController] Unexpected error disconnecting: $e');
+      if (!mounted) return;
+      showToast(context, 'Failed to disconnect: $e', kind: ToastKind.error);
+    }
+  }
+
+  Future<void> _confirmStop(CastDevice device) async {
     // `app.dart` mounts this bar above the router so it floats over every
     // route, which leaves its own context without a Navigator to push a
     // dialog onto. Push onto the router's root navigator instead. The
@@ -742,8 +780,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final shouldStop = await showDialog<bool>(
       context: dialogContext,
       builder: (context) => AlertDialog(
-        title: const Text('Stop Casting'),
-        content: const Text('Do you want to stop casting and disconnect?'),
+        title: const Text('Stop playback?'),
+        content: Text('Stop playing on ${device.name} and disconnect?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
