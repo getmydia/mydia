@@ -248,7 +248,7 @@ void main() {
         () async {
       // The fake's platform calls resolve in a microtask; a real one is a
       // genuine await gap a join() can land in. Gate isMaximized() (which
-      // the restore awaits after clearing _live) to force that gap open.
+      // the restore awaits mid-way) to force that gap open.
       final window = _GatedIsMaximizedWindowController(bounds: browse);
       final store = InMemoryWindowGeometryStore();
       final geometry = WindowGeometryController(
@@ -280,6 +280,14 @@ void main() {
 
       expect(window.bounds, playing);
       expect(geometry.isPaused, isTrue);
+
+      // The join took over the ending session rather than starting a new
+      // one, so the browse rect it restores is still the original.
+      session.leave('second');
+      await pumpEventQueue();
+
+      expect(window.bounds, browse);
+      expect(geometry.isPaused, isFalse);
     });
   });
 

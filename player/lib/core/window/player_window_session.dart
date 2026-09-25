@@ -121,12 +121,12 @@ class PlayerWindowSession with WindowListener {
     if (fullscreen) await _awaitFullscreenExit();
     if (_overtaken(generation)) return;
 
+    // The session stays live until the restore below has finished. A join()
+    // landing during one of its awaits (a real platform channel round trip
+    // is a genuine gap, not the fake's microtask) then takes over this
+    // session, snapshot and pause included, instead of starting a new one
+    // that would record the player-sized window as its "browse" rect.
     final snapshot = _snapshot;
-    final owner = _geometryOwner;
-    _live = false;
-    _snapshot = null;
-    _geometryOwner = null;
-
     try {
       // Before setBounds: GTK applies geometry hints to programmatic
       // resizes too.
@@ -135,23 +135,28 @@ class PlayerWindowSession with WindowListener {
       // choice. Restoring an old rect would fight it.
       final untouchable =
           await _window.isMaximized() || await _window.isFullScreen();
-      // A join() can land during the awaits above -- a real platform
-      // channel round trip is a genuine gap, not the fake's microtask. That
-      // join already claimed the window with its own pause and snapshot;
-      // applying this stale one now would clobber it.
-      if (snapshot != null && !untouchable && _members.isEmpty) {
+      if (_overtaken(generation)) return;
+      if (snapshot != null && !untouchable) {
         await _window.setBounds(snapshot);
       }
     } catch (e) {
       debugPrint('[PlayerWindowSession] Failed to restore window: $e');
     } finally {
-      // Always: leaving the controller paused would silently stop
-      // persisting geometry for the rest of the app session. If a join()
-      // landed above, its pause() already superseded this owner, so this
-      // resume() is a documented no-op (see WindowGeometryController.resume)
-      // rather than a real un-pause.
-      _geometry.resume(owner);
+      // Only when nobody took the session over. Otherwise the pause belongs
+      // to the new members, and the snapshot is still theirs to restore.
+      if (!_overtaken(generation)) _end();
     }
+  }
+
+  /// Ends the session. Always resumes geometry persistence: leaving the
+  /// controller paused would silently stop persisting geometry for the rest
+  /// of the app session.
+  void _end() {
+    final owner = _geometryOwner;
+    _live = false;
+    _snapshot = null;
+    _geometryOwner = null;
+    _geometry.resume(owner);
   }
 
   Future<void> _awaitFullscreenExit() async {
