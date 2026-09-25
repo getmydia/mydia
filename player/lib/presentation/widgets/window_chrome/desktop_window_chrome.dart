@@ -6,6 +6,7 @@ import '../../../core/window/decoration_layout.dart';
 import '../../../core/window/window_buttons_hidden.dart';
 import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_controller_native.dart';
+import '../../../core/window/window_frame_state.dart';
 import '../../../core/window/window_fullscreen.dart';
 import 'window_buttons.dart';
 import 'window_resize_edges.dart';
@@ -268,3 +269,12 @@ bool shouldShowWindowChrome({
   required bool isFullscreen,
 }) =>
     !isWeb && platform == TargetPlatform.linux && !isFullscreen;
+
+/// The radius `DesktopWindowChrome` clips the app to.
+///
+/// Zero in every state where GTK squares its own frame (maximized, tiled,
+/// fullscreen), so the clip always follows the frame it sits in. Pure and
+/// exposed for the same reason as [shouldShowWindowChrome].
+@visibleForTesting
+double windowCornerRadiusFor(WindowFrameState state) =>
+    state.isFloating ? kLinuxWindowCornerRadius : 0.0;

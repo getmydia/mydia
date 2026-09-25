@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/window/decoration_layout.dart';
+import 'package:player/core/window/window_frame_state.dart';
 import 'package:player/presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
@@ -104,6 +105,28 @@ void main() {
           isFalse,
         );
       });
+    }
+  });
+
+  // Pure for the same reason as `shouldShowWindowChrome`, and because GTK
+  // squares its own frame in exactly these states: a mismatch leaves a
+  // rounded app inside a square frame, or square app corners poking past a
+  // rounded one.
+  group('windowCornerRadiusFor', () {
+    for (final maximized in [false, true]) {
+      for (final tiled in [false, true]) {
+        for (final fullscreen in [false, true]) {
+          final state = WindowFrameState(
+            maximized: maximized,
+            tiled: tiled,
+            fullscreen: fullscreen,
+          );
+          final expected = state.isFloating ? kLinuxWindowCornerRadius : 0.0;
+          test('$state -> $expected', () {
+            expect(windowCornerRadiusFor(state), expected);
+          });
+        }
+      }
     }
   });
 
