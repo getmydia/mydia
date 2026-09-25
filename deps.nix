@@ -73,6 +73,19 @@ let
       beamDeps = [ comeonin elixir_make ];
     };
 
+    asn1_compiler = buildMix rec {
+      name = "asn1_compiler";
+      version = "0.1.1";
+
+      src = fetchHex {
+        pkg = "asn1_compiler";
+        version = "${version}";
+        sha256 = "c250d24c22f1a3f305d88864400f9ac2df55c6886e1e3a030e2946efeb94695e";
+      };
+
+      beamDeps = [];
+    };
+
     bandit = buildMix rec {
       name = "bandit";
       version = "1.12.5";
@@ -123,6 +136,19 @@ let
       };
 
       beamDeps = [ plug plug_cowboy ranch ];
+    };
+
+    cbor = buildMix rec {
+      name = "cbor";
+      version = "1.0.2";
+
+      src = fetchHex {
+        pkg = "cbor";
+        version = "${version}";
+        sha256 = "edbc9b4a16eb93a582437b9b249c340a75af03958e338fb43d8c1be9fc65b864";
+      };
+
+      beamDeps = [];
     };
 
     cc_precompiler = buildMix rec {
@@ -1256,6 +1282,19 @@ let
       beamDeps = [ rustler rustler_precompiled ];
     };
 
+    wax_ = buildMix rec {
+      name = "wax_";
+      version = "0.7.0";
+
+      src = fetchHex {
+        pkg = "wax_";
+        version = "${version}";
+        sha256 = "473b3378608418747e67746b7164576f1690a4ed1e044a4c8085a754269d21ce";
+      };
+
+      beamDeps = [ asn1_compiler cbor jason x509 ];
+    };
+
     web_driver_client = buildMix rec {
       name = "web_driver_client";
       version = "0.3.0";
@@ -1306,6 +1345,19 @@ let
       };
 
       beamDeps = [ telemetry ];
+    };
+
+    x509 = buildMix rec {
+      name = "x509";
+      version = "0.9.2";
+
+      src = fetchHex {
+        pkg = "x509";
+        version = "${version}";
+        sha256 = "4c5ede75697e565d4b0f5be04c3b71bb1fd3a090ea243af4bd7dae144e48cfc7";
+      };
+
+      beamDeps = [];
     };
 
     yamerl = buildRebar3 rec {
