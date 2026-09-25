@@ -24,14 +24,19 @@ defmodule MydiaWeb.Plugs.GridDensityCookie do
   def init(opts), do: opts
 
   @impl Plug
+  # The cookie is the source of truth and the session only mirrors it, so a
+  # cleared or expired cookie also clears the copy. The session is written only
+  # when the two differ, so an unchanged page load does not re-send it.
   def call(conn, _opts) do
     conn = fetch_cookies(conn)
     value = conn.cookies[@cookie]
+    stored = get_session(conn, :grid_density)
 
-    if GridDensityComponents.valid?(value) do
-      put_session(conn, :grid_density, value)
-    else
-      conn
+    cond do
+      value == stored -> conn
+      GridDensityComponents.valid?(value) -> put_session(conn, :grid_density, value)
+      is_nil(stored) -> conn
+      true -> delete_session(conn, :grid_density)
     end
   end
 end
