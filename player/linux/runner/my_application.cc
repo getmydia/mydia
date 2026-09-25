@@ -8,6 +8,7 @@ struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
   FlMethodChannel* window_chrome_channel;
+  FlMethodChannel* window_frame_channel;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -15,6 +16,81 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // The window chrome channel. Shared with macOS, whose AppDelegate.swift
 // answers `setTrafficLightsHidden` on the same name.
 static constexpr char kWindowChromeChannel[] = "dev.mydia.player/window_chrome";
+
+// The window state channel: maximized, tiled and fullscreen, which Dart uses
+// to square the corners it clips to. Separate from kWindowChromeChannel
+// because Dart's DecorationLayoutSource owns that channel's only handler.
+static constexpr char kWindowFrameChannel[] = "dev.mydia.player/window_frame";
+
+// Corner radius for the floating window's frame, shadow and background.
+// Must equal kLinuxWindowCornerRadius in
+// lib/core/layout/window_chrome_inset.dart, which clips the Flutter view to
+// the same curve.
+static constexpr char kFrameCss[] =
+    "window.mydia-frame { background-color: #000000; }\n"
+    "window.mydia-frame.csd,\n"
+    "window.mydia-frame.csd decoration { border-radius: 12px; }\n"
+    "window.mydia-frame.maximized, window.mydia-frame.maximized decoration,\n"
+    "window.mydia-frame.fullscreen, window.mydia-frame.fullscreen decoration,\n"
+    "window.mydia-frame.tiled, window.mydia-frame.tiled decoration,\n"
+    "window.mydia-frame.tiled-top, window.mydia-frame.tiled-top decoration,\n"
+    "window.mydia-frame.tiled-bottom, window.mydia-frame.tiled-bottom decoration,\n"
+    "window.mydia-frame.tiled-left, window.mydia-frame.tiled-left decoration,\n"
+    "window.mydia-frame.tiled-right, window.mydia-frame.tiled-right decoration,\n"
+    "window.mydia-frame.solid-csd, window.mydia-frame.solid-csd decoration\n"
+    "{ border-radius: 0; }\n";
+
+// A titlebar that takes no space.
+//
+// Handing GTK a custom titlebar keeps the window client-side decorated, so
+// GTK still draws the drop shadow, puts invisible resize borders in the
+// shadow margin, and tells the Wayland compositor the window's geometry
+// without the shadow (which is what GNOME's snapping and tiling read).
+// gtk_window_set_decorated(FALSE) threw all of that away.
+//
+// The size vfuncs are overridden rather than styled: theme CSS (min-height,
+// padding) cannot reach a widget that answers its own size request, which
+// is why hiding or CSS-shrinking an ordinary widget left five to six pixels
+// of frame above the content when this was first tried. Same idea as
+// libhandy's HdyNothing, without the dependency: the GNOME 51 runtime no
+// longer ships libhandy.
+G_DECLARE_FINAL_TYPE(MydiaNoTitlebar, mydia_no_titlebar, MYDIA, NO_TITLEBAR,
+                     GtkWidget)
+
+struct _MydiaNoTitlebar {
+  GtkWidget parent_instance;
+};
+
+G_DEFINE_TYPE(MydiaNoTitlebar, mydia_no_titlebar, GTK_TYPE_WIDGET)
+
+static void mydia_no_titlebar_get_preferred_size(GtkWidget* widget,
+                                                 gint* minimum,
+                                                 gint* natural) {
+  *minimum = 0;
+  *natural = 0;
+}
+
+static void mydia_no_titlebar_get_preferred_size_for(GtkWidget* widget,
+                                                     gint for_size,
+                                                     gint* minimum,
+                                                     gint* natural) {
+  *minimum = 0;
+  *natural = 0;
+}
+
+static void mydia_no_titlebar_class_init(MydiaNoTitlebarClass* klass) {
+  GtkWidgetClass* widget_class = GTK_WIDGET_CLASS(klass);
+  widget_class->get_preferred_width = mydia_no_titlebar_get_preferred_size;
+  widget_class->get_preferred_height = mydia_no_titlebar_get_preferred_size;
+  widget_class->get_preferred_width_for_height =
+      mydia_no_titlebar_get_preferred_size_for;
+  widget_class->get_preferred_height_for_width =
+      mydia_no_titlebar_get_preferred_size_for;
+}
+
+static void mydia_no_titlebar_init(MydiaNoTitlebar* self) {
+  gtk_widget_set_has_window(GTK_WIDGET(self), FALSE);
+}
 
 // Reads GTK's button layout, e.g. "appmenu:minimize,maximize,close".
 //
@@ -65,6 +141,60 @@ static void window_chrome_method_call_cb(FlMethodChannel* channel,
   }
 }
 
+// {maximized, tiled, fullscreen} for Dart. `tiled` is any of GTK's tiled
+// flags: GNOME reports a half-screen snap through the per-edge ones.
+static FlValue* window_state_value(GdkWindowState state) {
+  const GdkWindowState tiled_mask = static_cast<GdkWindowState>(
+      GDK_WINDOW_STATE_TILED | GDK_WINDOW_STATE_TOP_TILED |
+      GDK_WINDOW_STATE_RIGHT_TILED | GDK_WINDOW_STATE_BOTTOM_TILED |
+      GDK_WINDOW_STATE_LEFT_TILED);
+  FlValue* map = fl_value_new_map();
+  fl_value_set_string_take(
+      map, "maximized",
+      fl_value_new_bool((state & GDK_WINDOW_STATE_MAXIMIZED) != 0));
+  fl_value_set_string_take(map, "tiled",
+                           fl_value_new_bool((state & tiled_mask) != 0));
+  fl_value_set_string_take(
+      map, "fullscreen",
+      fl_value_new_bool((state & GDK_WINDOW_STATE_FULLSCREEN) != 0));
+  return map;
+}
+
+static gboolean window_state_event_cb(GtkWidget* widget,
+                                      GdkEventWindowState* event,
+                                      gpointer user_data) {
+  FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
+  g_autoptr(FlValue) value = window_state_value(event->new_window_state);
+  fl_method_channel_invoke_method(channel, "onWindowStateChanged", value,
+                                  nullptr, nullptr, nullptr);
+  return FALSE;
+}
+
+static void window_frame_method_call_cb(FlMethodChannel* channel,
+                                        FlMethodCall* method_call,
+                                        gpointer user_data) {
+  GtkWidget* window = GTK_WIDGET(user_data);
+  g_autoptr(FlMethodResponse) response = nullptr;
+
+  if (g_strcmp0(fl_method_call_get_name(method_call), "getWindowState") == 0) {
+    // Not yet realized means not yet shown: report the floating state.
+    GdkWindow* gdk_window = gtk_widget_get_window(window);
+    GdkWindowState state = gdk_window != nullptr
+                               ? gdk_window_get_state(gdk_window)
+                               : static_cast<GdkWindowState>(0);
+    g_autoptr(FlValue) result = window_state_value(state);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+
+  g_autoptr(GError) error = nullptr;
+  if (!fl_method_call_respond(method_call, response, &error)) {
+    g_warning("Failed to respond on %s: %s", kWindowFrameChannel,
+              error->message);
+  }
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -76,20 +206,26 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // The window is undecorated and Flutter draws its own buttons, drag band
-  // and resize edges. See
+  // Flutter draws its own buttons and drag band. See
   // `lib/presentation/widgets/window_chrome/desktop_window_chrome.dart`.
   //
-  // Done here rather than from Dart through `window_manager`'s
-  // `setTitleBarStyle(hidden)`, which makes the same
-  // `gtk_window_set_decorated` call: doing it at construction avoids a
-  // visible flash of a decorated window while the Flutter engine starts.
-  // Mirrors how `macos/Runner/MainFlutterWindow.swift` handles macOS.
-  //
-  // Collapsing a custom titlebar instead of undecorating was measured and
-  // rejected: it leaves five to six pixels of residual frame above the
-  // content. See the design spec.
-  gtk_window_set_decorated(window, FALSE);
+  // The window stays client-side decorated with a titlebar that takes no
+  // space (MydiaNoTitlebar, above), so GTK keeps the drop shadow, rounded
+  // corners and resize borders while the Flutter view starts at the top
+  // edge of the frame. Set at construction rather than from Dart so no
+  // decorated frame flashes while the engine starts.
+  GtkWidget* titlebar = GTK_WIDGET(g_object_new(mydia_no_titlebar_get_type(),
+                                                nullptr));
+  gtk_widget_show(titlebar);
+  gtk_window_set_titlebar(window, titlebar);
+
+  gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(window)),
+                              "mydia-frame");
+  g_autoptr(GtkCssProvider) frame_css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(frame_css, kFrameCss, -1, nullptr);
+  gtk_style_context_add_provider_for_screen(
+      gtk_window_get_screen(window), GTK_STYLE_PROVIDER(frame_css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
   // Set regardless of decoration, so alt-tab, window lists and taskbars
   // still have a name for this window.
@@ -103,9 +239,10 @@ static void my_application_activate(GApplication* application) {
 
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
-  // Background defaults to black, override it here if necessary, e.g. #00000000
-  // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  // Transparent so the corners Flutter clips away (DesktopWindowChrome) show
+  // GTK's rounded frame instead of square black pixels. Every screen paints
+  // its own opaque background.
+  gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
@@ -124,6 +261,18 @@ static void my_application_activate(GApplication* application) {
       kWindowChromeChannel, FL_METHOD_CODEC(codec));
   fl_method_channel_set_method_call_handler(
       self->window_chrome_channel, window_chrome_method_call_cb, self, nullptr);
+
+  self->window_frame_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)),
+      kWindowFrameChannel, FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      self->window_frame_channel, window_frame_method_call_cb, window,
+      nullptr);
+  // Tied to the channel's lifetime for the same reason as the
+  // decoration-layout signal below.
+  g_signal_connect_object(window, "window-state-event",
+                          G_CALLBACK(window_state_event_cb),
+                          self->window_frame_channel, G_CONNECT_DEFAULT);
 
   GtkSettings* settings = gtk_settings_get_default();
   if (settings != nullptr) {
@@ -183,6 +332,7 @@ static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   g_clear_object(&self->window_chrome_channel);
+  g_clear_object(&self->window_frame_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
