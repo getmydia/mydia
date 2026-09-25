@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/cast/cast_providers.dart';
 import 'cast_visuals.dart';
 
-/// The cast affordance, shown in app bars and as the shell overlay.
+/// The cast affordance, drawn flat at the end of every `WindowTitleRow`.
 ///
 /// Renders nothing when the current build has no cast capability at all
 /// (e.g. web), so unsupported builds show no dead affordance.
@@ -48,9 +48,6 @@ class CastButton extends ConsumerWidget {
             )
           : Icon(glyph, color: visuals.color),
       onPressed: onPressed,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.5),
-      ),
       tooltip: visuals.tooltip,
     );
   }

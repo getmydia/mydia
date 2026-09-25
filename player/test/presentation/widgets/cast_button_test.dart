@@ -71,6 +71,14 @@ void main() {
     expect(tapped, isTrue);
   });
 
+  testWidgets('draws no fill behind the glyph', (tester) async {
+    await pumpButton(tester, capabilities: const CastCapabilities.full());
+
+    final button =
+        tester.widget<IconButton>(find.byKey(const Key('cast-button')));
+    expect(button.style?.backgroundColor, isNull);
+  });
+
   testWidgets('shows the idle icon and neutral tooltip with no target',
       (tester) async {
     await pumpButton(tester, capabilities: const CastCapabilities.full());
