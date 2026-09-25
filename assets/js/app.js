@@ -30,6 +30,11 @@ import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
 import GridDensity from "./hooks/grid_density.mjs";
 import {
+  PasskeyRegister,
+  initPasskeyLogin,
+  initPasskeySecondFactor,
+} from "./hooks/passkey.mjs";
+import {
   MediaSelection,
   setAllSelected,
   setItemSelected,
@@ -440,6 +445,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     AddDirectUrl,
     BatchSelect,
     MediaSelection,
+    PasskeyRegister,
   },
   // Preserve Alpine.js state and selection across LiveView DOM patches
   dom: {
@@ -539,6 +545,10 @@ const AddDirectUrl = {
 
 // connect if there are any LiveViews on the page
 liveSocket.connect();
+
+// The login and second-factor pages are controller-rendered, not LiveViews.
+initPasskeyLogin(document);
+initPasskeySecondFactor(document);
 
 // Media selection - using document-level event delegation since streams replace DOM elements
 document.addEventListener("click", (e) => {

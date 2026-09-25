@@ -101,4 +101,32 @@ defmodule Mydia.AccountsFixtures do
 
     %{user: user, secret: secret, recovery_codes: recovery_codes}
   end
+
+  @doc """
+  Registers a passkey for `user` through the real ceremony with a software
+  authenticator. The returned authenticator signs later assertions.
+  """
+  def passkey_fixture(user, opts \\ []) do
+    alias Mydia.SoftAuthenticator
+
+    rp_id = Keyword.get(opts, :rp_id, "mydia.test")
+    origin = Keyword.get(opts, :origin, "https://#{rp_id}")
+    password = Keyword.get(opts, :password, "securepassword123")
+    authn = SoftAuthenticator.new() |> SoftAuthenticator.for_user(user)
+
+    {:ok, {challenge, options}} =
+      Accounts.begin_passkey_registration(user, password, rp_id, origin)
+
+    payload = SoftAuthenticator.attest(authn, SoftAuthenticator.ceremony(options, origin))
+
+    {:ok, passkey} =
+      Accounts.register_passkey(
+        user,
+        challenge,
+        payload,
+        Keyword.get(opts, :name, "Test passkey")
+      )
+
+    %{authenticator: authn, passkey: passkey, rp_id: rp_id, origin: origin}
+  end
 end

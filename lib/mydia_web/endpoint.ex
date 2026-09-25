@@ -39,9 +39,10 @@ defmodule MydiaWeb.Endpoint do
   # closed independently -- config/runtime.exs always configures a static
   # :callback_url for OIDC in production (see MydiaWeb.OidcRedirectUri) -- so
   # dropping :x_forwarded_host here is defense in depth, not the only fix,
-  # but nothing in this codebase reads conn.host today (grepped), so there is
-  # no legitimate behavior to preserve by keeping it and no operator
-  # reconfiguration needed to drop it.
+  # and the one reader of conn.host, MydiaWeb.PasskeySession, derives the
+  # WebAuthn relying party from it only because the browser-signed origin and
+  # the stored passkey host must both match it (see that module's docs).
+  # Keeping :x_forwarded_host would widen that surface for no gain.
   plug Plug.RewriteOn, [:x_forwarded_port, :x_forwarded_proto]
 
   socket "/live", Phoenix.LiveView.Socket,

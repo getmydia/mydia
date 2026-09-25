@@ -28,4 +28,15 @@ defmodule Mix.Tasks.Mydia.UserReset2faTest do
     assert_received {:mix_shell, :info, [message]}
     assert message =~ "does not have two-factor authentication"
   end
+
+  test "clears passkeys for an account whose only second factor is a passkey" do
+    user = user_fixture()
+    passkey_fixture(user)
+
+    Mix.Tasks.Mydia.User.run(["reset-2fa", user.username])
+
+    assert_received {:mix_shell, :info, [message]}
+    assert message =~ "Two-factor authentication turned off"
+    refute Mydia.Accounts.has_passkeys?(Mydia.Accounts.get_user!(user.id))
+  end
 end

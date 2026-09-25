@@ -4,6 +4,8 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
   """
 
   alias Mydia.Accounts
+
+  @passkey_only_message "This account signs in with a passkey. Add TOTP on your profile to sign in from the player."
   alias Mydia.Accounts.User
   alias Mydia.Auth.Guardian
   alias Mydia.Config
@@ -59,12 +61,20 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
 
       user ->
         if Accounts.verify_password(user, input.password) do
-          if Accounts.totp_enabled?(user) do
-            with :ok <- validate_challenge_device(user, input) do
-              {:ok, totp_challenge(user, input)}
-            end
-          else
-            finish_login(user, ip_address, input.username, input)
+          # The player has no passkey flow: an account whose only second
+          # factor is a passkey must add TOTP to sign in here, rather than
+          # let a password alone through.
+          cond do
+            Accounts.totp_enabled?(user) ->
+              with :ok <- validate_challenge_device(user, input) do
+                {:ok, totp_challenge(user, input)}
+              end
+
+            Accounts.has_passkeys?(user) ->
+              {:error, @passkey_only_message}
+
+            true ->
+              finish_login(user, ip_address, input.username, input)
           end
         else
           Accounts.record_login_failure(ip_address, input.username)

@@ -77,4 +77,18 @@ defmodule MydiaWeb.AdminUsersLiveTest do
       refute has_element?(view, "#totp-badge-#{user.id}")
     end
   end
+
+  test "resetting 2FA also removes passkeys", %{conn: conn} do
+    user = user_fixture()
+    passkey_fixture(user)
+
+    {:ok, view, _html} = live(conn, ~p"/admin/users")
+    assert has_element?(view, "#passkey-badge-#{user.id}")
+    assert has_element?(view, "#totp-badge-#{user.id}")
+
+    view |> element("#reset-2fa-#{user.id}") |> render_click()
+
+    refute Mydia.Accounts.has_passkeys?(user)
+    refute has_element?(view, "#passkey-badge-#{user.id}")
+  end
 end

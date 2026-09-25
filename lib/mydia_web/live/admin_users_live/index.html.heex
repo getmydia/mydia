@@ -124,12 +124,22 @@
                     <td>
                       <span class="font-mono text-sm">{auth_type_text(user)}</span>
                       <span
-                        :if={totp_enabled?(user)}
+                        :if={second_factor_on?(user)}
                         id={"totp-badge-#{user.id}"}
                         class="badge badge-success badge-sm ml-1"
                         title="Two-factor authentication is on"
                       >
                         2FA
+                      </span>
+                      <span
+                        :if={passkey_count(user) > 0}
+                        id={"passkey-badge-#{user.id}"}
+                        class="badge badge-ghost badge-sm ml-1"
+                        title="Passkeys registered"
+                      >
+                        {passkey_count(user)} {if passkey_count(user) == 1,
+                          do: "passkey",
+                          else: "passkeys"}
                       </span>
                     </td>
 
@@ -189,12 +199,12 @@
                           </button>
                         <% end %>
 
-                        <%= if totp_enabled?(user) do %>
+                        <%= if second_factor_on?(user) do %>
                           <button
                             id={"reset-2fa-#{user.id}"}
-                            phx-click="reset_totp"
+                            phx-click="reset_second_factors"
                             phx-value-id={user.id}
-                            data-confirm="Turn off two-factor authentication for this user? They will sign in with only their password until they set it up again."
+                            data-confirm="Turn off two-factor authentication for this user? This removes their authenticator app and all their passkeys. They will sign in with only their password until they set it up again."
                             class="btn btn-sm btn-ghost"
                             title="Reset two-factor authentication"
                           >

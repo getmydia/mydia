@@ -11,6 +11,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   use MydiaWeb, :live_component
 
   alias Mydia.Accounts
+  alias MydiaWeb.ProfileLive.SecondFactorThrottle
 
   @rate_limited_message "Too many login attempts. Please try again later."
 
@@ -75,7 +76,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
   def handle_event("regenerate", %{"totp" => %{"code" => code}}, socket) do
     user = socket.assigns.user
 
-    case rate_limited(user, fn -> Accounts.regenerate_recovery_codes(user, code) end) do
+    case SecondFactorThrottle.run(user, fn -> Accounts.regenerate_recovery_codes(user, code) end) do
       {:ok, codes} ->
         {:noreply,
          socket
@@ -106,7 +107,7 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
       ) do
     user = socket.assigns.user
 
-    case rate_limited(user, fn -> Accounts.disable_totp(user, password, code) end) do
+    case SecondFactorThrottle.run(user, fn -> Accounts.disable_totp(user, password, code) end) do
       {:ok, _user} ->
         {:noreply,
          socket
@@ -131,37 +132,6 @@ defmodule MydiaWeb.ProfileLive.TwoFactorComponent do
 
   defp reset_flow(socket) do
     assign(socket, step: :idle, secret: nil, qr_svg: nil, recovery_codes: [], error: nil)
-  end
-
-  # Wraps an authenticated second-factor check with the same throttle as
-  # login: an authenticated LiveView session could otherwise brute-force a
-  # 6-digit code straight through `regenerate` or `disable` with no rate
-  # limit. LiveView has no reliable client IP, so the account itself stands
-  # in for it; the username bucket is the real username, so profile-page
-  # failures spend the same per-account budget as password-login failures.
-  #
-  # The attempt is reserved atomically before `fun` runs (see
-  # `Accounts.reserve_second_factor_attempt/2`), so it is counted whether
-  # `fun` succeeds or fails; a failure needs no separate
-  # `record_login_failure/2` call.
-  defp rate_limited(user, fun) do
-    ip_key = "profile:#{user.id}"
-    username = user.username
-
-    case Accounts.reserve_second_factor_attempt(ip_key, username) do
-      :ok ->
-        case fun.() do
-          {:ok, _} = ok ->
-            Accounts.reset_login_rate_limit(ip_key, username)
-            ok
-
-          {:error, reason} = error when reason in [:invalid_code, :invalid_password] ->
-            error
-        end
-
-      {:error, :rate_limited} = error ->
-        error
-    end
   end
 
   defp load_status(socket, user_id) do

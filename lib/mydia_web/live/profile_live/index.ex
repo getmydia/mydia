@@ -40,6 +40,8 @@ defmodule MydiaWeb.ProfileLive.Index do
         max_file_size: 5_000_000
       )
       |> assign(:is_oidc_user, is_oidc_user)
+      |> assign(:local_auth_enabled, Mydia.Config.get().auth.local_enabled)
+      |> assign(:page_url, nil)
       |> assign(:profile_form, to_form(Accounts.change_profile(user)))
       |> assign(:password_form, to_form(password_changeset(), as: :password))
       |> assign(:show_password_modal, false)
@@ -67,8 +69,11 @@ defmodule MydiaWeb.ProfileLive.Index do
   end
 
   @impl true
-  def handle_params(_params, _url, socket) do
-    {:noreply, assign(socket, :page_title, "Profile & Preferences")}
+  def handle_params(_params, url, socket) do
+    {:noreply,
+     socket
+     |> assign(:page_title, "Profile & Preferences")
+     |> assign(:page_url, url)}
   end
 
   ## Profile Events
