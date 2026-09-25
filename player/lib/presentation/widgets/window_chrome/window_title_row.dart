@@ -102,7 +102,7 @@ class WindowTitleRow extends ConsumerWidget {
     );
     return IconButtonTheme(
       data: IconButtonThemeData(
-        style: compact.merge(Theme.of(context).iconButtonTheme.style),
+        style: compact.merge(IconButtonTheme.of(context).style),
       ),
       child: child,
     );
