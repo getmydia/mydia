@@ -71,14 +71,22 @@ class ReportedExtent extends StatefulWidget {
 }
 
 class _ReportedExtentState extends State<ReportedExtent> {
-  /// Last extent layout measured, whether or not it was reported.
-  double _measured = 0;
+  /// Last size layout measured, whether or not it was reported. Kept whole
+  /// rather than as the selected dimension so an [ReportedExtent.axis]
+  /// change can be answered without waiting for another layout.
+  Size? _measuredSize;
 
   /// Last value actually sent to [ReportedExtent.onExtent].
   double? _last;
 
+  /// The dimension currently selected out of [_measuredSize].
+  double get _measured => switch (widget.axis) {
+        Axis.vertical => _measuredSize?.height ?? 0,
+        Axis.horizontal => _measuredSize?.width ?? 0,
+      };
+
   void _onLayout(Size size) {
-    _measured = widget.axis == Axis.vertical ? size.height : size.width;
+    _measuredSize = size;
     _report();
   }
 
@@ -95,8 +103,9 @@ class _ReportedExtentState extends State<ReportedExtent> {
   void didUpdateWidget(ReportedExtent old) {
     super.didUpdateWidget(old);
     // Layout does not necessarily re-run when only `active` flips (the
-    // shell's route becoming current again), so report from here too.
-    if (old.active != widget.active) _report();
+    // shell's route becoming current again) or when `axis` switches to the
+    // other dimension of an unchanged size, so report from here too.
+    if (old.active != widget.active || old.axis != widget.axis) _report();
   }
 
   @override
