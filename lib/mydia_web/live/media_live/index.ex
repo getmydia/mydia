@@ -43,7 +43,7 @@ defmodule MydiaWeb.MediaLive.Index do
   }
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     if connected?(socket) do
       Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
       Phoenix.PubSub.subscribe(Mydia.PubSub, "library_scanner")
@@ -52,7 +52,7 @@ defmodule MydiaWeb.MediaLive.Index do
     {:ok,
      socket
      |> assign(:view_mode, :grid)
-     |> GridDensity.assign_current()
+     |> GridDensity.assign_current(session)
      |> PosterFieldsPref.assign_current()
      |> assign(:search_query, "")
      |> assign(:filter_progress, nil)

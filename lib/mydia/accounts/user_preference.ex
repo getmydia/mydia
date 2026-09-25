@@ -20,7 +20,6 @@ defmodule Mydia.Accounts.UserPreference do
     "interface_language" => "en",
     "theme" => "system",
     "close_manual_search_after_grab" => false,
-    "grid_density" => "comfortable",
     "recommendations_expanded" => false,
     "discover_hide_owned" => false,
     "hide_player" => false,
@@ -30,7 +29,6 @@ defmodule Mydia.Accounts.UserPreference do
   # Valid values for each preference
   @valid_themes ~w(system light dark)
   @valid_languages ~w(en es fr de it pt ja zh ko ru)
-  @valid_densities ~w(comfortable compact dense)
 
   @type t :: %__MODULE__{
           id: binary(),
@@ -79,13 +77,6 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def close_manual_search_after_grab?(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "close_manual_search_after_grab", @defaults["close_manual_search_after_grab"])
-  end
-
-  @doc """
-  Grid density for the Discover and Libraries poster grids.
-  """
-  def grid_density(%__MODULE__{preferences: prefs}) do
-    Map.get(prefs, "grid_density", @defaults["grid_density"])
   end
 
   @doc """
@@ -222,7 +213,6 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("metadata_language", @valid_languages)
     |> validate_preference_value("interface_language", @valid_languages)
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
-    |> validate_preference_value("grid_density", @valid_densities)
     |> validate_preference_value("recommendations_expanded", [true, false])
     |> validate_preference_value("discover_hide_owned", [true, false])
     |> validate_preference_value("add_monitored", [true, false])
@@ -239,7 +229,7 @@ defmodule Mydia.Accounts.UserPreference do
 
   # A stored `poster_fields` value that a later release removes from
   # `PosterFields`'s catalog must not fail every subsequent unrelated save
-  # (theme, grid_density, ...). `update_preferences_changeset/2` merges the
+  # (theme, ...). `update_preferences_changeset/2` merges the
   # stored map with the delta before validating, so an untouched stale value
   # would otherwise be re-validated on every write. Skip validation when the
   # value is unchanged from what is already on the row; only a new or changed

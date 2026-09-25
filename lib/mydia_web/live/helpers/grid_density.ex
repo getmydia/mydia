@@ -1,57 +1,60 @@
 defmodule MydiaWeb.Live.Helpers.GridDensity do
   @moduledoc """
-  Reads and persists the shared poster-grid density preference for the
-  Discover and Libraries LiveViews.
+  Reads and sets the poster-grid density for the Discover and Libraries
+  LiveViews.
 
-  Both pages read the same preference key, so the read and the write live
-  here rather than being copied into each LiveView. An unauthenticated or
-  guest render has no preference row to read: it gets the default, and its
-  toggle clicks change the current view without being persisted.
+  Density is a per-browser setting, not an account preference, so a
+  desktop's choice never reaches the same account's phone (#700). The
+  browser holds it in the `mydia_grid_density` cookie:
+
+    * `MydiaWeb.Plugs.GridDensityCookie` copies the cookie into the session
+      on every HTTP request, and `assign_current/2` reads it from there.
+    * `put/2` pushes `grid_density:saved`, and the `GridDensity` JS hook
+      writes the cookie only then, so the browser stores only values the
+      server accepted.
+
+  The session is fixed when the LiveView socket connects, so after a change
+  a live navigation to the other page mounts with the old value. The hook
+  compares the cookie with the rendered toggle on mount and re-sends
+  `set_grid_density` when they differ.
   """
 
   import Phoenix.Component, only: [assign: 3]
-  import Phoenix.LiveView, only: [put_flash: 3]
+  import Phoenix.LiveView, only: [push_event: 3]
 
-  alias Mydia.Accounts
-  alias Mydia.Accounts.UserPreference
+  alias MydiaWeb.GridDensityComponents
 
   @assign :grid_density
 
   @doc """
-  Assigns the viewer's stored density, or the default when there is no user.
+  Assigns this browser's density from the session, or the default.
   """
-  def assign_current(socket) do
-    assign(socket, @assign, current(socket))
+  def assign_current(socket, session) do
+    assign(socket, @assign, current(session))
   end
 
   @doc """
-  The viewer's stored density, or the default when there is no user.
+  This browser's density from the session, or the default.
   """
-  def current(socket) do
-    case socket.assigns[:current_user] do
-      nil -> UserPreference.defaults()["grid_density"]
-      user -> user |> Accounts.get_user_preference!() |> UserPreference.grid_density()
-    end
+  def current(%{"grid_density" => density}) do
+    if GridDensityComponents.valid?(density),
+      do: density,
+      else: GridDensityComponents.default()
   end
 
-  @doc """
-  Persists a density for the viewer and reassigns it.
+  def current(_session), do: GridDensityComponents.default()
 
-  A rejected changeset leaves the stored preference alone and flashes, rather
-  than silently showing a density that will not survive a reload.
+  @doc """
+  Applies a density to the current view and asks the browser to keep it.
+  An unknown value is ignored.
   """
   def put(socket, density) do
-    case socket.assigns[:current_user] do
-      nil ->
-        assign(socket, @assign, density)
-
-      user ->
-        preference = Accounts.get_user_preference!(user)
-
-        case Accounts.update_preference(preference, %{"grid_density" => density}) do
-          {:ok, _} -> assign(socket, @assign, density)
-          {:error, _changeset} -> put_flash(socket, :error, "Could not save that grid density")
-        end
+    if GridDensityComponents.valid?(density) do
+      socket
+      |> assign(@assign, density)
+      |> push_event("grid_density:saved", %{density: density})
+    else
+      socket
     end
   end
 end

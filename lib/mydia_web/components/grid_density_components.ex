@@ -28,15 +28,16 @@ defmodule MydiaWeb.GridDensityComponents do
 
   @default "comfortable"
 
-  # The unprefixed (phone-width) count is floored to 2 for every density.
-  # Compact and Dense only diverge from Comfortable at sm: and up: the poster
-  # card body was never designed to hold its content at a quarter of a
-  # phone's width, so a desktop-chosen density (an account-wide preference)
-  # cannot force 3 or 4 columns onto a phone. See issue #700.
+  # Each density has its own phone (unprefixed) column count. This is safe
+  # because density is a per-browser setting (see
+  # `MydiaWeb.Plugs.GridDensityCookie`): a phone only shows what was chosen
+  # on that phone. Issue #700 was the account-wide version of this setting
+  # pushing a desktop's Dense onto phones; at 3 or 4 columns the poster
+  # fields menu is how a phone user trims card text.
   @classes %{
     "comfortable" => "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
-    "compact" => "grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8",
-    "dense" => "grid-cols-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
+    "compact" => "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8",
+    "dense" => "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
   }
 
   # A 1 → 3 → many progression. The labels used to carry the meaning; once
@@ -49,6 +50,20 @@ defmodule MydiaWeb.GridDensityComponents do
     {"compact", "Compact", "hero-view-columns"},
     {"dense", "Dense", "hero-table-cells"}
   ]
+
+  @values Enum.map(@levels, &elem(&1, 0))
+
+  @doc "The density values, in toggle order."
+  @spec levels() :: [String.t()]
+  def levels, do: @values
+
+  @doc "Whether `density` is one of `levels/0`."
+  @spec valid?(term()) :: boolean()
+  def valid?(density), do: density in @values
+
+  @doc "The density used when a browser has not chosen one."
+  @spec default() :: String.t()
+  def default, do: @default
 
   @doc """
   Maps a density to its complete grid-column class string.
@@ -81,6 +96,8 @@ defmodule MydiaWeb.GridDensityComponents do
       param="density"
       label="Grid density"
       icon_only
+      phx-hook="GridDensity"
+      data-value={@density}
     >
       <:option
         :for={{value, label, icon_name} <- @levels}

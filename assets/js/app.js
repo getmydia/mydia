@@ -28,6 +28,7 @@ import VideoPlayer from "./hooks/video_player";
 import PlexOAuth from "./hooks/plex_oauth";
 import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
+import GridDensity from "./hooks/grid_density.mjs";
 import {
   MediaSelection,
   setAllSelected,
@@ -435,6 +436,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     PlexOAuth,
     DockNav,
     PersistedCheckbox,
+    GridDensity,
     AddDirectUrl,
     BatchSelect,
     MediaSelection,
