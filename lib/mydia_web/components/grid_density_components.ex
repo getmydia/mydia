@@ -146,7 +146,7 @@ defmodule MydiaWeb.GridDensityComponents do
       </div>
       <div
         tabindex="0"
-        class="dropdown-content z-30 mt-2 w-64 rounded-box bg-base-100 p-3 shadow-lg border border-base-300"
+        class="dropdown-content z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 p-3 shadow-lg border border-base-300"
       >
         <p class="text-xs font-semibold text-base-content/70 mb-2">Show on posters</p>
         <form id="poster-fields-form" phx-change="set_poster_fields">

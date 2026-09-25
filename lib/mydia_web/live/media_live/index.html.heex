@@ -126,14 +126,19 @@
           </.link>
         <% end %>
 
-        <%!-- View mode toggle --%>
-        <.view_mode_toggle view_mode={@view_mode} />
-        <.grid_density_toggle
-          :if={@view_mode == :grid}
-          id="library-density-toggle"
-          density={@grid_density}
-        />
-        <.poster_fields_menu :if={@view_mode == :grid} fields={@poster_fields} />
+        <%!-- View controls wrap as one unit and pin to the right of whichever
+              row they land on. Left as loose children of this flex-wrap bar,
+              the eye wrapped first, alone at the left, and its dropdown-end
+              menu opened off screen. --%>
+        <div id="library-view-controls" class="flex flex-nowrap items-center gap-2 ml-auto">
+          <.view_mode_toggle view_mode={@view_mode} />
+          <.grid_density_toggle
+            :if={@view_mode == :grid}
+            id="library-density-toggle"
+            density={@grid_density}
+          />
+          <.poster_fields_menu :if={@view_mode == :grid} fields={@poster_fields} />
+        </div>
       </div>
     </div>
 
