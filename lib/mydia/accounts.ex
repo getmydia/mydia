@@ -703,11 +703,14 @@ defmodule Mydia.Accounts do
   Checks a second factor: a 6-digit TOTP code or a recovery code, told apart by
   shape after normalization.
 
+  It also accepts `{:passkey, challenge, payload}`, an assertion from one of the user's own passkeys.
+
   Both branches consume what they accept with a conditional UPDATE, so two
   concurrent requests carrying the same code cannot both succeed. Rate limiting
   is the caller's job, alongside the password throttle.
   """
-  @spec verify_second_factor(User.t(), String.t()) :: :ok | {:error, :invalid_code}
+  @spec verify_second_factor(User.t(), String.t() | {:passkey, Wax.Challenge.t(), map()}) ::
+          :ok | {:error, :invalid_code}
   def verify_second_factor(%User{} = user, code) when is_binary(code) do
     normalized = Totp.normalize_code(code)
 
@@ -715,6 +718,13 @@ defmodule Mydia.Accounts do
       :totp -> verify_totp_code(user, normalized)
       :recovery -> redeem_recovery_code(user, normalized)
       :invalid -> {:error, :invalid_code}
+    end
+  end
+
+  def verify_second_factor(%User{id: user_id}, {:passkey, %Wax.Challenge{} = challenge, payload}) do
+    case Passkeys.authenticate(challenge, payload, user_id) do
+      {:ok, %User{id: ^user_id}} -> :ok
+      _ -> {:error, :invalid_code}
     end
   end
 
@@ -752,6 +762,20 @@ defmodule Mydia.Accounts do
 
   @doc "Renames one of the user's passkeys."
   defdelegate rename_passkey(user, passkey_id, name), to: Passkeys, as: :rename
+
+  @doc """
+  A challenge and JSON request options. `nil` means passwordless sign-in
+  (user verification required, any discoverable passkey); a user means a
+  second factor (that user's passkeys on `rp_id`).
+  """
+  defdelegate passkey_authentication_challenge(rp_id, origin, user),
+    to: Passkeys,
+    as: :authentication_challenge
+
+  @doc "Verifies a passwordless assertion and returns the passkey's owner."
+  @spec authenticate_passkey(Wax.Challenge.t(), map()) ::
+          {:ok, User.t()} | {:error, :invalid_passkey}
+  def authenticate_passkey(challenge, payload), do: Passkeys.authenticate(challenge, payload)
 
   @doc "Removes one of the user's passkeys after checking their current password."
   @spec delete_passkey(User.t(), String.t(), String.t()) ::

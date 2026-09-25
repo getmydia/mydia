@@ -80,6 +80,95 @@ defmodule Mydia.Accounts.Passkeys do
     :ok
   end
 
+  @spec authentication_challenge(String.t(), String.t(), User.t() | nil) ::
+          {Wax.Challenge.t(), map()}
+  def authentication_challenge(rp_id, origin, nil) do
+    challenge = WebAuthn.authentication_challenge(rp_id, origin, "required")
+    {challenge, WebAuthn.authentication_options(challenge, [])}
+  end
+
+  def authentication_challenge(rp_id, origin, %User{} = user) do
+    challenge = WebAuthn.authentication_challenge(rp_id, origin, "preferred")
+    allow = user |> for_rp(rp_id) |> Enum.map(&descriptor/1)
+    {challenge, WebAuthn.authentication_options(challenge, allow)}
+  end
+
+  @doc """
+  Verifies an assertion. With `user_id`, only that user's passkeys are
+  considered, so a second-factor check never touches another account's
+  counter. The credential must have been registered on the challenge's
+  relying party.
+  """
+  @spec authenticate(Wax.Challenge.t(), map(), String.t() | nil) ::
+          {:ok, User.t()} | {:error, :invalid_passkey}
+  def authenticate(%Wax.Challenge{} = challenge, payload, user_id \\ nil) do
+    with {:ok, passkey} <- fetch_for_assertion(challenge, payload, user_id),
+         {:ok, %{sign_count: count, user_handle: handle}} <-
+           WebAuthn.verify_authentication(
+             challenge,
+             payload,
+             passkey.credential_id,
+             Passkey.cose_key(passkey)
+           ),
+         :ok <- check_user_handle(handle, passkey.user_id),
+         :ok <- record_use(passkey, count) do
+      {:ok, Repo.get!(User, passkey.user_id)}
+    else
+      {:error, :sign_count_regressed} ->
+        Logger.warning(
+          "Passkey rejected: sign count went backwards, possible cloned authenticator " <>
+            "(payload id #{inspect(payload["id"])})"
+        )
+
+        {:error, :invalid_passkey}
+
+      {:error, reason} ->
+        Logger.info("Passkey assertion rejected: #{inspect(reason)}")
+        {:error, :invalid_passkey}
+    end
+  end
+
+  defp fetch_for_assertion(challenge, payload, user_id) do
+    with {:ok, credential_id} <- WebAuthn.credential_id(payload),
+         %Passkey{} = passkey <- lookup(credential_id, user_id) do
+      if passkey.rp_id == challenge.rp_id,
+        do: {:ok, passkey},
+        else: {:error, {:rp_id_mismatch, passkey.rp_id}}
+    else
+      _ -> {:error, :unknown_credential}
+    end
+  end
+
+  defp lookup(credential_id, nil), do: Repo.get_by(Passkey, credential_id: credential_id)
+
+  defp lookup(credential_id, user_id),
+    do: Repo.get_by(Passkey, credential_id: credential_id, user_id: user_id)
+
+  defp check_user_handle(nil, _user_id), do: :ok
+
+  defp check_user_handle(handle, user_id) do
+    case Ecto.UUID.load(handle) do
+      {:ok, ^user_id} -> :ok
+      _ -> {:error, :user_handle_mismatch}
+    end
+  rescue
+    _ -> {:error, :user_handle_mismatch}
+  end
+
+  # A conditional UPDATE, so two concurrent assertions cannot both move the
+  # counter, and a counter that did not advance matches no row. Authenticators
+  # that always report 0 (most synced passkeys) are always accepted.
+  defp record_use(%Passkey{id: id}, count) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    query = from p in Passkey, where: p.id == ^id
+    query = if count == 0, do: query, else: where(query, [p], p.sign_count < ^count)
+
+    case Repo.update_all(query, set: [sign_count: count, last_used_at: now]) do
+      {1, _} -> :ok
+      {0, _} -> {:error, :sign_count_regressed}
+    end
+  end
+
   defp fetch_owned(%User{id: user_id}, passkey_id) do
     with {:ok, id} <- Ecto.UUID.cast(passkey_id),
          %Passkey{} = passkey <- Repo.get_by(Passkey, id: id, user_id: user_id) do
