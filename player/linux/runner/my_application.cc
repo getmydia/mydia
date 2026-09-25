@@ -27,6 +27,18 @@ static constexpr char kWindowFrameChannel[] = "dev.mydia.player/window_frame";
 // matches native GNOME apps. Must equal kLinuxWindowCornerRadius in
 // lib/core/layout/window_chrome_inset.dart, which clips the Flutter view to
 // the same curve.
+//
+// The last rule recolours the `.solid-csd` ring GTK draws when the screen
+// has no compositor (GTK's resize grip in that state, since there is no
+// shadow margin to grab). Extracted from GTK 3.24.52's own
+// gtk-contained.css (`gresource extract ... /org/gtk/libgtk/theme/Adwaita/
+// gtk-contained.css`): `.solid-csd decoration` paints that ring with
+// `background-color`/`border`, both Adwaita's light headerbar tone, inside a
+// `padding: 4px` box; `box-shadow` there only adds a white inner highlight,
+// not the ring's fill. Overriding `background-color`/`border-color` to
+// black (and dropping the highlight, which would read as a stray white line
+// against it) recolours the ring; `padding` is left untouched so its width
+// stays GTK's own.
 static constexpr char kFrameCss[] =
     "window.mydia-frame { background-color: #000000; }\n"
     "window.mydia-frame.csd,\n"
@@ -39,7 +51,12 @@ static constexpr char kFrameCss[] =
     "window.mydia-frame.tiled-left, window.mydia-frame.tiled-left decoration,\n"
     "window.mydia-frame.tiled-right, window.mydia-frame.tiled-right decoration,\n"
     "window.mydia-frame.solid-csd, window.mydia-frame.solid-csd decoration\n"
-    "{ border-radius: 0; }\n";
+    "{ border-radius: 0; }\n"
+    "window.mydia-frame.solid-csd decoration {\n"
+    "  background-color: #000000;\n"
+    "  border-color: #000000;\n"
+    "  box-shadow: none;\n"
+    "}\n";
 
 // A titlebar that takes no space.
 //
@@ -142,9 +159,11 @@ static void window_chrome_method_call_cb(FlMethodChannel* channel,
   }
 }
 
-// {maximized, tiled, fullscreen} for Dart. `tiled` is any of GTK's tiled
-// flags: GNOME reports a half-screen snap through the per-edge ones.
-static FlValue* window_state_value(GdkWindowState state) {
+// {maximized, tiled, fullscreen, solidFrame} for Dart. `tiled` is any of
+// GTK's tiled flags: GNOME reports a half-screen snap through the per-edge
+// ones. `solidFrame` needs `widget` (not just `state`): it reflects the
+// widget's screen compositing, which GdkWindowState knows nothing about.
+static FlValue* window_state_value(GdkWindowState state, GtkWidget* widget) {
   const GdkWindowState tiled_mask = static_cast<GdkWindowState>(
       GDK_WINDOW_STATE_TILED | GDK_WINDOW_STATE_TOP_TILED |
       GDK_WINDOW_STATE_RIGHT_TILED | GDK_WINDOW_STATE_BOTTOM_TILED |
@@ -158,6 +177,10 @@ static FlValue* window_state_value(GdkWindowState state) {
   fl_value_set_string_take(
       map, "fullscreen",
       fl_value_new_bool((state & GDK_WINDOW_STATE_FULLSCREEN) != 0));
+  fl_value_set_string_take(
+      map, "solidFrame",
+      fl_value_new_bool(!gdk_screen_is_composited(
+          gtk_widget_get_screen(widget))));
   return map;
 }
 
@@ -165,7 +188,8 @@ static gboolean window_state_event_cb(GtkWidget* widget,
                                       GdkEventWindowState* event,
                                       gpointer user_data) {
   FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
-  g_autoptr(FlValue) value = window_state_value(event->new_window_state);
+  g_autoptr(FlValue) value =
+      window_state_value(event->new_window_state, widget);
   fl_method_channel_invoke_method(channel, "onWindowStateChanged", value,
                                   nullptr, nullptr, nullptr);
   return FALSE;
@@ -183,7 +207,7 @@ static void window_frame_method_call_cb(FlMethodChannel* channel,
     GdkWindowState state = gdk_window != nullptr
                                ? gdk_window_get_state(gdk_window)
                                : static_cast<GdkWindowState>(0);
-    g_autoptr(FlValue) result = window_state_value(state);
+    g_autoptr(FlValue) result = window_state_value(state, window);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   } else {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
@@ -194,6 +218,23 @@ static void window_frame_method_call_cb(FlMethodChannel* channel,
     g_warning("Failed to respond on %s: %s", kWindowFrameChannel,
               error->message);
   }
+}
+
+// Fires when the screen gains or loses a compositor, which is exactly when
+// GTK switches the window in or out of `.solid-csd`. `user_data` is the
+// frame channel itself (see the "mydia-window" data below for why that is
+// enough to also reach the window).
+static void composited_changed_cb(GdkScreen* screen, gpointer user_data) {
+  FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
+  GtkWidget* window =
+      GTK_WIDGET(g_object_get_data(G_OBJECT(channel), "mydia-window"));
+  GdkWindow* gdk_window = gtk_widget_get_window(window);
+  GdkWindowState state = gdk_window != nullptr
+                             ? gdk_window_get_state(gdk_window)
+                             : static_cast<GdkWindowState>(0);
+  g_autoptr(FlValue) value = window_state_value(state, window);
+  fl_method_channel_invoke_method(channel, "onWindowStateChanged", value,
+                                  nullptr, nullptr, nullptr);
 }
 
 // Called when first Flutter frame received.
@@ -272,10 +313,23 @@ static void my_application_activate(GApplication* application) {
   fl_method_channel_set_method_call_handler(
       self->window_frame_channel, window_frame_method_call_cb,
       g_object_ref(window), g_object_unref);
+  // A second, independent reference: composited_changed_cb needs to reach
+  // the window from the signal's user_data, which is the channel (so the
+  // signal's own lifetime, below, can tie to the channel like every other
+  // signal here). g_object_set_data_full drops this ref when the channel is
+  // finalized.
+  g_object_set_data_full(G_OBJECT(self->window_frame_channel), "mydia-window",
+                         g_object_ref(window), g_object_unref);
   // Tied to the channel's lifetime for the same reason as the
   // decoration-layout signal below.
   g_signal_connect_object(window, "window-state-event",
                           G_CALLBACK(window_state_event_cb),
+                          self->window_frame_channel, G_CONNECT_DEFAULT);
+  // Compositing can come and go without any GdkWindowState change (e.g. a
+  // compositor crashing), which is exactly when GTK toggles `.solid-csd`.
+  g_signal_connect_object(gtk_widget_get_screen(GTK_WIDGET(window)),
+                          "composited-changed",
+                          G_CALLBACK(composited_changed_cb),
                           self->window_frame_channel, G_CONNECT_DEFAULT);
 
   GtkSettings* settings = gtk_settings_get_default();

@@ -24,6 +24,13 @@ void main() {
       expect(
           WindowFrameState.fromChannel('maximized'), WindowFrameState.floating);
     });
+
+    test('reads solidFrame', () {
+      expect(
+        WindowFrameState.fromChannel(const {'solidFrame': true}),
+        const WindowFrameState(solidFrame: true),
+      );
+    });
   });
 
   group('isFloating', () {

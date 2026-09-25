@@ -298,8 +298,9 @@ bool shouldShowWindowChrome({
 /// The radius `DesktopWindowChrome` clips the app to.
 ///
 /// Zero in every state where GTK squares its own frame (maximized, tiled,
-/// fullscreen), so the clip always follows the frame it sits in. Pure and
-/// exposed for the same reason as [shouldShowWindowChrome].
+/// fullscreen, or compositor-less `solidFrame`), so the clip always follows
+/// the frame it sits in. Pure and exposed for the same reason as
+/// [shouldShowWindowChrome].
 @visibleForTesting
 double windowCornerRadiusFor(WindowFrameState state) =>
-    state.isFloating ? kLinuxWindowCornerRadius : 0.0;
+    !state.isFloating || state.solidFrame ? 0.0 : kLinuxWindowCornerRadius;

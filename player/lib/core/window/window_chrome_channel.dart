@@ -11,8 +11,8 @@
 /// two Dart sides open separate channel objects with separate handlers.
 const String kWindowChromeChannelName = 'dev.mydia.player/window_chrome';
 
-/// The Linux window state channel, `{maximized, tiled, fullscreen}`, read by
-/// `WindowFrameStateSource`.
+/// The Linux window state channel, `{maximized, tiled, fullscreen,
+/// solidFrame}`, read by `WindowFrameStateSource`.
 ///
 /// Matched literally by `kWindowFrameChannel` in
 /// `linux/runner/my_application.cc`. A separate channel rather than more

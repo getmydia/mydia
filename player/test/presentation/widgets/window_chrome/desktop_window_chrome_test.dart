@@ -117,15 +117,20 @@ void main() {
     for (final maximized in [false, true]) {
       for (final tiled in [false, true]) {
         for (final fullscreen in [false, true]) {
-          final state = WindowFrameState(
-            maximized: maximized,
-            tiled: tiled,
-            fullscreen: fullscreen,
-          );
-          final expected = state.isFloating ? kLinuxWindowCornerRadius : 0.0;
-          test('$state -> $expected', () {
-            expect(windowCornerRadiusFor(state), expected);
-          });
+          for (final solidFrame in [false, true]) {
+            final state = WindowFrameState(
+              maximized: maximized,
+              tiled: tiled,
+              fullscreen: fullscreen,
+              solidFrame: solidFrame,
+            );
+            final expected = !state.isFloating || state.solidFrame
+                ? 0.0
+                : kLinuxWindowCornerRadius;
+            test('$state -> $expected', () {
+              expect(windowCornerRadiusFor(state), expected);
+            });
+          }
         }
       }
     }

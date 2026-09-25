@@ -72,6 +72,22 @@ void main() {
       expect(source.state.value, const WindowFrameState(tiled: true));
     });
 
+    test('follows a pushed solidFrame change', () async {
+      stubChannel({});
+      final source = WindowFrameStateSource();
+      addTearDown(source.dispose);
+      await source.load();
+
+      await push({
+        'maximized': false,
+        'tiled': false,
+        'fullscreen': false,
+        'solidFrame': true,
+      });
+
+      expect(source.state.value, const WindowFrameState(solidFrame: true));
+    });
+
     test('a state pushed mid-load survives the older read landing after it',
         () async {
       final gate = Completer<Map<String, bool>>();
