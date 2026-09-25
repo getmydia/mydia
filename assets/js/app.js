@@ -75,10 +75,6 @@ const ThemeToggle = {
       attributeFilter: ["data-theme"],
     });
 
-// The login and second-factor pages are controller-rendered, not LiveViews.
-initPasskeyLogin(document);
-initPasskeySecondFactor(document);
-
     // Store observer to disconnect on unmount
     this.observer = observer;
   },
@@ -549,6 +545,10 @@ const AddDirectUrl = {
 
 // connect if there are any LiveViews on the page
 liveSocket.connect();
+
+// The login and second-factor pages are controller-rendered, not LiveViews.
+initPasskeyLogin(document);
+initPasskeySecondFactor(document);
 
 // Media selection - using document-level event delegation since streams replace DOM elements
 document.addEventListener("click", (e) => {

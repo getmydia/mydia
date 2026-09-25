@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -102,4 +103,14 @@ test("errors map to reasons and copy", () => {
   assert.equal(errorReason(new Error("boom")), "failed");
   assert.equal(errorMessage("duplicate"), "This device already has a passkey for this account");
   assert.equal(errorMessage("failed"), "Passkey not recognised");
+});
+
+test("initPasskeyLogin runs at startup, not inside ThemeToggle", () => {
+  const src = readFileSync(new URL("../../js/app.js", import.meta.url), "utf8");
+  const themeIdx = src.indexOf("const ThemeToggle");
+  const connectIdx = src.indexOf("liveSocket.connect()");
+  const initIdx = src.indexOf("initPasskeyLogin(document)");
+  assert.ok(initIdx > connectIdx, "expected init after liveSocket.connect()");
+  const themeBlock = src.slice(themeIdx, initIdx);
+  assert.ok(!themeBlock.includes("initPasskeyLogin"), "expected init outside ThemeToggle");
 });
