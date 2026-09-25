@@ -351,4 +351,133 @@ void main() {
       expect(t.window.bounds.height, closeTo(583.33, 0.5));
     });
   });
+
+  group('aspect lock', () {
+    Future<
+        ({
+          NativePlayerWindowSizer sizer,
+          FakeWindowController window,
+          WindowGeometryController geometry,
+          PlayerWindowSession session,
+          ManualFrames frames,
+          StreamController<VideoParams> params,
+        })> playing({
+      Rect bounds = const Rect.fromLTWH(0, 0, 1200, 900),
+      VideoParams video =
+          const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080),
+    }) async {
+      final t = build(bounds: bounds);
+      final params = StreamController<VideoParams>();
+      addTearDown(t.geometry.dispose);
+      addTearDown(params.close);
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(video);
+      await settle();
+      return (
+        sizer: t.sizer,
+        window: t.window,
+        geometry: t.geometry,
+        session: t.session,
+        frames: t.frames,
+        params: params,
+      );
+    }
+
+    test('is set to the video aspect when the window is fitted', () async {
+      final t = await playing();
+
+      expect(t.window.aspectRatio, closeTo(16 / 9, 0.0001));
+    });
+
+    test('is set before the resize', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      expect(t.window.callLog, ['setAspectRatio', 'setBounds']);
+    });
+
+    test('follows a new aspect', () async {
+      final t = await playing();
+
+      t.params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
+      await settle();
+
+      expect(t.window.aspectRatio, closeTo(2.4, 0.0001));
+    });
+
+    test('is not set when the minimum size forces letterboxing', () async {
+      // 720 wide at 2.39:1 would be 301 tall, under the 480 floor, so the
+      // window is 720x480 and a 2.39 lock would fight the floor.
+      final t = await playing(
+        bounds: const Rect.fromLTWH(0, 0, 720, 480),
+        video: const VideoParams(w: 1920, h: 803, dw: 1920, dh: 803),
+      );
+
+      expect(t.window.aspectRatio, 0);
+    });
+
+    test('is never set for audio-only content', () async {
+      final t = await playing(video: const VideoParams());
+
+      expect(t.window.setAspectRatioCalls, isEmpty);
+    });
+
+    test('is dropped on maximize and restored on unmaximize', () async {
+      final t = await playing();
+
+      t.sizer.onWindowMaximize();
+      await pumpEventQueue();
+      expect(t.window.aspectRatio, 0);
+
+      t.sizer.onWindowUnmaximize();
+      await pumpEventQueue();
+      expect(t.window.aspectRatio, closeTo(16 / 9, 0.0001));
+    });
+
+    test('is dropped in fullscreen and restored on exit', () async {
+      final t = await playing();
+
+      t.sizer.onWindowEnterFullScreen();
+      await pumpEventQueue();
+      expect(t.window.aspectRatio, 0);
+
+      t.sizer.onWindowLeaveFullScreen();
+      await pumpEventQueue();
+      expect(t.window.aspectRatio, closeTo(16 / 9, 0.0001));
+    });
+
+    test('is not re-applied once the sizer has detached', () async {
+      final t = await playing();
+
+      await t.sizer.detach();
+      await t.frames.end();
+      t.sizer.onWindowUnmaximize();
+      await pumpEventQueue();
+
+      expect(t.window.aspectRatio, 0);
+    });
+
+    test('a failing lock call does not stop the resize', () async {
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+      t.window.setAspectRatioError = StateError('not supported');
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+
+      expect(t.window.bounds, const Rect.fromLTWH(0, 112.5, 1200, 675));
+    });
+  });
 }

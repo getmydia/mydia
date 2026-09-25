@@ -41,6 +41,11 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   /// stream does not cause a second identical resize.
   double? _appliedAspect;
 
+  /// The lock to hold while windowed: the applied aspect, or null when the
+  /// minimum size forced a different shape (a lock would fight the floor)
+  /// or nothing has been fitted yet.
+  double? _lockedAspect;
+
   NativePlayerWindowSizer({
     required WindowController window,
     required PlayerWindowSession session,
@@ -56,6 +61,7 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
     if (_attached) return;
     _attached = true;
     _appliedAspect = null;
+    _lockedAspect = null;
     await _session.join(this);
   }
 
@@ -100,10 +106,52 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
       // Several awaits deep: the screen may have gone.
       if (!_attached) return;
 
+      final fitted = target.width / target.height;
+      final lock = (fitted - aspect).abs() < _kAspectTolerance ? aspect : null;
       _appliedAspect = aspect;
+      _lockedAspect = lock;
+      // Before setBounds: GTK applies geometry hints to programmatic resizes
+      // too, so the previous video's lock would bend the new rect. Its own
+      // try, because a platform that cannot lock should still resize.
+      await _applyLock(lock ?? 0);
       await _window.setBounds(target);
     } catch (e) {
       debugPrint('[PlayerWindowSizer] Failed to fit window to video: $e');
+    }
+  }
+
+  // A maximized or fullscreen window must fill its space, which a lock
+  // would prevent.
+  @override
+  void onWindowMaximize() => _dropLock();
+
+  @override
+  void onWindowEnterFullScreen() => _dropLock();
+
+  @override
+  void onWindowUnmaximize() => _reapplyLock();
+
+  @override
+  void onWindowLeaveFullScreen() => _reapplyLock();
+
+  void _dropLock() {
+    if (!_attached || _lockedAspect == null) return;
+    unawaited(_applyLock(0));
+  }
+
+  void _reapplyLock() {
+    final lock = _lockedAspect;
+    if (!_attached || lock == null) return;
+    unawaited(_applyLock(lock));
+  }
+
+  /// `setAspectRatio` is a GDK geometry hint on Linux, which Wayland
+  /// compositors may ignore; the window then resizes freely, as before.
+  Future<void> _applyLock(double aspect) async {
+    try {
+      await _window.setAspectRatio(aspect);
+    } catch (e) {
+      debugPrint('[PlayerWindowSizer] Failed to set aspect lock: $e');
     }
   }
 
@@ -130,6 +178,7 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
     unawaited(_paramsSubscription?.cancel());
     _paramsSubscription = null;
     _appliedAspect = null;
+    _lockedAspect = null;
 
     if (_attached) {
       _attached = false;
