@@ -161,8 +161,17 @@ static void window_chrome_method_call_cb(FlMethodChannel* channel,
 
 // {maximized, tiled, fullscreen, solidFrame} for Dart. `tiled` is any of
 // GTK's tiled flags: GNOME reports a half-screen snap through the per-edge
-// ones. `solidFrame` needs `widget` (not just `state`): it reflects the
-// widget's screen compositing, which GdkWindowState knows nothing about.
+// ones. `solidFrame` needs `widget` (not just `state`): it reads GTK's own
+// `.solid-csd` style class rather than re-deriving the decision.
+//
+// It is not simply `!gdk_screen_is_composited(screen)`: GTK's own
+// gtk_window_supports_client_shadow() (gtkwindow.c) also requires the
+// _GTK_FRAME_EXTENTS window-manager hint and an RGBA visual. Under XWayland
+// behind a Wayland compositor without that hint, the screen reports
+// composited but GTK still falls back to solid-csd, so the negated-composited
+// check reported solidFrame=false on a window GTK was drawing as solid-csd.
+// Reading the class GTK itself added tracks its real decision regardless of
+// which of its criteria failed.
 static FlValue* window_state_value(GdkWindowState state, GtkWidget* widget) {
   const GdkWindowState tiled_mask = static_cast<GdkWindowState>(
       GDK_WINDOW_STATE_TILED | GDK_WINDOW_STATE_TOP_TILED |
@@ -179,8 +188,8 @@ static FlValue* window_state_value(GdkWindowState state, GtkWidget* widget) {
       fl_value_new_bool((state & GDK_WINDOW_STATE_FULLSCREEN) != 0));
   fl_value_set_string_take(
       map, "solidFrame",
-      fl_value_new_bool(!gdk_screen_is_composited(
-          gtk_widget_get_screen(widget))));
+      fl_value_new_bool(gtk_style_context_has_class(
+          gtk_widget_get_style_context(widget), "solid-csd")));
   return map;
 }
 
@@ -220,10 +229,21 @@ static void window_frame_method_call_cb(FlMethodChannel* channel,
   }
 }
 
-// Fires when the screen gains or loses a compositor, which is exactly when
-// GTK switches the window in or out of `.solid-csd`. `user_data` is the
+// Fires when the screen gains or loses a compositor. `user_data` is the
 // frame channel itself (see the "mydia-window" data below for why that is
 // enough to also reach the window).
+//
+// GTK 3.24.52's own handler for this signal (gtk_window_on_composited_changed
+// in gtkwindow.c) only queues a redraw and propagates "composited-changed"
+// down the widget tree; it does not touch the "solid-csd"/"csd" style
+// classes. Checked against the GTK source (`gtk-3.24.52.tar.xz` in the nix
+// store) rather than assumed: GTK decides CSD vs solid-csd exactly once, in
+// gtk_window_set_titlebar() (this app calls it before realizing the window),
+// and never revisits it afterwards for a window that is already client
+// decorated, which ours is from that first call. So this push is unlikely to
+// ever carry a changed `solidFrame` in practice. Kept anyway as a cheap,
+// harmless safety net -- Dart dedups identical pushes -- in case a future
+// GTK version, or a code path this reading missed, does revisit it.
 static void composited_changed_cb(GdkScreen* screen, gpointer user_data) {
   FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
   GtkWidget* window =
@@ -233,6 +253,23 @@ static void composited_changed_cb(GdkScreen* screen, gpointer user_data) {
                              ? gdk_window_get_state(gdk_window)
                              : static_cast<GdkWindowState>(0);
   g_autoptr(FlValue) value = window_state_value(state, window);
+  fl_method_channel_invoke_method(channel, "onWindowStateChanged", value,
+                                  nullptr, nullptr, nullptr);
+}
+
+// Fires on any style re-computation of the window's own style context
+// (theme change, provider added, state change...). Same "cheap safety net"
+// reasoning as composited_changed_cb above: nothing found while reading
+// gtkwindow.c re-adds or removes "solid-csd" from here either, but a style
+// pass is the closest thing to an event GTK fires near where such a change,
+// if one ever happens, would show up.
+static void style_updated_cb(GtkWidget* widget, gpointer user_data) {
+  FlMethodChannel* channel = FL_METHOD_CHANNEL(user_data);
+  GdkWindow* gdk_window = gtk_widget_get_window(widget);
+  GdkWindowState state = gdk_window != nullptr
+                             ? gdk_window_get_state(gdk_window)
+                             : static_cast<GdkWindowState>(0);
+  g_autoptr(FlValue) value = window_state_value(state, widget);
   fl_method_channel_invoke_method(channel, "onWindowStateChanged", value,
                                   nullptr, nullptr, nullptr);
 }
@@ -326,10 +363,15 @@ static void my_application_activate(GApplication* application) {
                           G_CALLBACK(window_state_event_cb),
                           self->window_frame_channel, G_CONNECT_DEFAULT);
   // Compositing can come and go without any GdkWindowState change (e.g. a
-  // compositor crashing), which is exactly when GTK toggles `.solid-csd`.
+  // compositor crashing). See composited_changed_cb's comment for why this
+  // is a safety net rather than a confirmed source of `solidFrame` changes.
   g_signal_connect_object(gtk_widget_get_screen(GTK_WIDGET(window)),
                           "composited-changed",
                           G_CALLBACK(composited_changed_cb),
+                          self->window_frame_channel, G_CONNECT_DEFAULT);
+  // Same safety-net reasoning as composited_changed_cb; see style_updated_cb.
+  g_signal_connect_object(window, "style-updated",
+                          G_CALLBACK(style_updated_cb),
                           self->window_frame_channel, G_CONNECT_DEFAULT);
 
   GtkSettings* settings = gtk_settings_get_default();
