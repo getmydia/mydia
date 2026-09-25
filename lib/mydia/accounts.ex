@@ -23,6 +23,8 @@ defmodule Mydia.Accounts do
     UsernameSource,
     HomeLayout,
     RecoveryCode,
+    Passkey,
+    Passkeys,
     Totp
   }
 
@@ -717,6 +719,63 @@ defmodule Mydia.Accounts do
   end
 
   def verify_second_factor(_user, _code), do: {:error, :invalid_code}
+
+  @doc "The user's passkeys, oldest first."
+  defdelegate list_passkeys(user), to: Passkeys, as: :list
+
+  @doc "True when the user has at least one passkey (on `rp_id`, when given)."
+  defdelegate has_passkeys?(user), to: Passkeys, as: :any?
+  defdelegate has_passkeys?(user, rp_id), to: Passkeys, as: :any?
+
+  @doc """
+  True when a password sign-in must be followed by a second factor: TOTP is on,
+  or the user has any passkey.
+  """
+  @spec second_factor_enabled?(User.t()) :: boolean()
+  def second_factor_enabled?(%User{} = user), do: totp_enabled?(user) or has_passkeys?(user)
+
+  @doc """
+  Starts adding a passkey. The current password is required so a hijacked
+  session cannot plant a permanent credential. Returns the challenge to keep
+  server side and the JSON options for `navigator.credentials.create`.
+  """
+  @spec begin_passkey_registration(User.t(), String.t(), String.t(), String.t()) ::
+          {:ok, {Wax.Challenge.t(), map()}} | {:error, :invalid_password}
+  def begin_passkey_registration(%User{} = user, current_password, rp_id, origin) do
+    if verify_password(user, current_password),
+      do: {:ok, Passkeys.registration_challenge(user, rp_id, origin)},
+      else: {:error, :invalid_password}
+  end
+
+  @doc "Verifies a registration response against `challenge` and stores the passkey."
+  defdelegate register_passkey(user, challenge, payload, name), to: Passkeys, as: :register
+
+  @doc "Renames one of the user's passkeys."
+  defdelegate rename_passkey(user, passkey_id, name), to: Passkeys, as: :rename
+
+  @doc "Removes one of the user's passkeys after checking their current password."
+  @spec delete_passkey(User.t(), String.t(), String.t()) ::
+          {:ok, Passkey.t()} | {:error, :invalid_password | :not_found}
+  def delete_passkey(%User{} = user, passkey_id, current_password) do
+    if verify_password(user, current_password),
+      do: Passkeys.delete(user, passkey_id),
+      else: {:error, :invalid_password}
+  end
+
+  @doc """
+  Removes every second factor without proof: TOTP, recovery codes and all
+  passkeys. For admins helping a locked-out user and for
+  `mix mydia.user reset-2fa`. `admin_reset_totp/1` stays TOTP-only because
+  `disable_totp/3` uses it.
+  """
+  @spec admin_reset_second_factors(User.t()) :: {:ok, User.t()}
+  def admin_reset_second_factors(%User{} = user) do
+    Repo.transaction(fn ->
+      :ok = Passkeys.delete_all(user)
+      {:ok, user} = admin_reset_totp(user)
+      user
+    end)
+  end
 
   defp verify_totp_code(%User{totp_secret_encrypted: ciphertext} = user, code)
        when is_binary(ciphertext) do
