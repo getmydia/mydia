@@ -266,9 +266,12 @@ static void my_application_activate(GApplication* application) {
   self->window_frame_channel = fl_method_channel_new(
       fl_engine_get_binary_messenger(fl_view_get_engine(view)),
       kWindowFrameChannel, FL_METHOD_CODEC(codec));
+  // The channel (owned by self) can outlive the activate() call's local
+  // `window`, so the handler takes its own reference and releases it when
+  // the channel replaces or drops the handler.
   fl_method_channel_set_method_call_handler(
-      self->window_frame_channel, window_frame_method_call_cb, window,
-      nullptr);
+      self->window_frame_channel, window_frame_method_call_cb,
+      g_object_ref(window), g_object_unref);
   // Tied to the channel's lifetime for the same reason as the
   // decoration-layout signal below.
   g_signal_connect_object(window, "window-state-event",
