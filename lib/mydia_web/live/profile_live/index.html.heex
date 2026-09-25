@@ -316,6 +316,13 @@
                 id="two-factor"
                 user_id={@current_user.id}
               />
+              <.live_component
+                :if={@current_user.password_hash && @local_auth_enabled}
+                module={MydiaWeb.ProfileLive.PasskeysComponent}
+                id="passkeys-card"
+                user_id={@current_user.id}
+                page_url={@page_url}
+              />
             <% end %>
           </div>
         </div>
