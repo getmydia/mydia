@@ -141,6 +141,8 @@ defmodule MydiaWeb.Router do
     # the dynamic "/:provider" routes below.
     post "/passkey/options", PasskeyController, :options
     post "/passkey/login", PasskeyController, :login
+    post "/login/totp/passkey-options", SessionController, :totp_passkey_options
+    post "/login/totp/passkey", SessionController, :totp_passkey
 
     # Auto-login (for first-time setup)
     get "/auto-login", AuthController, :auto_login

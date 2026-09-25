@@ -2,47 +2,81 @@
   <div class="card w-full max-w-md bg-base-100 shadow-xl">
     <div class="card-body">
       <h2 class="card-title text-2xl font-bold">
-        <.icon name="hero-shield-check" class="size-6" /> Two-factor authentication
+        <.icon name="hero-shield-check" class="size-6" /> Verify it's you
       </h2>
-      <p class="text-sm text-base-content/70 mb-4">
-        Enter the 6-digit code from your authenticator app, or one of your recovery codes.
-      </p>
 
       <div :if={@error} class="alert alert-error mb-4" id="totp-error">
         <.icon name="hero-exclamation-circle" class="size-5 shrink-0" />
         <span>{@error}</span>
       </div>
 
-      <.form for={%{}} as={:totp} action={~p"/auth/login/totp"} id="totp-form">
-        <div class="form-control">
-          <label class="label" for="totp-code">
-            <span class="label-text">Authentication code</span>
-          </label>
-          <input
-            type="text"
-            name="totp[code]"
-            id="totp-code"
-            class="input input-bordered w-full font-mono tracking-widest text-center text-lg"
-            autocomplete="one-time-code"
-            autocapitalize="off"
-            spellcheck="false"
-            maxlength="24"
-            required
-            autofocus
-          />
-        </div>
+      <div
+        :if={@passkey_available}
+        id="passkey-second-factor-section"
+        class="mb-2"
+        data-options-url={~p"/auth/login/totp/passkey-options"}
+        data-verify-url={~p"/auth/login/totp/passkey"}
+      >
+        <p class="text-sm text-base-content/70 mb-4">Use one of your passkeys.</p>
+        <button type="button" id="passkey-second-factor" class="btn btn-primary w-full">
+          <.icon name="hero-finger-print" class="size-5" /> Use a passkey
+        </button>
+        <p id="passkey-second-factor-error" class="hidden text-error text-sm mt-2" role="alert">
+        </p>
+      </div>
 
-        <div class="form-control mt-6">
-          <button type="submit" class="btn btn-primary w-full" id="totp-submit">
-            Verify
-          </button>
-        </div>
-      </.form>
+      <div :if={@passkey_available and @totp_enabled} class="divider text-xs text-base-content/60">
+        or
+      </div>
 
-      <p class="text-xs text-base-content/60 mt-4">
-        Lost your authenticator? Use a recovery code or ask an admin to reset
-        two-factor authentication.
-      </p>
+      <%= if @totp_enabled do %>
+        <p class="text-sm text-base-content/70 mb-4">
+          Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+        </p>
+
+        <.form for={%{}} as={:totp} action={~p"/auth/login/totp"} id="totp-form">
+          <div class="form-control">
+            <label class="label" for="totp-code">
+              <span class="label-text">Authentication code</span>
+            </label>
+            <input
+              type="text"
+              name="totp[code]"
+              id="totp-code"
+              class="input input-bordered w-full font-mono tracking-widest text-center text-lg"
+              autocomplete="one-time-code"
+              autocapitalize="off"
+              spellcheck="false"
+              maxlength="24"
+              required
+              autofocus
+            />
+          </div>
+
+          <div class="form-control mt-6">
+            <button type="submit" class="btn btn-primary w-full" id="totp-submit">
+              Verify
+            </button>
+          </div>
+        </.form>
+
+        <p class="text-xs text-base-content/60 mt-4">
+          Lost your authenticator? Use a recovery code or ask an admin to reset
+          two-factor authentication.
+        </p>
+      <% end %>
+
+      <div
+        :if={not @passkey_available and not @totp_enabled}
+        class="alert alert-warning"
+        id="second-factor-unavailable"
+      >
+        <.icon name="hero-exclamation-triangle" class="size-5 shrink-0" />
+        <span>
+          Your passkey can't be used at this address. Sign in from the address where you
+          added it, or ask an admin to reset two-factor authentication.
+        </span>
+      </div>
 
       <div class="text-center mt-2">
         <.link href={~p"/auth/login"} class="link link-hover text-sm" id="totp-back">
