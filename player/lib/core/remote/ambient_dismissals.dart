@@ -33,8 +33,12 @@ class AmbientDismissals extends Notifier<Set<AmbientDismissal>> {
   @override
   Set<AmbientDismissal> build() => const {};
 
-  void dismiss(AmbientTarget target) =>
-      state = {...state, AmbientDismissal.of(target)};
+  void dismiss(AmbientTarget target) => dismissKey(AmbientDismissal.of(target));
+
+  /// For callers holding a cast session rather than an [AmbientTarget].
+  /// [key]'s node id must already be lower-cased, as [AmbientDismissal.of]
+  /// does.
+  void dismissKey(AmbientDismissal key) => state = {...state, key};
 }
 
 final ambientDismissalsProvider =
