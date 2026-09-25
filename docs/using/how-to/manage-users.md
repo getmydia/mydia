@@ -87,6 +87,37 @@ codes keep working, and the user can set two-factor authentication up again.
 
 SSO users do not see this option. Their identity provider handles second factors.
 
+### Passkeys
+
+A passkey lets you sign in with your fingerprint, face, or device PIN
+instead of typing a password. Add one from **Profile → Security →
+Passkeys**. Mydia asks for your current password first.
+
+Once you have a passkey you can:
+
+- **Sign in without a password.** Click **Sign in with a passkey** on the
+  login page, or pick the passkey your browser offers in the username field.
+- **Use it as your second factor.** Signing in with your password now also
+  asks for your passkey (or your authenticator app code, if you set one up).
+
+Things to know:
+
+- **Passkeys need HTTPS.** Browsers only allow them on a secure address
+  (`https://`, or `http://localhost`), and never on a bare IP address such
+  as `https://192.168.1.10`. If you reach Mydia over plain HTTP on your
+  network, put it behind a reverse proxy with a certificate first (see
+  [Reverse proxy](reverse-proxy.md)).
+- **A passkey works at one address.** A passkey added at
+  `mydia.example.com` is not offered at `mydia.home.lan`. Add one at each
+  address you use.
+- **The player app still uses your password.** If your only second factor is
+  a passkey, the player cannot sign in: set up an authenticator app (TOTP)
+  as well.
+- **Lost your passkey?** An admin can reset two-factor authentication from
+  **Admin → Users**, or run `mydia-cli user reset-2fa <username>`. This
+  removes the authenticator app and every passkey for that account.
+
+
 Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See [SSO/OIDC Configuration](sso-oidc.md) for supported providers, setup, and role assignment.
 
 ## Request System
