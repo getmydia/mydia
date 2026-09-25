@@ -766,7 +766,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
-  Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
+  final Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
   /// Local copies of bitmap subtitle sidecars fetched during this screen's
   /// life, deleted in [dispose]. mpv loads them from disk; see
@@ -5437,8 +5437,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       case LogicalKeyboardKey.select:
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.gameButtonA:
-        if (!InputCapabilities.directionalPrimary)
+        if (!InputCapabilities.directionalPrimary) {
           return KeyEventResult.ignored;
+        }
         if (_chromeFocusNode.hasFocus) return KeyEventResult.ignored;
         _chromeVisibility.show();
         _osdPlayPauseFocus.requestFocus();
