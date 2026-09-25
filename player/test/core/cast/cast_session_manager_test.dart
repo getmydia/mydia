@@ -780,6 +780,69 @@ void main() {
       expect(await store.load(), isNull);
       expect(lanCalls, [true, false]);
     });
+
+    test('stops the receiver before disconnecting', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+
+      await manager.stopCast();
+
+      expect(backend.stopCallCount, 1);
+      expect(backend.disconnectCallCount, greaterThanOrEqualTo(1));
+    });
+  });
+
+  group('detach', () {
+    test('leaves the receiver playing but ends this session', () async {
+      final manager = build(isP2pMode: true);
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      final disconnectsBefore = backend.disconnectCallCount;
+
+      await manager.detach();
+
+      expect(backend.stopCallCount, 0,
+          reason: 'detach must never tell the receiver to stop');
+      expect(backend.disconnectCallCount, disconnectsBefore + 1);
+      expect(backend.connectedDevice, isNull);
+      expect(manager.currentSession, isNull);
+      expect(await store.load(), isNull,
+          reason: 'a relaunch must not re-adopt a session the user let go of');
+      expect(lanCalls, [true, false]);
+    });
+
+    test('ends the server-side HLS session it started', () async {
+      final manager = build(isP2pMode: true);
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      expect(sessions.live, hasLength(1));
+
+      await manager.detach();
+
+      expect(sessions.live, isEmpty);
+    });
+
+    test('cancels a connect still in flight', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      backend.holdNextConnect();
+
+      final connecting = manager.connectTo(device);
+      await Future<void>.delayed(Duration.zero);
+
+      await manager.detach();
+      expect(manager.currentSession, isNull);
+
+      backend.releaseConnect();
+      await connecting;
+
+      expect(manager.currentSession, isNull,
+          reason: 'a connect resolving after the detach must not resurrect '
+              'the session');
+      expect(backend.connectedDevice, isNull);
+      expect(backend.stopCallCount, 0);
+    });
   });
 
   group('restoreSession', () {

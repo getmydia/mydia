@@ -70,6 +70,10 @@ class FakeCastBackend implements CastBackend {
   /// than merely being ignored.
   int disconnectCallCount = 0;
 
+  /// How many times [stop] has been called, so a test can prove a detach
+  /// left the receiver playing.
+  int stopCallCount = 0;
+
   /// Makes the *next* [connect] call suspend until [releaseConnect] is
   /// called, instead of resolving immediately. Only that one call waits —
   /// any later `connect` (e.g. a second, winning `connectTo`) proceeds
@@ -181,7 +185,10 @@ class FakeCastBackend implements CastBackend {
   Future<void> pause() async => _states.add(CastPlaybackState.paused);
 
   @override
-  Future<void> stop() async => _states.add(CastPlaybackState.idle);
+  Future<void> stop() async {
+    stopCallCount++;
+    _states.add(CastPlaybackState.idle);
+  }
 
   @override
   Future<void> seek(Duration position) async => seeks.add(position);

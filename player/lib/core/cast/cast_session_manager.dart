@@ -1751,6 +1751,27 @@ class CastSessionManager {
       debugPrint('[CastSessionManager] Ignoring stop error: $e');
     }
 
+    await _endSession();
+  }
+
+  /// Lets go of the receiver without stopping it.
+  ///
+  /// Everything [stopCast] does except telling the receiver to stop, so
+  /// whoever is watching there carries on. The stored session is still
+  /// cleared: a relaunch must not re-adopt a receiver the user chose to
+  /// leave alone.
+  Future<void> detach() async {
+    // Same ordering requirement as `stopCast`.
+    _connectGeneration++;
+
+    _cancelSubscriptions();
+
+    await _endSession();
+  }
+
+  /// Teardown shared by [stopCast] and [detach], after the receiver has
+  /// (or deliberately has not) been told to stop.
+  Future<void> _endSession() async {
     await _backend.disconnect();
     await _store.clear();
 
