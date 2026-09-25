@@ -17,6 +17,7 @@ import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/player/progress_service.dart';
+import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
@@ -1007,6 +1008,81 @@ void main() {
           reason: 'pullToLocal itself already refuses to touch anything '
               'when nothing has been polled; this pins the button honors '
               'that null rather than plowing ahead into navigation');
+    });
+  });
+
+  group('cast bar disconnect button', () {
+    const lanternDevice = CastDevice(
+      id: 'node-tv',
+      name: 'Living Room',
+      protocol: CastProtocolKind.mydia,
+      metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'The Lantern Keepers'},
+    );
+
+    testWidgets('shown for a Mydia session, not a chromecast one',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
+
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(_session(
+          duration: const Duration(minutes: 44),
+        )),
+      );
+
+      expect(find.byKey(const Key('cast-bar-detach')), findsNothing);
+    });
+
+    testWidgets(
+        'leaves the target playing, clears the target and hides the banner '
+        'for that item', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      await harness.manager.connectTo(lanternDevice);
+
+      // `sessionStream` is a plain broadcast stream with no replay, so seed
+      // the adopted session first, then follow the manager's own updates
+      // (including the null that `detach()` publishes).
+      final sessionController = StreamController<CastSession?>();
+      addTearDown(sessionController.close);
+      sessionController.add(harness.manager.currentSession);
+      final forward =
+          harness.manager.sessionStream.listen(sessionController.add);
+      addTearDown(forward.cancel);
+
+      final container = await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: sessionController.stream,
+        extraOverrides: [
+          ambientPlayingProvider.overrideWith((ref) =>
+              Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),
+        ],
+      );
+      container.read(castTargetProvider.notifier).set(lanternDevice);
+      await tester.pump();
+
+      expect(find.byKey(const Key('cast-bar-detach')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-detach')));
+      await tester.pumpAndSettle();
+
+      expect(mydiaBackend.stopCallCount, 0,
+          reason: 'Disconnect must never stop playback on the other device');
+      expect(mydiaBackend.disconnectCallCount, 1);
+      expect(harness.manager.currentSession, isNull);
+      expect(container.read(castTargetProvider), isNull,
+          reason: 'the next play must stay on this device');
+      expect(container.read(ambientDismissalsProvider),
+          contains(const AmbientDismissal('node-tv', 'The Lantern Keepers')));
+      expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing,
+          reason: 'the Playing on banner for the same item must not pop '
+              'straight back after disconnecting');
+      expect(tester.takeException(), isNull);
     });
   });
 
