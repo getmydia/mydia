@@ -5,9 +5,9 @@ import '../../../core/window/decoration_layout.dart';
 
 /// A single window-manager button, drawn by Flutter.
 ///
-/// Once the GTK window is undecorated these are the only close, minimize and
-/// maximize affordances the window has, so the hit target is deliberately
-/// larger than the glyph.
+/// GTK draws no titlebar (`MydiaNoTitlebar` in `my_application.cc`), so
+/// these are the only close, minimize and maximize affordances the window
+/// has, and the hit target is deliberately larger than the glyph.
 class WindowButtonWidget extends StatefulWidget {
   const WindowButtonWidget({
     super.key,

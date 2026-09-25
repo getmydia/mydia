@@ -162,9 +162,9 @@ class _WindowChromeState extends State<_WindowChrome> {
         children: [
           Positioned.fill(child: widget.child),
 
-          // On top of everything else: the button
-          // corners are the only part of this widget still drawn over the app,
-          // and only where a corner actually has buttons in it.
+          // On top of everything else: the button corners are the only part
+          // of this widget still drawn over the app, and only where a
+          // corner actually has buttons in it.
           ValueListenableBuilder<DecorationLayout>(
             valueListenable: widget.layout,
             builder: (context, layout, _) => Stack(children: _corners(layout)),
