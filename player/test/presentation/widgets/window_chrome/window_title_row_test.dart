@@ -363,6 +363,26 @@ void main() {
       }
     });
 
+    testWidgets('on Linux back and cast sit well inside the band',
+        (tester) async {
+      final band = WindowChromeInsets(
+        height: kLinuxWindowChromeHeight,
+        leading: 0,
+        trailing: linuxButtonGroupReserve(3),
+      );
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await pumpWithBack(tester, band);
+        expectClearOfEdges(tester, const Key('lead'),
+            band: band.height, margin: 6);
+        expectClearOfEdges(tester, WindowTitleRow.castKey,
+            band: band.height, margin: 6);
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    });
+
     testWidgets('without a band the buttons keep their full size',
         (tester) async {
       final previousPlatform = debugDefaultTargetPlatformOverride;
