@@ -1110,6 +1110,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#two-factor-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two-Factor Authentication
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3087,6 +3098,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#two-factor-authentication" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two-Factor Authentication
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3225,6 +3247,31 @@ user can neither add media nor request it.</p>
 </ol>
 <p>You can change an existing user's role later from the same page, using the edit
 icon on their row.</p>
+<h3 id="two-factor-authentication">Two-Factor Authentication</h3>
+<p>Local users can require a code from an authenticator app (Aegis, 2FAS,
+1Password and similar) every time they sign in with their password.</p>
+<ol>
+<li>Open <strong>Profile</strong> and choose <strong>Set up two-factor authentication</strong></li>
+<li>Scan the QR code, or type the key shown under it into the app</li>
+<li>Enter the 6-digit code the app shows to turn it on</li>
+<li>Save the 10 recovery codes. Each one signs you in once if you lose your
+   authenticator, and they are not shown again. <strong>New recovery codes</strong> on the
+   same card replaces the whole set.</li>
+</ol>
+<p>Once it is on, both the web sign-in and the Mydia Player's direct-server
+sign-in ask for a code after the password. Pairing a device with a claim code
+or QR code does not, because it starts from a session that is already signed in.</p>
+<p>Update the Mydia Player before turning this on: older player versions cannot
+complete the code step and show a generic sign-in error.</p>
+<p>If someone loses both their authenticator and their recovery codes, an admin can
+turn two-factor authentication off for them from <strong>Admin &gt; System &gt; Users</strong> (the
+shield icon on their row). With no other admin available, use the command line:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>mydia-cli<span class="w"> </span>user<span class="w"> </span>reset-2fa<span class="w"> </span>&lt;username&gt;
+</code></pre></div>
+<p>The authenticator secret is encrypted with a key derived from <code>SECRET_KEY_BASE</code>.
+Changing <code>SECRET_KEY_BASE</code> stops authenticator codes from working; recovery
+codes keep working, and the user can set two-factor authentication up again.</p>
+<p>SSO users do not see this option. Their identity provider handles second factors.</p>
 <p>Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See <a href="../sso-oidc/">SSO/OIDC Configuration</a> for supported providers, setup, and role assignment.</p>
 <h2 id="request-system">Request System</h2>
 <p>Guest users can request media:</p>
@@ -3268,8 +3315,8 @@ approved or rejected. Both sides find out by looking. Admins should check
 <p>Disabling authentication is not recommended for production deployments.</p>
 </div>
 <p>For local/testing environments, you can disable local auth when using OIDC:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">LOCAL_AUTH_ENABLED</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">OIDC_ENABLED</span><span class="o">=</span><span class="nb">true</span>
 </code></pre></div>
 <h2 id="next-steps">Next Steps</h2>
 <ul>
