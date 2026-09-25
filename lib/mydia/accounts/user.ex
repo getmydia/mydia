@@ -55,6 +55,7 @@ defmodule Mydia.Accounts.User do
     has_one :preference, Mydia.Accounts.UserPreference
     has_many :api_keys, Mydia.Accounts.ApiKey
     has_many :recovery_codes, Mydia.Accounts.RecoveryCode
+    has_many :passkeys, Mydia.Accounts.Passkey
     has_many :media_requests, Mydia.Media.MediaRequest, foreign_key: :requester_id
     has_many :approved_requests, Mydia.Media.MediaRequest, foreign_key: :approved_by_id
 
