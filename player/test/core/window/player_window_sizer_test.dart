@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/window/player_window_session.dart';
 import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/core/window/player_window_sizer_native.dart';
 import 'package:player/core/window/window_geometry_controller.dart';
@@ -10,6 +11,7 @@ import 'package:player/core/window/window_geometry_math.dart';
 import 'package:player/core/window/window_geometry_store.dart';
 
 import 'fake_window_controller.dart';
+import 'manual_frames.dart';
 
 void main() {
   const primary = WorkArea(
@@ -23,29 +25,36 @@ void main() {
     NativePlayerWindowSizer sizer,
     FakeWindowController window,
     WindowGeometryController geometry,
-    InMemoryWindowGeometryStore store,
+    PlayerWindowSession session,
+    ManualFrames frames,
   }) build({
     Rect bounds = const Rect.fromLTWH(100, 100, 1200, 900),
     void Function()? onDetached,
   }) {
     final window = FakeWindowController(bounds: bounds);
-    final store = InMemoryWindowGeometryStore();
     final geometry = WindowGeometryController(
       window: window,
-      store: store,
+      store: InMemoryWindowGeometryStore(),
       readWorkAreas: oneDisplay,
       debounce: const Duration(milliseconds: 10),
+    );
+    final frames = ManualFrames();
+    final session = PlayerWindowSession(
+      window: window,
+      geometry: geometry,
+      afterFrame: frames.schedule,
     );
     return (
       sizer: NativePlayerWindowSizer(
         window: window,
-        geometry: geometry,
+        session: session,
         readWorkAreas: oneDisplay,
         onDetached: onDetached,
       ),
       window: window,
       geometry: geometry,
-      store: store,
+      session: session,
+      frames: frames,
     );
   }
 
@@ -71,85 +80,28 @@ void main() {
   });
 
   group('attach and detach', () {
-    test('attaching stops geometry from being persisted', () async {
+    test('attaching joins the session', () async {
       final t = build();
       addTearDown(t.geometry.dispose);
 
       await t.sizer.attach();
-      t.geometry.onWindowResize();
-      await settle();
 
-      expect(t.store.get(), isNull);
+      expect(t.session.isLive, isTrue);
+      expect(t.geometry.isPaused, isTrue);
     });
 
-    test('detaching restores the bounds captured on attach', () async {
+    test('detaching leaves the session, which restores after the frame',
+        () async {
       final t = build(bounds: const Rect.fromLTWH(100, 100, 1200, 900));
       addTearDown(t.geometry.dispose);
 
       await t.sizer.attach();
-      // Stand in for whatever the aspect snap did.
       await t.window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
       await t.sizer.detach();
+      await t.frames.end();
 
       expect(t.window.bounds, const Rect.fromLTWH(100, 100, 1200, 900));
-    });
-
-    test('detaching resumes persistence', () async {
-      final t = build();
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      await t.sizer.detach();
-
-      t.window.bounds = const Rect.fromLTWH(50, 50, 1000, 700);
-      t.geometry.onWindowResize();
-      await settle();
-
-      expect(t.store.get()!.bounds, const Rect.fromLTWH(50, 50, 1000, 700));
-    });
-
-    test('detaching while maximized leaves the window alone', () async {
-      // The user maximized during playback. Restoring an old rect would fight
-      // an explicit choice.
-      final t = build();
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      t.window.maximized = true;
-      t.window.setBoundsCalls.clear();
-
-      await t.sizer.detach();
-
-      expect(t.window.setBoundsCalls, isEmpty);
-    });
-
-    test('detaching while maximized still resumes persistence', () async {
-      final t = build();
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      t.window.maximized = true;
-      await t.sizer.detach();
-
-      t.window.maximized = false;
-      t.window.bounds = const Rect.fromLTWH(60, 60, 1000, 700);
-      t.geometry.onWindowResize();
-      await settle();
-
-      expect(t.store.get()!.bounds, const Rect.fromLTWH(60, 60, 1000, 700));
-    });
-
-    test('detaching while fullscreen leaves the window alone', () async {
-      final t = build();
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      t.window.fullScreen = true;
-      t.window.setBoundsCalls.clear();
-
-      await t.sizer.detach();
-
-      expect(t.window.setBoundsCalls, isEmpty);
+      expect(t.session.isLive, isFalse);
     });
 
     test('detaching without attaching does not throw', () async {
@@ -159,97 +111,52 @@ void main() {
       await expectLater(t.sizer.detach(), completes);
     });
 
-    test('attach pauses before it snapshots', () async {
-      // Every other test awaits attach() to completion before probing
-      // anything, so both orderings ("pause then snapshot" vs "snapshot then
-      // pause") look identical afterwards. This test observes the paused
-      // state at the exact moment the snapshot read happens, which is the
-      // only place the ordering is externally visible: a resize event the
-      // user already queued must not land after the snapshot is taken.
-      final window = _PauseObservingWindowController(
-        bounds: const Rect.fromLTWH(100, 100, 1200, 900),
-      );
-      final geometry = WindowGeometryController(
-        window: window,
-        store: InMemoryWindowGeometryStore(),
-        readWorkAreas: oneDisplay,
-        debounce: const Duration(milliseconds: 10),
-      );
-      window.geometry = geometry;
-      addTearDown(geometry.dispose);
-
-      final sizer = NativePlayerWindowSizer(
-        window: window,
-        geometry: geometry,
-        readWorkAreas: oneDisplay,
-      );
-
-      await sizer.attach();
-
-      expect(
-        window.pausedAtSnapshot,
-        isTrue,
-        reason: 'attach() must pause before reading the window bounds, or a '
-            'resize event already queued by the user could land after the '
-            'snapshot is taken',
-      );
-    });
-
-    test('detach resumes persistence even when restoring the snapshot throws',
-        () async {
-      final t = build();
+    test('onDetached fires exactly once', () async {
+      var callCount = 0;
+      final t = build(onDetached: () => callCount++);
       addTearDown(t.geometry.dispose);
 
       await t.sizer.attach();
-      t.window.setBoundsError = StateError('platform channel gone');
+      await t.sizer.detach();
+      // A stray second detach(), e.g. a double dispose(), must not
+      // double-remove the sizer from windowManager's listener list.
+      await t.sizer.detach();
 
-      await expectLater(t.sizer.detach(), completes);
+      expect(callCount, 1);
+    });
 
-      t.window.setBoundsError = null;
-      t.window.bounds = const Rect.fromLTWH(70, 70, 1000, 700);
-      t.geometry.onWindowResize();
+    test('the next episode inherits the window, then refits its aspect',
+        () async {
+      // Two sizers on one session, in the order go_router produces.
+      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
+      addTearDown(t.geometry.dispose);
+      final first = StreamController<VideoParams>();
+      final second = StreamController<VideoParams>();
+      addTearDown(first.close);
+      addTearDown(second.close);
+
+      await t.sizer.attach();
+      t.sizer.bindVideoParams(first.stream);
+      first.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await settle();
+      // The user makes it bigger.
+      t.window.bounds = const Rect.fromLTWH(0, 0, 1600, 900);
+
+      final next = NativePlayerWindowSizer(
+        window: t.window,
+        session: t.session,
+        readWorkAreas: oneDisplay,
+      );
+      await next.attach();
+      await t.sizer.detach();
+      await t.frames.end();
+      next.bindVideoParams(second.stream);
+      second.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
       await settle();
 
-      expect(
-        t.store.get()!.bounds,
-        const Rect.fromLTWH(70, 70, 1000, 700),
-        reason: 'resume() must run even though setBounds threw, or '
-            'persistence silently stops for the rest of the session',
-      );
-    });
-
-    test('onDetached fires exactly once on detach', () async {
-      var callCount = 0;
-      final t = build(onDetached: () => callCount++);
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      await t.sizer.detach();
-
-      expect(callCount, 1);
-
-      // A stray second detach() — e.g. a double dispose() — must not fire it
-      // again, or the facade would double-remove the sizer from
-      // windowManager's listener list.
-      await t.sizer.detach();
-
-      expect(callCount, 1);
-    });
-
-    test('onDetached fires even when restoring the snapshot throws', () async {
-      // A leak that only happens on the error path is still a leak: the
-      // facade's removeListener call must run regardless of whether
-      // setBounds succeeded.
-      var callCount = 0;
-      final t = build(onDetached: () => callCount++);
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      t.window.setBoundsError = StateError('platform channel gone');
-
-      await t.sizer.detach();
-
-      expect(callCount, 1);
+      // Width kept at 1600; 1600 / 2.4 = 666.67.
+      expect(t.window.bounds.width, 1600);
+      expect(t.window.bounds.height, closeTo(666.67, 0.5));
     });
   });
 
@@ -424,7 +331,7 @@ void main() {
   });
 
   group('manual resize', () {
-    test('a user resize stops all later snapping', () async {
+    test('a user resize does not stop the next aspect from fitting', () async {
       final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
       addTearDown(t.geometry.dispose);
       final params = StreamController<VideoParams>();
@@ -435,273 +342,13 @@ void main() {
       params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
       await settle();
 
-      // The user drags an edge.
-      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
+      t.window.bounds = const Rect.fromLTWH(0, 0, 1400, 788);
       t.sizer.onWindowResize();
-      t.window.setBoundsCalls.clear();
-
       params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
       await settle();
 
-      expect(t.window.setBoundsCalls, isEmpty);
-    });
-
-    test('the sizer does not mistake its own resize for the user', () async {
-      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
-      addTearDown(t.geometry.dispose);
-      final params = StreamController<VideoParams>();
-      addTearDown(params.close);
-
-      await t.sizer.attach();
-      t.sizer.bindVideoParams(params.stream);
-      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-      await settle();
-
-      // The platform echoes our own resize back at us.
-      t.sizer.onWindowResize();
-      t.window.setBoundsCalls.clear();
-
-      params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
-      await settle();
-
-      expect(t.window.setBoundsCalls, hasLength(1));
-    });
-
-    test('a sub-pixel rounding difference is not a user resize', () async {
-      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
-      addTearDown(t.geometry.dispose);
-      final params = StreamController<VideoParams>();
-      addTearDown(params.close);
-
-      await t.sizer.attach();
-      t.sizer.bindVideoParams(params.stream);
-      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-      await settle();
-
-      // The platform applied 675.4 where we asked for 675.
-      t.window.bounds = Rect.fromLTWH(
-        t.window.bounds.left,
-        t.window.bounds.top,
-        t.window.bounds.width,
-        t.window.bounds.height + 0.4,
-      );
-      t.sizer.onWindowResize();
-      t.window.setBoundsCalls.clear();
-
-      params.add(const VideoParams(w: 1920, h: 800, dw: 1920, dh: 800));
-      await settle();
-
-      expect(t.window.setBoundsCalls, hasLength(1));
-    });
-
-    test('a user resize before any snap also stops snapping', () async {
-      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
-      addTearDown(t.geometry.dispose);
-      final params = StreamController<VideoParams>();
-      addTearDown(params.close);
-
-      await t.sizer.attach();
-      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
-      t.sizer.onWindowResize();
-
-      t.sizer.bindVideoParams(params.stream);
-      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-      await settle();
-
-      expect(t.window.setBoundsCalls, isEmpty);
-    });
-
-    test('a fresh attach forgets the previous manual resize', () async {
-      // The flag is per player session, so opening the player again starts
-      // from a clean slate.
-      final t = build(bounds: const Rect.fromLTWH(0, 0, 1200, 900));
-      addTearDown(t.geometry.dispose);
-      final params = StreamController<VideoParams>();
-      addTearDown(params.close);
-
-      await t.sizer.attach();
-      t.window.bounds = const Rect.fromLTWH(0, 0, 800, 600);
-      t.sizer.onWindowResize();
-      await t.sizer.detach();
-
-      await t.sizer.attach();
-      t.window.setBoundsCalls.clear();
-      t.sizer.bindVideoParams(params.stream);
-      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-      await settle();
-
-      expect(t.window.setBoundsCalls, hasLength(1));
-    });
-
-    test('a user resize that lands mid-snap still stops the snap', () async {
-      // `_onVideoParams` checks `_userResized` once at the top, then awaits
-      // isMaximized(), isFullScreen(), getBounds(), and readWorkAreas()
-      // before calling setBounds(). If the user grabs an edge during one of
-      // those round trips, `_checkForUserResize` latches `_userResized` --
-      // but only a re-check right before the write stops the in-flight snap
-      // from stomping it anyway.
-      final window = _SlowFullScreenCheckController(
-        bounds: const Rect.fromLTWH(0, 0, 1200, 900),
-        delay: const Duration(milliseconds: 30),
-      );
-      final geometry = WindowGeometryController(
-        window: window,
-        store: InMemoryWindowGeometryStore(),
-        readWorkAreas: oneDisplay,
-        debounce: const Duration(milliseconds: 10),
-      );
-      addTearDown(geometry.dispose);
-      final sizer = NativePlayerWindowSizer(
-        window: window,
-        geometry: geometry,
-        readWorkAreas: oneDisplay,
-      );
-      final params = StreamController<VideoParams>();
-      addTearDown(params.close);
-
-      await sizer.attach();
-      sizer.bindVideoParams(params.stream);
-      // No snap has happened yet, so this suspends on the slow
-      // isFullScreen() check with `_expectedBounds` still null.
-      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
-
-      // While that check is in flight, the user grabs an edge. With
-      // `_expectedBounds` still null, `_checkForUserResize` latches
-      // `_userResized` as soon as its own (fast) getBounds() resolves --
-      // well before the 30ms delay above elapses.
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      sizer.onWindowResize();
-
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-
-      expect(window.setBoundsCalls, isEmpty);
+      expect(t.window.bounds.width, 1400);
+      expect(t.window.bounds.height, closeTo(583.33, 0.5));
     });
   });
-
-  group('fullscreen exit race', () {
-    test(
-        'a leave-fullscreen event after detach restores the snapshot and '
-        'resumes geometry', () async {
-      // Regression for the fullscreen-exit race: `isFullScreen()` still
-      // reports true when `detach()` first checks it, because
-      // `defaultExitNativeFullscreen()`'s animated exit has not finished.
-      // `detach()` must wait for the real exit before deciding anything.
-      final t = build(bounds: const Rect.fromLTWH(100, 100, 1200, 900));
-      addTearDown(t.geometry.dispose);
-
-      await t.sizer.attach();
-      // Stand in for whatever the aspect snap did.
-      await t.window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
-      t.window.fullScreen = true;
-
-      // detach() must return promptly even though the window is still
-      // reported fullscreen -- it must not block on the exit. It resolves
-      // as soon as it hands off to the fullscreen wait, well before that
-      // wait itself is done, so awaiting it here proves promptness without
-      // proving anything about the restore yet.
-      await t.sizer.detach();
-      expect(
-        t.window.bounds,
-        const Rect.fromLTWH(0, 0, 2000, 838),
-        reason: 'nothing must be restored until the real exit is observed',
-      );
-
-      // The OS finishes the animated exit.
-      t.window.fullScreen = false;
-      t.sizer.onWindowLeaveFullScreen();
-      await settle();
-
-      expect(t.window.bounds, const Rect.fromLTWH(100, 100, 1200, 900));
-
-      // Geometry persistence must be resumed too.
-      t.window.bounds = const Rect.fromLTWH(50, 50, 1000, 700);
-      t.geometry.onWindowResize();
-      await settle();
-      expect(t.store.get()!.bounds, const Rect.fromLTWH(50, 50, 1000, 700));
-    });
-
-    test('the timeout also restores the snapshot and resumes geometry',
-        () async {
-      // If the leave-fullscreen event never arrives (window destroyed
-      // mid-animation, or a platform quirk), the wait must not stall
-      // forever -- a bounded timeout completes detach() anyway.
-      final window = FakeWindowController(
-        bounds: const Rect.fromLTWH(100, 100, 1200, 900),
-      );
-      final store = InMemoryWindowGeometryStore();
-      final geometry = WindowGeometryController(
-        window: window,
-        store: store,
-        readWorkAreas: oneDisplay,
-        debounce: const Duration(milliseconds: 10),
-      );
-      addTearDown(geometry.dispose);
-      final sizer = NativePlayerWindowSizer(
-        window: window,
-        geometry: geometry,
-        readWorkAreas: oneDisplay,
-        fullscreenExitTimeout: const Duration(milliseconds: 20),
-      );
-
-      await sizer.attach();
-      await window.setBounds(const Rect.fromLTWH(0, 0, 2000, 838));
-      window.fullScreen = true;
-
-      await sizer.detach();
-      // No onWindowLeaveFullScreen() call: only the timeout can complete
-      // this. The window also happens to still report fullscreen once the
-      // timeout fires, so nothing should be restored.
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-
-      expect(
-        window.bounds,
-        const Rect.fromLTWH(0, 0, 2000, 838),
-        reason: 'still fullscreen when the timeout fired -- restoring would '
-            'fight that state',
-      );
-
-      window.fullScreen = false;
-      window.bounds = const Rect.fromLTWH(60, 60, 1000, 700);
-      geometry.onWindowResize();
-      await settle();
-
-      expect(
-        store.get()!.bounds,
-        const Rect.fromLTWH(60, 60, 1000, 700),
-        reason: 'the timeout path must resume geometry persistence just '
-            'like the event path does',
-      );
-    });
-  });
-}
-
-/// Records whether the geometry controller was already paused at the moment
-/// attach() read the window bounds. [geometry] is assigned after
-/// construction because it needs this very controller to build.
-class _PauseObservingWindowController extends FakeWindowController {
-  _PauseObservingWindowController({required super.bounds});
-
-  WindowGeometryController? geometry;
-  bool? pausedAtSnapshot;
-
-  @override
-  Future<Rect> getBounds() async {
-    pausedAtSnapshot ??= geometry?.isPaused;
-    return super.getBounds();
-  }
-}
-
-/// Gives `isFullScreen()` real, awaitable latency, standing in for a real
-/// platform channel's millisecond-scale IPC. Used to prove that a user
-/// resize landing while `_onVideoParams` is mid-flight still stops the snap.
-class _SlowFullScreenCheckController extends FakeWindowController {
-  _SlowFullScreenCheckController({required super.bounds, required this.delay});
-
-  final Duration delay;
-
-  @override
-  Future<bool> isFullScreen() async {
-    await Future<void>.delayed(delay);
-    return super.isFullScreen();
-  }
 }

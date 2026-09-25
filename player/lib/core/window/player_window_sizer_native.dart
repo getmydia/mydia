@@ -1,54 +1,39 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'player_window_session.dart';
 import 'player_window_sizer.dart';
 import 'window_controller.dart';
 import 'window_geometry_controller.dart';
 import 'window_geometry_math.dart';
 
-/// How far the applied rect may drift from the requested one before we call it
-/// a user resize. Platforms round and constrain what they actually apply, so
-/// exact equality would report a manual resize on every snap.
-const double _kResizeTolerance = 2;
+/// Two aspects closer than this are the same shape: an HLS rendition switch
+/// re-emits the same shape at a new resolution.
+const double _kAspectTolerance = 0.01;
 
-/// Snaps the window to the video's aspect ratio while the player is mounted.
+/// Snaps the window to the video's aspect ratio while its player is mounted.
+///
+/// One per `PlayerScreen`. The browse snapshot and the geometry pause belong
+/// to the shared [PlayerWindowSession], which is what carries the window
+/// across next-episode navigation.
 ///
 /// Nothing here is allowed to throw: it runs from `PlayerScreen.initState` and
 /// `dispose`, where an exception would surface as a red screen mid-playback.
 class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   final WindowController _window;
-  final WindowGeometryController _geometry;
+  final PlayerWindowSession _session;
   final WorkAreaReader _readWorkAreas;
 
-  /// How long [detach] waits for `onWindowLeaveFullScreen` before giving up
-  /// and completing anyway. Exposed for tests, which inject a short value so
-  /// they don't have to wait out the real default. See [detach].
-  final Duration _fullscreenExitTimeout;
-
-  /// Invoked once at the end of [detach], after the controller is resumed.
-  /// The facade uses this to unregister the sizer from `windowManager`'s
-  /// listener list — the sizer itself must never touch that singleton, and a
-  /// sizer is built per player session, so without this every session would
-  /// leak a listener.
+  /// Invoked once, on the first [detach]. The facade uses this to unregister
+  /// the sizer from `windowManager`'s listener list; a sizer is built per
+  /// player screen, so without it every screen would leak a listener.
   final void Function()? _onDetached;
 
-  /// The window as it was before the player took over. Restored on detach.
-  Rect? _snapshot;
   bool _attached = false;
-
-  /// The token [WindowGeometryController.pause] returned on [attach], passed
-  /// back to [WindowGeometryController.resume] on [detach] so a stale
-  /// resume from a different sizer instance can never un-pause a controller
-  /// this one still owns.
-  Object? _geometryOwner;
-
-  /// Set while [detach] is waiting for the OS to actually finish leaving
-  /// fullscreen. See [detach] and [onWindowLeaveFullScreen].
-  Completer<void>? _fullscreenExitSignal;
+  bool _detachNotified = false;
 
   StreamSubscription<VideoParams>? _paramsSubscription;
 
@@ -56,47 +41,22 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   /// stream does not cause a second identical resize.
   double? _appliedAspect;
 
-  /// The rect most recently asked for, so a resize event that does not match
-  /// it can be attributed to the user.
-  Rect? _expectedBounds;
-
-  /// Set once the user resizes the window by hand. Stops all further snapping
-  /// for this player session, including auto-played next episodes.
-  bool _userResized = false;
-
-  /// Guards [_onDetached] so a stray second [detach] call cannot fire it —
-  /// and by extension cannot double-remove this sizer from a listener list —
-  /// twice.
-  bool _detachNotified = false;
-
   NativePlayerWindowSizer({
     required WindowController window,
-    required WindowGeometryController geometry,
+    required PlayerWindowSession session,
     required WorkAreaReader readWorkAreas,
     void Function()? onDetached,
-    Duration fullscreenExitTimeout = const Duration(seconds: 2),
   })  : _window = window,
-        _geometry = geometry,
+        _session = session,
         _readWorkAreas = readWorkAreas,
-        _onDetached = onDetached,
-        _fullscreenExitTimeout = fullscreenExitTimeout;
+        _onDetached = onDetached;
 
   @override
   Future<void> attach() async {
     if (_attached) return;
     _attached = true;
-    _userResized = false;
-    _expectedBounds = null;
     _appliedAspect = null;
-    // Pause first: a resize event already queued by the user must not land
-    // after we start reshaping the window.
-    _geometryOwner = _geometry.pause();
-
-    try {
-      _snapshot = await _window.getBounds();
-    } catch (e) {
-      debugPrint('[PlayerWindowSizer] Failed to snapshot window bounds: $e');
-    }
+    await _session.join(this);
   }
 
   @override
@@ -109,14 +69,17 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
     );
   }
 
+  /// Fits every new aspect from the window's *current* rect, so a manual
+  /// resize (or the previous episode's window) is the starting point rather
+  /// than something that switches fitting off.
   Future<void> _onVideoParams(VideoParams params) async {
-    if (!_attached || _userResized) return;
+    if (!_attached) return;
 
     final aspect = _aspectOf(params);
     if (aspect == null) return;
 
-    // An HLS rendition switch re-emits the same shape at a new resolution.
-    if (_appliedAspect != null && (_appliedAspect! - aspect).abs() < 0.01) {
+    final applied = _appliedAspect;
+    if (applied != null && (applied - aspect).abs() < _kAspectTolerance) {
       return;
     }
 
@@ -134,63 +97,13 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
         workArea: area.bounds,
       );
 
-      // The checks above are four awaits deep. If the user grabbed an edge
-      // while they were in flight, `_checkForUserResize` (driven by the
-      // resize event that generates) already latched `_userResized` for
-      // it -- but only this re-check, right before the write, stops that
-      // in-flight snap from stomping it anyway.
-      if (_userResized) return;
+      // Several awaits deep: the screen may have gone.
+      if (!_attached) return;
 
       _appliedAspect = aspect;
-      _expectedBounds = target;
       await _window.setBounds(target);
     } catch (e) {
       debugPrint('[PlayerWindowSizer] Failed to fit window to video: $e');
-    }
-  }
-
-  @override
-  void onWindowResize() => _noticeResize();
-
-  // macOS and Windows also emit the "finished" variant; Linux does not. Both
-  // route to the same check, and a duplicate is harmless.
-  @override
-  void onWindowResized() => _noticeResize();
-
-  void _noticeResize() {
-    if (!_attached || _userResized) return;
-    unawaited(_checkForUserResize());
-  }
-
-  // Signals a `detach()` that is waiting out a fullscreen exit. See
-  // `detach()` for why the wait exists at all: media_kit's
-  // `defaultExitNativeFullscreen()` starts an animated, multi-hundred-ms
-  // exit on macOS and returns before it finishes, so `isFullScreen()` at the
-  // top of `detach()` still reports true. Harmless to fire with no `detach()`
-  // waiting -- the completer is simply discarded.
-  @override
-  void onWindowLeaveFullScreen() {
-    final signal = _fullscreenExitSignal;
-    if (signal != null && !signal.isCompleted) signal.complete();
-  }
-
-  Future<void> _checkForUserResize() async {
-    try {
-      final actual = await _window.getBounds();
-      final expected = _expectedBounds;
-
-      // No snap has happened yet, so any resize is the user's.
-      if (expected == null) {
-        _userResized = true;
-        return;
-      }
-
-      final drifted =
-          (actual.width - expected.width).abs() > _kResizeTolerance ||
-              (actual.height - expected.height).abs() > _kResizeTolerance;
-      if (drifted) _userResized = true;
-    } catch (e) {
-      debugPrint('[PlayerWindowSizer] Failed to inspect window bounds: $e');
     }
   }
 
@@ -216,78 +129,11 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   Future<void> detach() async {
     unawaited(_paramsSubscription?.cancel());
     _paramsSubscription = null;
-
-    final snapshot = _snapshot;
-    _snapshot = null;
-    _attached = false;
     _appliedAspect = null;
 
-    var fullscreen = false;
-    try {
-      fullscreen = await _window.isFullScreen();
-    } catch (e) {
-      debugPrint(
-          '[PlayerWindowSizer] Failed to check fullscreen state on detach: $e');
-    }
-
-    if (fullscreen) {
-      // `PlayerScreen.dispose()` calls `defaultExitNativeFullscreen()` just
-      // before this. On macOS that starts an animated, multi-hundred-ms
-      // exit and returns immediately, so the check above still sees the old
-      // state. Deciding anything now -- restoring the snapshot, or resuming
-      // geometry persistence -- would let the animation's own resize
-      // events, and a spurious `unmaximize` it also emits, land as the
-      // window's saved geometry once the OS actually restores the
-      // pre-fullscreen (letterboxed) frame. Wait for the real exit instead,
-      // bounded by a timeout so the controller can never stay paused
-      // forever if the event never arrives (e.g. the window was destroyed
-      // mid-animation).
-      unawaited(_awaitFullscreenExitThenComplete(snapshot));
-      return;
-    }
-
-    await _completeDetach(snapshot);
-  }
-
-  /// Waits for [onWindowLeaveFullScreen], or [_fullscreenExitTimeout],
-  /// whichever comes first, then runs [_completeDetach].
-  Future<void> _awaitFullscreenExitThenComplete(Rect? snapshot) async {
-    final signal = Completer<void>();
-    _fullscreenExitSignal = signal;
-
-    try {
-      await Future.any<void>([
-        signal.future,
-        Future<void>.delayed(_fullscreenExitTimeout),
-      ]);
-    } finally {
-      if (identical(_fullscreenExitSignal, signal)) {
-        _fullscreenExitSignal = null;
-      }
-    }
-
-    await _completeDetach(snapshot);
-  }
-
-  /// The shared tail of [detach]: restore [snapshot] if the window is
-  /// neither maximized nor fullscreen *right now* (re-checked fresh, since
-  /// this may run well after [detach] itself returned), resume geometry
-  /// persistence, and fire [_onDetached] -- exactly once, on every path.
-  Future<void> _completeDetach(Rect? snapshot) async {
-    try {
-      // Maximizing or going fullscreen during playback is an explicit
-      // choice. Restoring an old rect would fight it.
-      final untouchable =
-          await _window.isMaximized() || await _window.isFullScreen();
-      if (snapshot != null && !untouchable) {
-        await _window.setBounds(snapshot);
-      }
-    } catch (e) {
-      debugPrint('[PlayerWindowSizer] Failed to restore window bounds: $e');
-    } finally {
-      // Always, on every path: leaving the controller paused would silently
-      // stop persisting geometry for the rest of the session.
-      _geometry.resume(_geometryOwner);
+    if (_attached) {
+      _attached = false;
+      _session.leave(this);
     }
 
     if (!_detachNotified) {
