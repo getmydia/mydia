@@ -20,16 +20,31 @@ defmodule MydiaWeb.Components.GridDensityToggleTest do
     compact = GridDensityComponents.grid_columns_class("compact")
     dense = GridDensityComponents.grid_columns_class("dense")
 
-    assert compact == "grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8"
-    assert dense == "grid-cols-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
+    assert compact == "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8"
+    assert dense == "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12"
     refute compact == dense
   end
 
-  test "no density exceeds 2 unprefixed columns, so a phone never gets compact or dense's desktop column count" do
-    for density <- ["comfortable", "compact", "dense"] do
-      assert GridDensityComponents.grid_columns_class(density) =~ ~r/^grid-cols-2(\s|$)/,
-             "#{density} must floor its unprefixed (phone-width) column count to 2"
+  test "each density gives a phone its own column count" do
+    # Density is per-browser, so a phone only ever shows what was chosen on
+    # that phone. If these collapse to one count again, the toggle is inert
+    # below sm: while still being rendered there.
+    assert GridDensityComponents.grid_columns_class("comfortable") =~ ~r/^grid-cols-2\s/
+    assert GridDensityComponents.grid_columns_class("compact") =~ ~r/^grid-cols-3\s/
+    assert GridDensityComponents.grid_columns_class("dense") =~ ~r/^grid-cols-4\s/
+  end
+
+  test "levels are listed in toggle order and are the only valid values" do
+    assert GridDensityComponents.levels() == ["comfortable", "compact", "dense"]
+    assert GridDensityComponents.default() == "comfortable"
+
+    for level <- GridDensityComponents.levels() do
+      assert GridDensityComponents.valid?(level)
     end
+
+    refute GridDensityComponents.valid?("tiny")
+    refute GridDensityComponents.valid?(nil)
+    refute GridDensityComponents.valid?(:dense)
   end
 
   test "an unknown density falls back to comfortable" do
