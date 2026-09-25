@@ -1,5 +1,6 @@
 defmodule MydiaWeb.SessionController do
   alias MydiaWeb.Auth.SignIn
+  alias MydiaWeb.PasskeySession
 
   @moduledoc """
   Local authentication controller.
@@ -27,10 +28,7 @@ defmodule MydiaWeb.SessionController do
       config = Config.get()
 
       if config.auth.local_enabled do
-        render(conn, :new,
-          changeset: Accounts.change_user(%Mydia.Accounts.User{}),
-          oidc_configured: oidc_configured?()
-        )
+        render_login(conn)
       else
         conn
         |> put_flash(:error, "Local authentication is disabled")
@@ -202,9 +200,14 @@ defmodule MydiaWeb.SessionController do
   defp login_error(conn, message) do
     conn
     |> put_flash(:error, message)
-    |> render(:new,
-      changeset: Accounts.change_user(%Mydia.Accounts.User{}),
-      oidc_configured: oidc_configured?()
+    |> render_login()
+  end
+
+  defp render_login(conn) do
+    render(conn, :new,
+      changeset: Accounts.change_user(%User{}),
+      oidc_configured: oidc_configured?(),
+      passkeys_available: match?({:ok, _}, PasskeySession.relying_party(conn))
     )
   end
 end

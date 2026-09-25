@@ -137,6 +137,10 @@ defmodule MydiaWeb.Router do
     post "/local/login", SessionController, :create
     get "/login/totp", SessionController, :totp_new
     post "/login/totp", SessionController, :totp_create
+    # Passkeys (JSON, called by assets/js/hooks/passkey.mjs). Declared before
+    # the dynamic "/:provider" routes below.
+    post "/passkey/options", PasskeyController, :options
+    post "/passkey/login", PasskeyController, :login
 
     # Auto-login (for first-time setup)
     get "/auto-login", AuthController, :auto_login

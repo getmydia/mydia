@@ -27,6 +27,7 @@
             name="user[username]"
             id="user_username"
             class="input input-bordered w-full"
+            autocomplete="username webauthn"
             required
             autofocus
           />
@@ -51,6 +52,20 @@
           </button>
         </div>
       </.form>
+
+      <div
+        :if={@passkeys_available}
+        id="passkey-login-section"
+        class="hidden mt-4"
+        data-options-url={~p"/auth/passkey/options"}
+        data-login-url={~p"/auth/passkey/login"}
+      >
+        <div class="divider text-xs text-base-content/60">or</div>
+        <button type="button" id="passkey-login" class="btn btn-outline w-full">
+          <.icon name="hero-finger-print" class="size-5" /> Sign in with a passkey
+        </button>
+        <p id="passkey-login-error" class="hidden text-error text-sm mt-2" role="alert"></p>
+      </div>
 
       <%= if @oidc_configured do %>
         <div class="divider">OR</div>
