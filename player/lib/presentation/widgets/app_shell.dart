@@ -126,8 +126,8 @@ class AppShell extends ConsumerStatefulWidget {
     required Widget child,
   }) =>
       Builder(
-        builder: (context) => ReportedHeight(
-          onHeight: DockExtents.reporterOf(context)?.onDock,
+        builder: (context) => ReportedExtent(
+          onExtent: DockExtents.reporterOf(context)?.onDock,
           // A route pushed over the shell (the immersive player) keeps the
           // shell mounted underneath; the bar must not keep floating at dock
           // height over a screen that has no dock.
@@ -140,6 +140,22 @@ class AppShell extends ConsumerStatefulWidget {
               child: child,
             ),
           ),
+        ),
+      );
+
+  /// Reports the desktop sidebar's width to `DockExtents` so the floating
+  /// cast bar sits beside it instead of painting over its bottom rows.
+  ///
+  /// Gated on the route being current for the same reason as [dockChrome]:
+  /// a route pushed over the shell (the immersive player) hides the
+  /// sidebar, and the bar must not keep leaving a gap for it.
+  @visibleForTesting
+  static Widget sidebarChrome({required Widget child}) => Builder(
+        builder: (context) => ReportedExtent(
+          onExtent: DockExtents.reporterOf(context)?.onSidebar,
+          axis: Axis.horizontal,
+          active: ModalRoute.of(context)?.isCurrent ?? true,
+          child: child,
         ),
       );
 
@@ -370,18 +386,20 @@ class _AppShellState extends ConsumerState<AppShell>
                   onExit: (direction) => direction == TraversalDirection.right
                       ? _focusBoundary.focusContent()
                       : false,
-                  child: DesktopSidebar(
-                    location: location,
-                    onNavigate: _navigateTo,
-                    showBackToMydia: showBackToMydia,
-                    isOffline: isOffline,
-                    // Gated like the region above it: off-tier the sidebar row
-                    // falls back to the per-row node FocusHighlight creates,
-                    // which is what keeps `_region`'s "unchanged off-tier"
-                    // claim true rather than borrowing the shell-owned node.
-                    selectedRowFocusNode: InputCapabilities.directionalPrimary
-                        ? _sidebarFocusNode
-                        : null,
+                  child: AppShell.sidebarChrome(
+                    child: DesktopSidebar(
+                      location: location,
+                      onNavigate: _navigateTo,
+                      showBackToMydia: showBackToMydia,
+                      isOffline: isOffline,
+                      // Gated like the region above it: off-tier the sidebar row
+                      // falls back to the per-row node FocusHighlight creates,
+                      // which is what keeps `_region`'s "unchanged off-tier"
+                      // claim true rather than borrowing the shell-owned node.
+                      selectedRowFocusNode: InputCapabilities.directionalPrimary
+                          ? _sidebarFocusNode
+                          : null,
+                    ),
                   ),
                 ),
                 Expanded(

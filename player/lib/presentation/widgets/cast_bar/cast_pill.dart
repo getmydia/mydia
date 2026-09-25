@@ -10,6 +10,11 @@ class CastPill extends StatelessWidget {
 
   static const radius = BorderRadius.all(Radius.circular(18));
 
+  /// Widest the bar grows beside the desktop sidebar, including this pill's
+  /// own side margins. Wider than this the scrubber gains nothing and the
+  /// bar only covers more content.
+  static const double maxWidth = 720;
+
   final Widget child;
 
   @override

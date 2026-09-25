@@ -24,6 +24,7 @@ import 'package:player/native/lib.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/playback/local_playback_state.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
+import 'package:player/presentation/widgets/cast_bar/cast_bar_parts.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
@@ -52,9 +53,10 @@ CastSession _session({
   bool isStale = false,
   List<CastSubtitleTrack> subtitles = const [],
   CastSubtitleTrack? selectedSubtitle,
+  CastDevice device = _device,
 }) {
   return CastSession(
-    device: _device,
+    device: device,
     playbackState: CastPlaybackState.playing,
     connectionState:
         isStale ? CastConnectionState.lost : CastConnectionState.connected,
@@ -1086,6 +1088,66 @@ void main() {
     });
   });
 
+  group('cast bar transport row', () {
+    const track = CastSubtitleTrack(
+      trackId: '1',
+      url: 'u1',
+      label: 'English',
+      language: 'eng',
+    );
+
+    for (final withSubtitles in [false, true]) {
+      for (final mydia in [false, true]) {
+        testWidgets(
+            'centers play/pause (subtitles: $withSubtitles, mydia: $mydia)',
+            (tester) async {
+          await _pump(
+            tester,
+            session: _session(
+              duration: const Duration(minutes: 44),
+              device: mydia ? _mydiaDevice : _device,
+              subtitles: withSubtitles ? const [track] : const [],
+            ),
+          );
+
+          expect(find.byKey(const Key('cast-bar-subtitles')),
+              withSubtitles ? findsOneWidget : findsNothing);
+          expect(find.byKey(const Key('cast-bar-pull')),
+              mydia ? findsOneWidget : findsNothing);
+
+          final row =
+              tester.getRect(find.byKey(const Key('cast-bar-transport')));
+          final play =
+              tester.getRect(find.byKey(const Key('cast-bar-play-pause')));
+          expect(play.center.dx, closeTo(row.center.dx, 0.5),
+              reason: 'the optional CC and Pull slots keep their width when '
+                  'empty, so play/pause never drifts off center');
+        });
+      }
+    }
+
+    testWidgets('stop sits in the header row, not the transport row',
+        (tester) async {
+      await _pump(tester,
+          session: _session(duration: const Duration(minutes: 44)));
+
+      expect(
+        find.descendant(
+          of: find.byType(CastBarRow),
+          matching: find.byKey(const Key('cast-bar-stop')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('cast-bar-transport')),
+          matching: find.byKey(const Key('cast-bar-stop')),
+        ),
+        findsNothing,
+      );
+    });
+  });
+
   group('capability gate', () {
     testWidgets(
         'renders nothing on a build with no Chromecast/DLNA capability and '
@@ -1496,6 +1558,8 @@ void main() {
 
   group('cast bar placement', () {
     const dockKey = Key('placement-dock');
+    const sidebarKey = Key('placement-sidebar');
+    const desktopSize = Size(1400, 900);
 
     // A real phone width (390, iPhone-mini class) overflows BottomNav's Row
     // here: `flutter test` does not load the app's own `Inter` font (a
@@ -1515,6 +1579,7 @@ void main() {
       WidgetTester tester, {
       required Size size,
       required bool withDock,
+      bool withSidebar = false,
       required ValueSetter<double> onInset,
     }) async {
       tester.view.physicalSize = size;
@@ -1549,10 +1614,20 @@ void main() {
                     ),
                   )
                 : null,
-            body: Builder(builder: (context) {
-              onInset(DockInsets.bottomOf(context));
-              return const SizedBox.expand();
-            }),
+            body: Row(
+              children: [
+                if (withSidebar)
+                  AppShell.sidebarChrome(
+                    child: const SizedBox(key: sidebarKey, width: 260),
+                  ),
+                Expanded(
+                  child: Builder(builder: (context) {
+                    onInset(DockInsets.bottomOf(context));
+                    return const SizedBox.expand();
+                  }),
+                ),
+              ],
+            ),
           ),
         ),
       ));
@@ -1593,10 +1668,70 @@ void main() {
     testWidgets('sits at the window bottom when there is no dock',
         (tester) async {
       await pumpShell(tester,
-          size: const Size(1400, 900), withDock: false, onInset: (_) {});
+          size: desktopSize, withDock: false, onInset: (_) {});
 
       final bar = tester.getRect(find.byType(CastPill));
       expect(bar.bottom, closeTo(900 - 12, 1));
+      expect(bar.width, desktopSize.width,
+          reason: 'with no sidebar reported the bar keeps its full width');
+    });
+
+    testWidgets('sits beside the desktop sidebar, capped and centered',
+        (tester) async {
+      await pumpShell(tester,
+          size: desktopSize,
+          withDock: false,
+          withSidebar: true,
+          onInset: (_) {});
+
+      final bar = tester.getRect(find.byType(CastPill));
+      final sidebar = tester.getRect(find.byKey(sidebarKey));
+      expect(bar.left, greaterThanOrEqualTo(sidebar.right),
+          reason: 'the bar must not cover the sidebar (Settings lives at '
+              'its bottom)');
+      expect(bar.width, CastPill.maxWidth);
+      expect(bar.center.dx,
+          closeTo(sidebar.right + (desktopSize.width - sidebar.right) / 2, 1),
+          reason: 'centered in the content column, not the window');
+      expect(bar.bottom, closeTo(desktopSize.height - 12, 1));
+    });
+
+    testWidgets('fills a content column narrower than the cap', (tester) async {
+      const narrow = Size(900, 900);
+      await pumpShell(tester,
+          size: narrow, withDock: false, withSidebar: true, onInset: (_) {});
+
+      final bar = tester.getRect(find.byType(CastPill));
+      expect(bar.left, closeTo(260, 1));
+      expect(bar.width, closeTo(narrow.width - 260, 1));
+    });
+
+    testWidgets(
+        'takes the full width back once a route covers the sidebar, and '
+        'returns beside it once popped', (tester) async {
+      await pumpShell(tester,
+          size: desktopSize,
+          withDock: false,
+          withSidebar: true,
+          onInset: (_) {});
+
+      // The immersive player, in production: the shell stays mounted
+      // underneath but is no longer the current route.
+      final navigator = Navigator.of(tester.element(find.byKey(sidebarKey)));
+      navigator.push(MaterialPageRoute(
+        builder: (_) => const Scaffold(body: SizedBox.expand()),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(find.byType(CastPill)).width, desktopSize.width,
+          reason: 'no sidebar is visible, so no gap may be left for it');
+
+      navigator.pop();
+      await tester.pumpAndSettle();
+
+      final bar = tester.getRect(find.byType(CastPill));
+      expect(bar.left, greaterThanOrEqualTo(260));
+      expect(bar.width, CastPill.maxWidth);
     });
 
     testWidgets(
