@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/window/decoration_layout.dart';
 import 'package:player/core/window/window_buttons_hidden.dart';
-import 'package:player/core/window/window_controller.dart';
 import 'package:player/core/window/window_frame_state.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/desktop_window_chrome.dart';
@@ -193,28 +192,6 @@ void main() {
       await tester.pump();
 
       expect(window.closeCalls, 1);
-    });
-  });
-
-  testWidgets('the top resize edge still works clear of the button corner',
-      (tester) async {
-    await _onLinux(() async {
-      final window = FakeWindowController();
-      await _pumpPlayingPlayer(tester, controller: window);
-
-      // `DesktopWindowChrome` no longer draws a full-width strip over the
-      // window: dragging the window is `WindowTitleRow`'s job now, mounted
-      // per screen. All that is left here at x=300, clear of the end
-      // corner's reserved width, is the resize edge itself.
-      await tester.dragFrom(const Offset(300, 4), const Offset(0, 30));
-      await tester.pump();
-
-      expect(window.startResizingCalls, [WindowEdge.top]);
-
-      // This test drives no mouse, so `ChromeVisibility`'s auto-hide timer is
-      // still armed. Let it fire, or the binding fails the test on a pending
-      // timer at teardown.
-      await tester.pump(const Duration(seconds: 4));
     });
   });
 }

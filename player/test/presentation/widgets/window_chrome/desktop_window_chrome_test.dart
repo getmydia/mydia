@@ -9,7 +9,6 @@ import 'package:player/core/window/window_frame_state.dart';
 import 'package:player/presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
-import 'package:player/presentation/widgets/window_chrome/window_resize_edges.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../core/window/fake_window_controller.dart';
@@ -133,14 +132,32 @@ void main() {
   });
 
   group('DesktopWindowChrome', () {
-    testWidgets('draws buttons and resize edges on Linux', (tester) async {
+    testWidgets('draws buttons on Linux', (tester) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
         window: FakeWindowController(),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNWidgets(3));
-          expect(find.byType(WindowResizeEdges), findsOneWidget);
+        },
+      );
+    });
+
+    testWidgets(
+        'a drag at the very top edge reaches the app: GTK owns resizing now, '
+        'from the shadow margin outside the view', (tester) async {
+      var dragged = false;
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        child: GestureDetector(
+          onPanStart: (_) => dragged = true,
+          child: const ColoredBox(color: Color(0xFF000000)),
+        ),
+        body: () async {
+          await tester.dragFrom(const Offset(300, 2), const Offset(0, 30));
+          expect(dragged, isTrue);
         },
       );
     });
@@ -205,7 +222,6 @@ void main() {
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
           expect(find.byType(WindowDragBand), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsNothing);
         },
       );
     });
@@ -228,15 +244,12 @@ void main() {
         fullscreen: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsNothing);
         },
       );
     });
 
-    testWidgets(
-        'hides the buttons but KEEPS the resize edges while playback chrome '
-        'is hidden. Losing the ability to resize mid-playback would be a '
-        'regression', (tester) async {
+    testWidgets('hides the buttons while playback chrome is hidden',
+        (tester) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
@@ -244,7 +257,7 @@ void main() {
         buttonsHidden: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsOneWidget);
+          expect(find.byType(ColoredBox), findsWidgets);
         },
       );
     });
