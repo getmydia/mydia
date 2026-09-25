@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import 'movie_detail_controller.dart';
+import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
@@ -14,8 +16,6 @@ import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/movie_detail.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
@@ -41,22 +41,28 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final movieAsync = ref.watch(movieDetailControllerProvider(id));
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.movieDetail(id)],
-            topInset: freshnessTopInset(context, appBarHeight: 0),
-          ),
-          Expanded(
-            child: movieAsync.when(
-              data: (movie) => _buildContent(context, ref, movie),
-              loading: () => _buildLoadingState(context),
-              error: (error, stack) => _buildErrorState(context, ref, error),
+    // This is a full-window route (pushed outside the shell), and so the sole
+    // owner of the title-bar band here: the body has to sit under
+    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+    // band on top of the hero's own title row a second time.
+    return WindowChromeInsets.removeBand(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        body: Column(
+          children: [
+            FreshnessHeader(
+              queryKeys: [QueryKeys.movieDetail(id)],
+              topInset: freshnessTopInset(context, appBarHeight: 0),
             ),
-          ),
-        ],
+            Expanded(
+              child: movieAsync.when(
+                data: (movie) => _buildContent(context, ref, movie),
+                loading: () => _buildLoadingState(context),
+                error: (error, stack) => _buildErrorState(context, ref, error),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -81,20 +87,42 @@ class MovieDetailScreen extends ConsumerWidget {
     }
   }
 
+  /// Exposes [_buildLoadingState] for
+  /// `detail_screen_inset_test.dart`: that test proves the back button
+  /// clears the window chrome in this transient state too, not only in the
+  /// loaded hero, without needing `movieDetailControllerProvider`'s GraphQL
+  /// stream to reach the loading branch.
+  @visibleForTesting
+  Widget loadingStateForTest(BuildContext context) =>
+      _buildLoadingState(context);
+
+  /// Exposes [_buildErrorState] for the same reason as
+  /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
+  /// button reads `movieDetailControllerProvider(id).notifier` from it, even
+  /// though nothing is watched during build.
+  @visibleForTesting
+  Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
+      _buildErrorState(context, ref, error);
+
   Widget _buildLoadingState(BuildContext context) {
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        // The same title row as the loaded hero, so the back button (and the
+        // cast button) clear the traffic lights / Linux buttons here too:
+        // this state sits under the same `WindowChromeInsets.removeBand` as
+        // the rest of the screen, so a plain `leading` slot with its own flat
+        // padding has nothing left to push it clear of the band with.
+        // `topScrim: false` because the spinner background never had a top
+        // darkening gradient and this state does not need one added.
+        detailHeroAppBar(
+          context: context,
           expandedHeight: 350,
-          pinned: true,
-          backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
-          flexibleSpace: FlexibleSpaceBar(
-            background: Container(
-              color: AppColors.surface,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+          back: _buildBackButton(context),
+          topScrim: false,
+          background: Container(
+            color: AppColors.surface,
+            child: const Center(
+              child: CircularProgressIndicator(),
             ),
           ),
         ),
@@ -139,11 +167,14 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildErrorState(BuildContext context, WidgetRef ref, Object error) {
     return CustomScrollView(
       slivers: [
-        SliverAppBar(
+        // See the loading state's header above: the same title row as the
+        // loaded hero, so the back button clears the window chrome here too.
+        detailHeroAppBar(
+          context: context,
           expandedHeight: 200,
-          pinned: true,
-          backgroundColor: AppColors.background,
-          leading: _buildBackButton(context),
+          back: _buildBackButton(context),
+          topScrim: false,
+          background: Container(color: AppColors.background),
         ),
         SliverFillRemaining(
           child: Center(
@@ -205,7 +236,7 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildContent(BuildContext context, WidgetRef ref, MovieDetail movie) {
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, ref, movie),
+        _buildHeroSection(context, movie),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 24),
@@ -407,140 +438,126 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
+  /// The hero's back affordance: a translucent pill, sized and positioned by
+  /// [detailHeroAppBar]'s title row rather than its own padding, so it lands
+  /// clear of the traffic lights / Linux buttons instead of baking in a flat
+  /// 8px edge inset that knows nothing about the window chrome.
   Widget _buildBackButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Material(
-        color: Colors.black.withValues(alpha: 0.3),
+    return Material(
+      color: Colors.black.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(8),
-            child: Icon(Icons.arrow_back_rounded, color: Colors.white),
-          ),
+        onTap: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        },
+        child: const Padding(
+          padding: EdgeInsets.all(8),
+          child: Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
       ),
     );
   }
 
-  Widget _buildHeroSection(
-      BuildContext context, WidgetRef ref, MovieDetail movie) {
-    return SliverAppBar(
+  Widget _buildHeroSection(BuildContext context, MovieDetail movie) {
+    return detailHeroAppBar(
+      context: context,
       expandedHeight: 380,
-      pinned: true,
-      stretch: true,
-      backgroundColor: AppColors.background,
-      leading: _buildBackButton(context),
-      actions: [
-        Padding(
-          padding: const EdgeInsets.all(8),
-          child: CastButton(onPressed: () => pickCastDevice(context, ref)),
-        ),
-        const SizedBox(width: 8),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        stretchModes: const [
-          StretchMode.zoomBackground,
-          StretchMode.blurBackground,
-        ],
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (movie.artwork.backdropUrl != null)
-              CachedNetworkImage(
-                imageUrl: movie.artwork.backdropUrl!,
-                fit: BoxFit.cover,
-                cacheManager: BackdropCacheManager(),
-                placeholder: (context, url) => Container(
-                  color: AppColors.surface,
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: AppColors.surface,
-                ),
-              )
-            else
-              Container(color: AppColors.surface),
-            // Gradient overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    AppColors.background.withValues(alpha: 0.5),
-                    AppColors.background.withValues(alpha: 0.95),
-                    AppColors.background,
-                  ],
-                  stops: const [0.0, 0.5, 0.8, 1.0],
-                ),
+      back: _buildBackButton(context),
+      background: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (movie.artwork.backdropUrl != null)
+            CachedNetworkImage(
+              imageUrl: movie.artwork.backdropUrl!,
+              fit: BoxFit.cover,
+              cacheManager: BackdropCacheManager(),
+              placeholder: (context, url) => Container(
+                color: AppColors.surface,
+              ),
+              errorWidget: (context, url, error) => Container(
+                color: AppColors.surface,
+              ),
+            )
+          else
+            Container(color: AppColors.surface),
+          // Gradient overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  AppColors.background.withValues(alpha: 0.5),
+                  AppColors.background.withValues(alpha: 0.95),
+                  AppColors.background,
+                ],
+                stops: const [0.0, 0.5, 0.8, 1.0],
               ),
             ),
-            // Content overlay
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+          ),
+          // Content overlay
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        movie.title,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (movie.yearDisplay.isNotEmpty) ...[
+                        const SizedBox(height: 4),
                         Text(
-                          movie.title,
+                          movie.yearDisplay,
                           style: Theme.of(context)
                               .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.8),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                              .bodyMedium
+                              ?.copyWith(color: AppColors.textSecondary),
                         ),
-                        if (movie.yearDisplay.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            movie.yearDisplay,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  _buildHeroPlayControl(context, movie),
-                ],
-              ),
+                ),
+                const SizedBox(width: 16),
+                _buildHeroPlayControl(context, movie),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   /// The hero's Play affordance, extracted (like the other `_buildX` helpers
   /// in this file) for readability: the overlay `Row` it lives in is already
-  /// deeply nested inside the `SliverAppBar`'s `FlexibleSpaceBar`/`Stack`.
+  /// deeply nested inside the `background` `Stack` passed to
+  /// `detailHeroAppBar`.
   Widget _buildHeroPlayControl(BuildContext context, MovieDetail movie) {
     return HeroPlayControl(
       files: movie.files,

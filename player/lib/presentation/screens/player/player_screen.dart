@@ -72,9 +72,9 @@ import '../../widgets/audio_track_selector.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/gesture_controls.dart';
 import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/cast_device_picker.dart';
 import '../../widgets/video_controls/cast_chrome_icon.dart';
+import '../../widgets/video_controls/chrome_top_bar.dart';
 import '../../widgets/video_controls/custom_video_controls.dart';
 import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
@@ -235,8 +235,13 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// `kMacTitleBarOverlap` and putting a black band above every video —
   /// `NativePlayerWindowSizer` then snaps the window to the video's aspect
   /// ratio *without* that inset, so media_kit adds side pillars too.
-  /// `playback_chrome.dart`'s own `SafeArea` is what insets the on-screen
-  /// chrome (back pill, transport) instead; it is unaffected by this.
+  /// `playback_chrome.dart`'s own `SafeArea` keeps the same `top: false` for
+  /// the same reason; its top bar is placed by `PlayerTopBarSlot` instead,
+  /// which reads `WindowChromeInsets` directly to sit level with the window
+  /// controls on a windowed desktop, or 16px below the safe area's own
+  /// `padding.top` everywhere else. `_withCastAffordance`'s loading/error
+  /// cast pill goes through that same slot, so it never drifts from where
+  /// playback puts it.
   ///
   /// On iOS this also puts the video full-bleed under the notch, which is
   /// intentional, not a side effect: this is an immersive video player, the
@@ -6161,15 +6166,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Casting is the natural remedy for a file the local player cannot decode,
   /// so hiding the button behind "local playback is ready" removes it exactly
   /// when it is most useful.
+  ///
+  /// Built through `PlayerTopBarSlot`, the same seam `PlaybackChrome` places
+  /// its back/title/cast pills through, so this state's cast pill lands at
+  /// the exact spot the playing state's does: level with the window controls
+  /// on a windowed desktop, or 16px below the safe area everywhere else. A
+  /// second, independently-positioned pill here would drift from that the
+  /// next time either one's placement changed.
   Widget _withCastAffordance(Widget child) {
     return Stack(
       children: [
         Positioned.fill(child: child),
-        Positioned(
-          top: 8,
-          right: 8,
-          child: SafeArea(
-            child: CastButton(onPressed: _showCastDevicePicker),
+        PlayerTopBarSlot(
+          child: ChromeTopBar(
+            showBack: false,
+            castAction: castChromeActionFor(ref),
+            onCastTap: _showCastDevicePicker,
           ),
         ),
       ],

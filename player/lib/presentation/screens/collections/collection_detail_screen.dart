@@ -14,8 +14,10 @@ import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/recently_added_item.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
   final String id;
@@ -31,79 +33,147 @@ class CollectionDetailScreen extends ConsumerWidget {
     }
   }
 
+  /// Builds Collection detail's title-bar header.
+  ///
+  /// A static, `@visibleForTesting` seam rather than inlined in [build]:
+  /// `build` also watches `collectionDetailControllerProvider(id)`, a
+  /// GraphQL-backed stream, expensive to satisfy in a widget test that only
+  /// wants to check where the cast button lands. This is the exact widget
+  /// [build] puts in `Scaffold.appBar`, taking [itemsData] already resolved
+  /// rather than watching the provider itself.
+  @visibleForTesting
+  static PreferredSizeWidget header(
+    BuildContext context, {
+    required String id,
+    required AsyncValue<List<RecentlyAddedItem>> itemsData,
+  }) {
+    return WindowTitleBar(
+      height: WindowTitleRow.heightOf(context),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_rounded),
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/collections');
+          }
+        },
+      ),
+      title: const Text(
+        'Collection',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: -0.5,
+        ),
+      ),
+      actions: [
+        if (isDownloadSupported)
+          itemsData.whenOrNull(
+                data: (items) => items.isNotEmpty
+                    ? _CollectionDownloadButton(
+                        collectionId: id,
+                        items: items,
+                      )
+                    : null,
+              ) ??
+              const SizedBox.shrink(),
+      ],
+      // The blur and translucent fill this screen always had, kept exactly:
+      // only the leading/title/actions now flow through the shared row
+      // instead of a plain `AppBar`. The cast button is new here --
+      // `WindowTitleRow` always appends one, and this screen never had one
+      // before.
+      decorate: (row) => ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: ColoredBox(
+            color: AppColors.background.withValues(alpha: 0.8),
+            child: row,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Breathing room between the header's bottom edge and the grid's first
+  /// row, on top of the header's own real height.
+  ///
+  /// Before the header drew into the window-control band it was always a
+  /// flat `kToolbarHeight` (56), and the grid's top padding was a flat `100`,
+  /// so this gap was baked into that literal rather than named: `100 - 56 ==
+  /// 44`. Once the header's height started varying by platform (40 on
+  /// macOS, 36 on Linux, still 56 with no window chrome), a flat `100`
+  /// stopped tracking it: the gap grew from 44 to 60 on macOS purely because
+  /// the header shrank underneath an unchanged literal. Naming the 44 and
+  /// adding it to the header's real height (see [gridTopPadding]) keeps the
+  /// gap itself constant instead. Mirrors `DownloadsScreen.storageSectionGap`.
+  @visibleForTesting
+  static const double gridTopGap = 44;
+
+  /// Top padding for the grid's first row.
+  ///
+  /// [context] must be the one [build] captures in its own `Builder`, above
+  /// the `Scaffold`, the same one it passes to [header]: inside the body of
+  /// a `Scaffold(extendBodyBehindAppBar: true)` Flutter rewrites
+  /// `MediaQuery.paddingOf(context).top` to the app bar's own rendered
+  /// bottom edge for any context that is actually a descendant of that body,
+  /// so reading it from a context inside the grid's own `LayoutBuilder`
+  /// would count the header twice. Reuses the same `freshnessTopInset`
+  /// calculation the freshness overlay above the grid already uses, so both
+  /// track the header's real height together. Mirrors
+  /// `DownloadsScreen.topSpacerHeight`.
+  @visibleForTesting
+  static double gridTopPadding(BuildContext context) =>
+      freshnessTopInset(context,
+          appBarHeight: WindowTitleRow.heightOf(context)) +
+      gridTopGap;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final itemsData = ref.watch(collectionDetailControllerProvider(id));
 
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight),
-        child: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: AppBar(
-              backgroundColor: AppColors.background.withValues(alpha: 0.8),
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/collections');
-                  }
-                },
-              ),
-              title: const Text(
-                'Collection',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.5,
+    // This is a full-window route (pushed outside the shell), and so the sole
+    // owner of the title-bar band here: the body has to sit under
+    // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
+    // band on top of the app bar's own reserved height.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) {
+          final barHeight = WindowTitleRow.heightOf(context);
+          final gridTop = gridTopPadding(context);
+          return Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: header(context, id: id, itemsData: itemsData),
+            body: Column(
+              children: [
+                FreshnessHeader(
+                  queryKeys: [QueryKeys.collectionItems(id)],
+                  topInset: freshnessTopInset(context, appBarHeight: barHeight),
                 ),
-              ),
-              actions: [
-                if (isDownloadSupported)
-                  itemsData.whenOrNull(
-                        data: (items) => items.isNotEmpty
-                            ? _CollectionDownloadButton(
-                                collectionId: id,
-                                items: items,
-                              )
-                            : null,
-                      ) ??
-                      const SizedBox.shrink(),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      await ref
+                          .read(collectionDetailControllerProvider(id).notifier)
+                          .refresh();
+                    },
+                    child: itemsData.when(
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (error, _) => _buildErrorView(context, error, ref),
+                      data: (items) {
+                        if (items.isEmpty) {
+                          return _buildEmptyState(context);
+                        }
+                        return _buildGridView(context, items, gridTop);
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          FreshnessHeader(
-            queryKeys: [QueryKeys.collectionItems(id)],
-            topInset: freshnessTopInset(context, appBarHeight: kToolbarHeight),
-          ),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await ref
-                    .read(collectionDetailControllerProvider(id).notifier)
-                    .refresh();
-              },
-              child: itemsData.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _buildErrorView(context, error, ref),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return _buildEmptyState(context);
-                  }
-                  return _buildGridView(context, items);
-                },
-              ),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -204,7 +274,7 @@ class CollectionDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGridView(BuildContext context, List items) {
+  Widget _buildGridView(BuildContext context, List items, double topPadding) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
@@ -215,7 +285,7 @@ class CollectionDetailScreen extends ConsumerWidget {
 
         return GridView.builder(
           padding: EdgeInsets.fromLTRB(
-              horizontalPadding, 100, horizontalPadding, bottomPadding),
+              horizontalPadding, topPadding, horizontalPadding, bottomPadding),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
             childAspectRatio: 0.58,

@@ -90,13 +90,17 @@ void main() {
       );
 
       // The player is entitled to consider its own chrome hidden here: from
-      // where it sits, under an opaque strip, the pointer did leave. What it
-      // is not entitled to do is take the window buttons with it.
+      // where it sits, under the button, the pointer did leave (the button
+      // is a plain positioned child that absorbs its own hit test, so the
+      // tap and the hover both stop there and never reach the player's own
+      // full-area MouseRegion underneath). What it is not entitled to do is
+      // take the window buttons with it.
       expect(windowButtonsHidden.value, isTrue);
     });
   });
 
-  testWidgets('the bare drag band keeps the buttons alive too', (tester) async {
+  testWidgets('hovering anywhere in the end corner keeps the buttons alive',
+      (tester) async {
     await _onLinux(() async {
       await _pumpPlayingPlayer(tester);
 
@@ -105,17 +109,19 @@ void main() {
       addTearDown(gesture.removePointer);
       await tester.pump();
 
-      // Well clear of the buttons on the right: a viewer heading for the
-      // close button crosses this on the way, and the buttons have to still
-      // be there when they arrive.
-      await gesture.moveTo(const Offset(120, kLinuxWindowChromeHeight / 2));
+      // Inside the end corner's reserved width but off any individual
+      // button: a viewer heading for the close button crosses this on the
+      // way, and the buttons have to still be there when they arrive. There
+      // is no full-width strip to hover any more, only the corner itself.
+      await gesture
+          .moveTo(const Offset(800 - 20, kLinuxWindowChromeHeight / 2));
       await tester.pumpAndSettle();
 
       expect(_closeButton, findsOneWidget);
     });
   });
 
-  testWidgets('reaching for the top strip restores buttons already hidden',
+  testWidgets('reaching into the end corner restores buttons already hidden',
       (tester) async {
     await _onLinux(() async {
       await _pumpPlayingPlayer(tester);
@@ -130,19 +136,19 @@ void main() {
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(
-        location: const Offset(400, kLinuxWindowChromeHeight / 2),
+        location: const Offset(800 - 20, kLinuxWindowChromeHeight / 2),
       );
       addTearDown(gesture.removePointer);
       await tester.pumpAndSettle();
 
       expect(_closeButton, findsOneWidget,
-          reason: 'a pointer in the title strip must be able to summon the '
-              'window buttons; nothing underneath can, because the strip '
-              'takes the hover');
+          reason: 'a pointer in the button corner must be able to summon '
+              'the window buttons; nothing underneath can, because the '
+              'corner takes the hover');
     });
   });
 
-  testWidgets('leaving the strip lets the buttons hide again', (tester) async {
+  testWidgets('leaving the corner lets the buttons hide again', (tester) async {
     await _onLinux(() async {
       await _pumpPlayingPlayer(tester);
 
@@ -151,7 +157,7 @@ void main() {
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(
-        location: const Offset(400, kLinuxWindowChromeHeight / 2),
+        location: const Offset(800 - 20, kLinuxWindowChromeHeight / 2),
       );
       addTearDown(gesture.removePointer);
       await tester.pumpAndSettle();
@@ -159,7 +165,7 @@ void main() {
 
       // Out through the top of the window, so nothing underneath is hovered
       // on the way out and the hidden state stands.
-      await gesture.moveTo(const Offset(400, -50));
+      await gesture.moveTo(const Offset(800 - 20, -50));
       await tester.pumpAndSettle();
 
       expect(_closeButton, findsNothing,
@@ -188,41 +194,24 @@ void main() {
     });
   });
 
-  testWidgets('the hover-tracking strip does not swallow the window drag',
+  testWidgets('the top resize edge still works clear of the button corner',
       (tester) async {
     await _onLinux(() async {
       final window = FakeWindowController();
       await _pumpPlayingPlayer(tester, controller: window);
 
-      // Below the 8px resize edge, clear of the buttons: the drag band.
-      await tester.dragFrom(
-        const Offset(300, kLinuxWindowChromeHeight / 2),
-        const Offset(40, 40),
-      );
-      await tester.pump();
-
-      expect(window.startDraggingCalls, 1);
-
-      // This test drives no mouse, so `ChromeVisibility`'s auto-hide timer is
-      // still armed. Let it fire, or the binding fails the test on a pending
-      // timer at teardown.
-      await tester.pump(const Duration(seconds: 4));
-    });
-  });
-
-  testWidgets('the top resize edge still resizes through the strip',
-      (tester) async {
-    await _onLinux(() async {
-      final window = FakeWindowController();
-      await _pumpPlayingPlayer(tester, controller: window);
-
-      // The hover strip is drawn over this 8px zone, so it is the one place
-      // `opaque: false` has to be doing its job for the edge to survive.
+      // `DesktopWindowChrome` no longer draws a full-width strip over the
+      // window: dragging the window is `WindowTitleRow`'s job now, mounted
+      // per screen. All that is left here at x=300, clear of the end
+      // corner's reserved width, is the resize edge itself.
       await tester.dragFrom(const Offset(300, 4), const Offset(0, 30));
       await tester.pump();
 
       expect(window.startResizingCalls, [WindowEdge.top]);
 
+      // This test drives no mouse, so `ChromeVisibility`'s auto-hide timer is
+      // still armed. Let it fire, or the binding fails the test on a pending
+      // timer at teardown.
       await tester.pump(const Duration(seconds: 4));
     });
   });

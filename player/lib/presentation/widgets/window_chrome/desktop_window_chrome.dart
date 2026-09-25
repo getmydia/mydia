@@ -8,7 +8,6 @@ import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_controller_native.dart';
 import '../../../core/window/window_fullscreen.dart';
 import 'window_buttons.dart';
-import 'window_drag_band.dart';
 import 'window_resize_edges.dart';
 
 /// Draws the window's own decorations inside the window, on platforms where
@@ -18,6 +17,13 @@ import 'window_resize_edges.dart';
 /// `WindowChromeInset`. That file's doc comment records why anywhere else is
 /// unsafe: a per-screen treatment is what let the detail screens and the
 /// player slide under the macOS traffic lights in the first place.
+///
+/// Draws only the button corners now, not a full-width strip: dragging the
+/// window is `WindowTitleRow`'s job, mounted per screen, and the player's own
+/// video surface answers to a drag started over it too (`onWindowDrag` in
+/// `playback_chrome.dart`). This widget only ever needed the strip to host
+/// the buttons and their hover tracking, and both now fit in the corners
+/// they actually occupy, per `linuxButtonGroupReserve`.
 ///
 /// Linux only for now. macOS keeps AppKit's traffic lights, which float over
 /// the Flutter view already, and Windows still has its native caption.
@@ -101,21 +107,21 @@ class _WindowChrome extends StatefulWidget {
 }
 
 class _WindowChromeState extends State<_WindowChrome> {
-  /// Whether the pointer is somewhere in the top strip.
+  /// Whether the pointer is somewhere in one of the button corners.
   ///
-  /// Tracked because the strip is drawn *over* the app, so everything beneath
-  /// it — the player's chrome most visibly — sees a pointer moving up into the
-  /// strip as a `PointerExitEvent` and concludes the pointer left the window.
-  /// The player answers that by hiding its chrome, which sets
+  /// Tracked because a corner is drawn *over* the app, so everything beneath
+  /// it, the player's chrome most visibly, sees a pointer moving into the
+  /// corner as a `PointerExitEvent` and concludes the pointer left the
+  /// window. The player answers that by hiding its chrome, which sets
   /// `windowButtonsHidden`, which used to delete the very buttons the cursor
   /// was travelling towards. `ChromeVisibility` already refuses to fade out
   /// from under a cursor resting on one of its own controls; this is that same
   /// rule applied to the window buttons.
-  bool _pointerOverStrip = false;
+  bool _pointerOverButtons = false;
 
-  void _setPointerOverStrip(bool over) {
-    if (_pointerOverStrip == over) return;
-    setState(() => _pointerOverStrip = over);
+  void _setPointerOverButtons(bool over) {
+    if (_pointerOverButtons == over) return;
+    setState(() => _pointerOverButtons = over);
   }
 
   @override
@@ -125,86 +131,123 @@ class _WindowChromeState extends State<_WindowChrome> {
         Positioned.fill(
           child: WindowResizeEdges(
             controller: widget.controller,
-            child: Stack(
-              children: [
-                Positioned.fill(child: widget.child),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: WindowDragBand(
-                    controller: widget.controller,
-                    height: kLinuxWindowChromeHeight,
-                  ),
-                ),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: kLinuxWindowChromeHeight,
-                  child: _buttons(),
-                ),
-              ],
-            ),
+            child: widget.child,
           ),
         ),
 
-        // Topmost so nothing can shadow it — not the resize edges above the
-        // strip, not the drag band, not the buttons themselves — and
-        // `opaque: false` so it shadows nothing in turn.
-        // `RenderMouseRegion.hitTest` returns `super.hitTest(...) && _opaque`,
-        // which still records the region for the mouse tracker while
-        // answering false, so the hit test carries on into the siblings
-        // underneath and every gesture below behaves exactly as it did.
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: kLinuxWindowChromeHeight,
-          child: MouseRegion(
-            opaque: false,
-            onEnter: (_) => _setPointerOverStrip(true),
-            onExit: (_) => _setPointerOverStrip(false),
-          ),
+        // On top of the resize edges (and everything else): the button
+        // corners are the only part of this widget still drawn over the app,
+        // and only where a corner actually has buttons in it.
+        ValueListenableBuilder<DecorationLayout>(
+          valueListenable: widget.layout,
+          builder: (context, layout, _) => Stack(children: _corners(layout)),
         ),
       ],
     );
   }
 
-  /// The buttons fade out with the playback chrome, while the drag band and
-  /// the resize edges stay live. They are invisible either way, and losing
-  /// the ability to move or resize the window mid-playback would be a
-  /// regression.
+  /// Two `Positioned` per side that actually carries buttons (none for an
+  /// empty side: nothing there needs a hit area, and drawing one would just
+  /// be more surface for a stray tap or hover to hit for no reason), each
+  /// covering the same rect at exactly `_cornerWidth` and
+  /// `kLinuxWindowChromeHeight`:
   ///
-  /// A pointer inside the strip overrides the hidden state in both
+  /// - The buttons themselves, a plain positioned child with nothing wrapping
+  ///   it that could steal its hit test. A tap on a button has to return
+  ///   `true` all the way up through this entry so the `Stack` stops right
+  ///   here, the same as it always did before this widget grew corners: a
+  ///   click on close or minimize must never also reach whatever the corner
+  ///   happens to be drawn over (the resize edges, and beyond them the app's
+  ///   own content, one layer of which is `WindowTitleRow`'s drag band).
+  /// - A hover-tracking `MouseRegion`, listed after (so painted on top of)
+  ///   the buttons entry, with no child of its own and `opaque: false`. See
+  ///   its own comment below for why it is a separate sibling rather than a
+  ///   wrapper around the buttons.
+  List<Widget> _corners(DecorationLayout layout) => [
+        for (final (isStart, buttons) in [
+          (true, layout.start),
+          (false, layout.end),
+        ])
+          if (buttons.isNotEmpty) ...[
+            PositionedDirectional(
+              top: 0,
+              start: isStart ? 0 : null,
+              end: isStart ? null : 0,
+              height: kLinuxWindowChromeHeight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: kLinuxChromeEdgePadding,
+                ),
+                child: _buttons(buttons),
+              ),
+            ),
+
+            // Topmost so nothing can shadow it, and `opaque: false` so it
+            // shadows nothing in turn. `RenderMouseRegion.hitTest` returns
+            // `super.hitTest(...) && opaque`, which still records the region
+            // for the mouse tracker while answering false, so the hit test
+            // carries on into the buttons entry beneath and every gesture
+            // there behaves exactly as it would with no hover region here at
+            // all. Wrapping the buttons in this `MouseRegion` instead of
+            // stacking it as a sibling, as an earlier version of this widget
+            // did, would make the *buttons'* own successful hit test return
+            // false too (the whole point of `opaque: false` is to always
+            // answer false), letting the tap fall through to whatever the
+            // corner sits over. That silently doubled every button press
+            // into a click on `WindowTitleRow`'s drag band underneath, which
+            // holds the gesture arena for `kDoubleTapTimeout` waiting to see
+            // if it becomes a double-click-to-maximize.
+            PositionedDirectional(
+              top: 0,
+              start: isStart ? 0 : null,
+              end: isStart ? null : 0,
+              height: kLinuxWindowChromeHeight,
+              width: _cornerWidth(buttons.length),
+              child: MouseRegion(
+                opaque: false,
+                onEnter: (_) => _setPointerOverButtons(true),
+                onExit: (_) => _setPointerOverButtons(false),
+              ),
+            ),
+          ],
+      ];
+
+  /// Width of one side's button group exactly as `_buttons` draws it: edge
+  /// padding on both sides of the row, plus the buttons themselves, the same
+  /// whether they are actually visible or standing in as the hidden-state
+  /// placeholder. Deliberately not `linuxButtonGroupReserve`, which also
+  /// budgets `kLinuxChromeGap` for content clearance elsewhere and does not
+  /// describe what is drawn here.
+  static double _cornerWidth(int buttonCount) =>
+      2 * kLinuxChromeEdgePadding + buttonCount * kLinuxWindowButtonExtent;
+
+  /// The buttons fade out with the playback chrome, while the resize edges
+  /// stay live. They are invisible either way, and losing the ability to
+  /// resize the window mid-playback would be a regression.
+  ///
+  /// A pointer inside the corner overrides the hidden state in both
   /// directions: buttons under the cursor are never taken away, and reaching
-  /// for the top of the window during playback brings them back rather than
-  /// leaving a viewer to hunt for controls that are not drawn.
-  Widget _buttons() {
+  /// for a corner during playback brings them back rather than leaving a
+  /// viewer to hunt for controls that are not drawn.
+  ///
+  /// Hidden state keeps a `SizedBox` the width the buttons would occupy
+  /// rather than `SizedBox.shrink()`, so this entry's rendered size always
+  /// matches `_cornerWidth`, the fixed size the sibling hover `MouseRegion`
+  /// in `_corners` covers regardless of hidden state. The hover region does
+  /// not actually read this widget's size (it is a sibling, not a wrapper,
+  /// precisely so a hit on a real button is never swallowed), but keeping
+  /// the two in agreement is what makes `_cornerWidth`'s doc comment true.
+  Widget _buttons(List<WindowButton> buttons) {
     return ValueListenableBuilder<bool>(
       valueListenable: widget.buttonsHidden,
       builder: (context, hidden, _) {
-        if (hidden && !_pointerOverStrip) return const SizedBox.shrink();
-
-        return ValueListenableBuilder<DecorationLayout>(
-          valueListenable: widget.layout,
-          builder: (context, layout, _) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Row(
-              children: [
-                WindowButtons(
-                  buttons: layout.start,
-                  controller: widget.controller,
-                ),
-                const Spacer(),
-                WindowButtons(
-                  buttons: layout.end,
-                  controller: widget.controller,
-                ),
-              ],
-            ),
-          ),
-        );
+        if (hidden && !_pointerOverButtons) {
+          return SizedBox(
+            width: buttons.length * kLinuxWindowButtonExtent,
+            height: kLinuxWindowChromeHeight,
+          );
+        }
+        return WindowButtons(buttons: buttons, controller: widget.controller);
       },
     );
   }
@@ -217,7 +260,7 @@ class _WindowChromeState extends State<_WindowChrome> {
 /// under `flutter test`, so a regression deleting the web check from
 /// [DesktopWindowChrome.build] would pass every widget test unless the
 /// underlying logic is tested on explicit inputs. Same reasoning as
-/// `windowChromeInsetFor`.
+/// `windowChromeInsetsFor`.
 @visibleForTesting
 bool shouldShowWindowChrome({
   required bool isWeb,

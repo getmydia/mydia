@@ -136,6 +136,12 @@ class AppDelegate: FlutterAppDelegate {
         self?.mainFlutterWindow?.standardWindowButton(.miniaturizeButton)?.isHidden = hidden
         self?.mainFlutterWindow?.standardWindowButton(.zoomButton)?.isHidden = hidden
         result(nil)
+      case "titleBarPointerDown":
+        // `WindowDragBand` reports every pointer-down on empty band space
+        // here; `MainFlutterWindow` is the only thing that knows whether it
+        // was the second half of a double-click `sendEvent` diverted to it.
+        (self?.mainFlutterWindow as? MainFlutterWindow)?.handleTitleBarPointerDown()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }

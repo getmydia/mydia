@@ -4,12 +4,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
@@ -146,72 +147,87 @@ class DownloadsScreen extends ConsumerWidget {
     final sortedItems = items.values.toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(context, ref),
-      body: CustomScrollView(
-        slivers: [
-          // Top padding for app bar
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 100),
+    // This screen's own `WindowTitleRow` (built by `header`) draws into the
+    // title-bar band, so the body has to sit under `removeBand`: otherwise
+    // the ambient `MediaQuery.padding.top` still carries the band and every
+    // inset below double-counts it.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
+          appBar: header(context, ref),
+          body: CustomScrollView(
+            slivers: [
+              // Top padding for the app bar. Computed here, outside the
+              // Scaffold, for the same reason browse_scaffold.dart/
+              // library_screen.dart do: `topSpacerHeight` reads
+              // `MediaQuery.paddingOf(context)`, and the body of a
+              // `Scaffold(extendBodyBehindAppBar: true)` rewrites that to the
+              // app bar's own rendered height, so reading it from inside the
+              // body would count the header twice.
+              SliverToBoxAdapter(
+                child: SizedBox(height: topSpacerHeight(context)),
+              ),
+
+              // Storage usage section
+              SliverToBoxAdapter(
+                child: storageQuotaAsync.when(
+                  data: (status) => _buildStorageHeader(context, ref, status),
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+              ),
+
+              // Failed downloads section (keep as list for visibility)
+              SliverToBoxAdapter(
+                child: failedDownloadsAsync.when(
+                  data: (failed) {
+                    if (failed.isEmpty) return const SizedBox.shrink();
+                    return _buildFailedSection(context, ref, failed);
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+              ),
+
+              // Main Grid
+              if (sortedItems.isEmpty &&
+                  !downloadQueueAsync.isLoading &&
+                  !downloadedMediaAsync.isLoading)
+                SliverFillRemaining(
+                  child: _buildEmptyState(context),
+                )
+              else
+                SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount =
+                        _calculateCrossAxisCount(constraints.crossAxisExtent);
+                    return SliverPadding(
+                      padding: const EdgeInsets.all(16),
+                      sliver: SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          childAspectRatio: 0.48,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 16,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            return _buildGridItem(
+                                context, ref, sortedItems[index]);
+                          },
+                          childCount: sortedItems.length,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+              const SliverDockGap(),
+            ],
           ),
-
-          // Storage usage section
-          SliverToBoxAdapter(
-            child: storageQuotaAsync.when(
-              data: (status) => _buildStorageHeader(context, ref, status),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          // Failed downloads section (keep as list for visibility)
-          SliverToBoxAdapter(
-            child: failedDownloadsAsync.when(
-              data: (failed) {
-                if (failed.isEmpty) return const SizedBox.shrink();
-                return _buildFailedSection(context, ref, failed);
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-          ),
-
-          // Main Grid
-          if (sortedItems.isEmpty &&
-              !downloadQueueAsync.isLoading &&
-              !downloadedMediaAsync.isLoading)
-            SliverFillRemaining(
-              child: _buildEmptyState(context),
-            )
-          else
-            SliverLayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount =
-                    _calculateCrossAxisCount(constraints.crossAxisExtent);
-                return SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      childAspectRatio: 0.48,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 16,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        return _buildGridItem(context, ref, sortedItems[index]);
-                      },
-                      childCount: sortedItems.length,
-                    ),
-                  ),
-                );
-              },
-            ),
-
-          const SliverDockGap(),
-        ],
+        ),
       ),
     );
   }
@@ -822,7 +838,7 @@ class DownloadsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _showCancelAllQueuedDialog(
+  static Future<void> _showCancelAllQueuedDialog(
       BuildContext context, WidgetRef ref, int queuedCount) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -853,7 +869,51 @@ class DownloadsScreen extends ConsumerWidget {
     }
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, WidgetRef ref) {
+  /// Breathing room between the header's bottom edge and the storage
+  /// section, on top of the header's own height.
+  ///
+  /// Before the title row drew into the band, the header was always a flat
+  /// `kToolbarHeight` (56) and the space above the storage section was a flat
+  /// `100`, so this gap was baked into that literal rather than named:
+  /// `100 - 56 == 44`. Once the header's height started varying by platform
+  /// (40 on macOS, 36 on Linux, still 56 with no window chrome), a flat
+  /// `100` stopped tracking it: the gap grew
+  /// from 44 to 60 on macOS purely because the header shrank underneath an
+  /// unchanged spacer. Naming the 44 and adding it to the header's real
+  /// height (see [topSpacerHeight]) keeps the gap itself constant instead.
+  @visibleForTesting
+  static const double storageSectionGap = 44;
+
+  /// Height of the blank sliver above the storage section.
+  ///
+  /// [context] must be read inside the same `WindowChromeInsets.removeBand`
+  /// builder [build] evaluates this from (see the call site): `removeBand`
+  /// has already taken the band back out of `MediaQuery.paddingOf(context)`,
+  /// so adding the header's own height here counts it exactly once, the same
+  /// way every other converted screen's `chromeTop`/`scrollTopPadding` does.
+  /// On mobile (zero window-chrome insets) this reduces to the header's old
+  /// flat value: `statusBar + kToolbarHeight (56) + storageSectionGap (44)`,
+  /// which is exactly the old flat `100` whenever the status bar is 0 (the
+  /// `flutter_test` default), and now also correctly grows with a real
+  /// device's status bar instead of ignoring it, matching every other
+  /// screen's own chrome math.
+  @visibleForTesting
+  static double topSpacerHeight(BuildContext context) =>
+      freshnessTopInset(context,
+          appBarHeight: WindowTitleRow.heightOf(context)) +
+      storageSectionGap;
+
+  /// Builds the screen's title-bar header.
+  ///
+  /// A static, `@visibleForTesting` seam rather than a private instance
+  /// method: `DownloadsScreen.build` stands up the queue, storage-quota and
+  /// downloaded-media providers together, which is expensive to satisfy in a
+  /// widget test just to check where the cast button lands. A test can
+  /// override only [downloadQueueProvider] (the one provider this header
+  /// reads) and call this directly, exercising the exact code path [build]
+  /// uses rather than a mirror of it.
+  @visibleForTesting
+  static PreferredSizeWidget header(BuildContext context, WidgetRef ref) {
     final queueAsync = ref.watch(downloadQueueProvider);
     final queuedCount = queueAsync.whenOrNull(
           data: (tasks) => tasks
@@ -863,53 +923,42 @@ class DownloadsScreen extends ConsumerWidget {
         0;
 
     return PreferredSize(
-      preferredSize: const Size.fromHeight(kToolbarHeight),
+      preferredSize: Size.fromHeight(WindowTitleRow.heightOf(context)),
       child: GlassSurface.appBar(
         opacity: 0.85,
-        child: SafeArea(
-          child: SizedBox(
-            height: kToolbarHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.download_rounded,
-                    color: AppColors.primary,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Downloads',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.3,
-                        ),
-                  ),
-                  const Spacer(),
-                  if (queuedCount > 0) ...[
-                    IconButton(
-                      onPressed: () =>
-                          _showCancelAllQueuedDialog(context, ref, queuedCount),
-                      tooltip: 'Cancel all queued',
-                      icon: const Icon(
-                        Icons.clear_all_rounded,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                  // DownloadsScreen's app bar is always visible (no
-                  // desktop suppression), so it carries its own cast
-                  // affordance instead of the shell's overlay. See
-                  // AppShell.needsCastOverlay.
-                  CastButton(
-                    onPressed: () => pickCastDevice(context, ref),
-                  ),
-                ],
+        child: WindowTitleRow(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.download_rounded,
+                color: AppColors.primary,
+                size: 24,
               ),
-            ),
+              const SizedBox(width: 10),
+              Text(
+                'Downloads',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                    ),
+              ),
+            ],
           ),
+          actions: [
+            if (queuedCount > 0) ...[
+              IconButton(
+                onPressed: () =>
+                    _showCancelAllQueuedDialog(context, ref, queuedCount),
+                tooltip: 'Cancel all queued',
+                icon: const Icon(
+                  Icons.clear_all_rounded,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ],
         ),
       ),
     );

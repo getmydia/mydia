@@ -8,11 +8,11 @@ import 'library_sort_provider.dart';
 import 'library_sort_sheet.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/app_shell.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/theme/colors.dart';
 import '../filter/filter_editor_sheet.dart';
 
@@ -43,8 +43,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   /// The single source of truth for three call sites that used to carry their
   /// own copy: `preferredSize`, the freshness inset, and the scroll padding.
   /// The old copies all said 120 while the bar actually builds 112.
-  double _barHeight(bool showSearch) =>
-      kToolbarHeight + (showSearch ? _searchRowHeight : 0);
+  double _barHeight(bool showSearch, BuildContext context) =>
+      WindowTitleRow.heightOf(context) + (showSearch ? _searchRowHeight : 0);
 
   @override
   void dispose() {
@@ -130,66 +130,81 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final icon = widget.libraryType == LibraryType.movies
         ? Icons.movie_rounded
         : Icons.tv_rounded;
-    final isDesktop = Breakpoints.isDesktop(context);
-
-    // On desktop, always show search bar expanded
-    final effectiveShowSearch = isDesktop || _showSearch;
-
-    final barHeight = _barHeight(effectiveShowSearch);
-    // Read MediaQuery *here*, above the `Scaffold`. Inside the body of a
-    // `Scaffold(extendBodyBehindAppBar: true)` Flutter rewrites `padding.top`
-    // to the app bar's own bottom edge (see `_BodyBuilder` in
-    // material/scaffold.dart), so any descendant that reads it and adds
-    // `barHeight` again counts the bar twice. That was this screen's bug: the
-    // grid read it from a `LayoutBuilder` inside the body and sat 128px too
-    // low, while the list read it from this context and was nearly right.
-    final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
-    final scrollTopPadding = chromeTop + 8;
 
     // Library grids use the calm static backdrop (no per-title artwork).
     publishBackdropSource(ref, BackdropSource.none);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(
-        title,
-        icon,
-        isDesktop,
-        effectiveShowSearch,
-        barHeight,
-        sort,
-        filter,
-      ),
-      // A `Stack`, not a `Column`: `FreshnessHeader` carries a top inset that
-      // exists purely to clear an app bar this body already extends behind. As
-      // a `Column` sibling that inset was charged as layout height too, so
-      // every background refetch shoved the whole grid down by ~161px on top
-      // of its own padding. Overlaying keeps the header in the same pixels
-      // without it owning any of the scroll view's space.
-      body: LibraryMediaBody(
-        filter: filter,
-        scrollController: _scrollController,
-        chromeTop: chromeTop,
-        scrollTopPadding: scrollTopPadding,
-        viewMode: _viewMode,
-        emptyTitle: widget.libraryType == LibraryType.movies
-            ? 'No movies yet'
-            : 'No TV shows yet',
-        emptySubtitle: 'Add content to your library to see it here',
-        emptyIcon: widget.libraryType == LibraryType.movies
-            ? Icons.movie_filter_rounded
-            : Icons.live_tv_rounded,
-        searchQuery: _searchController.text,
-        onSearchClear: () {
-          _searchController.clear();
-          setState(() {});
+    // This screen's own `WindowTitleRow` (built by `_buildAppBar`) draws
+    // into the title-bar band, so the body has to sit under `removeBand`:
+    // otherwise the ambient `MediaQuery.padding.top` still carries the band
+    // and every inset below double-counts it.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) {
+          final isDesktop = Breakpoints.isDesktop(context);
+
+          // On desktop, always show search bar expanded
+          final effectiveShowSearch = isDesktop || _showSearch;
+
+          final barHeight = _barHeight(effectiveShowSearch, context);
+          // Read MediaQuery *here*, above the `Scaffold`. Inside the body of
+          // a `Scaffold(extendBodyBehindAppBar: true)` Flutter rewrites
+          // `padding.top` to the app bar's own bottom edge (see
+          // `_BodyBuilder` in material/scaffold.dart), so any descendant
+          // that reads it and adds `barHeight` again counts the bar twice.
+          // That was this screen's bug: the grid read it from a
+          // `LayoutBuilder` inside the body and sat 128px too low, while the
+          // list read it from this context and was nearly right.
+          final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
+          final scrollTopPadding = chromeTop + 8;
+
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            extendBodyBehindAppBar: true,
+            appBar: _buildAppBar(
+              context,
+              title,
+              icon,
+              isDesktop,
+              effectiveShowSearch,
+              barHeight,
+              sort,
+              filter,
+            ),
+            // A `Stack`, not a `Column`: `FreshnessHeader` carries a top
+            // inset that exists purely to clear an app bar this body
+            // already extends behind. As a `Column` sibling that inset was
+            // charged as layout height too, so every background refetch
+            // shoved the whole grid down by ~161px on top of its own
+            // padding. Overlaying keeps the header in the same pixels
+            // without it owning any of the scroll view's space.
+            body: LibraryMediaBody(
+              filter: filter,
+              scrollController: _scrollController,
+              chromeTop: chromeTop,
+              scrollTopPadding: scrollTopPadding,
+              viewMode: _viewMode,
+              emptyTitle: widget.libraryType == LibraryType.movies
+                  ? 'No movies yet'
+                  : 'No TV shows yet',
+              emptySubtitle: 'Add content to your library to see it here',
+              emptyIcon: widget.libraryType == LibraryType.movies
+                  ? Icons.movie_filter_rounded
+                  : Icons.live_tv_rounded,
+              searchQuery: _searchController.text,
+              onSearchClear: () {
+                _searchController.clear();
+                setState(() {});
+              },
+            ),
+          );
         },
       ),
     );
   }
 
   PreferredSizeWidget _buildAppBar(
+    BuildContext context,
     String title,
     IconData icon,
     bool isDesktop,
@@ -204,163 +219,144 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       preferredSize: Size.fromHeight(barHeight),
       child: GlassSurface.appBar(
         opacity: 0.85,
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Main app bar
-              SizedBox(
-                height: kToolbarHeight,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: isDesktop ? horizontalPadding - 8 : 8),
-                  child: Row(
-                    children: [
-                      // Hamburger menu on mobile
-                      if (!isDesktop)
-                        IconButton(
-                          icon: const Icon(Icons.menu_rounded),
-                          onPressed: () {
-                            AppShell.scaffoldKey.currentState?.openDrawer();
-                          },
-                          tooltip: 'Menu',
-                        ),
-                      // Title with icon
-                      Padding(
-                        padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
-                        child: Row(
-                          children: [
-                            Icon(
-                              icon,
-                              color: AppColors.primary,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 10),
-                            Text(
-                              title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .headlineSmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: -0.3,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      // Action buttons - hide search toggle on desktop
-                      if (!isDesktop)
-                        _ActionButton(
-                          icon: Icons.search_rounded,
-                          isActive: _showSearch,
-                          onPressed: _toggleSearch,
-                          tooltip: 'Search',
-                        ),
-                      if (!isDesktop) const SizedBox(width: 4),
-                      _ActionButton(
-                        icon: Icons.sort_rounded,
-                        onPressed: _showSortMenu,
-                        tooltip: 'Sort: ${sort.field.displayName}'
-                            '${sort.field.supportsDirection ? ' (${sort.direction == SortDirection.asc ? 'Asc' : 'Desc'})' : ''}',
-                      ),
-                      const SizedBox(width: 4),
-                      _ActionButton(
-                        icon: _viewMode == LibraryViewMode.grid
-                            ? Icons.view_list_rounded
-                            : Icons.grid_view_rounded,
-                        onPressed: _toggleViewMode,
-                        tooltip: 'Toggle view',
-                      ),
-                      const SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        icon: const Icon(
-                          Icons.more_vert_rounded,
-                          color: AppColors.textSecondary,
-                          size: 22,
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(
-                          minWidth: 40,
-                          minHeight: 40,
-                        ),
-                        color: AppColors.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        onSelected: (value) {
-                          if (value == 'save_filter') {
-                            _saveAsFilter(filter);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'save_filter',
-                            child: Text('Save this view as a filter'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 4),
-                      // LibraryScreen keeps a real app bar on every platform
-                      // (unlike the desktop-suppressed Home screen), so it
-                      // carries its own cast affordance instead of the
-                      // shell's overlay. See AppShell.needsCastOverlay.
-                      CastButton(
-                        onPressed: () => pickCastDevice(context, ref),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Search bar (animated, always visible on desktop)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                height: showSearch ? _searchRowHeight : 0,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: showSearch ? 1.0 : 0.0,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        horizontalPadding, 0, horizontalPadding, 12),
-                    child: TextField(
-                      controller: _searchController,
-                      autofocus: !isDesktop && _showSearch,
-                      decoration: InputDecoration(
-                        hintText: 'Search ${title.toLowerCase()}...',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear_rounded, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                        filled: true,
-                        fillColor:
-                            AppColors.surfaceVariant.withValues(alpha: 0.5),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                      onChanged: (value) {
-                        setState(() {});
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WindowTitleRow(
+              // Hamburger menu on mobile
+              leading: isDesktop
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.menu_rounded),
+                      onPressed: () {
+                        AppShell.scaffoldKey.currentState?.openDrawer();
                       },
+                      tooltip: 'Menu',
                     ),
+              // Title with icon
+              title: Padding(
+                padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
+                child: Row(
+                  children: [
+                    Icon(
+                      icon,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      title,
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.3,
+                              ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                // Action buttons - hide search toggle on desktop
+                if (!isDesktop)
+                  _ActionButton(
+                    icon: Icons.search_rounded,
+                    isActive: _showSearch,
+                    onPressed: _toggleSearch,
+                    tooltip: 'Search',
+                  ),
+                if (!isDesktop) const SizedBox(width: 4),
+                _ActionButton(
+                  icon: Icons.sort_rounded,
+                  onPressed: _showSortMenu,
+                  tooltip: 'Sort: ${sort.field.displayName}'
+                      '${sort.field.supportsDirection ? ' (${sort.direction == SortDirection.asc ? 'Asc' : 'Desc'})' : ''}',
+                ),
+                const SizedBox(width: 4),
+                _ActionButton(
+                  icon: _viewMode == LibraryViewMode.grid
+                      ? Icons.view_list_rounded
+                      : Icons.grid_view_rounded,
+                  onPressed: _toggleViewMode,
+                  tooltip: 'Toggle view',
+                ),
+                const SizedBox(width: 4),
+                PopupMenuButton<String>(
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    color: AppColors.textSecondary,
+                    size: 22,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 40,
+                    minHeight: 40,
+                  ),
+                  color: AppColors.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'save_filter') {
+                      _saveAsFilter(filter);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'save_filter',
+                      child: Text('Save this view as a filter'),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 4),
+              ],
+            ),
+
+            // Search bar (animated, always visible on desktop)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              height: showSearch ? _searchRowHeight : 0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: showSearch ? 1.0 : 0.0,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      horizontalPadding, 0, horizontalPadding, 12),
+                  child: TextField(
+                    controller: _searchController,
+                    autofocus: !isDesktop && _showSearch,
+                    decoration: InputDecoration(
+                      hintText: 'Search ${title.toLowerCase()}...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor:
+                          AppColors.surfaceVariant.withValues(alpha: 0.5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {});
+                    },
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

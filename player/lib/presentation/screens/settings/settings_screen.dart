@@ -6,6 +6,7 @@ import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/remote/node_registration_providers.dart';
 import '../../../core/remote/registration_status.dart';
@@ -19,10 +20,9 @@ import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/user_settings.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
-import '../../widgets/cast_actions.dart';
-import '../../widgets/cast_button.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import 'settings_controller.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
@@ -41,6 +41,22 @@ import 'widgets/update_card.dart';
 /// quite likely there to sign out or collect diagnostics.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  /// Builds Settings' title-bar header.
+  ///
+  /// A static, `@visibleForTesting` seam rather than inlined in [build]:
+  /// `build` also wires up `settingsControllerProvider`, `connectionProvider`,
+  /// `p2pStatusNotifierProvider` (which starts a real native P2P node) and
+  /// `updateProvider`, all far too expensive to satisfy in a widget test that
+  /// only wants to check where the cast button lands. This is the exact
+  /// widget [build] puts in `Scaffold.appBar`, not a mirror of it.
+  @visibleForTesting
+  static PreferredSizeWidget header(BuildContext context) {
+    return WindowTitleBar(
+      height: WindowTitleRow.heightOf(context),
+      title: Text('Settings', style: Theme.of(context).textTheme.titleLarge),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -62,56 +78,56 @@ class SettingsScreen extends ConsumerWidget {
     );
     final horizontal = MediaQuery.sizeOf(context).width >= 600 ? 26.0 : 14.0;
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text('Settings'),
-        // SettingsScreen's app bar is always visible (no desktop
-        // suppression), so it carries its own cast affordance instead of
-        // the shell's overlay. See AppShell.needsCastOverlay.
-        actions: [
-          CastButton(onPressed: () => pickCastDevice(context, ref)),
-          const SizedBox(width: 8),
-        ],
-      ),
-      // An explicit padding turns off ListView's own MediaQuery bottom inset,
-      // so the dock's height has to be reserved here by hand.
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          horizontal,
-          20,
-          horizontal,
-          DockInsets.bottomOf(context),
-        ),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 660),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  SettingsIdentity(
-                    username: settings?.username ?? '',
-                    serverUrl: settings?.serverUrl ?? '',
-                  ),
-                  const UpdateCard(),
-                  _PlaybackSection(
-                    settings: settings,
-                    failed: settingsAsync.hasError,
-                  ),
-                  const SizedBox(height: 18),
-                  _ManageSection(connection: summary),
-                  const SizedBox(height: 18),
-                  _AccountSection(
-                    onSignOut: () => _handleSignOut(context, ref),
-                  ),
-                  _VersionFooter(version: currentVersion),
-                ],
-              ),
+    // Settings sits in the shell's content column, whose leading inset the
+    // shell already narrows by the sidebar width, so its own `WindowTitleRow`
+    // (via `WindowTitleBar`, below) draws into the band directly rather than
+    // going through a separate desktop cast overlay. The body has to sit
+    // under `removeBand`, or the ambient `MediaQuery.padding.top` still
+    // carries the band on top of the app bar's own reserved height.
+    return WindowChromeInsets.removeBand(
+      child: Builder(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: header(context),
+          // An explicit padding turns off ListView's own MediaQuery bottom
+          // inset, so the dock's height has to be reserved here by hand.
+          body: ListView(
+            padding: EdgeInsets.fromLTRB(
+              horizontal,
+              20,
+              horizontal,
+              DockInsets.bottomOf(context),
             ),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 660),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SettingsIdentity(
+                        username: settings?.username ?? '',
+                        serverUrl: settings?.serverUrl ?? '',
+                      ),
+                      const UpdateCard(),
+                      _PlaybackSection(
+                        settings: settings,
+                        failed: settingsAsync.hasError,
+                      ),
+                      const SizedBox(height: 18),
+                      _ManageSection(connection: summary),
+                      const SizedBox(height: 18),
+                      _AccountSection(
+                        onSignOut: () => _handleSignOut(context, ref),
+                      ),
+                      _VersionFooter(version: currentVersion),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

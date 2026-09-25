@@ -10,6 +10,8 @@ Future<void> _pump(
   WidgetTester tester, {
   required FakeWindowController window,
   ValueListenable<bool>? maximized,
+  VoidCallback? onDoubleTap,
+  VoidCallback? onPointerDown,
 }) {
   return tester.pumpWidget(
     MaterialApp(
@@ -19,6 +21,8 @@ Future<void> _pump(
           controller: window,
           height: 36,
           maximized: maximized,
+          onDoubleTap: onDoubleTap,
+          onPointerDown: onPointerDown,
         ),
       ),
     ),
@@ -75,6 +79,65 @@ void main() {
 
       expect(window.unmaximizeCalls, 1);
       expect(window.maximizeCalls, 0);
+    });
+
+    testWidgets(
+        'when onDoubleTap is supplied, a double-tap calls it instead of '
+        'toggling maximize', (tester) async {
+      final window = FakeWindowController();
+      var calls = 0;
+      await _pump(
+        tester,
+        window: window,
+        maximized: ValueNotifier(false),
+        onDoubleTap: () => calls++,
+      );
+
+      final centre = tester.getCenter(find.byType(WindowDragBand));
+      await tester.tapAt(centre);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(centre);
+      await tester.pump(kDoubleTapTimeout);
+
+      expect(calls, 1);
+      expect(window.maximizeCalls, 0);
+      expect(window.unmaximizeCalls, 0);
+    });
+
+    testWidgets(
+        'onPointerDown reports a single pointer-down immediately, with no '
+        'second tap needed', (tester) async {
+      final window = FakeWindowController();
+      var calls = 0;
+      await _pump(tester, window: window, onPointerDown: () => calls++);
+
+      await tester.tapAt(tester.getCenter(find.byType(WindowDragBand)));
+      await tester.pump();
+
+      expect(calls, 1);
+    });
+
+    testWidgets(
+        'onPointerDown suppresses the double-tap maximize toggle, so the '
+        'two never both run for the same click', (tester) async {
+      final window = FakeWindowController();
+      var calls = 0;
+      await _pump(
+        tester,
+        window: window,
+        maximized: ValueNotifier(false),
+        onPointerDown: () => calls++,
+      );
+
+      final centre = tester.getCenter(find.byType(WindowDragBand));
+      await tester.tapAt(centre);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tapAt(centre);
+      await tester.pump();
+
+      expect(calls, 2, reason: 'once per down, not once per double-tap');
+      expect(window.maximizeCalls, 0);
+      expect(window.unmaximizeCalls, 0);
     });
 
     testWidgets('is exactly as tall as asked', (tester) async {
