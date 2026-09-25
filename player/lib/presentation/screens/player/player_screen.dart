@@ -1157,10 +1157,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
   /// than the resolved location (`go_router/lib/src/match.dart:231`:
   /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
-  /// `concatenatePaths(matchedPath, route.path)`). So `_navigateToEpisode`'s
-  /// `context.go` updates this State in place instead of building a new one,
-  /// and [_initializePlayer], which is where every other per-file field is
-  /// cleared, is not re-entered.
+  /// `concatenatePaths(matchedPath, route.path)`). `_navigateToEpisode`
+  /// itself mounts a new State when the player was opened with `context.push`
+  /// (the usual case, see `test/core/router/player_route_handoff_test.dart`),
+  /// so this path is for a `go` between two declarative player locations,
+  /// where [_initializePlayer], which clears every other per-file field, is
+  /// not re-entered.
   ///
   /// Deliberately narrow. It resets the three subtitle-preference fields and
   /// nothing else, and it does not call [_initializePlayer]. Whether the rest
@@ -2572,12 +2574,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     ]);
 
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
-    // source switch, a session restart, or a fresh `PlayerScreen` state for
-    // a new queue item. It is *not* re-bound by navigating to the next
-    // episode of a season -- that reuses this same `PlayerScreen` state
-    // (go_router keys the page by route pattern, not the resolved path), so
-    // `initState` and this call do not run again then. The sizer cancels
-    // the previous subscription itself.
+    // source switch or a session restart. Next/previous episode navigation
+    // mounts a new `PlayerScreen` with its own sizer; the shared
+    // `PlayerWindowSession` is what carries the window across that handoff.
+    // The sizer cancels the previous subscription itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // A new open: its track list is not mpv's until the probe below.
