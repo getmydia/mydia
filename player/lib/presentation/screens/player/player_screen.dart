@@ -1655,10 +1655,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // error) or a server too old to carry the field, and neither is a
       // statement that the viewer has no preference. Assigning `const []`
       // unconditionally would discard what `_rememberAudioLanguage` stored on
-      // the previous episode, which is exactly the case where a season
-      // playing through must keep it. Next-episode navigation mounts a new
-      // `PlayerScreen` (see `test/core/router/player_route_handoff_test.dart`),
-      // so this field carries the choice forward across that handoff.
+      // the previous episode whenever this State is reused for the next one
+      // (a `go` between two declarative player locations; a pushed player
+      // gets a new State instead, see
+      // `test/core/router/player_route_handoff_test.dart`).
       final serverPreference =
           candidatesResult?.metadata.preferredAudioLanguages;
       if (serverPreference != null) {
@@ -5035,10 +5035,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return;
       }
 
-      // Kept for the next media: next-episode navigation mounts a new
-      // `PlayerScreen` (see `test/core/router/player_route_handoff_test.dart`),
-      // but the shared `PlayerWindowSession` carries this choice forward
-      // across that handoff, so the fresh Player built there reads this field.
+      // Kept for the next media this State opens if it is reused (a `go`
+      // between two declarative player locations), where `initState` does not
+      // run again and the fresh Player built there reads this field. A pushed
+      // player gets a new State instead; see
+      // `test/core/router/player_route_handoff_test.dart`.
       final data = result.data?['setAudioLanguagePreference'];
       final updated = data?['preferredAudioLanguages'];
       if (updated is List) {
@@ -5117,14 +5118,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [queued] is the whole of what this sends. A queued write belongs to the
   /// file and the selection generation that made it, and it is dropped when
   /// either has moved on rather than rebuilt from the state now showing: the
-  /// queue can outlive both. Next-episode navigation mounts a new `PlayerScreen`
-  /// (see `test/core/router/player_route_handoff_test.dart`), but queued writes
-  /// made before that handoff must not apply to the new file. Without these
-  /// checks, a pick still waiting from before the handoff would name the new
-  /// file with the old file's track, and a pick a later one superseded would
-  /// store a choice the viewer has already moved past. Both are invisible to a
-  /// call site's own "after the apply" ordering, which is why the check is here
-  /// and not there.
+  /// queue can outlive both. When navigating to the next episode reuses this
+  /// State (see [didUpdateWidget]), a pick still waiting here when the file
+  /// changes would otherwise name the *new* file with the old file's track,
+  /// and a pick a later one superseded would store a choice the viewer has
+  /// already moved past. Both are invisible to a call site's own "after
+  /// the apply" ordering, which is why the check is here and not there.
   ///
   /// Resolving the track against the server happens after those checks, not
   /// before: [_serverSideSubtitleTrack] reads the live player and the live
