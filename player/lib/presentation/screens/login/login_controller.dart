@@ -92,6 +92,7 @@ class LoginState {
     this.claimCodeStatus = ClaimCodeStatus.idle,
     this.claimCodeMessage,
     this.credentialsNotPersisted = false,
+    this.totpChallenge,
   });
 
   final ConnectionMode mode;
@@ -107,6 +108,9 @@ class LoginState {
   /// The UI must warn the user before letting them into the app.
   final bool credentialsNotPersisted;
 
+  /// Set while a password login waits for a TOTP or recovery code.
+  final TotpChallenge? totpChallenge;
+
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
@@ -115,6 +119,8 @@ class LoginState {
     ClaimCodeStatus? claimCodeStatus,
     String? claimCodeMessage,
     bool? credentialsNotPersisted,
+    TotpChallenge? totpChallenge,
+    bool clearTotpChallenge = false,
   }) {
     return LoginState(
       mode: mode ?? this.mode,
@@ -125,6 +131,8 @@ class LoginState {
       claimCodeMessage: claimCodeMessage,
       credentialsNotPersisted:
           credentialsNotPersisted ?? this.credentialsNotPersisted,
+      totpChallenge:
+          clearTotpChallenge ? null : (totpChallenge ?? this.totpChallenge),
     );
   }
 
@@ -309,24 +317,20 @@ class LoginController extends _$LoginController {
       final authService = ref.read(authServiceProvider);
 
       // Call the GraphQL login method from AuthService
-      await authService.loginWithGraphQL(
+      final outcome = await authService.loginWithGraphQL(
         serverUrl: serverUrl,
         username: username,
         password: password,
       );
 
-      // Check if still mounted before updating state
       if (!ref.mounted) return;
 
-      // Update the auth state provider to trigger UI updates
-      await ref.read(authStateProvider.notifier).refresh();
+      if (outcome is TotpChallenge) {
+        state = state.copyWith(isLoading: false, totpChallenge: outcome);
+        return;
+      }
 
-      if (!ref.mounted) return;
-      state = state.copyWith(
-        isLoading: false,
-        success: true,
-        credentialsNotPersisted: authService.storageDegraded,
-      );
+      await _finishPasswordLogin(authService);
     } catch (e) {
       // Check if still mounted before updating state
       if (!ref.mounted) return;
@@ -353,6 +357,64 @@ class LoginController extends _$LoginController {
 
       state = state.copyWith(isLoading: false, error: errorMessage);
     }
+  }
+
+  /// Submits the code for a pending [LoginState.totpChallenge].
+  Future<void> submitTotpCode(String code) async {
+    final challenge = state.totpChallenge;
+    if (challenge == null) return;
+
+    state = state.copyWith(isLoading: true, error: null);
+
+    try {
+      final authService = ref.read(authServiceProvider);
+      await authService.verifyTotp(challenge: challenge, code: code.trim());
+      if (!ref.mounted) return;
+      await _finishPasswordLogin(authService);
+    } catch (e) {
+      if (!ref.mounted) return;
+
+      final errorStr = e.toString();
+      if (errorStr.contains('Sign-in expired')) {
+        state = state.copyWith(
+          isLoading: false,
+          clearTotpChallenge: true,
+          error: 'Sign-in expired, please try again',
+        );
+      } else if (errorStr.contains('Too many')) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Too many login attempts. Please try again later.',
+        );
+      } else if (errorStr.contains('SocketException') ||
+          errorStr.contains('connection') ||
+          errorStr.contains('network')) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Cannot connect to server. Check the URL and your network.',
+        );
+      } else {
+        state = state.copyWith(isLoading: false, error: 'Invalid code');
+      }
+    }
+  }
+
+  /// Abandons a pending TOTP challenge and returns to the password step.
+  void cancelTotp() {
+    state = state.copyWith(clearTotpChallenge: true, error: null);
+  }
+
+  Future<void> _finishPasswordLogin(AuthService authService) async {
+    // Update the auth state provider to trigger UI updates
+    await ref.read(authStateProvider.notifier).refresh();
+
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      isLoading: false,
+      success: true,
+      clearTotpChallenge: true,
+      credentialsNotPersisted: authService.storageDegraded,
+    );
   }
 
   /// Attempt to pair using QR code data.

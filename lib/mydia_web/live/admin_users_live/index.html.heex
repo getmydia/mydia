@@ -123,6 +123,14 @@
                     <%!-- Auth Type --%>
                     <td>
                       <span class="font-mono text-sm">{auth_type_text(user)}</span>
+                      <span
+                        :if={totp_enabled?(user)}
+                        id={"totp-badge-#{user.id}"}
+                        class="badge badge-success badge-sm ml-1"
+                        title="Two-factor authentication is on"
+                      >
+                        2FA
+                      </span>
                     </td>
 
                     <%!-- Role --%>
@@ -178,6 +186,19 @@
                             title="Reset password"
                           >
                             <.icon name="hero-key" class="w-4 h-4" />
+                          </button>
+                        <% end %>
+
+                        <%= if totp_enabled?(user) do %>
+                          <button
+                            id={"reset-2fa-#{user.id}"}
+                            phx-click="reset_totp"
+                            phx-value-id={user.id}
+                            data-confirm="Turn off two-factor authentication for this user? They will sign in with only their password until they set it up again."
+                            class="btn btn-sm btn-ghost"
+                            title="Reset two-factor authentication"
+                          >
+                            <.icon name="hero-shield-exclamation" class="w-4 h-4" />
                           </button>
                         <% end %>
 

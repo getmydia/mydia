@@ -54,8 +54,17 @@ defmodule Mydia.Accounts.UsernameBackfill do
       :error
   end
 
+  # Selects only the columns the backfill reads, never the whole schema. This
+  # runs from a migration, where the `users` table is as old as that migration
+  # while `User` is as new as the code: a full `SELECT` names columns a later
+  # migration has not added yet, and on PostgreSQL the failed query aborts the
+  # migrator's transaction.
+  @backfill_fields [:id, :username, :username_source, :email, :oidc_sub]
+
   defp nameless_users_query do
-    where(User, [u], is_nil(u.username) or fragment("trim(?)", u.username) == "")
+    User
+    |> where([u], is_nil(u.username) or fragment("trim(?)", u.username) == "")
+    |> select([u], struct(u, ^@backfill_fields))
   end
 
   defp log_stats(stats) do

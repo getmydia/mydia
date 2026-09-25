@@ -134,6 +134,12 @@ defmodule MydiaWeb.Schema.MutationTypes do
       arg(:input, non_null(:login_input))
       resolve(&MydiaWeb.Schema.Resolvers.AuthResolver.login/3)
     end
+
+    @desc "Complete a login that returned totpRequired"
+    field :verify_totp, :login_result do
+      arg(:input, non_null(:verify_totp_input))
+      resolve(&MydiaWeb.Schema.Resolvers.AuthResolver.verify_totp/3)
+    end
   end
 
   object :device_mutations do

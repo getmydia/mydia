@@ -61,6 +61,9 @@ defmodule MydiaWeb.Schema do
   # exposes the schema shape only, never data.
   @public_fields [
     :login,
+    # The second half of a TOTP login. The caller has no token yet; the
+    # challenge token in its input is the credential.
+    :verify_totp,
     :refresh_media_token,
     :refresh_access_token,
     # Version floors only. A player that cannot authenticate against this

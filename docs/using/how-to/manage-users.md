@@ -54,6 +54,39 @@ Admins can create users through the Admin UI:
 You can change an existing user's role later from the same page, using the edit
 icon on their row.
 
+### Two-Factor Authentication
+
+Local users can require a code from an authenticator app (Aegis, 2FAS,
+1Password and similar) every time they sign in with their password.
+
+1. Open **Profile** and choose **Set up two-factor authentication**
+2. Scan the QR code, or type the key shown under it into the app
+3. Enter the 6-digit code the app shows to turn it on
+4. Save the 10 recovery codes. Each one signs you in once if you lose your
+   authenticator, and they are not shown again. **New recovery codes** on the
+   same card replaces the whole set.
+
+Once it is on, both the web sign-in and the Mydia Player's direct-server
+sign-in ask for a code after the password. Pairing a device with a claim code
+or QR code does not, because it starts from a session that is already signed in.
+
+Update the Mydia Player before turning this on: older player versions cannot
+complete the code step and show a generic sign-in error.
+
+If someone loses both their authenticator and their recovery codes, an admin can
+turn two-factor authentication off for them from **Admin > System > Users** (the
+shield icon on their row). With no other admin available, use the command line:
+
+```bash
+mydia-cli user reset-2fa <username>
+```
+
+The authenticator secret is encrypted with a key derived from `SECRET_KEY_BASE`.
+Changing `SECRET_KEY_BASE` stops authenticator codes from working; recovery
+codes keep working, and the user can set two-factor authentication up again.
+
+SSO users do not see this option. Their identity provider handles second factors.
+
 Mydia also supports single sign-on via OpenID Connect (OIDC), including auto-promotion of the first OIDC user to admin. See [SSO/OIDC Configuration](sso-oidc.md) for supported providers, setup, and role assignment.
 
 ## Request System

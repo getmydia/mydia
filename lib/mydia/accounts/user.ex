@@ -24,6 +24,9 @@ defmodule Mydia.Accounts.User do
           display_name: String.t() | nil,
           avatar_url: String.t() | nil,
           last_login_at: DateTime.t() | nil,
+          totp_secret_encrypted: String.t() | nil,
+          totp_enabled_at: DateTime.t() | nil,
+          totp_last_used_at: DateTime.t() | nil,
           preference: Mydia.Accounts.UserPreference.t() | nil | Ecto.Association.NotLoaded.t(),
           api_keys: [Mydia.Accounts.ApiKey.t()] | Ecto.Association.NotLoaded.t(),
           media_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
@@ -45,9 +48,13 @@ defmodule Mydia.Accounts.User do
     field :display_name, :string
     field :avatar_url, :string
     field :last_login_at, :utc_datetime
+    field :totp_secret_encrypted, :string, redact: true
+    field :totp_enabled_at, :utc_datetime
+    field :totp_last_used_at, :utc_datetime
 
     has_one :preference, Mydia.Accounts.UserPreference
     has_many :api_keys, Mydia.Accounts.ApiKey
+    has_many :recovery_codes, Mydia.Accounts.RecoveryCode
     has_many :media_requests, Mydia.Media.MediaRequest, foreign_key: :requester_id
     has_many :approved_requests, Mydia.Media.MediaRequest, foreign_key: :approved_by_id
 
@@ -96,6 +103,17 @@ defmodule Mydia.Accounts.User do
   """
   def login_changeset(user) do
     change(user, last_login_at: DateTime.utc_now() |> DateTime.truncate(:second))
+  end
+
+  @totp_fields [:totp_secret_encrypted, :totp_enabled_at, :totp_last_used_at]
+
+  @doc """
+  Changeset for writing TOTP state. Called only by `Mydia.Accounts`, never
+  with user-supplied params, so it uses `change/2` over an explicit field list
+  rather than `cast/3`.
+  """
+  def totp_changeset(user, attrs) do
+    change(user, Map.take(attrs, @totp_fields))
   end
 
   @doc """

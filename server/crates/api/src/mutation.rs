@@ -12,6 +12,7 @@ use crate::context::{authenticated_user, not_implemented, ApiContext};
 use crate::types::auth::{
     remote_device_from, AccessToken, ApiKey, ClaimCode, CreateApiKeyResult, LoginInput,
     LoginResult, MediaToken, RemoteDevice, RevokeDeviceResult, ToggleFavoriteResult, User,
+    VerifyTotpInput,
 };
 use crate::types::common::{PlaylistMode, StreamingStrategy};
 use crate::types::discovery::RemoveFromContinueWatchingResult;
@@ -298,15 +299,29 @@ impl RootMutationType {
         let expires_in = (expires_at - Utc::now()).num_seconds() as i32;
 
         Ok(Some(LoginResult {
-            token,
-            user: User {
+            token: Some(token),
+            user: Some(User {
                 id: user.id.into(),
                 username: Some(user.username),
                 email: user.email,
                 display_name: user.display_name,
-            },
-            expires_in,
+            }),
+            expires_in: Some(expires_in),
+            totp_required: false,
+            challenge_token: None,
         }))
+    }
+
+    /// Complete a login that returned totpRequired
+    ///
+    /// Mydia Server has no TOTP yet, so `login` never returns a challenge and
+    /// this field exists only to keep the schema identical to the Elixir app's.
+    async fn verify_totp(
+        &self,
+        _ctx: &Context<'_>,
+        _input: VerifyTotpInput,
+    ) -> Result<Option<LoginResult>> {
+        Err(not_implemented("verifyTotp"))
     }
 
     /// Revoke a device

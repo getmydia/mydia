@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/auth/auth_service.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
 
 void main() {
@@ -21,6 +22,34 @@ void main() {
           .copyWith(isLoading: false);
 
       expect(state.credentialsNotPersisted, isTrue);
+    });
+  });
+
+  group('LoginState.totpChallenge', () {
+    const challenge = TotpChallenge(
+      serverUrl: 'https://mydia.test',
+      challengeToken: 'challenge',
+      username: 'someone',
+    );
+
+    test('defaults to null', () {
+      expect(const LoginState().totpChallenge, isNull);
+    });
+
+    test('survives an unrelated copyWith', () {
+      final state = const LoginState()
+          .copyWith(totpChallenge: challenge)
+          .copyWith(isLoading: true);
+
+      expect(state.totpChallenge, same(challenge));
+    });
+
+    test('is cleared by clearTotpChallenge', () {
+      final state = const LoginState()
+          .copyWith(totpChallenge: challenge)
+          .copyWith(clearTotpChallenge: true);
+
+      expect(state.totpChallenge, isNull);
     });
   });
 }

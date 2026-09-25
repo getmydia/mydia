@@ -1,9 +1,9 @@
 //! Authentication, device and API key types.
 //!
 //! Types owned by this module (keep in sync with tests/types_remaining.rs):
-//! User, LoginResult, LoginInput, AccessToken, MediaToken, ApiKey,
-//! CreateApiKeyResult, RemoteDevice, RevokeDeviceResult, ClaimCode, Device,
-//! DeviceStatusEvent, ToggleFavoriteResult.
+//! User, LoginResult, LoginInput, VerifyTotpInput, AccessToken, MediaToken,
+//! ApiKey, CreateApiKeyResult, RemoteDevice, RevokeDeviceResult, ClaimCode,
+//! Device, DeviceStatusEvent, ToggleFavoriteResult.
 
 use async_graphql::{InputObject, SimpleObject, ID};
 use chrono::{DateTime, Utc};
@@ -20,9 +20,11 @@ pub struct User {
 
 #[derive(SimpleObject)]
 pub struct LoginResult {
-    pub token: String,
-    pub user: User,
-    pub expires_in: i32,
+    pub token: Option<String>,
+    pub user: Option<User>,
+    pub expires_in: Option<i32>,
+    pub totp_required: bool,
+    pub challenge_token: Option<String>,
 }
 
 #[derive(InputObject)]
@@ -32,6 +34,12 @@ pub struct LoginInput {
     pub device_id: String,
     pub device_name: String,
     pub platform: String,
+}
+
+#[derive(InputObject)]
+pub struct VerifyTotpInput {
+    pub challenge_token: String,
+    pub code: String,
 }
 
 #[derive(SimpleObject)]
@@ -171,6 +179,10 @@ pub fn sdl_fragment() -> String {
         }
 
         async fn login_input(&self, _input: LoginInput) -> bool {
+            false
+        }
+
+        async fn verify_totp_input(&self, _input: VerifyTotpInput) -> bool {
             false
         }
 

@@ -104,6 +104,96 @@ defmodule Mydia.Accounts.ApiKeyRateLimiterTest do
     end
   end
 
+  describe "reserve_attempt/2" do
+    test "admits attempts up to max_attempts and rejects after" do
+      ip = "192.168.1.50"
+
+      for _i <- 1..10 do
+        assert :ok = ApiKeyRateLimiter.reserve_attempt(ip)
+      end
+
+      assert {:error, :rate_limited} = ApiKeyRateLimiter.reserve_attempt(ip)
+    end
+
+    test "counts against the same bucket record_failed_attempt/2 and check_rate_limit/2 use" do
+      ip = "192.168.1.51"
+
+      for _i <- 1..5 do
+        assert :ok = ApiKeyRateLimiter.reserve_attempt(ip)
+      end
+
+      for _i <- 1..5 do
+        ApiKeyRateLimiter.record_failed_attempt(ip)
+      end
+
+      assert {:error, :rate_limited} = ApiKeyRateLimiter.check_rate_limit(ip)
+    end
+
+    test "respects a custom max_attempts and window_seconds" do
+      ip = "192.168.1.52"
+      opts = [max_attempts: 2, window_seconds: 60]
+
+      assert :ok = ApiKeyRateLimiter.reserve_attempt(ip, opts)
+      assert :ok = ApiKeyRateLimiter.reserve_attempt(ip, opts)
+      assert {:error, :rate_limited} = ApiKeyRateLimiter.reserve_attempt(ip, opts)
+    end
+
+    test "still admits and counts the attempt against a bucket that was just reset" do
+      # reserve_attempt/2's window-expiry fallback used to call
+      # :ets.update_counter/3 with no default tuple when it lost the
+      # select_replace race, which raises ArgumentError against a bucket
+      # that no longer exists (e.g. a concurrent reset_rate_limit/1 or
+      # cleanup_expired/0 deleted it between reserve_attempt/2's own read
+      # and its replace attempt). That exact interleaving cannot be forced
+      # deterministically from a test -- it depends on two processes
+      # racing inside a few consecutive ETS calls -- so this instead proves
+      # the documented, reachable case: reserve_attempt/2 must not crash
+      # and must still count the attempt when called against an absent
+      # bucket.
+      ip = "192.168.1.55"
+      storage_key = "api_key_validation:#{ip}"
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+      refute :ets.member(:api_key_rate_limiter, storage_key)
+
+      assert :ok = ApiKeyRateLimiter.reserve_attempt(ip)
+
+      assert [{^storage_key, 1, _first_attempt_at, _window_seconds}] =
+               :ets.lookup(:api_key_rate_limiter, storage_key)
+    end
+  end
+
+  describe "reserve_attempt/2 under concurrency" do
+    # The whole point of reserve_attempt/2: check-then-record lets N parallel
+    # callers all read "under the limit" before any of them has written
+    # anything, so all N get admitted no matter how far past max_attempts N
+    # is. Incrementing first and admitting only if the post-increment count is
+    # still within the limit closes that window.
+    test "admits exactly max_attempts callers out of many concurrent reservations" do
+      ip = "192.168.1.53"
+      max_attempts = 10
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+
+      results =
+        1..50
+        |> Task.async_stream(
+          fn _ -> ApiKeyRateLimiter.reserve_attempt(ip, max_attempts: max_attempts) end,
+          max_concurrency: 50,
+          timeout: :infinity
+        )
+        |> Enum.map(fn {:ok, result} -> result end)
+
+      admitted = Enum.count(results, &(&1 == :ok))
+      rejected = Enum.count(results, &(&1 == {:error, :rate_limited}))
+
+      assert admitted == max_attempts
+      assert rejected == 50 - max_attempts
+
+      ApiKeyRateLimiter.reset_rate_limit(ip)
+    end
+  end
+
   describe "record_failed_attempt/2 under concurrency" do
     # A brute-force limit that loses increments when guesses arrive in parallel
     # is a limit an attacker gets to raise by simply opening more connections.

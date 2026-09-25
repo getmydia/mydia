@@ -21,7 +21,9 @@ defmodule Mydia.Accounts do
     ApiKeyRateLimiter,
     Avatar,
     UsernameSource,
-    HomeLayout
+    HomeLayout,
+    RecoveryCode,
+    Totp
   }
 
   @changelog_key "last_seen_changelog_version"
@@ -56,6 +58,13 @@ defmodule Mydia.Accounts do
     |> maybe_preload(opts[:preload])
     |> Repo.get!(id)
   end
+
+  @doc """
+  Gets a user by id, or nil.
+  """
+  @spec get_user_by_id(binary()) :: User.t() | nil
+  def get_user_by_id(id) when is_binary(id), do: Repo.get(User, id)
+  def get_user_by_id(_id), do: nil
 
   @doc """
   Gets a user by username.
@@ -461,6 +470,38 @@ defmodule Mydia.Accounts do
     :ok
   end
 
+  @doc """
+  Atomically reserves a second-factor attempt against both the IP and
+  username login rate-limit buckets.
+
+  A second-factor check (a TOTP or recovery code) must count on issuance,
+  not only on failure. `check_login_rate_limit/2` plus `record_login_failure/2`
+  -- the password path's shape -- leaves a window where N concurrent code
+  checks can all pass the read-only check before any of them records a
+  failure, letting more than the configured limit of guesses through per
+  username. This reserves in both buckets up front through
+  `ApiKeyRateLimiter.reserve_attempt/2`, which increments the counter and
+  only admits the caller if the resulting count is still within the limit,
+  so concurrent callers serialize on the counter instead of racing a shared
+  read.
+
+  If either bucket is already over its limit, returns `{:error,
+  :rate_limited}` without the caller ever checking the code. A caller does
+  not call `record_login_failure/2` afterward: this reservation already
+  counted the attempt, whether the code turns out right or wrong. A caller
+  whose code is valid should still call `reset_login_rate_limit/2` -- they
+  are past the point the limit exists to protect, and clearing other
+  in-flight reservations for the same account is an acceptable trade for not
+  leaving a legitimate user locked out by their own earlier typos.
+  """
+  @spec reserve_second_factor_attempt(String.t(), String.t()) :: :ok | {:error, :rate_limited}
+  def reserve_second_factor_attempt(ip_or_key, username) do
+    with :ok <-
+           ApiKeyRateLimiter.reserve_attempt(login_ip_key(ip_or_key), login_ip_rate_opts()) do
+      ApiKeyRateLimiter.reserve_attempt(login_username_key(username), login_username_rate_opts())
+    end
+  end
+
   defp login_ip_rate_opts do
     [
       max_attempts: @login_ip_rate_limit_max_attempts,
@@ -524,6 +565,230 @@ defmodule Mydia.Accounts do
     else
       {:error, :invalid_password}
     end
+  end
+
+  ## Two-factor authentication (TOTP)
+
+  @doc """
+  True when the user has confirmed TOTP enrollment.
+  """
+  @spec totp_enabled?(User.t()) :: boolean()
+  def totp_enabled?(%User{totp_enabled_at: %DateTime{}}), do: true
+  def totp_enabled?(_user), do: false
+
+  @doc """
+  Starts enrollment. Returns a fresh secret and its `otpauth://` URI and
+  persists nothing: the caller holds the secret until
+  `confirm_totp_enrollment/3` proves the user's authenticator has it.
+  """
+  @spec begin_totp_enrollment(User.t()) :: %{secret: binary(), uri: String.t()}
+  def begin_totp_enrollment(%User{} = user) do
+    secret = Totp.generate_secret()
+    %{secret: secret, uri: Totp.otpauth_uri(User.label(user), secret)}
+  end
+
+  @doc """
+  Enables TOTP once `code` matches `secret`, and issues a fresh set of
+  recovery codes. The plaintext codes are returned exactly once.
+
+  Guards concurrent confirmations with a conditional `UPDATE ... WHERE
+  totp_enabled_at IS NULL` inside the transaction, not a reload-then-branch.
+  A reload only protects against a race under `SERIALIZABLE`; under
+  PostgreSQL's default READ COMMITTED, two concurrent confirmations (e.g.
+  the same "Turn on" click submitted twice) can both read `totp_enabled_at:
+  nil` before either commits, so both unconditional writes would go
+  through, the second replacing the first's secret and recovery codes with
+  no error shown. The conditional UPDATE is a single atomic statement at
+  the row level regardless of isolation level, so only one of two
+  concurrent confirmations can ever match and update the row; the other
+  affects zero rows and rolls back with `{:error, :already_enabled}`.
+  """
+  @spec confirm_totp_enrollment(User.t(), binary(), String.t()) ::
+          {:ok, User.t(), [String.t()]} | {:error, :invalid_code | :already_enabled}
+  def confirm_totp_enrollment(%User{} = user, secret, code) do
+    case Totp.valid_code?(secret, Totp.normalize_code(code), nil) do
+      {:ok, step} ->
+        codes = Totp.generate_recovery_codes()
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        Repo.transaction(fn ->
+          {count, _} =
+            Repo.update_all(
+              from(u in User, where: u.id == ^user.id and is_nil(u.totp_enabled_at)),
+              set: [
+                totp_secret_encrypted: Totp.encrypt(secret),
+                totp_enabled_at: now,
+                totp_last_used_at: step
+              ]
+            )
+
+          if count == 0 do
+            Repo.rollback(:already_enabled)
+          else
+            updated_user = Repo.get!(User, user.id)
+            replace_recovery_codes!(updated_user, codes)
+            {updated_user, codes}
+          end
+        end)
+        |> case do
+          {:ok, {updated_user, codes}} -> {:ok, updated_user, codes}
+          {:error, :already_enabled} -> {:error, :already_enabled}
+        end
+
+      :error ->
+        {:error, :invalid_code}
+    end
+  end
+
+  @doc """
+  Turns TOTP off for the account's owner, who must supply both their password
+  and a current code or recovery code.
+  """
+  @spec disable_totp(User.t(), String.t(), String.t()) ::
+          {:ok, User.t()} | {:error, :invalid_password | :invalid_code}
+  def disable_totp(%User{} = user, current_password, code) do
+    cond do
+      not verify_password(user, current_password) -> {:error, :invalid_password}
+      verify_second_factor(user, code) != :ok -> {:error, :invalid_code}
+      true -> admin_reset_totp(user)
+    end
+  end
+
+  @doc """
+  Turns TOTP off without any proof. For admins helping a locked-out user and
+  for `mix mydia.user reset-2fa`.
+  """
+  @spec admin_reset_totp(User.t()) :: {:ok, User.t()}
+  def admin_reset_totp(%User{} = user) do
+    Repo.transaction(fn ->
+      Repo.delete_all(from(r in RecoveryCode, where: r.user_id == ^user.id))
+
+      user
+      |> User.totp_changeset(%{
+        totp_secret_encrypted: nil,
+        totp_enabled_at: nil,
+        totp_last_used_at: nil
+      })
+      |> Repo.update!()
+    end)
+  end
+
+  @doc """
+  Replaces every recovery code after a valid second factor.
+  """
+  @spec regenerate_recovery_codes(User.t(), String.t()) ::
+          {:ok, [String.t()]} | {:error, :invalid_code}
+  def regenerate_recovery_codes(%User{} = user, code) do
+    with :ok <- verify_second_factor(user, code) do
+      codes = Totp.generate_recovery_codes()
+      {:ok, _} = Repo.transaction(fn -> replace_recovery_codes!(user, codes) end)
+      {:ok, codes}
+    end
+  end
+
+  @doc """
+  Counts the user's unused recovery codes.
+  """
+  @spec recovery_codes_remaining(User.t()) :: non_neg_integer()
+  def recovery_codes_remaining(%User{id: user_id}) do
+    Repo.aggregate(
+      from(r in RecoveryCode, where: r.user_id == ^user_id and is_nil(r.used_at)),
+      :count
+    )
+  end
+
+  @doc """
+  Checks a second factor: a 6-digit TOTP code or a recovery code, told apart by
+  shape after normalization.
+
+  Both branches consume what they accept with a conditional UPDATE, so two
+  concurrent requests carrying the same code cannot both succeed. Rate limiting
+  is the caller's job, alongside the password throttle.
+  """
+  @spec verify_second_factor(User.t(), String.t()) :: :ok | {:error, :invalid_code}
+  def verify_second_factor(%User{} = user, code) when is_binary(code) do
+    normalized = Totp.normalize_code(code)
+
+    case Totp.code_kind(normalized) do
+      :totp -> verify_totp_code(user, normalized)
+      :recovery -> redeem_recovery_code(user, normalized)
+      :invalid -> {:error, :invalid_code}
+    end
+  end
+
+  def verify_second_factor(_user, _code), do: {:error, :invalid_code}
+
+  defp verify_totp_code(%User{totp_secret_encrypted: ciphertext} = user, code)
+       when is_binary(ciphertext) do
+    with {:ok, secret} <- decrypt_totp_secret(user),
+         {:ok, step} <- Totp.valid_code?(secret, code, user.totp_last_used_at),
+         {1, _} <-
+           Repo.update_all(
+             from(u in User,
+               where:
+                 u.id == ^user.id and
+                   (is_nil(u.totp_last_used_at) or u.totp_last_used_at < ^step)
+             ),
+             set: [totp_last_used_at: step]
+           ) do
+      :ok
+    else
+      _ -> {:error, :invalid_code}
+    end
+  end
+
+  defp verify_totp_code(_user, _code), do: {:error, :invalid_code}
+
+  defp decrypt_totp_secret(%User{} = user) do
+    case Totp.decrypt(user.totp_secret_encrypted) do
+      {:ok, secret} ->
+        {:ok, secret}
+
+      :error ->
+        Logger.warning(
+          "TOTP secret for user #{user.id} could not be decrypted; SECRET_KEY_BASE may have changed"
+        )
+
+        :error
+    end
+  end
+
+  defp redeem_recovery_code(%User{id: user_id}, code) do
+    from(r in RecoveryCode, where: r.user_id == ^user_id and is_nil(r.used_at))
+    |> Repo.all()
+    |> Enum.find(&Bcrypt.verify_pass(code, &1.code_hash))
+    |> case do
+      nil ->
+        {:error, :invalid_code}
+
+      %RecoveryCode{id: id} ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        case Repo.update_all(
+               from(r in RecoveryCode, where: r.id == ^id and is_nil(r.used_at)),
+               set: [used_at: now]
+             ) do
+          {1, _} -> :ok
+          {0, _} -> {:error, :invalid_code}
+        end
+    end
+  end
+
+  defp replace_recovery_codes!(%User{id: user_id}, codes) do
+    Repo.delete_all(from(r in RecoveryCode, where: r.user_id == ^user_id))
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    rows =
+      Enum.map(codes, fn code ->
+        %{
+          id: Ecto.UUID.generate(),
+          user_id: user_id,
+          code_hash: Bcrypt.hash_pwd_salt(Totp.normalize_code(code)),
+          inserted_at: now
+        }
+      end)
+
+    Repo.insert_all(RecoveryCode, rows)
   end
 
   ## User Preferences

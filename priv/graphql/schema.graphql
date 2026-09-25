@@ -152,6 +152,9 @@ type RootMutationType {
   "Login with username\/password and device information"
   login(input: LoginInput!): LoginResult
 
+  "Complete a login that returned totpRequired"
+  verifyTotp(input: VerifyTotpInput!): LoginResult
+
   "Revoke a device"
   revokeDevice(id: ID!): RevokeDeviceResult
 
@@ -1105,16 +1108,31 @@ input LoginInput {
   platform: String!
 }
 
+"Input for verifyTotp mutation"
+input VerifyTotpInput {
+  "challengeToken from login"
+  challengeToken: String!
+
+  "6-digit TOTP code or a recovery code"
+  code: String!
+}
+
 "Result of login mutation"
 type LoginResult {
-  "JWT authentication token"
-  token: String!
+  "JWT authentication token. Null when totpRequired is true"
+  token: String
 
-  "Authenticated user information"
-  user: User!
+  "Authenticated user information. Null when totpRequired is true"
+  user: User
 
-  "Token expiration in seconds"
-  expiresIn: Int!
+  "Token expiration in seconds. Null when totpRequired is true"
+  expiresIn: Int
+
+  "True when the account needs a TOTP or recovery code; pass challengeToken to verifyTotp"
+  totpRequired: Boolean!
+
+  "Short-lived token for verifyTotp. Set only when totpRequired is true"
+  challengeToken: String
 }
 
 "User information"

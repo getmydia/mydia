@@ -6,6 +6,7 @@ const OWNED_AUTH: &[&str] = &[
     "User",
     "LoginResult",
     "LoginInput",
+    "VerifyTotpInput",
     "AccessToken",
     "MediaToken",
     "ApiKey",

@@ -8,6 +8,34 @@ import 'auth_storage.dart';
 import 'device_info_service.dart';
 import '../graphql/client.dart';
 import '../../graphql/mutations/login.graphql.dart';
+import '../../graphql/mutations/verify_totp.graphql.dart';
+
+/// What a password login produced.
+sealed class LoginOutcome {
+  const LoginOutcome();
+}
+
+/// The session is stored and the user is signed in.
+class LoginSuccess extends LoginOutcome {
+  const LoginSuccess();
+}
+
+/// The password was right and the account has two-factor authentication.
+/// Pass this to [AuthService.verifyTotp] with the user's code.
+class TotpChallenge extends LoginOutcome {
+  const TotpChallenge({
+    required this.serverUrl,
+    required this.challengeToken,
+    required this.username,
+  });
+
+  final String serverUrl;
+  final String challengeToken;
+
+  /// What the user typed at the password step, the fallback display name if
+  /// the server's user record has no username.
+  final String username;
+}
 
 /// Service for managing authentication tokens and server configuration.
 ///
@@ -159,9 +187,10 @@ class AuthService {
 
   /// Login with username and password via GraphQL (recommended).
   ///
-  /// Returns a map with session information on success, or throws an exception on failure.
-  /// This method uses the GraphQL login mutation and includes device information.
-  Future<Map<String, dynamic>> loginWithGraphQL({
+  /// Returns [LoginSuccess] once the session is stored, or a [TotpChallenge]
+  /// when the account needs a second factor; nothing is stored in that case.
+  /// Throws on failure.
+  Future<LoginOutcome> loginWithGraphQL({
     required String serverUrl,
     required String username,
     required String password,
@@ -171,15 +200,12 @@ class AuthService {
         : serverUrl;
 
     try {
-      // Get device information
       final deviceId = await _deviceInfo.getDeviceId();
       final deviceName = await _deviceInfo.getDeviceName();
       final platform = _deviceInfo.getPlatform();
 
-      // Create a temporary GraphQL client without authentication
       final client = createGraphQLClient(normalizedUrl, null);
 
-      // Execute the login mutation
       final result = await client.mutate(
         MutationOptions(
           document: documentNodeMutationLogin,
@@ -190,44 +216,107 @@ class AuthService {
             deviceName: deviceName,
             platform: platform,
           ).toJson(),
+          fetchPolicy: FetchPolicy.noCache,
         ),
       );
 
-      // Check for errors
       if (result.hasException) {
-        final errorMessage = result.exception?.graphqlErrors.isNotEmpty == true
-            ? result.exception!.graphqlErrors.first.message
-            : result.exception.toString();
-        throw Exception('Login failed: $errorMessage');
+        throw Exception('Login failed: ${_graphQLErrorMessage(result)}');
       }
 
-      final mutation =
-          result.data != null ? Mutation$Login.fromJson(result.data!) : null;
-      final loginData = mutation?.login;
+      final loginData = result.data != null
+          ? Mutation$Login.fromJson(result.data!).login
+          : null;
       if (loginData == null) {
         throw Exception('No data returned from login mutation');
       }
 
-      // Store the session
-      await setSession(
-        token: loginData.token,
-        serverUrl: normalizedUrl,
-        userId: loginData.user.id,
-        username: loginData.user.username ?? username,
-      );
+      if (loginData.totpRequired) {
+        final challengeToken = loginData.challengeToken;
+        if (challengeToken == null) {
+          throw Exception('Server asked for a code but sent no challenge');
+        }
+        return TotpChallenge(
+          serverUrl: normalizedUrl,
+          challengeToken: challengeToken,
+          username: username,
+        );
+      }
 
-      return {
-        'token': loginData.token,
-        'serverUrl': normalizedUrl,
-        'userId': loginData.user.id,
-        'username': loginData.user.username ?? username,
-        'email': loginData.user.email,
-        'displayName': loginData.user.displayName,
-        'expiresIn': loginData.expiresIn,
-      };
+      await _storeLoginSession(
+        serverUrl: normalizedUrl,
+        token: loginData.token,
+        userId: loginData.user?.id,
+        username: loginData.user?.username ?? username,
+      );
+      return const LoginSuccess();
     } catch (e) {
       throw Exception('Login error: $e');
     }
+  }
+
+  /// Completes a login that returned a [TotpChallenge].
+  Future<void> verifyTotp({
+    required TotpChallenge challenge,
+    required String code,
+  }) async {
+    try {
+      final client = createGraphQLClient(challenge.serverUrl, null);
+
+      final result = await client.mutate(
+        MutationOptions(
+          document: documentNodeMutationVerifyTotp,
+          variables: Variables$Mutation$VerifyTotp(
+            challengeToken: challenge.challengeToken,
+            code: code,
+          ).toJson(),
+          fetchPolicy: FetchPolicy.noCache,
+        ),
+      );
+
+      if (result.hasException) {
+        throw Exception('Verification failed: ${_graphQLErrorMessage(result)}');
+      }
+
+      final data = result.data != null
+          ? Mutation$VerifyTotp.fromJson(result.data!).verifyTotp
+          : null;
+      if (data == null) {
+        throw Exception('No data returned from verifyTotp mutation');
+      }
+
+      await _storeLoginSession(
+        serverUrl: challenge.serverUrl,
+        token: data.token,
+        userId: data.user?.id,
+        username: data.user?.username ?? challenge.username,
+      );
+    } catch (e) {
+      throw Exception('Verification error: $e');
+    }
+  }
+
+  String _graphQLErrorMessage(QueryResult result) {
+    return result.exception?.graphqlErrors.isNotEmpty == true
+        ? result.exception!.graphqlErrors.first.message
+        : result.exception.toString();
+  }
+
+  Future<void> _storeLoginSession({
+    required String serverUrl,
+    required String? token,
+    required String? userId,
+    required String username,
+  }) async {
+    if (token == null || userId == null) {
+      throw Exception('Server returned no token');
+    }
+    await setSession(
+      token: token,
+      serverUrl: serverUrl,
+      userId: userId,
+      username: username,
+    );
   }
 
   /// Login with username and password via the REST API (legacy).

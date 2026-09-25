@@ -4,9 +4,13 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
   """
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.User
   alias Mydia.Auth.Guardian
   alias Mydia.Config
   alias Mydia.RemoteAccess
+
+  @totp_challenge_salt "totp challenge"
+  @totp_challenge_max_age 300
 
   @doc """
   Login with username/password and device information.
@@ -55,15 +59,33 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
 
       user ->
         if Accounts.verify_password(user, input.password) do
-          Accounts.reset_login_rate_limit(ip_address, input.username)
-          # Update last login timestamp
-          Accounts.update_last_login(user)
-
-          issue_login_token(user, input)
+          if Accounts.totp_enabled?(user) do
+            with :ok <- validate_challenge_device(user, input) do
+              {:ok, totp_challenge(user, input)}
+            end
+          else
+            finish_login(user, ip_address, input.username, input)
+          end
         else
           Accounts.record_login_failure(ip_address, input.username)
           {:error, "Invalid username or password"}
         end
+    end
+  end
+
+  # Validates the device fields before the challenge token is signed, so a
+  # bad device field (e.g. an over-long device name) is rejected up front
+  # instead of surfacing only once the challenge is redeemed with a correct
+  # code, which would otherwise burn that code on a device error.
+  defp validate_challenge_device(user, input) do
+    case RemoteAccess.validate_login_device(%{
+           user_id: user.id,
+           client_device_id: input.device_id,
+           device_name: input.device_name,
+           platform: input.platform
+         }) do
+      :ok -> :ok
+      {:error, %Ecto.Changeset{}} -> {:error, "Failed to register this device"}
     end
   end
 
@@ -84,13 +106,97 @@ defmodule MydiaWeb.Schema.Resolvers.AuthResolver do
            Guardian.encode_and_sign(user, %{"device_id" => device.id, "typ" => "access"}) do
       expires_in = Map.get(claims, "exp", 0) - Map.get(claims, "iat", 0)
 
-      {:ok, %{token: token, user: user, expires_in: expires_in}}
+      {:ok, %{token: token, user: user, expires_in: expires_in, totp_required: false}}
     else
       {:error, %Ecto.Changeset{}} ->
         {:error, "Failed to register this device"}
 
       {:error, reason} ->
         {:error, "Failed to create authentication token: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Completes a login that returned `totp_required`. The challenge token carries
+  the user, the typed login name and the device fields from the original
+  `login` call, so the rate-limit bucket, the device row and the token are all
+  produced exactly as a password-only login would produce them.
+  """
+  def verify_totp(_parent, %{input: %{challenge_token: token, code: code}}, %{context: context}) do
+    if Config.get().auth.local_enabled do
+      ip_address = Map.get(context, :remote_ip, "unknown")
+
+      with {:ok, user, login_name, device} <- challenge_user(token),
+           :ok <- totp_rate_limit(ip_address, login_name),
+           :ok <- second_factor(user, code) do
+        finish_login(user, ip_address, login_name, device)
+      end
+    else
+      {:error, "Local authentication is disabled"}
+    end
+  end
+
+  # Shared tail of a successful login, whether it took one step (password
+  # only) or two (password then TOTP): clear the rate-limit bucket, stamp the
+  # login, and mint the device-scoped token.
+  defp finish_login(user, ip_address, rate_limit_key, input_or_device) do
+    Accounts.reset_login_rate_limit(ip_address, rate_limit_key)
+    Accounts.update_last_login(user)
+    issue_login_token(user, input_or_device)
+  end
+
+  defp totp_challenge(user, input) do
+    token =
+      Phoenix.Token.sign(MydiaWeb.Endpoint, @totp_challenge_salt, %{
+        "user_id" => user.id,
+        "login_name" => input.username,
+        "device_id" => input.device_id,
+        "device_name" => input.device_name,
+        "platform" => input.platform
+      })
+
+    %{totp_required: true, challenge_token: token}
+  end
+
+  # The `login` mutation keys the rate-limit bucket on whatever the caller
+  # typed, which may be an email rather than the stored username. The
+  # challenge token carries that same typed string forward so a password
+  # failure and a code failure against one login attempt share a bucket,
+  # instead of each auth step getting its own guessing budget.
+  defp challenge_user(token) do
+    with {:ok, claims} <-
+           Phoenix.Token.verify(MydiaWeb.Endpoint, @totp_challenge_salt, token,
+             max_age: @totp_challenge_max_age
+           ),
+         %User{} = user <- Accounts.get_user_by_id(claims["user_id"]),
+         true <- Accounts.totp_enabled?(user) do
+      {:ok, user, claims["login_name"],
+       %{
+         device_id: claims["device_id"],
+         device_name: claims["device_name"],
+         platform: claims["platform"]
+       }}
+    else
+      _ -> {:error, "Sign-in expired, please try again"}
+    end
+  end
+
+  # Reserves this attempt atomically, before the code is checked, so parallel
+  # requests cannot all pass a read-only check before any of them counted.
+  # See `Accounts.reserve_second_factor_attempt/2`.
+  defp totp_rate_limit(ip_address, login_name) do
+    case Accounts.reserve_second_factor_attempt(ip_address, login_name) do
+      :ok -> :ok
+      {:error, :rate_limited} -> {:error, "Too many login attempts. Please try again later."}
+    end
+  end
+
+  # No separate `record_login_failure/2` on a wrong code: `totp_rate_limit/2`
+  # already counted this attempt when it reserved it.
+  defp second_factor(user, code) do
+    case Accounts.verify_second_factor(user, code) do
+      :ok -> :ok
+      {:error, :invalid_code} -> {:error, "Invalid code"}
     end
   end
 end
