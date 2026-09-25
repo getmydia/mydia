@@ -135,14 +135,21 @@ class PlayerWindowSession with WindowListener {
       // choice. Restoring an old rect would fight it.
       final untouchable =
           await _window.isMaximized() || await _window.isFullScreen();
-      if (snapshot != null && !untouchable) {
+      // A join() can land during the awaits above -- a real platform
+      // channel round trip is a genuine gap, not the fake's microtask. That
+      // join already claimed the window with its own pause and snapshot;
+      // applying this stale one now would clobber it.
+      if (snapshot != null && !untouchable && _members.isEmpty) {
         await _window.setBounds(snapshot);
       }
     } catch (e) {
       debugPrint('[PlayerWindowSession] Failed to restore window: $e');
     } finally {
       // Always: leaving the controller paused would silently stop
-      // persisting geometry for the rest of the app session.
+      // persisting geometry for the rest of the app session. If a join()
+      // landed above, its pause() already superseded this owner, so this
+      // resume() is a documented no-op (see WindowGeometryController.resume)
+      // rather than a real un-pause.
       _geometry.resume(owner);
     }
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -242,6 +243,44 @@ void main() {
       expect(t.window.bounds, browse);
       expect(await persists(t.window, t.geometry, t.store), isTrue);
     });
+
+    test('a player that joins while the restore is in flight keeps the window',
+        () async {
+      // The fake's platform calls resolve in a microtask; a real one is a
+      // genuine await gap a join() can land in. Gate isMaximized() (which
+      // the restore awaits after clearing _live) to force that gap open.
+      final window = _GatedIsMaximizedWindowController(bounds: browse);
+      final store = InMemoryWindowGeometryStore();
+      final geometry = WindowGeometryController(
+        window: window,
+        store: store,
+        readWorkAreas: oneDisplay,
+        debounce: const Duration(milliseconds: 10),
+      );
+      addTearDown(geometry.dispose);
+      final session = PlayerWindowSession(
+        window: window,
+        geometry: geometry,
+        // Runs the restore immediately instead of waiting on ManualFrames,
+        // so it is already parked on the gate below by the time 'second'
+        // joins.
+        afterFrame: (cb) => cb(),
+      );
+
+      await session.join('first');
+      await window.setBounds(playing);
+      session.leave('first');
+      // Lets the restore run up to (and park on) the gated isMaximized().
+      await pumpEventQueue();
+
+      await session.join('second');
+
+      window.gate.complete();
+      await pumpEventQueue();
+
+      expect(window.bounds, playing);
+      expect(geometry.isPaused, isTrue);
+    });
   });
 
   group('fullscreen exit', () {
@@ -314,5 +353,20 @@ class _PauseObservingWindowController extends FakeWindowController {
   Future<Rect> getBounds() async {
     pausedAtSnapshot ??= geometry?.isPaused;
     return super.getBounds();
+  }
+}
+
+/// Parks `isMaximized()` on a `Completer` the test controls, standing in for
+/// a real platform-channel round trip the fake's usual microtask resolution
+/// hides.
+class _GatedIsMaximizedWindowController extends FakeWindowController {
+  _GatedIsMaximizedWindowController({required super.bounds});
+
+  final Completer<void> gate = Completer<void>();
+
+  @override
+  Future<bool> isMaximized() async {
+    await gate.future;
+    return super.isMaximized();
   }
 }
