@@ -161,7 +161,11 @@ defmodule Mydia.Accounts.Passkeys do
   defp record_use(%Passkey{id: id}, count) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     query = from p in Passkey, where: p.id == ^id
-    query = if count == 0, do: query, else: where(query, [p], p.sign_count < ^count)
+
+    query =
+      if count == 0,
+        do: where(query, [p], p.sign_count == 0),
+        else: where(query, [p], p.sign_count < ^count)
 
     case Repo.update_all(query, set: [sign_count: count, last_used_at: now]) do
       {1, _} -> :ok

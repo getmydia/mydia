@@ -99,6 +99,17 @@ defmodule Mydia.AccountsPasskeyAuthTest do
     assert log =~ "sign count"
   end
 
+  test "rejects a zero counter after the stored counter advanced", ctx do
+    {challenge, _options, ceremony} = login_ceremony()
+    {authn, payload} = SoftAuthenticator.assert(ctx.authenticator, ceremony, sign_count: 5)
+    assert {:ok, _} = Accounts.authenticate_passkey(challenge, payload)
+
+    {challenge, _options, ceremony} = login_ceremony()
+    {_authn, payload} = SoftAuthenticator.assert(authn, ceremony, sign_count: 0)
+
+    assert {:error, :invalid_passkey} = Accounts.authenticate_passkey(challenge, payload)
+  end
+
   test "accepts authenticators that always report a zero counter", ctx do
     for _ <- 1..2 do
       {challenge, _options, ceremony} = login_ceremony()
