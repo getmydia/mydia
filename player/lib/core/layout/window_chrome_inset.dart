@@ -22,11 +22,15 @@ const double kMacTitleBarOverlap = 40.0;
 /// Height of the title row drawn at the top of the Linux window, where the
 /// Flutter-drawn window buttons sit.
 ///
+/// Close to a GNOME/libadwaita headerbar (47px with 34px buttons), so the
+/// window sits naturally among native apps: the 32px title-row controls get
+/// 7px above and below, and the 28px window buttons 9px.
+///
 /// No longer a full-width reserved band: [windowChromeInsetsFor] only
 /// reserves the corners the buttons occupy, sized by
 /// [linuxButtonGroupReserve]. This is the row's height, used to size the
 /// drag band and the button strip `DesktopWindowChrome` positions over it.
-const double kLinuxWindowChromeHeight = 36.0;
+const double kLinuxWindowChromeHeight = 46.0;
 
 /// Width kept clear at the macOS title bar's leading edge for the traffic
 /// lights.

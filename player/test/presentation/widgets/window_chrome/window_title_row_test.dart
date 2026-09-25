@@ -321,4 +321,78 @@ void main() {
       );
     });
   });
+
+  group('buttons in the band', () {
+    Future<void> pumpWithBack(WidgetTester tester, WindowChromeInsets insets) =>
+        _pump(
+          tester,
+          insets: insets,
+          child: WindowTitleRow(
+            leading: IconButton(
+              key: const Key('lead'),
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: () {},
+            ),
+            title: const Text('Shelf'),
+          ),
+        );
+
+    void expectClearOfEdges(
+      WidgetTester tester,
+      Key key, {
+      required double band,
+      required double margin,
+    }) {
+      final rect = tester.getRect(find.byKey(key));
+      expect(rect.top, greaterThanOrEqualTo(margin), reason: '$key top');
+      expect(rect.bottom, lessThanOrEqualTo(band - margin),
+          reason: '$key bottom');
+    }
+
+    testWidgets('on macOS back and cast clear the band edges', (tester) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await pumpWithBack(tester, _mac);
+        expectClearOfEdges(tester, const Key('lead'),
+            band: _mac.height, margin: 4);
+        expectClearOfEdges(tester, WindowTitleRow.castKey,
+            band: _mac.height, margin: 4);
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    });
+
+    testWidgets('on Linux back and cast sit well inside the band',
+        (tester) async {
+      final band = WindowChromeInsets(
+        height: kLinuxWindowChromeHeight,
+        leading: 0,
+        trailing: linuxButtonGroupReserve(3),
+      );
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await pumpWithBack(tester, band);
+        expectClearOfEdges(tester, const Key('lead'),
+            band: band.height, margin: 6);
+        expectClearOfEdges(tester, WindowTitleRow.castKey,
+            band: band.height, margin: 6);
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    });
+
+    testWidgets('without a band the buttons keep their full size',
+        (tester) async {
+      final previousPlatform = debugDefaultTargetPlatformOverride;
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      try {
+        await pumpWithBack(tester, WindowChromeInsets.zero);
+        expect(tester.getSize(find.byKey(const Key('lead'))).height, 40);
+      } finally {
+        debugDefaultTargetPlatformOverride = previousPlatform;
+      }
+    });
+  });
 }
