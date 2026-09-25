@@ -1,4 +1,6 @@
 defmodule MydiaWeb.SessionController do
+  alias MydiaWeb.Auth.SignIn
+
   @moduledoc """
   Local authentication controller.
 
@@ -9,7 +11,6 @@ defmodule MydiaWeb.SessionController do
 
   alias Mydia.Accounts
   alias Mydia.Accounts.User
-  alias Mydia.Auth.Guardian
   alias Mydia.Config
 
   # How long a password-verified sign-in may wait for its second factor.
@@ -57,7 +58,7 @@ defmodule MydiaWeb.SessionController do
     config = Config.get()
 
     if config.auth.local_enabled do
-      ip_address = remote_ip(conn)
+      ip_address = SignIn.remote_ip(conn)
 
       case Accounts.check_login_rate_limit(ip_address, username) do
         :ok ->
@@ -108,18 +109,9 @@ defmodule MydiaWeb.SessionController do
     |> redirect(to: ~p"/auth/login/totp")
   end
 
-  # Sign in the user via Guardian, which stores the token in session under the
-  # :guardian_default_token key that VerifySession expects. Also store under
-  # :guardian_token for backward compatibility with code that reads that key
-  # directly (e.g., logout, Flutter cookie auth).
   defp sign_in_and_redirect(conn, user) do
-    Accounts.update_last_login(user)
-    {:ok, token, _claims} = Guardian.create_token(user)
-
     conn
-    |> Guardian.Plug.sign_in(user)
-    |> put_session(:guardian_default_token, token)
-    |> put_session(:guardian_token, token)
+    |> SignIn.sign_in(user)
     |> put_flash(:info, "Successfully logged in!")
     |> redirect(to: "/")
   end
@@ -154,7 +146,7 @@ defmodule MydiaWeb.SessionController do
   defp totp_code_param(_params), do: ""
 
   defp verify_totp(conn, user, code) do
-    ip_address = remote_ip(conn)
+    ip_address = SignIn.remote_ip(conn)
 
     # `reserve_second_factor_attempt/2` counts this attempt atomically before
     # the code is even checked, closing the race where parallel requests could
@@ -214,13 +206,5 @@ defmodule MydiaWeb.SessionController do
       changeset: Accounts.change_user(%Mydia.Accounts.User{}),
       oidc_configured: oidc_configured?()
     )
-  end
-
-  defp remote_ip(conn) do
-    case conn.remote_ip do
-      {a, b, c, d} -> "#{a}.#{b}.#{c}.#{d}"
-      {a, b, c, d, e, f, g, h} -> "#{a}:#{b}:#{c}:#{d}:#{e}:#{f}:#{g}:#{h}"
-      _ -> "unknown"
-    end
   end
 end
