@@ -6,6 +6,7 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/window/decoration_layout.dart';
 import 'package:player/core/window/window_buttons_hidden.dart';
 import 'package:player/core/window/window_controller.dart';
+import 'package:player/core/window/window_frame_state.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
@@ -48,6 +49,7 @@ Future<void> _pumpPlayingPlayer(
         ),
         controller: controller ?? FakeWindowController(),
         fullscreen: ValueNotifier(false),
+        frameState: ValueNotifier(WindowFrameState.floating),
         child: const ChromeVisibility(
           isPlaying: true,
           child: Align(

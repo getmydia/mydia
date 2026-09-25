@@ -28,22 +28,36 @@ import 'window_resize_edges.dart';
 ///
 /// Linux only for now. macOS keeps AppKit's traffic lights, which float over
 /// the Flutter view already, and Windows still has its native caption.
+///
+/// It also clips the app to the corner radius GTK rounds the window frame
+/// to (`kFrameCss` in `linux/runner/my_application.cc`), squaring it
+/// whenever GTK squares the frame. The Flutter view is transparent on Linux,
+/// so the clipped-away corners show GTK's frame and shadow.
 class DesktopWindowChrome extends StatelessWidget {
   const DesktopWindowChrome({
     super.key,
     required this.child,
     required ValueListenable<DecorationLayout> layout,
+    required ValueListenable<WindowFrameState> frameState,
     WindowController? controller,
     ValueListenable<bool>? fullscreen,
     ValueListenable<bool>? buttonsHidden,
   })  : _layout = layout,
+        _frameState = frameState,
         _controller = controller,
         _fullscreen = fullscreen,
         _buttonsHidden = buttonsHidden;
 
+  /// The `ClipRRect` rounding the app to the GTK frame. Exposed for tests.
+  static const Key clipKey = ValueKey('desktop-window-chrome-clip');
+
   final Widget child;
 
   final ValueListenable<DecorationLayout> _layout;
+
+  /// Maximized / tiled / fullscreen, from `WindowFrameStateSource`. Drives
+  /// the corner radius so the clip matches the frame GTK draws around it.
+  final ValueListenable<WindowFrameState> _frameState;
 
   /// Injected by tests. Defaults to the real window.
   final WindowController? _controller;
@@ -76,6 +90,7 @@ class DesktopWindowChrome extends StatelessWidget {
 
         return _WindowChrome(
           layout: _layout,
+          frameState: _frameState,
           controller: _controller ?? const WindowManagerController(),
           buttonsHidden: _buttonsHidden ?? windowButtonsHidden,
           child: child,
@@ -94,12 +109,14 @@ class _WindowChrome extends StatefulWidget {
   const _WindowChrome({
     required this.child,
     required this.layout,
+    required this.frameState,
     required this.controller,
     required this.buttonsHidden,
   });
 
   final Widget child;
   final ValueListenable<DecorationLayout> layout;
+  final ValueListenable<WindowFrameState> frameState;
   final WindowController controller;
   final ValueListenable<bool> buttonsHidden;
 
@@ -127,23 +144,39 @@ class _WindowChromeState extends State<_WindowChrome> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: WindowResizeEdges(
-            controller: widget.controller,
-            child: widget.child,
+    // Always a `ClipRRect`, even when square: swapping it in and out would
+    // change the tree shape and remount the entire app on every maximize.
+    // `Clip.none` at radius zero skips the clip's cost entirely.
+    return ValueListenableBuilder<WindowFrameState>(
+      valueListenable: widget.frameState,
+      builder: (context, state, stack) {
+        final radius = windowCornerRadiusFor(state);
+        return ClipRRect(
+          key: DesktopWindowChrome.clipKey,
+          borderRadius:
+              radius == 0 ? BorderRadius.zero : BorderRadius.circular(radius),
+          clipBehavior: radius == 0 ? Clip.none : Clip.antiAlias,
+          child: stack,
+        );
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: WindowResizeEdges(
+              controller: widget.controller,
+              child: widget.child,
+            ),
           ),
-        ),
 
-        // On top of the resize edges (and everything else): the button
-        // corners are the only part of this widget still drawn over the app,
-        // and only where a corner actually has buttons in it.
-        ValueListenableBuilder<DecorationLayout>(
-          valueListenable: widget.layout,
-          builder: (context, layout, _) => Stack(children: _corners(layout)),
-        ),
-      ],
+          // On top of the resize edges (and everything else): the button
+          // corners are the only part of this widget still drawn over the app,
+          // and only where a corner actually has buttons in it.
+          ValueListenableBuilder<DecorationLayout>(
+            valueListenable: widget.layout,
+            builder: (context, layout, _) => Stack(children: _corners(layout)),
+          ),
+        ],
+      ),
     );
   }
 

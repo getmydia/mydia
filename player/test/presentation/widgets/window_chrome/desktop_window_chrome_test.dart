@@ -29,6 +29,7 @@ Future<void> _pump(
   ),
   ValueListenable<bool>? fullscreen,
   ValueListenable<bool>? buttonsHidden,
+  ValueListenable<WindowFrameState>? frameState,
   Widget child = const ColoredBox(color: Color(0xFF000000)),
   Future<void> Function()? body,
 }) async {
@@ -41,6 +42,7 @@ Future<void> _pump(
           controller: window,
           fullscreen: fullscreen ?? ValueNotifier(false),
           buttonsHidden: buttonsHidden ?? ValueNotifier(false),
+          frameState: frameState ?? ValueNotifier(WindowFrameState.floating),
           child: child,
         ),
       ),
@@ -267,6 +269,69 @@ void main() {
         },
       );
     });
+
+    testWidgets('clips the app to the frame radius while floating',
+        (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        body: () async {
+          final clip =
+              tester.widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+          expect(clip.borderRadius,
+              BorderRadius.circular(kLinuxWindowCornerRadius));
+          expect(clip.clipBehavior, Clip.antiAlias);
+        },
+      );
+    });
+
+    testWidgets(
+        'squares the corners when maximized, then tiled, without remounting '
+        'the app underneath', (tester) async {
+      final frameState = ValueNotifier(WindowFrameState.floating);
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        frameState: frameState,
+        child: const _StateProbe(),
+        body: () async {
+          final before = tester.state(find.byType(_StateProbe));
+
+          for (final state in const [
+            WindowFrameState(maximized: true),
+            WindowFrameState(tiled: true),
+          ]) {
+            frameState.value = state;
+            await tester.pump();
+
+            final clip = tester
+                .widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+            expect(clip.borderRadius, BorderRadius.zero, reason: '$state');
+            expect(clip.clipBehavior, Clip.none, reason: '$state');
+          }
+
+          expect(
+            tester.state(find.byType(_StateProbe)),
+            same(before),
+            reason: 'toggling the clip must not change the tree shape, or '
+                'every maximize would throw away the whole app state',
+          );
+        },
+      );
+    });
+
+    testWidgets('no clip on macOS', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.macOS,
+        window: FakeWindowController(),
+        body: () async {
+          expect(find.byKey(DesktopWindowChrome.clipKey), findsNothing);
+        },
+      );
+    });
   });
 
   group('DesktopWindowChrome over a real WindowTitleRow', () {
@@ -311,6 +376,7 @@ void main() {
                 controller: windowController,
                 fullscreen: ValueNotifier(false),
                 buttonsHidden: ValueNotifier(false),
+                frameState: ValueNotifier(WindowFrameState.floating),
                 child: WindowChromeInsets.scope(
                   insets: WindowChromeInsets(
                     height: kLinuxWindowChromeHeight,
@@ -404,4 +470,19 @@ void main() {
       });
     });
   });
+}
+
+/// A stateful leaf whose `State` identity shows whether the app subtree was
+/// remounted.
+class _StateProbe extends StatefulWidget {
+  const _StateProbe();
+
+  @override
+  State<_StateProbe> createState() => _StateProbeState();
+}
+
+class _StateProbeState extends State<_StateProbe> {
+  @override
+  Widget build(BuildContext context) =>
+      const ColoredBox(color: Color(0xFF000000));
 }

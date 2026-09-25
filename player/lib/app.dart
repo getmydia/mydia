@@ -13,6 +13,7 @@ import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
+import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
@@ -162,6 +163,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final DecorationLayoutSource _decorationLayout =
       DecorationLayoutSource();
 
+  /// Owns the GTK window-state channel for the app's lifetime, so the chrome
+  /// can square its corners when the window is maximized, snapped or
+  /// fullscreen. Starts floating and re-publishes once the real state lands.
+  late final WindowFrameStateSource _windowFrame = WindowFrameStateSource();
+
   /// The macOS menu bar and Dock menu's commands. Null off macOS.
   AppMenuCommands? _appMenu;
 
@@ -267,6 +273,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // chrome renders correctly before this completes and simply re-renders
     // if the real layout differs.
     unawaited(_decorationLayout.load());
+    unawaited(_windowFrame.load());
   }
 
   /// Whether a restore has already been attempted this launch. Auth state can
@@ -368,6 +375,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void dispose() {
     _appMenu?.detach();
     _decorationLayout.dispose();
+    _windowFrame.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _remoteIntentsSubscription?.cancel();
     _controlRequestSubscription?.cancel();
@@ -565,6 +573,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       builder: (context, child) => TvCanvas(
         child: DesktopWindowChrome(
           layout: _decorationLayout.layout,
+          frameState: _windowFrame.state,
           child: WindowChromeInset(
             decorationLayout: _decorationLayout.layout,
             child: ToastLayer(
