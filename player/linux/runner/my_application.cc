@@ -23,13 +23,14 @@ static constexpr char kWindowChromeChannel[] = "dev.mydia.player/window_chrome";
 static constexpr char kWindowFrameChannel[] = "dev.mydia.player/window_frame";
 
 // Corner radius for the floating window's frame, shadow and background.
-// Must equal kLinuxWindowCornerRadius in
+// 15px is libadwaita's --window-radius (GNOME 50 runtime), so the player
+// matches native GNOME apps. Must equal kLinuxWindowCornerRadius in
 // lib/core/layout/window_chrome_inset.dart, which clips the Flutter view to
 // the same curve.
 static constexpr char kFrameCss[] =
     "window.mydia-frame { background-color: #000000; }\n"
     "window.mydia-frame.csd,\n"
-    "window.mydia-frame.csd decoration { border-radius: 12px; }\n"
+    "window.mydia-frame.csd decoration { border-radius: 15px; }\n"
     "window.mydia-frame.maximized, window.mydia-frame.maximized decoration,\n"
     "window.mydia-frame.fullscreen, window.mydia-frame.fullscreen decoration,\n"
     "window.mydia-frame.tiled, window.mydia-frame.tiled decoration,\n"
