@@ -65,6 +65,12 @@ class FakeCastBackend implements CastBackend {
   Completer<void>? _connectGate;
   bool _connectGateClaimed = false;
 
+  Completer<void>? _loadGate;
+  bool _loadGateClaimed = false;
+
+  Completer<void>? _disconnectGate;
+  bool _disconnectGateClaimed = false;
+
   /// How many times [disconnect] has actually been called, so a test can
   /// prove a cancelled/superseded connect tore its connection down rather
   /// than merely being ignored.
@@ -86,6 +92,24 @@ class FakeCastBackend implements CastBackend {
   /// Lets the [connect] call gated by [holdNextConnect] proceed.
   void releaseConnect() {
     _connectGate?.complete();
+  }
+
+  void holdNextLoad() {
+    _loadGate = Completer<void>();
+    _loadGateClaimed = false;
+  }
+
+  void releaseLoad() {
+    _loadGate?.complete();
+  }
+
+  void holdNextDisconnect() {
+    _disconnectGate = Completer<void>();
+    _disconnectGateClaimed = false;
+  }
+
+  void releaseDisconnect() {
+    _disconnectGate?.complete();
   }
 
   /// What `probeReceiverContentUrl` reports. Null — the default, and what the
@@ -160,12 +184,24 @@ class FakeCastBackend implements CastBackend {
 
   @override
   Future<void> disconnect() async {
+    final gate = _disconnectGate;
+    if (gate != null && !_disconnectGateClaimed) {
+      _disconnectGateClaimed = true;
+      await gate.future;
+    }
+
     disconnectCallCount++;
     _connected = null;
   }
 
   @override
   Future<void> loadMedia(CastMediaRequest request) async {
+    final loadGate = _loadGate;
+    if (loadGate != null && !_loadGateClaimed) {
+      _loadGateClaimed = true;
+      await loadGate.future;
+    }
+
     final persistent = _persistentLoadFailure;
     if (persistent != null) {
       throw CastBackendException('fake persistent load failure', persistent);

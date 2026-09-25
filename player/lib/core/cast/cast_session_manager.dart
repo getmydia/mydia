@@ -587,7 +587,18 @@ class CastSessionManager {
     final CastRoute loaded;
     if (isMydia) {
       try {
-        await _loadOnRoute(resolver, route, device, request, backend);
+        await _loadOnRoute(
+          resolver,
+          route,
+          device,
+          request,
+          backend,
+          generation: generation,
+        );
+        if (generation != _connectGeneration) {
+          await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+          return;
+        }
         loaded = route;
       } catch (e) {
         if (generation == _connectGeneration) _cancelSubscriptions();
@@ -610,7 +621,12 @@ class CastSessionManager {
           device,
           request,
           startedHlsSessions,
+          generation: generation,
         );
+        if (generation != _connectGeneration) {
+          await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+          return;
+        }
       } catch (e) {
         // Nothing succeeded: leaving the backend connected, the listeners
         // live, and the LAN proxy exposed would strand the app in a state
@@ -1139,10 +1155,18 @@ class CastSessionManager {
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
-    List<String> startedHlsSessions,
-  ) async {
+    List<String> startedHlsSessions, {
+    required int generation,
+  }) async {
     try {
-      await _loadOnRoute(resolver, route, device, request, backend);
+      await _loadOnRoute(
+        resolver,
+        route,
+        device,
+        request,
+        backend,
+        generation: generation,
+      );
       return route;
     } on CastBackendException catch (firstFailure) {
       final secondRoute = await _retryRouteFor(
@@ -1156,7 +1180,14 @@ class CastSessionManager {
       if (secondRoute == null) rethrow;
 
       try {
-        await _loadOnRoute(resolver, secondRoute, device, request, backend);
+        await _loadOnRoute(
+          resolver,
+          secondRoute,
+          device,
+          request,
+          backend,
+          generation: generation,
+        );
         return secondRoute;
       } on CastBackendException {
         final isBridgeEscalationFromDirectMediaLoadFailed =
@@ -1178,7 +1209,14 @@ class CastSessionManager {
         debugPrint(
           '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
         );
-        await _loadOnRoute(resolver, transcodeRoute, device, request, backend);
+        await _loadOnRoute(
+          resolver,
+          transcodeRoute,
+          device,
+          request,
+          backend,
+          generation: generation,
+        );
         return transcodeRoute;
       }
     }
@@ -1317,8 +1355,9 @@ class CastSessionManager {
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
-    CastBackend backend,
-  ) async {
+    CastBackend backend, {
+    required int generation,
+  }) async {
     // The route already rewrote every track to a URL its receiver can fetch,
     // and dropped them entirely when it cannot serve any. Reading them from
     // here rather than from `request` is what gives every entry point
@@ -1363,6 +1402,7 @@ class CastSessionManager {
       subtitles: subtitles,
       contentRef: contentRef,
     ));
+    if (generation != _connectGeneration) return;
 
     _subtitles = subtitles;
     _selectedSubtitle = subtitles
@@ -1379,6 +1419,7 @@ class CastSessionManager {
     // off would show the viewer a subtitle they were told is disabled.
     if (subtitles.isNotEmpty && _selectedSubtitle == null) {
       await backend.selectSubtitle(null);
+      if (generation != _connectGeneration) return;
     }
 
     // What to carry forward as "the chosen id". When tracks were actually
@@ -1421,6 +1462,7 @@ class CastSessionManager {
       showId: request.showId,
     );
     await _store.save(_persisted!);
+    if (generation != _connectGeneration) return;
 
     _publish(CastSession(
       device: device,
@@ -1741,7 +1783,7 @@ class CastSessionManager {
     // `_connectGeneration`'s dartdoc. Must happen before anything else here:
     // the whole point is that the in-flight call's own generation check,
     // running after this returns, sees a mismatch.
-    _connectGeneration++;
+    final generation = ++_connectGeneration;
 
     _cancelSubscriptions();
 
@@ -1751,7 +1793,7 @@ class CastSessionManager {
       debugPrint('[CastSessionManager] Ignoring stop error: $e');
     }
 
-    await _endSession();
+    await _endSession(generation: generation);
   }
 
   /// Lets go of the receiver without stopping it.
@@ -1762,24 +1804,31 @@ class CastSessionManager {
   /// leave alone.
   Future<void> detach() async {
     // Same ordering requirement as `stopCast`.
-    _connectGeneration++;
+    final generation = ++_connectGeneration;
 
     _cancelSubscriptions();
 
-    await _endSession();
+    await _endSession(generation: generation);
   }
 
   /// Teardown shared by [stopCast] and [detach], after the receiver has
   /// (or deliberately has not) been told to stop.
-  Future<void> _endSession() async {
+  Future<void> _endSession({required int generation}) async {
+    if (generation != _connectGeneration) return;
+
     await _backend.disconnect();
+    if (generation != _connectGeneration) return;
+
     await _store.clear();
+    if (generation != _connectGeneration) return;
 
     final hlsSessionId = _activeHlsSessionId;
     _activeHlsSessionId = null;
     if (hlsSessionId != null) await _streamingSessions.end(hlsSessionId);
+    if (generation != _connectGeneration) return;
 
     await _disableLanQuietly();
+    if (generation != _connectGeneration) return;
 
     _persisted = null;
     _lastRequest = null;
@@ -1936,6 +1985,7 @@ class CastSessionManager {
     CastLaunchRequest request,
     CastBackend backend,
   ) async {
+    final generation = _connectGeneration;
     final resolver = _resolverFactory();
     final startedHlsSessions = <String>[];
 
@@ -1952,7 +2002,18 @@ class CastSessionManager {
         return false;
       }
 
-      await _loadOnRoute(resolver, route, stored.device, request, backend);
+      await _loadOnRoute(
+        resolver,
+        route,
+        stored.device,
+        request,
+        backend,
+        generation: generation,
+      );
+      if (generation != _connectGeneration) {
+        await _abandonStart(false, startedHlsSessions);
+        return false;
+      }
       await _adoptHlsSession(route.hlsSessionId, startedHlsSessions);
       return true;
     } catch (e) {

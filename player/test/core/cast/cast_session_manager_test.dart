@@ -843,6 +843,40 @@ void main() {
       expect(backend.connectedDevice, isNull);
       expect(backend.stopCallCount, 0);
     });
+
+    test('does not restore session after detach during load', () async {
+      final manager = build(isP2pMode: true);
+      addTearDown(manager.dispose);
+      backend.holdNextLoad();
+
+      final casting = manager.startCast(device: device, request: launch);
+      await Future<void>.delayed(Duration.zero);
+
+      await manager.detach();
+      backend.releaseLoad();
+      await casting;
+
+      expect(manager.currentSession, isNull);
+      expect(await store.load(), isNull);
+      expect(backend.stopCallCount, 0);
+    });
+
+    test('does not clear a newer connect after a slow disconnect', () async {
+      final manager = build();
+      addTearDown(manager.dispose);
+      await manager.startCast(device: device, request: launch);
+      backend.holdNextDisconnect();
+
+      final detaching = manager.detach();
+      await Future<void>.delayed(Duration.zero);
+
+      await manager.connectTo(device);
+      backend.releaseDisconnect();
+      await detaching;
+
+      expect(manager.currentSession, isNotNull);
+      expect(manager.currentSession!.device, device);
+    });
   });
 
   group('restoreSession', () {
