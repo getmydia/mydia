@@ -96,6 +96,8 @@ defmodule MydiaWeb.GridDensityComponents do
       param="density"
       label="Grid density"
       icon_only
+      phx-hook="GridDensity"
+      data-value={@density}
     >
       <:option
         :for={{value, label, icon_name} <- @levels}

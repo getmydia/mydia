@@ -169,4 +169,21 @@ defmodule MydiaWeb.Components.GridDensityToggleTest do
 
     assert text == ""
   end
+
+  test "the toggle carries the GridDensity hook and the rendered value" do
+    html =
+      render_component(&GridDensityComponents.grid_density_toggle/1,
+        density: "compact",
+        id: "library-density-toggle"
+      )
+
+    # The hook compares data-value with the browser's cookie on mount to catch
+    # a live navigation that mounted with a stale session. phx-hook needs the
+    # element's id, which the join container already has.
+    join = html |> LazyHTML.from_fragment() |> LazyHTML.filter("div.join")
+
+    assert LazyHTML.attribute(join, "phx-hook") == ["GridDensity"]
+    assert LazyHTML.attribute(join, "data-value") == ["compact"]
+    assert LazyHTML.attribute(join, "id") == ["library-density-toggle"]
+  end
 end
