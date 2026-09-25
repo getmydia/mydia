@@ -89,6 +89,25 @@ class WindowTitleRow extends ConsumerWidget {
           ? Breakpoints.getHorizontalPadding(context) - 8
           : 8;
 
+  /// Inside the band, icon buttons drop to 32px so they clear its edges: the
+  /// macOS band is AppKit's fixed 40px title bar, centred on the traffic
+  /// lights, and a full-size 40px button fills it top to bottom. Compact
+  /// density takes 8px off, and `shrinkWrap` keeps a mobile-sized tap target
+  /// from growing it back. The app theme's own style still applies to
+  /// everything compact leaves unset.
+  static Widget _compactIconButtons(BuildContext context, Widget child) {
+    final compact = IconButton.styleFrom(
+      visualDensity: VisualDensity.compact,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+    return IconButtonTheme(
+      data: IconButtonThemeData(
+        style: compact.merge(Theme.of(context).iconButtonTheme.style),
+      ),
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final insets = WindowChromeInsets.of(context);
@@ -143,7 +162,9 @@ class WindowTitleRow extends ConsumerWidget {
                         onPointerDown: _onBandPointerDown(),
                       ),
                     ),
-                    Positioned.fill(child: row),
+                    Positioned.fill(
+                      child: _compactIconButtons(context, row),
+                    ),
                   ],
                 ),
         ),
