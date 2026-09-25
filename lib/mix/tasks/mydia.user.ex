@@ -247,8 +247,8 @@ defmodule Mix.Tasks.Mydia.User do
           user ->
             display = user.email || user.username
 
-            if Accounts.totp_enabled?(user) do
-              {:ok, _} = Accounts.admin_reset_totp(user)
+            if Accounts.second_factor_enabled?(user) do
+              {:ok, _} = Accounts.admin_reset_second_factors(user)
               Mix.shell().info("✓ Two-factor authentication turned off for: #{display}")
             else
               Mix.shell().info("#{display} does not have two-factor authentication enabled")

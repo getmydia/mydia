@@ -341,8 +341,8 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     end
   end
 
-  def handle_event("reset_totp", %{"id" => id}, socket) do
-    {:ok, _user} = id |> Accounts.get_user!() |> Accounts.admin_reset_totp()
+  def handle_event("reset_second_factors", %{"id" => id}, socket) do
+    {:ok, _user} = id |> Accounts.get_user!() |> Accounts.admin_reset_second_factors()
 
     {:noreply,
      socket
@@ -370,7 +370,9 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
     # Get users with preloaded associations for stats
     users =
-      Accounts.list_users(Keyword.put(opts, :preload, [:media_requests, :approved_requests]))
+      Accounts.list_users(
+        Keyword.put(opts, :preload, [:media_requests, :approved_requests, :passkeys])
+      )
 
     # Filter by search query if present
     users =
@@ -593,5 +595,8 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   defp auth_type_text(%User{oidc_sub: oidc_sub}) when not is_nil(oidc_sub), do: "OIDC"
   defp auth_type_text(_user), do: "Local"
 
-  defp totp_enabled?(user), do: Accounts.totp_enabled?(user)
+  defp passkey_count(%{passkeys: passkeys}) when is_list(passkeys), do: length(passkeys)
+  defp passkey_count(_user), do: 0
+
+  defp second_factor_on?(user), do: Accounts.totp_enabled?(user) or passkey_count(user) > 0
 end
