@@ -1,9 +1,9 @@
 defmodule MydiaWeb.Live.Helpers.PosterFields do
   @moduledoc """
   Reads and persists the library poster fields preference
-  (`Mydia.Accounts.PosterFields`). Same contract as `GridDensity`: a guest or
-  unauthenticated render gets the defaults, and its changes apply to the
-  current view without being persisted.
+  (`Mydia.Accounts.PosterFields`). A guest or unauthenticated render gets the
+  defaults, and its changes apply to the current view without being
+  persisted.
   """
 
   import Phoenix.Component, only: [assign: 3]

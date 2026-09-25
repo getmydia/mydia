@@ -217,4 +217,12 @@ defmodule Mydia.Accounts.UserPreferenceTest do
       assert UserPreference.add_library_path_id(pref, :tv_show) == mixed_library.id
     end
   end
+
+  test "a stored grid_density key from an older release does not block other writes" do
+    pref = %UserPreference{preferences: %{"grid_density" => "dense", "theme" => "system"}}
+
+    changeset = UserPreference.update_preferences_changeset(pref, %{"theme" => "dark"})
+
+    assert changeset.valid?
+  end
 end

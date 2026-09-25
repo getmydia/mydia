@@ -54,7 +54,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   @unsupported_media_type "That media type is not supported."
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(_params, session, socket) do
     socket =
       socket
       |> assign(:page_title, "Discover")
@@ -76,7 +76,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:load_error, nil)
       |> assign(:add_config, nil)
       |> assign(:quality_profiles, Settings.list_quality_profiles())
-      |> GridDensity.assign_current()
+      |> GridDensity.assign_current(session)
       |> assign_hide_owned()
 
     {:ok, socket}
@@ -345,8 +345,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     value = not socket.assigns.hide_owned
 
     # A rejected write leaves the toggle where it was rather than flipping the
-    # grid for a preference that will be gone on the next mount. Mirrors
-    # `GridDensity.put/2`.
+    # grid for a preference that will be gone on the next mount.
     case persist_hide_owned(socket, value) do
       :ok ->
         {:noreply,

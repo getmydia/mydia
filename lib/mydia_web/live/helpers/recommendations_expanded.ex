@@ -3,10 +3,8 @@ defmodule MydiaWeb.Live.Helpers.RecommendationsExpanded do
   Reads and persists whether the More Like This rail on a media detail page is
   open.
 
-  Modelled on `MydiaWeb.Live.Helpers.GridDensity`, which solves the same
-  problem for the shared poster-grid density. The rail used to reset to
-  collapsed on every mount, so a user who wanted it open had to reopen it on
-  every page load.
+  The rail used to reset to collapsed on every mount, so a user who wanted it
+  open had to reopen it on every page load.
 
   A guest or unauthenticated render has no preference row to read: it gets the
   default, and its toggle clicks change the current view without being
