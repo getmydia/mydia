@@ -30,8 +30,9 @@ void main() {
   }) build({
     Rect bounds = const Rect.fromLTWH(100, 100, 1200, 900),
     void Function()? onDetached,
+    FakeWindowController? windowOverride,
   }) {
-    final window = FakeWindowController(bounds: bounds);
+    final window = windowOverride ?? FakeWindowController(bounds: bounds);
     final geometry = WindowGeometryController(
       window: window,
       store: InMemoryWindowGeometryStore(),
@@ -479,5 +480,57 @@ void main() {
 
       expect(t.window.bounds, const Rect.fromLTWH(0, 112.5, 1200, 675));
     });
+
+    test(
+        'a maximize that lands mid-fit leaves the window unlocked and '
+        'untouched', () async {
+      final window = _GatedBoundsWindowController(
+        bounds: const Rect.fromLTWH(0, 0, 1200, 900),
+      );
+      final t = build(windowOverride: window);
+      addTearDown(t.geometry.dispose);
+      final params = StreamController<VideoParams>();
+      addTearDown(params.close);
+
+      await t.sizer.attach();
+      window.armGate();
+      t.sizer.bindVideoParams(params.stream);
+      params.add(const VideoParams(w: 1920, h: 1080, dw: 1920, dh: 1080));
+      await pumpEventQueue();
+
+      window.maximized = true;
+      t.sizer.onWindowMaximize();
+      window.openGate();
+      await settle();
+
+      expect(window.setAspectRatioCalls, isEmpty);
+      expect(window.setBoundsCalls, isEmpty);
+    });
   });
+}
+
+/// A [FakeWindowController] whose [getBounds] parks on a gate the test
+/// controls, so a test can land a window event exactly mid-fit -- after the
+/// maximized/fullscreen check but before the target rect and lock are
+/// applied. `attach()`'s `PlayerWindowSession.join` also calls `getBounds`,
+/// so the gate starts open and must be armed explicitly.
+class _GatedBoundsWindowController extends FakeWindowController {
+  Completer<void>? _gate;
+
+  _GatedBoundsWindowController({super.bounds});
+
+  void armGate() => _gate = Completer<void>();
+
+  void openGate() {
+    final gate = _gate;
+    _gate = null;
+    gate?.complete();
+  }
+
+  @override
+  Future<Rect> getBounds() async {
+    final gate = _gate;
+    if (gate != null) await gate.future;
+    return super.getBounds();
+  }
 }

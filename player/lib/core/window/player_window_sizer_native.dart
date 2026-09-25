@@ -46,6 +46,11 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   /// or nothing has been fitted yet.
   double? _lockedAspect;
 
+  /// The window is maximized or fullscreen, per the latest window event.
+  /// Updated unconditionally (even while detached) since it is just state;
+  /// what reads it is gated on [_attached] itself.
+  bool _filling = false;
+
   NativePlayerWindowSizer({
     required WindowController window,
     required PlayerWindowSession session,
@@ -62,6 +67,7 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
     _attached = true;
     _appliedAspect = null;
     _lockedAspect = null;
+    _filling = false;
     await _session.join(this);
   }
 
@@ -103,8 +109,10 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
         workArea: area.bounds,
       );
 
-      // Several awaits deep: the screen may have gone.
-      if (!_attached) return;
+      // Several awaits deep: the screen may have gone, or a maximize/
+      // fullscreen event may have landed and already dropped the (not yet
+      // applied) lock -- applying one now, or resizing, would fight it.
+      if (!_attached || _filling) return;
 
       final fitted = target.width / target.height;
       final lock = (fitted - aspect).abs() < _kAspectTolerance ? aspect : null;
@@ -123,16 +131,28 @@ class NativePlayerWindowSizer with WindowListener implements PlayerWindowSizer {
   // A maximized or fullscreen window must fill its space, which a lock
   // would prevent.
   @override
-  void onWindowMaximize() => _dropLock();
+  void onWindowMaximize() {
+    _filling = true;
+    _dropLock();
+  }
 
   @override
-  void onWindowEnterFullScreen() => _dropLock();
+  void onWindowEnterFullScreen() {
+    _filling = true;
+    _dropLock();
+  }
 
   @override
-  void onWindowUnmaximize() => _reapplyLock();
+  void onWindowUnmaximize() {
+    _filling = false;
+    _reapplyLock();
+  }
 
   @override
-  void onWindowLeaveFullScreen() => _reapplyLock();
+  void onWindowLeaveFullScreen() {
+    _filling = false;
+    _reapplyLock();
+  }
 
   void _dropLock() {
     if (!_attached || _lockedAspect == null) return;
