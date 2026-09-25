@@ -35,11 +35,18 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
   end
 
   # daisyUI dropdowns open on :focus-within, so focusing the trigger opens it.
-  defp open_menu(session) do
-    eval_js(session, """
-    document.querySelector('#poster-fields-menu [role=button]').focus();
-    return true;
-    """)
+  # A closed menu reports a zero-size rect at the origin, which
+  # assert_in_viewport/2 would accept, so prove it actually opened first.
+  defp open_menu(session, w) do
+    shown =
+      eval_js(session, """
+      document.querySelector('#poster-fields-menu [role=button]').focus();
+      var el = document.querySelector('#poster-fields-menu .dropdown-content');
+      var r = el.getBoundingClientRect();
+      return el.checkVisibility({visibilityProperty: true}) && r.width > 0 && r.height > 0;
+      """)
+
+    assert shown, "at #{w}px the poster fields menu did not open"
 
     session
   end
@@ -69,7 +76,7 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
                "density toggle (top #{density_top})"
 
       session
-      |> open_menu()
+      |> open_menu(w)
       |> assert_in_viewport("#poster-fields-menu .dropdown-content")
     end
   end
