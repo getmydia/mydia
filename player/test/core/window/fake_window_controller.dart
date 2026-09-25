@@ -28,9 +28,6 @@ class FakeWindowController implements WindowController {
   int closeCalls = 0;
   int startDraggingCalls = 0;
 
-  /// Every edge passed to [startResizing], in order.
-  final List<WindowEdge> startResizingCalls = [];
-
   /// When set, [setBounds] throws this instead of recording the call. Lets a
   /// test drive the failure path of code that must still clean up afterwards.
   Object? setBoundsError;
@@ -109,11 +106,5 @@ class FakeWindowController implements WindowController {
   Future<void> startDragging() async {
     startDraggingCalls++;
     callLog.add('startDragging');
-  }
-
-  @override
-  Future<void> startResizing(WindowEdge edge) async {
-    startResizingCalls.add(edge);
-    callLog.add('startResizing');
   }
 }

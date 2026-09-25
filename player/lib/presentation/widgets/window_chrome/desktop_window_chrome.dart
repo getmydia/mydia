@@ -6,9 +6,9 @@ import '../../../core/window/decoration_layout.dart';
 import '../../../core/window/window_buttons_hidden.dart';
 import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_controller_native.dart';
+import '../../../core/window/window_frame_state.dart';
 import '../../../core/window/window_fullscreen.dart';
 import 'window_buttons.dart';
-import 'window_resize_edges.dart';
 
 /// Draws the window's own decorations inside the window, on platforms where
 /// the OS no longer does.
@@ -27,22 +27,36 @@ import 'window_resize_edges.dart';
 ///
 /// Linux only for now. macOS keeps AppKit's traffic lights, which float over
 /// the Flutter view already, and Windows still has its native caption.
+///
+/// It also clips the app to the corner radius GTK rounds the window frame
+/// to (`kFrameCss` in `linux/runner/my_application.cc`), squaring it
+/// whenever GTK squares the frame. The Flutter view is transparent on Linux,
+/// so the clipped-away corners show GTK's frame and shadow.
 class DesktopWindowChrome extends StatelessWidget {
   const DesktopWindowChrome({
     super.key,
     required this.child,
     required ValueListenable<DecorationLayout> layout,
+    required ValueListenable<WindowFrameState> frameState,
     WindowController? controller,
     ValueListenable<bool>? fullscreen,
     ValueListenable<bool>? buttonsHidden,
   })  : _layout = layout,
+        _frameState = frameState,
         _controller = controller,
         _fullscreen = fullscreen,
         _buttonsHidden = buttonsHidden;
 
+  /// The `ClipRRect` rounding the app to the GTK frame. Exposed for tests.
+  static const Key clipKey = ValueKey('desktop-window-chrome-clip');
+
   final Widget child;
 
   final ValueListenable<DecorationLayout> _layout;
+
+  /// Maximized / tiled / fullscreen, from `WindowFrameStateSource`. Drives
+  /// the corner radius so the clip matches the frame GTK draws around it.
+  final ValueListenable<WindowFrameState> _frameState;
 
   /// Injected by tests. Defaults to the real window.
   final WindowController? _controller;
@@ -75,6 +89,7 @@ class DesktopWindowChrome extends StatelessWidget {
 
         return _WindowChrome(
           layout: _layout,
+          frameState: _frameState,
           controller: _controller ?? const WindowManagerController(),
           buttonsHidden: _buttonsHidden ?? windowButtonsHidden,
           child: child,
@@ -93,12 +108,14 @@ class _WindowChrome extends StatefulWidget {
   const _WindowChrome({
     required this.child,
     required this.layout,
+    required this.frameState,
     required this.controller,
     required this.buttonsHidden,
   });
 
   final Widget child;
   final ValueListenable<DecorationLayout> layout;
+  final ValueListenable<WindowFrameState> frameState;
   final WindowController controller;
   final ValueListenable<bool> buttonsHidden;
 
@@ -126,23 +143,34 @@ class _WindowChromeState extends State<_WindowChrome> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: WindowResizeEdges(
-            controller: widget.controller,
-            child: widget.child,
-          ),
-        ),
+    // Always a `ClipRRect`, even when square: swapping it in and out would
+    // change the tree shape and remount the entire app on every maximize.
+    // `Clip.none` at radius zero skips the clip's cost entirely.
+    return ValueListenableBuilder<WindowFrameState>(
+      valueListenable: widget.frameState,
+      builder: (context, state, stack) {
+        final radius = windowCornerRadiusFor(state);
+        return ClipRRect(
+          key: DesktopWindowChrome.clipKey,
+          borderRadius:
+              radius == 0 ? BorderRadius.zero : BorderRadius.circular(radius),
+          clipBehavior: radius == 0 ? Clip.none : Clip.antiAlias,
+          child: stack,
+        );
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(child: widget.child),
 
-        // On top of the resize edges (and everything else): the button
-        // corners are the only part of this widget still drawn over the app,
-        // and only where a corner actually has buttons in it.
-        ValueListenableBuilder<DecorationLayout>(
-          valueListenable: widget.layout,
-          builder: (context, layout, _) => Stack(children: _corners(layout)),
-        ),
-      ],
+          // On top of everything else: the button corners are the only part
+          // of this widget still drawn over the app, and only where a
+          // corner actually has buttons in it.
+          ValueListenableBuilder<DecorationLayout>(
+            valueListenable: widget.layout,
+            builder: (context, layout, _) => Stack(children: _corners(layout)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -221,9 +249,7 @@ class _WindowChromeState extends State<_WindowChrome> {
   static double _cornerWidth(int buttonCount) =>
       2 * kLinuxChromeEdgePadding + buttonCount * kLinuxWindowButtonExtent;
 
-  /// The buttons fade out with the playback chrome, while the resize edges
-  /// stay live. They are invisible either way, and losing the ability to
-  /// resize the window mid-playback would be a regression.
+  /// The buttons fade out with the playback chrome.
   ///
   /// A pointer inside the corner overrides the hidden state in both
   /// directions: buttons under the cursor are never taken away, and reaching
@@ -268,3 +294,13 @@ bool shouldShowWindowChrome({
   required bool isFullscreen,
 }) =>
     !isWeb && platform == TargetPlatform.linux && !isFullscreen;
+
+/// The radius `DesktopWindowChrome` clips the app to.
+///
+/// Zero in every state where GTK squares its own frame (maximized, tiled,
+/// fullscreen, or compositor-less `solidFrame`), so the clip always follows
+/// the frame it sits in. Pure and exposed for the same reason as
+/// [shouldShowWindowChrome].
+@visibleForTesting
+double windowCornerRadiusFor(WindowFrameState state) =>
+    !state.isFloating || state.solidFrame ? 0.0 : kLinuxWindowCornerRadius;

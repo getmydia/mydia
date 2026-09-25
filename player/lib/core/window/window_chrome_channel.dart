@@ -10,3 +10,13 @@
 /// Deliberately just the name, not a shared `MethodChannel` instance: the
 /// two Dart sides open separate channel objects with separate handlers.
 const String kWindowChromeChannelName = 'dev.mydia.player/window_chrome';
+
+/// The Linux window state channel, `{maximized, tiled, fullscreen,
+/// solidFrame}`, read by `WindowFrameStateSource`.
+///
+/// Matched literally by `kWindowFrameChannel` in
+/// `linux/runner/my_application.cc`. A separate channel rather than more
+/// methods on [kWindowChromeChannelName], because `DecorationLayoutSource`
+/// installs that channel's only Dart handler and a second one would replace
+/// it.
+const String kWindowFrameChannelName = 'dev.mydia.player/window_frame';
