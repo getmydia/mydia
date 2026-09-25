@@ -78,12 +78,44 @@ done
 # `--locked` fails when the lock does not already satisfy the manifest, which is
 # exactly the state a manifest-only bump leaves behind. The Nix build vendors
 # from these locks, so a stale one is a build failure there rather than here.
+#
+# `cargo metadata --locked` still hits the crates.io index to validate the lock.
+# On 2026-09-25 a transient index fetch failure on master (`failed to get libc`)
+# failed `Check / Generated Freshness` even though every lock was current. Retry
+# only errors that look like network or registry outages, not a stale lock.
+cargo_lock_err_is_transient() {
+  case $1 in
+    *"failed to get "*) return 0 ;;
+    *"Could not connect"*) return 0 ;;
+    *"Connection refused"*) return 0 ;;
+    *"timed out"*) return 0 ;;
+    *"Temporary failure in name resolution"*) return 0 ;;
+  esac
+  return 1
+}
+
+cargo_metadata_locked() {
+  local d=$1 attempts=3 i err=""
+  for ((i = 1; i <= attempts; i++)); do
+    if err="$(cd "$d" && cargo metadata --locked --format-version 1 2>&1 >/dev/null)"; then
+      return 0
+    fi
+    if [ "$i" -lt "$attempts" ] && cargo_lock_err_is_transient "$err"; then
+      echo "note: cargo metadata in $d failed with a transient error (attempt $i/$attempts), retrying..." >&2
+      sleep "$((i * 10))"
+      continue
+    fi
+    printf '%s' "$err"
+    return 1
+  done
+}
+
 if command -v cargo >/dev/null 2>&1; then
   # shellcheck source=scripts/lib/cargo-lock-dirs.sh
   source "$root/scripts/lib/cargo-lock-dirs.sh"
   for d in "${cargo_lock_dirs[@]}"; do
     [ -f "$d/Cargo.lock" ] || continue
-    if ! err="$(cd "$d" && cargo metadata --locked --format-version 1 2>&1 >/dev/null)"; then
+    if ! err="$(cargo_metadata_locked "$d")"; then
       fail "$d/Cargo.lock does not satisfy its manifest:
 $(echo "$err" | sed 's/^/    /' | head -5)
   Run 'cargo metadata' in $d and commit the updated lock."
