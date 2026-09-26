@@ -8,7 +8,7 @@ defmodule Mydia.Library.FileRenamer do
 
   import Ecto.Query, warn: false
 
-  alias Mydia.Library.Structs.Quality
+  alias Mydia.Library.Structs.{Quality, RenamePreview}
   alias Mydia.Library.{FileNamer, MediaFile}
   alias Mydia.Media.MediaItem
   alias Mydia.Repo
@@ -18,13 +18,7 @@ defmodule Mydia.Library.FileRenamer do
   @doc """
   Generates a proposed filename for a media file based on its metadata.
 
-  Returns a map with:
-  - `:current_path` - The current full path
-  - `:proposed_path` - The proposed full path
-  - `:current_filename` - Just the current filename
-  - `:proposed_filename` - Just the proposed filename
-  - `:directory` - The directory path
-  - `:extension` - The file extension
+  Returns a `%RenamePreview{}`.
   """
   def generate_rename_preview(%MediaFile{} = file) do
     # Load associations if needed - force reload to ensure we have fresh data
@@ -71,21 +65,25 @@ defmodule Mydia.Library.FileRenamer do
 
     proposed_path = Path.join(directory, proposed_filename)
 
-    %{
+    %RenamePreview{
+      file_id: file.id,
       current_path: current_path,
       proposed_path: proposed_path,
       current_filename: current_filename,
       proposed_filename: proposed_filename,
       directory: directory,
       extension: Path.extname(current_path),
-      file_id: file.id
+      season_number: file.episode && file.episode.season_number,
+      episode_number: file.episode && file.episode.episode_number,
+      changed?: proposed_filename != current_filename
     }
   end
 
   @doc """
   Generates rename previews for all files associated with a media item.
 
-  Returns a list of preview maps.
+  Returns previews sorted by season, then episode, then current filename.
+  Movie previews have no season and keep filename order.
   """
   def generate_rename_previews_for_media_item(%MediaItem{} = media_item) do
     active_files_query = MediaFile.versions()
@@ -113,7 +111,14 @@ defmodule Mydia.Library.FileRenamer do
     file_ids
     |> Enum.map(&Mydia.Library.get_media_file!/1)
     |> Enum.map(&generate_rename_preview/1)
+    |> Enum.sort_by(
+      &{sort_key(&1.season_number), sort_key(&1.episode_number), &1.current_filename}
+    )
   end
+
+  # nil sorts after every integer, so previews without an episode land last.
+  defp sort_key(nil), do: {1, 0}
+  defp sort_key(n), do: {0, n}
 
   @doc """
   Renames a media file on the filesystem and updates the database.
