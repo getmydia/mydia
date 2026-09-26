@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../core/window/window_controller.dart';
 import '../../../core/window/window_maximized.dart';
 
-/// The strip along the top of an undecorated window that behaves like a
-/// title bar: drag to move, double-click to toggle maximize.
+/// The strip along the top of a window with no native title bar that
+/// behaves like one: drag to move, double-click to toggle maximize.
 ///
 /// Full width rather than only the gap beside the buttons, so any empty
 /// space in the row that mounts it is a drag handle. `DesktopWindowChrome`

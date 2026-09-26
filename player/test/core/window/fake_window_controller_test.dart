@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/window/window_controller.dart';
 
 import 'fake_window_controller.dart';
 
@@ -38,22 +37,6 @@ void main() {
       await window.startDragging();
       expect(window.startDraggingCalls, 1);
       expect(window.callLog, ['startDragging']);
-    });
-
-    test('records every resize edge, in order', () async {
-      final window = FakeWindowController();
-      await window.startResizing(WindowEdge.topLeft);
-      await window.startResizing(WindowEdge.bottom);
-
-      expect(
-        window.startResizingCalls,
-        [WindowEdge.topLeft, WindowEdge.bottom],
-      );
-      expect(window.callLog, ['startResizing', 'startResizing']);
-    });
-
-    test('WindowEdge covers all eight edges and corners', () {
-      expect(WindowEdge.values, hasLength(8));
     });
   });
 }

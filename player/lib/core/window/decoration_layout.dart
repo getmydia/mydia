@@ -67,8 +67,9 @@ const String kFallbackDecorationLayout = ':minimize,maximize,close';
 /// The fallback on a parsed-but-empty layout is a deliberate divergence from
 /// GTK, which would render a header bar with no buttons at all. A GTK app in
 /// that state still has the window manager's right-click title bar menu as an
-/// escape hatch. This app undecorates the window, so that menu is gone, and a
-/// window with no buttons would have no pointer-driven way to close it.
+/// escape hatch. This app's titlebar takes no space (`MydiaNoTitlebar` in
+/// `my_application.cc`), so that menu has nowhere to appear, and a window
+/// with no buttons would have no pointer-driven way to close it.
 DecorationLayout parseDecorationLayout(String raw) {
   final parsed = _parse(raw);
   return parsed.isEmpty ? _parse(kFallbackDecorationLayout) : parsed;

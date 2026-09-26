@@ -6,8 +6,7 @@ import 'window_controller.dart';
 
 /// The real window, behind the [WindowController] seam.
 ///
-/// Delegation only, plus the [WindowEdge] to `ResizeEdge` mapping. Every
-/// branch worth testing lives above this line.
+/// Delegation only. Every branch worth testing lives above this line.
 class WindowManagerController implements WindowController {
   const WindowManagerController();
 
@@ -39,20 +38,9 @@ class WindowManagerController implements WindowController {
   Future<void> setMinimumSize(Size size) => windowManager.setMinimumSize(size);
 
   @override
-  Future<void> startDragging() => windowManager.startDragging();
+  Future<void> setAspectRatio(double aspectRatio) =>
+      windowManager.setAspectRatio(aspectRatio);
 
   @override
-  Future<void> startResizing(WindowEdge edge) =>
-      windowManager.startResizing(_resizeEdgeFor(edge));
-
-  static ResizeEdge _resizeEdgeFor(WindowEdge edge) => switch (edge) {
-        WindowEdge.top => ResizeEdge.top,
-        WindowEdge.bottom => ResizeEdge.bottom,
-        WindowEdge.left => ResizeEdge.left,
-        WindowEdge.right => ResizeEdge.right,
-        WindowEdge.topLeft => ResizeEdge.topLeft,
-        WindowEdge.topRight => ResizeEdge.topRight,
-        WindowEdge.bottomLeft => ResizeEdge.bottomLeft,
-        WindowEdge.bottomRight => ResizeEdge.bottomRight,
-      };
+  Future<void> startDragging() => windowManager.startDragging();
 }

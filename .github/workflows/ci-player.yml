@@ -625,6 +625,9 @@ jobs:
       - name: Test the ostree skeleton repair
         if: needs.changes.outputs.player == 'true'
         run: ./player/flatpak/test/ensure-skeleton-test.sh
+      - name: Test channel branding
+        if: needs.changes.outputs.player == 'true'
+        run: ./player/tool/test/apply-channel-test.sh
 
       # Seconds, not minutes. Catches most manifest metadata mistakes long
       # before the full flatpak-build job below finishes compiling mpv.

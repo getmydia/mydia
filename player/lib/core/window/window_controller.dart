@@ -1,24 +1,5 @@
 import 'dart:ui';
 
-/// Which window edge or corner a resize drag started from.
-///
-/// Mirrors `window_manager`'s `ResizeEdge`, redeclared here so this file goes
-/// on importing nothing but `dart:ui`. That is the point of the seam: reading
-/// the `windowManager` getter constructs a `WindowManager._()` which calls
-/// `setMethodCallHandler` before a Flutter binding may exist, so a test that
-/// only wanted the enum would assert-fail. `WindowManagerController` maps
-/// between the two.
-enum WindowEdge {
-  top,
-  bottom,
-  left,
-  right,
-  topLeft,
-  topRight,
-  bottomLeft,
-  bottomRight,
-}
-
 /// The slice of `window_manager` this module needs.
 ///
 /// Narrow on purpose: `WindowGeometryController`, `PlayerWindowSizer` and the
@@ -38,9 +19,10 @@ abstract interface class WindowController {
   Future<void> close();
   Future<void> setMinimumSize(Size size);
 
+  /// Constrains user resizes to [aspectRatio] (width / height). `0` removes
+  /// the constraint.
+  Future<void> setAspectRatio(double aspectRatio);
+
   /// Hands the drag to the window manager, which keeps its own edge snapping.
   Future<void> startDragging();
-
-  /// Hands a resize drag to the window manager from the given edge.
-  Future<void> startResizing(WindowEdge edge);
 }

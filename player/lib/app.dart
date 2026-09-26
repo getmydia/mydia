@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
 import 'core/auth/auth_status.dart';
@@ -13,6 +14,7 @@ import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
 import 'core/theme/app_theme.dart';
 import 'core/window/decoration_layout_source.dart';
+import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
@@ -162,6 +164,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final DecorationLayoutSource _decorationLayout =
       DecorationLayoutSource();
 
+  /// Owns the GTK window-state channel for the app's lifetime, so the chrome
+  /// can square its corners when the window is maximized, snapped or
+  /// fullscreen. Starts floating and re-publishes once the real state lands.
+  late final WindowFrameStateSource _windowFrame = WindowFrameStateSource();
+
   /// The macOS menu bar and Dock menu's commands. Null off macOS.
   AppMenuCommands? _appMenu;
 
@@ -267,6 +274,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // chrome renders correctly before this completes and simply re-renders
     // if the real layout differs.
     unawaited(_decorationLayout.load());
+    unawaited(_windowFrame.load());
   }
 
   /// Whether a restore has already been attempted this launch. Auth state can
@@ -368,6 +376,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void dispose() {
     _appMenu?.detach();
     _decorationLayout.dispose();
+    _windowFrame.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _remoteIntentsSubscription?.cancel();
     _controlRequestSubscription?.cancel();
@@ -494,7 +503,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (authState.isLoading) {
       debugPrint('[MyApp] Showing loading screen');
       return MaterialApp(
-        title: 'Mydia Player',
+        title: BuildChannel.current.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
@@ -517,7 +526,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (authState.hasError) {
       debugPrint('[MyApp] Auth error: ${authState.error}');
       return MaterialApp(
-        title: 'Mydia Player',
+        title: BuildChannel.current.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
@@ -542,7 +551,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Mydia Player',
+      title: BuildChannel.current.appName,
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.darkTheme,
@@ -565,6 +574,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       builder: (context, child) => TvCanvas(
         child: DesktopWindowChrome(
           layout: _decorationLayout.layout,
+          frameState: _windowFrame.state,
           child: WindowChromeInset(
             decorationLayout: _decorationLayout.layout,
             child: ToastLayer(

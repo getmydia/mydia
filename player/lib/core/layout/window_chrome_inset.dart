@@ -58,6 +58,14 @@ const double kLinuxChromeEdgePadding = 6.0;
 /// starts past the reserved corner.
 const double kLinuxChromeGap = 8.0;
 
+/// Corner radius of the floating Linux window.
+///
+/// Must equal the `border-radius` in `kFrameCss` in
+/// `linux/runner/my_application.cc`: GTK rounds the frame and shadow to that
+/// curve and `DesktopWindowChrome` clips the Flutter view to this one, so a
+/// mismatch shows as a sliver of frame or a square app corner.
+const double kLinuxWindowCornerRadius = 15.0;
+
 /// Fallback [DecorationLayout] used by [WindowChromeInset.build] when no real
 /// signal is injected. Only Linux ever consults it, and `app.dart` always
 /// passes the real signal there, so in practice this only feeds tests.

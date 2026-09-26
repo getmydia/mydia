@@ -6,6 +6,7 @@
 /// pre-formatted strings.
 library;
 
+import '../../build_channel.dart';
 import '../../format/bitrate.dart';
 import 'playback_stats.dart';
 import 'stats_metrics.dart';
@@ -108,7 +109,7 @@ String statsClipboardText(
   required String appVersion,
 }) {
   final lines = <String>[
-    'Mydia Player $appVersion',
+    '${BuildChannel.current.appName} $appVersion',
     'Playing: ${_modeLabel(context.mode)} - ${context.qualityLabel}',
     if (context.why != null) 'Why: ${context.why}',
     if (context.whyDetail != null) 'Detail: ${context.whyDetail}',

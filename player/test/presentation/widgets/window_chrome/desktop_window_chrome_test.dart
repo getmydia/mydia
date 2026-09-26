@@ -5,10 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/window/decoration_layout.dart';
+import 'package:player/core/window/window_frame_state.dart';
 import 'package:player/presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'package:player/presentation/widgets/window_chrome/window_button.dart';
 import 'package:player/presentation/widgets/window_chrome/window_drag_band.dart';
-import 'package:player/presentation/widgets/window_chrome/window_resize_edges.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../core/window/fake_window_controller.dart';
@@ -28,6 +28,7 @@ Future<void> _pump(
   ),
   ValueListenable<bool>? fullscreen,
   ValueListenable<bool>? buttonsHidden,
+  ValueListenable<WindowFrameState>? frameState,
   Widget child = const ColoredBox(color: Color(0xFF000000)),
   Future<void> Function()? body,
 }) async {
@@ -40,6 +41,7 @@ Future<void> _pump(
           controller: window,
           fullscreen: fullscreen ?? ValueNotifier(false),
           buttonsHidden: buttonsHidden ?? ValueNotifier(false),
+          frameState: frameState ?? ValueNotifier(WindowFrameState.floating),
           child: child,
         ),
       ),
@@ -107,15 +109,60 @@ void main() {
     }
   });
 
+  // Pure for the same reason as `shouldShowWindowChrome`, and because GTK
+  // squares its own frame in exactly these states: a mismatch leaves a
+  // rounded app inside a square frame, or square app corners poking past a
+  // rounded one.
+  group('windowCornerRadiusFor', () {
+    for (final maximized in [false, true]) {
+      for (final tiled in [false, true]) {
+        for (final fullscreen in [false, true]) {
+          for (final solidFrame in [false, true]) {
+            final state = WindowFrameState(
+              maximized: maximized,
+              tiled: tiled,
+              fullscreen: fullscreen,
+              solidFrame: solidFrame,
+            );
+            final expected = !state.isFloating || state.solidFrame
+                ? 0.0
+                : kLinuxWindowCornerRadius;
+            test('$state -> $expected', () {
+              expect(windowCornerRadiusFor(state), expected);
+            });
+          }
+        }
+      }
+    }
+  });
+
   group('DesktopWindowChrome', () {
-    testWidgets('draws buttons and resize edges on Linux', (tester) async {
+    testWidgets('draws buttons on Linux', (tester) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
         window: FakeWindowController(),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNWidgets(3));
-          expect(find.byType(WindowResizeEdges), findsOneWidget);
+        },
+      );
+    });
+
+    testWidgets(
+        'a drag at the very top edge reaches the app: GTK owns resizing now, '
+        'from the shadow margin outside the view', (tester) async {
+      var dragged = false;
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        child: GestureDetector(
+          onPanStart: (_) => dragged = true,
+          child: const ColoredBox(color: Color(0xFF000000)),
+        ),
+        body: () async {
+          await tester.dragFrom(const Offset(300, 2), const Offset(0, 30));
+          expect(dragged, isTrue);
         },
       );
     });
@@ -180,7 +227,6 @@ void main() {
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
           expect(find.byType(WindowDragBand), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsNothing);
         },
       );
     });
@@ -203,15 +249,12 @@ void main() {
         fullscreen: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsNothing);
         },
       );
     });
 
-    testWidgets(
-        'hides the buttons but KEEPS the resize edges while playback chrome '
-        'is hidden. Losing the ability to resize mid-playback would be a '
-        'regression', (tester) async {
+    testWidgets('hides the buttons while playback chrome is hidden',
+        (tester) async {
       await _pump(
         tester,
         platform: TargetPlatform.linux,
@@ -219,7 +262,7 @@ void main() {
         buttonsHidden: ValueNotifier(true),
         body: () async {
           expect(find.byType(WindowButtonWidget), findsNothing);
-          expect(find.byType(WindowResizeEdges), findsOneWidget);
+          expect(find.byType(ColoredBox), findsWidgets);
         },
       );
     });
@@ -241,6 +284,69 @@ void main() {
             find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
           );
           expect(close.dx, lessThan(minimize.dx));
+        },
+      );
+    });
+
+    testWidgets('clips the app to the frame radius while floating',
+        (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        body: () async {
+          final clip =
+              tester.widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+          expect(clip.borderRadius,
+              BorderRadius.circular(kLinuxWindowCornerRadius));
+          expect(clip.clipBehavior, Clip.antiAlias);
+        },
+      );
+    });
+
+    testWidgets(
+        'squares the corners when maximized, then tiled, without remounting '
+        'the app underneath', (tester) async {
+      final frameState = ValueNotifier(WindowFrameState.floating);
+      await _pump(
+        tester,
+        platform: TargetPlatform.linux,
+        window: FakeWindowController(),
+        frameState: frameState,
+        child: const _StateProbe(),
+        body: () async {
+          final before = tester.state(find.byType(_StateProbe));
+
+          for (final state in const [
+            WindowFrameState(maximized: true),
+            WindowFrameState(tiled: true),
+          ]) {
+            frameState.value = state;
+            await tester.pump();
+
+            final clip = tester
+                .widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+            expect(clip.borderRadius, BorderRadius.zero, reason: '$state');
+            expect(clip.clipBehavior, Clip.none, reason: '$state');
+          }
+
+          expect(
+            tester.state(find.byType(_StateProbe)),
+            same(before),
+            reason: 'toggling the clip must not change the tree shape, or '
+                'every maximize would throw away the whole app state',
+          );
+        },
+      );
+    });
+
+    testWidgets('no clip on macOS', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.macOS,
+        window: FakeWindowController(),
+        body: () async {
+          expect(find.byKey(DesktopWindowChrome.clipKey), findsNothing);
         },
       );
     });
@@ -288,6 +394,7 @@ void main() {
                 controller: windowController,
                 fullscreen: ValueNotifier(false),
                 buttonsHidden: ValueNotifier(false),
+                frameState: ValueNotifier(WindowFrameState.floating),
                 child: WindowChromeInsets.scope(
                   insets: WindowChromeInsets(
                     height: kLinuxWindowChromeHeight,
@@ -381,4 +488,19 @@ void main() {
       });
     });
   });
+}
+
+/// A stateful leaf whose `State` identity shows whether the app subtree was
+/// remounted.
+class _StateProbe extends StatefulWidget {
+  const _StateProbe();
+
+  @override
+  State<_StateProbe> createState() => _StateProbeState();
+}
+
+class _StateProbeState extends State<_StateProbe> {
+  @override
+  Widget build(BuildContext context) =>
+      const ColoredBox(color: Color(0xFF000000));
 }

@@ -10,6 +10,15 @@ class FakeWindowController implements WindowController {
   bool fullScreen;
   Size? minimumSize;
 
+  /// The lock currently applied; `0` is none.
+  double aspectRatio = 0;
+
+  /// Every value passed to [setAspectRatio], in order.
+  final List<double> setAspectRatioCalls = [];
+
+  /// When set, [setAspectRatio] throws this instead of recording the call.
+  Object? setAspectRatioError;
+
   /// Every rect passed to [setBounds], in order.
   final List<Rect> setBoundsCalls = [];
 
@@ -18,9 +27,6 @@ class FakeWindowController implements WindowController {
   int minimizeCalls = 0;
   int closeCalls = 0;
   int startDraggingCalls = 0;
-
-  /// Every edge passed to [startResizing], in order.
-  final List<WindowEdge> startResizingCalls = [];
 
   /// When set, [setBounds] throws this instead of recording the call. Lets a
   /// test drive the failure path of code that must still clean up afterwards.
@@ -69,6 +75,15 @@ class FakeWindowController implements WindowController {
   }
 
   @override
+  Future<void> setAspectRatio(double value) async {
+    final error = setAspectRatioError;
+    if (error != null) throw error;
+    setAspectRatioCalls.add(value);
+    callLog.add('setAspectRatio');
+    aspectRatio = value;
+  }
+
+  @override
   Future<void> unmaximize() async {
     unmaximizeCalls++;
     callLog.add('unmaximize');
@@ -91,11 +106,5 @@ class FakeWindowController implements WindowController {
   Future<void> startDragging() async {
     startDraggingCalls++;
     callLog.add('startDragging');
-  }
-
-  @override
-  Future<void> startResizing(WindowEdge edge) async {
-    startResizingCalls.add(edge);
-    callLog.add('startResizing');
   }
 }

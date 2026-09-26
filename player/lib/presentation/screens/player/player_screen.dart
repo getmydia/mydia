@@ -787,7 +787,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
-  Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
+  final Map<String, SubtitleTrack> _mediaKitSubtitleTrackMap = {};
 
   /// Local copies of bitmap subtitle sidecars fetched during this screen's
   /// life, deleted in [dispose]. mpv loads them from disk; see
@@ -1180,11 +1180,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
   /// than the resolved location (`go_router/lib/src/match.dart:231`:
-  /// `pageKey: ValueKey<String>(newMatchedPath)`). So `_navigateToEpisode`'s
-  /// `context.go`, a remote `LoadContent` and a deep link while playing all
-  /// update this State in place instead of building a new one, and
-  /// [_switchToFile] does the per-file teardown and reload a new State would
-  /// have done in `dispose` and `initState`.
+  /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
+  /// `concatenatePaths(matchedPath, route.path)`). `_navigateToEpisode`'s own
+  /// first `context.go` mounts a new State instead, because the player was
+  /// opened with `context.push` (the usual case, see
+  /// `test/core/router/player_route_handoff_test.dart`) and a pushed page is
+  /// keyed per push rather than per pattern. Every advance after that first
+  /// one -- `_navigateToEpisode`'s `context.go`, a remote `LoadContent`, a
+  /// deep link while playing -- goes between two declarative player
+  /// locations with the same pattern key, so it updates this State in place
+  /// instead of building a new one, and [_switchToFile] does the per-file
+  /// teardown and reload -- including re-entering [_initializePlayer] -- that
+  /// a new State would otherwise have done in `initState`.
   @override
   void didUpdateWidget(PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1792,9 +1799,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // error) or a server too old to carry the field, and neither is a
       // statement that the viewer has no preference. Assigning `const []`
       // unconditionally would discard what `_rememberAudioLanguage` stored on
-      // the previous episode, which is exactly the case where a season
-      // playing through must keep it: go_router reuses this screen state, so
-      // this field is the only thing carrying the choice forward.
+      // the previous episode whenever this State is reused for the next one
+      // (a `go` between two declarative player locations; a pushed player
+      // gets a new State instead, see
+      // `test/core/router/player_route_handoff_test.dart`).
       final serverPreference =
           candidatesResult?.metadata.preferredAudioLanguages;
       if (serverPreference != null) {
@@ -2728,12 +2736,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     ]);
 
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
-    // source switch, a session restart, or a fresh `PlayerScreen` state for
-    // a new queue item. It is *not* re-bound by navigating to the next
-    // episode of a season -- that reuses this same `PlayerScreen` state
-    // (go_router keys the page by route pattern, not the resolved path), so
-    // `initState` and this call do not run again then. The sizer cancels
-    // the previous subscription itself.
+    // source switch or a session restart. Next/previous episode navigation
+    // mounts a new `PlayerScreen` with its own sizer; the shared
+    // `PlayerWindowSession` is what carries the window across that handoff.
+    // The sizer cancels the previous subscription itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // A new open: its track list is not mpv's until the probe below.
@@ -5219,10 +5225,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return;
       }
 
-      // Kept for the next media this screen opens without remounting, which
-      // is what a season playing through does: go_router keys the page by
-      // route pattern, so `initState` does not run again for the next
-      // episode and the fresh Player built there reads this field.
+      // Kept for the next media this State opens if it is reused (a `go`
+      // between two declarative player locations), where `initState` does not
+      // run again and the fresh Player built there reads this field. A pushed
+      // player gets a new State instead; see
+      // `test/core/router/player_route_handoff_test.dart`.
       final data = result.data?['setAudioLanguagePreference'];
       final updated = data?['preferredAudioLanguages'];
       if (updated is List) {
@@ -5301,11 +5308,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [queued] is the whole of what this sends. A queued write belongs to the
   /// file and the selection generation that made it, and it is dropped when
   /// either has moved on rather than rebuilt from the state now showing: the
-  /// queue can outlive both. Navigating from one episode to the next reuses
-  /// this State (see [didUpdateWidget]), so a pick still waiting here when the
-  /// file changes would otherwise name the *new* file with the old file's
-  /// track, and a pick a later one superseded would store a choice the viewer
-  /// has already moved past. Both are invisible to a call site's own "after
+  /// queue can outlive both. When navigating to the next episode reuses this
+  /// State (see [didUpdateWidget]), a pick still waiting here when the file
+  /// changes would otherwise name the *new* file with the old file's track,
+  /// and a pick a later one superseded would store a choice the viewer has
+  /// already moved past. Both are invisible to a call site's own "after
   /// the apply" ordering, which is why the check is here and not there.
   ///
   /// Resolving the track against the server happens after those checks, not
@@ -5620,8 +5627,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       case LogicalKeyboardKey.select:
       case LogicalKeyboardKey.enter:
       case LogicalKeyboardKey.gameButtonA:
-        if (!InputCapabilities.directionalPrimary)
+        if (!InputCapabilities.directionalPrimary) {
           return KeyEventResult.ignored;
+        }
         if (_chromeFocusNode.hasFocus) return KeyEventResult.ignored;
         _chromeVisibility.show();
         _osdPlayPauseFocus.requestFocus();

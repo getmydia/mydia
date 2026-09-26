@@ -79,6 +79,11 @@ jobs:
             org.gnome.Platform//50 org.gnome.Sdk//50 \
             org.freedesktop.Sdk.Extension.llvm21//25.08
 
+      - name: Brand the channel
+        # Beta and dev get their name and icon here. Names only: the flatpak
+        # rasterises its own icon from the channel SVG in build.sh.
+        run: ./player/tool/apply-channel.sh --names-only "${{ inputs.version }}"
+
       - name: Stamp the version
         run: |
           ./player/flatpak/stamp-version.sh \
