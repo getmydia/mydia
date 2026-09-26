@@ -17,6 +17,7 @@ import '../widgets/storage_unavailable_dialog.dart';
 import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
+import '../widgets/channel_badge.dart';
 import 'login/login_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -635,6 +636,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             letterSpacing: -0.5,
           ),
         ),
+        const SizedBox(height: 6),
+        const ChannelBadge(),
         const SizedBox(height: 4),
         Text(
           'Stream your media library',
@@ -771,14 +774,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Mydia Player',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
+              const Row(
+                children: [
+                  Text(
+                    'Mydia Player',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  ChannelBadge(),
+                ],
               ),
               const SizedBox(height: 2),
               Text(

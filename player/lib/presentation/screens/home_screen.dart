@@ -22,6 +22,7 @@ import '../../core/theme/colors.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/mydia_logo.dart';
 import '../widgets/window_chrome/window_title_row.dart';
+import '../widgets/channel_badge.dart';
 import 'home/home_controller.dart';
 
 String _resumeSuffix({
@@ -121,6 +122,8 @@ class HomeScreen extends ConsumerWidget {
                     letterSpacing: -0.5,
                   ),
                 ),
+                SizedBox(width: 8),
+                ChannelBadge(),
               ],
             ),
       actions: isDesktop

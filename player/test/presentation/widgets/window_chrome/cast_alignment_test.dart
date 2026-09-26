@@ -342,7 +342,8 @@ void main() {
     testWidgets(
         'on mobile, the search action is present and the cast button is '
         'the last control', (tester) async {
-      const width = 400.0;
+      // Title row includes the DEV pill beside the wordmark in debug builds.
+      const width = 480.0;
       await pumpWithInsets(
         tester,
         WindowChromeInsets.zero,
