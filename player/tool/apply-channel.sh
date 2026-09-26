@@ -69,7 +69,7 @@ if [ "$channel" != stable ]; then
   rewrite flatpak/dev.mydia.player.metainfo.xml '(<component[^>]*>\s*<id>dev\.mydia\.player</id>\s*<name>)Mydia Player(</name>)'
 
   if [ "$names_only" = false ]; then
-    : # Task 5 regenerates launcher icons here.
+    (cd "$root" && dart run flutter_launcher_icons -f "flutter_launcher_icons-$channel.yaml")
   fi
 fi
 
