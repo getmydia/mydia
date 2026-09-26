@@ -1280,16 +1280,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     await save;
     await _bestEffort('end session', () async => playback?.endSession());
     await disposal;
+    // A second switch that started while this one was still awaiting above
+    // has already bumped `_loadGeneration` past `gen` (and may already have
+    // reloaded, registering sidecars of its own). Only the most recent switch
+    // may discard sidecars or reload; it discards this switch's old ones too,
+    // since they are still in the list.
+    if (!_isCurrentLoad(gen)) return;
     for (final path in _imageSidecarPaths) {
       unawaited(discardImageSidecar(path));
     }
     _imageSidecarPaths.clear();
     _subtitleBodyFetches.clear();
     _resumeOverrideSeconds = widget.resumeSeconds;
-    // A second switch that started while this one was still awaiting above
-    // has already bumped `_loadGeneration` past `gen` (and may already have
-    // reloaded); only the most recent switch may reload.
-    if (!_isCurrentLoad(gen)) return;
     await _initializePlayer();
   }
 
