@@ -126,7 +126,7 @@ class _ProbedPlayer extends PlatformPlayer {
 /// query in its place; used by tests that need to shape that one response
 /// differently from the shared default.
 StubLink _link({
-  Object Function(Request request)? onPreference,
+  Object? Function(Request request)? onPreference,
 }) {
   return StubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
@@ -194,6 +194,7 @@ Future<void> _mount(
   _ProbedPlayer player, {
   required String fileId,
   String mediaId = 'movie-1',
+  bool waitForOpen = true,
 }) async {
   final firstMount = _container == null;
   _container ??= buildPlayerScreenContainer(
@@ -222,7 +223,7 @@ Future<void> _mount(
   ));
   await tester.pump();
 
-  if (firstMount) {
+  if (firstMount && waitForOpen) {
     await pumpUntil(tester, () => player.opened);
     await tester.pump(const Duration(seconds: 1));
   }
@@ -431,5 +432,51 @@ void main() {
 
     expect(state.watchedInvalidationSentForTesting as bool, isFalse);
     expect(state.isDownloadedSourceForTesting as bool, isFalse);
+  });
+
+  testWidgets('a load for the old file cannot land after the switch',
+      (tester) async {
+    // movie-1's preference is held back, which parks file A's whole load:
+    // `_fetchProgressAndEpisodes` is awaited before the player is opened.
+    final held = Completer<Object>();
+    final link = _link(onPreference: (request) {
+      if (request.variables['id'] != 'movie-1') return null;
+      return held.future;
+    });
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player,
+        fileId: 'file-a', mediaId: 'movie-1', waitForOpen: false);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(player.openedUris, isEmpty, reason: 'sanity: file A is parked');
+
+    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
+
+    // Release file A's parked load. Its answer carries a file-b entry with a
+    // language no other response uses, so a stale write is observable.
+    held.complete(subtitlePreferenceResponse(
+      root: 'movie',
+      id: 'movie-1',
+      preferences: {
+        'file-b': preferredSubtitleObject(mode: 'TRACK', language: 'fre'),
+      },
+    ));
+    // A plain fake-clock pump cannot resume the parked run: releasing the
+    // completer only schedules a microtask, and reaching the rest of the
+    // load past it depends on real asynchronous I/O the same way the second
+    // `_initializePlayer` does (see `_pumpUntilSwitched`).
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+
+    expect(player.openedUris.where((u) => u.contains('/file-a/')), isEmpty,
+        reason: 'the superseded load must not go on to open file A');
+    expect(_playingFileId(player), 'file-b');
+    expect(
+      (_preferenceStateOf(tester).preference as PreferTrack?)?.language,
+      isNot('fre'),
+      reason: 'movie-1\'s late answer must not overwrite file B\'s',
+    );
   });
 }

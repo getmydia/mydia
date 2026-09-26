@@ -637,6 +637,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The key for the file now showing; see [_mediaKeyOf].
   String get _mediaKey => _mediaKeyOf(widget);
 
+  /// Bumped at the start of every load and every file switch. A load
+  /// captures it on entry and stops writing state as soon as it no longer
+  /// matches, so a slow answer for a file this State has moved past (see
+  /// [didUpdateWidget]) cannot land on the one now showing.
+  int _loadGeneration = 0;
+
+  bool _isCurrentLoad(int generation) =>
+      mounted && generation == _loadGeneration;
+
   /// Whether [_applySubtitlePreference] has already run for the file now
   /// loaded. media_kit revises its track list several times per playback and
   /// every revision reaches [_applySubtitleTracks], so without this a
@@ -1186,6 +1195,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// any of it down would exit fullscreen or reshape the window on every
   /// episode advance.
   Future<void> _switchToFile(PlayerScreen previous) async {
+    _loadGeneration++;
     await _bestEffort(
       'save progress',
       () => _saveProgressFor(
@@ -1414,6 +1424,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _initializePlayer() async {
+    final gen = ++_loadGeneration;
     // Flushes whatever the *previous* load's timeline reached before this
     // one takes over the field -- e.g. `_restartLocalPlayback` calling this
     // again after a cast session ends abandons the cast-era timeline, which
@@ -1440,6 +1451,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       // Check for downloaded content first (before any network operations)
       final downloadManager = await ref.read(downloadManagerProvider.future);
+      if (!_isCurrentLoad(gen)) return;
       final downloadedMedia =
           downloadManager.getDownloadedMediaById(widget.mediaId);
 
@@ -1456,6 +1468,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
         final offlinePath =
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        if (!_isCurrentLoad(gen)) return;
         if (offlinePath == null) {
           setState(() {
             _error =
@@ -1477,6 +1490,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         } catch (e) {
           debugPrint('Could not open local progress store: $e');
         }
+        if (!_isCurrentLoad(gen)) return;
 
         // No server is reachable, so the saved position comes from whatever a
         // previous offline session recorded locally. The stored duration is
@@ -1501,13 +1515,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           resumeOverride: _consumeResumeOverride(),
           mounted: mounted,
           ask: (saved, total) async {
-            if (!mounted) return null;
+            if (!_isCurrentLoad(gen)) return null;
             return showResumeDialog(context, saved, total);
           },
         );
         if (plan == null) return;
+        if (!_isCurrentLoad(gen)) return;
 
         if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+        if (!_isCurrentLoad(gen)) return;
 
         await _openPlayerAndStart(offlinePath, {}, plan: plan);
         return;
@@ -1518,6 +1534,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (downloadedMedia != null && !kIsWeb) {
         final localPath =
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        if (!_isCurrentLoad(gen)) return;
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
 
@@ -1526,8 +1543,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           try {
             final graphqlClient =
                 await ref.read(asyncGraphqlClientProvider.future);
+            if (!_isCurrentLoad(gen)) return;
             _progressService = ProgressService(graphqlClient);
-            await _fetchProgressAndEpisodes(graphqlClient);
+            await _fetchProgressAndEpisodes(graphqlClient, gen);
+            if (!_isCurrentLoad(gen)) return;
           } catch (e) {
             debugPrint('Could not initialize progress sync: $e');
           }
@@ -1544,6 +1563,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           } catch (e) {
             debugPrint('Could not open local progress store: $e');
           }
+          if (!_isCurrentLoad(gen)) return;
 
           // Reconcile the server's progress (just loaded above) against
           // whatever this device recorded locally, e.g. during an earlier
@@ -1573,13 +1593,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             resumeOverride: _consumeResumeOverride(),
             mounted: mounted,
             ask: (saved, total) async {
-              if (!mounted) return null;
+              if (!_isCurrentLoad(gen)) return null;
               return showResumeDialog(context, saved, total);
             },
           );
           if (plan == null) return;
+          if (!_isCurrentLoad(gen)) return;
 
           if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+          if (!_isCurrentLoad(gen)) return;
 
           await _openPlayerAndStart(localPath, {}, plan: plan);
           return;
@@ -1589,6 +1611,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       // Online mode - initialize network services
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      if (!_isCurrentLoad(gen)) return;
 
       // Capture it directly rather than relying on the `ref.listenManual` in
       // `initState` to have fired by now. That listener is the right mechanism
@@ -1603,6 +1626,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Get server URL and token
       final serverUrl = await ref.read(serverUrlProvider.future);
       final token = await ref.read(authTokenProvider.future);
+      if (!_isCurrentLoad(gen)) return;
 
       if (serverUrl == null || token == null) {
         if (mounted) {
@@ -1643,6 +1667,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           targetPeer: serverNodeAddr,
           authToken: token,
         );
+        if (!_isCurrentLoad(gen)) return;
         debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
       }
 
@@ -1669,7 +1694,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       // Fetch saved progress and episode list for TV shows
-      await _fetchProgressAndEpisodes(graphqlClient);
+      await _fetchProgressAndEpisodes(graphqlClient, gen);
+      if (!_isCurrentLoad(gen)) return;
       _playTimeline?.mark('queries_done');
 
       // Fetch streaming candidates to determine optimal strategy
@@ -1680,6 +1706,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
 
       var candidatesFetch = await candidatesFuture;
+      if (!_isCurrentLoad(gen)) return;
 
       // A selected file can go missing out from under a live route: a
       // quality upgrade replaces an episode's file, writing a new
@@ -1702,6 +1729,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           mediaContentType,
           widget.mediaId,
         );
+        if (!_isCurrentLoad(gen)) return;
       }
 
       final candidatesResult = candidatesFetch.candidates;
@@ -1744,9 +1772,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   'this title. Check your connection and try again.'))
           : widget.fileId;
 
-      await _resolveQualityForFile(candidatesResult);
+      await _resolveQualityForFile(candidatesResult, gen);
+      if (!_isCurrentLoad(gen)) return;
 
       final memory = await _openPlaybackMemory();
+      if (!_isCurrentLoad(gen)) return;
       // The p2p branch threw above if the node address was missing, so the
       // cast is safe there; HTTP keys by URL.
       final serverKey = isP2PMode ? connectionState.serverNodeAddr! : serverUrl;
@@ -1815,13 +1845,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         resumeOverride: _consumeResumeOverride(),
         mounted: mounted,
         ask: (saved, total) async {
-          if (!mounted) return null;
+          if (!_isCurrentLoad(gen)) return null;
           return showResumeDialog(context, saved, total);
         },
       );
       if (plan == null) return;
+      if (!_isCurrentLoad(gen)) return;
 
       if (await _castToTargetIfSet(plan, fileId: playFileId)) return;
+      if (!_isCurrentLoad(gen)) return;
 
       if (playbackPlan is HlsPlan) {
         // Before a session is requested: past this point an FFmpeg transcode
@@ -1857,6 +1889,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // A previous controller's session, from a cast stop or a proxy
       // handoff re-running this method, is ended before it is dropped.
       await _playback?.endSession();
+      if (!_isCurrentLoad(gen)) return;
       final playback = PlaybackController(
         client: () => _graphqlClient,
         urls: urls,
@@ -1872,6 +1905,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         totalDuration: _totalDuration,
         onProgress: _setLoadingMessage,
       );
+      if (!_isCurrentLoad(gen)) {
+        // Opened for a file this State has moved past. The switch already
+        // detached `_playback`, so nothing else will end this session.
+        if (identical(_playback, playback)) _playback = null;
+        await playback.endSession();
+        return;
+      }
       _applySource(source);
 
       // A windowed session baked the resume offset into FFmpeg's -ss, so it
@@ -1883,6 +1923,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         verificationPlan: playbackPlan,
       );
     } catch (e) {
+      // A superseded load that fails must not tear down the player the
+      // current load built.
+      if (!_isCurrentLoad(gen)) return;
       debugPrint('Error initializing player: $e');
       // The player and its verification monitor, not the streaming session:
       // that stays owned by this screen until `dispose()`'s own
@@ -1938,12 +1981,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// label would revert in front of them. See [_settledQuality].
   Future<void> _resolveQualityForFile(
     Query$StreamingCandidates$streamingCandidates? candidatesResult,
+    int gen,
   ) async {
     _qualityLadder = deriveQualityLadder(
       sourceHeight: candidatesResult?.metadata.height,
     );
 
     final requested = _settledQuality ?? await _storedDefaultQuality();
+    if (!_isCurrentLoad(gen)) return;
 
     if (requested.isAuto || _qualityLadder.contains(requested)) {
       _settledQuality = requested;
@@ -2927,7 +2972,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Fetches the movie or episode detail document: saved progress, runtime,
   /// and the subtitle tracks extracted from its files.
-  Future<void> _fetchDetail(GraphQLClient client) async {
+  Future<void> _fetchDetail(GraphQLClient client, int gen) async {
     try {
       if (widget.mediaType == 'movie') {
         // Fetch movie progress
@@ -2937,6 +2982,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             variables: Variables$Query$MovieDetail(id: widget.mediaId).toJson(),
           ),
         );
+        if (!_isCurrentLoad(gen)) return;
 
         if (result.data != null) {
           final movie = Query$MovieDetail.fromJson(result.data!).movie;
@@ -2958,6 +3004,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 Variables$Query$EpisodeDetail(id: widget.mediaId).toJson(),
           ),
         );
+        if (!_isCurrentLoad(gen)) return;
 
         if (result.data != null) {
           final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
@@ -2983,18 +3030,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// reads the tracks `_extractSubtitlesFromFiles` builds from the detail.
   /// Season episodes no longer waits for the detail to succeed, so a failed
   /// detail now costs one extra query rather than skipping it.
-  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) {
+  Future<void> _fetchProgressAndEpisodes(GraphQLClient client, int gen) {
     return runIsolated({
       'detail and subtitle preference': () async {
-        await _fetchDetail(client);
-        await _fetchSubtitlePreference(client);
+        await _fetchDetail(client, gen);
+        await _fetchSubtitlePreference(client, gen);
       },
       if (widget.mediaType == 'episode' &&
           widget.showId != null &&
           widget.seasonNumber != null)
-        'season episodes': () => _fetchSeasonEpisodes(client),
-      'segments': () => _fetchSegments(client),
-      'subtitle offsets': () => _loadSubtitleOffsets(client),
+        'season episodes': () => _fetchSeasonEpisodes(client, gen),
+      'segments': () => _fetchSegments(client, gen),
+      'subtitle offsets': () => _loadSubtitleOffsets(client, gen),
     });
   }
 
@@ -3011,7 +3058,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// every media file this screen loads (see [_fetchProgressAndEpisodes]),
   /// and a previous file's offsets or its "loaded" flag must never survive
   /// into a new one just because this fetch happened to fail for it.
-  Future<void> _loadSubtitleOffsets(GraphQLClient client) async {
+  Future<void> _loadSubtitleOffsets(GraphQLClient client, int gen) async {
     if (mounted) {
       setState(() {
         _subtitleOffsets = {};
@@ -3050,7 +3097,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final settings =
           Query$SubtitleTrackSettings.fromJson(data).subtitleTrackSettings;
-      if (!mounted) return;
+      if (!_isCurrentLoad(gen)) return;
 
       setState(() {
         _subtitleOffsets = {
@@ -3326,7 +3373,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// Every failure lands on the same answer, no segments. Detection is
   /// additive background work and must never surface as a playback error.
-  Future<void> _fetchSegments(GraphQLClient client) async {
+  Future<void> _fetchSegments(GraphQLClient client, int gen) async {
     final root = switch (widget.mediaType) {
       'movie' => 'movie',
       'episode' => 'episode',
@@ -3345,6 +3392,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               : Variables$Query$EpisodeSegments(id: widget.mediaId).toJson(),
         ),
       );
+      if (!_isCurrentLoad(gen)) return;
 
       if (result.hasException) {
         debugPrint('[PlayerScreen] No segments available: ${result.exception}');
@@ -3386,7 +3434,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// track-list revision, nothing else would trigger an apply.
   /// [_applySubtitlePreference] is idempotent past its own one-shot, so this
   /// costs nothing when a revision got there first.
-  Future<void> _fetchSubtitlePreference(GraphQLClient client) async {
+  Future<void> _fetchSubtitlePreference(GraphQLClient client, int gen) async {
     final root = switch (widget.mediaType) {
       'movie' => 'movie',
       'episode' => 'episode',
@@ -3432,7 +3480,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         root: root,
         fileId: widget.fileId,
       );
-      if (!mounted) return;
+      if (!_isCurrentLoad(gen)) return;
 
       _subtitlePreference = subtitlePreferenceFrom(
         mode: preferred?['mode'] as String?,
@@ -3676,7 +3724,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     setState(() => _applySubtitleTracks(mkTracks));
   }
 
-  Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
+  Future<void> _fetchSeasonEpisodes(GraphQLClient client, int gen) async {
     _graphQLClient = client;
     if (widget.showId == null || widget.seasonNumber == null) return;
 
@@ -3694,7 +3742,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (result.data != null) {
         final episodes =
             Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
-        if (episodes != null && mounted) {
+        if (episodes != null && _isCurrentLoad(gen)) {
           setState(() {
             _seasonEpisodes = episodes
                 .whereType<Query$SeasonEpisodes$seasonEpisodes>()
