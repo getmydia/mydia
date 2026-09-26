@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/graphql/mutations/update_movie_progress.graphql.dart';
 import 'package:player/graphql/queries/media_segments.graphql.dart';
@@ -84,11 +85,27 @@ class _ProbedPlayer extends PlatformPlayer {
   /// entered, rather than guessing a duration.
   bool openStarted = false;
 
+  /// When set, [open] throws this instead of completing -- simulating a
+  /// decoder rejecting the file, so `_initializePlayer`'s outer catch has
+  /// something to actually catch. `_player` is already this player by the
+  /// time this throws (`_openPlayerAndStart` assigns it before calling
+  /// `open`), which is what lets [disposeGate] hold that catch open.
+  Object? openError;
+
+  /// Set by a test that wants to suspend [dispose] partway through, the way
+  /// a slow platform teardown would -- in particular, holding
+  /// `_initializePlayer`'s catch block inside its own `await
+  /// _disposePlayer()` so a later switch can supersede it before `setState`
+  /// runs. Null (the default) makes [dispose] complete immediately.
+  Completer<void>? disposeGate;
+
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
     openStarted = true;
     final gate = openGate;
     if (gate != null) await gate.future;
+    final error = openError;
+    if (error != null) throw error;
     opened = true;
     if (playable is Media) {
       openedUris.add(playable.uri);
@@ -132,9 +149,18 @@ class _ProbedPlayer extends PlatformPlayer {
     positionController.add(position);
   }
 
+  /// Set synchronously at the top of [dispose], before it awaits
+  /// [disposeGate] -- unlike [disposed], which the gate holds back. A test
+  /// parking a switch's catch block inside [dispose] polls this to know the
+  /// parked call has actually been entered, rather than guessing a duration.
+  bool disposeStarted = false;
+
   @override
   // ignore: must_call_super
   Future<void> dispose() async {
+    disposeStarted = true;
+    final gate = disposeGate;
+    if (gate != null) await gate.future;
     disposeCallCount++;
     disposed = true;
     // Deliberately does not call `super.dispose()`: the base implementation
@@ -162,9 +188,14 @@ class _ProbedPlayer extends PlatformPlayer {
 /// none of the branches below key off the requested id (streaming candidates
 /// keys off the file id in the request instead of the fixed movie id these
 /// fixtures carry).
+///
+/// [onMovieDetail], when it returns non-null, answers `MovieDetail` in its
+/// place -- used to make one file's detail query fail (or answer something
+/// distinct) without touching the other queries every load also makes.
 StubLink _link({
   Object? Function(Request request)? onPreference,
   Object? Function(Request request)? onMovieProgress,
+  Object? Function(Request request)? onMovieDetail,
 }) {
   return StubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
@@ -174,6 +205,8 @@ StubLink _link({
       };
     }
     if (_carries(request, documentNodeQueryMovieDetail)) {
+      final hooked = onMovieDetail?.call(request);
+      if (hooked != null) return hooked;
       return movieDetailResponse(files: [
         mediaFileWithSubtitle(fileId: 'file-a'),
         mediaFileWithSubtitle(fileId: 'file-b'),
@@ -699,5 +732,170 @@ void main() {
       reason: 'dispose() must not find a live player to credit to movie-2, '
           'the file the switch never actually reached',
     );
+  });
+
+  testWidgets(
+      'a failed detail query for the new file must not surface the old '
+      'file\'s resume position or subtitle tracks', (tester) async {
+    // File A's detail query answers normally, with its own saved position
+    // and subtitle track. File B's answers a plain GraphQL error -- `result
+    // .data` comes back null, so `_fetchDetail` never reaches the
+    // assignments that would otherwise overwrite what file A left behind.
+    var movieDetailCalls = 0;
+    final link = _link(onMovieDetail: (request) {
+      movieDetailCalls++;
+      if (movieDetailCalls == 1) {
+        return movieDetailResponse(
+          positionSeconds: 4200,
+          files: [mediaFileWithSubtitle(fileId: 'file-a')],
+        );
+      }
+      return graphqlErrorResponse('detail unavailable');
+    });
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
+
+    final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    expect(state.savedPositionSecondsForTesting as int?, 4200,
+        reason: 'sanity: file A carries its own saved position');
+    expect(
+      (state.serverSubtitleTracksForTesting as List).isNotEmpty,
+      isTrue,
+      reason: 'sanity: file A carries its own subtitle track',
+    );
+
+    await _mount(tester, link, player, fileId: 'file-b');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
+
+    expect(state.savedPositionSecondsForTesting as int?, isNull,
+        reason: 'file A\'s resume position must not survive a failed '
+            'detail query for file B');
+    expect(
+      (state.serverSubtitleTracksForTesting as List).isEmpty,
+      isTrue,
+      reason: 'file A\'s subtitle tracks must not survive a failed detail '
+          'query for file B',
+    );
+  });
+
+  testWidgets(
+      'a superseded load must not start a cast for the file it left behind',
+      (tester) async {
+    final link = _link();
+    final player = _ProbedPlayer();
+    final castManager = CapturingCastSessionManager();
+    final castManagerGate = Completer<void>();
+    final castManagerRequested = Completer<void>();
+
+    // Built directly, not through `_mount`'s shared container, so the gate
+    // can be threaded onto `castSessionManagerProvider`.
+    _container = buildPlayerScreenContainer(
+      link: link,
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      castManager: castManager,
+      proxyService: TrackingLocalProxyService(),
+      castManagerGate: castManagerGate,
+      castManagerRequested: castManagerRequested,
+    );
+    _containerTearDownRegistered = true;
+    addTearDown(_container!.dispose);
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
+
+    // Choosing a cast target now means every later load tries to start a
+    // cast instead of opening a local player.
+    _container!.read(castTargetProvider.notifier).set(testDevice);
+
+    // Switch to file B: its own `_castToTargetIfSet` reaches
+    // `castSessionManagerProvider.future` and parks there. Polled for
+    // directly (not a fixed pump duration): the same real asynchronous I/O
+    // `_pumpUntilSwitched` waits out stands between this mount and file B
+    // even reaching that read.
+    await _mount(tester, link, player, fileId: 'file-b');
+    await tester.runAsync(
+        () => pumpUntilReal(tester, () => castManagerRequested.isCompleted));
+    expect(castManager.capturedRequests, isEmpty,
+        reason: 'sanity: file B\'s cast attempt is parked on the gate, '
+            'before it ever reaches startCast');
+
+    // Switch again, to file C, while file B's cast attempt is still parked.
+    // `castSessionManagerProvider` caches its one Future, so file C's own
+    // `_castToTargetIfSet` call reads the same still-pending future and
+    // parks on it too (or will, once its own load reaches that point --
+    // either way nothing has called startCast yet).
+    await _mount(tester, link, player, fileId: 'file-c');
+    expect(castManager.capturedRequests, isEmpty,
+        reason: 'sanity: nothing has started a cast while the gate is '
+            'still closed');
+
+    // Release the cast manager. Both parked calls resume from the same
+    // future: file B's (superseded) and file C's (current).
+    castManagerGate.complete();
+    await tester.runAsync(() =>
+        pumpUntilReal(tester, () => castManager.capturedRequests.isNotEmpty));
+    await tester.pump();
+
+    expect(castManager.capturedRequests.length, 1,
+        reason: 'the superseded load (file B) must never reach startCast; '
+            'only the current load may');
+    expect(castManager.capturedRequests.single.fileId, 'file-c');
+  });
+
+  testWidgets(
+      'a superseded load\'s error must not overwrite the current file\'s '
+      'view', (tester) async {
+    final link = _link();
+    final players = <_ProbedPlayer>[];
+    final disposeGate = Completer<void>();
+
+    // Only file B's player (the second created) fails to open and parks on
+    // dispose; file A's and file C's open normally.
+    _ProbedPlayer next() {
+      final p = _ProbedPlayer();
+      if (players.length == 1) {
+        p.openError = Exception('decoder rejected the file');
+        p.disposeGate = disposeGate;
+      }
+      players.add(p);
+      return p;
+    }
+
+    await _mountWithFactory(tester, link, next, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+
+    // Switch to file B: its player opens, throws, and `_initializePlayer`'s
+    // catch calls `_disposePlayer()`, which parks on `disposeGate` before it
+    // can reach `setState`. Polls for the parked call itself (not a fixed
+    // delay): the same real asynchronous I/O `_pumpUntilSwitched` waits out
+    // stands between this mount and file B's player even reaching `open()`.
+    await _mountWithFactory(tester, link, next, fileId: 'file-b');
+    await tester.runAsync(() => pumpUntilReal(
+        tester, () => players.length == 2 && players[1].disposeStarted));
+    expect(players[1].disposeStarted, isTrue,
+        reason: 'sanity: file B\'s catch reached its parked dispose call');
+    expect(find.text('Failed to load video'), findsNothing,
+        reason: 'sanity: file B\'s catch is parked on disposeGate, before '
+            'it ever reaches setState');
+
+    // Switch again, to file C, while file B's catch is still parked.
+    await _mountWithFactory(tester, link, next, fileId: 'file-c');
+    await _pumpUntilSwitched(
+        tester, () => players.length == 3 && players[2].opened);
+    expect(_playingFileId(players.last), 'file-c');
+
+    // Release file B's parked dispose and let its now-superseded catch
+    // drain.
+    disposeGate.complete();
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+
+    expect(find.text('Failed to load video'), findsNothing,
+        reason: 'file B\'s stale error must not replace file C\'s working '
+            'view');
+    expect(_playingFileId(players.last), 'file-c');
   });
 }

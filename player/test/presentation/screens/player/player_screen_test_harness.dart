@@ -11,6 +11,7 @@
 // core Flutter design. That is why `player_screen_key_handling_test.dart`
 // only ever tested an extracted free function instead of the widget itself.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -90,6 +91,15 @@ class FakeDownloadService extends Fake implements DownloadService {
 class CapturingCastSessionManager extends Fake implements CastSessionManager {
   CastLaunchRequest? capturedRequest;
 
+  /// Every request `startCast` was actually called with, in order.
+  ///
+  /// [capturedRequest] only ever holds the last one, which cannot tell a
+  /// single legitimate cast from a stale load's call landing before the
+  /// current load's own -- both leave the same last value behind. A test
+  /// asserting a superseded load never reached `startCast` at all needs the
+  /// full list instead.
+  final List<CastLaunchRequest> capturedRequests = [];
+
   /// When set, `startCast` throws this instead of succeeding — simulating an
   /// unreachable receiver or a rejected codec, so a test can prove
   /// `_castToTargetIfSet` falls through to local playback on failure without
@@ -116,6 +126,7 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
     required CastLaunchRequest request,
   }) async {
     capturedRequest = request;
+    capturedRequests.add(request);
     final error = startCastError;
     if (error != null) throw error;
   }
@@ -696,6 +707,20 @@ ProviderContainer buildPlayerScreenContainer({
   SettingsService? coreSettingsService,
   GraphQLCache? cache,
   Stream<CastSession?>? castSessionStream,
+  // Holds `castSessionManagerProvider`'s own future open until a test
+  // completes it, so a load parked inside `_castToTargetIfSet`'s
+  // `await ref.read(castSessionManagerProvider.future)` can be superseded
+  // by a later switch before the manager ever resolves -- the race
+  // `_castToTargetIfSet`'s `loadGeneration` check closes. `FutureProvider`
+  // caches the one Future this override produces, so every load's read
+  // during a test shares it and unparks together when it completes.
+  Completer<void>? castManagerGate,
+  // Completed the instant the override above starts awaiting
+  // [castManagerGate] -- before that, a test cannot tell "the parked read
+  // has not happened yet" from "it has and is waiting", and a fixed pump
+  // duration guesses at which one it is. Ignored when [castManagerGate] is
+  // null.
+  Completer<void>? castManagerRequested,
 }) {
   return ProviderContainer(overrides: [
     settingsServiceProvider
@@ -714,7 +739,16 @@ ProviderContainer buildPlayerScreenContainer({
     conn.connectionProvider
         .overrideWith(() => FixedConnectionNotifier(connectionState)),
     localProxyServiceProvider.overrideWithValue(proxyService),
-    castSessionManagerProvider.overrideWith((ref) async => castManager),
+    castSessionManagerProvider.overrideWith((ref) async {
+      final gate = castManagerGate;
+      if (gate != null) {
+        if (castManagerRequested?.isCompleted == false) {
+          castManagerRequested!.complete();
+        }
+        await gate.future;
+      }
+      return castManager;
+    }),
     // Null by default: no receiver, so `isCastingProvider` stays false and the
     // screen builds its local body. Pass a stream to stand in for a live cast,
     // which is the only way to reach `_buildCastPlaceholder` — the real

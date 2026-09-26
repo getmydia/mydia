@@ -732,6 +732,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   @visibleForTesting
   bool get isDownloadedSourceForTesting => _isDownloadedSource;
 
+  /// Exposed so a widget test can prove a failed detail query for the new
+  /// file leaves no resume position behind from the one it replaced. See
+  /// [_resetPerFileState] and `player_screen_file_change_test.dart`.
+  @visibleForTesting
+  int? get savedPositionSecondsForTesting => _savedPositionSeconds;
+
+  /// Exposed so a widget test can prove a failed detail query for the new
+  /// file leaves no subtitle tracks behind from the one it replaced. See
+  /// [_resetPerFileState] and `player_screen_file_change_test.dart`.
+  @visibleForTesting
+  List<app_models.SubtitleTrack> get serverSubtitleTracksForTesting =>
+      _serverSubtitleTracks;
+
   /// Exposed so a widget test can tell a preference apply that delivered from
   /// one the screen had to retake. See `subtitle_preference_apply_test.dart`.
   @visibleForTesting
@@ -1394,8 +1407,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// that swaps in the server-ranked file for local playback (see
   /// [_fetchStreamingCandidates]) reaches the receiver too, rather than
   /// sending it the id the server just rejected.
-  Future<bool> _castToTargetIfSet(ResumePlan plan,
-      {required String fileId}) async {
+  ///
+  /// [loadGeneration] is the caller's own `gen` (like
+  /// [_openPlayerAndStart]'s). Both awaits below -- resolving the cast
+  /// manager and `startCast` itself -- can outlast this load: a file switch
+  /// (or a second cast request) can bump `_loadGeneration` while either is in
+  /// flight, and this call must not start a cast for a file this State has
+  /// already moved past. Rechecked right before `startCast`, closing the
+  /// manager-resolution window; once `startCast` itself is in flight there is
+  /// no cancellation to fall back on, so a switch landing during that
+  /// specific await can still launch a stale cast; every caller's own
+  /// `_isCurrentLoad(gen)` check right after this returns is what stops the
+  /// stale load from acting on it. A stale caller gets `false` here (no cast
+  /// was started), which -- unlike returning `true` -- falls through to that
+  /// existing post-await guard instead of skipping it.
+  Future<bool> _castToTargetIfSet(
+    ResumePlan plan, {
+    required String fileId,
+    int? loadGeneration,
+  }) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
 
@@ -1414,6 +1444,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
+      // Superseded while resolving the manager: this load's plan and file id
+      // already belong to a file this State has moved past. Bail before the
+      // side effect a stale caller cannot take back -- launching a cast on
+      // the receiver for the wrong file.
+      if (loadGeneration != null && !_isCurrentLoad(loadGeneration)) {
+        return false;
+      }
       await manager.startCast(
         device: target,
         request: CastLaunchRequest(
@@ -1490,6 +1527,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _progressService = null;
     // Once per file: crossing 90% on the next episode must invalidate again.
     _watchedInvalidationSent = false;
+
+    // These are all re-fetched by `_fetchProgressAndEpisodes` (detail and
+    // season queries) or the offline/downloaded-progress branches below, but
+    // only on success. A failed or empty detail query used to leave whatever
+    // the previous file left behind in place: the new file could offer the
+    // old one's resume position, subtitle tracks, or episode list. Clearing
+    // them here means a load that stops before its branch reassigns them
+    // shows nothing for this file rather than something stale for the last
+    // one. `_saveProgressFor` for the file this reset is replacing already
+    // ran synchronously in `_switchToFile`, before this reset, so clearing
+    // `_totalDuration` here cannot affect that save.
+    _savedPositionSeconds = null;
+    _savedDurationSeconds = null;
+    _serverLastWatchedAt = null;
+    _runtimeMinutes = null;
+    _totalDuration = null;
+    _serverSubtitleTracks = [];
+    _seasonEpisodes = null;
+    _currentEpisodeIndex = null;
     _resetUpNext();
   }
 
@@ -1592,7 +1648,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (plan == null) return;
         if (!_isCurrentLoad(gen)) return;
 
-        if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+        if (await _castToTargetIfSet(plan,
+            fileId: widget.fileId, loadGeneration: gen)) {
+          return;
+        }
         if (!_isCurrentLoad(gen)) return;
 
         await _openPlayerAndStart(
@@ -1675,7 +1734,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (plan == null) return;
           if (!_isCurrentLoad(gen)) return;
 
-          if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+          if (await _castToTargetIfSet(plan,
+              fileId: widget.fileId, loadGeneration: gen)) {
+            return;
+          }
           if (!_isCurrentLoad(gen)) return;
 
           await _openPlayerAndStart(
@@ -1933,7 +1995,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (plan == null) return;
       if (!_isCurrentLoad(gen)) return;
 
-      if (await _castToTargetIfSet(plan, fileId: playFileId)) return;
+      if (await _castToTargetIfSet(plan,
+          fileId: playFileId, loadGeneration: gen)) {
+        return;
+      }
       if (!_isCurrentLoad(gen)) return;
 
       if (playbackPlan is HlsPlan) {
@@ -2017,6 +2082,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // would tear it down before the screen is ever unmounted.
       _stopVerification();
       await _disposePlayer();
+      // `_disposePlayer` awaits; a switch can land during that await and
+      // move this State on to a newer file. Recheck before setState, or
+      // this load's error overwrites the newer load's loading or playback
+      // view with a failure that belongs to the file it left behind.
+      if (!_isCurrentLoad(gen)) return;
       if (mounted) {
         setState(() {
           _error = e.toString();
