@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:player/core/build_channel.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -338,7 +339,7 @@ void main() {
   testWidgets('the footer names the running version', (tester) async {
     await _pump(tester, version: '0.14.2');
 
-    expect(find.text('Mydia Player 0.14.2'), findsOneWidget);
+    expect(find.text('${BuildChannel.current.appName} 0.14.2'), findsOneWidget);
   });
 
   testWidgets('an unknown version renders no footer rather than a placeholder',
@@ -347,7 +348,7 @@ void main() {
     // worth less than no footer.
     await _pump(tester);
 
-    expect(find.textContaining('Mydia Player'), findsNothing);
+    expect(find.textContaining(BuildChannel.current.appName), findsNothing);
   });
 
   testWidgets('shows the current quality rung label', (tester) async {
@@ -688,6 +689,7 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -5000));
     await tester.pumpAndSettle();
 
-    expectClearsDock(tester, find.text('Mydia Player 1.2.3'));
+    expectClearsDock(
+        tester, find.text('${BuildChannel.current.appName} 1.2.3'));
   });
 }

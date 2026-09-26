@@ -17,6 +17,7 @@ import '../widgets/storage_unavailable_dialog.dart';
 import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
+import '../widgets/channel_badge.dart';
 import 'login/login_controller.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -626,14 +627,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         SizedBox(height: isCompact ? 12 : 16),
-        Text(
-          'Mydia Player',
-          style: TextStyle(
-            fontSize: titleSize,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            letterSpacing: -0.5,
-          ),
+        // The pill sits inline so it adds no height: the form below must
+        // stay on screen on short windows.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                'Mydia Player',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: titleSize,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const ChannelBadge(),
+          ],
         ),
         const SizedBox(height: 4),
         Text(
@@ -771,14 +785,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Mydia Player',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
+              const Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Mydia Player',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  ChannelBadge(),
+                ],
               ),
               const SizedBox(height: 2),
               Text(

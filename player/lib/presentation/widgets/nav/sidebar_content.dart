@@ -9,6 +9,7 @@ import '../../../domain/navigation/media_filter.dart';
 import '../../../domain/navigation/nav_destination.dart';
 import '../../../domain/navigation/sidebar_layout.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
+import '../channel_badge.dart';
 import '../mydia_logo.dart';
 import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
@@ -146,14 +147,23 @@ class SidebarContent extends ConsumerWidget {
               const MydiaLogo(size: 36),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Mydia Player',
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.5,
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Mydia Player',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: -0.5,
+                                ),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    const ChannelBadge(),
+                  ],
                 ),
               ),
               IconButton(

@@ -40,7 +40,12 @@ rustup show
 cd player
 flutter pub get
 flutter pub run build_runner build --delete-conflicting-outputs
-flutter build linux --release
+# Written by tool/apply-channel.sh in CI. Absent in a local build, which then
+# builds as stable. The sandbox does not inherit the job's environment, so the
+# file is how the channel gets in.
+CHANNEL=stable
+[ -f .build-channel ] && CHANNEL="$(cat .build-channel)"
+flutter build linux --release --dart-define=MYDIA_CHANNEL="$CHANNEL"
 cd ..
 
 # --- Install -----------------------------------------------------------------
@@ -69,9 +74,11 @@ install -Dm644 player/flatpak/dev.mydia.player.metainfo.xml \
 # catalog stores rasterised PNGs regardless, and desktop environments are happy
 # with the hicolor sizes below, so the SVG buys nothing and costs a
 # host-dependent build failure.
+ICON_SRC=player/assets/icon.svg
+[ "$CHANNEL" != stable ] && ICON_SRC="player/assets/icon-$CHANNEL.svg"
 for size in 64 128 256; do
   install -d "/app/share/icons/hicolor/${size}x${size}/apps"
-  rsvg-convert -w "$size" -h "$size" player/assets/icon.svg \
+  rsvg-convert -w "$size" -h "$size" "$ICON_SRC" \
     -o "/app/share/icons/hicolor/${size}x${size}/apps/dev.mydia.player.png"
 done
 

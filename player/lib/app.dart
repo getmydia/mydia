@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
 import 'core/auth/auth_status.dart';
@@ -502,7 +503,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (authState.isLoading) {
       debugPrint('[MyApp] Showing loading screen');
       return MaterialApp(
-        title: 'Mydia Player',
+        title: BuildChannel.current.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
@@ -525,7 +526,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (authState.hasError) {
       debugPrint('[MyApp] Auth error: ${authState.error}');
       return MaterialApp(
-        title: 'Mydia Player',
+        title: BuildChannel.current.appName,
         debugShowCheckedModeBanner: false,
         scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.darkTheme,
@@ -550,7 +551,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Mydia Player',
+      title: BuildChannel.current.appName,
       debugShowCheckedModeBanner: false,
       scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.darkTheme,

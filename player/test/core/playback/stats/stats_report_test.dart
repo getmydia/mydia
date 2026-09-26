@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/build_channel.dart';
 import 'package:player/core/playback/stats/playback_stats.dart';
 import 'package:player/core/playback/stats/stats_metrics.dart';
 import 'package:player/core/playback/stats/stats_report.dart';
@@ -265,7 +266,7 @@ void main() {
       appVersion: '1.4.2',
     );
 
-    expect(text, contains('Mydia Player 1.4.2'));
+    expect(text, contains('${BuildChannel.current.appName} 1.4.2'));
     expect(text, contains('Source: 2160p hevc - 14.2 Mb/s - mkv'));
     expect(text, contains('Audio: eac3 5.1 - 48 kHz - eng'));
     expect(text, contains('Decoder: h264 (vaapi) hardware'));

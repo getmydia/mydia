@@ -1,0 +1,19 @@
+# Beta channel launcher icons. tool/apply-channel.sh runs
+# `dart run flutter_launcher_icons -f` on this in CI; mirrors the
+# flutter_launcher_icons block in pubspec.yaml plus macOS.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  windows:
+    generate: true
+    image_path: "assets/icon-beta.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/icon-beta.png"
+  image_path: "assets/icon-beta.png"
+  image_path_ios: "assets/icon_ios-beta.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0f172a"
+  adaptive_icon_foreground: "assets/icon-beta.png"
+  min_sdk_android: 21

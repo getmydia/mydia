@@ -71,10 +71,17 @@ jobs:
       - name: Run code generation
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
+      - name: Brand the channel
+        working-directory: ${{ env.PLAYER_PATH }}
+        shell: bash
+        # Beta and dev builds get their own name and a ribboned icon. Stable
+        # is untouched. Uses the full version: iOS strips the prerelease suffix
+        # from pubspec, so the channel has to be read before that matters.
+        run: ./tool/apply-channel.sh "${{ inputs.version }}"
 
       - name: Build Linux
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build linux --release
+        run: flutter build linux --release --dart-define=MYDIA_CHANNEL=${{ env.MYDIA_CHANNEL }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
