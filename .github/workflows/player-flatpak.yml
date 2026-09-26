@@ -83,7 +83,7 @@ jobs:
         # Beta and dev get their name and icon here. Names only: the flatpak
         # rasterises its own icon from the channel SVG in build.sh.
         run: ./player/tool/apply-channel.sh --names-only "${{ inputs.version }}"
-      - name: Stamp the version
+
       - name: Stamp the version
         run: |
           ./player/flatpak/stamp-version.sh \
