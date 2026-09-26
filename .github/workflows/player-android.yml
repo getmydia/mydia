@@ -96,6 +96,13 @@ jobs:
       - name: Run code generation
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
+      - name: Brand the channel
+        working-directory: ${{ env.PLAYER_PATH }}
+        shell: bash
+        # Beta and dev builds get their own name and a ribboned icon. Stable
+        # is untouched. Uses the full version: iOS strips the prerelease suffix
+        # from pubspec, so the channel has to be read before that matters.
+        run: ./tool/apply-channel.sh "${{ inputs.version }}"
 
       - name: Decode keystore
         if: env.ANDROID_KEYSTORE_BASE64 != ''
@@ -119,11 +126,11 @@ jobs:
 
       - name: Build APK
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build apk --release --target-platform android-arm,android-arm64
+        run: flutter build apk --release --target-platform android-arm,android-arm64 --dart-define=MYDIA_CHANNEL=${{ env.MYDIA_CHANNEL }}
 
       - name: Build AAB
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build appbundle --release --target-platform android-arm,android-arm64
+        run: flutter build appbundle --release --target-platform android-arm,android-arm64 --dart-define=MYDIA_CHANNEL=${{ env.MYDIA_CHANNEL }}
 
       - name: Check APK ABIs
         run: ./scripts/check-apk-abis.sh ${{ env.PLAYER_PATH }}/build/app/outputs/flutter-apk/app-release.apk

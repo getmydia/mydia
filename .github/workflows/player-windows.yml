@@ -59,10 +59,17 @@ jobs:
       - name: Run code generation
         working-directory: ${{ env.PLAYER_PATH }}
         run: flutter pub run build_runner build
+      - name: Brand the channel
+        working-directory: ${{ env.PLAYER_PATH }}
+        shell: bash
+        # Beta and dev builds get their own name and a ribboned icon. Stable
+        # is untouched. Uses the full version: iOS strips the prerelease suffix
+        # from pubspec, so the channel has to be read before that matters.
+        run: ./tool/apply-channel.sh "${{ inputs.version }}"
 
       - name: Build Windows
         working-directory: ${{ env.PLAYER_PATH }}
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=MYDIA_CHANNEL=${{ env.MYDIA_CHANNEL }}
 
       # Must run before the installer is packaged: installer.iss globs the same
       # Release directory, so the DLLs are only in the shipped installer if they
