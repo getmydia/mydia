@@ -187,7 +187,8 @@ class _AppShellState extends ConsumerState<AppShell>
   GoRouter? _router;
   CollectionAutoSync? _collectionAutoSync;
 
-  /// Whether the nav drawer is open. Drives [AppShell.dockChrome].
+  /// Whether the nav drawer is open. Drives [AppShell.dockChrome], and the
+  /// cast bar's fade through [ReportedDrawer].
   bool _drawerOpen = false;
 
   /// Node for the sidebar's selected row. Also the boundary's target, so one
@@ -442,56 +443,59 @@ class _AppShellState extends ConsumerState<AppShell>
       );
     }
 
-    return Scaffold(
-      key: AppShell.scaffoldKey,
-      backgroundColor: Colors.transparent,
-      extendBody: true,
-      onDrawerChanged: (isOpen) {
-        if (!mounted) return;
-        setState(() => _drawerOpen = isOpen);
-        AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
-      },
-      drawer: MobileDrawer(
-        location: location,
-        onNavigate: (route) {
-          Navigator.of(context).pop();
-          _navigateTo(route);
+    return ReportedDrawer(
+      open: _drawerOpen,
+      child: Scaffold(
+        key: AppShell.scaffoldKey,
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        onDrawerChanged: (isOpen) {
+          if (!mounted) return;
+          setState(() => _drawerOpen = isOpen);
+          AppShell.onDrawerVisibilityChanged(isOpen: isOpen, ref: ref);
         },
-        showBackToMydia: showBackToMydia,
-        isOffline: isOffline,
-      ),
-      body: Stack(
-        children: [
-          Positioned.fill(child: backdrop),
-          // Insets pass through unchanged here: a narrow mobile/macOS window
-          // has no sidebar to cover the window-control reserve, so the row
-          // still needs the full ambient value.
-          AppShell.contentGutter(
-            child: Column(
-              children: [
-                AppShell.bannerArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isOffline) const OfflineBanner(),
-                      const CompatibilityBanner(),
-                      const UpdateBanner(),
-                    ],
-                  ),
-                ),
-                Expanded(child: widget.child),
-              ],
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: AppShell.dockChrome(
-        drawerOpen: _drawerOpen,
-        child: BottomNav(
+        drawer: MobileDrawer(
           location: location,
-          onNavigate: _navigateTo,
-          isOffline: isOffline,
+          onNavigate: (route) {
+            Navigator.of(context).pop();
+            _navigateTo(route);
+          },
           showBackToMydia: showBackToMydia,
+          isOffline: isOffline,
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(child: backdrop),
+            // Insets pass through unchanged here: a narrow mobile/macOS window
+            // has no sidebar to cover the window-control reserve, so the row
+            // still needs the full ambient value.
+            AppShell.contentGutter(
+              child: Column(
+                children: [
+                  AppShell.bannerArea(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isOffline) const OfflineBanner(),
+                        const CompatibilityBanner(),
+                        const UpdateBanner(),
+                      ],
+                    ),
+                  ),
+                  Expanded(child: widget.child),
+                ],
+              ),
+            ),
+          ],
+        ),
+        bottomNavigationBar: AppShell.dockChrome(
+          drawerOpen: _drawerOpen,
+          child: BottomNav(
+            location: location,
+            onNavigate: _navigateTo,
+            isOffline: isOffline,
+            showBackToMydia: showBackToMydia,
+          ),
         ),
       ),
     );
