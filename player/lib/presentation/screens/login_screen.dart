@@ -627,17 +627,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ),
         ),
         SizedBox(height: isCompact ? 12 : 16),
-        Text(
-          'Mydia Player',
-          style: TextStyle(
-            fontSize: titleSize,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-            letterSpacing: -0.5,
-          ),
+        // The pill sits inline so it adds no height: the form below must
+        // stay on screen on short windows.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Mydia Player',
+              style: TextStyle(
+                fontSize: titleSize,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const ChannelBadge(),
+          ],
         ),
-        const SizedBox(height: 6),
-        const ChannelBadge(),
         const SizedBox(height: 4),
         Text(
           'Stream your media library',

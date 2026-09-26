@@ -115,11 +115,17 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 MydiaLogo(size: 32),
                 SizedBox(width: 10),
-                Text(
-                  'Mydia Player',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.5,
+                // Flexible so the channel pill beside it fits on a narrow
+                // phone: the wordmark ellipsizes instead of overflowing.
+                Flexible(
+                  child: Text(
+                    'Mydia Player',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ),
                 SizedBox(width: 8),
