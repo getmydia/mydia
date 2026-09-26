@@ -11,11 +11,12 @@ abstract interface class PlayerWindowSizer {
   /// Watches [params] for the video's display dimensions.
   ///
   /// `PlayerScreen._initializePlayer` builds a fresh `Player` -- and this is
-  /// called again with its stream -- on a source switch and a session
-  /// restart. Next/previous episode navigation builds a whole new
-  /// `PlayerScreen` (and a new sizer) instead: see
-  /// `test/core/router/player_route_handoff_test.dart`. Any previous
-  /// subscription is cancelled.
+  /// called again with its stream -- on a source switch, a session restart,
+  /// and a later episode advance that reuses this `PlayerScreen` (its
+  /// `didUpdateWidget` re-enters `_initializePlayer`). Only the *first*
+  /// advance out of a pushed player builds a whole new `PlayerScreen` (and a
+  /// new sizer) instead: see `test/core/router/player_route_handoff_test.dart`.
+  /// Any previous subscription is cancelled.
   void bindVideoParams(Stream<VideoParams> params);
 
   /// Restores the snapshot and hands the window back.

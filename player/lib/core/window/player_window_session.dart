@@ -21,12 +21,15 @@ void runAfterCurrentFrame(VoidCallback callback) {
 
 /// The window's time "in the player", which can span several player screens.
 ///
-/// Next/previous episode navigation mounts a new `PlayerScreen` whose sizer
-/// joins before the old screen's sizer leaves (see
-/// `test/core/router/player_route_handoff_test.dart`). Holding the browse
-/// snapshot and the geometry pause here, instead of in each sizer, is what
-/// lets the second episode inherit the window the user had rather than the
-/// browse rect.
+/// The first episode advance out of a pushed player -- and any route
+/// replacement onto a different player entirely -- mounts a new
+/// `PlayerScreen` whose sizer joins before the old screen's sizer leaves
+/// (see `test/core/router/player_route_handoff_test.dart`). Holding the
+/// browse snapshot and the geometry pause here, instead of in each sizer, is
+/// what lets that new screen inherit the window the user had rather than the
+/// browse rect. Later episode advances within the same season reuse the one
+/// `PlayerScreen` State instead (`_switchToFile`), so its sizer never leaves
+/// and this session never sees a handoff at all.
 ///
 /// The session ends only when the last member has left and a frame has
 /// passed with nobody rejoining. Then it restores the browse window, drops

@@ -2736,10 +2736,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     ]);
 
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
-    // source switch or a session restart. Next/previous episode navigation
-    // mounts a new `PlayerScreen` with its own sizer; the shared
-    // `PlayerWindowSession` is what carries the window across that handoff.
-    // The sizer cancels the previous subscription itself.
+    // source switch, a session restart, or a later episode advance that
+    // reuses this screen (see [didUpdateWidget]). Only the first advance out
+    // of a pushed player mounts a whole new `PlayerScreen` with its own
+    // sizer; the shared `PlayerWindowSession` is what carries the window
+    // across that handoff. The sizer cancels the previous subscription
+    // itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // A new open: its track list is not mpv's until the probe below.
