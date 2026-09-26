@@ -166,4 +166,6 @@ To change the ribbon, edit `assets/icon{,_ios}-{beta,dev}.svg` and run
 
 A local `flutter run` has no define and shows the DEV pill, but keeps the
 stable native name and icon. Run the script by hand for the full treatment;
-`git checkout -- player/` undoes it.
+`git checkout -- player/ && rm -f player/.build-channel` undoes it. The
+marker file is ignored by git, and a leftover one makes the next local Flatpak
+build use the old channel.

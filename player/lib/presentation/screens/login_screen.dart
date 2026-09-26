@@ -632,13 +632,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Mydia Player',
-              style: TextStyle(
-                fontSize: titleSize,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.5,
+            Flexible(
+              child: Text(
+                'Mydia Player',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: titleSize,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -783,13 +787,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             children: [
               const Row(
                 children: [
-                  Text(
-                    'Mydia Player',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                      letterSpacing: -0.5,
+                  Flexible(
+                    child: Text(
+                      'Mydia Player',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
                   SizedBox(width: 8),
