@@ -206,6 +206,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// Creates the playback engine. Reused across native source switches.
   final Player Function()? createPlayer;
 
+  /// Creates the window sizer. Null uses [createPlayerWindowSizer]; tests
+  /// pass a recording fake to see whether the window was re-attached.
+  @visibleForTesting
+  final PlayerWindowSizer Function()? createWindowSizer;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -219,6 +224,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.subtitleTrack,
     this.autoplay = true,
     this.createPlayer,
+    this.createWindowSizer,
   });
 
   @override
@@ -1081,8 +1087,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   PlayerWindowSizer? _windowSizer;
 
   /// Identity handle for this screen's orientation lease. The controller
-  /// tracks owners by identity, so a replacement screen's handle is distinct
-  /// from this one's and only the last release restores normal orientations.
+  /// tracks owners by identity, so a route replacement (a different player
+  /// route, not an episode advance, which reuses this State) has a handle
+  /// distinct from this one's, and only the last release restores normal
+  /// orientations.
   final Object _orientationLeaseOwner = Object();
 
   /// Whether [initState] acquired the lease above, so [dispose] releases only
@@ -1130,7 +1138,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
     // anything reshapes the window.
-    final windowSizer = createPlayerWindowSizer();
+    final windowSizer =
+        widget.createWindowSizer?.call() ?? createPlayerWindowSizer();
     _windowSizer = windowSizer;
     unawaited(windowSizer.attach());
 
@@ -1149,9 +1158,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the player makes the next reveal start from a known place.
     _chromeVisibility.addListener(_onChromeVisibilityChanged);
 
-    // Keep one shared lease for the complete player route lifetime. During an
-    // episode replacement, the incoming and outgoing screens hand this lease
-    // off without briefly restoring portrait-capable orientations.
+    // Keep one shared lease for the complete player route lifetime. During a
+    // route replacement (a different player route, not an episode advance,
+    // which reuses this State), the incoming and outgoing screens hand this
+    // lease off without briefly restoring portrait-capable orientations.
     _ownsOrientationLease = PlayerScreen.wantsForcedLandscape(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
@@ -1166,17 +1176,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Loads the file `widget` now names when this State is reused for a
-  /// different one.
+  /// Loads the new file when this State is handed a different one.
   ///
   /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
   /// than the resolved location (`go_router/lib/src/match.dart:231`:
-  /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
-  /// `concatenatePaths(matchedPath, route.path)`). So `_navigateToEpisode`'s
-  /// `context.go` updates this State in place instead of building a new one,
-  /// and this is the only hook that notices the file changed.
-  ///
-  /// See [_switchToFile] for what a switch does and does not tear down.
+  /// `pageKey: ValueKey<String>(newMatchedPath)`). So `_navigateToEpisode`'s
+  /// `context.go`, a remote `LoadContent` and a deep link while playing all
+  /// update this State in place instead of building a new one, and
+  /// [_switchToFile] does the per-file teardown and reload a new State would
+  /// have done in `dispose` and `initState`.
   @override
   void didUpdateWidget(PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -3338,14 +3346,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// deliberately seeked back into, which is precisely what the guard exists
   /// to prevent.
   ///
-  /// The clearing half is insurance, not a live path. go_router derives the
-  /// page key for `/player/:type/:id` from the route *pattern* rather than the
-  /// resolved location, so a next-episode navigation updates this State in
-  /// place instead of building a new one, and `PlayerScreen`'s
-  /// `didUpdateWidget` notices the new parameters only for the
-  /// subtitle-preference fields. [_initializePlayer] is therefore still never
-  /// re-entered on that path and neither is this. The page key is
-  /// `go_router/lib/src/match.dart:231`, if you want to check the claim.
+  /// The clearing half runs on every file switch: a reused State re-enters
+  /// [_initializePlayer] through [_switchToFile].
   void _resetSegmentsIfMediaChanged() {
     final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
     if (_skipTrackerMediaKey == mediaKey) return;
@@ -4227,24 +4229,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!mounted) return;
 
     // `seasonNumber` is the *target's*, not `widget.seasonNumber`. Passing the
-    // current screen's season would tell the next PlayerScreen it is in the
-    // season it just left, so its `_fetchSeasonEpisodes` would load the wrong
-    // list, `_currentEpisodeIndex` would resolve to -1, and up-next would be
-    // dead for that entire season. Only reachable once Task 10 lands, but
-    // wrong either way.
+    // current screen's season would tell this same PlayerScreen, reloading
+    // for the next file, it is in the season it just left, so its
+    // `_fetchSeasonEpisodes` would load the wrong list, `_currentEpisodeIndex`
+    // would resolve to -1, and up-next would be dead for that entire season.
     context.go(
       '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
     );
   }
 
-  /// Saves the current position against [mediaType]/[mediaId] rather than
-  /// `widget`'s own, so a caller mid-switch can still credit the file being
-  /// replaced instead of the one taking over `widget`. See [_switchToFile].
+  /// Saves the current position under this widget's own identity; see
+  /// [_saveProgressFor].
   Future<void> _saveProgress() => _saveProgressFor(
         mediaType: widget.mediaType,
         mediaId: widget.mediaId,
       );
 
+  /// Saves the current position against [mediaType]/[mediaId] rather than
+  /// `widget`'s own, so a caller mid-switch can still credit the file being
+  /// replaced instead of the one taking over `widget`. See [_switchToFile].
   Future<void> _saveProgressFor({
     required String mediaType,
     required String mediaId,
@@ -4422,8 +4425,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Terminate the HLS session on the server and clean up P2P resources.
-  /// This stops FFmpeg and cleans up server-side resources.
+  /// Runs only when the screen really goes away (`dispose`, tab close). A
+  /// file switch on a reused State ends its session through [_switchToFile]
+  /// and keeps the proxy hold, since `this` still needs it. On a real route
+  /// replacement the incoming screen has already started the proxy (Flutter
+  /// mounts the new route before disposing the old one), so an unconditional
+  /// stop here would close the server it streams from.
   ///
   /// Reads only the fields captured in [initState] ([_mediaProxy],
   /// [_graphqlClient]) — never `ref` directly. This
@@ -5790,7 +5797,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Passes `this` so a newer `PlayerScreen` that already attached over
     // this one (a remote `LoadContent` mounts before the old screen
     // disposes) is never clobbered by this late detach — see
-    // `detachPlayer`'s own dartdoc.
+    // `detachPlayer`'s own dartdoc. That mounts before disposal only when it
+    // replaces the route; one that only changes the file reuses this State
+    // (see [didUpdateWidget]).
     _remoteTargetController.detachPlayer(this);
     _nowPlaying.clear(this);
     final playbackNotifier = _localPlaybackNotifier;

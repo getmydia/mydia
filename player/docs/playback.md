@@ -497,3 +497,27 @@ Cues are drawn in the browser's own style, and the player has no subtitle
 appearance settings to honour, so nothing is lost there today. They sit at the
 bottom of the video, where the OSD covers them while it is up.
 
+## Episode advance reuses the player screen
+
+go_router keys `/player/:type/:id` by the route pattern, not the resolved
+path, so navigating from one episode to the next (up-next, the next and
+previous buttons, a remote `LoadContent`, a deep link while playing) updates
+the existing `PlayerScreen` State instead of building a new one.
+`didUpdateWidget` notices the changed `mediaType:mediaId:fileId` and
+`_switchToFile` does the per-file work:
+
+1. Save the old file's progress, addressed by the *old* widget's ids
+   (`widget` already names the new file by then).
+2. Stop verification and up-next, end the old HLS session, dispose the player.
+3. Re-run `_initializePlayer`, whose `_resetPerFileState` clears every
+   per-file field.
+
+The screen-scoped pieces stay attached: fullscreen, the window sizer, the
+orientation lease and the media proxy hold. A per-file page key would give
+each episode a fresh State, but its `dispose` would exit fullscreen and hand
+the window back on every advance.
+
+Every await in the load path checks `_loadGeneration`, so a slow answer for a
+file the viewer already moved past is dropped instead of landing on the new
+one.
+

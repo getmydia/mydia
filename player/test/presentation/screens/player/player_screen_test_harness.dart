@@ -35,6 +35,7 @@ import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/settings/settings_providers.dart';
 import 'package:player/core/settings/settings_service.dart';
+import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -742,6 +743,7 @@ Future<void> pumpPlayerScreen(
   String mediaType = 'movie',
   String fileId = 'file-1',
   Player Function()? createPlayer,
+  PlayerWindowSizer Function()? createWindowSizer,
 }) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
@@ -753,6 +755,7 @@ Future<void> pumpPlayerScreen(
         fileId: fileId,
         title: 'The Long Aurora',
         createPlayer: createPlayer,
+        createWindowSizer: createWindowSizer,
       ),
     ),
   ));
