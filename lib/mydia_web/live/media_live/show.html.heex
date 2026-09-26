@@ -120,9 +120,11 @@
                 <%= if has_media_files?(@media_item) do %>
                   <div class="tooltip tooltip-bottom" data-tip="Rename files">
                     <button
+                      id="rename-files-button"
                       type="button"
                       phx-click="show_rename_modal"
                       class="btn btn-ghost btn-sm btn-square"
+                      aria-label="Rename files"
                     >
                       <.icon name="hero-pencil-square" class="w-4 h-4" />
                     </button>
@@ -431,8 +433,9 @@
     />
   <% end %>
   <%= if @show_rename_modal do %>
-    <Modals.rename_files_modal
+    <RenameModal.rename_files_modal
       rename_previews={@rename_previews}
+      rename_selected={@rename_selected}
       renaming_files={@renaming_files}
     />
   <% end %>

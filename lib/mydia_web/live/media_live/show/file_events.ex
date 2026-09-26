@@ -500,42 +500,6 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
     end
   end
 
-  def show_rename_modal(_params, socket) do
-    media_item = load_media_item(socket.assigns.media_item.id)
-
-    rename_previews =
-      Mydia.Library.FileRenamer.generate_rename_previews_for_media_item(media_item)
-
-    {:noreply,
-     socket
-     |> assign(:show_rename_modal, true)
-     |> assign(:rename_previews, rename_previews)}
-  end
-
-  def hide_rename_modal(_params, socket) do
-    {:noreply,
-     socket
-     |> assign(:show_rename_modal, false)
-     |> assign(:rename_previews, [])
-     |> assign(:renaming_files, false)}
-  end
-
-  def confirm_rename_files(_params, socket) do
-    rename_previews = socket.assigns.rename_previews
-
-    rename_specs =
-      Enum.map(rename_previews, fn preview ->
-        %{file_id: preview.file_id, new_path: preview.proposed_path}
-      end)
-
-    {:noreply,
-     socket
-     |> assign(:renaming_files, true)
-     |> start_async(:rename_files, fn ->
-       Mydia.Library.FileRenamer.rename_files_batch(rename_specs)
-     end)}
-  end
-
   def mark_file_preferred(%{"file-id" => file_id}, socket) do
     file = Library.get_media_file!(file_id)
     media_item = socket.assigns.media_item
@@ -786,51 +750,6 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
      socket
      |> assign(:rescanning_season, nil)
      |> put_flash(:error, "Season re-scan failed unexpectedly")}
-  end
-
-  def handle_rename_files_async({:ok, {:ok, results}}, socket) do
-    success_count = Enum.count(results, &match?({:ok, _}, &1))
-    error_count = Enum.count(results, &match?({:error, _}, &1))
-
-    message =
-      cond do
-        error_count == 0 ->
-          "Successfully renamed #{success_count} file(s)"
-
-        success_count == 0 ->
-          "Failed to rename all files"
-
-        true ->
-          "Renamed #{success_count} file(s), #{error_count} failed"
-      end
-
-    flash_type = if error_count > 0, do: :warning, else: :info
-
-    {:noreply,
-     socket
-     |> assign(:renaming_files, false)
-     |> assign(:show_rename_modal, false)
-     |> assign(:rename_previews, [])
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
-     |> put_flash(flash_type, message)}
-  end
-
-  def handle_rename_files_async({:ok, {:error, reason}}, socket) do
-    Logger.error("File rename failed: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> assign(:renaming_files, false)
-     |> put_flash(:error, "Failed to rename files: #{inspect(reason)}")}
-  end
-
-  def handle_rename_files_async({:exit, reason}, socket) do
-    Logger.error("File rename task crashed: #{inspect(reason)}")
-
-    {:noreply,
-     socket
-     |> assign(:renaming_files, false)
-     |> put_flash(:error, "File rename failed unexpectedly")}
   end
 
   defp rescan_flash_message(prefix, scan_result, refreshed) do
