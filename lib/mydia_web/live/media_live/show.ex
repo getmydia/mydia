@@ -17,6 +17,8 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
+  alias MydiaWeb.MediaLive.Show.RenameEvents
+  alias MydiaWeb.MediaLive.Show.RenameModal
   alias MydiaWeb.MediaLive.Show.SearchEvents
   alias MydiaWeb.MediaLive.Show.SegmentEvents
   alias MydiaWeb.MediaLive.Show.FranchiseEvents
@@ -129,6 +131,7 @@ defmodule MydiaWeb.MediaLive.Show do
      # File rename modal state
      |> assign(:show_rename_modal, false)
      |> assign(:rename_previews, [])
+     |> assign(:rename_selected, MapSet.new())
      |> assign(:renaming_files, false)
      # Season expanded/collapsed state
      |> assign(:expanded_seasons, expanded_seasons)
@@ -362,13 +365,25 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FileEvents.cancel_transcode(params, socket)
 
   def handle_event("show_rename_modal", params, socket),
-    do: FileEvents.show_rename_modal(params, socket)
+    do: RenameEvents.show_rename_modal(params, socket)
 
   def handle_event("hide_rename_modal", params, socket),
-    do: FileEvents.hide_rename_modal(params, socket)
+    do: RenameEvents.hide_rename_modal(params, socket)
+
+  def handle_event("toggle_rename_file", params, socket),
+    do: RenameEvents.toggle_rename_file(params, socket)
+
+  def handle_event("toggle_rename_season", params, socket),
+    do: RenameEvents.toggle_rename_season(params, socket)
+
+  def handle_event("select_all_rename", params, socket),
+    do: RenameEvents.select_all_rename(params, socket)
+
+  def handle_event("clear_rename_selection", params, socket),
+    do: RenameEvents.clear_rename_selection(params, socket)
 
   def handle_event("confirm_rename_files", params, socket),
-    do: FileEvents.confirm_rename_files(params, socket)
+    do: RenameEvents.confirm_rename_files(params, socket)
 
   def handle_event("mark_file_preferred", params, socket),
     do: FileEvents.mark_file_preferred(params, socket)
@@ -891,7 +906,7 @@ defmodule MydiaWeb.MediaLive.Show do
     do: FileEvents.handle_rescan_season_async(result, socket)
 
   def handle_async(:rename_files, result, socket),
-    do: FileEvents.handle_rename_files_async(result, socket)
+    do: RenameEvents.handle_rename_files_async(result, socket)
 
   def handle_async(:subtitle_search, result, socket),
     do: SubtitleEvents.handle_subtitle_search_async(result, socket)
