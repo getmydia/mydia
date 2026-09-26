@@ -46,6 +46,12 @@ import 'toast/toaster.dart';
 /// sidebar report into: the bar sits above the dock rather than painting over
 /// it, beside the sidebar at most [CastPill.maxWidth] wide, and floats at the
 /// window edge when there is neither.
+///
+/// Fades the bar out and stops it taking taps while the shell reports its
+/// mobile nav drawer open: the layer paints above `Scaffold.drawer`, so the
+/// bar would otherwise sit on the drawer and its scrim. It stays mounted, as
+/// `AppShell.dockChrome` keeps the dock mounted, so no screen's
+/// `DockInsets` reflow behind the drawer.
 class CastBarLayer extends StatefulWidget {
   const CastBarLayer({super.key, required this.child});
 
@@ -59,6 +65,7 @@ class _CastBarLayerState extends State<CastBarLayer> {
   double _dock = 0;
   double _castBar = 0;
   double _sidebar = 0;
+  bool _drawerOpen = false;
 
   void _setDock(double height) {
     if (!mounted || height == _dock) return;
@@ -75,6 +82,11 @@ class _CastBarLayerState extends State<CastBarLayer> {
     setState(() => _sidebar = width);
   }
 
+  void _setDrawer(bool open) {
+    if (!mounted || open == _drawerOpen) return;
+    setState(() => _drawerOpen = open);
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasDock = _dock > 0;
@@ -82,9 +94,11 @@ class _CastBarLayerState extends State<CastBarLayer> {
       dock: _dock,
       castBar: _castBar,
       sidebar: _sidebar,
+      drawerOpen: _drawerOpen,
       onDock: _setDock,
       onCastBar: _setCastBar,
       onSidebar: _setSidebar,
+      onDrawer: _setDrawer,
       child: Stack(
         children: [
           widget.child,
@@ -118,7 +132,14 @@ class _CastBarLayerState extends State<CastBarLayer> {
                       child: MediaQuery.removePadding(
                         context: context,
                         removeBottom: hasDock,
-                        child: const CastMiniController(),
+                        child: IgnorePointer(
+                          ignoring: _drawerOpen,
+                          child: AnimatedOpacity(
+                            opacity: _drawerOpen ? 0 : 1,
+                            duration: const Duration(milliseconds: 200),
+                            child: const CastMiniController(),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -502,8 +523,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                   key: const Key('cast-bar-detach'),
                   icon: const Icon(Icons.link_off, size: 18),
                   color: AppColors.textSecondary,
-                  tooltip:
-                      'Disconnect, keep playing on ${session.device.name}',
+                  tooltip: 'Disconnect, keep playing on ${session.device.name}',
                   onPressed: () => _detach(session),
                 ),
               // Confirmed, unlike the idle/connecting close: media is

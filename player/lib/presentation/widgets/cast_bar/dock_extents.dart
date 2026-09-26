@@ -3,22 +3,26 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 /// Extents the cast bar, the dock and the desktop sidebar need from each
-/// other.
+/// other, plus whether the mobile nav drawer is open.
 ///
 /// `CastBarLayer` sits above the router and `AppShell` below it, so the
 /// dock's height and the sidebar's width have to travel up to the bar, and
 /// the bar's height back down to the screens' `DockInsets`. `CastBarLayer`
 /// owns all three values and provides them here; the dock, the sidebar and
-/// the bar report into [onDock], [onSidebar] and [onCastBar].
+/// the bar report into [onDock], [onSidebar] and [onCastBar]. The shell
+/// reports its drawer through [ReportedDrawer] into [onDrawer], because the
+/// bar paints above `Scaffold.drawer` and has to get out of its way.
 class DockExtents extends InheritedWidget {
   const DockExtents({
     super.key,
     required this.dock,
     required this.castBar,
     required this.sidebar,
+    required this.drawerOpen,
     required this.onDock,
     required this.onCastBar,
     required this.onSidebar,
+    required this.onDrawer,
     required super.child,
   });
 
@@ -31,9 +35,13 @@ class DockExtents extends InheritedWidget {
   /// The desktop sidebar's width while it is on screen and its route is
   /// current; 0 otherwise.
   final double sidebar;
+
+  /// Whether the mobile nav drawer is open.
+  final bool drawerOpen;
   final ValueChanged<double> onDock;
   final ValueChanged<double> onCastBar;
   final ValueChanged<double> onSidebar;
+  final ValueChanged<bool> onDrawer;
 
   /// Rebuilds the caller when a height changes.
   static DockExtents? maybeOf(BuildContext context) =>
@@ -46,7 +54,10 @@ class DockExtents extends InheritedWidget {
 
   @override
   bool updateShouldNotify(DockExtents old) =>
-      old.dock != dock || old.castBar != castBar || old.sidebar != sidebar;
+      old.dock != dock ||
+      old.castBar != castBar ||
+      old.sidebar != sidebar ||
+      old.drawerOpen != drawerOpen;
 }
 
 /// Reports [child]'s laid-out extent along [axis] (its height by default)
@@ -120,6 +131,59 @@ class _ReportedExtentState extends State<ReportedExtent> {
   @override
   Widget build(BuildContext context) =>
       _SizeProbe(onSize: _onLayout, child: widget.child);
+}
+
+/// Reports whether the mobile nav drawer is [open] to [DockExtents.onDrawer],
+/// and reports it closed when this widget goes away, so a shell torn down
+/// with its drawer open cannot leave the cast bar hidden.
+class ReportedDrawer extends StatefulWidget {
+  const ReportedDrawer({super.key, required this.open, required this.child});
+
+  final bool open;
+  final Widget child;
+
+  @override
+  State<ReportedDrawer> createState() => _ReportedDrawerState();
+}
+
+class _ReportedDrawerState extends State<ReportedDrawer> {
+  /// Cached because `dispose` cannot look up inherited widgets.
+  ValueChanged<bool>? _onDrawer;
+
+  /// Last value reported; the layer starts out assuming closed.
+  bool _last = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _onDrawer = DockExtents.reporterOf(context)?.onDrawer;
+    _report(widget.open);
+  }
+
+  @override
+  void didUpdateWidget(ReportedDrawer old) {
+    super.didUpdateWidget(old);
+    if (old.open != widget.open) _report(widget.open);
+  }
+
+  @override
+  void dispose() {
+    _report(false);
+    super.dispose();
+  }
+
+  // Deferred like ReportedExtent's reports: the receiver calls setState,
+  // which must not happen while this subtree is building.
+  void _report(bool open) {
+    if (open == _last) return;
+    _last = open;
+    final onDrawer = _onDrawer;
+    if (onDrawer == null) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) => onDrawer(open));
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _SizeProbe extends SingleChildRenderObjectWidget {
