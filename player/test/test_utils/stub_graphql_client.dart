@@ -1,7 +1,9 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 /// Returns the response for the [callIndex]-th request, or an [Exception] to
-/// throw, or a fully built [Response].
+/// throw, or a fully built [Response]. May also return a [Future] of any of
+/// those, so a test can hold one query's answer back to control its timing
+/// relative to another.
 typedef StubHandler = Object Function(Request request, int callIndex);
 
 /// A [Link] that answers from a script instead of a server.
@@ -35,7 +37,10 @@ class StubLink extends Link {
     final index = requests.length;
     requests.add(request);
 
-    final outcome = handler(request, index);
+    final raw = handler(request, index);
+    // A handler may hold a response back (a Completer's future) so a test
+    // can control when one query lands relative to another.
+    final outcome = raw is Future ? await raw : raw;
     if (outcome is Exception) throw outcome;
     if (outcome is Response) {
       yield outcome;

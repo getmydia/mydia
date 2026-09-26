@@ -206,6 +206,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// Creates the playback engine. Reused across native source switches.
   final Player Function()? createPlayer;
 
+  /// Creates the window sizer. Null uses [createPlayerWindowSizer]; tests
+  /// pass a recording fake to see whether the window was re-attached.
+  @visibleForTesting
+  final PlayerWindowSizer Function()? createWindowSizer;
+
   const PlayerScreen({
     super.key,
     required this.mediaId,
@@ -219,6 +224,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.subtitleTrack,
     this.autoplay = true,
     this.createPlayer,
+    this.createWindowSizer,
   });
 
   @override
@@ -348,6 +354,17 @@ class PlayerScreen extends ConsumerStatefulWidget {
     if (chromeBlocksBack) return BackAction.hideChrome;
     return BackAction.pop;
   }
+}
+
+/// Thrown by [_PlayerScreenState._openPlayerAndStart] when the load it is
+/// preparing is superseded before a [Player] exists to hand back or to
+/// dispose. Caught only by [_PlayerScreenState._initializePlayer]'s own
+/// catch, whose first line already returns as soon as it sees
+/// `!_isCurrentLoad(gen)` -- ahead of the `debugPrint`/`_disposePlayer`/
+/// `setState` that follow it -- so this reaches the exact same no-op every
+/// other stale return in that method does. Never inspected or rethrown.
+class _SupersededLoad implements Exception {
+  const _SupersededLoad();
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen>
@@ -637,6 +654,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// The key for the file now showing; see [_mediaKeyOf].
   String get _mediaKey => _mediaKeyOf(widget);
 
+  /// Bumped at the start of every load and every file switch. A load
+  /// captures it on entry and stops writing state as soon as it no longer
+  /// matches, so a slow answer for a file this State has moved past (see
+  /// [didUpdateWidget]) cannot land on the one now showing.
+  int _loadGeneration = 0;
+
+  bool _isCurrentLoad(int generation) =>
+      mounted && generation == _loadGeneration;
+
   /// Whether [_applySubtitlePreference] has already run for the file now
   /// loaded. media_kit revises its track list several times per playback and
   /// every revision reaches [_applySubtitleTracks], so without this a
@@ -699,6 +725,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   @visibleForTesting
   bool get preferenceAppliedForTesting => _preferenceAppliedForPlayback;
+
+  @visibleForTesting
+  bool get watchedInvalidationSentForTesting => _watchedInvalidationSent;
+
+  @visibleForTesting
+  bool get isDownloadedSourceForTesting => _isDownloadedSource;
+
+  /// Exposed so a widget test can prove a failed detail query for the new
+  /// file leaves no resume position behind from the one it replaced. See
+  /// [_resetPerFileState] and `player_screen_file_change_test.dart`.
+  @visibleForTesting
+  int? get savedPositionSecondsForTesting => _savedPositionSeconds;
+
+  /// Exposed so a widget test can prove a failed detail query for the new
+  /// file leaves no subtitle tracks behind from the one it replaced. See
+  /// [_resetPerFileState] and `player_screen_file_change_test.dart`.
+  @visibleForTesting
+  List<app_models.SubtitleTrack> get serverSubtitleTracksForTesting =>
+      _serverSubtitleTracks;
 
   /// Exposed so a widget test can tell a preference apply that delivered from
   /// one the screen had to retake. See `subtitle_preference_apply_test.dart`.
@@ -1066,8 +1111,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   PlayerWindowSizer? _windowSizer;
 
   /// Identity handle for this screen's orientation lease. The controller
-  /// tracks owners by identity, so a replacement screen's handle is distinct
-  /// from this one's and only the last release restores normal orientations.
+  /// tracks owners by identity, so a route replacement (a different player
+  /// route, not an episode advance, which reuses this State) has a handle
+  /// distinct from this one's, and only the last release restores normal
+  /// orientations.
   final Object _orientationLeaseOwner = Object();
 
   /// Whether [initState] acquired the lease above, so [dispose] releases only
@@ -1115,7 +1162,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
     // anything reshapes the window.
-    final windowSizer = createPlayerWindowSizer();
+    final windowSizer =
+        widget.createWindowSizer?.call() ?? createPlayerWindowSizer();
     _windowSizer = windowSizer;
     unawaited(windowSizer.attach());
 
@@ -1134,9 +1182,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // the player makes the next reveal start from a known place.
     _chromeVisibility.addListener(_onChromeVisibilityChanged);
 
-    // Keep one shared lease for the complete player route lifetime. During an
-    // episode replacement, the incoming and outgoing screens hand this lease
-    // off without briefly restoring portrait-capable orientations.
+    // Keep one shared lease for the complete player route lifetime. During a
+    // route replacement (a different player route, not an episode advance,
+    // which reuses this State), the incoming and outgoing screens hand this
+    // lease off without briefly restoring portrait-capable orientations.
     _ownsOrientationLease = PlayerScreen.wantsForcedLandscape(
       isMobile: PlatformFeatures.isMobile,
       directionalPrimary: InputCapabilities.directionalPrimary,
@@ -1151,37 +1200,122 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Re-arm the per-show subtitle preference when this State is handed a
-  /// different file.
+  /// Loads the new file when this State is handed a different one.
   ///
   /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
   /// than the resolved location (`go_router/lib/src/match.dart:231`:
   /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
-  /// `concatenatePaths(matchedPath, route.path)`). `_navigateToEpisode`
-  /// itself mounts a new State when the player was opened with `context.push`
-  /// (the usual case, see `test/core/router/player_route_handoff_test.dart`),
-  /// so this path is for a `go` between two declarative player locations,
-  /// where [_initializePlayer], which clears every other per-file field, is
-  /// not re-entered.
-  ///
-  /// Deliberately narrow. It resets the three subtitle-preference fields and
-  /// nothing else, and it does not call [_initializePlayer]. Whether the rest
-  /// of this screen's per-file state survives the same reuse is a separate
-  /// question with a separate answer; see
-  /// `player_screen_file_change_test.dart`, which asserts both.
+  /// `concatenatePaths(matchedPath, route.path)`). `_navigateToEpisode`'s own
+  /// first `context.go` mounts a new State instead, because the player was
+  /// opened with `context.push` (the usual case, see
+  /// `test/core/router/player_route_handoff_test.dart`) and a pushed page is
+  /// keyed per push rather than per pattern. Every advance after that first
+  /// one -- `_navigateToEpisode`'s `context.go`, a remote `LoadContent`, a
+  /// deep link while playing -- goes between two declarative player
+  /// locations with the same pattern key, so it updates this State in place
+  /// instead of building a new one, and [_switchToFile] does the per-file
+  /// teardown and reload -- including re-entering [_initializePlayer] -- that
+  /// a new State would otherwise have done in `initState`.
   @override
   void didUpdateWidget(PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_mediaKeyOf(oldWidget) == _mediaKey) return;
+    unawaited(_switchToFile(oldWidget));
+  }
 
-    final previous = '${oldWidget.mediaType}:${oldWidget.mediaId}:'
-        '${oldWidget.fileId}';
-    if (previous == _mediaKey) return;
+  /// Replaces the file this State plays with the one `widget` now names.
+  ///
+  /// [previous] is the widget the old file came from. `widget` already names
+  /// the new file here, so anything that must still address the old one
+  /// (its progress save) takes [previous]'s identity explicitly.
+  ///
+  /// Screen-scoped state (window sizer, fullscreen, orientation lease, proxy
+  /// hold) is deliberately untouched: this is the same screen, and tearing
+  /// any of it down would exit fullscreen or reshape the window on every
+  /// episode advance.
+  ///
+  /// Everything the old file owns is detached from State before this
+  /// function's own first `await` -- every statement up to (and including)
+  /// starting [disposal] below runs synchronously, with no suspension point
+  /// in between. `didUpdateWidget` calls this unawaited, so nothing stops a
+  /// second file switch (a remote command, a fast deep link, up-next racing
+  /// a manual tap) from starting on this same State while this one is still
+  /// awaiting its own save or session end. Without the synchronous detach, a
+  /// second switch's *own* first step -- saving progress for the file it is
+  /// leaving -- would still find this switch's `_player`, undisposed, and
+  /// credit this switch's position to the second switch's id. The same
+  /// applies to `dispose()`'s fire-and-forget save, which reads whatever
+  /// `_player` and `widget` (already the new file) happen to hold at the
+  /// moment the screen goes away. [_saveProgressFor] already bails out at
+  /// its first line when `_player` is null, so detaching it here is what
+  /// makes both races harmless: a second switch's own save, and dispose's,
+  /// simply find nothing left to save.
+  Future<void> _switchToFile(PlayerScreen previous) async {
+    final gen = ++_loadGeneration;
 
-    // The preference belongs to the show, not the file, but it is refetched
-    // per file, so the previous file's answer must not apply to this one.
-    _subtitlePreference = null;
-    _preferenceAppliedForPlayback = false;
-    _preferenceApplyRetries = 0;
+    // Started here, not awaited yet -- an async function runs synchronously
+    // up to its own first `await`, and that covers every read
+    // [_saveProgressFor] and `ProgressService`'s sync helpers do
+    // (`_player`, `_progressStore`, `_progressService`, `_isDownloadedSource`,
+    // `_totalDuration`, and `player.state.position`/`duration` inside
+    // `resolveSync`) -- so the old file's position is captured before the
+    // detach below ever runs.
+    final save = _bestEffort(
+      'save progress',
+      () => _saveProgressFor(
+        mediaType: previous.mediaType,
+        mediaId: previous.mediaId,
+      ),
+    );
+
+    _stopVerification();
+    if (mounted) {
+      setState(() {
+        _resetUpNext();
+        _isLoading = true;
+      });
+    } else {
+      _resetUpNext();
+      _isLoading = true;
+    }
+
+    // Ends the old file's server session without `_terminateHlsSession`,
+    // which would also release this screen's proxy hold.
+    final playback = _playback;
+    _playback = null;
+
+    // Also started here, not awaited yet: [_disposePlayer] nulls `_player`
+    // and `_videoController` at its own very first (synchronous) lines,
+    // before its own first `await` -- see its doc comment. So by the time
+    // this line returns, `_player` is already gone from State.
+    final disposal = _bestEffort('dispose player', _disposePlayer);
+
+    await save;
+    await _bestEffort('end session', () async => playback?.endSession());
+    await disposal;
+    // A second switch that started while this one was still awaiting above
+    // has already bumped `_loadGeneration` past `gen` (and may already have
+    // reloaded, registering sidecars of its own). Only the most recent switch
+    // may discard sidecars or reload; it discards this switch's old ones too,
+    // since they are still in the list.
+    if (!_isCurrentLoad(gen)) return;
+    for (final path in _imageSidecarPaths) {
+      unawaited(discardImageSidecar(path));
+    }
+    _imageSidecarPaths.clear();
+    _subtitleBodyFetches.clear();
+    _resumeOverrideSeconds = widget.resumeSeconds;
+    await _initializePlayer();
+  }
+
+  /// Runs one teardown step of [_switchToFile], logging instead of throwing,
+  /// so an unreachable server cannot strand the viewer on the old file.
+  Future<void> _bestEffort(String step, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      debugPrint('[PlayerScreen] File switch: $step failed: $e');
+    }
   }
 
   /// Read the auto-skip preference once at mount.
@@ -1273,8 +1407,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// that swaps in the server-ranked file for local playback (see
   /// [_fetchStreamingCandidates]) reaches the receiver too, rather than
   /// sending it the id the server just rejected.
-  Future<bool> _castToTargetIfSet(ResumePlan plan,
-      {required String fileId}) async {
+  ///
+  /// [loadGeneration] is the caller's own `gen` (like
+  /// [_openPlayerAndStart]'s). Both awaits below -- resolving the cast
+  /// manager and `startCast` itself -- can outlast this load: a file switch
+  /// (or a second cast request) can bump `_loadGeneration` while either is in
+  /// flight, and this call must not start a cast for a file this State has
+  /// already moved past. Rechecked right before `startCast`, closing the
+  /// manager-resolution window; once `startCast` itself is in flight there is
+  /// no cancellation to fall back on, so a switch landing during that
+  /// specific await can still launch a stale cast; every caller's own
+  /// `_isCurrentLoad(gen)` check right after this returns is what stops the
+  /// stale load from acting on it. A stale caller gets `false` here (no cast
+  /// was started), which -- unlike returning `true` -- falls through to that
+  /// existing post-await guard instead of skipping it.
+  Future<bool> _castToTargetIfSet(
+    ResumePlan plan, {
+    required String fileId,
+    int? loadGeneration,
+  }) async {
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
 
@@ -1293,6 +1444,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     try {
       final manager = await ref.read(castSessionManagerProvider.future);
+      // Superseded while resolving the manager: this load's plan and file id
+      // already belong to a file this State has moved past. Bail before the
+      // side effect a stale caller cannot take back -- launching a cast on
+      // the receiver for the wrong file.
+      if (loadGeneration != null && !_isCurrentLoad(loadGeneration)) {
+        return false;
+      }
       await manager.startCast(
         device: target,
         request: CastLaunchRequest(
@@ -1331,16 +1489,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  Future<void> _initializePlayer() async {
-    // Flushes whatever the *previous* load's timeline reached before this
-    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
-    // again after a cast session ends abandons the cast-era timeline, which
-    // would otherwise never print. A no-op on the very first call, when
-    // `_playTimeline` is still null.
-    _playTimeline?.logOnce();
-    _playTimeline = StartupTimeline('playback');
-    _resetSegmentsIfMediaChanged();
-
+  /// Clears everything that describes one file's playback, before a load.
+  ///
+  /// Runs at the top of every [_initializePlayer]: first mount, a cast-stop
+  /// restart, and a file switch on a reused State (see [didUpdateWidget]).
+  /// Pure; the `setState` that follows in [_initializePlayer] rebuilds.
+  void _resetPerFileState() {
     // Cleared up front so the branches that never reach a streaming session —
     // offline, and already-downloaded — cannot inherit a ladder derived for a
     // previous one. Both return early below, and a local file has no session
@@ -1365,6 +1519,48 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _preferenceAppliedForPlayback = false;
     _preferenceApplyRetries = 0;
 
+    // Each load branch sets these again; a load that stops early (an error
+    // before its branch) must not keep the previous file's answer.
+    _isDownloadedSource = false;
+    _progressStore = null;
+    _progressService?.dispose();
+    _progressService = null;
+    // Once per file: crossing 90% on the next episode must invalidate again.
+    _watchedInvalidationSent = false;
+
+    // These are all re-fetched by `_fetchProgressAndEpisodes` (detail and
+    // season queries) or the offline/downloaded-progress branches below, but
+    // only on success. A failed or empty detail query used to leave whatever
+    // the previous file left behind in place: the new file could offer the
+    // old one's resume position, subtitle tracks, or episode list. Clearing
+    // them here means a load that stops before its branch reassigns them
+    // shows nothing for this file rather than something stale for the last
+    // one. `_saveProgressFor` for the file this reset is replacing already
+    // ran synchronously in `_switchToFile`, before this reset, so clearing
+    // `_totalDuration` here cannot affect that save.
+    _savedPositionSeconds = null;
+    _savedDurationSeconds = null;
+    _serverLastWatchedAt = null;
+    _runtimeMinutes = null;
+    _totalDuration = null;
+    _serverSubtitleTracks = [];
+    _seasonEpisodes = null;
+    _currentEpisodeIndex = null;
+    _resetUpNext();
+  }
+
+  Future<void> _initializePlayer() async {
+    final gen = ++_loadGeneration;
+    // Flushes whatever the *previous* load's timeline reached before this
+    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
+    // again after a cast session ends abandons the cast-era timeline, which
+    // would otherwise never print. A no-op on the very first call, when
+    // `_playTimeline` is still null.
+    _playTimeline?.logOnce();
+    _playTimeline = StartupTimeline('playback');
+    _resetSegmentsIfMediaChanged();
+    _resetPerFileState();
+
     try {
       setState(() {
         _isLoading = true;
@@ -1381,6 +1577,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       // Check for downloaded content first (before any network operations)
       final downloadManager = await ref.read(downloadManagerProvider.future);
+      if (!_isCurrentLoad(gen)) return;
       final downloadedMedia =
           downloadManager.getDownloadedMediaById(widget.mediaId);
 
@@ -1397,6 +1594,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
         final offlinePath =
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        if (!_isCurrentLoad(gen)) return;
         if (offlinePath == null) {
           setState(() {
             _error =
@@ -1418,6 +1616,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         } catch (e) {
           debugPrint('Could not open local progress store: $e');
         }
+        if (!_isCurrentLoad(gen)) return;
 
         // No server is reachable, so the saved position comes from whatever a
         // previous offline session recorded locally. The stored duration is
@@ -1442,15 +1641,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           resumeOverride: _consumeResumeOverride(),
           mounted: mounted,
           ask: (saved, total) async {
-            if (!mounted) return null;
+            if (!_isCurrentLoad(gen)) return null;
             return showResumeDialog(context, saved, total);
           },
         );
         if (plan == null) return;
+        if (!_isCurrentLoad(gen)) return;
 
-        if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+        if (await _castToTargetIfSet(plan,
+            fileId: widget.fileId, loadGeneration: gen)) {
+          return;
+        }
+        if (!_isCurrentLoad(gen)) return;
 
-        await _openPlayerAndStart(offlinePath, {}, plan: plan);
+        await _openPlayerAndStart(
+          offlinePath,
+          {},
+          plan: plan,
+          loadGeneration: gen,
+        );
         return;
       }
 
@@ -1459,6 +1668,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (downloadedMedia != null && !kIsWeb) {
         final localPath =
             await _resolveDownloadedFilePath(downloadedMedia.filePath);
+        if (!_isCurrentLoad(gen)) return;
         if (localPath != null) {
           debugPrint('Playing from local file: $localPath');
 
@@ -1467,8 +1677,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           try {
             final graphqlClient =
                 await ref.read(asyncGraphqlClientProvider.future);
+            if (!_isCurrentLoad(gen)) return;
             _progressService = ProgressService(graphqlClient);
-            await _fetchProgressAndEpisodes(graphqlClient);
+            await _fetchProgressAndEpisodes(graphqlClient, gen);
+            if (!_isCurrentLoad(gen)) return;
           } catch (e) {
             debugPrint('Could not initialize progress sync: $e');
           }
@@ -1485,6 +1697,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           } catch (e) {
             debugPrint('Could not open local progress store: $e');
           }
+          if (!_isCurrentLoad(gen)) return;
 
           // Reconcile the server's progress (just loaded above) against
           // whatever this device recorded locally, e.g. during an earlier
@@ -1514,15 +1727,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             resumeOverride: _consumeResumeOverride(),
             mounted: mounted,
             ask: (saved, total) async {
-              if (!mounted) return null;
+              if (!_isCurrentLoad(gen)) return null;
               return showResumeDialog(context, saved, total);
             },
           );
           if (plan == null) return;
+          if (!_isCurrentLoad(gen)) return;
 
-          if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
+          if (await _castToTargetIfSet(plan,
+              fileId: widget.fileId, loadGeneration: gen)) {
+            return;
+          }
+          if (!_isCurrentLoad(gen)) return;
 
-          await _openPlayerAndStart(localPath, {}, plan: plan);
+          await _openPlayerAndStart(
+            localPath,
+            {},
+            plan: plan,
+            loadGeneration: gen,
+          );
           return;
         }
         debugPrint('Downloaded file not found, falling back to streaming');
@@ -1530,6 +1753,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       // Online mode - initialize network services
       final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      if (!_isCurrentLoad(gen)) return;
 
       // Capture it directly rather than relying on the `ref.listenManual` in
       // `initState` to have fired by now. That listener is the right mechanism
@@ -1544,6 +1768,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Get server URL and token
       final serverUrl = await ref.read(serverUrlProvider.future);
       final token = await ref.read(authTokenProvider.future);
+      if (!_isCurrentLoad(gen)) return;
 
       if (serverUrl == null || token == null) {
         if (mounted) {
@@ -1584,6 +1809,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           targetPeer: serverNodeAddr,
           authToken: token,
         );
+        if (!_isCurrentLoad(gen)) return;
         debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
       }
 
@@ -1610,7 +1836,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       // Fetch saved progress and episode list for TV shows
-      await _fetchProgressAndEpisodes(graphqlClient);
+      await _fetchProgressAndEpisodes(graphqlClient, gen);
+      if (!_isCurrentLoad(gen)) return;
       _playTimeline?.mark('queries_done');
 
       // Fetch streaming candidates to determine optimal strategy
@@ -1621,6 +1848,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
 
       var candidatesFetch = await candidatesFuture;
+      if (!_isCurrentLoad(gen)) return;
 
       // A selected file can go missing out from under a live route: a
       // quality upgrade replaces an episode's file, writing a new
@@ -1643,6 +1871,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           mediaContentType,
           widget.mediaId,
         );
+        if (!_isCurrentLoad(gen)) return;
       }
 
       final candidatesResult = candidatesFetch.candidates;
@@ -1686,9 +1915,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   'this title. Check your connection and try again.'))
           : widget.fileId;
 
-      await _resolveQualityForFile(candidatesResult);
+      await _resolveQualityForFile(candidatesResult, gen);
+      if (!_isCurrentLoad(gen)) return;
 
       final memory = await _openPlaybackMemory();
+      if (!_isCurrentLoad(gen)) return;
       // The p2p branch threw above if the node address was missing, so the
       // cast is safe there; HTTP keys by URL.
       final serverKey = isP2PMode ? connectionState.serverNodeAddr! : serverUrl;
@@ -1757,13 +1988,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         resumeOverride: _consumeResumeOverride(),
         mounted: mounted,
         ask: (saved, total) async {
-          if (!mounted) return null;
+          if (!_isCurrentLoad(gen)) return null;
           return showResumeDialog(context, saved, total);
         },
       );
       if (plan == null) return;
+      if (!_isCurrentLoad(gen)) return;
 
-      if (await _castToTargetIfSet(plan, fileId: playFileId)) return;
+      if (await _castToTargetIfSet(plan,
+          fileId: playFileId, loadGeneration: gen)) {
+        return;
+      }
+      if (!_isCurrentLoad(gen)) return;
 
       if (playbackPlan is HlsPlan) {
         // Before a session is requested: past this point an FFmpeg transcode
@@ -1799,6 +2035,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // A previous controller's session, from a cast stop or a proxy
       // handoff re-running this method, is ended before it is dropped.
       await _playback?.endSession();
+      if (!_isCurrentLoad(gen)) return;
       final playback = PlaybackController(
         client: () => _graphqlClient,
         urls: urls,
@@ -1814,6 +2051,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         totalDuration: _totalDuration,
         onProgress: _setLoadingMessage,
       );
+      if (!_isCurrentLoad(gen)) {
+        // Opened for a file this State has moved past. The switch already
+        // detached `_playback`, so nothing else will end this session.
+        if (identical(_playback, playback)) _playback = null;
+        await playback.endSession();
+        return;
+      }
       _applySource(source);
 
       // A windowed session baked the resume offset into FFmpeg's -ss, so it
@@ -1823,8 +2067,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.headers,
         plan: source.seekOnOpen ? plan : ResumePlan.fromStart,
         verificationPlan: playbackPlan,
+        loadGeneration: gen,
       );
     } catch (e) {
+      // A superseded load that fails must not tear down the player the
+      // current load built.
+      if (!_isCurrentLoad(gen)) return;
       debugPrint('Error initializing player: $e');
       // The player and its verification monitor, not the streaming session:
       // that stays owned by this screen until `dispose()`'s own
@@ -1834,6 +2082,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // would tear it down before the screen is ever unmounted.
       _stopVerification();
       await _disposePlayer();
+      // `_disposePlayer` awaits; a switch can land during that await and
+      // move this State on to a newer file. Recheck before setState, or
+      // this load's error overwrites the newer load's loading or playback
+      // view with a failure that belongs to the file it left behind.
+      if (!_isCurrentLoad(gen)) return;
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -1880,12 +2133,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// label would revert in front of them. See [_settledQuality].
   Future<void> _resolveQualityForFile(
     Query$StreamingCandidates$streamingCandidates? candidatesResult,
+    int gen,
   ) async {
     _qualityLadder = deriveQualityLadder(
       sourceHeight: candidatesResult?.metadata.height,
     );
 
     final requested = _settledQuality ?? await _storedDefaultQuality();
+    if (!_isCurrentLoad(gen)) return;
 
     if (requested.isAuto || _qualityLadder.contains(requested)) {
       _settledQuality = requested;
@@ -2490,6 +2745,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Bails a [_openPlayerAndStart] run out once [player] is no longer worth
+  /// finishing setup on -- unmounted, `superseded` says this load's own
+  /// generation is stale, or `_player` has already moved on to something
+  /// else entirely. Returns whether the caller should stop and return
+  /// [player] as-is. The unconditional `mounted` check is the same one the
+  /// plain `identical`-only version of this check has always made; only
+  /// `superseded` is new, and it is a no-op (always false) for a caller
+  /// that passes none, i.e. `_attachSource`'s web continuation.
+  ///
+  /// Takes responsibility for [player] only when `_player` still is
+  /// [player]: nulls the fields and disposes it, since nothing else has
+  /// touched it yet and nothing else will. When `_player` no longer is
+  /// [player], [_disposePlayer] already disposed it (the switch that
+  /// superseded this load runs it before creating its own replacement) --
+  /// calling `dispose()` again here would double-dispose a media_kit
+  /// `Player`, which asserts. That is also why this can only be called
+  /// after [player] has actually been installed into `_player`; the
+  /// pre-creation check in [_openPlayerAndStart] throws instead, since it
+  /// has no player yet to weigh either way.
+  Future<bool> _bailIfPlayerSuperseded(
+    Player player, {
+    required bool Function() superseded,
+  }) async {
+    if (mounted && !superseded() && identical(_player, player)) return false;
+    if (identical(_player, player)) {
+      _player = null;
+      _videoController = null;
+      await player.dispose();
+    }
+    return true;
+  }
+
   /// Shared tail of _initializePlayer: create player, open the media, start
   /// playback.
   ///
@@ -2509,13 +2796,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// whole `Player` for a mid-session switch (`_switchSource`), and passes
   /// [isSourceSwitch] so this does not treat that continuation as a fresh
   /// media item.
+  ///
+  /// [loadGeneration] is the epoch [_initializePlayer] captured before
+  /// calling this (its own `gen`). Every await below re-checks it through
+  /// the local `superseded()` (in addition to the plain
+  /// `identical(_player, player)` this already needed): without it, a
+  /// [_switchToFile] landing on one of
+  /// those awaits detaches whatever `_player` already held, and this run --
+  /// unaware it has been superseded -- goes on to create and install a new
+  /// `Player` for a file nobody wants anymore, which the next load then
+  /// overwrites without ever disposing. `_attachSource`'s web continuation
+  /// passes none: it has no generation of its own to check, so for it
+  /// staleness is judged only by `identical(_player, player)`, exactly as
+  /// before this parameter existed.
   Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
     required ResumePlan plan,
     PlaybackPlan? verificationPlan,
     bool isSourceSwitch = false,
+    int? loadGeneration,
   }) async {
+    bool superseded() =>
+        loadGeneration != null && !_isCurrentLoad(loadGeneration);
+
     if (mounted) {
       setState(() {
         _loadingMessage = null;
@@ -2529,6 +2833,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // life of the session. A no-op on native, and on web when hls.js cannot
     // run at all.
     await prepareHlsEngine();
+
+    // Superseded during the await above, before a `Player` exists to hand
+    // back or dispose. `_disposePlayer` already detached whatever the old
+    // load held; creating one here would only leak it, exactly the finding
+    // this generation check exists to close (see the doc comment above).
+    if (superseded()) throw const _SupersededLoad();
 
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
@@ -2575,10 +2885,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     ]);
 
     // Re-bound whenever `_initializePlayer` runs again for this screen: a
-    // source switch or a session restart. Next/previous episode navigation
-    // mounts a new `PlayerScreen` with its own sizer; the shared
-    // `PlayerWindowSession` is what carries the window across that handoff.
-    // The sizer cancels the previous subscription itself.
+    // source switch, a session restart, or a later episode advance that
+    // reuses this screen (see [didUpdateWidget]). Only the first advance out
+    // of a pushed player mounts a whole new `PlayerScreen` with its own
+    // sizer; the shared `PlayerWindowSession` is what carries the window
+    // across that handoff. The sizer cancels the previous subscription
+    // itself.
     _windowSizer?.bindVideoParams(player.stream.videoParams);
 
     // A new open: its track list is not mpv's until the probe below.
@@ -2673,11 +2985,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `dispose()` may have run while this was suspended: it nulls `_player`
     // and disposes both `player` and the progress service. `identical`
     // also catches a newer `_openPlayerAndStart` call (a source switch)
-    // having replaced `_player` out from under this one. Bailing out here,
-    // before anything below touches `player` or `_progressService` again,
-    // is what keeps e.g. `player.play()` from throwing against a
-    // `PlatformPlayer` whose stream controllers `dispose()` already closed.
-    if (!mounted || !identical(_player, player)) return player;
+    // having replaced `_player` out from under this one, and `superseded`
+    // catches this load having gone stale while `_player` still is `player`
+    // -- the race window before whichever switch superseded it has gotten
+    // as far as its own `_disposePlayer`. Bailing out here, before anything
+    // below touches `player` or `_progressService` again, is what keeps
+    // e.g. `player.play()` from throwing against a `PlatformPlayer` whose
+    // stream controllers `dispose()` already closed.
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
@@ -2702,11 +3019,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (widget.subtitleTrack != null) {
       await selectTrack(TrackKind.subtitle, widget.subtitleTrack);
     }
+    // Same race as the tracksReady check above: a switch landing during
+    // either `selectTrack` await must not let this run go on to seek/play a
+    // player it no longer owns.
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
 
     // Web only; see `mediaStartingAt`. A plain seek, not a `seekToReal`, for
     // the same reason as the open above.
     if (opening.seekAfterOpen) {
       await player.seek(plan.position);
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
     }
 
     // The bar a position has to clear to count as playback. Zero on a
@@ -2721,6 +3047,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // playing. Every other caller leaves `autoplay` at its default of true.
     if (widget.autoplay) {
       await player.play();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
     }
 
     // Start progress tracking
@@ -2735,6 +3064,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Listen for playback completion
     await _positionSubscription?.cancel();
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
     _positionSubscription = player.stream.position.listen((_) {
       _onPlaybackProgress();
     });
@@ -2867,7 +3199,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Fetches the movie or episode detail document: saved progress, runtime,
   /// and the subtitle tracks extracted from its files.
-  Future<void> _fetchDetail(GraphQLClient client) async {
+  Future<void> _fetchDetail(GraphQLClient client, int gen) async {
     try {
       if (widget.mediaType == 'movie') {
         // Fetch movie progress
@@ -2877,6 +3209,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             variables: Variables$Query$MovieDetail(id: widget.mediaId).toJson(),
           ),
         );
+        if (!_isCurrentLoad(gen)) return;
 
         if (result.data != null) {
           final movie = Query$MovieDetail.fromJson(result.data!).movie;
@@ -2898,6 +3231,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 Variables$Query$EpisodeDetail(id: widget.mediaId).toJson(),
           ),
         );
+        if (!_isCurrentLoad(gen)) return;
 
         if (result.data != null) {
           final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
@@ -2923,18 +3257,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// reads the tracks `_extractSubtitlesFromFiles` builds from the detail.
   /// Season episodes no longer waits for the detail to succeed, so a failed
   /// detail now costs one extra query rather than skipping it.
-  Future<void> _fetchProgressAndEpisodes(GraphQLClient client) {
+  Future<void> _fetchProgressAndEpisodes(GraphQLClient client, int gen) {
     return runIsolated({
       'detail and subtitle preference': () async {
-        await _fetchDetail(client);
-        await _fetchSubtitlePreference(client);
+        await _fetchDetail(client, gen);
+        await _fetchSubtitlePreference(client, gen);
       },
       if (widget.mediaType == 'episode' &&
           widget.showId != null &&
           widget.seasonNumber != null)
-        'season episodes': () => _fetchSeasonEpisodes(client),
-      'segments': () => _fetchSegments(client),
-      'subtitle offsets': () => _loadSubtitleOffsets(client),
+        'season episodes': () => _fetchSeasonEpisodes(client, gen),
+      'segments': () => _fetchSegments(client, gen),
+      'subtitle offsets': () => _loadSubtitleOffsets(client, gen),
     });
   }
 
@@ -2951,7 +3285,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// every media file this screen loads (see [_fetchProgressAndEpisodes]),
   /// and a previous file's offsets or its "loaded" flag must never survive
   /// into a new one just because this fetch happened to fail for it.
-  Future<void> _loadSubtitleOffsets(GraphQLClient client) async {
+  Future<void> _loadSubtitleOffsets(GraphQLClient client, int gen) async {
     if (mounted) {
       setState(() {
         _subtitleOffsets = {};
@@ -2990,7 +3324,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final settings =
           Query$SubtitleTrackSettings.fromJson(data).subtitleTrackSettings;
-      if (!mounted) return;
+      if (!_isCurrentLoad(gen)) return;
 
       setState(() {
         _subtitleOffsets = {
@@ -3231,14 +3565,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// deliberately seeked back into, which is precisely what the guard exists
   /// to prevent.
   ///
-  /// The clearing half is insurance, not a live path. go_router derives the
-  /// page key for `/player/:type/:id` from the route *pattern* rather than the
-  /// resolved location, so a next-episode navigation updates this State in
-  /// place instead of building a new one, and `PlayerScreen`'s
-  /// `didUpdateWidget` notices the new parameters only for the
-  /// subtitle-preference fields. [_initializePlayer] is therefore still never
-  /// re-entered on that path and neither is this. The page key is
-  /// `go_router/lib/src/match.dart:231`, if you want to check the claim.
+  /// The clearing half runs on every file switch: a reused State re-enters
+  /// [_initializePlayer] through [_switchToFile].
   void _resetSegmentsIfMediaChanged() {
     final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
     if (_skipTrackerMediaKey == mediaKey) return;
@@ -3266,7 +3594,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// Every failure lands on the same answer, no segments. Detection is
   /// additive background work and must never surface as a playback error.
-  Future<void> _fetchSegments(GraphQLClient client) async {
+  Future<void> _fetchSegments(GraphQLClient client, int gen) async {
     final root = switch (widget.mediaType) {
       'movie' => 'movie',
       'episode' => 'episode',
@@ -3285,6 +3613,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               : Variables$Query$EpisodeSegments(id: widget.mediaId).toJson(),
         ),
       );
+      if (!_isCurrentLoad(gen)) return;
 
       if (result.hasException) {
         debugPrint('[PlayerScreen] No segments available: ${result.exception}');
@@ -3326,7 +3655,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// track-list revision, nothing else would trigger an apply.
   /// [_applySubtitlePreference] is idempotent past its own one-shot, so this
   /// costs nothing when a revision got there first.
-  Future<void> _fetchSubtitlePreference(GraphQLClient client) async {
+  Future<void> _fetchSubtitlePreference(GraphQLClient client, int gen) async {
     final root = switch (widget.mediaType) {
       'movie' => 'movie',
       'episode' => 'episode',
@@ -3372,7 +3701,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         root: root,
         fileId: widget.fileId,
       );
-      if (!mounted) return;
+      if (!_isCurrentLoad(gen)) return;
 
       _subtitlePreference = subtitlePreferenceFrom(
         mode: preferred?['mode'] as String?,
@@ -3616,7 +3945,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     setState(() => _applySubtitleTracks(mkTracks));
   }
 
-  Future<void> _fetchSeasonEpisodes(GraphQLClient client) async {
+  Future<void> _fetchSeasonEpisodes(GraphQLClient client, int gen) async {
     _graphQLClient = client;
     if (widget.showId == null || widget.seasonNumber == null) return;
 
@@ -3634,7 +3963,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (result.data != null) {
         final episodes =
             Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
-        if (episodes != null && mounted) {
+        if (episodes != null && _isCurrentLoad(gen)) {
           setState(() {
             _seasonEpisodes = episodes
                 .whereType<Query$SeasonEpisodes$seasonEpisodes>()
@@ -3971,13 +4300,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     countdown.start();
   }
 
+  /// Stops the up-next countdown and its play/pause listener.
+  void _stopUpNextTimers() {
+    _upNextCountdown?.cancel();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
+  }
+
+  /// Forgets the up-next prompt entirely, for a file that has not offered it.
+  /// Pure; callers wrap it in `setState` when mounted.
+  void _resetUpNext() {
+    _stopUpNextTimers();
+    _upNextCountdown?.dispose();
+    _upNextCountdown = null;
+    _upNextTarget = null;
+    _showUpNext = false;
+    _autoPlayCancelled = false;
+  }
+
   /// Cancel the prompt and the countdown, for the rest of this file.
   void _cancelAutoPlay() {
     // Synchronous, before any setState: a dismiss that only lands next frame
     // can lose to a fire scheduled this one.
-    _upNextCountdown?.cancel();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
+    _stopUpNextTimers();
     if (mounted) {
       setState(() {
         _showUpNext = false;
@@ -4103,17 +4448,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!mounted) return;
 
     // `seasonNumber` is the *target's*, not `widget.seasonNumber`. Passing the
-    // current screen's season would tell the next PlayerScreen it is in the
-    // season it just left, so its `_fetchSeasonEpisodes` would load the wrong
-    // list, `_currentEpisodeIndex` would resolve to -1, and up-next would be
-    // dead for that entire season. Only reachable once Task 10 lands, but
-    // wrong either way.
+    // current screen's season would tell this same PlayerScreen, reloading
+    // for the next file, it is in the season it just left, so its
+    // `_fetchSeasonEpisodes` would load the wrong list, `_currentEpisodeIndex`
+    // would resolve to -1, and up-next would be dead for that entire season.
     context.go(
       '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
     );
   }
 
-  Future<void> _saveProgress() async {
+  /// Saves the current position under this widget's own identity; see
+  /// [_saveProgressFor].
+  Future<void> _saveProgress() => _saveProgressFor(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+      );
+
+  /// Saves the current position against [mediaType]/[mediaId] rather than
+  /// `widget`'s own, so a caller mid-switch can still credit the file being
+  /// replaced instead of the one taking over `widget`. See [_switchToFile].
+  Future<void> _saveProgressFor({
+    required String mediaType,
+    required String mediaId,
+  }) async {
     final player = _player;
     if (player == null) return;
 
@@ -4136,8 +4493,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
-          mediaId: widget.mediaId,
-          mediaType: widget.mediaType,
+          mediaId: mediaId,
+          mediaType: mediaType,
           position: position,
           duration: duration,
           now: DateTime.now(),
@@ -4147,8 +4504,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       await recordLocalProgress(
         store: store,
-        mediaId: widget.mediaId,
-        mediaType: widget.mediaType,
+        mediaId: mediaId,
+        mediaType: mediaType,
         position: position,
         duration: duration,
         now: DateTime.now(),
@@ -4157,10 +4514,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (progressService == null) return;
 
-    if (widget.mediaType == 'movie') {
-      await progressService.saveMovieProgress(player, widget.mediaId);
-    } else if (widget.mediaType == 'episode') {
-      await progressService.saveEpisodeProgress(player, widget.mediaId);
+    if (mediaType == 'movie') {
+      await progressService.saveMovieProgress(player, mediaId);
+    } else if (mediaType == 'episode') {
+      await progressService.saveEpisodeProgress(player, mediaId);
     }
   }
 
@@ -4287,8 +4644,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  /// Terminate the HLS session on the server and clean up P2P resources.
-  /// This stops FFmpeg and cleans up server-side resources.
+  /// Runs only when the screen really goes away (`dispose`, tab close). A
+  /// file switch on a reused State ends its session through [_switchToFile]
+  /// and keeps the proxy hold, since `this` still needs it. On a real route
+  /// replacement the incoming screen has already started the proxy (Flutter
+  /// mounts the new route before disposing the old one), so an unconditional
+  /// stop here would close the server it streams from.
   ///
   /// Reads only the fields captured in [initState] ([_mediaProxy],
   /// [_graphqlClient]) — never `ref` directly. This
@@ -5657,7 +6018,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Passes `this` so a newer `PlayerScreen` that already attached over
     // this one (a remote `LoadContent` mounts before the old screen
     // disposes) is never clobbered by this late detach — see
-    // `detachPlayer`'s own dartdoc.
+    // `detachPlayer`'s own dartdoc. That mounts before disposal only when it
+    // replaces the route; one that only changes the file reuses this State
+    // (see [didUpdateWidget]).
     _remoteTargetController.detachPlayer(this);
     _nowPlaying.clear(this);
     final playbackNotifier = _localPlaybackNotifier;
@@ -6105,6 +6468,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Cancels every subscription bound to the current player and disposes it.
   ///
+  /// Nulls `_player`/`_videoController` at the very top, before any `await`
+  /// -- not at the end, as this used to. [_switchToFile] calls this
+  /// unawaited and relies on that ordering: it starts this function, does
+  /// not await it immediately, and only the synchronous prefix (this
+  /// null-out) is guaranteed to have run by the time control returns to it.
+  /// A second switch or `dispose()` racing in right after must see `_player`
+  /// already gone, never a live reference to a player a switch is mid-way
+  /// through replacing. Every existing caller awaits this fully regardless,
+  /// so clearing the fields sooner only makes the guarantee stricter; none
+  /// of the cancellations below read `_player` (each cancels its own
+  /// subscription field, or a collector/service that already captured its
+  /// own reference when it started), so moving the null-out ahead of them
+  /// changes nothing else about what this function does.
+  ///
   /// Also stops the stats collector, covering every disposal path rather
   /// than requiring each caller to remember it -- the same reasoning that
   /// put `rebind()` inside `_switchSource` instead of at its call sites. It
@@ -6116,6 +6493,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// path that already stopped the collector is a no-op.
   Future<void> _disposePlayer() async {
     _scrub.reset();
+    final player = _player;
+    _player = null;
+    _videoController = null;
+
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await _tracksSubscription?.cancel();
@@ -6142,9 +6523,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _progressService?.stopSync();
     _stopStatsCollector();
 
-    final player = _player;
-    _player = null;
-    _videoController = null;
     await player?.dispose();
   }
 

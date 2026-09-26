@@ -364,10 +364,11 @@ caller having to remember it.
 `_lastFallback` is cleared on a genuinely fresh media item but preserved
 across a fallback's own source switch (the `isSourceSwitch` guard in
 `_initializePlayer`). `go_router` keys the player page by route pattern, not
-the resolved path, so navigating to the next episode of a season reuses the
-same `PlayerScreen` state rather than rerunning `initState`, which is
-exactly the moment a stale Why message would otherwise outlive the file it
-explained if the clear were unconditional.
+the resolved path, so a later episode advance within a season (see "Episode
+advance reuses the player screen" below) reuses the same `PlayerScreen`
+state rather than rerunning `initState`, which is exactly the moment a stale
+Why message would otherwise outlive the file it explained if the clear were
+unconditional.
 
 Known gap, left as is rather than patched: a 1280x720 television leaves
 482px of available height (720 minus the 64px top inset minus the desktop
@@ -496,4 +497,33 @@ per cue reaching the console for the length of a film.
 Cues are drawn in the browser's own style, and the player has no subtitle
 appearance settings to honour, so nothing is lost there today. They sit at the
 bottom of the video, where the OSD covers them while it is up.
+
+## Episode advance reuses the player screen
+
+go_router keys `/player/:type/:id` by the route pattern, not the resolved
+path (`go_router/lib/src/match.dart:231`). A pushed page is keyed per push
+instead, so the *first* advance out of a player opened with `context.push`
+(the usual entry point) still builds a whole new `PlayerScreen` State --
+`test/core/router/player_route_handoff_test.dart` pins this. Every advance
+after that goes between two declarative player locations with the same
+pattern key, so navigating from one episode to the next (up-next, the next
+and previous buttons, a remote `LoadContent`, a deep link while playing)
+updates the existing `PlayerScreen` State instead of building a new one.
+`didUpdateWidget` notices the changed `mediaType:mediaId:fileId` and
+`_switchToFile` does the per-file work:
+
+1. Save the old file's progress, addressed by the *old* widget's ids
+   (`widget` already names the new file by then).
+2. Stop verification and up-next, end the old HLS session, dispose the player.
+3. Re-run `_initializePlayer`, whose `_resetPerFileState` clears every
+   per-file field.
+
+The screen-scoped pieces stay attached: fullscreen, the window sizer, the
+orientation lease and the media proxy hold. A per-file page key would give
+each episode a fresh State, but its `dispose` would exit fullscreen and hand
+the window back on every advance.
+
+Every await in the load path checks `_loadGeneration`, so a slow answer for a
+file the viewer already moved past is dropped instead of landing on the new
+one.
 
