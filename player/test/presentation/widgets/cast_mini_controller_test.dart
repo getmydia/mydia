@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -26,6 +27,7 @@ import 'package:player/core/playback/local_playback_state.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_bar_parts.dart';
 import 'package:player/presentation/widgets/cast_bar/cast_pill.dart';
+import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
@@ -283,6 +285,7 @@ Future<ProviderContainer> _pumpWithManager(
 Future<bool Function()> _pumpLayer(
   WidgetTester tester, {
   required CastDevice target,
+  WidgetBuilder? screen,
 }) async {
   var tappedBelow = false;
 
@@ -299,15 +302,17 @@ Future<bool Function()> _pumpLayer(
   final router = GoRouter(routes: [
     GoRoute(
       path: '/',
-      builder: (context, state) => Scaffold(
-        body: Center(
-          child: ElevatedButton(
-            key: const Key('below-the-bar'),
-            onPressed: () => tappedBelow = true,
-            child: const Text('Underneath'),
+      builder: (context, state) =>
+          screen?.call(context) ??
+          Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                key: const Key('below-the-bar'),
+                onPressed: () => tappedBelow = true,
+                child: const Text('Underneath'),
+              ),
+            ),
           ),
-        ),
-      ),
     ),
   ]);
   addTearDown(router.dispose);
@@ -325,6 +330,69 @@ Future<bool Function()> _pumpLayer(
 
   return () => tappedBelow;
 }
+
+/// A Scaffold with a nav drawer that reports its open state through
+/// [ReportedDrawer], wired the way `AppShell`'s mobile layout wires it.
+///
+/// [present] swaps the whole screen out, to check a torn-down shell cannot
+/// leave the bar hidden.
+class _DrawerScreen extends StatefulWidget {
+  const _DrawerScreen({
+    required this.scaffoldKey,
+    required this.present,
+    required this.onDrawerTap,
+  });
+
+  final GlobalKey<ScaffoldState> scaffoldKey;
+  final ValueListenable<bool> present;
+  final VoidCallback onDrawerTap;
+
+  @override
+  State<_DrawerScreen> createState() => _DrawerScreenState();
+}
+
+class _DrawerScreenState extends State<_DrawerScreen> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: widget.present,
+        builder: (context, present, _) => !present
+            ? const SizedBox.expand()
+            : ReportedDrawer(
+                open: _open,
+                child: Scaffold(
+                  key: widget.scaffoldKey,
+                  onDrawerChanged: (isOpen) => setState(() => _open = isOpen),
+                  drawer: Drawer(
+                    child: GestureDetector(
+                      key: const Key('drawer-surface'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onDrawerTap,
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                  body: const SizedBox.expand(),
+                ),
+              ),
+      );
+}
+
+/// The fade [CastBarLayer] wraps the bar in: the nearest one above it.
+AnimatedOpacity _barFade(WidgetTester tester) => tester.widget(find
+    .ancestor(
+      of: find.byType(CastMiniController),
+      matching: find.byType(AnimatedOpacity),
+    )
+    .first);
+
+/// The pointer gate [CastBarLayer] wraps the bar in: the nearest one above it.
+IgnorePointer _barGate(WidgetTester tester) => tester.widget(find
+    .ancestor(
+      of: find.byType(CastMiniController),
+      matching: find.byType(IgnorePointer),
+    )
+    .first);
 
 void main() {
   group('CastBarLayer', () {
@@ -369,6 +437,84 @@ void main() {
       expect(tappedBelow(), isTrue,
           reason: 'the bar is a full-screen layer; only the bar itself may '
               'take pointer events');
+    });
+
+    group('with the mobile nav drawer', () {
+      late GlobalKey<ScaffoldState> scaffoldKey;
+      late ValueNotifier<bool> present;
+      late bool tappedDrawer;
+
+      Future<void> pumpWithDrawer(WidgetTester tester) async {
+        scaffoldKey = GlobalKey<ScaffoldState>();
+        present = ValueNotifier(true);
+        addTearDown(present.dispose);
+        tappedDrawer = false;
+        await _pumpLayer(
+          tester,
+          target: _device,
+          screen: (_) => _DrawerScreen(
+            scaffoldKey: scaffoldKey,
+            present: present,
+            onDrawerTap: () => tappedDrawer = true,
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('shows the bar while the drawer is closed', (tester) async {
+        await pumpWithDrawer(tester);
+
+        expect(_barFade(tester).opacity, 1);
+        expect(_barGate(tester).ignoring, isFalse);
+      });
+
+      testWidgets('fades the bar and lets taps reach the open drawer',
+          (tester) async {
+        await pumpWithDrawer(tester);
+        final bar = tester.getRect(find.byType(CastMiniController));
+
+        scaffoldKey.currentState!.openDrawer();
+        await tester.pumpAndSettle();
+
+        expect(_barFade(tester).opacity, 0);
+        expect(_barGate(tester).ignoring, isTrue);
+        // Still mounted at the same size, so no screen's DockInsets reflow.
+        expect(tester.getRect(find.byType(CastMiniController)), bar);
+
+        // Inside the drawer (x = 40) at the bar's height: the drawer, not
+        // the bar, must take it.
+        await tester.tapAt(Offset(40, bar.center.dy));
+        await tester.pump();
+        expect(tappedDrawer, isTrue);
+      });
+
+      testWidgets('brings the bar back when the drawer closes', (tester) async {
+        await pumpWithDrawer(tester);
+        scaffoldKey.currentState!.openDrawer();
+        await tester.pumpAndSettle();
+
+        scaffoldKey.currentState!.closeDrawer();
+        await tester.pumpAndSettle();
+
+        expect(_barFade(tester).opacity, 1);
+        expect(_barGate(tester).ignoring, isFalse);
+      });
+
+      testWidgets('brings the bar back when the shell goes away mid-open',
+          (tester) async {
+        await pumpWithDrawer(tester);
+        scaffoldKey.currentState!.openDrawer();
+        await tester.pumpAndSettle();
+        expect(_barFade(tester).opacity, 0);
+
+        // Logout or an auth redirect tears the shell down with the drawer
+        // still open; nothing will ever report it closed.
+        present.value = false;
+        await tester.pumpAndSettle();
+
+        expect(_barFade(tester).opacity, 1);
+        expect(_barGate(tester).ignoring, isFalse);
+      });
     });
   });
 
