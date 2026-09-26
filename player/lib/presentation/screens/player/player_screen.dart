@@ -700,6 +700,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   @visibleForTesting
   bool get preferenceAppliedForTesting => _preferenceAppliedForPlayback;
 
+  @visibleForTesting
+  bool get watchedInvalidationSentForTesting => _watchedInvalidationSent;
+
+  @visibleForTesting
+  bool get isDownloadedSourceForTesting => _isDownloadedSource;
+
   /// Exposed so a widget test can tell a preference apply that delivered from
   /// one the screen had to retake. See `subtitle_preference_apply_test.dart`.
   @visibleForTesting
@@ -1151,35 +1157,72 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Re-arm the per-show subtitle preference when this State is handed a
-  /// different file.
+  /// Loads the file `widget` now names when this State is reused for a
+  /// different one.
   ///
   /// go_router keys `/player/:type/:id`'s page off the route *pattern* rather
   /// than the resolved location (`go_router/lib/src/match.dart:231`:
   /// `pageKey: ValueKey<String>(newMatchedPath)`, where `newMatchedPath` is
   /// `concatenatePaths(matchedPath, route.path)`). So `_navigateToEpisode`'s
   /// `context.go` updates this State in place instead of building a new one,
-  /// and [_initializePlayer], which is where every other per-file field is
-  /// cleared, is not re-entered.
+  /// and this is the only hook that notices the file changed.
   ///
-  /// Deliberately narrow. It resets the three subtitle-preference fields and
-  /// nothing else, and it does not call [_initializePlayer]. Whether the rest
-  /// of this screen's per-file state survives the same reuse is a separate
-  /// question with a separate answer; see
-  /// `player_screen_file_change_test.dart`, which asserts both.
+  /// See [_switchToFile] for what a switch does and does not tear down.
   @override
   void didUpdateWidget(PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_mediaKeyOf(oldWidget) == _mediaKey) return;
+    unawaited(_switchToFile(oldWidget));
+  }
 
-    final previous = '${oldWidget.mediaType}:${oldWidget.mediaId}:'
-        '${oldWidget.fileId}';
-    if (previous == _mediaKey) return;
+  /// Replaces the file this State plays with the one `widget` now names.
+  ///
+  /// [previous] is the widget the old file came from. `widget` already names
+  /// the new file here, so anything that must still address the old one
+  /// (its progress save) takes [previous]'s identity explicitly.
+  ///
+  /// Screen-scoped state (window sizer, fullscreen, orientation lease, proxy
+  /// hold) is deliberately untouched: this is the same screen, and tearing
+  /// any of it down would exit fullscreen or reshape the window on every
+  /// episode advance.
+  Future<void> _switchToFile(PlayerScreen previous) async {
+    await _bestEffort(
+      'save progress',
+      () => _saveProgressFor(
+        mediaType: previous.mediaType,
+        mediaId: previous.mediaId,
+      ),
+    );
+    _stopVerification();
+    if (mounted) {
+      setState(_resetUpNext);
+    } else {
+      _resetUpNext();
+    }
+    // Ends the old file's server session without `_terminateHlsSession`,
+    // which would also release this screen's proxy hold.
+    final playback = _playback;
+    _playback = null;
+    await _bestEffort('end session', () async => playback?.endSession());
+    await _bestEffort('dispose player', _disposePlayer);
+    for (final path in _imageSidecarPaths) {
+      unawaited(discardImageSidecar(path));
+    }
+    _imageSidecarPaths.clear();
+    _subtitleBodyFetches.clear();
+    _resumeOverrideSeconds = widget.resumeSeconds;
+    if (!mounted) return;
+    await _initializePlayer();
+  }
 
-    // The preference belongs to the show, not the file, but it is refetched
-    // per file, so the previous file's answer must not apply to this one.
-    _subtitlePreference = null;
-    _preferenceAppliedForPlayback = false;
-    _preferenceApplyRetries = 0;
+  /// Runs one teardown step of [_switchToFile], logging instead of throwing,
+  /// so an unreachable server cannot strand the viewer on the old file.
+  Future<void> _bestEffort(String step, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      debugPrint('[PlayerScreen] File switch: $step failed: $e');
+    }
   }
 
   /// Read the auto-skip preference once at mount.
@@ -1329,16 +1372,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  Future<void> _initializePlayer() async {
-    // Flushes whatever the *previous* load's timeline reached before this
-    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
-    // again after a cast session ends abandons the cast-era timeline, which
-    // would otherwise never print. A no-op on the very first call, when
-    // `_playTimeline` is still null.
-    _playTimeline?.logOnce();
-    _playTimeline = StartupTimeline('playback');
-    _resetSegmentsIfMediaChanged();
-
+  /// Clears everything that describes one file's playback, before a load.
+  ///
+  /// Runs at the top of every [_initializePlayer]: first mount, a cast-stop
+  /// restart, and a file switch on a reused State (see [didUpdateWidget]).
+  /// Pure; the `setState` that follows in [_initializePlayer] rebuilds.
+  void _resetPerFileState() {
     // Cleared up front so the branches that never reach a streaming session —
     // offline, and already-downloaded — cannot inherit a ladder derived for a
     // previous one. Both return early below, and a local file has no session
@@ -1362,6 +1401,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _subtitlePreference = null;
     _preferenceAppliedForPlayback = false;
     _preferenceApplyRetries = 0;
+
+    // Each load branch sets these again; a load that stops early (an error
+    // before its branch) must not keep the previous file's answer.
+    _isDownloadedSource = false;
+    _progressStore = null;
+    _progressService?.dispose();
+    _progressService = null;
+    // Once per file: crossing 90% on the next episode must invalidate again.
+    _watchedInvalidationSent = false;
+    _resetUpNext();
+  }
+
+  Future<void> _initializePlayer() async {
+    // Flushes whatever the *previous* load's timeline reached before this
+    // one takes over the field -- e.g. `_restartLocalPlayback` calling this
+    // again after a cast session ends abandons the cast-era timeline, which
+    // would otherwise never print. A no-op on the very first call, when
+    // `_playTimeline` is still null.
+    _playTimeline?.logOnce();
+    _playTimeline = StartupTimeline('playback');
+    _resetSegmentsIfMediaChanged();
+    _resetPerFileState();
 
     try {
       setState(() {
@@ -3970,13 +4031,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     countdown.start();
   }
 
+  /// Stops the up-next countdown and its play/pause listener.
+  void _stopUpNextTimers() {
+    _upNextCountdown?.cancel();
+    _upNextPlayingSub?.cancel();
+    _upNextPlayingSub = null;
+  }
+
+  /// Forgets the up-next prompt entirely, for a file that has not offered it.
+  /// Pure; callers wrap it in `setState` when mounted.
+  void _resetUpNext() {
+    _stopUpNextTimers();
+    _upNextCountdown?.dispose();
+    _upNextCountdown = null;
+    _upNextTarget = null;
+    _showUpNext = false;
+    _autoPlayCancelled = false;
+  }
+
   /// Cancel the prompt and the countdown, for the rest of this file.
   void _cancelAutoPlay() {
     // Synchronous, before any setState: a dismiss that only lands next frame
     // can lose to a fire scheduled this one.
-    _upNextCountdown?.cancel();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
+    _stopUpNextTimers();
     if (mounted) {
       setState(() {
         _showUpNext = false;
@@ -4112,7 +4189,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
-  Future<void> _saveProgress() async {
+  /// Saves the current position against [mediaType]/[mediaId] rather than
+  /// `widget`'s own, so a caller mid-switch can still credit the file being
+  /// replaced instead of the one taking over `widget`. See [_switchToFile].
+  Future<void> _saveProgress() => _saveProgressFor(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+      );
+
+  Future<void> _saveProgressFor({
+    required String mediaType,
+    required String mediaId,
+  }) async {
     final player = _player;
     if (player == null) return;
 
@@ -4135,8 +4223,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
-          mediaId: widget.mediaId,
-          mediaType: widget.mediaType,
+          mediaId: mediaId,
+          mediaType: mediaType,
           position: position,
           duration: duration,
           now: DateTime.now(),
@@ -4146,8 +4234,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       await recordLocalProgress(
         store: store,
-        mediaId: widget.mediaId,
-        mediaType: widget.mediaType,
+        mediaId: mediaId,
+        mediaType: mediaType,
         position: position,
         duration: duration,
         now: DateTime.now(),
@@ -4156,10 +4244,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (progressService == null) return;
 
-    if (widget.mediaType == 'movie') {
-      await progressService.saveMovieProgress(player, widget.mediaId);
-    } else if (widget.mediaType == 'episode') {
-      await progressService.saveEpisodeProgress(player, widget.mediaId);
+    if (mediaType == 'movie') {
+      await progressService.saveMovieProgress(player, mediaId);
+    } else if (mediaType == 'episode') {
+      await progressService.saveEpisodeProgress(player, mediaId);
     }
   }
 

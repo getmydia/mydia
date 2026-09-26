@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/graphql/mutations/update_movie_progress.graphql.dart';
 import 'package:player/graphql/queries/media_segments.graphql.dart';
 import 'package:player/graphql/queries/movie_detail.graphql.dart';
 import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
@@ -55,6 +56,8 @@ class _ProbedPlayer extends PlatformPlayer {
 
   /// Every source URI the screen opened on this player, in order.
   final openedUris = <String>[];
+
+  bool disposed = false;
 
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
@@ -101,14 +104,30 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 
   @override
+  // ignore: must_call_super
   Future<void> dispose() async {
-    await super.dispose();
+    disposed = true;
+    // Deliberately does not call `super.dispose()`: the base implementation
+    // closes every controller on this instance, including
+    // `positionController`, and `_mount` reuses the same `_ProbedPlayer`
+    // across a switch so a test can seek and read back across it. A closed
+    // controller makes the *second* `open()` throw
+    // ("Cannot add new events after calling close"), which every real
+    // platform player avoids simply by being a fresh instance per load (see
+    // `_openPlayerAndStart`'s `widget.createPlayer?.call() ?? Player()`).
+    // `disposed` is what every test here actually asserts on.
   }
 }
 
 /// The scripted responses a direct-play movie load consumes, with distinct
 /// per-file preferences so a stale one is observable after a fileId change.
-StubLink _link() {
+///
+/// [onPreference], when it returns non-null, answers the subtitle-preference
+/// query in its place; used by tests that need to shape that one response
+/// differently from the shared default.
+StubLink _link({
+  Object Function(Request request)? onPreference,
+}) {
   return StubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
       return {
@@ -123,6 +142,8 @@ StubLink _link() {
       ]);
     }
     if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+      final hooked = onPreference?.call(request);
+      if (hooked != null) return hooked;
       return subtitlePreferenceResponse(
         root: 'movie',
         id: 'movie-1',
@@ -150,6 +171,8 @@ StubLink _link() {
         fileId: id,
       );
     }
+    // The fallback already answers UpdateMovieProgress; tests read those
+    // requests back from `link.requests`.
     return <String, dynamic>{
       '__typename': 'RootMutationType',
       'updateMovieProgress': null,
@@ -158,7 +181,6 @@ StubLink _link() {
 }
 
 ProviderContainer? _container;
-_ProbedPlayer? _probedPlayer;
 var _containerTearDownRegistered = false;
 
 /// Mounts or updates the screen against [link] on [player].
@@ -171,8 +193,8 @@ Future<void> _mount(
   StubLink link,
   _ProbedPlayer player, {
   required String fileId,
+  String mediaId = 'movie-1',
 }) async {
-  _probedPlayer = player;
   final firstMount = _container == null;
   _container ??= buildPlayerScreenContainer(
     link: link,
@@ -190,7 +212,7 @@ Future<void> _mount(
     child: MaterialApp(
       builder: toastLayerBuilder,
       home: PlayerScreen(
-        mediaId: 'movie-1',
+        mediaId: mediaId,
         mediaType: 'movie',
         fileId: fileId,
         title: 'The Long Aurora',
@@ -204,6 +226,40 @@ Future<void> _mount(
     await pumpUntil(tester, () => player.opened);
     await tester.pump(const Duration(seconds: 1));
   }
+}
+
+/// Like [_mount], but builds a fresh platform player from [next] for every
+/// `createPlayer` call, so a test can tell one file's player from the next.
+Future<void> _mountWithFactory(
+  WidgetTester tester,
+  StubLink link,
+  _ProbedPlayer Function() next, {
+  required String fileId,
+}) async {
+  _container ??= buildPlayerScreenContainer(
+    link: link,
+    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    castManager: CapturingCastSessionManager(),
+    proxyService: TrackingLocalProxyService(),
+  );
+  if (!_containerTearDownRegistered) {
+    addTearDown(_container!.dispose);
+    _containerTearDownRegistered = true;
+  }
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: _container!,
+    child: MaterialApp(
+      builder: toastLayerBuilder,
+      home: PlayerScreen(
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: fileId,
+        title: 'The Long Aurora',
+        createPlayer: () => Player(platformPlayer: next()),
+      ),
+    ),
+  ));
+  await tester.pump(const Duration(seconds: 1));
 }
 
 /// Reads the subtitle-preference fields through the mounted State.
@@ -223,8 +279,6 @@ Future<void> _mount(
 
 /// Which file's preference load has finished, or null while still loading.
 String? _preferenceLoadedFor(WidgetTester tester) {
-  final player = _probedPlayer;
-  if (player == null || !player.opened) return null;
   final finder = find.byType(PlayerScreen);
   if (finder.evaluate().isEmpty) return null;
   if (find.byType(CircularProgressIndicator).evaluate().isNotEmpty) {
@@ -240,7 +294,26 @@ String? _playingFileId(_ProbedPlayer player) {
   return RegExp(r'/direct/([^/]+)/stream').firstMatch(uri)?.group(1);
 }
 
+/// Waits for whatever a file switch on a reused State is doing, the way
+/// [pumpUntilReal] does.
+///
+/// A switch re-runs the same real asynchronous I/O the first load does (see
+/// `player_screen_test_harness.dart`'s `pumpUntilReal` doc comment), so
+/// plain `pumpUntil` -- fake-clock pumps with no real event-loop turn --
+/// can leave [condition] stuck forever even though the switch itself is not
+/// stuck at all.
+Future<void> _pumpUntilSwitched(
+  WidgetTester tester,
+  bool Function() condition,
+) =>
+    tester.runAsync(() => pumpUntilReal(tester, condition));
+
 void main() {
+  setUp(() {
+    _container = null;
+    _containerTearDownRegistered = false;
+  });
+
   testWidgets('a changed fileId on a reused State', (tester) async {
     final link = _link();
     final player = _ProbedPlayer();
@@ -251,7 +324,7 @@ void main() {
     // Same widget type, same position in the tree, new parameters: exactly
     // what a same-page-key navigation produces.
     await _mount(tester, link, player, fileId: 'file-b');
-    await tester.pump(const Duration(seconds: 1));
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
     final preference = _preferenceStateOf(tester);
     final playing = _playingFileId(player);
@@ -260,24 +333,103 @@ void main() {
     expect(
       playing,
       'file-b',
-      skip: playing != 'file-b'
-          ? 'Separate issue: reused State leaves playback on the old file; '
-              'open before widening this PR (#870)'
-          : false,
-      reason: 'if this fails, the State-reuse gap reaches past the subtitle '
-          'preference and is a separate issue, not this PR',
+      reason: 'a reused State must load the new file',
     );
 
-    // Two separate questions, recorded separately so the verdict is legible.
+    // file-b carries its own preference in `_link()`'s fixture (Japanese, no
+    // track title) -- distinct from file-a's (English, with one) -- so this
+    // fails if the old file's preference leaked, not merely if none loaded.
+    final loaded = preference.preference;
+    expect(loaded, isA<PreferTrack>(),
+        reason: 'file-b must load its own preference');
     expect(
-      preference.preference,
-      isNull,
+      (loaded as PreferTrack?)?.language,
+      'jpn',
       reason: 'the previous file\'s preference must not survive into this one',
     );
     expect(
       preference.appliedForPlayback,
-      isFalse,
-      reason: 'the one-shot must be re-armed for the new file',
+      isTrue,
+      reason: 'the one-shot must be re-armed and applied for the new file',
     );
+  });
+
+  testWidgets('the old player is disposed when the file changes',
+      (tester) async {
+    final link = _link();
+    final players = <_ProbedPlayer>[];
+    // A fresh platform player per `createPlayer` call, so the first file's
+    // player can be told apart from the second's.
+    _ProbedPlayer next() {
+      final p = _ProbedPlayer();
+      players.add(p);
+      return p;
+    }
+
+    await _mountWithFactory(tester, link, next, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    await _mountWithFactory(tester, link, next, fileId: 'file-b');
+    await _pumpUntilSwitched(
+        tester, () => players.length == 2 && players[1].opened);
+
+    expect(players.first.disposed, isTrue,
+        reason: 'the first file\'s player must be torn down');
+    expect(players.last.disposed, isFalse);
+    expect(_playingFileId(players.last), 'file-b');
+  });
+
+  testWidgets('progress for the old file is saved under the old id',
+      (tester) async {
+    final link = _link();
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    await player.seek(const Duration(seconds: 30));
+    await tester.pump();
+
+    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
+
+    final saves = link.requests
+        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
+        .map((r) => r.variables)
+        .toList();
+    expect(
+      saves.where(
+          (v) => v['movieId'] == 'movie-1' && v['positionSeconds'] == 30),
+      isNotEmpty,
+      reason: 'the switch must save file A\'s position against movie-1',
+    );
+    expect(
+      saves.where(
+          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30),
+      isEmpty,
+      reason: 'file A\'s position must never be written to movie-2',
+    );
+  });
+
+  testWidgets('the watched flag is re-armed for the new file', (tester) async {
+    final link = _link();
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    // `isWatched` measures against the server-reported duration
+    // (`streamingCandidatesResponse`'s 5400s, in the shared `_link()`), not
+    // this fake player's own 90s `duration` field: `StreamTimeline.
+    // resolveDuration` prefers the server's figure whenever it is known. 4900
+    // of 5400s is past the 90% watched threshold.
+    await player.seek(const Duration(seconds: 4900));
+    await tester.pump();
+    final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    expect(state.watchedInvalidationSentForTesting as bool, isTrue,
+        reason: 'sanity: file A must have crossed the watched threshold');
+
+    await _mount(tester, link, player, fileId: 'file-b');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
+
+    expect(state.watchedInvalidationSentForTesting as bool, isFalse);
+    expect(state.isDownloadedSourceForTesting as bool, isFalse);
   });
 }
