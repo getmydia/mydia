@@ -143,3 +143,27 @@ Verified against the SDK pinned by `player/.fvmrc` on 2026-08-07 while fixing
 ITMS-90068 (PR #367). No PR-level iOS build exists to catch a mistake here:
 `ci-player.yml` covers Windows, macOS, Linux and Android, and iOS builds only
 inside `release.yml`.
+
+## Beta and dev builds are branded by `tool/apply-channel.sh`
+
+Every platform workflow runs `player/tool/apply-channel.sh <version>` before
+`flutter build`. A `-beta.N` version becomes "Mydia Player Beta" with an amber
+ribboned icon, `-dev.N` becomes "Mydia Player Dev" with a red one, and anything
+else is left alone. It rewrites eight display-name sites in place, regenerates
+launcher icons with `flutter_launcher_icons -f flutter_launcher_icons-<channel>.yaml`,
+and exports `MYDIA_CHANNEL` for `--dart-define`, which drives the in-app
+BETA/DEV pill (`ChannelBadge`) and `BuildChannel.appName`.
+
+App identity is never touched. Changing `dev.mydia.player`, the Windows
+`AppId` or `PRODUCT_NAME` per channel would break in-place track switching.
+
+When a display-name site is reworded, the script fails the build rather than
+ship a beta under the stable name. Update its regex, and
+`tool/test/apply-channel-test.sh`, which CI runs.
+
+To change the ribbon, edit `assets/icon{,_ios}-{beta,dev}.svg` and run
+`tool/gen-channel-icons.sh` (needs `rsvg-convert`). Commit the PNGs.
+
+A local `flutter run` has no define and shows the DEV pill, but keeps the
+stable native name and icon. Run the script by hand for the full treatment;
+`git checkout -- player/` undoes it.
