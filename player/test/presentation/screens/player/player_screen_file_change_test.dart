@@ -125,8 +125,16 @@ class _ProbedPlayer extends PlatformPlayer {
 /// [onPreference], when it returns non-null, answers the subtitle-preference
 /// query in its place; used by tests that need to shape that one response
 /// differently from the shared default.
+///
+/// [onMovieProgress], when it returns non-null, answers `UpdateMovieProgress`
+/// in its place -- used to hold one movie id's save back on a `Completer` so
+/// a test can park a switch inside it. Answers any movie/file id already:
+/// none of the branches below key off the requested id (streaming candidates
+/// keys off the file id in the request instead of the fixed movie id these
+/// fixtures carry).
 StubLink _link({
   Object? Function(Request request)? onPreference,
+  Object? Function(Request request)? onMovieProgress,
 }) {
   return StubLink((request, index) {
     if (_carries(request, documentNodeQuerySubtitleContent)) {
@@ -170,6 +178,10 @@ StubLink _link({
         directPlay: true,
         fileId: id,
       );
+    }
+    if (_carries(request, documentNodeMutationUpdateMovieProgress)) {
+      final hooked = onMovieProgress?.call(request);
+      if (hooked != null) return hooked;
     }
     // The fallback already answers UpdateMovieProgress; tests read those
     // requests back from `link.requests`.
@@ -477,6 +489,128 @@ void main() {
       (_preferenceStateOf(tester).preference as PreferTrack?)?.language,
       isNot('fre'),
       reason: 'movie-1\'s late answer must not overwrite file B\'s',
+    );
+  });
+
+  testWidgets(
+      'a second switch while the first still awaits its save never credits '
+      'the file in between', (tester) async {
+    // Holds movie-1's own save back, so the movie-1 -> movie-2 switch parks
+    // inside it -- the same shape as the "load cannot land" test above, but
+    // for the save step instead of the load step.
+    final held = Completer<Object>();
+    final link = _link(onMovieProgress: (request) {
+      if (request.variables['movieId'] != 'movie-1') return null;
+      return held.future;
+    });
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    await player.seek(const Duration(seconds: 30));
+    await tester.pump();
+
+    // Switch A (movie-1 -> movie-2) starts and parks inside its own save for
+    // movie-1 (held above). `_player` must already be detached by the time
+    // this returns, or switch B below would read movie-1's still-live player
+    // as movie-2's.
+    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+
+    // `ProgressService` throttles any sync attempt for 10 *real* seconds
+    // after the last one it started, regardless of which id that one
+    // targeted -- and switch A's parked save above already started one. Left
+    // alone, switch B's own (would-be erroneous) save silently no-ops on
+    // that throttle before it ever reaches `_player`, passing this test
+    // whether or not the switch itself is correct. Waiting past it is what
+    // makes the assertions below mean anything.
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 11)));
+
+    // Switch B (movie-2 -> movie-3) starts immediately, before A resumes.
+    await _mount(tester, link, player, fileId: 'file-c', mediaId: 'movie-3');
+    await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-c');
+
+    // Release A's held save and let its now-superseded tail drain.
+    held.complete(<String, dynamic>{
+      '__typename': 'RootMutationType',
+      'updateMovieProgress': null,
+    });
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+
+    final saves = link.requests
+        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
+        .map((r) => r.variables)
+        .toList();
+    expect(
+      saves.where(
+          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30),
+      isEmpty,
+      reason: 'movie-1\'s position must never be written under movie-2, '
+          'the file it was never actually playing',
+    );
+    expect(_playingFileId(player), 'file-c',
+        reason: 'the most recent switch must win');
+    expect(
+      player.openedUris.where((u) => u.contains('/file-b/')),
+      isEmpty,
+      reason: 'a switch superseded before it reloads must never open the '
+          'file it was replacing',
+    );
+  });
+
+  testWidgets(
+      'disposing mid-switch never saves the old file\'s position under the '
+      'new id', (tester) async {
+    // Same hold as above, but this time the screen goes away entirely while
+    // parked, instead of a second switch arriving.
+    final held = Completer<Object>();
+    final link = _link(onMovieProgress: (request) {
+      if (request.variables['movieId'] != 'movie-1') return null;
+      return held.future;
+    });
+    final player = _ProbedPlayer();
+
+    await _mount(tester, link, player, fileId: 'file-a', mediaId: 'movie-1');
+    await pumpUntil(tester, () => _preferenceLoadedFor(tester) == 'file-a');
+    // An odd value nothing else in this test produces, so a stale write is
+    // unambiguous.
+    await player.seek(const Duration(seconds: 37));
+    await tester.pump();
+
+    // The switch (movie-1 -> movie-2) starts and parks inside its own save
+    // for movie-1 (held above).
+    await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
+
+    // See the matching comment in the overlapping-switches test above: the
+    // parked save already started `ProgressService`'s 10-real-second
+    // throttle, and without waiting it out, `dispose()`'s own save below
+    // would no-op on the throttle rather than on `_player` being detached --
+    // passing this test whether or not the fix is in place.
+    await tester.runAsync(() => Future.delayed(const Duration(seconds: 11)));
+
+    // The screen is torn down while the switch is still parked.
+    await tester.pumpWidget(const SizedBox());
+
+    // Release the held save and let the (now-orphaned) switch drain.
+    held.complete(<String, dynamic>{
+      '__typename': 'RootMutationType',
+      'updateMovieProgress': null,
+    });
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+
+    final saves = link.requests
+        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
+        .map((r) => r.variables)
+        .toList();
+    expect(
+      saves.where(
+          (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 37),
+      isEmpty,
+      reason: 'dispose() must not find a live player to credit to movie-2, '
+          'the file the switch never actually reached',
     );
   });
 }

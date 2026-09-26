@@ -1202,34 +1202,76 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// hold) is deliberately untouched: this is the same screen, and tearing
   /// any of it down would exit fullscreen or reshape the window on every
   /// episode advance.
+  ///
+  /// Everything the old file owns is detached from State before this
+  /// function's own first `await` -- every statement up to (and including)
+  /// starting [disposal] below runs synchronously, with no suspension point
+  /// in between. `didUpdateWidget` calls this unawaited, so nothing stops a
+  /// second file switch (a remote command, a fast deep link, up-next racing
+  /// a manual tap) from starting on this same State while this one is still
+  /// awaiting its own save or session end. Without the synchronous detach, a
+  /// second switch's *own* first step -- saving progress for the file it is
+  /// leaving -- would still find this switch's `_player`, undisposed, and
+  /// credit this switch's position to the second switch's id. The same
+  /// applies to `dispose()`'s fire-and-forget save, which reads whatever
+  /// `_player` and `widget` (already the new file) happen to hold at the
+  /// moment the screen goes away. [_saveProgressFor] already bails out at
+  /// its first line when `_player` is null, so detaching it here is what
+  /// makes both races harmless: a second switch's own save, and dispose's,
+  /// simply find nothing left to save.
   Future<void> _switchToFile(PlayerScreen previous) async {
-    _loadGeneration++;
-    await _bestEffort(
+    final gen = ++_loadGeneration;
+
+    // Started here, not awaited yet -- an async function runs synchronously
+    // up to its own first `await`, and that covers every read
+    // [_saveProgressFor] and `ProgressService`'s sync helpers do
+    // (`_player`, `_progressStore`, `_progressService`, `_isDownloadedSource`,
+    // `_totalDuration`, and `player.state.position`/`duration` inside
+    // `resolveSync`) -- so the old file's position is captured before the
+    // detach below ever runs.
+    final save = _bestEffort(
       'save progress',
       () => _saveProgressFor(
         mediaType: previous.mediaType,
         mediaId: previous.mediaId,
       ),
     );
+
     _stopVerification();
     if (mounted) {
-      setState(_resetUpNext);
+      setState(() {
+        _resetUpNext();
+        _isLoading = true;
+      });
     } else {
       _resetUpNext();
+      _isLoading = true;
     }
+
     // Ends the old file's server session without `_terminateHlsSession`,
     // which would also release this screen's proxy hold.
     final playback = _playback;
     _playback = null;
+
+    // Also started here, not awaited yet: [_disposePlayer] nulls `_player`
+    // and `_videoController` at its own very first (synchronous) lines,
+    // before its own first `await` -- see its doc comment. So by the time
+    // this line returns, `_player` is already gone from State.
+    final disposal = _bestEffort('dispose player', _disposePlayer);
+
+    await save;
     await _bestEffort('end session', () async => playback?.endSession());
-    await _bestEffort('dispose player', _disposePlayer);
+    await disposal;
     for (final path in _imageSidecarPaths) {
       unawaited(discardImageSidecar(path));
     }
     _imageSidecarPaths.clear();
     _subtitleBodyFetches.clear();
     _resumeOverrideSeconds = widget.resumeSeconds;
-    if (!mounted) return;
+    // A second switch that started while this one was still awaiting above
+    // has already bumped `_loadGeneration` past `gen` (and may already have
+    // reloaded); only the most recent switch may reload.
+    if (!_isCurrentLoad(gen)) return;
     await _initializePlayer();
   }
 
@@ -6247,6 +6289,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Cancels every subscription bound to the current player and disposes it.
   ///
+  /// Nulls `_player`/`_videoController` at the very top, before any `await`
+  /// -- not at the end, as this used to. [_switchToFile] calls this
+  /// unawaited and relies on that ordering: it starts this function, does
+  /// not await it immediately, and only the synchronous prefix (this
+  /// null-out) is guaranteed to have run by the time control returns to it.
+  /// A second switch or `dispose()` racing in right after must see `_player`
+  /// already gone, never a live reference to a player a switch is mid-way
+  /// through replacing. Every existing caller awaits this fully regardless,
+  /// so clearing the fields sooner only makes the guarantee stricter; none
+  /// of the cancellations below read `_player` (each cancels its own
+  /// subscription field, or a collector/service that already captured its
+  /// own reference when it started), so moving the null-out ahead of them
+  /// changes nothing else about what this function does.
+  ///
   /// Also stops the stats collector, covering every disposal path rather
   /// than requiring each caller to remember it -- the same reasoning that
   /// put `rebind()` inside `_switchSource` instead of at its call sites. It
@@ -6258,6 +6314,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// path that already stopped the collector is a no-op.
   Future<void> _disposePlayer() async {
     _scrub.reset();
+    final player = _player;
+    _player = null;
+    _videoController = null;
+
     await _positionSubscription?.cancel();
     _positionSubscription = null;
     await _tracksSubscription?.cancel();
@@ -6284,9 +6344,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _progressService?.stopSync();
     _stopStatsCollector();
 
-    final player = _player;
-    _player = null;
-    _videoController = null;
     await player?.dispose();
   }
 
