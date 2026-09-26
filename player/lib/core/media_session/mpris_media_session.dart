@@ -4,6 +4,7 @@ import 'dart:io' show pid;
 import 'package:dbus/dbus.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 
+import '../build_channel.dart';
 import '../remote/remote_control_intent.dart';
 import 'media_session_state.dart';
 import 'system_media_session.dart';
@@ -231,7 +232,7 @@ class _MprisObject extends DBusObject {
         'CanSetFullscreen': const DBusBoolean(false),
         'Fullscreen': const DBusBoolean(false),
         'HasTrackList': const DBusBoolean(false),
-        'Identity': const DBusString('Mydia Player'),
+        'Identity': DBusString(BuildChannel.current.appName),
         'DesktopEntry': const DBusString('dev.mydia.player'),
         'SupportedUriSchemes': DBusArray.string(const []),
         'SupportedMimeTypes': DBusArray.string(const []),

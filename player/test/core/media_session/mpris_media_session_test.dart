@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dbus/dbus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/build_channel.dart';
 import 'package:player/core/media_session/media_session_state.dart';
 import 'package:player/core/media_session/mpris_media_session.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
@@ -81,7 +82,7 @@ void main() {
   test('owns the primary name and identifies itself', () async {
     expect(session.busName, mprisBusName);
     expect((await remote.getProperty(_root, 'Identity')).asString(),
-        'Mydia Player');
+        BuildChannel.current.appName);
     expect((await remote.getProperty(_root, 'DesktopEntry')).asString(),
         'dev.mydia.player');
     expect((await remote.getProperty(_root, 'CanRaise')).asBoolean(), isTrue);

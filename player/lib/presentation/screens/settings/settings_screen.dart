@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/build_channel.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/graphql/graphql_provider.dart';
@@ -457,7 +458,7 @@ class _VersionFooter extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 22, 0, 4),
       child: Text(
-        'Mydia Player $version',
+        '${BuildChannel.current.appName} $version',
         textAlign: TextAlign.center,
         style: const TextStyle(
           fontSize: 11.5,
