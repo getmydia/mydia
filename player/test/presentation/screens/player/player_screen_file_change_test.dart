@@ -59,8 +59,36 @@ class _ProbedPlayer extends PlatformPlayer {
 
   bool disposed = false;
 
+  /// How many times [dispose] actually ran. The real native platform player
+  /// asserts (`AssertionError('[Player] has been disposed')`) on a second
+  /// call; this fake does not, so a test that cares about a double dispose
+  /// has to count for itself.
+  int disposeCallCount = 0;
+
+  /// How many times [play] actually ran, so a test can capture a baseline
+  /// and assert it never grows -- i.e. this player was never told to play
+  /// again after some later point (a switch superseding its load).
+  int playCallCount = 0;
+
+  /// Set by a test that wants to suspend this player's [open] partway
+  /// through, the way a slow network open would. `open` sets [openStarted]
+  /// synchronously before awaiting it, then waits for it to complete before
+  /// doing anything else -- in particular, before [opened] or [openedUris]
+  /// reflect anything. Null (the default) makes [open] complete immediately,
+  /// as before this field existed.
+  Completer<void>? openGate;
+
+  /// Set synchronously at the top of [open], before it awaits [openGate] --
+  /// unlike [opened], which [openGate] holds back. A test parking a load
+  /// inside [open] polls this to know the parked call has actually been
+  /// entered, rather than guessing a duration.
+  bool openStarted = false;
+
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
+    openStarted = true;
+    final gate = openGate;
+    if (gate != null) await gate.future;
     opened = true;
     if (playable is Media) {
       openedUris.add(playable.uri);
@@ -87,6 +115,7 @@ class _ProbedPlayer extends PlatformPlayer {
 
   @override
   Future<void> play() async {
+    playCallCount++;
     state = state.copyWith(playing: true);
     playingController.add(true);
   }
@@ -106,6 +135,7 @@ class _ProbedPlayer extends PlatformPlayer {
   @override
   // ignore: must_call_super
   Future<void> dispose() async {
+    disposeCallCount++;
     disposed = true;
     // Deliberately does not call `super.dispose()`: the base implementation
     // closes every controller on this instance, including
@@ -388,6 +418,63 @@ void main() {
     expect(players.first.disposed, isTrue,
         reason: 'the first file\'s player must be torn down');
     expect(players.last.disposed, isFalse);
+    expect(_playingFileId(players.last), 'file-b');
+  });
+
+  testWidgets(
+      'a load parked inside the media player\'s own open() cannot play or '
+      'double-dispose after the switch', (tester) async {
+    // File A's own `player.open()` -- not any GraphQL step ahead of it --
+    // is what parks here, so this exercises the checks `_openPlayerAndStart`
+    // makes with a `Player` already built and installed into `_player`,
+    // distinct from the `prepareHlsEngine` window ahead of player creation
+    // (no seam reaches that from a widget test: `prepareHlsEngine` is a
+    // no-op `async {}` off the web, see `hls_engine_stub.dart`, so it never
+    // actually suspends here regardless of any gate).
+    final link = _link();
+    final players = <_ProbedPlayer>[];
+    final openGate = Completer<void>();
+
+    // Only the first created player (file A's) parks; file B's opens
+    // normally, the same shape `_mountWithFactory`'s other callers use to
+    // tell one file's player from the next.
+    _ProbedPlayer next() {
+      final p = _ProbedPlayer();
+      if (players.isEmpty) p.openGate = openGate;
+      players.add(p);
+      return p;
+    }
+
+    await _mountWithFactory(tester, link, next, fileId: 'file-a');
+    await pumpUntil(
+        tester, () => players.isNotEmpty && players.first.openStarted);
+    expect(players.first.opened, isFalse,
+        reason: 'sanity: file A\'s open must still be parked');
+
+    await _mountWithFactory(tester, link, next, fileId: 'file-b');
+    await _pumpUntilSwitched(
+        tester, () => players.length == 2 && players[1].opened);
+    expect(_playingFileId(players.last), 'file-b',
+        reason: 'sanity: the switch must land normally while file A '
+            'is still parked');
+
+    final playCallsAtSwitch = players.first.playCallCount;
+
+    // Release file A's parked open and let its now-superseded tail drain.
+    openGate.complete();
+    await tester
+        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+
+    expect(players.first.disposeCallCount, 1,
+        reason: 'the superseded load must leave its own player disposed '
+            'exactly once -- never twice (media_kit asserts on that) and '
+            'never zero times (which is the leak this guards against)');
+    expect(players.first.playCallCount, playCallsAtSwitch,
+        reason: 'the superseded load must never play the player it built '
+            'for a file nobody wants anymore');
+    expect(players.last.disposed, isFalse,
+        reason: 'the current player must survive the drain untouched');
     expect(_playingFileId(players.last), 'file-b');
   });
 

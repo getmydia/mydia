@@ -356,6 +356,17 @@ class PlayerScreen extends ConsumerStatefulWidget {
   }
 }
 
+/// Thrown by [_PlayerScreenState._openPlayerAndStart] when the load it is
+/// preparing is superseded before a [Player] exists to hand back or to
+/// dispose. Caught only by [_PlayerScreenState._initializePlayer]'s own
+/// catch, whose first line already returns as soon as it sees
+/// `!_isCurrentLoad(gen)` -- ahead of the `debugPrint`/`_disposePlayer`/
+/// `setState` that follow it -- so this reaches the exact same no-op every
+/// other stale return in that method does. Never inspected or rethrown.
+class _SupersededLoad implements Exception {
+  const _SupersededLoad();
+}
+
 class _PlayerScreenState extends ConsumerState<PlayerScreen>
     implements RemotePlayerBinding {
   Player? _player;
@@ -1582,7 +1593,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
         if (!_isCurrentLoad(gen)) return;
 
-        await _openPlayerAndStart(offlinePath, {}, plan: plan);
+        await _openPlayerAndStart(
+          offlinePath,
+          {},
+          plan: plan,
+          loadGeneration: gen,
+        );
         return;
       }
 
@@ -1660,7 +1676,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (await _castToTargetIfSet(plan, fileId: widget.fileId)) return;
           if (!_isCurrentLoad(gen)) return;
 
-          await _openPlayerAndStart(localPath, {}, plan: plan);
+          await _openPlayerAndStart(
+            localPath,
+            {},
+            plan: plan,
+            loadGeneration: gen,
+          );
           return;
         }
         debugPrint('Downloaded file not found, falling back to streaming');
@@ -1979,6 +2000,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         source.headers,
         plan: source.seekOnOpen ? plan : ResumePlan.fromStart,
         verificationPlan: playbackPlan,
+        loadGeneration: gen,
       );
     } catch (e) {
       // A superseded load that fails must not tear down the player the
@@ -2651,6 +2673,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
+  /// Bails a [_openPlayerAndStart] run out once [player] is no longer worth
+  /// finishing setup on -- unmounted, `superseded` says this load's own
+  /// generation is stale, or `_player` has already moved on to something
+  /// else entirely. Returns whether the caller should stop and return
+  /// [player] as-is. The unconditional `mounted` check is the same one the
+  /// plain `identical`-only version of this check has always made; only
+  /// `superseded` is new, and it is a no-op (always false) for a caller
+  /// that passes none, i.e. `_attachSource`'s web continuation.
+  ///
+  /// Takes responsibility for [player] only when `_player` still is
+  /// [player]: nulls the fields and disposes it, since nothing else has
+  /// touched it yet and nothing else will. When `_player` no longer is
+  /// [player], [_disposePlayer] already disposed it (the switch that
+  /// superseded this load runs it before creating its own replacement) --
+  /// calling `dispose()` again here would double-dispose a media_kit
+  /// `Player`, which asserts. That is also why this can only be called
+  /// after [player] has actually been installed into `_player`; the
+  /// pre-creation check in [_openPlayerAndStart] throws instead, since it
+  /// has no player yet to weigh either way.
+  Future<bool> _bailIfPlayerSuperseded(
+    Player player, {
+    required bool Function() superseded,
+  }) async {
+    if (mounted && !superseded() && identical(_player, player)) return false;
+    if (identical(_player, player)) {
+      _player = null;
+      _videoController = null;
+      await player.dispose();
+    }
+    return true;
+  }
+
   /// Shared tail of _initializePlayer: create player, open the media, start
   /// playback.
   ///
@@ -2670,13 +2724,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// whole `Player` for a mid-session switch (`_switchSource`), and passes
   /// [isSourceSwitch] so this does not treat that continuation as a fresh
   /// media item.
+  ///
+  /// [loadGeneration] is the epoch [_initializePlayer] captured before
+  /// calling this (its own `gen`). Every await below re-checks it through
+  /// the local `superseded()` (in addition to the plain
+  /// `identical(_player, player)` this already needed): without it, a
+  /// [_switchToFile] landing on one of
+  /// those awaits detaches whatever `_player` already held, and this run --
+  /// unaware it has been superseded -- goes on to create and install a new
+  /// `Player` for a file nobody wants anymore, which the next load then
+  /// overwrites without ever disposing. `_attachSource`'s web continuation
+  /// passes none: it has no generation of its own to check, so for it
+  /// staleness is judged only by `identical(_player, player)`, exactly as
+  /// before this parameter existed.
   Future<Player> _openPlayerAndStart(
     String mediaSource,
     Map<String, String> httpHeaders, {
     required ResumePlan plan,
     PlaybackPlan? verificationPlan,
     bool isSourceSwitch = false,
+    int? loadGeneration,
   }) async {
+    bool superseded() =>
+        loadGeneration != null && !_isCurrentLoad(loadGeneration);
+
     if (mounted) {
       setState(() {
         _loadingMessage = null;
@@ -2690,6 +2761,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // life of the session. A no-op on native, and on web when hls.js cannot
     // run at all.
     await prepareHlsEngine();
+
+    // Superseded during the await above, before a `Player` exists to hand
+    // back or dispose. `_disposePlayer` already detached whatever the old
+    // load held; creating one here would only leak it, exactly the finding
+    // this generation check exists to close (see the doc comment above).
+    if (superseded()) throw const _SupersededLoad();
 
     // Create media_kit player
     final player = widget.createPlayer?.call() ?? Player();
@@ -2836,11 +2913,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `dispose()` may have run while this was suspended: it nulls `_player`
     // and disposes both `player` and the progress service. `identical`
     // also catches a newer `_openPlayerAndStart` call (a source switch)
-    // having replaced `_player` out from under this one. Bailing out here,
-    // before anything below touches `player` or `_progressService` again,
-    // is what keeps e.g. `player.play()` from throwing against a
-    // `PlatformPlayer` whose stream controllers `dispose()` already closed.
-    if (!mounted || !identical(_player, player)) return player;
+    // having replaced `_player` out from under this one, and `superseded`
+    // catches this load having gone stale while `_player` still is `player`
+    // -- the race window before whichever switch superseded it has gotten
+    // as far as its own `_disposePlayer`. Bailing out here, before anything
+    // below touches `player` or `_progressService` again, is what keeps
+    // e.g. `player.play()` from throwing against a `PlatformPlayer` whose
+    // stream controllers `dispose()` already closed.
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
     _settleTracks(tracksSettleEpoch, player);
     if (!tracksReady && !kIsWeb) {
       // Timing out on web is the expected path, not worth logging every time.
@@ -2865,11 +2947,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (widget.subtitleTrack != null) {
       await selectTrack(TrackKind.subtitle, widget.subtitleTrack);
     }
+    // Same race as the tracksReady check above: a switch landing during
+    // either `selectTrack` await must not let this run go on to seek/play a
+    // player it no longer owns.
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
 
     // Web only; see `mediaStartingAt`. A plain seek, not a `seekToReal`, for
     // the same reason as the open above.
     if (opening.seekAfterOpen) {
       await player.seek(plan.position);
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
     }
 
     // The bar a position has to clear to count as playback. Zero on a
@@ -2884,6 +2975,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // playing. Every other caller leaves `autoplay` at its default of true.
     if (widget.autoplay) {
       await player.play();
+      if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+        return player;
+      }
     }
 
     // Start progress tracking
@@ -2898,6 +2992,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // Listen for playback completion
     await _positionSubscription?.cancel();
+    if (await _bailIfPlayerSuperseded(player, superseded: superseded)) {
+      return player;
+    }
     _positionSubscription = player.stream.position.listen((_) {
       _onPlaybackProgress();
     });
