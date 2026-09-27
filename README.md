@@ -62,7 +62,7 @@ Open http://localhost:4000 and create your admin account.
 
 - **Unified Media Management** - Movies + TV shows with TMDB/TVDB metadata
 - **Automated Downloads** - Monitored search, quality profiles, automatic upgrades
-- **Release Ranking** - One scorer ranks automatic, manual and upgrade searches: quality profiles, custom formats, audio language, identity checks
+- **Release Ranking** - Picks the right release for you: the right episode, your languages, your quality profile and custom formats
 - **Download Clients** - qBittorrent, Transmission, rqbit, SABnzbd, NZBGet, debrid providers
 - **Indexers** - Prowlarr, Jackett, built-in Cardigann (experimental)
 - **Multi-User** - Admin/guest roles with request workflow
@@ -72,57 +72,48 @@ Open http://localhost:4000 and create your admin account.
 
 ## How Mydia Picks a Release
 
-Automatic search, manual search, and the daily upgrade sweep all rank release
-candidates through the same code: `Mydia.Indexers.ReleaseRanker` and
-`Mydia.Indexers.SearchScorer`. A release becomes scoring input through exactly
-one place, `Mydia.Quality.Attrs`, so a codec or source spelling fixed there is
-fixed for every search path at once.
+A search usually turns up dozens of releases for the same movie or episode.
+Mydia throws out the ones that are wrong or unwanted, puts the rest in order of
+what you asked for, and grabs the first one. The manual search dialog shows you
+the same order, so you can see why a release came out on top and pick a
+different one yourself.
 
 ```mermaid
 flowchart TD
-    A[Search results] --> B[Hard removals]
-    B --> C[Score each release]
-    C --> D[Sort order]
-    D --> E{Automatic or manual}
-    E -->|Automatic search| F[Grab the top result]
-    E -->|Manual search| G[Same order, removed releases stay visible]
+    A[Releases found by your indexers] --> B[Drop wrong and unwanted releases]
+    B --> C[Order the rest by what you asked for]
+    C --> D{Who is choosing}
+    D -->|Automatic search| E[Grab the top release]
+    D -->|You, in manual search| F[See the same order and pick]
 ```
 
-**Hard removals** drop a release before it is scored: an invalid or fake
-release name, a blocked tag, a rejecting custom format, an NZB posted too
-recently, an excluded source, a below-floor resolution, an identity mismatch
-(wrong season, episode, or a TV-shaped title in a movie search), and zero
-title relevance against the query. Manual search turns three of those off on
-purpose, the operator's escape hatch: excluded sources, the resolution floor,
-and identity removal. A release that fails only one of those three is scored
-and sorted normally instead of dropped; an identity mismatch is also sunk to
-the bottom, below every release that matches. Everything else on the list
-still applies to manual search.
+**What gets dropped:** fake or malformed releases, releases for a different
+title, tags you have blocked, custom formats your profile rejects, sources your
+profile excludes (cam rips, for example), anything below your minimum
+resolution, and Usenet posts too new to be complete. In manual search, excluded
+sources, low resolutions and releases that look like a different title are kept
+at the bottom of the list instead, in case you know better.
 
-**Sort order**, most significant first: identity match before mismatch,
-preferred audio language, position in the profile's preferred-resolution
-list, number of matching audio languages, custom format score, then the base
-score. Identity is outermost on purpose: a release whose season or episode
-does not match the search never outranks one that does, regardless of
-language, resolution, or format.
+**How the rest is ordered**, most important first:
 
-**The score** is quality (about 60%) plus availability plus a small
-title-match bonus, cut by 30% if a torrent has zero seeders. Availability
-comes from seeders on a log scale for torrents, or completion and grab count
-for NZBs. Quality is a weighted blend of the profile's preference lists:
-resolution and video codec weigh heaviest, then audio codec, then audio
-channels and source, then file size and HDR.
+1. The right season and episode. A wrong match never beats a right one.
+2. Your preferred audio language, if you set one.
+3. The resolutions your quality profile lists, in its order. A resolution the
+   profile does not list comes after all the ones it does.
+4. More of your languages, so dual audio beats a single match.
+5. Your custom format scores.
+6. Overall fit: how well the codec, audio, source, size and HDR match your
+   profile, how healthy the release is (seeders, or how complete a Usenet post
+   is), and how closely its name matches. A torrent with no seeders drops
+   sharply.
 
-Upgrade *acceptance* is a separate comparison, `Mydia.Upgrades.Comparator`,
-using the same quality weights without custom formats, identity, title
-relevance or seeders. It runs twice. Before a grab, each candidate release is
-scored against the file on disk, with anything the release name leaves out
-ignored on both sides, and has to beat it by the profile's upgrade margin (a
-better audio language also counts). After the download, the new file is
-analyzed and compared with the old one again before anything is replaced.
+**Upgrades** use the same ordering to find a better release, but only replace
+your file when the new one is clearly better by your quality profile or adds a
+preferred audio language. Mydia checks the release before downloading it and
+the actual file afterwards, and keeps your old file until the new one passes.
 
-Full explanation: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md).
-Custom formats: [Custom Formats](docs/configuration/custom-formats.md).
+More detail: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md)
+and [Custom Formats](docs/configuration/custom-formats.md).
 
 ## Mydia Player
 
