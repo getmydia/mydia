@@ -113,11 +113,13 @@ for NZBs. Quality is a weighted blend of the profile's preference lists:
 resolution and video codec weigh heaviest, then audio codec, then audio
 channels and source, then file size and HDR.
 
-Upgrade *acceptance*, deciding whether a freshly downloaded file replaces the
-one on disk, is a separate comparison, `Mydia.Upgrades.Comparator`, scored
-with the same quality weights but without custom formats or identity checks.
-It compares two analyzed files rather than release names, so there is no
-title relevance or seeder count to weigh in.
+Upgrade *acceptance* is a separate comparison, `Mydia.Upgrades.Comparator`,
+using the same quality weights without custom formats, identity, title
+relevance or seeders. It runs twice. Before a grab, each candidate release is
+scored against the file on disk, with anything the release name leaves out
+ignored on both sides, and has to beat it by the profile's upgrade margin (a
+better audio language also counts). After the download, the new file is
+analyzed and compared with the old one again before anything is replaced.
 
 Full explanation: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md).
 Custom formats: [Custom Formats](docs/configuration/custom-formats.md).

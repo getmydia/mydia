@@ -15,11 +15,24 @@ selection sits in the wider flow, see
 The natural mental model is that every release gets a number and the biggest
 number wins. Mydia does compute a number, and it is not the thing that decides.
 
-Selection happens in two steps. First, releases are sorted by **which position
-their resolution occupies in your profile's preferred resolution list**. Only
-within that grouping does the numeric score break ties.
+Selection is a sort on several keys, compared in order:
 
-The consequence is blunt and it explains most surprises: a release whose
+1. **Identity.** A release that matches the title, season and episode you
+   searched for comes before one that does not.
+2. **Preferred audio language**, when the item has an audio language
+   preference.
+3. **Which position the release's resolution occupies in your profile's
+   preferred resolution list.**
+4. How many of your preferred audio languages the release carries.
+5. Custom format score.
+6. The numeric score.
+
+Each key only breaks ties left by the ones above it, so the numeric score
+decides only among releases that already agree on everything else. Without an
+audio language preference, keys 2 and 4 are equal for every release, and
+resolution is effectively the first thing compared after identity.
+
+The resolution key explains most surprises: a release whose
 resolution is not in your preferred list cannot outrank one that is, at any
 score, ever. Under a 1080p profile, a 2160p remux with a thousand seeders loses
 to a mediocre 1080p WEB-DL. That is working as designed. A profile that names
@@ -137,22 +150,14 @@ The design intent is to fail open: if the parser cannot read a release name at
 all, no penalty is applied, so unusual naming conventions are not silently
 discarded.
 
-There is a consequence to this that is genuinely surprising, and it follows from
-the resolution-first sorting described at the top of this page. Because the
-resolution grouping is applied *before* scores are compared, a release that
-mismatches on identity but sits at a preferred resolution sorts above a release
-that matches on identity but sits at a non-preferred one. The enormous penalty
-only settles ties within a resolution grouping; it cannot reach across
-groupings.
-
-In practice this needs an unusual setup to bite, since a search that only
-returns wrong-identity releases at your preferred resolution is already an
-unusual search. But if you ever see Mydia grab a season pack for an episode
-search, this interaction, rather than a broken matcher, is the likely mechanism.
+Identity is also the outermost sort key described at the top of this page, so a
+mismatching release sorts below every matching one regardless of resolution,
+language or custom formats. It is only chosen when nothing that matches
+survived the hard removals.
 
 ## What the score actually weighs
 
-Within a resolution grouping, the score is roughly: a quality component worth
+Among releases the sort keys above leave tied, the score is roughly: a quality component worth
 about sixty percent, an availability component derived from seeders (or from
 completion and grab count for Usenet), and a small title-relevance bonus. A
 release with zero seeders takes a flat multiplier against the whole thing.
@@ -318,8 +323,8 @@ accurate release name would be punished for what it did not bother to say.
 
 Everything else on this page still governs which surviving candidate gets
 grabbed. The upgrade comparison runs after blocklist rejection and before
-ranking, so what it lets through is then ordered by the ordinary rules,
-resolution grouping first. A release at a resolution your profile does not list
+ranking, so what it lets through is then ordered by the ordinary sort keys
+described at the top of this page. A release at a resolution your profile does not list
 still cannot win.
 
 ### Second decision: the release has to prove it
