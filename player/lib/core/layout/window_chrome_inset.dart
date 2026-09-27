@@ -66,6 +66,15 @@ const double kLinuxChromeGap = 8.0;
 /// mismatch shows as a sliver of frame or a square app corner.
 const double kLinuxWindowCornerRadius = 15.0;
 
+/// Height of the Windows title bar band.
+const double kWindowsTitleBarHeight = 40.0;
+
+/// Width of a single Windows caption button.
+const double kWindowsCaptionButtonWidth = 46.0;
+
+/// Total width reserved for Windows caption buttons (minimize, maximize, close).
+const double kWindowsCaptionButtonsReserve = 3 * kWindowsCaptionButtonWidth;
+
 /// Fallback [DecorationLayout] used by [WindowChromeInset.build] when no real
 /// signal is injected. Only Linux ever consults it, and `app.dart` always
 /// passes the real signal there, so in practice this only feeds tests.
@@ -212,6 +221,13 @@ WindowChromeInsets windowChromeInsetsFor({
         leading: linuxButtonGroupReserve(decorationLayout.start.length),
         trailing: linuxButtonGroupReserve(decorationLayout.end.length),
       );
+    case TargetPlatform.windows:
+      final ltr = textDirection == TextDirection.ltr;
+      return WindowChromeInsets(
+        height: kWindowsTitleBarHeight,
+        leading: ltr ? 0 : kWindowsCaptionButtonsReserve,
+        trailing: ltr ? kWindowsCaptionButtonsReserve : 0,
+      );
     default:
       return WindowChromeInsets.zero;
   }
@@ -263,7 +279,8 @@ class WindowChromeInset extends StatelessWidget {
     // decision, so there is no reason to rebuild on it.
     if (isWeb ||
         (platform != TargetPlatform.macOS &&
-            platform != TargetPlatform.linux)) {
+            platform != TargetPlatform.linux &&
+            platform != TargetPlatform.windows)) {
       return WindowChromeInsets.scope(
         insets: WindowChromeInsets.zero,
         child: child,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/window/desktop_window.dart';
 import 'package:player/core/window/player_window_sizer.dart';
@@ -17,6 +18,18 @@ void main() {
     test('initDesktopWindow completes without throwing', () async {
       await expectLater(initDesktopWindow(), completes);
     });
+
+    test(
+      'initDesktopWindow completes without throwing on Windows',
+      () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+        try {
+          await expectLater(initDesktopWindow(), completes);
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
 
     test('startWindowDrag does not throw', () {
       expect(startWindowDrag, returnsNormally);

@@ -86,11 +86,14 @@ void main() {
   // target — mirrors
   // `platform_features_keyboard_test.dart`/`computeSupportsKeyboardShortcuts`.
   group('windowChromeInsetsFor', () {
-    test('zero on web even on macOS and Linux (kIsWeb is false under test)',
+    test(
+        'zero on web even on macOS, Linux, and Windows (kIsWeb is false under test)',
         () {
       expect(resolve(isWeb: true, platform: TargetPlatform.macOS),
           WindowChromeInsets.zero);
       expect(resolve(isWeb: true, platform: TargetPlatform.linux),
+          WindowChromeInsets.zero);
+      expect(resolve(isWeb: true, platform: TargetPlatform.windows),
           WindowChromeInsets.zero);
     });
 
@@ -105,12 +108,33 @@ void main() {
       TargetPlatform.android,
       TargetPlatform.iOS,
       TargetPlatform.fuchsia,
-      TargetPlatform.windows,
     ]) {
       test('zero on ${platform.name}', () {
         expect(resolve(platform: platform), WindowChromeInsets.zero);
       });
     }
+
+    test('Windows reserves caption buttons on the trailing side under LTR', () {
+      expect(
+        resolve(platform: TargetPlatform.windows),
+        const WindowChromeInsets(
+          height: 40.0,
+          leading: 0.0,
+          trailing: 138.0,
+        ),
+      );
+    });
+
+    test('Windows moves caption buttons to leading under RTL', () {
+      expect(
+        resolve(platform: TargetPlatform.windows, dir: TextDirection.rtl),
+        const WindowChromeInsets(
+          height: 40.0,
+          leading: 138.0,
+          trailing: 0.0,
+        ),
+      );
+    });
 
     test('macOS reserves the traffic lights on the leading side', () {
       expect(
@@ -274,8 +298,38 @@ void main() {
       expect(top, 0);
     });
 
+    testWidgets('reserves the caption button band on windowed Windows',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        late double top;
+        late WindowChromeInsets insets;
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: WindowChromeInset(
+                fullscreen: ValueNotifier(false),
+                child: Builder(builder: (context) {
+                  top = MediaQuery.of(context).padding.top;
+                  insets = WindowChromeInsets.of(context);
+                  return const SizedBox.shrink();
+                }),
+              ),
+            ),
+          ),
+        );
+
+        expect(top, 40.0);
+        expect(insets.height, 40.0);
+        expect(insets.trailing, 138.0);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
     for (final platform in [
-      TargetPlatform.windows,
       TargetPlatform.iOS,
       TargetPlatform.android,
     ]) {
