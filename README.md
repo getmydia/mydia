@@ -70,6 +70,58 @@ Open http://localhost:4000 and create your admin account.
 - **Import Lists** - Sync from TMDB watchlists, popular, trending (experimental)
 - **Real-Time UI** - Phoenix LiveView with instant updates
 
+## How Mydia Picks a Release
+
+Automatic search, manual search, and the daily upgrade sweep all rank release
+candidates through the same code: `Mydia.Indexers.ReleaseRanker` and
+`Mydia.Indexers.SearchScorer`. A release becomes scoring input through exactly
+one place, `Mydia.Quality.Attrs`, so a codec or source spelling fixed there is
+fixed for every search path at once.
+
+```mermaid
+flowchart TD
+    A[Search results] --> B[Hard removals]
+    B --> C[Score each release]
+    C --> D[Sort order]
+    D --> E{Automatic or manual}
+    E -->|Automatic search| F[Grab the top result]
+    E -->|Manual search| G[Same order, removed releases stay visible]
+```
+
+**Hard removals** drop a release before it is scored: an invalid or fake
+release name, a blocked tag, a rejecting custom format, an NZB posted too
+recently, an excluded source, a below-floor resolution, an identity mismatch
+(wrong season, episode, or a TV-shaped title in a movie search), and zero
+title relevance against the query. Manual search turns three of those off on
+purpose, the operator's escape hatch: excluded sources, the resolution floor,
+and identity removal. A release that fails only one of those three is scored
+and sorted normally instead of dropped; an identity mismatch is also sunk to
+the bottom, below every release that matches. Everything else on the list
+still applies to manual search.
+
+**Sort order**, most significant first: identity match before mismatch,
+preferred audio language, position in the profile's preferred-resolution
+list, number of matching audio languages, custom format score, then the base
+score. Identity is outermost on purpose: a release whose season or episode
+does not match the search never outranks one that does, regardless of
+language, resolution, or format.
+
+**The score** is quality (about 60%) plus availability plus a small
+title-match bonus, cut by 30% if a torrent has zero seeders. Availability
+comes from seeders on a log scale for torrents, or completion and grab count
+for NZBs. Quality is a weighted blend of the profile's preference lists:
+resolution and video codec weigh heaviest, then audio codec, then audio
+channels and source, then file size and HDR.
+
+Upgrade *acceptance*, deciding whether a freshly downloaded file replaces the
+one on disk, is a separate comparison, `Mydia.Upgrades.Comparator`, scored
+with the same quality weights but without custom formats or identity checks.
+It compares two analyzed files rather than release names, so there is no
+title relevance or seeder count to weigh in.
+
+Full explanation: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md).
+Custom formats: [Custom Formats](docs/configuration/custom-formats.md).
+
 ## Mydia Player
 
 A cross-platform app that streams your library from anywhere over an encrypted
