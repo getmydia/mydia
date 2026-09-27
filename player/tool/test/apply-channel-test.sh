@@ -60,6 +60,16 @@ check_channel() {
 check_channel 0.16.0-beta.3 beta 'Mydia Player Beta'
 check_channel 0.17.0-dev.42 dev 'Mydia Player Dev'
 
+# crlf: check that files with CRLF endings (as git checks out on Windows) work
+fresh_copy
+for f in "${SITES[@]}"; do
+  sed -i 's/$/\r/' "$WORK/p/$f"
+done
+GITHUB_ENV= "$SCRIPT" --names-only --root "$WORK/p" 0.17.0-dev.42 >/dev/null
+for f in "${SITES[@]}"; do
+  grep -q "Mydia Player Dev" "$WORK/p/$f" || fail "crlf: $f does not contain 'Mydia Player Dev'"
+done
+
 # drift: a site that no longer holds the expected text must fail the script
 fresh_copy
 perl -0777 -pi -e 's/android:label="Mydia Player"/android:label="Something Else"/' \

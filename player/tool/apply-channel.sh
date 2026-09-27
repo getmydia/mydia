@@ -52,7 +52,7 @@ rewrite() {
   local file="$root/$1" regex="$2" want="${3:-1}"
   [ -f "$file" ] || { echo "apply-channel: missing $1" >&2; exit 1; }
   NAME="$name" REGEX="$regex" WANT="$want" perl -0777 -pi -e '
-    my $n = s/$ENV{REGEX}/$1$ENV{NAME}$2/g;
+    my $n = (s/$ENV{REGEX}/$1$ENV{NAME}$2/g) || 0;
     die "apply-channel: expected $ENV{WANT} match(es) in $ARGV, found $n\n"
       unless $n == $ENV{WANT};
   ' "$file"
@@ -65,7 +65,7 @@ if [ "$channel" != stable ]; then
   rewrite windows/runner/Runner.rc '(VALUE "(?:FileDescription|ProductName)", ")Mydia Player(")' 2
   rewrite windows/installer.iss '(#define MyAppName ")Mydia Player(")'
   rewrite linux/runner/my_application.cc '(gtk_window_set_title\(window, ")Mydia Player("\))'
-  rewrite flatpak/dev.mydia.player.desktop '(?m)(^Name=)Mydia Player($)'
+  rewrite flatpak/dev.mydia.player.desktop '(?m)(^Name=)Mydia Player(\r?$)'
   rewrite flatpak/dev.mydia.player.metainfo.xml '(<component[^>]*>\s*<id>dev\.mydia\.player</id>\s*<name>)Mydia Player(</name>)'
 
   if [ "$names_only" = false ]; then
