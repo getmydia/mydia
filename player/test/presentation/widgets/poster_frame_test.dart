@@ -5,6 +5,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cache/artwork_decode.dart';
+import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/ambient_backdrop_provider.dart';
 import 'package:player/presentation/widgets/poster_frame.dart';
@@ -294,6 +296,56 @@ void main() {
         await tester.pump();
 
         expect(container.read(ambientBackdropControllerProvider), posterB);
+      });
+    });
+  });
+
+  group('PosterFrame decode size', () {
+    const url = 'https://image.tmdb.org/t/p/w500/a.jpg';
+
+    ImageProvider<Object> renderedProvider(WidgetTester tester) => tester
+        .widget<Image>(
+          find.descendant(
+            of: find.byType(PosterFrame),
+            matching: find.byType(Image),
+          ),
+        )
+        .image;
+
+    testWidgets('decodes at its laid-out width, bucketed', (tester) async {
+      await mockNetworkImages(() async {
+        // posterHost sets devicePixelRatio to MediaQueryData's default, 1.0.
+        await tester.pumpWidget(
+          posterHost(
+            const PosterFrame(imageUrl: url, placeholder: _placeholder),
+            size: const Size(140, 210),
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          renderedProvider(tester),
+          artworkImageProvider(
+            url,
+            cacheManager: PosterCacheManager(),
+            decodeWidth: 192,
+          ),
+        );
+      });
+    });
+
+    testWidgets('never decodes wider than the w500 source', (tester) async {
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          posterHost(
+            const PosterFrame(imageUrl: url, placeholder: _placeholder),
+            size: const Size(700, 1050),
+          ),
+        );
+        await tester.pump();
+
+        final provider = renderedProvider(tester) as ResizeImage;
+        expect(provider.width, posterSourceWidth);
       });
     });
   });
