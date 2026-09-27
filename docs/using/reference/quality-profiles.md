@@ -34,7 +34,7 @@ Profiles following [TRaSH Guides](https://trash-guides.info/) recommendations:
 - TRaSH - WEB-1080p
 - TRaSH - WEB-2160p
 
-These translate the resolution, source, and size parts of the guides. The custom format scoring the guides are built around has no Mydia equivalent; see [Why Mydia Picked That Release](../explanation/quality-decisions.md#there-are-no-custom-formats).
+These translate the resolution, source, and size parts of the guides. Importing a preset does not bring in the guide's custom formats too; that per-format scoring is a separate feature you configure yourself, see [Custom Formats](../../configuration/custom-formats.md) and [Why Mydia Picked That Release](../explanation/quality-decisions.md#custom-formats-are-a-separate-sort-key).
 
 ### Profilarr/Dictionarry
 
