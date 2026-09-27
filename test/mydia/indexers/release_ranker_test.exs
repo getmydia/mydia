@@ -89,8 +89,8 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
   # profile) under `:size`, and the raw 0-10 title bonus under `:title_match`
   # (no longer inflated ×100). `:age` and `:tag_bonus` remain 0.0 because the
   # unified formula has no separate age or tag component. Soft-penalty fields
-  # (`:size_penalty`, `:seeder_penalty`, `:identity_penalty`) default to 0.0 and
-  # are only non-zero when the corresponding ranking option fires.
+  # (`:seeder_penalty`, `:identity_penalty`) default to 0.0, and `:limit_violation`
+  # is nil.
 
   # Tests for select_best_result/2
 
@@ -243,7 +243,7 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
         assert item.breakdown.total == item.score
 
         # New soft-penalty fields default to 0.0 when no penalty applies
-        assert item.breakdown.size_penalty == 0.0
+        assert item.breakdown.limit_violation == nil
         assert item.breakdown.seeder_penalty == 0.0
         assert item.breakdown.identity_penalty == 0.0
 
@@ -626,9 +626,7 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
             preferred_video_codecs: ["h265", "h264"],
             preferred_audio_codecs: ["ac3", "aac"],
             preferred_resolutions: ["1080p", "720p"],
-            preferred_sources: ["BluRay", "WEB-DL"],
-            movie_min_size_mb: 2048,
-            movie_max_size_mb: 15360
+            preferred_sources: ["BluRay", "WEB-DL"]
           }
         })
 
@@ -689,14 +687,15 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert length(
                ReleaseRanker.rank_all([result],
                  quality_profile: profile,
-                 apply_resolution_floor: false
+                 apply_profile_limits: false
                )
              ) == 1
     end
 
-    test "max_resolution stays a scoring signal and does not hard-reject" do
-      # Only the floor gates. Grabbing above the ceiling wastes disk but still
-      # yields a watchable file, so it remains a penalty.
+    test "a max_resolution violation also hard-rejects the release" do
+      # Grabbing above the ceiling wastes disk but still yields a watchable
+      # file, yet the same reasoning as the floor applies: there is no minimum
+      # score to grab, so the top of an all-above-ceiling list is still taken.
       profile =
         build_quality_profile(%{
           quality_standards: %{
@@ -713,7 +712,15 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
           quality: QualityParser.parse("Test.Movie.2024.2160p.BluRay.x265-GROUP")
         })
 
-      assert length(ReleaseRanker.rank_all([result], quality_profile: profile)) == 1
+      assert ReleaseRanker.rank_all([result], quality_profile: profile) == []
+
+      # The operator's manual escape hatch still surfaces it.
+      assert length(
+               ReleaseRanker.rank_all([result],
+                 quality_profile: profile,
+                 apply_profile_limits: false
+               )
+             ) == 1
     end
 
     test "a profile without quality_standards zeroes the quality component" do
@@ -873,8 +880,8 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
     end
   end
 
-  describe "soft size/seeder penalties (U2)" do
-    test "AE2: an episode below the minimum size is kept with a size penalty" do
+  describe "size limits and seeder penalties" do
+    test "AE2: an episode below the minimum size is removed" do
       # ~22 minute 1080p episode at 350 MB, below a 512 MB minimum.
       small =
         build_result(%{
@@ -884,26 +891,15 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
           quality: QualityParser.parse("Show.S09E01.1080p.WEB.h264-GROUP")
         })
 
-      ranked = ReleaseRanker.rank_all([small], size_range: {512, 4096}, min_seeders: 0)
-
-      assert length(ranked) == 1
-      item = List.first(ranked)
-      assert item.breakdown.size_penalty < 0.0
+      assert ReleaseRanker.rank_all([small], size_range: {512, 4096}, min_seeders: 0) == []
     end
 
-    test "a release far outside the range is penalized more than one just outside" do
-      just_below =
+    test "manual search keeps an out-of-range release, below every in-range one" do
+      below =
         build_result(%{
-          title: "Show.S01E01.1080p.WEB.JustBelow",
+          title: "Show.S01E01.1080p.WEB.Below",
           size: 480 * 1024 * 1024,
-          seeders: 20
-        })
-
-      far_below =
-        build_result(%{
-          title: "Show.S01E01.1080p.WEB.FarBelow",
-          size: 50 * 1024 * 1024,
-          seeders: 20
+          seeders: 90
         })
 
       in_range =
@@ -914,18 +910,28 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
         })
 
       ranked =
-        ReleaseRanker.rank_all([just_below, far_below, in_range],
+        ReleaseRanker.rank_all([below, in_range],
           size_range: {512, 4096},
-          min_seeders: 0
+          min_seeders: 0,
+          apply_profile_limits: false
         )
 
-      a = Enum.find(ranked, &String.contains?(&1.result.title, "JustBelow"))
-      b = Enum.find(ranked, &String.contains?(&1.result.title, "FarBelow"))
-      c = Enum.find(ranked, &String.contains?(&1.result.title, "InRange"))
+      assert [
+               %{
+                 result: %{title: "Show.S01E01.1080p.WEB.InRange"},
+                 breakdown: %{limit_violation: nil}
+               },
+               %{
+                 result: %{title: "Show.S01E01.1080p.WEB.Below"},
+                 breakdown: %{limit_violation: "size_below_minimum: 480 MB < 512 MB"}
+               }
+             ] = ranked
+    end
 
-      assert c.breakdown.size_penalty == 0.0
-      assert b.breakdown.size_penalty < a.breakdown.size_penalty
-      assert a.breakdown.size_penalty < 0.0
+    test "a release of unknown size is kept" do
+      unknown = build_result(%{title: "Show.S01E01.1080p.WEB.Unknown", size: 0, seeders: 20})
+
+      assert [_] = ReleaseRanker.rank_all([unknown], size_range: {512, 4096}, min_seeders: 0)
     end
 
     test "a zero-seeder torrent stays in results with a reduced score" do
@@ -1145,7 +1151,7 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       ranked = ReleaseRanker.rank_all([result]) |> List.first()
       breakdown = ranked.breakdown
 
-      assert breakdown.size_penalty == 0.0
+      assert breakdown.limit_violation == nil
       assert breakdown.seeder_penalty == 0.0
       assert breakdown.identity_penalty == 0.0
 
@@ -2359,30 +2365,39 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
   end
 
   describe "score_all_with_reasons/2 and build_filter_stats/2 (U7)" do
-    test "never returns size/seeders/ratio rejection reasons; a too-small release is accepted with a size penalty" do
-      results = [
+    test "reports a size limit as a rejection while low seeders and ratio stay penalties" do
+      small =
         build_result(%{
           title: "Show.S01E01.1080p.WEB.h264-GROUP",
           size: 50 * 1024 * 1024,
           seeders: 0,
           leechers: 100
         })
-      ]
+
+      in_range =
+        build_result(%{
+          title: "Show.S01E02.1080p.WEB.h264-GROUP",
+          size: 1000 * 1024 * 1024,
+          seeders: 0,
+          leechers: 100
+        })
 
       scored =
-        ReleaseRanker.score_all_with_reasons(results,
+        ReleaseRanker.score_all_with_reasons([small, in_range],
           size_range: {512, 4096},
           min_seeders: 10,
           min_ratio: 0.5
         )
 
-      row = List.first(scored)
-      assert row.status == :accepted
-      assert row.breakdown.size_penalty < 0.0
-      assert row.breakdown.seeder_penalty < 0.0
+      small_row = Enum.find(scored, &(&1.title == small.title))
+      assert small_row.status == :rejected
+      assert small_row.rejection_reason == "size_below_minimum: 50 MB < 512 MB"
+
+      in_range_row = Enum.find(scored, &(&1.title == in_range.title))
+      assert in_range_row.status == :accepted
+      assert in_range_row.breakdown.seeder_penalty < 0.0
 
       reasons = Enum.map(scored, & &1.rejection_reason)
-      refute Enum.any?(reasons, &(&1 && String.contains?(&1, "size_out_of_range")))
       refute Enum.any?(reasons, &(&1 && String.contains?(&1, "low_seeders")))
       refute Enum.any?(reasons, &(&1 && String.contains?(&1, "low_ratio")))
     end
@@ -2428,31 +2443,37 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert row.breakdown.identity_penalty < 0.0
     end
 
-    test "build_filter_stats flags penalized-but-kept results and drops size rejections" do
-      results = [
+    test "build_filter_stats counts size rejections and flags penalized-but-kept results" do
+      small =
         build_result(%{
           title: "Show.S09E02.1080p.WEB.h264-GROUP",
           size: 50 * 1024 * 1024,
           seeders: 50,
           quality: QualityParser.parse("Show.S09E02.1080p.WEB.h264-GROUP")
         })
-      ]
+
+      kept =
+        build_result(%{
+          title: "Show.S09E02.1080p.WEB.h264-OTHER",
+          size: 1000 * 1024 * 1024,
+          seeders: 50,
+          quality: QualityParser.parse("Show.S09E02.1080p.WEB.h264-OTHER")
+        })
 
       stats =
-        ReleaseRanker.build_filter_stats(results,
+        ReleaseRanker.build_filter_stats([small, kept],
           media_type: :episode,
           expected_season: 9,
           expected_episode: 1,
           size_range: {512, 4096}
         )
 
-      row = List.first(stats["results"])
-      assert row["status"] == "accepted"
+      assert stats["rejection_counts"]["size_below_minimum"] == 1
+
+      row = Enum.find(stats["results"], &(&1["status"] == "accepted"))
       assert row["penalized"] == true
       assert row["penalties"]["identity_penalty"] < 0.0
-      assert row["penalties"]["size_penalty"] < 0.0
-
-      refute Map.has_key?(stats["rejection_counts"], "size_out_of_range")
+      refute Map.has_key?(row["penalties"], "size_penalty")
     end
   end
 
