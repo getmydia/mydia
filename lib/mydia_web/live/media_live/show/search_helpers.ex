@@ -286,17 +286,16 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
 
   For the `:quality` sort mode this routes through `ReleaseRanker.rank_all/2`,
   so the manual top result equals what automatic search would select (R2),
-  with three deliberate exceptions: `quality_sort_via_ranker/2` passes
-  `apply_source_exclusion: false`, `apply_resolution_floor: false` and
-  `apply_identity_removal: false`, so neither a profile's `:excluded_sources`
-  list nor its `:min_resolution` floor is enforced here, and a release that is
-  not the item stays listed below every release that is. Per spec R8, manual search and manual grab are the
-  operator's explicit escape hatch and must stay unaffected by removals the
-  automatic path applies — silently dropping a release from the manual
-  dialog, recoverable only by switching sort mode, would remove that escape
-  hatch. Penalized releases (size/seeder/identity) remain visible, sorted to
-  the bottom (R3); the hard removals that still apply to manual search are
-  blocked tags, invalid releases, and too-recent NZBs.
+  with two deliberate exceptions: `quality_sort_via_ranker/2` passes
+  `apply_profile_limits: false` and `apply_identity_removal: false`, so none
+  of the profile's limits (excluded sources, min/max resolution, require HDR,
+  min/max size) removes a release here, and a release that is not the item
+  stays listed below every release that is. Per spec R8, manual search and
+  manual grab are the operator's explicit escape hatch and must stay
+  unaffected by removals the automatic path applies. A release that breaks a
+  limit is listed below every release that does not, with the reason on
+  `breakdown.limit_violation`. The hard removals that still apply to manual
+  search are blocked tags, invalid releases, and too-recent NZBs.
   Non-quality sort modes (`:seeders`, `:size`, `:date`) stay as direct sorts.
   """
   def sort_search_results_with_opts(results, :quality, ranking_opts) do
@@ -314,14 +313,14 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   # order. When no quality profile is set, fall back to a seeders sort (matching
   # the legacy no-profile behavior).
   #
-  # apply_source_exclusion, apply_resolution_floor and apply_identity_removal
-  # false are all load-bearing (R8): this is the manual search dialog, and
-  # manual search/grab must never silently drop a release because of a
-  # profile's :excluded_sources list, its :min_resolution floor, or an identity
-  # mismatch the operator may know better about, even though a resolved
-  # profile IS passed through for scoring/sorting. The opt-outs are explicit
-  # flags rather than "no profile present" so they can't be defeated by the
-  # profile the manual dialog legitimately does pass.
+  # apply_profile_limits and apply_identity_removal false are both
+  # load-bearing (R8): this is the manual search dialog, and manual
+  # search/grab must never silently drop a release because of one of the
+  # profile's limits or an identity mismatch the operator may know better
+  # about, even though a resolved profile IS passed through for
+  # scoring/sorting. The opt-outs are explicit flags rather than "no profile
+  # present" so they can't be defeated by the profile the manual dialog
+  # legitimately does pass.
   defp quality_sort_via_ranker(results, ranking_opts) do
     case Keyword.get(ranking_opts, :quality_profile) do
       nil ->
@@ -330,8 +329,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
       _profile ->
         opts =
           ranking_opts
-          |> Keyword.put(:apply_source_exclusion, false)
-          |> Keyword.put(:apply_resolution_floor, false)
+          |> Keyword.put(:apply_profile_limits, false)
           |> Keyword.put(:apply_identity_removal, false)
 
         results
