@@ -72,11 +72,8 @@ Open http://localhost:4000 and create your admin account.
 
 ## How Mydia Picks a Release
 
-A search usually turns up dozens of releases for the same movie or episode.
-Mydia throws out the ones that are wrong or unwanted, puts the rest in order of
-what you asked for, and grabs the first one. The manual search dialog shows you
-the same order, so you can see why a release came out on top and pick a
-different one yourself.
+Automatic and manual search rank releases the same way. Automatic search grabs
+the top one; manual search shows you the list in that order.
 
 ```mermaid
 flowchart TD
@@ -87,30 +84,36 @@ flowchart TD
     D -->|You, in manual search| F[See the same order and pick]
 ```
 
-**What gets dropped:** fake or malformed releases, releases for a different
-title, tags you have blocked, custom formats your profile rejects, sources your
-profile excludes (cam rips, for example), anything below your minimum
-resolution, and Usenet posts too new to be complete. In manual search, excluded
-sources, low resolutions and releases that look like a different title are kept
-at the bottom of the list instead, in case you know better.
+**Dropped before ranking**
 
-**How the rest is ordered**, most important first:
+- Fake or malformed release names
+- A different title than the one searched *
+- Tags you blocked
+- Custom formats your profile rejects
+- Sources your profile excludes, such as cam rips *
+- Resolutions below your profile's minimum *
+- Usenet posts too new to be complete
 
-1. The right season and episode. A wrong match never beats a right one.
-2. Your preferred audio language, if you set one.
-3. The resolutions your quality profile lists, in its order. A resolution the
-   profile does not list comes after all the ones it does.
-4. More of your languages, so dual audio beats a single match.
-5. Your custom format scores.
-6. Overall fit: how well the codec, audio, source, size and HDR match your
-   profile, how healthy the release is (seeders, or how complete a Usenet post
-   is), and how closely its name matches. A torrent with no seeders drops
-   sharply.
+\* Manual search keeps these at the bottom of the list instead.
 
-**Upgrades** use the same ordering to find a better release, but only replace
-your file when the new one is clearly better by your quality profile or adds a
-preferred audio language. Mydia checks the release before downloading it and
-the actual file afterwards, and keeps your old file until the new one passes.
+**Ranking order**, each step only breaking ties left by the one above
+
+1. Right season and episode
+2. Preferred audio language
+3. Resolution, in your profile's order; unlisted resolutions last
+4. Number of preferred audio languages
+5. Custom format score
+6. Quality score: about 60% profile fit (resolution, codec, audio, source,
+   size, HDR), plus seeders or Usenet completeness, plus name match. Torrents
+   with 0 seeders lose 30%.
+
+**Upgrades**
+
+- Found with the same ranking
+- Must beat your current file by the profile's upgrade margin, or add a
+  preferred audio language
+- Checked twice: the release before download, the real file after
+- Your old file is kept until the new one passes
 
 More detail: [Why Mydia Picked That Release](docs/using/explanation/quality-decisions.md)
 and [Custom Formats](docs/configuration/custom-formats.md).
