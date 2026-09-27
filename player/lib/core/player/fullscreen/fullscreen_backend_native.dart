@@ -29,9 +29,26 @@ FullscreenBackend createFullscreenBackend({
 /// `defaultExitNativeFullscreen` reports one, so inventing failures here would
 /// be the same guessing the web backend was fixed to stop doing.
 class NativeFullscreenBackend implements FullscreenBackend {
-  NativeFullscreenBackend({required this.onChange});
+  NativeFullscreenBackend({
+    required this.onChange,
+    @visibleForTesting ValueNotifier<bool>? windowSignal,
+    @visibleForTesting bool? isWindows,
+    @visibleForTesting VoidCallback? onEnterNative,
+    @visibleForTesting VoidCallback? onExitNative,
+  })  : _windowSignal = windowSignal,
+        _isWindows = isWindows,
+        _onEnterNative = onEnterNative ?? defaultEnterNativeFullscreen,
+        _onExitNative = onExitNative ?? defaultExitNativeFullscreen;
 
   final ValueChanged<bool> onChange;
+  final ValueNotifier<bool>? _windowSignal;
+  final bool? _isWindows;
+  final VoidCallback _onEnterNative;
+  final VoidCallback _onExitNative;
+
+  bool get _effectiveIsWindows => _isWindows ?? PlatformFeatures.isWindows;
+  ValueNotifier<bool> get _effectiveWindowSignal =>
+      _windowSignal ?? windowFullscreenSignal;
 
   /// Both native routes exist unconditionally, so this never moves. It is a
   /// notifier rather than a constant only because the interface is shaped for
@@ -55,32 +72,44 @@ class NativeFullscreenBackend implements FullscreenBackend {
   @override
   void attach(Player player) {
     if (mode != FullscreenMode.osWindow || _listening) return;
-    windowFullscreen.addListener(_republish);
+    _effectiveWindowSignal.addListener(_republish);
     _listening = true;
     _republish();
   }
 
-  void _republish() => onChange(windowFullscreen.value);
+  void _republish() => onChange(_effectiveWindowSignal.value);
 
   @override
   void enter() {
-    defaultEnterNativeFullscreen();
-    // The one mode with no event source: `setEnabledSystemUIMode` has no
-    // callback, so mobile reports optimistically. No worse than before, and
-    // isolated to the platform that cannot do better.
-    if (mode == FullscreenMode.systemUi) onChange(true);
+    _onEnterNative();
+    // Mobile has no system event callback for `setEnabledSystemUIMode`, and
+    // Windows has no OS-level fullscreen event callback (Win32 borderless
+    // fullscreen is just a resized style-stripped window, and media_kit_video
+    // does not emit window events). Both report optimistically, and on Windows
+    // we also keep the app-wide `windowFullscreenSignal` in sync.
+    if (_effectiveIsWindows) {
+      _effectiveWindowSignal.value = true;
+    }
+    if (mode == FullscreenMode.systemUi || _effectiveIsWindows) {
+      onChange(true);
+    }
   }
 
   @override
   void exit() {
-    defaultExitNativeFullscreen();
-    if (mode == FullscreenMode.systemUi) onChange(false);
+    _onExitNative();
+    if (_effectiveIsWindows) {
+      _effectiveWindowSignal.value = false;
+    }
+    if (mode == FullscreenMode.systemUi || _effectiveIsWindows) {
+      onChange(false);
+    }
   }
 
   @override
   void dispose() {
     if (_listening) {
-      windowFullscreen.removeListener(_republish);
+      _effectiveWindowSignal.removeListener(_republish);
       _listening = false;
     }
     _ready.dispose();
