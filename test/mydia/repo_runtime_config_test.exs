@@ -45,6 +45,17 @@ defmodule Mydia.RepoRuntimeConfigTest do
   end
 
   test "preserves test sandbox database path when DATABASE_PATH env is unset" do
+    orig_env = System.get_env("DATABASE_PATH")
+    System.delete_env("DATABASE_PATH")
+
+    on_exit(fn ->
+      if orig_env do
+        System.put_env("DATABASE_PATH", orig_env)
+      else
+        System.delete_env("DATABASE_PATH")
+      end
+    end)
+
     fake_config = %Schema{
       database: %Schema.Database{path: "mydia_dev.db", pool_size: 5}
     }

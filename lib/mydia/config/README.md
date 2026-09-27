@@ -21,7 +21,8 @@ busy timeout, etc.) for write concurrency safety (#283) and are not operator-tun
 `database.path` and `database.pool_size` are the only two settings in the schema.
 They are loaded during phase one (`sources: [:yaml, :env]`) and applied via
 `Mydia.Repo.init/2`, which runs at Repo boot with all modules loaded and applies
-uniformly to dev, test, and prod.
+uniformly to dev, test, and prod. In production releases, `config/runtime.exs`
+continues to require `DATABASE_PATH` from the environment.
 
 Oban settings (`poll_interval` and `max_age_days`) are likewise loaded from
 `:runtime_config` and applied via `Mydia.Jobs.ObanConfig` when Oban starts in the
