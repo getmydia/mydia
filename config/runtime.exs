@@ -117,7 +117,10 @@ if config_env() == :prod do
 
       config :mydia, Mydia.Repo,
         database: database_path,
-        pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5")
+        pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),
+        # Mydia.Perf keys query timings by the calling function; the
+        # stacktrace capture follows the metrics switch above.
+        stacktrace: perf_metrics_enabled?
   end
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
