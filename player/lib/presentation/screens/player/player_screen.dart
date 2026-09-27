@@ -5850,6 +5850,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return KeyEventResult.handled;
 
       case LogicalKeyboardKey.keyF:
+      case LogicalKeyboardKey.f11:
         // Gated on the same signal as the button, so the two cannot disagree
         // about whether fullscreen exists. Claiming the key while doing nothing
         // would swallow it from anything else that wants it.
