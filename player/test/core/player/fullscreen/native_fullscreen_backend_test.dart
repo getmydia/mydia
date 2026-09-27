@@ -36,6 +36,41 @@ void main() {
       expect(changes, [true, false]);
     });
 
+    test(
+        'on Windows with player attached, each transition reports exactly once',
+        () {
+      final changes = <bool>[];
+      final windowSignal = ValueNotifier<bool>(false);
+      var nativeEnterCalls = 0;
+      var nativeExitCalls = 0;
+
+      final backend = NativeFullscreenBackend(
+        onChange: changes.add,
+        windowSignal: windowSignal,
+        isWindows: true,
+        onEnterNative: () => nativeEnterCalls++,
+        onExitNative: () => nativeExitCalls++,
+      );
+      addTearDown(backend.dispose);
+
+      final player = Player(platformPlayer: _FakePlatformPlayer());
+      backend.attach(player);
+      // attach initial republish
+      expect(changes, [false]);
+
+      backend.enter();
+      expect(nativeEnterCalls, 1);
+      expect(windowSignal.value, isTrue);
+      // exactly once for enter (republished via windowSignal)
+      expect(changes, [false, true]);
+
+      backend.exit();
+      expect(nativeExitCalls, 1);
+      expect(windowSignal.value, isFalse);
+      // exactly once for exit (republished via windowSignal)
+      expect(changes, [false, true, false]);
+    });
+
     test('on non-Windows desktop, enter does not optimistically report', () {
       final changes = <bool>[];
       final windowSignal = ValueNotifier<bool>(false);

@@ -90,7 +90,8 @@ class NativeFullscreenBackend implements FullscreenBackend {
     if (_effectiveIsWindows) {
       _effectiveWindowSignal.value = true;
     }
-    if (mode == FullscreenMode.systemUi || _effectiveIsWindows) {
+    if (mode == FullscreenMode.systemUi ||
+        (_effectiveIsWindows && !_listening)) {
       onChange(true);
     }
   }
@@ -101,7 +102,8 @@ class NativeFullscreenBackend implements FullscreenBackend {
     if (_effectiveIsWindows) {
       _effectiveWindowSignal.value = false;
     }
-    if (mode == FullscreenMode.systemUi || _effectiveIsWindows) {
+    if (mode == FullscreenMode.systemUi ||
+        (_effectiveIsWindows && !_listening)) {
       onChange(false);
     }
   }
