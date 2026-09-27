@@ -1077,7 +1077,7 @@ defmodule Mydia.Library.TRaSHGuideIntegrationTest do
         source: "WEBRip",
         video_codec: "h265",
         audio_codec: "ac3",
-        file_size_mb: 800,
+        file_size_mb: 1100,
         media_type: :episode
       }
 

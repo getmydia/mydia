@@ -4,6 +4,7 @@ defmodule Mydia.Indexers.ProfileLimitsTest do
   alias Mydia.Indexers.{ProfileLimits, QualityParser, ReleaseRanker, SearchResult}
   alias Mydia.Settings.DefaultQualityProfiles
   alias Mydia.Settings.QualityProfile
+  alias Mydia.Settings.QualityProfilePresets
 
   @mb 1_048_576
 
@@ -229,12 +230,18 @@ defmodule Mydia.Indexers.ProfileLimitsTest do
       default_keys =
         Enum.flat_map(DefaultQualityProfiles.defaults(), &Map.keys(&1.quality_standards))
 
+      preset_keys =
+        Enum.flat_map(
+          QualityProfilePresets.list_presets(),
+          &Map.keys(&1.profile_data.quality_standards)
+        )
+
       form_keys =
         ~r/quality_standards\]\[([a-z_]+)\]/
         |> Regex.scan(File.read!("lib/mydia_web/live/admin_quality_profiles_live/components.ex"))
         |> Enum.map(fn [_, key] -> String.to_atom(key) end)
 
-      unclassified = Enum.uniq(default_keys ++ form_keys) -- classified
+      unclassified = Enum.uniq(default_keys ++ preset_keys ++ form_keys) -- classified
 
       assert unclassified == [],
              "Classify #{inspect(unclassified)} in Mydia.Indexers.ProfileLimits as a limit " <>
