@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/theme/colors.dart';
 import '../../core/ui/reduced_motion.dart';
@@ -62,8 +63,16 @@ class _AmbientBackdropState extends State<AmbientBackdrop> {
     // the crossfade does not stall on first decode (plan U4 / R2).
     final url = widget.imageUrl;
     if (url != null && url != oldWidget.imageUrl) {
+      // Must build the same provider _ArtworkLayer resolves, decode width
+      // included, or this warms a cache entry nothing reads and every
+      // backdrop decodes twice.
       precacheImage(
-        CachedNetworkImageProvider(url, cacheManager: BackdropCacheManager()),
+        artworkImageProvider(
+          url,
+          cacheManager: BackdropCacheManager(),
+          decodeWidth:
+              viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+        ),
         context,
       );
     }
@@ -167,6 +176,11 @@ class _ArtworkLayer extends StatelessWidget {
             imageUrl: imageUrl,
             fit: BoxFit.cover,
             cacheManager: BackdropCacheManager(),
+            // Viewport width rather than a LayoutBuilder, so it matches the
+            // precache in _AmbientBackdropState.didUpdateWidget exactly.
+            memCacheWidth:
+                viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
+            imageRenderMethodForWeb: artworkWebRenderMethod,
             // No placeholder/error chrome: the constant dark base behind the
             // switcher covers the gap, keeping the scrim color stable.
             placeholder: (_, __) => const SizedBox.expand(),

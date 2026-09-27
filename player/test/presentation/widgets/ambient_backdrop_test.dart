@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cache/artwork_decode.dart';
+import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 
 import '../../test_utils/mock_network_images.dart';
@@ -177,6 +179,50 @@ void main() {
         await tester.pump();
 
         expect(_switcherOf(tester).duration, greaterThan(Duration.zero));
+      });
+    });
+
+    testWidgets('decodes the backdrop at viewport width, capped at w1280',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: const AmbientBackdrop(
+                  imageUrl: 'https://image.tmdb.org/t/p/w1280/a.jpg',
+                  id: 'a',
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final rendered = tester
+            .widget<Image>(
+              find.descendant(
+                of: find.byType(AmbientBackdrop),
+                matching: find.byType(Image),
+              ),
+            )
+            .image;
+
+        // The precache in didUpdateWidget builds exactly this provider, so
+        // equality here is what guarantees the precache warms the entry the
+        // layer reads.
+        expect(
+          rendered,
+          artworkImageProvider(
+            'https://image.tmdb.org/t/p/w1280/a.jpg',
+            cacheManager: BackdropCacheManager(),
+            decodeWidth: 832,
+          ),
+        );
       });
     });
   });
