@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cache/artwork_decode.dart';
+import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
 
 import '../../test_utils/mock_network_images.dart';
@@ -177,6 +179,139 @@ void main() {
         await tester.pump();
 
         expect(_switcherOf(tester).duration, greaterThan(Duration.zero));
+      });
+    });
+
+    testWidgets('decodes the backdrop at viewport width, capped at w1280',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: const AmbientBackdrop(
+                  imageUrl: 'https://image.tmdb.org/t/p/w1280/a.jpg',
+                  id: 'a',
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final rendered = tester
+            .widget<Image>(
+              find.descendant(
+                of: find.byType(AmbientBackdrop),
+                matching: find.byType(Image),
+              ),
+            )
+            .image;
+
+        // The precache in didUpdateWidget builds exactly this provider, so
+        // equality here is what guarantees the precache warms the entry the
+        // layer reads.
+        expect(
+          rendered,
+          artworkImageProvider(
+            'https://image.tmdb.org/t/p/w1280/a.jpg',
+            cacheManager: BackdropCacheManager(),
+            decodeWidth: 832,
+          ),
+        );
+      });
+    });
+
+    testWidgets(
+        'didUpdateWidget precaches the bucketed key, never the unbounded one',
+        (tester) async {
+      // The test above only ever mounts once, so didUpdateWidget's
+      // precacheImage call never runs. Swapping the id/url here is the only
+      // way to exercise it.
+      PaintingBinding.instance.imageCache.clear();
+      tester.view.physicalSize = const Size(800, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const urlA = 'https://image.tmdb.org/t/p/w1280/a.jpg';
+      const urlB = 'https://image.tmdb.org/t/p/w1280/b.jpg';
+
+      await mockNetworkImages(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: const AmbientBackdrop(imageUrl: urlA, id: 'a'),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // New id -> didUpdateWidget sees imageUrl change and precaches.
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(
+                child: const AmbientBackdrop(imageUrl: urlB, id: 'b'),
+              ),
+            ),
+          ),
+        );
+
+        final boundedProvider = artworkImageProvider(
+          urlB,
+          cacheManager: BackdropCacheManager(),
+          decodeWidth: 832,
+        );
+        // What didUpdateWidget would precache if it dropped the decode
+        // width: the full-resolution provider _ArtworkLayer never asks for.
+        final unboundedProvider = artworkImageProvider(
+          urlB,
+          cacheManager: BackdropCacheManager(),
+          decodeWidth: null,
+        );
+
+        ImageCacheStatus? boundedStatus;
+        ImageCacheStatus? unboundedStatus;
+        // obtainKey (and so obtainCacheStatus) is documented async; run it
+        // under runAsync so any real Future it awaits can actually complete.
+        await tester.runAsync(() async {
+          boundedStatus = await boundedProvider.obtainCacheStatus(
+            configuration: const ImageConfiguration(),
+          );
+          unboundedStatus = await unboundedProvider.obtainCacheStatus(
+            configuration: const ImageConfiguration(),
+          );
+        });
+
+        // The precache must land the same bucketed key _ArtworkLayer
+        // resolves...
+        expect(boundedStatus?.tracked, isTrue);
+        // ...and never the unbounded one. Otherwise the backdrop decodes
+        // twice: once for the precache's full-resolution fetch, once for the
+        // layer's correctly sized one -- the exact waste the precache exists
+        // to avoid.
+        expect(unboundedStatus?.tracked ?? false, isFalse);
+
+        // Let the crossfade finish so a single Image remains to compare.
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pumpAndSettle();
+
+        final rendered = tester
+            .widget<Image>(
+              find.descendant(
+                of: find.byType(AmbientBackdrop),
+                matching: find.byType(Image),
+              ),
+            )
+            .image;
+
+        expect(rendered, boundedProvider);
       });
     });
   });

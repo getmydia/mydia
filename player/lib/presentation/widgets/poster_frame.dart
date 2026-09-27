@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/ui/reduced_motion.dart';
@@ -30,7 +31,9 @@ import 'ambient_backdrop_provider.dart';
 ///    with the depth contract deliberately, not incidentally: if network image
 ///    loading were reachable without going through this widget, a fresh author
 ///    wiring up their own `CachedNetworkImage` would have no reason to ever
-///    reach for the depth tokens, and the contract would drift a fourth time;
+///    reach for the depth tokens, and the contract would drift a fourth time.
+///    It also bounds the decode to the laid-out width
+///    (core/cache/artwork_decode.dart);
 ///  * publishing the hovered artwork to the ambient backdrop (R5/R9).
 ///
 /// What it does not own: sizing (it fills its constraints and the caller sizes
@@ -243,13 +246,24 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
             fit: StackFit.expand,
             children: [
               if (url != null && url.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  cacheManager: PosterCacheManager(),
-                  placeholder: (context, _) =>
-                      widget.loadingPlaceholder ?? widget.placeholder,
-                  errorWidget: (context, _, __) => widget.placeholder,
+                // Decode at the size actually on screen. Full-size decodes of
+                // a whole grid exhausted GPU memory on web: Firefox painted
+                // posters black, mobile Safari dropped them on scroll-back.
+                LayoutBuilder(
+                  builder: (context, constraints) => CachedNetworkImage(
+                    imageUrl: url,
+                    fit: BoxFit.cover,
+                    cacheManager: PosterCacheManager(),
+                    memCacheWidth: artworkDecodeWidth(
+                      constraints.maxWidth,
+                      MediaQuery.devicePixelRatioOf(context),
+                      sourceWidth: posterSourceWidth,
+                    ),
+                    imageRenderMethodForWeb: artworkWebRenderMethod,
+                    placeholder: (context, _) =>
+                        widget.loadingPlaceholder ?? widget.placeholder,
+                    errorWidget: (context, _, __) => widget.placeholder,
+                  ),
                 )
               else
                 widget.placeholder,
