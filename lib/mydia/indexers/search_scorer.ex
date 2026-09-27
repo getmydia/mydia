@@ -10,7 +10,8 @@ defmodule Mydia.Indexers.SearchScorer do
   Combined Score = (quality_score * 0.6 + seeder_score + title_bonus) * zero_seeder_penalty
 
   Where:
-  - quality_score: 0-100 (from QualityProfile.score_media_file/2 or fallback)
+  - quality_score: 0-100 (from QualityProfile.score_media_file/2, whose input
+    is built by `release_attrs/2` from `Mydia.Quality.Attrs`, or fallback)
   - seeder_score: log10(seeders + 1) * 10 (max ~30 pts)
   - title_bonus: title_relevance_bonus / 2 (0-10 pts)
   - zero_seeder_penalty: 0.7 if seeders == 0, else 1.0
@@ -27,6 +28,8 @@ defmodule Mydia.Indexers.SearchScorer do
   alias Mydia.Indexers.QualityParser
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
+  alias Mydia.Library.Structs.Quality
+  alias Mydia.Quality.Attrs
   alias Mydia.Settings.QualityProfile
 
   @type score_opts :: [
@@ -183,10 +186,7 @@ defmodule Mydia.Indexers.SearchScorer do
   end
 
   def score_quality(%SearchResult{} = result, %QualityProfile{} = profile, media_type) do
-    # Convert search result to media_attrs format for scoring
-    media_attrs = search_result_to_media_attrs(result, media_type)
-
-    score_result = QualityProfile.score_media_file(profile, media_attrs)
+    score_result = QualityProfile.score_media_file(profile, release_attrs(result, media_type))
 
     {score_result.score, score_result.breakdown, score_result.violations}
   end
@@ -304,67 +304,37 @@ defmodule Mydia.Indexers.SearchScorer do
       String.match?(word, year_pattern)
   end
 
-  # Convert SearchResult to the media_attrs format expected by QualityProfile.score_media_file/2
-  #
-  # `:resolution` goes through QualityParser.effective_resolution/1, so an
-  # untagged release is measured as 360p rather than as "unknown". A nil here
-  # scored a neutral 50 and produced no range violation, ranking it above an
-  # honestly-labelled out-of-range release at 25. The assumption belongs at
-  # this seam and not inside score_media_file/2, which Mydia.Upgrades.Comparator
-  # also calls for real files, where a nil resolution means "not analyzed yet".
-  defp search_result_to_media_attrs(%SearchResult{quality: nil} = result, media_type) do
-    # No quality info available
-    file_size_mb = if result.size, do: result.size / (1024 * 1024), else: nil
+  @doc """
+  The scoring input for a release: `Mydia.Quality.Attrs.from_quality/3` with
+  the one search-only rule applied and unknown dimensions dropped.
 
-    %{
-      resolution: QualityParser.effective_resolution(nil),
-      source: nil,
-      video_codec: nil,
-      audio_codec: nil,
-      file_size_mb: file_size_mb,
-      media_type: media_type
-    }
-  end
-
-  defp search_result_to_media_attrs(%SearchResult{quality: quality} = result, media_type) do
-    # Map codec names to the format expected by quality profiles
-    video_codec = normalize_codec(quality.codec)
-    audio_codec = normalize_audio_codec(quality.audio)
-
-    # Convert size from bytes to MB
-    file_size_mb = if result.size, do: result.size / (1024 * 1024), else: nil
-
-    base_attrs = %{
-      resolution: QualityParser.effective_resolution(quality),
-      source: quality.source,
-      video_codec: video_codec,
-      audio_codec: audio_codec,
-      audio_channels: extract_audio_channels(quality.audio),
-      file_size_mb: file_size_mb,
-      media_type: media_type
-    }
-
-    # HDR tokens by specificity, e.g. ["dolby_vision", "hdr10"] for a DV 8.1
-    # release. Omitted entirely when the release carries no HDR signal, which
-    # is what score_hdr_format/2's SDR fallback clause expects.
-    tokens =
-      Hdr.profile_tokens(%Hdr{
-        base: quality.hdr_format,
-        dv_profile: if(quality.dolby_vision, do: 8)
-      })
-
-    if tokens == [], do: base_attrs, else: Map.put(base_attrs, :hdr_tokens, tokens)
+  `:resolution` falls back to `QualityParser.assumed_resolution/0`, so an
+  untagged release is measured as 360p rather than as "unknown". A nil here
+  scored a neutral 50 and produced no range violation, ranking it above an
+  honestly-labelled out-of-range release at 25. The assumption belongs at
+  this seam and not inside `Attrs` or `score_media_file/2`, which
+  `Mydia.Upgrades.Comparator` also uses for real files, where a nil
+  resolution means "not analyzed yet".
+  """
+  @spec release_attrs(SearchResult.t(), :movie | :episode) :: map()
+  def release_attrs(%SearchResult{} = result, media_type) do
+    (result.quality || %Quality{})
+    |> Attrs.from_quality(result.size, media_type)
+    |> Map.update!(:resolution, &(&1 || QualityParser.assumed_resolution()))
+    |> Map.reject(fn {_k, v} -> is_nil(v) end)
   end
 
   # Extract detected quality attributes from search result for display
   defp extract_detected_quality(%SearchResult{quality: nil}), do: %{}
 
   defp extract_detected_quality(%SearchResult{quality: quality} = result) do
+    attrs = Attrs.from_quality(quality, result.size, :movie)
+
     %{
       resolution: quality.resolution,
       source: quality.source,
-      video_codec: normalize_codec(quality.codec),
-      audio_codec: normalize_audio_codec(quality.audio),
+      video_codec: attrs.video_codec,
+      audio_codec: attrs.audio_codec,
       hdr:
         Hdr.display(%Hdr{
           base: quality.hdr_format,
@@ -372,58 +342,5 @@ defmodule Mydia.Indexers.SearchScorer do
         }),
       size_mb: if(result.size, do: Float.round(result.size / (1024 * 1024), 1), else: nil)
     }
-  end
-
-  # Derive an audio channel layout (e.g. "5.1", "7.1", "7.1.2", "2.0") from the
-  # parsed audio string so quality_standards.preferred_audio_channels has a real
-  # effect on search ranking. Returns nil when no channel notation is present.
-  defp extract_audio_channels(nil), do: nil
-
-  defp extract_audio_channels(audio) when is_binary(audio) do
-    case Regex.run(~r/(?<!\d)(\d\.\d(?:\.\d)?)(?!\d)/, audio) do
-      [_, channels] -> channels
-      _ -> nil
-    end
-  end
-
-  # Normalize video codec names to match quality profile format
-  defp normalize_codec(nil), do: nil
-
-  defp normalize_codec(codec) when is_binary(codec) do
-    codec
-    |> String.downcase()
-    |> case do
-      "x264" -> "h264"
-      "x265" -> "h265"
-      "h.264" -> "h264"
-      "h.265" -> "h265"
-      other -> other
-    end
-  end
-
-  # Normalize audio codec names to match quality profile format
-  defp normalize_audio_codec(nil), do: nil
-
-  defp normalize_audio_codec(codec) when is_binary(codec) do
-    codec
-    |> String.downcase()
-    |> case do
-      # TrueHD Atmos is the highest tier - map to "atmos"
-      "truehd atmos" -> "atmos"
-      "atmos" -> "atmos"
-      "dolby atmos" -> "atmos"
-      # TrueHD without Atmos
-      "truehd" -> "truehd"
-      "dolby truehd" -> "truehd"
-      # DTS variants
-      "dts:x" -> "dts-hd"
-      "dts-hd ma" -> "dts-hd"
-      "dts-hd" -> "dts-hd"
-      # Dolby Digital variants
-      "dd+" -> "eac3"
-      "ddp" -> "eac3"
-      "dd" -> "ac3"
-      other -> other
-    end
   end
 end
