@@ -934,6 +934,64 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert [_] = ReleaseRanker.rank_all([unknown], size_range: {512, 4096}, min_seeders: 0)
     end
 
+    test "manual search with apply_profile_limits and apply_identity_removal both false sorts limit compliance inside identity match" do
+      # The combination manual search actually uses: nothing is removed, but
+      # a limit-violating release sinks below every compliant one, and within
+      # each of those tiers an identity mismatch sinks further still. Identity
+      # stays the outermost tier per the sink_limit_violations/2 comment.
+      target = %Mydia.Indexers.ReleaseIdentity.Target{
+        type: :tv_show,
+        year: nil,
+        keys: ["driftwoodcove"]
+      }
+
+      compliant_match =
+        build_result(%{
+          title: "Driftwood.Cove.S01E01.1080p.WEB.h264-GROUP",
+          size: 1000 * 1024 * 1024,
+          seeders: 20
+        })
+
+      violating_match =
+        build_result(%{
+          title: "Driftwood.Cove.S01E02.1080p.WEB.h264-GROUP",
+          size: 50 * 1024 * 1024,
+          seeders: 20
+        })
+
+      compliant_mismatch =
+        build_result(%{
+          title: "Marlow.Fields.S01E01.1080p.WEB.h264-GROUP",
+          size: 1000 * 1024 * 1024,
+          seeders: 20
+        })
+
+      violating_mismatch =
+        build_result(%{
+          title: "Marlow.Fields.S01E02.1080p.WEB.h264-GROUP",
+          size: 50 * 1024 * 1024,
+          seeders: 20
+        })
+
+      ranked =
+        ReleaseRanker.rank_all(
+          [violating_mismatch, compliant_mismatch, violating_match, compliant_match],
+          media_type: :episode,
+          size_range: {512, 4096},
+          min_seeders: 0,
+          identity_target: target,
+          apply_profile_limits: false,
+          apply_identity_removal: false
+        )
+
+      assert Enum.map(ranked, & &1.result.title) == [
+               compliant_match.title,
+               violating_match.title,
+               compliant_mismatch.title,
+               violating_mismatch.title
+             ]
+    end
+
     test "a zero-seeder torrent stays in results with a reduced score" do
       results = [
         build_result(%{title: "Dead.1080p.x264", seeders: 0, leechers: 0}),

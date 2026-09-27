@@ -205,7 +205,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
   @doc """
   Applies the surviving hard removals to a result list.
 
-  Only two hard removals remain here — seeders, ratio and identity are soft
+  Only two hard removals remain here: seeders, ratio and identity are soft
   scoring penalties, and quality-profile limits are removed by
   `Mydia.Indexers.ProfileLimits`. Removes results that:
   - Contain any `:blocked_tags` in their title (R8)
