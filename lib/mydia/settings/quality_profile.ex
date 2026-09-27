@@ -827,8 +827,42 @@ defmodule Mydia.Settings.QualityProfile do
           violations
       end
 
+    # File size is a hard limit like the resolution bounds, so a file outside
+    # the range for its media type reads as maximally upgradable. An unknown or
+    # zero size is no evidence either way.
+    violations =
+      case size_violation(standards, media_attrs) do
+        nil -> violations
+        message -> [message | violations]
+      end
+
     violations
   end
+
+  defp size_violation(standards, %{file_size_mb: size, media_type: media_type})
+       when is_number(size) and size > 0 and media_type in [:movie, :episode] do
+    {min_key, max_key} =
+      case media_type do
+        :movie -> {:movie_min_size_mb, :movie_max_size_mb}
+        :episode -> {:episode_min_size_mb, :episode_max_size_mb}
+      end
+
+    min_size = Map.get(standards, min_key)
+    max_size = Map.get(standards, max_key)
+
+    cond do
+      is_number(min_size) and size < min_size ->
+        "File size #{round(size)} MB is below minimum #{min_size} MB"
+
+      is_number(max_size) and size > max_size ->
+        "File size #{round(size)} MB is above maximum #{max_size} MB"
+
+      true ->
+        nil
+    end
+  end
+
+  defp size_violation(_standards, _media_attrs), do: nil
 
   # Scores a value based on its position in a preference list
   # First item = 100, last item = 60, not in list = 25

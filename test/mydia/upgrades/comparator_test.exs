@@ -355,4 +355,50 @@ defmodule Mydia.Upgrades.ComparatorTest do
              )
     end
   end
+
+  describe "size limits" do
+    # uhd_file/0 is 20 GiB, above this profile's 15 GiB movie maximum. The low
+    # cutoff means only the size violation can make it eligible.
+    defp sized_profile do
+      standards =
+        Map.merge(profile().quality_standards, %{
+          movie_min_size_mb: 2048,
+          movie_max_size_mb: 15_360
+        })
+
+      profile(%{quality_standards: standards, upgrade_until_score: 10})
+    end
+
+    test "a file outside the size range scores 0 and is eligible for upgrade" do
+      assert {:ok, score} = Comparator.score_file(uhd_file(), sized_profile(), :movie)
+      assert score == 0.0
+      assert Comparator.below_cutoff?(uhd_file(), sized_profile(), :movie)
+    end
+
+    test "an in-range candidate replaces an out-of-range file" do
+      candidate = %Quality{resolution: "2160p", codec: "x265"}
+
+      assert {:ok, %{reason: :quality}} =
+               Comparator.upgrade?(
+                 uhd_file(),
+                 candidate,
+                 10 * 1024 * 1024 * 1024,
+                 sized_profile(),
+                 :movie
+               )
+    end
+
+    test "an out-of-range candidate does not replace an out-of-range file" do
+      candidate = %Quality{resolution: "2160p", codec: "x265"}
+
+      assert {:error, :below_margin} =
+               Comparator.upgrade?(
+                 uhd_file(),
+                 candidate,
+                 25 * 1024 * 1024 * 1024,
+                 sized_profile(),
+                 :movie
+               )
+    end
+  end
 end

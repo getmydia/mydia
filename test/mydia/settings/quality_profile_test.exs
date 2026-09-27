@@ -237,4 +237,48 @@ defmodule Mydia.Settings.QualityProfileTest do
       assert breakdown.video_codec == 60.0
     end
   end
+
+  describe "score_media_file/2 size limits" do
+    defp sized_profile do
+      %QualityProfile{
+        name: "Sized",
+        quality_standards: %{
+          preferred_resolutions: ["1080p"],
+          episode_min_size_mb: 1024,
+          episode_max_size_mb: 4096
+        }
+      }
+    end
+
+    defp episode_attrs(size_mb),
+      do: %{resolution: "1080p", file_size_mb: size_mb, media_type: :episode}
+
+    test "an episode below the minimum is a violation and scores 0" do
+      result = QualityProfile.score_media_file(sized_profile(), episode_attrs(300.0))
+
+      assert result.score == 0.0
+      assert result.violations == ["File size 300 MB is below minimum 1024 MB"]
+    end
+
+    test "an episode above the maximum is a violation" do
+      result = QualityProfile.score_media_file(sized_profile(), episode_attrs(5000.0))
+
+      assert result.violations == ["File size 5000 MB is above maximum 4096 MB"]
+    end
+
+    test "an episode in range has no violation" do
+      assert QualityProfile.score_media_file(sized_profile(), episode_attrs(2000.0)).violations ==
+               []
+    end
+
+    test "an unknown size is not a violation" do
+      assert QualityProfile.score_media_file(sized_profile(), episode_attrs(nil)).violations == []
+      assert QualityProfile.score_media_file(sized_profile(), episode_attrs(0.0)).violations == []
+    end
+
+    test "movie bounds do not apply to an episode" do
+      profile = %QualityProfile{sized_profile() | quality_standards: %{movie_min_size_mb: 2048}}
+      assert QualityProfile.score_media_file(profile, episode_attrs(300.0)).violations == []
+    end
+  end
 end
