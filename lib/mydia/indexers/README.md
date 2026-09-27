@@ -64,3 +64,40 @@ instead, because a file's missing resolution means "not analyzed yet".
 The manual search dialog gets a row's score, breakdown, detected values and
 violations from one `ReleaseRanker.explain/2` call, the same pipeline automatic
 search ranks with. Do not score a row a second way for display.
+
+## Limits vs preferences
+
+There is no minimum score before an automatic grab. A release that is only
+scored down is still grabbed whenever it tops a list of bad releases, which is
+how a 1080p profile took a 360p XviD and an episode profile with a size floor
+took episodes far below it. So every quality-profile setting falls in one of
+two classes, and the class decides where it is enforced.
+
+**Limits.** A setting that constrains the resulting file and is phrased as a
+limit (min, max, require, exclude). Automatic and upgrade search never grab a
+release that breaks one (`Mydia.Indexers.ProfileLimits.reject/2`), and a file
+on disk that breaks one is a violation in
+`Mydia.Settings.QualityProfile.score_media_file/2`, so it scores 0 and is
+eligible for upgrade. Manual search passes `apply_profile_limits: false`, lists
+the release below every compliant one, and shows the reason.
+
+**Preferences.** Everything else. They only change ranking.
+
+| Setting | Class |
+|---|---|
+| `excluded_sources` | limit |
+| `min_resolution`, `max_resolution` | limit |
+| `require_hdr` | limit |
+| `movie_min_size_mb`, `movie_max_size_mb`, `episode_min_size_mb`, `episode_max_size_mb` | limit (a season pack is judged per episode; an unknown size passes) |
+| `preferred_*`, `hdr_formats` | preference |
+| `min_ratio`, minimum seeders | preference: they describe whether a download will finish, not the file, and `StallDetector` handles dead torrents |
+| audio language | preference (outermost sort key) |
+
+Blocked tags, rejecting custom formats and identity mismatches are also hard
+removals, but they are not profile settings.
+
+A new `quality_standards` key must be classified in `ProfileLimits`.
+`test/mydia/indexers/profile_limits_test.exs` fails until it is, and checks
+every limit in all three places (automatic removal, manual listing, file
+violation). Changing a limit to a preference means changing that test, not
+just the ranker.

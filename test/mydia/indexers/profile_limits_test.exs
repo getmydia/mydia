@@ -1,7 +1,8 @@
 defmodule Mydia.Indexers.ProfileLimitsTest do
   use ExUnit.Case, async: true
 
-  alias Mydia.Indexers.{ProfileLimits, QualityParser, SearchResult}
+  alias Mydia.Indexers.{ProfileLimits, QualityParser, ReleaseRanker, SearchResult}
+  alias Mydia.Settings.DefaultQualityProfiles
   alias Mydia.Settings.QualityProfile
 
   @mb 1_048_576
@@ -146,4 +147,137 @@ defmodule Mydia.Indexers.ProfileLimitsTest do
              ]
     end
   end
+
+  # One case per limit key: the standards that set it, a release that breaks
+  # it, and the attributes of a file on disk that break it. Adding a limit key
+  # without a case here fails "every limit key has a case".
+  @cases [
+    %{
+      key: :excluded_sources,
+      standards: %{excluded_sources: ["Telesync"]},
+      title: "Some.Movie.2024.1080p.TELESYNC.HEVC.AAC2.0-GRP",
+      size_mb: 1400,
+      media_type: :movie,
+      file: %{source: "Telesync", resolution: "1080p"}
+    },
+    %{
+      key: :min_resolution,
+      standards: %{min_resolution: "1080p"},
+      title: "Some.Movie.2024.720p.WEB-DL.x264-GRP",
+      size_mb: 4000,
+      media_type: :movie,
+      file: %{resolution: "720p"}
+    },
+    %{
+      key: :max_resolution,
+      standards: %{max_resolution: "1080p"},
+      title: "Some.Movie.2024.2160p.WEB-DL.x265-GRP",
+      size_mb: 4000,
+      media_type: :movie,
+      file: %{resolution: "2160p"}
+    },
+    %{
+      key: :require_hdr,
+      standards: %{require_hdr: true},
+      title: "Some.Movie.2024.1080p.WEB-DL.x264-GRP",
+      size_mb: 4000,
+      media_type: :movie,
+      file: %{resolution: "1080p", hdr_tokens: []}
+    },
+    %{
+      key: :movie_min_size_mb,
+      standards: %{movie_min_size_mb: 2048},
+      title: "Some.Movie.2024.1080p.WEB-DL.x264-GRP",
+      size_mb: 700,
+      media_type: :movie,
+      file: %{resolution: "1080p", file_size_mb: 700}
+    },
+    %{
+      key: :movie_max_size_mb,
+      standards: %{movie_max_size_mb: 15_360},
+      title: "Some.Movie.2024.1080p.WEB-DL.x264-GRP",
+      size_mb: 30_000,
+      media_type: :movie,
+      file: %{resolution: "1080p", file_size_mb: 30_000}
+    },
+    %{
+      key: :episode_min_size_mb,
+      standards: %{episode_min_size_mb: 512},
+      title: "Some.Show.S01E01.1080p.WEB-DL.x264-GRP",
+      size_mb: 200,
+      media_type: :episode,
+      file: %{resolution: "1080p", file_size_mb: 200}
+    },
+    %{
+      key: :episode_max_size_mb,
+      standards: %{episode_max_size_mb: 4096},
+      title: "Some.Show.S01E01.1080p.WEB-DL.x264-GRP",
+      size_mb: 9000,
+      media_type: :episode,
+      file: %{resolution: "1080p", file_size_mb: 9000}
+    }
+  ]
+
+  describe "limits vs preferences" do
+    test "every limit key has a case" do
+      assert Enum.sort(Enum.map(@cases, & &1.key)) == Enum.sort(ProfileLimits.limit_keys())
+    end
+
+    test "every quality_standards key is classified as a limit or a preference" do
+      classified = ProfileLimits.limit_keys() ++ ProfileLimits.preference_keys()
+
+      default_keys =
+        Enum.flat_map(DefaultQualityProfiles.defaults(), &Map.keys(&1.quality_standards))
+
+      form_keys =
+        ~r/quality_standards\]\[([a-z_]+)\]/
+        |> Regex.scan(File.read!("lib/mydia_web/live/admin_quality_profiles_live/components.ex"))
+        |> Enum.map(fn [_, key] -> String.to_atom(key) end)
+
+      unclassified = Enum.uniq(default_keys ++ form_keys) -- classified
+
+      assert unclassified == [],
+             "Classify #{inspect(unclassified)} in Mydia.Indexers.ProfileLimits as a limit " <>
+               "(and add a case to @cases) or a preference. See lib/mydia/indexers/README.md."
+    end
+  end
+
+  for c <- @cases do
+    @c c
+
+    describe "limit #{c.key}" do
+      test "automatic search removes a release that breaks it" do
+        c = @c
+        assert ReleaseRanker.rank_all([release(c.title, c.size_mb)], limit_opts(c)) == []
+      end
+
+      test "manual search keeps the release and records the reason" do
+        c = @c
+
+        assert [%{breakdown: %{limit_violation: reason}}] =
+                 ReleaseRanker.rank_all(
+                   [release(c.title, c.size_mb)],
+                   limit_opts(c) ++ [apply_profile_limits: false]
+                 )
+
+        assert is_binary(reason)
+      end
+
+      test "a file on disk that breaks it is a violation" do
+        c = @c
+
+        result =
+          QualityProfile.score_media_file(
+            profile(c.standards),
+            Map.put(c.file, :media_type, c.media_type)
+          )
+
+        assert result.score == 0.0
+        assert result.violations != []
+      end
+    end
+  end
+
+  defp limit_opts(c),
+    do: [quality_profile: profile(c.standards), media_type: c.media_type, min_seeders: 0]
 end

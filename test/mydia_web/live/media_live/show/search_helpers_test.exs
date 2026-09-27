@@ -268,7 +268,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
   end
 
-  describe "sort_search_results_with_opts/3 does not apply source exclusion (R8)" do
+  describe "sort_search_results_with_opts/3 does not apply profile limits (R8)" do
     test "an excluded release survives manual quality-sort routing, unlike the automatic path" do
       profile = %QualityProfile{
         name: "Excludes telesync",
