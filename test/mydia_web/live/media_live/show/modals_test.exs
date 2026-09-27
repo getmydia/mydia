@@ -342,13 +342,50 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
         quality_profile: profile
       }
 
-      html =
-        modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264"}, %{media_item: media_item})
+      title = "Some.Movie.2020.1080p.ENG.x264"
+      result_extra = %{title: title, quality: Mydia.Indexers.QualityParser.parse(title)}
+      html = modal_html(result_extra, %{media_item: media_item})
 
       assert html =~ ~s(id="search-result-00000-1-score-badge")
       assert html =~ ~s(id="search-result-00000-1-score-breakdown")
       assert html =~ "Score breakdown"
       assert html =~ ~s(id="search-result-00000-1-audio")
+
+      # The ring shows the ranker's own total for this row, not a second score.
+      opts =
+        MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(%{
+          media_item: media_item,
+          manual_search_context: %{type: :media_item},
+          min_seeders: 0,
+          manual_search_query: "Some Movie 2020"
+        })
+
+      result =
+        struct!(
+          Mydia.Indexers.SearchResult,
+          Map.merge(
+            %{
+              download_url: "magnet:?xt=urn:btih:" <> String.duplicate("e", 40),
+              indexer: "test-indexer",
+              size: 1_000,
+              seeders: 12,
+              leechers: 3
+            },
+            result_extra
+          )
+        )
+
+      expected = Mydia.Indexers.ReleaseRanker.explain(result, opts).breakdown.total
+      assert expected > 0
+
+      badge_text =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#search-result-00000-1-score-badge")
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert badge_text == Integer.to_string(trunc(expected))
     end
 
     test "without a quality profile, the row shows the seeders circle, no score badge, and the audio badge still renders" do

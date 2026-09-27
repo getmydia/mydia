@@ -32,9 +32,11 @@ decides only among releases that already agree on everything else. Without an
 audio language preference, keys 2 and 4 are equal for every release, and
 resolution is effectively the first thing compared after identity.
 
-The resolution key explains most surprises: a release whose
-resolution is not in your preferred list cannot outrank one that is, at any
-score, ever. Under a 1080p profile, a 2160p remux with a thousand seeders loses
+The resolution key explains most surprises: among releases that tie on identity
+and audio language, a release whose resolution is not in your preferred list
+cannot outrank one that is, at any score. With an audio language preference set,
+a release in your language can still beat one at a preferred resolution without
+it. Under a 1080p profile, a 2160p remux with a thousand seeders loses
 to a mediocre 1080p WEB-DL. That is working as designed. A profile that names
 1080p is read as a statement about what you want, not a floor to be exceeded when
 something better shows up.
