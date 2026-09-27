@@ -389,7 +389,7 @@ defmodule Mydia.Library do
         # compatibility, which collapses "DD+ 5.1" to "ac3" and "TrueHD Atmos"
         # to "truehd" — losing the channel layout and the Atmos/E-AC3
         # distinction that quality scoring needs. Keep the analyzer's own
-        # string so `Mydia.Upgrades.Attrs` has something lossless to read.
+        # string so `Mydia.Quality.Attrs` has something lossless to read.
         |> maybe_put_struct_field(:audio_codec_raw, result.audio_codec)
 
       write_analysis_success(

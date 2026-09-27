@@ -439,10 +439,14 @@ defmodule Mydia.Indexers.ReleaseRanker do
   ## Scoring Functions
 
   @doc """
-  Calculates the full score breakdown for a single search result.
+  Scores one result and returns everything the manual search dialog shows for
+  it, from a single scorer call.
 
   Used by both automatic searches and manual UI searches for consistent scoring.
-  Returns a `ScoreBreakdown` struct with individual component scores and total.
+  Returns a map with `:breakdown` (a `ScoreBreakdown` struct), `:detected`
+  (quality attributes the scorer read off the result, with `:size_mb` restored
+  to the release's real size even when scoring saw a per-episode-sized season
+  pack) and `:violations` (constraint violations from the scorer).
 
   This function always uses the unified SearchScorer algorithm to ensure
   consistent scoring between manual and automatic searches.
@@ -455,8 +459,12 @@ defmodule Mydia.Indexers.ReleaseRanker do
   - `:search_query` - Original search query to score title relevance
   - `:preferred_qualities` - List of resolutions in preference order (used for sorting)
   """
-  @spec calculate_score_breakdown(SearchResult.t(), ranking_options()) :: ScoreBreakdown.t()
-  def calculate_score_breakdown(%SearchResult{} = result, opts) do
+  @spec explain(SearchResult.t(), ranking_options()) :: %{
+          breakdown: ScoreBreakdown.t(),
+          detected: map(),
+          violations: [String.t()]
+        }
+  def explain(%SearchResult{} = result, opts) do
     quality_profile = Keyword.get(opts, :quality_profile)
     media_type = Keyword.get(opts, :media_type, :movie)
     search_query = Keyword.get(opts, :search_query)
@@ -528,24 +536,48 @@ defmodule Mydia.Indexers.ReleaseRanker do
     """)
 
     # Map to ScoreBreakdown struct
-    ScoreBreakdown.new(%{
-      quality: round_score(quality_score),
-      seeders: round_score(seeder_score),
-      size: round_score(size_score),
-      age: 0.0,
-      title_match: round_score(title_bonus),
-      tag_bonus: round_score(tag_bonus),
-      custom_format_score: custom_format_score,
-      total: round_score(total_score),
-      size_penalty: round_score(size_penalty),
-      seeder_penalty: round_score(seeder_penalty),
-      identity_penalty: round_score(identity_penalty),
-      language_rank: audio.language_rank,
-      language_matches: audio.language_matches,
-      audio_languages: audio.audio_languages,
-      audio_assumed: audio.audio_assumed
-    })
+    breakdown =
+      ScoreBreakdown.new(%{
+        quality: round_score(quality_score),
+        seeders: round_score(seeder_score),
+        size: round_score(size_score),
+        age: 0.0,
+        title_match: round_score(title_bonus),
+        tag_bonus: round_score(tag_bonus),
+        custom_format_score: custom_format_score,
+        total: round_score(total_score),
+        size_penalty: round_score(size_penalty),
+        seeder_penalty: round_score(seeder_penalty),
+        identity_penalty: round_score(identity_penalty),
+        language_rank: audio.language_rank,
+        language_matches: audio.language_matches,
+        audio_languages: audio.audio_languages,
+        audio_assumed: audio.audio_assumed
+      })
+
+    %{
+      breakdown: breakdown,
+      # Scoring saw a season pack per episode; the dialog shows the release's
+      # real size, the same size a grab downloads.
+      detected: Map.put(score_result.detected, :size_mb, real_size_mb(result)),
+      violations: score_result.violations
+    }
   end
+
+  # SearchResult.size is a non_neg_integer/0 enforced key, never nil, so there
+  # is no "unknown size" case to fall back on here.
+  defp real_size_mb(%SearchResult{size: size}),
+    do: Float.round(size / (1024 * 1024), 1)
+
+  @doc """
+  Calculates the full score breakdown for a single search result.
+
+  Used by both automatic searches and manual UI searches for consistent scoring.
+  Returns a `ScoreBreakdown` struct with individual component scores and total.
+  """
+  @spec calculate_score_breakdown(SearchResult.t(), ranking_options()) :: ScoreBreakdown.t()
+  def calculate_score_breakdown(%SearchResult{} = result, opts),
+    do: explain(result, opts).breakdown
 
   ## Private Functions - Release Validation Filtering
 

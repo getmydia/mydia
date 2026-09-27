@@ -1,9 +1,10 @@
-defmodule Mydia.Upgrades.AttrsTest do
+defmodule Mydia.Quality.AttrsTest do
   use ExUnit.Case, async: true
 
+  alias Mydia.Indexers.QualityParser
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.{FileMetadata, Quality}
-  alias Mydia.Upgrades.Attrs
+  alias Mydia.Quality.Attrs
 
   # A media file exactly as Mydia.Library.apply_analysis/2 writes it: the
   # streaming-normalized codec in the column, the analyzer's own string kept
@@ -155,7 +156,7 @@ defmodule Mydia.Upgrades.AttrsTest do
     end
 
     test "yields nil for a codec no quality profile ranks" do
-      file = %MediaFile{audio_codec: "vorbis", size: 1024 * 1024}
+      file = %MediaFile{audio_codec: "wma", size: 1024 * 1024}
       assert %{audio_codec: nil} = Attrs.from_media_file(file, :movie)
     end
   end
@@ -245,8 +246,7 @@ defmodule Mydia.Upgrades.AttrsTest do
   # from_media_file/2's metadata_source/1 (attrs.ex:191) reads metadata.source
   # directly - it does not parse relative_path itself, as the "lifts source
   # out of nested metadata" test above already establishes. So these fixtures
-  # pre-populate metadata.source with what Mydia.Quality.Sources.detect/1 (the
-  # same detector Task 3 wired into QualityProfileEngine.extract_source/1)
+  # pre-populate metadata.source with what Mydia.Quality.Sources.detect/1
   # would derive from the filename, rather than relying on from_media_file/2
   # to parse relative_path itself - it doesn't. That keeps the assertion
   # honest about what is actually under test: canonical_source/1's mapping,
@@ -386,6 +386,38 @@ defmodule Mydia.Upgrades.AttrsTest do
       assert result.score == 0.0
       assert [violation] = result.violations
       assert violation =~ "Telesync"
+    end
+  end
+
+  describe "vocabulary shared with search ranking" do
+    test "DTS:X is DTS-HD" do
+      quality = QualityParser.parse("Quiet.Harbor.2031.2160p.BluRay.DTS-X.x265-GRP")
+      assert %{audio_codec: "dts-hd"} = Attrs.from_quality(quality, nil, :movie)
+    end
+
+    test "VP9 and Vorbis are named, not unknown" do
+      quality = QualityParser.parse("Quiet.Harbor.2031.1080p.WEBRip.VP9.Vorbis-GRP")
+      attrs = Attrs.from_quality(quality, nil, :movie)
+      assert attrs.video_codec == "vp9"
+      assert attrs.audio_codec == "vorbis"
+    end
+
+    test "PDTV is a known source" do
+      quality = QualityParser.parse("Quiet.Harbor.S01E01.PDTV.x264-GRP")
+      assert %{source: "PDTV"} = Attrs.from_quality(quality, nil, :episode)
+    end
+  end
+
+  describe "canonical_video_codec/1" do
+    test "folds release-naming synonyms" do
+      assert Attrs.canonical_video_codec("hevc") == "h265"
+      assert Attrs.canonical_video_codec("x264") == "h264"
+      assert Attrs.canonical_video_codec("H.265") == "h265"
+    end
+
+    test "unknown and nil are nil" do
+      assert Attrs.canonical_video_codec("realvideo") == nil
+      assert Attrs.canonical_video_codec(nil) == nil
     end
   end
 end

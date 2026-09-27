@@ -1,7 +1,12 @@
-defmodule Mydia.Upgrades.Attrs do
+defmodule Mydia.Quality.Attrs do
   @moduledoc """
   Normalizes on-disk files and parsed release titles into the single canonical
   vocabulary `Mydia.Settings.QualityProfile.score_media_file/2` validates against.
+
+  It is the only such normalizer. Search ranking (`Mydia.Indexers.SearchScorer`),
+  upgrade decisions (`Mydia.Upgrades.Comparator`) and profile codec preferences
+  (`Mydia.Settings.QualityProfile`) all read this vocabulary, so a spelling
+  fixed here is fixed for all three.
 
   This module exists because `Mydia.Library.FileAnalyzer` writes human-readable
   display strings ("H.264 (High)", "DD+ 5.1", "Dolby Vision", "4K") while
@@ -77,13 +82,12 @@ defmodule Mydia.Upgrades.Attrs do
 
   @canonical_resolutions ~w(360p 480p 576p 720p 1080p 2160p 4320p)
 
-  # One canonical value per physical codec, matching the vocabulary
-  # `Mydia.Indexers.SearchScorer` and every shipped quality profile already
-  # use ("h264"/"h265"). "hevc" and "x265" are release-naming synonyms for
-  # h265, not a distinct codec QualityProfile ranks separately; keeping them
-  # as separate outputs left every HEVC file and x264/x265 release absent
-  # from `preferred_video_codecs`, scoring 25.0 on the heaviest-weighted
-  # dimension under every shipped profile.
+  # One canonical value per physical codec, the vocabulary every shipped
+  # quality profile uses ("h264"/"h265"). "hevc" and "x265" are release-naming
+  # synonyms for h265, not a distinct codec QualityProfile ranks separately;
+  # keeping them as separate outputs left every HEVC file and x264/x265
+  # release absent from `preferred_video_codecs`, scoring 25.0 on the
+  # heaviest-weighted dimension under every shipped profile.
   @video_codec_aliases %{
     "h.264" => "h264",
     "h264" => "h264",
@@ -98,6 +102,7 @@ defmodule Mydia.Upgrades.Attrs do
     "vc-1" => "vc1",
     "mpeg2" => "mpeg2",
     "mpeg-2" => "mpeg2",
+    "vp9" => "vp9",
     "xvid" => "xvid",
     "divx" => "divx",
     # Mydia.Streaming.Codec collapses Xvid and DivX (and any other MPEG-4
@@ -123,11 +128,13 @@ defmodule Mydia.Upgrades.Attrs do
     "dts" => "dts",
     "dts-hd" => "dts-hd",
     "dtshd" => "dts-hd",
+    "dts:x" => "dts-hd",
     "truehd" => "truehd",
     "atmos" => "atmos",
     "flac" => "flac",
     "mp3" => "mp3",
     "opus" => "opus",
+    "vorbis" => "vorbis",
     "pcm" => nil
   }
 
@@ -145,7 +152,7 @@ defmodule Mydia.Upgrades.Attrs do
   }
 
   @canonical_sources ~w(BluRay REMUX WEB-DL WEBRip HDTV SDTV DVD DVDRip BDRip) ++
-                       ["CAM", "Telesync", "Telecine", "Screener", "Workprint"]
+                       ["CAM", "Telesync", "Telecine", "Screener", "Workprint", "PDTV"]
 
   # Precedence for fused audio strings that carry two codec tokens, e.g.
   # FileAnalyzer's "TrueHD Atmos" or "DTS-HD MA". Atmos is a higher-tier
@@ -268,16 +275,22 @@ defmodule Mydia.Upgrades.Attrs do
 
   defp canonical_resolution(_), do: nil
 
-  defp canonical_video_codec(nil), do: nil
+  @doc """
+  The canonical codec for a release-naming or analyzer spelling, or `nil`
+  when unknown. `QualityProfile` folds its codec preferences through this so
+  a profile that lists "hevc" still matches an "h265" file or release.
+  """
+  @spec canonical_video_codec(String.t() | nil) :: String.t() | nil
+  def canonical_video_codec(nil), do: nil
 
-  defp canonical_video_codec(value) when is_binary(value) do
+  def canonical_video_codec(value) when is_binary(value) do
     value
     |> strip_parenthetical()
     |> String.downcase()
     |> then(&Map.get(@video_codec_aliases, &1))
   end
 
-  defp canonical_video_codec(_), do: nil
+  def canonical_video_codec(_), do: nil
 
   defp canonical_source(nil), do: nil
 

@@ -13,7 +13,9 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Indexers.RankingOptions
   alias Mydia.Media.AudioLanguagePolicy
+  alias Mydia.Settings.CustomFormats
   alias MydiaWeb.MediaLive.Show.SearchHelpers
 
   @build_literal ~r/RankingOptions\.build\(%\{(.*?)\n\s*\}\)/s
@@ -24,8 +26,10 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
           [body] <- Regex.scan(@build_literal, File.read!(path), capture: :all_but_first),
           do: {path, body}
 
-    # Six call sites exist today. A scan that finds fewer is a broken scan.
-    assert length(literals) >= 6
+    # Five call sites exist today (profile_score_breakdown/3's back-compat
+    # literal was deleted along with the function). A scan that finds fewer
+    # is a broken scan.
+    assert length(literals) >= 5
 
     offenders = for {path, body} <- literals, not (body =~ "audio_policy:"), do: path
     assert offenders == []
@@ -69,8 +73,12 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
             download_url: "magnet:?xt=urn:btih:test",
             indexer: "TestIndexer"
           },
-          profile,
-          :movie
+          RankingOptions.build(%{
+            quality_profile: profile,
+            custom_formats: CustomFormats.resolve_for_profile(profile),
+            audio_policy: nil,
+            media_type: :movie
+          })
         )
       end)
 

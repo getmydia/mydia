@@ -2,6 +2,7 @@ defmodule Mydia.Indexers.SearchScorerTest do
   use ExUnit.Case, async: true
 
   alias Mydia.Indexers.{QualityParser, SearchResult, SearchScorer}
+  alias Mydia.Quality.Attrs
   alias Mydia.Settings.QualityProfile
 
   # Test Fixtures
@@ -321,7 +322,7 @@ defmodule Mydia.Indexers.SearchScorerTest do
       assert seven_one > two_zero
     end
 
-    test "adjacent-letter channel formats (e.g. DDP5.1) extract correctly" do
+    test "codec-then-channels formats (e.g. DDP 5.1) extract correctly" do
       profile = %Mydia.Settings.QualityProfile{
         name: "Chan",
         quality_standards: %{
@@ -343,8 +344,14 @@ defmodule Mydia.Indexers.SearchScorerTest do
         }
       end
 
+      # "DDP 5.1" is the space-delimited "<codec> <channels>" shape every real
+      # producer emits (FileAnalyzer's extract_audio_codec/1, "DD+ 5.1"); the
+      # glued "DDP5.1" this test used to pass is not producible by either
+      # QualityParser.extract_audio/1 (only ever returns a bare codec label,
+      # never channels) or FileAnalyzer, so it no longer extracts through
+      # Attrs.split_audio/1's whitespace tokenization.
       {ddp_five_one, _, _} =
-        Mydia.Indexers.SearchScorer.score_quality(base.("DDP5.1"), profile, :movie)
+        Mydia.Indexers.SearchScorer.score_quality(base.("DDP 5.1"), profile, :movie)
 
       {truehd_five_one, _, _} =
         Mydia.Indexers.SearchScorer.score_quality(base.("TrueHD 5.1"), profile, :movie)
@@ -401,5 +408,46 @@ defmodule Mydia.Indexers.SearchScorerTest do
       # Exact match should score higher
       assert score_exact > score_similar
     end
+  end
+
+  describe "release_attrs/2" do
+    test "is Attrs.from_quality/3 without nil keys for a tagged release" do
+      result = build_result(%{})
+
+      expected =
+        result.quality
+        |> Attrs.from_quality(result.size, :movie)
+        |> Map.reject(fn {_k, v} -> is_nil(v) end)
+
+      assert SearchScorer.release_attrs(result, :movie) == expected
+    end
+
+    test "an untagged release is judged as the assumed resolution" do
+      title = "Quiet.Harbor.2031.XviD-AFG"
+      result = build_result(%{title: title, quality: QualityParser.parse(title)})
+
+      assert SearchScorer.release_attrs(result, :movie).resolution ==
+               QualityParser.assumed_resolution()
+    end
+
+    test "a release with no parsed quality still has resolution and size" do
+      result = build_result(%{quality: nil})
+      attrs = SearchScorer.release_attrs(result, :movie)
+
+      assert attrs.resolution == QualityParser.assumed_resolution()
+      assert attrs.file_size_mb == div(result.size, 1024 * 1024)
+    end
+  end
+
+  test "a DTS:X release earns the dts-hd audio preference" do
+    profile = build_quality_profile()
+    title = "Quiet.Harbor.2031.1080p.BluRay.DTS-X.x264-GRP"
+    result = build_result(%{title: title, quality: QualityParser.parse(title)})
+
+    %{breakdown: breakdown} =
+      SearchScorer.score_result_with_breakdown(result, quality_profile: profile)
+
+    # "dts-hd" is third of four in the fixture profile's audio list.
+    assert breakdown.audio_codec > 25.0
   end
 end

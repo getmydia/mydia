@@ -271,7 +271,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   end
 
   describe "manual_search_modal/1 row states" do
-    defp modal_html(result_extra) do
+    defp modal_html(result_extra, assigns_extra \\ %{}) do
       result =
         Map.merge(
           %Mydia.Indexers.SearchResult{
@@ -287,19 +287,25 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
           result_extra
         )
 
-      render_component(&Modals.manual_search_modal/1,
-        manual_search_context: %{type: :media_item},
-        media_item: %Mydia.Media.MediaItem{title: "Some Movie", type: "movie"},
-        manual_search_query: "Some Movie 2020",
-        searching: false,
-        results_empty?: false,
-        indexer_errors: [],
-        streams: %{search_results: [{"search-result-00000-1", result}]},
-        quality_filter: nil,
-        min_seeders: 0,
-        sort_by: :seeders,
-        close_after_grab: false
-      )
+      assigns =
+        Map.merge(
+          %{
+            manual_search_context: %{type: :media_item},
+            media_item: %Mydia.Media.MediaItem{title: "Some Movie", type: "movie"},
+            manual_search_query: "Some Movie 2020",
+            searching: false,
+            results_empty?: false,
+            indexer_errors: [],
+            streams: %{search_results: [{"search-result-00000-1", result}]},
+            quality_filter: nil,
+            min_seeders: 0,
+            sort_by: :seeders,
+            close_after_grab: false
+          },
+          assigns_extra
+        )
+
+      render_component(&Modals.manual_search_modal/1, assigns)
     end
 
     test "grab_failed renders a retry button with the reason" do
@@ -320,6 +326,75 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{downloading: true})
 
       assert html =~ "Grabbing…"
+    end
+
+    test "with a quality profile, the row renders a score badge and breakdown panel" do
+      profile = %Mydia.Settings.QualityProfile{
+        id: Ecto.UUID.generate(),
+        name: "Test Profile",
+        quality_standards: %{preferred_resolutions: ["1080p", "720p"]}
+      }
+
+      media_item = %Mydia.Media.MediaItem{
+        title: "Some Movie",
+        type: "movie",
+        quality_profile_id: profile.id,
+        quality_profile: profile
+      }
+
+      title = "Some.Movie.2020.1080p.ENG.x264"
+      result_extra = %{title: title, quality: Mydia.Indexers.QualityParser.parse(title)}
+      html = modal_html(result_extra, %{media_item: media_item})
+
+      assert html =~ ~s(id="search-result-00000-1-score-badge")
+      assert html =~ ~s(id="search-result-00000-1-score-breakdown")
+      assert html =~ "Score breakdown"
+      assert html =~ ~s(id="search-result-00000-1-audio")
+
+      # The ring shows the ranker's own total for this row, not a second score.
+      opts =
+        MydiaWeb.MediaLive.Show.SearchHelpers.build_manual_ranking_opts(%{
+          media_item: media_item,
+          manual_search_context: %{type: :media_item},
+          min_seeders: 0,
+          manual_search_query: "Some Movie 2020"
+        })
+
+      result =
+        struct!(
+          Mydia.Indexers.SearchResult,
+          Map.merge(
+            %{
+              download_url: "magnet:?xt=urn:btih:" <> String.duplicate("e", 40),
+              indexer: "test-indexer",
+              size: 1_000,
+              seeders: 12,
+              leechers: 3
+            },
+            result_extra
+          )
+        )
+
+      expected = Mydia.Indexers.ReleaseRanker.explain(result, opts).breakdown.total
+      assert expected > 0
+
+      badge_text =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#search-result-00000-1-score-badge")
+        |> LazyHTML.text()
+        |> String.trim()
+
+      assert badge_text == Integer.to_string(trunc(expected))
+    end
+
+    test "without a quality profile, the row shows the seeders circle, no score badge, and the audio badge still renders" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 12})
+
+      refute html =~ ~s(id="search-result-00000-1-score-badge")
+      refute html =~ ~s(id="search-result-00000-1-score-breakdown")
+      assert html =~ "12 seeders"
+      assert html =~ ~s(id="search-result-00000-1-audio")
     end
   end
 

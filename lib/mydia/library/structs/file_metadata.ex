@@ -17,7 +17,6 @@ defmodule Mydia.Library.Structs.FileMetadata do
   - **AV1 codec details**: av1_profile, av1_level, av1_tier
   - **Shared codec detail**: bit_depth
   - **Streams**: streams (per-stream detail, see `Mydia.Library.Structs.StreamInfo`)
-  - **Quality evaluation**: quality_evaluation (written by QualityProfileEngine)
   - **Catch-all**: extra (captures unknown keys from legacy data or future ffprobe versions)
   """
 
@@ -42,7 +41,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
     # both of those to a bare codec ("ac3", "truehd"), dropping the channel
     # layout and the Atmos/E-AC3 distinction. That is the right shape for
     # streaming-compatibility checks and the wrong shape for quality scoring,
-    # so the lossless string is preserved here for `Mydia.Upgrades.Attrs`.
+    # so the lossless string is preserved here for `Mydia.Quality.Attrs`.
     :audio_codec_raw,
 
     # H.264/AVC codec details
@@ -73,9 +72,6 @@ defmodule Mydia.Library.Structs.FileMetadata do
     # pathological file being re-probed on every tick forever.
     :streams,
 
-    # Quality evaluation (written by QualityProfileEngine)
-    :quality_evaluation,
-
     # Catch-all for unknown/future ffprobe fields
     extra: %{}
   ]
@@ -101,7 +97,6 @@ defmodule Mydia.Library.Structs.FileMetadata do
           av1_tier: integer() | nil,
           bit_depth: integer() | nil,
           streams: [StreamInfo.t()] | nil,
-          quality_evaluation: map() | nil,
           extra: map()
         }
 
@@ -126,8 +121,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
     "av1_level" => :av1_level,
     "av1_tier" => :av1_tier,
     "bit_depth" => :bit_depth,
-    "streams" => :streams,
-    "quality_evaluation" => :quality_evaluation
+    "streams" => :streams
   }
 
   @doc """

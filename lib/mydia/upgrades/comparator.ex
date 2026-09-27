@@ -9,7 +9,7 @@ defmodule Mydia.Upgrades.Comparator do
     * the **delta** test scores a normalized candidate against that same file,
       asking "is this specific release actually better?"
 
-  Both sides are normalized through `Mydia.Upgrades.Attrs` first. Dimensions the
+  Both sides are normalized through `Mydia.Quality.Attrs` first. Dimensions the
   file does not know are neutralized on both sides so that neither a terse
   release title nor a sparsely analyzed file can skew the comparison.
 
@@ -21,8 +21,8 @@ defmodule Mydia.Upgrades.Comparator do
   alias Mydia.Indexers.ReleaseLanguages
   alias Mydia.Library.MediaFile
   alias Mydia.Library.Structs.Quality
+  alias Mydia.Quality.Attrs
   alias Mydia.Settings.QualityProfile
-  alias Mydia.Upgrades.Attrs
   alias Mydia.Upgrades.FileLanguages
 
   @neutralizable ~w(resolution video_codec audio_codec audio_channels source hdr_tokens file_size_mb)a

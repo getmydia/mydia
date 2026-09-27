@@ -93,7 +93,7 @@ defmodule Mydia.Settings.QualityProfileTest do
 
   # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the indexer
   # search/grab path, but the V3 release parser still emits canonical "BDRip"
-  # for on-disk files, and that value flows through Mydia.Upgrades.Attrs into
+  # for on-disk files, and that value flows through Mydia.Quality.Attrs into
   # scoring. So "BDRip" must remain selectable as a preference.
   describe "quality_standards preferred_sources validation" do
     test "accepts BDRip: the V3 parser still emits it for on-disk files" do
@@ -213,6 +213,28 @@ defmodule Mydia.Settings.QualityProfileTest do
 
       assert [violation] = result.violations
       assert violation =~ "HDR is required"
+    end
+  end
+
+  describe "video codec preferences use the canonical vocabulary" do
+    test "a hevc preference matches an h265 input" do
+      profile = %QualityProfile{quality_standards: %{preferred_video_codecs: ["hevc", "h264"]}}
+
+      %{breakdown: breakdown} =
+        QualityProfile.score_media_file(profile, %{video_codec: "h265", media_type: :movie})
+
+      assert breakdown.video_codec == 100.0
+    end
+
+    test "synonyms collapse to their first position" do
+      profile =
+        %QualityProfile{quality_standards: %{preferred_video_codecs: ["x265", "h264", "hevc"]}}
+
+      %{breakdown: breakdown} =
+        QualityProfile.score_media_file(profile, %{video_codec: "h264", media_type: :movie})
+
+      # ["h265", "h264"] after folding: h264 is last of two.
+      assert breakdown.video_codec == 60.0
     end
   end
 end

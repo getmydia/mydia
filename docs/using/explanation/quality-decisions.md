@@ -15,13 +15,28 @@ selection sits in the wider flow, see
 The natural mental model is that every release gets a number and the biggest
 number wins. Mydia does compute a number, and it is not the thing that decides.
 
-Selection happens in two steps. First, releases are sorted by **which position
-their resolution occupies in your profile's preferred resolution list**. Only
-within that grouping does the numeric score break ties.
+Selection is a sort on several keys, compared in order:
 
-The consequence is blunt and it explains most surprises: a release whose
-resolution is not in your preferred list cannot outrank one that is, at any
-score, ever. Under a 1080p profile, a 2160p remux with a thousand seeders loses
+1. **Identity.** A release that matches the title, season and episode you
+   searched for comes before one that does not.
+2. **Preferred audio language**, when the item has an audio language
+   preference.
+3. **Which position the release's resolution occupies in your profile's
+   preferred resolution list.**
+4. How many of your preferred audio languages the release carries.
+5. Custom format score.
+6. The numeric score.
+
+Each key only breaks ties left by the ones above it, so the numeric score
+decides only among releases that already agree on everything else. Without an
+audio language preference, keys 2 and 4 are equal for every release, and
+resolution is effectively the first thing compared after identity.
+
+The resolution key explains most surprises: among releases that tie on identity
+and audio language, a release whose resolution is not in your preferred list
+cannot outrank one that is, at any score. With an audio language preference set,
+a release in your language can still beat one at a preferred resolution without
+it. Under a 1080p profile, a 2160p remux with a thousand seeders loses
 to a mediocre 1080p WEB-DL. That is working as designed. A profile that names
 1080p is read as a statement about what you want, not a floor to be exceeded when
 something better shows up.
@@ -137,22 +152,14 @@ The design intent is to fail open: if the parser cannot read a release name at
 all, no penalty is applied, so unusual naming conventions are not silently
 discarded.
 
-There is a consequence to this that is genuinely surprising, and it follows from
-the resolution-first sorting described at the top of this page. Because the
-resolution grouping is applied *before* scores are compared, a release that
-mismatches on identity but sits at a preferred resolution sorts above a release
-that matches on identity but sits at a non-preferred one. The enormous penalty
-only settles ties within a resolution grouping; it cannot reach across
-groupings.
-
-In practice this needs an unusual setup to bite, since a search that only
-returns wrong-identity releases at your preferred resolution is already an
-unusual search. But if you ever see Mydia grab a season pack for an episode
-search, this interaction, rather than a broken matcher, is the likely mechanism.
+Identity is also the outermost sort key described at the top of this page, so a
+mismatching release sorts below every matching one regardless of resolution,
+language or custom formats. It is only chosen when nothing that matches
+survived the hard removals.
 
 ## What the score actually weighs
 
-Within a resolution grouping, the score is roughly: a quality component worth
+Among releases the sort keys above leave tied, the score is roughly: a quality component worth
 about sixty percent, an availability component derived from seeders (or from
 completion and grab count for Usenet), and a small title-relevance bonus. A
 release with zero seeders takes a flat multiplier against the whole thing.
@@ -244,8 +251,8 @@ configuration, and the shipped default is an empty list.
 So the mechanism exists and works, and for practical purposes it is not part of
 the configuration surface today. It is listed among the hard rejections above for
 completeness rather than because it is likely to be your answer. The same is true
-of the preferred-tag bonus mentioned later on this page: implemented, reachable
-only from job arguments, and empty in a running instance.
+of the preferred-tag bonus: implemented, reachable only from job arguments, and
+empty in a running instance.
 
 ## How upgrades are decided
 
@@ -318,8 +325,8 @@ accurate release name would be punished for what it did not bother to say.
 
 Everything else on this page still governs which surviving candidate gets
 grabbed. The upgrade comparison runs after blocklist rejection and before
-ranking, so what it lets through is then ordered by the ordinary rules,
-resolution grouping first. A release at a resolution your profile does not list
+ranking, so what it lets through is then ordered by the ordinary sort keys
+described at the top of this page. A release at a resolution your profile does not list
 still cannot win.
 
 ### Second decision: the release has to prove it
@@ -369,28 +376,13 @@ PROPER and REPACK markers are still not scored. A PROPER replaces the release it
 corrects only if it happens to score higher on the profile dimensions above,
 which is not what the marker is for.
 
-## There are no custom formats
+## Custom formats are a separate sort key
 
-Radarr and Sonarr let you define named custom formats with individual scores:
-release groups you trust, audio formats you want, encoders you avoid, each
-contributing points to a total. That model is the main reason the *arr stack's
-quality handling is more expressive than Mydia's, and it is genuinely more
-expressive.
-
-Mydia has three term-based mechanisms and none of them is a custom format. Only
-one of the three is configurable: resolution, codec, source, audio, and HDR
-preferences are ordered lists scored by position. The other two, blocked tags
-and a preferred-tag bonus, are implemented in the ranking code and not reachable
-from the interface, as described above.
-
-PROPER and REPACK markers are parsed out of release names and are then not used
-for scoring. A PROPER does not currently rank above the release it corrects.
-
-This is a real capability gap, not a philosophical difference, and it is the
-honest answer to "can I replicate my TRaSH Guides setup". The preset gallery
-includes profiles derived from those guides, and they translate the resolution,
-source, and size parts faithfully; the per-format scoring that makes those guides
-powerful has no equivalent to translate into.
+Custom formats match release titles with patterns, and a quality profile gives
+each match a score or a reject flag. They do not add to the quality score.
+Within a resolution tier, the higher total format score wins before seeders,
+size and source are compared, and a rejecting format drops the release
+outright. See [Custom Formats](../../configuration/custom-formats.md).
 
 ## Where to go next
 

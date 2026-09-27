@@ -10,6 +10,7 @@ defmodule Mydia.Indexers.CustomFormatCallSitesTest do
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
 
+  alias Mydia.Indexers.RankingOptions
   alias Mydia.Settings.CustomFormats
   alias MydiaWeb.MediaLive.Show.SearchHelpers
 
@@ -33,7 +34,7 @@ defmodule Mydia.Indexers.CustomFormatCallSitesTest do
     refute log =~ "custom formats will be ignored"
   end
 
-  test "profile_score_breakdown/3 passes formats", %{profile: profile} do
+  test "profile_score_breakdown/2 passes formats", %{profile: profile} do
     result = %Mydia.Indexers.SearchResult{
       title: "Film.2024.VFF.1080p",
       size: 5 * 1024 * 1024 * 1024,
@@ -43,9 +44,17 @@ defmodule Mydia.Indexers.CustomFormatCallSitesTest do
       indexer: "TestIndexer"
     }
 
+    opts =
+      RankingOptions.build(%{
+        quality_profile: profile,
+        custom_formats: CustomFormats.resolve_for_profile(profile),
+        audio_policy: nil,
+        media_type: :movie
+      })
+
     log =
       capture_log(fn ->
-        SearchHelpers.profile_score_breakdown(result, profile, :movie)
+        SearchHelpers.profile_score_breakdown(result, opts)
       end)
 
     refute log =~ "custom formats will be ignored"

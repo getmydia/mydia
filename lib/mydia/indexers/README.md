@@ -48,3 +48,19 @@ option: `attach_cookies/4` in `lib/mydia/indexers/cardigann_search_engine.ex`
 sets `redirect: false` whenever it attaches a `Cookie`, and an unfollowed 3xx
 falls through to the existing failover. Trusted-origin scoping for absolute paths
 and mirror failover is tracked in issue #602.
+
+## Ranking has one path
+
+Every ranking decision ends in `QualityProfile.score_media_file/2`, and every
+input to it is built by `Mydia.Quality.Attrs`: `from_quality/3` for a release,
+`from_media_file/2` for a file on disk. Search ranking (`SearchScorer`), upgrade
+decisions (`Upgrades.Comparator`) and profile codec preferences all read that
+vocabulary. A release or codec spelling that scores wrong is fixed there, once.
+
+Search adds exactly one rule on top, in `SearchScorer.release_attrs/2`: a
+release with no resolution token is judged as 360p. Upgrades leave it unknown
+instead, because a file's missing resolution means "not analyzed yet".
+
+The manual search dialog gets a row's score, breakdown, detected values and
+violations from one `ReleaseRanker.explain/2` call, the same pipeline automatic
+search ranks with. Do not score a row a second way for display.

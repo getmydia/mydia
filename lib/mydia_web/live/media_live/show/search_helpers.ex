@@ -10,7 +10,6 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   alias Mydia.Indexers.ReleaseIdentity
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Indexers.SearchResult
-  alias Mydia.Indexers.SearchScorer
   alias Mydia.Indexers.Structs.IndexerProgress
   alias Mydia.Media
   alias Mydia.Media.AudioLanguagePolicy
@@ -397,17 +396,9 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   defp expected_identity(_context), do: {nil, nil}
 
   @doc """
-  Calculate profile-based score for a search result.
-  Returns the combined score using the unified SearchScorer algorithm.
-  """
-  def profile_score(%SearchResult{} = result, quality_profile, media_type) do
-    opts = [quality_profile: quality_profile, media_type: media_type]
-    SearchScorer.score_result(result, opts)
-  end
-
-  @doc """
   Build the unified score breakdown for a manual-search result, using the same
-  `ReleaseRanker` pipeline (and the same ranking options) that ordered the list.
+  `ReleaseRanker` pipeline (and the same ranking options) that ordered the
+  list, scored with a single `ReleaseRanker.explain/2` call.
 
   Returns a map with:
   - `:score` - The ranker total (may be deeply negative for identity mismatches)
@@ -421,32 +412,8 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpers do
   """
   def profile_score_breakdown(%SearchResult{} = result, ranking_opts)
       when is_list(ranking_opts) do
-    breakdown = ReleaseRanker.calculate_score_breakdown(result, ranking_opts)
-    scorer = SearchScorer.score_result_with_breakdown(result, ranking_opts)
-
-    %{
-      score: breakdown.total,
-      breakdown: breakdown,
-      detected: scorer.detected,
-      violations: scorer.violations
-    }
-  end
-
-  @doc """
-  Back-compat 3-arity breakdown using only the quality profile and media type.
-  """
-  def profile_score_breakdown(%SearchResult{} = result, quality_profile, media_type) do
-    profile_score_breakdown(
-      result,
-      RankingOptions.build(%{
-        quality_profile: quality_profile,
-        custom_formats: CustomFormats.resolve_for_profile(quality_profile),
-        # This back-compat entry never sees a media item, so there is no
-        # preference to rank by. nil is the explicit "resolved, none".
-        audio_policy: nil,
-        media_type: media_type
-      })
-    )
+    explained = ReleaseRanker.explain(result, ranking_opts)
+    Map.put(explained, :score, explained.breakdown.total)
   end
 
   def get_media_type(media_item) do
