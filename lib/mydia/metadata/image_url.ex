@@ -29,8 +29,13 @@ defmodule Mydia.Metadata.ImageUrl do
 
   @doc """
   Builds a backdrop image URL.
+
+  Defaults to `w1280`, not `original`. TMDB originals are commonly 3840x2160,
+  about 33 MB once decoded, and every consumer shows the backdrop blurred,
+  dimmed or at most full-width. On the web player those decodes crowded out
+  the poster grid's textures.
   """
-  def backdrop_url(path, size \\ "original"), do: image_url(path, size)
+  def backdrop_url(path, size \\ "w1280"), do: image_url(path, size)
 
   @doc """
   Builds a profile/cast image URL.
