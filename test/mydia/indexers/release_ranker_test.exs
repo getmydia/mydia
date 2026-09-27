@@ -2594,4 +2594,45 @@ defmodule Mydia.Indexers.ReleaseRankerTest do
       assert row.rejection_reason == "custom_format: VFQ"
     end
   end
+
+  describe "explain/2" do
+    test "its breakdown is calculate_score_breakdown/2" do
+      title = "Quiet.Harbor.2031.1080p.BluRay.x264-GRP"
+
+      result = %SearchResult{
+        title: title,
+        size: 8 * 1024 * 1024 * 1024,
+        seeders: 40,
+        leechers: 2,
+        download_url: "magnet:?xt=urn:btih:explain",
+        indexer: "TestIndexer",
+        quality: QualityParser.parse(title)
+      }
+
+      opts = [media_type: :movie, search_query: "Quiet Harbor 2031"]
+
+      assert ReleaseRanker.explain(result, opts).breakdown ==
+               ReleaseRanker.calculate_score_breakdown(result, opts)
+    end
+
+    test "a season pack shows its real size while scoring per episode" do
+      title = "Quiet.Harbor.S02.1080p.WEB-DL.x264-GRP"
+      size = 20 * 1024 * 1024 * 1024
+
+      result = %SearchResult{
+        title: title,
+        size: size,
+        seeders: 40,
+        leechers: 2,
+        download_url: "magnet:?xt=urn:btih:pack",
+        indexer: "TestIndexer",
+        quality: QualityParser.parse(title)
+      }
+
+      explained = ReleaseRanker.explain(result, media_type: :episode, episode_count: 10)
+
+      assert explained.detected.size_mb == Float.round(size / (1024 * 1024), 1)
+      assert is_list(explained.violations)
+    end
+  end
 end

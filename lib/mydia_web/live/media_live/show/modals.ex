@@ -918,21 +918,15 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 class="list-row hover:bg-base-200/50 transition-colors px-4 py-3 border-b border-base-200 last:border-b-0"
               >
                 <% profile? = Keyword.get(@manual_ranking_opts, :quality_profile) != nil %>
-                <% score_data = profile? && profile_score_breakdown(result, @manual_ranking_opts) %>
-                <% breakdown = score_data && score_data.breakdown %>
-                <% score = (score_data && score_data.score) || 0 %>
-                <%!-- Detection does not need a quality profile: compute it directly
-                     when no profile-scored breakdown is available so the badge
-                     still shows. --%>
-                <% audio =
-                  breakdown ||
-                    Mydia.Indexers.ReleaseRanker.calculate_score_breakdown(
-                      result,
-                      @manual_ranking_opts
-                    ) %>
+                <%!-- One scorer call per row: the audio badge needs the breakdown
+                     with or without a profile; the score ring only with one. --%>
+                <% score_data = profile_score_breakdown(result, @manual_ranking_opts) %>
+                <% breakdown = score_data.breakdown %>
+                <% audio = breakdown %>
+                <% score = score_data.score %>
                 <% ring_value = max(0, trunc(score)) %>
                 <% has_penalty =
-                  profile? && breakdown &&
+                  profile? &&
                     (breakdown.size_penalty < 0.0 or breakdown.seeder_penalty < 0.0 or
                        breakdown.identity_penalty < 0.0) %>
                 <%!-- Score display --%>
