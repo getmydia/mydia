@@ -268,11 +268,6 @@ defmodule Mydia.Config.Loader do
     %{}
     |> put_if_present(:path, System.get_env("DATABASE_PATH"))
     |> put_if_present(:pool_size, System.get_env("POOL_SIZE"), &parse_integer/1)
-    |> put_if_present(:timeout, System.get_env("DATABASE_TIMEOUT"), &parse_integer/1)
-    |> put_if_present(:cache_size, System.get_env("SQLITE_CACHE_SIZE"), &parse_integer/1)
-    |> put_if_present(:busy_timeout, System.get_env("SQLITE_BUSY_TIMEOUT"), &parse_integer/1)
-    |> put_if_present(:journal_mode, System.get_env("SQLITE_JOURNAL_MODE"))
-    |> put_if_present(:synchronous, System.get_env("SQLITE_SYNCHRONOUS"))
   end
 
   defp load_auth_env do

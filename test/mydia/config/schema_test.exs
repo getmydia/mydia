@@ -69,26 +69,15 @@ defmodule Mydia.Config.SchemaTest do
       assert "must be greater than 0" in errors_on(changeset).database.pool_size
     end
 
-    test "validates database journal_mode" do
+    test "validates database path is required" do
       attrs = %{
-        database: %{journal_mode: "invalid"}
+        database: %{path: nil}
       }
 
       changeset = Schema.changeset(%Schema{}, attrs)
 
       refute changeset.valid?
-      assert "is invalid" in errors_on(changeset).database.journal_mode
-    end
-
-    test "validates database synchronous mode" do
-      attrs = %{
-        database: %{synchronous: "invalid"}
-      }
-
-      changeset = Schema.changeset(%Schema{}, attrs)
-
-      refute changeset.valid?
-      assert "is invalid" in errors_on(changeset).database.synchronous
+      assert "can't be blank" in errors_on(changeset).database.path
     end
 
     test "validates at least one auth method is enabled" do
@@ -389,7 +378,9 @@ defmodule Mydia.Config.SchemaTest do
       assert defaults.server.host == "0.0.0.0"
       assert defaults.server.url_scheme == "http"
       assert defaults.database.pool_size == 5
-      assert defaults.database.journal_mode == "wal"
+      assert defaults.database.path == "mydia_dev.db"
+      refute Map.has_key?(defaults.database, :journal_mode)
+      refute Map.has_key?(defaults.database, :busy_timeout)
       assert defaults.auth.local_enabled == true
       assert defaults.auth.oidc_enabled == false
       # movies_path and tv_path are now optional legacy fields with no defaults

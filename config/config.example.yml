@@ -37,31 +37,17 @@ server:
 
 # Database Configuration
 # ----------------------
+# Only path and pool_size are configurable. Journal mode, synchronous mode,
+# cache size, and busy timeout are fixed by Mydia: WAL and IMMEDIATE
+# transactions are required for correct concurrent writes, not tuning knobs.
 database:
   # Path to SQLite database file
+  # Also settable with the DATABASE_PATH environment variable, which wins.
   path: "/config/mydia.db"
 
   # Database connection pool size
+  # Also settable with the POOL_SIZE environment variable, which wins.
   pool_size: 5
-
-  # Query timeout in milliseconds
-  # Increased to 60 seconds to handle long-running library scans
-  timeout: 60000
-
-  # SQLite cache size in KB (negative means KB, positive means pages)
-  cache_size: -64000
-
-  # SQLite busy timeout in milliseconds
-  # Increased to 30 seconds to handle concurrent writes during library scans
-  busy_timeout: 30000
-
-  # SQLite journal mode (delete, truncate, persist, memory, wal)
-  # WAL (Write-Ahead Logging) is recommended for better concurrency
-  journal_mode: "wal"
-
-  # SQLite synchronous mode (off, normal, full, extra)
-  # 'normal' provides good balance of safety and performance
-  synchronous: "normal"
 
 # Authentication Configuration
 # ----------------------------
