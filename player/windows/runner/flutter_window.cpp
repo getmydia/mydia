@@ -1,5 +1,8 @@
 #include "flutter_window.h"
 
+#include <flutter_windows.h>
+#include <windowsx.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -65,6 +68,44 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+
+    case WM_NCHITTEST: {
+      DWORD style = GetWindowLong(hwnd, GWL_STYLE);
+      if ((style & WS_MAXIMIZEBOX) == 0 || IsIconic(hwnd)) {
+        break;
+      }
+
+      POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(hwnd, &pt);
+
+      RECT client_rect;
+      GetClientRect(hwnd, &client_rect);
+
+      HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
+      double scale = dpi > 0 ? (dpi / 96.0) : 1.0;
+
+      int button_width = static_cast<int>(46 * scale);
+      int button_height = static_cast<int>(40 * scale);
+
+      // Maximize button is adjacent to the close button on the right edge:
+      int max_left = client_rect.right - 2 * button_width;
+      int max_right = client_rect.right - button_width;
+
+      if (pt.x >= max_left && pt.x < max_right && pt.y >= 0 &&
+          pt.y < button_height) {
+        return HTMAXBUTTON;
+      }
+      break;
+    }
+
+    case WM_NCLBUTTONDOWN:
+    case WM_NCLBUTTONUP: {
+      if (wparam == HTMAXBUTTON) {
+        return DefWindowProc(hwnd, message, wparam, lparam);
+      }
+      break;
+    }
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
