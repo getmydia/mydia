@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../core/cache/artwork_decode.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -451,6 +452,11 @@ class MovieDetailScreen extends ConsumerWidget {
               imageUrl: movie.artwork.backdropUrl!,
               fit: BoxFit.cover,
               cacheManager: BackdropCacheManager(),
+              memCacheWidth: viewportDecodeWidth(
+                context,
+                sourceWidth: backdropSourceWidth,
+              ),
+              imageRenderMethodForWeb: artworkWebRenderMethod,
               placeholder: (context, url) => Container(
                 color: AppColors.surface,
               ),
