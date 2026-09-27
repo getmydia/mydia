@@ -10,6 +10,7 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
 
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Repo
@@ -52,8 +53,10 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
     item = insert(:media_item)
     listed = marker!(item.id)
 
-    {:ok, _} = Mydia.Media.update_media_item(item, %{title: "First change"})
-    {:ok, _} = Mydia.Media.update_media_item(item, %{title: "Second change"})
+    {:ok, _} = Mydia.Media.update_media_item(Scope.unrestricted(), item, %{title: "First change"})
+
+    {:ok, _} =
+      Mydia.Media.update_media_item(Scope.unrestricted(), item, %{title: "Second change"})
 
     assert [%MediaItemRevision{revision: revision, deleted: false}] = feed(item)
     assert revision > listed.revision
@@ -64,7 +67,8 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
     item = insert(:media_item)
     listed = marker!(item.id)
 
-    {:ok, _deleted, _files_not_deleted} = Mydia.Media.delete_media_item(item)
+    {:ok, _deleted, _files_not_deleted} =
+      Mydia.Media.delete_media_item(Scope.unrestricted(), item)
 
     assert [%MediaItemRevision{revision: revision, deleted: true}] = feed(item)
     assert revision > listed.revision
@@ -74,7 +78,9 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
   test "changed_at_by_ids returns marker timestamps for live ids only" do
     live = insert(:media_item)
     removed = insert(:media_item)
-    {:ok, _deleted, _files_not_deleted} = Mydia.Media.delete_media_item(removed)
+
+    {:ok, _deleted, _files_not_deleted} =
+      Mydia.Media.delete_media_item(Scope.unrestricted(), removed)
 
     assert RevisionFeed.changed_at_by_ids([]) == %{}
 
@@ -95,7 +101,9 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
     end
 
     removed = insert(:media_item)
-    {:ok, _deleted, _files_not_deleted} = Mydia.Media.delete_media_item(removed)
+
+    {:ok, _deleted, _files_not_deleted} =
+      Mydia.Media.delete_media_item(Scope.unrestricted(), removed)
 
     assert_raise Ecto.NoResultsError, fn -> RevisionFeed.changed_at!(removed.id) end
   end
@@ -117,7 +125,10 @@ defmodule Mydia.LibraryApi.RevisionFeedTest do
 
   test "mark_live neither resurrects a tombstone nor invents a marker" do
     removed = insert(:media_item)
-    {:ok, _deleted, _files_not_deleted} = Mydia.Media.delete_media_item(removed)
+
+    {:ok, _deleted, _files_not_deleted} =
+      Mydia.Media.delete_media_item(Scope.unrestricted(), removed)
+
     tombstone = marker!(removed.id)
     unknown = Ecto.UUID.generate()
 

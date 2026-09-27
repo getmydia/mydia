@@ -28,10 +28,12 @@ defmodule Mydia.Media.RecentlyAdded do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
   alias Mydia.Media.RecentlyAdded.Entry
+  alias Mydia.Media.Restrictions
   alias Mydia.Repo
 
   # Keeps a single `:ids` query under both SQLite's 32,766 and PostgreSQL's
@@ -136,15 +138,17 @@ defmodule Mydia.Media.RecentlyAdded do
     * `:types` - restrict to these `media_items.type` values.
     * `:limit` - cap the number of entries.
 
-  Items with no files never appear, since they have no slots.
+  Items with no files never appear, since they have no slots. Items the scope
+  cannot see never appear either, and are filtered before `:limit` so a
+  restricted viewer still gets a full page.
   """
-  @spec list_recent(keyword()) :: [Entry.t()]
-  def list_recent(opts) do
+  @spec list_recent(Scope.t(), keyword()) :: [Entry.t()]
+  def list_recent(%Scope{} = scope, opts) do
     since = Keyword.fetch!(opts, :since)
 
     rows =
-      since
-      |> windowed_rows_query(Keyword.get(opts, :types), Keyword.get(opts, :limit))
+      scope
+      |> windowed_rows_query(since, Keyword.get(opts, :types), Keyword.get(opts, :limit))
       |> Repo.all()
 
     items = load_items(Enum.map(rows, & &1.media_item_id))
@@ -171,7 +175,7 @@ defmodule Mydia.Media.RecentlyAdded do
     end)
   end
 
-  defp windowed_rows_query(since, types, limit) do
+  defp windowed_rows_query(scope, since, types, limit) do
     slots = slots_query()
 
     query =
@@ -187,16 +191,16 @@ defmodule Mydia.Media.RecentlyAdded do
         }
 
     query =
-      case types do
-        nil ->
-          query
+      if types in [nil, []] and not Scope.restricted?(scope) do
+        query
+      else
+        item_ids =
+          MediaItem
+          |> Restrictions.apply(scope)
+          |> filter_types(types)
+          |> select([m], m.id)
 
-        [] ->
-          query
-
-        types ->
-          item_ids = from(m in MediaItem, where: m.type in ^types, select: m.id)
-          where(query, [s], s.media_item_id in subquery(item_ids))
+        where(query, [s], s.media_item_id in subquery(item_ids))
       end
 
     # Applied last, after any type filter, so the cap counts rows the caller
@@ -206,6 +210,9 @@ defmodule Mydia.Media.RecentlyAdded do
     # most of.
     maybe_limit(query, limit)
   end
+
+  defp filter_types(query, types) when types in [nil, []], do: query
+  defp filter_types(query, types), do: where(query, [m], m.type in ^types)
 
   defp maybe_limit(query, nil), do: query
   defp maybe_limit(query, limit) when is_integer(limit) and limit > 0, do: limit(query, ^limit)

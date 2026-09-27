@@ -13,6 +13,7 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Indexers.RankingOptions
   alias Mydia.Media.AudioLanguagePolicy
   alias Mydia.Settings.CustomFormats
@@ -42,7 +43,8 @@ defmodule Mydia.Indexers.AudioPolicyCallSitesTest do
       episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: number})
     end
 
-    {:ok, show} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
+    {:ok, show} =
+      Mydia.Media.update_media_item(Scope.unrestricted(), show, %{download_audio_language: "en"})
 
     opts =
       SearchHelpers.build_manual_ranking_opts(%{

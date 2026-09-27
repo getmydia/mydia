@@ -3,6 +3,7 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
 
@@ -37,7 +38,8 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
 
       assert {:ok, _count} = Media.refresh_episodes_for_tv_show(ctx.item, config: ctx.config)
 
-      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "Harbor Lights"
+      assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 1, 8).title ==
+               "Harbor Lights"
 
       assert [event] = title_events(ctx.item)
       assert event.actor_id == "media_context"
@@ -63,7 +65,7 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
 
       assert {:ok, _count} = Media.refresh_episodes_for_tv_show(ctx.item, config: ctx.config)
 
-      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "TBA "
+      assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 1, 8).title == "TBA "
       assert title_events(ctx.item) == []
     end
 
@@ -72,7 +74,9 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
 
       assert {:ok, _count} = Media.refresh_episodes_for_tv_show(ctx.item, config: ctx.config)
 
-      assert Media.get_episode_by_number(ctx.item.id, 1, 3).title == "Quiet Tide"
+      assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 1, 3).title ==
+               "Quiet Tide"
+
       assert title_events(ctx.item) == []
     end
 
@@ -95,7 +99,8 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
 
       assert {:ok, _count} = Media.refresh_episodes_for_tv_show(ctx.item, config: ctx.config)
 
-      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "Harbor Lights"
+      assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 1, 8).title ==
+               "Harbor Lights"
 
       assert [event] = title_events(ctx.item)
       assert event.metadata["count"] == 1
@@ -104,7 +109,7 @@ defmodule Mydia.Media.EpisodeTitleChangesTest do
                %{"season" => 1, "episode" => 8, "old" => "TBA ", "new" => "Harbor Lights"}
              ]
 
-      assert Media.get_media_item!(ctx.item.id).seasons_refreshed_at == nil
+      assert Media.get_media_item!(Scope.unrestricted(), ctx.item.id).seasons_refreshed_at == nil
     end
   end
 

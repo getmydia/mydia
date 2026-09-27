@@ -12,6 +12,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
   `mediaItemChanges` feed.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -78,19 +79,19 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Library do
   end
 
   defp fetch_one({:id, id}) do
-    case Media.list_media_items(ids: [id], preload: MediaItemView.preloads()) do
+    case Media.list_media_items(Scope.system(), ids: [id], preload: MediaItemView.preloads()) do
       [item | _] -> item
       [] -> nil
     end
   end
 
   defp fetch_one({:external, key, value, type}) do
-    # find_by_external_ids/2 takes short keys (%{tmdb:, tvdb:, imdb:}), not the
+    # find_by_external_ids/3 takes short keys (%{tmdb:, tvdb:, imdb:}), not the
     # GraphQL argument names. Passing :tmdb_id here matches nothing and returns
     # nil for every lookup.
     ids = %{external_key(key) => value}
 
-    case Media.find_by_external_ids(ids, type: type && to_string(type)) do
+    case Media.find_by_external_ids(Scope.system(), ids, type: type && to_string(type)) do
       nil -> nil
       %MediaItem{id: id} -> fetch_one({:id, id})
     end

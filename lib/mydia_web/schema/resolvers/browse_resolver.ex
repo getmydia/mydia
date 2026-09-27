@@ -173,7 +173,6 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
   # Helper functions
 
   defp current_user(%{context: context}), do: context[:current_user]
-  defp current_user(_resolution), do: nil
 
   defp current_scope(%{context: context}), do: context[:current_scope]
   defp current_scope(_resolution), do: nil
@@ -346,17 +345,13 @@ defmodule MydiaWeb.Schema.Resolvers.BrowseResolver do
       case determine_node_type(parent) do
         :tv_show ->
           # Get all seasons
-          case resolve_seasons_as_list(parent, info) do
-            {:ok, seasons} -> seasons
-            _ -> []
-          end
+          {:ok, seasons} = resolve_seasons_as_list(parent, info)
+          seasons
 
         :season ->
           # Get all episodes in this season
-          case resolve_episodes_as_list(parent, info) do
-            {:ok, episodes} -> episodes
-            _ -> []
-          end
+          {:ok, episodes} = resolve_episodes_as_list(parent, info)
+          episodes
 
         _ ->
           # Movies, Episodes, and LibraryPaths have no children

@@ -106,7 +106,9 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
   end
 
   defp set_category!(media_item, category) do
-    {:ok, updated} = Media.update_category(media_item, category, override: true)
+    {:ok, updated} =
+      Media.update_category(Scope.unrestricted(), media_item, category, override: true)
+
     updated
   end
 end

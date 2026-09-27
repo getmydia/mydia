@@ -1269,11 +1269,12 @@ defmodule Mydia.Media do
   divide by.
 
   Used to size a season pack per episode when ranking it; see the
-  `:episode_count` option of `Mydia.Indexers.ReleaseRanker`.
+  `:episode_count` option of `Mydia.Indexers.ReleaseRanker`. A sizing figure
+  for a title the caller already holds, so it reads under `Scope.system/0`.
   """
   @spec season_pack_episode_count(binary(), integer()) :: pos_integer()
   def season_pack_episode_count(media_item_id, season_number) do
-    episodes = list_episodes(media_item_id, season: season_number)
+    episodes = list_episodes(Scope.system(), media_item_id, season: season_number)
     today = Date.utc_today()
 
     aired =
@@ -2777,22 +2778,27 @@ defmodule Mydia.Media do
     - `:actor_type` - The type of actor (:user, :system, :job) - defaults to :system
     - `:actor_id` - The ID of the actor (user_id, job name, etc.)
 
+  Refused with `{:error, :restricted}` when the item is outside what the scope
+  may write, the same rule `update_media_item/4` applies.
+
   ## Examples
 
-      iex> update_category(media_item, :anime_movie)
+      iex> update_category(scope, media_item, :anime_movie)
       {:ok, %MediaItem{}}
 
-      iex> update_category(media_item, :anime_movie, override: true)
+      iex> update_category(scope, media_item, :anime_movie, override: true)
       {:ok, %MediaItem{category: "anime_movie", category_override: true}}
   """
-  @spec update_category(MediaItem.t(), atom() | String.t(), keyword()) ::
-          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t()}
-  def update_category(%MediaItem{} = media_item, category, opts \\ []) do
-    override = Keyword.get(opts, :override, false)
-    audit_opts = Keyword.take(opts, [:reason, :actor_type, :actor_id])
+  @spec update_category(Scope.t(), MediaItem.t(), atom() | String.t(), keyword()) ::
+          {:ok, MediaItem.t()} | {:error, Ecto.Changeset.t() | :restricted}
+  def update_category(%Scope{} = scope, %MediaItem{} = media_item, category, opts \\ []) do
+    with :ok <- authorize_write(scope, merged_write_attrs(media_item, %{})) do
+      override = Keyword.get(opts, :override, false)
+      audit_opts = Keyword.take(opts, [:reason, :actor_type, :actor_id])
 
-    changeset = MediaItem.category_changeset(media_item, category, override: override)
-    persist_and_audit_media_item(changeset, media_item, audit_opts)
+      changeset = MediaItem.category_changeset(media_item, category, override: override)
+      persist_and_audit_media_item(changeset, media_item, audit_opts)
+    end
   end
 
   @doc """
@@ -2855,7 +2861,7 @@ defmodule Mydia.Media do
     |> Enum.reduce(0, fn media_item, count ->
       category = CategoryClassifier.classify(media_item)
 
-      case update_category(media_item, category) do
+      case update_category(Scope.system(), media_item, category) do
         {:ok, _} -> count + 1
         {:error, _} -> count
       end
@@ -2919,7 +2925,7 @@ defmodule Mydia.Media do
             }
 
           true ->
-            case update_category(media_item, new_category) do
+            case update_category(Scope.system(), media_item, new_category) do
               {:ok, _updated} ->
                 %{
                   id: media_item.id,

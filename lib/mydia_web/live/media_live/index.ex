@@ -441,7 +441,11 @@ defmodule MydiaWeb.MediaLive.Index do
          ) do
       {:ok, _updated_item} ->
         socket =
-          case LibraryListing.row(id, socket.assigns.current_user.id) do
+          case LibraryListing.row(
+                 socket.assigns.current_scope,
+                 id,
+                 socket.assigns.current_user.id
+               ) do
             nil -> socket
             row -> stream_insert(socket, :media_items, row)
           end
@@ -932,7 +936,11 @@ defmodule MydiaWeb.MediaLive.Index do
     offset = if page == 0, do: 0, else: @items_per_page + (page - 1) * @items_per_scroll
     limit = if page == 0, do: @items_per_page, else: @items_per_scroll
 
-    listing = LibraryListing.page(listing_opts(socket.assigns, offset: offset, limit: limit))
+    listing =
+      LibraryListing.page(
+        socket.assigns.current_scope,
+        listing_opts(socket.assigns, offset: offset, limit: limit)
+      )
 
     socket
     |> assign(:has_more, listing.has_more?)
@@ -947,7 +955,11 @@ defmodule MydiaWeb.MediaLive.Index do
   # Selects everything the current filters match, including items past the
   # rendered page. limit: 0 skips loading progress for rows nobody renders.
   defp select_all_visible(socket) do
-    %{visible_ids: ids} = LibraryListing.page(listing_opts(socket.assigns, offset: 0, limit: 0))
+    %{visible_ids: ids} =
+      LibraryListing.page(
+        socket.assigns.current_scope,
+        listing_opts(socket.assigns, offset: 0, limit: 0)
+      )
 
     assign(socket, :selected_ids, ids)
   end

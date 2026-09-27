@@ -3,6 +3,7 @@ defmodule Mydia.Media.MediaItemDownloadAudioLanguageTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MediaItem
 
@@ -43,10 +44,14 @@ defmodule Mydia.Media.MediaItemDownloadAudioLanguageTest do
     test "round-trips through update_media_item/3" do
       item = media_item_fixture(%{type: "tv_show", title: "Paper Lantern Club"})
 
-      {:ok, updated} = Media.update_media_item(item, %{download_audio_language: "en"})
+      {:ok, updated} =
+        Media.update_media_item(Scope.unrestricted(), item, %{download_audio_language: "en"})
+
       assert Repo.get!(MediaItem, updated.id).download_audio_language == "en"
 
-      {:ok, cleared} = Media.update_media_item(updated, %{download_audio_language: ""})
+      {:ok, cleared} =
+        Media.update_media_item(Scope.unrestricted(), updated, %{download_audio_language: ""})
+
       assert Repo.get!(MediaItem, cleared.id).download_audio_language == nil
     end
   end

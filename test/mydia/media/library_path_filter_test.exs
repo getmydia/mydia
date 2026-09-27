@@ -5,6 +5,7 @@ defmodule Mydia.Media.LibraryPathFilterTest do
   import Mydia.MediaFixtures
   import Mydia.SettingsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Media.LibraryListing
@@ -20,8 +21,8 @@ defmodule Mydia.Media.LibraryPathFilterTest do
   end
 
   defp ids_in(library) do
-    [library_path_id: library.id]
-    |> Media.media_items_query()
+    Scope.unrestricted()
+    |> Media.media_items_query(library_path_id: library.id)
     |> Repo.all()
     |> MapSet.new(& &1.id)
   end
@@ -92,14 +93,14 @@ defmodule Mydia.Media.LibraryPathFilterTest do
     refute orphan.id in ids_in(b)
   end
 
-  test "LibraryListing.page/1 applies the filter", %{movies_a: a, movies_b: b} do
+  test "LibraryListing.page/2 applies the filter", %{movies_a: a, movies_b: b} do
     in_a = media_item_fixture(%{type: "movie", title: "Glasswing"})
     media_file_fixture(%{media_item_id: in_a.id, library_path_id: a.id})
     in_b = media_item_fixture(%{type: "movie", title: "Moth Harbour"})
     media_file_fixture(%{media_item_id: in_b.id, library_path_id: b.id})
 
     page =
-      LibraryListing.page(
+      LibraryListing.page(Scope.unrestricted(),
         user_id: Ecto.UUID.generate(),
         type: "movie",
         library_path_id: a.id,

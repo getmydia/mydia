@@ -10,6 +10,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemChangesTest do
 
   use MydiaWeb.ConnCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.Cursor
   alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.Principal
@@ -129,7 +130,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemChangesTest do
     snapshot = changes(%{"first" => 50})
     assert edge_ids(snapshot) == [show.id]
 
-    {:ok, _deleted, _files_not_deleted} = Media.delete_media_item(show)
+    {:ok, _deleted, _files_not_deleted} = Media.delete_media_item(Scope.unrestricted(), show)
 
     page = changes(%{"first" => 50, "after" => end_cursor(snapshot)})
 
@@ -144,7 +145,7 @@ defmodule MydiaWeb.LibrarySchema.MediaItemChangesTest do
     boundary = marker!(show.id)
 
     loader = fn _ids ->
-      {:ok, _deleted, _files_not_deleted} = Media.delete_media_item(show)
+      {:ok, _deleted, _files_not_deleted} = Media.delete_media_item(Scope.unrestricted(), show)
       %{}
     end
 

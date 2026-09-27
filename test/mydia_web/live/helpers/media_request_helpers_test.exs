@@ -189,7 +189,7 @@ defmodule MydiaWeb.Live.Helpers.MediaRequestHelpersTest do
       shared_id = System.unique_integer([:positive])
 
       {:ok, _show_request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "tv_show",
           title: "Harbour Lights",
           tmdb_id: shared_id,

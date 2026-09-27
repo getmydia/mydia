@@ -175,7 +175,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp load_widget(socket, :recently_added) do
     recently_added =
-      RecentlyAdded.list_recent(
+      RecentlyAdded.list_recent(socket.assigns.current_scope,
         since: DateTime.add(DateTime.utc_now(), -30, :day),
         types: nil,
         limit: 12
@@ -186,7 +186,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp load_widget(socket, :recently_added_movies) do
     recently_added_movies =
-      RecentlyAdded.list_recent(
+      RecentlyAdded.list_recent(socket.assigns.current_scope,
         since: DateTime.add(DateTime.utc_now(), -30, :day),
         types: ["movie"],
         limit: 12
@@ -197,7 +197,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   defp load_widget(socket, :recently_added_tv) do
     recently_added_tv =
-      RecentlyAdded.list_recent(
+      RecentlyAdded.list_recent(socket.assigns.current_scope,
         since: DateTime.add(DateTime.utc_now(), -30, :day),
         types: ["tv_show"],
         limit: 12
@@ -225,8 +225,13 @@ defmodule MydiaWeb.DashboardLive.Index do
     seven_days_ago = Date.add(today, -7)
     seven_days_ahead = Date.add(today, 7)
 
-    recent_episodes = Media.list_episodes_by_air_date(seven_days_ago, today, monitored: true)
-    upcoming_episodes = Media.list_episodes_by_air_date(today, seven_days_ahead, monitored: true)
+    scope = socket.assigns.current_scope
+
+    recent_episodes =
+      Media.list_episodes_by_air_date(scope, seven_days_ago, today, monitored: true)
+
+    upcoming_episodes =
+      Media.list_episodes_by_air_date(scope, today, seven_days_ahead, monitored: true)
 
     socket
     |> assign(:recent_episodes, Enum.take(recent_episodes, 10))
@@ -250,7 +255,7 @@ defmodule MydiaWeb.DashboardLive.Index do
 
       socket
       |> assign(:trending_prerequisites_loaded, true)
-      |> assign(:library_status_map, Media.get_library_status_map())
+      |> assign(:library_status_map, Media.get_library_status_map(socket.assigns.current_scope))
       |> assign(:request_status_map, request_status_map)
       |> assign(:quality_profiles, Mydia.Settings.list_quality_profiles())
     end

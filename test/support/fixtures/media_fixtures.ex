@@ -51,7 +51,11 @@ defmodule Mydia.MediaFixtures do
         |> Mydia.Repo.update!()
 
       category ->
-        {:ok, updated} = Mydia.Media.update_category(item, category, override: true)
+        {:ok, updated} =
+          Mydia.Media.update_category(Mydia.Accounts.Scope.system(), item, category,
+            override: true
+          )
+
         updated
     end
   end

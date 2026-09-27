@@ -5,6 +5,7 @@ defmodule Mydia.Media.LibraryListingTest do
   import Mydia.DownloadsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Media
@@ -165,20 +166,20 @@ defmodule Mydia.Media.LibraryListingTest do
           duration_seconds: 6000
         })
 
-      assert LibraryListing.row(movie.id, user.id).progress.id == mine.id
+      assert LibraryListing.row(Scope.unrestricted(), movie.id, user.id).progress.id == mine.id
     end
 
     test "is nil for an item that does not exist", %{user: user} do
-      assert LibraryListing.row(Ecto.UUID.generate(), user.id) == nil
+      assert LibraryListing.row(Scope.unrestricted(), Ecto.UUID.generate(), user.id) == nil
     end
 
     test "issues the same number of queries however many episodes a show has", %{user: user} do
       show = media_item_fixture(%{type: "tv_show", title: "Long Season"})
       add_episodes(show, 2)
-      small = count_queries(fn -> LibraryListing.row(show.id, user.id) end)
+      small = count_queries(fn -> LibraryListing.row(Scope.unrestricted(), show.id, user.id) end)
 
       add_episodes(show, 38)
-      large = count_queries(fn -> LibraryListing.row(show.id, user.id) end)
+      large = count_queries(fn -> LibraryListing.row(Scope.unrestricted(), show.id, user.id) end)
 
       assert small == large
     end
@@ -462,7 +463,7 @@ defmodule Mydia.Media.LibraryListingTest do
     versions = MediaFile.versions()
 
     item =
-      Media.get_media_item!(item_id,
+      Media.get_media_item!(Scope.unrestricted(), item_id,
         preload: [
           :downloads,
           media_files: versions,
@@ -492,8 +493,42 @@ defmodule Mydia.Media.LibraryListingTest do
     }
   end
 
+  describe "access restrictions" do
+    setup do
+      allowed = media_item_fixture(%{type: "movie", title: "Paper Kite Parade"})
+      hidden = media_item_fixture(%{type: "movie", title: "Nightglass Harbor"})
+
+      Repo.update_all(from(m in MediaItem, where: m.id == ^allowed.id),
+        set: [category: "cartoon_movie"]
+      )
+
+      Repo.update_all(from(m in MediaItem, where: m.id == ^hidden.id), set: [category: "movie"])
+
+      restricted = restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      %{
+        allowed: allowed,
+        hidden: hidden,
+        restricted: restricted,
+        scope: Scope.for_user(restricted)
+      }
+    end
+
+    test "page/2 lists only what the scope can see", ctx do
+      page = LibraryListing.page(ctx.scope, user_id: ctx.restricted.id, type: "movie", limit: 50)
+
+      assert MapSet.equal?(page.visible_ids, MapSet.new([ctx.allowed.id]))
+      assert titles(page) == ["Paper Kite Parade"]
+    end
+
+    test "row/3 is nil for an item the scope cannot see", ctx do
+      assert LibraryListing.row(ctx.scope, ctx.hidden.id, ctx.restricted.id) == nil
+      assert %LibraryRow{} = LibraryListing.row(ctx.scope, ctx.allowed.id, ctx.restricted.id)
+    end
+  end
+
   defp page(user, opts) do
-    LibraryListing.page(Keyword.merge([user_id: user.id, limit: 50], opts))
+    LibraryListing.page(Scope.unrestricted(), Keyword.merge([user_id: user.id, limit: 50], opts))
   end
 
   defp titles(%{rows: rows}), do: Enum.map(rows, & &1.item.title)
@@ -510,7 +545,7 @@ defmodule Mydia.Media.LibraryListingTest do
   end
 
   defp assert_parity(item, user) do
-    row = LibraryListing.row(item.id, user.id)
+    row = LibraryListing.row(Scope.unrestricted(), item.id, user.id)
     assert %LibraryRow{} = row
     assert actual(row) == expected(item.id)
     row

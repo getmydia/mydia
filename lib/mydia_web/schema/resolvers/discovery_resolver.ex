@@ -33,13 +33,13 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   end
 
   @spec recently_added(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def recently_added(_parent, args, _info) do
+  def recently_added(_parent, args, info) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
     thirty_days_ago = DateTime.add(DateTime.utc_now(), -30, :day)
 
     entries =
-      RecentlyAdded.list_recent(
+      RecentlyAdded.list_recent(info.context[:current_scope],
         since: thirty_days_ago,
         types: requested_types(Map.get(args, :types)),
         limit: pagination_limit(first, after_cursor)

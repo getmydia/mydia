@@ -47,7 +47,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
   end
 
   test "the stored choice is marked active", %{conn: conn, show: show} do
-    {:ok, _} = Mydia.Media.update_media_item(show, %{download_audio_language: "es"})
+    {:ok, _} =
+      Mydia.Media.update_media_item(Mydia.Accounts.Scope.unrestricted(), show, %{
+        download_audio_language: "es"
+      })
 
     view = open_modal(conn, show)
 
@@ -64,7 +67,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
   end
 
   test "the Server default option clears the choice", %{conn: conn, show: show} do
-    {:ok, _} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
+    {:ok, _} =
+      Mydia.Media.update_media_item(Mydia.Accounts.Scope.unrestricted(), show, %{
+        download_audio_language: "en"
+      })
 
     view = open_modal(conn, show)
     view |> element("#download-audio-option-default") |> render_click()
@@ -74,7 +80,11 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
   end
 
   test "a malformed event leaves the stored choice untouched", %{conn: conn, show: show} do
-    {:ok, _} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
+    {:ok, _} =
+      Mydia.Media.update_media_item(Mydia.Accounts.Scope.unrestricted(), show, %{
+        download_audio_language: "en"
+      })
+
     {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
 
     render_hook(view, "set_download_audio_language", %{})
@@ -107,7 +117,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioTest do
   end
 
   test "choosing the language the show already has queues nothing", %{conn: conn, show: show} do
-    {:ok, _} = Mydia.Media.update_media_item(show, %{download_audio_language: "en"})
+    {:ok, _} =
+      Mydia.Media.update_media_item(Mydia.Accounts.Scope.unrestricted(), show, %{
+        download_audio_language: "en"
+      })
 
     view = open_modal(conn, show)
     view |> element("#download-audio-option-en") |> render_click()

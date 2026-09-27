@@ -57,7 +57,7 @@ defmodule Mydia.Media.LibraryStatusTest do
     show =
       media_item_fixture(%{type: "tv_show", title: "Harbour Lights", tmdb_id: 674, year: 2011})
 
-    status = Media.library_status_for_tmdb_ids([674], "tv_show")
+    status = Media.library_status_for_tmdb_ids(Scope.unrestricted(), [674], "tv_show")
 
     assert %{{:tv_show, :tmdb, 674} => %{id: id}} = status
     assert id == show.id

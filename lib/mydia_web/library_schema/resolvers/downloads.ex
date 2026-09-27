@@ -12,6 +12,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads
   alias Mydia.LibraryApi.Principal
   alias Mydia.LibraryApi.RevisionFeed
@@ -129,7 +130,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Downloads do
     items =
       case item_ids do
         [] -> []
-        ids -> Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
+        ids -> Media.list_media_items(Scope.system(), ids: ids, preload: MediaItemView.preloads())
       end
 
     by_id = Map.new(items, &{&1.id, &1})

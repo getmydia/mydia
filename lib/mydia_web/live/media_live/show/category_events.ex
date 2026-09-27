@@ -61,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
           _ -> false
         end
 
-      case Media.update_category(media_item, category,
+      case Media.update_category(socket.assigns.current_scope, media_item, category,
              override: override,
              reason: "Category updated",
              actor_type: :user,
@@ -92,7 +92,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       media_item = socket.assigns.media_item
       new_category = Mydia.Media.CategoryClassifier.classify(media_item)
 
-      case Media.update_category(media_item, new_category,
+      case Media.update_category(socket.assigns.current_scope, media_item, new_category,
              override: false,
              reason: "Category reset to auto-detected",
              actor_type: :user,

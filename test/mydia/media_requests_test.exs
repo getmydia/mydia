@@ -174,7 +174,7 @@ defmodule Mydia.MediaRequestsTest do
       tmdb_id = System.unique_integer([:positive])
 
       assert {:ok, _movie_request} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "movie",
                  title: "Harbour Lights",
                  tmdb_id: tmdb_id,
@@ -182,7 +182,7 @@ defmodule Mydia.MediaRequestsTest do
                })
 
       assert {:ok, show_request} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "tv_show",
                  title: "Harbour Lights: The Series",
                  tmdb_id: tmdb_id,
@@ -197,7 +197,7 @@ defmodule Mydia.MediaRequestsTest do
       tvdb_id = System.unique_integer([:positive])
 
       assert {:ok, _show_request} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "tv_show",
                  title: "Signal Hill",
                  tvdb_id: tvdb_id,
@@ -205,7 +205,7 @@ defmodule Mydia.MediaRequestsTest do
                })
 
       assert {:ok, movie_request} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "movie",
                  title: "Signal Hill",
                  tvdb_id: tvdb_id,
@@ -225,8 +225,10 @@ defmodule Mydia.MediaRequestsTest do
         requester_id: user.id
       }
 
-      assert {:ok, _request} = MediaRequests.create_request(attrs)
-      assert {:error, :duplicate_request} = MediaRequests.create_request(attrs)
+      assert {:ok, _request} = MediaRequests.create_request(Scope.unrestricted(), attrs)
+
+      assert {:error, :duplicate_request} =
+               MediaRequests.create_request(Scope.unrestricted(), attrs)
     end
 
     test "surfaces the validation error when media_type is missing", %{user: user} do
@@ -234,7 +236,7 @@ defmodule Mydia.MediaRequestsTest do
       # absent media_type must fall through to the real error rather than
       # short-circuiting as a false duplicate.
       assert {:ok, _first} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  media_type: "movie",
                  title: "Harbour Lights",
                  tmdb_id: 778_811,
@@ -242,7 +244,7 @@ defmodule Mydia.MediaRequestsTest do
                })
 
       assert {:error, changeset} =
-               MediaRequests.create_request(%{
+               MediaRequests.create_request(Scope.unrestricted(), %{
                  title: "Harbour Lights",
                  tmdb_id: 778_811,
                  requester_id: user.id
@@ -277,7 +279,7 @@ defmodule Mydia.MediaRequestsTest do
       assert {:error, :restricted} =
                MediaRequests.create_request(scope, attrs, config: relay_config(bypass))
 
-      refute MediaRequests.pending_request_exists?(tmdb_id)
+      refute MediaRequests.pending_request_exists?("movie", tmdb_id)
     end
 
     test "allows a request for a title within the account's bounds", %{user: user} do

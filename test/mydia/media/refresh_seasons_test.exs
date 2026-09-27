@@ -3,6 +3,7 @@ defmodule Mydia.Media.RefreshSeasonsTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
 
@@ -70,7 +71,9 @@ defmodule Mydia.Media.RefreshSeasonsTest do
                actor_id: "airing_episode_refresh"
              )
 
-    assert Media.get_episode_by_number(ctx.item.id, 2, 8).title == "Harbor Lights"
+    assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 2, 8).title ==
+             "Harbor Lights"
+
     assert :counters.get(ctx.hits, 1) == 0, "the show must not be fetched"
     assert :counters.get(ctx.hits, 2) == 0, "a season that was not named must not be fetched"
     assert :counters.get(ctx.hits, 3) == 1
@@ -85,7 +88,7 @@ defmodule Mydia.Media.RefreshSeasonsTest do
 
     assert {:ok, []} = Media.refresh_seasons(ctx.item, [2], config: ctx.config)
 
-    assert Media.get_media_item!(ctx.item.id).seasons_refreshed_at == nil
+    assert Media.get_media_item!(Scope.unrestricted(), ctx.item.id).seasons_refreshed_at == nil
     assert length(events(ctx.item, "media_item.updated")) == updates_before
   end
 
@@ -139,7 +142,8 @@ defmodule Mydia.Media.RefreshSeasonsTest do
     assert {:error, {:failed_seasons, 1}} =
              Media.refresh_seasons(ctx.item, [2], config: ctx.config)
 
-    assert Media.get_episode_by_number(ctx.item.id, 2, 8).title == "Harbor Lights"
+    assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 2, 8).title ==
+             "Harbor Lights"
 
     assert [event] = events(ctx.item, "media_item.episode_titles_updated")
     assert event.metadata["count"] == 1
@@ -204,7 +208,9 @@ defmodule Mydia.Media.RefreshSeasonsTest do
       assert {:ok, [%{season: 1, episode: 8, old: "Episode 8", new: "Harbor Lights"}]} =
                Media.refresh_seasons(ctx.item, [1], config: ctx.config)
 
-      assert Media.get_episode_by_number(ctx.item.id, 1, 8).title == "Harbor Lights"
+      assert Media.get_episode_by_number(Scope.unrestricted(), ctx.item.id, 1, 8).title ==
+               "Harbor Lights"
+
       assert [_event] = events(ctx.item, "media_item.episode_titles_updated")
     end
   end

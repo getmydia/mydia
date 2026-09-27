@@ -42,6 +42,6 @@ defmodule MydiaWeb.LibrarySchema.MutationAuthorizationTest do
              Absinthe.run(document, MydiaWeb.LibrarySchema, context: %{principal: @user})
 
     assert Enum.any?(errors, &(&1.extensions[:code] == "FORBIDDEN"))
-    assert Mydia.Media.get_media_item!(item.id).monitored
+    assert Mydia.Media.get_media_item!(Mydia.Accounts.Scope.unrestricted(), item.id).monitored
   end
 end

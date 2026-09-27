@@ -38,7 +38,10 @@ defmodule MydiaWeb.MediaLive.Show.DownloadAudioEvents do
     with :ok <- Authorization.authorize_update_media(socket) do
       media_item = socket.assigns.media_item
 
-      case Media.update_media_item(media_item, %{download_audio_language: language},
+      case Media.update_media_item(
+             socket.assigns.current_scope,
+             media_item,
+             %{download_audio_language: language},
              reason: "Download audio updated"
            ) do
         {:ok, updated} ->

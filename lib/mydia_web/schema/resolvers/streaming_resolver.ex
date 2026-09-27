@@ -222,6 +222,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
       user ->
         with {:ok, media_file} <- load_media_file(file_id),
+             :ok <- authorize(context[:current_scope], media_file),
              media_item_id when is_binary(media_item_id) <-
                AudioPreferences.media_item_id_of(media_file) do
           apply_audio_language_preference(user.id, media_item_id, media_file, args[:language])
@@ -346,6 +347,7 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
       user ->
         with {:ok, media_file} <- load_media_file(file_id),
+             :ok <- authorize(context[:current_scope], media_file),
              media_item_id when is_binary(media_item_id) <-
                SubtitlePreferences.media_item_id_of(media_file) do
           store_subtitle_preference(user.id, media_item_id, media_file, args)

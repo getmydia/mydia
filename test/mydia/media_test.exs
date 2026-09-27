@@ -123,8 +123,13 @@ defmodule Mydia.MediaTest do
 
     test "delete_media_item/1 deletes the media item" do
       media_item = media_item_fixture()
-      assert {:ok, %MediaItem{}, %DiskRemoval{}} = Media.delete_media_item(Scope.unrestricted(),media_item)
-      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(Scope.unrestricted(), media_item.id) end
+
+      assert {:ok, %MediaItem{}, %DiskRemoval{}} =
+               Media.delete_media_item(Scope.unrestricted(), media_item)
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Media.get_media_item!(Scope.unrestricted(), media_item.id)
+      end
     end
 
     test "change_media_item/1 returns a media item changeset" do
@@ -1017,7 +1022,9 @@ defmodule Mydia.MediaTest do
     test "update_category/2 updates the category" do
       media_item = media_item_fixture()
 
-      assert {:ok, %MediaItem{} = updated} = Media.update_category(media_item, :anime_movie)
+      assert {:ok, %MediaItem{} = updated} =
+               Media.update_category(Scope.unrestricted(), media_item, :anime_movie)
+
       assert updated.category == "anime_movie"
       assert updated.category_override == false
     end
@@ -1026,7 +1033,9 @@ defmodule Mydia.MediaTest do
       media_item = media_item_fixture()
 
       assert {:ok, %MediaItem{} = updated} =
-               Media.update_category(media_item, :anime_movie, override: true)
+               Media.update_category(Scope.unrestricted(), media_item, :anime_movie,
+                 override: true
+               )
 
       assert updated.category == "anime_movie"
       assert updated.category_override == true
@@ -1034,7 +1043,9 @@ defmodule Mydia.MediaTest do
 
     test "clear_category_override/1 clears the override flag" do
       media_item = media_item_fixture()
-      {:ok, media_item} = Media.update_category(media_item, :anime_movie, override: true)
+
+      {:ok, media_item} =
+        Media.update_category(Scope.unrestricted(), media_item, :anime_movie, override: true)
 
       assert media_item.category_override == true
 
@@ -1071,7 +1082,9 @@ defmodule Mydia.MediaTest do
 
     test "reclassify_media_item/1 respects category_override flag" do
       media_item = media_item_fixture()
-      {:ok, media_item} = Media.update_category(media_item, :cartoon_movie, override: true)
+
+      {:ok, media_item} =
+        Media.update_category(Scope.unrestricted(), media_item, :cartoon_movie, override: true)
 
       # Update metadata to indicate anime
       {:ok, media_item} =
@@ -1086,7 +1099,9 @@ defmodule Mydia.MediaTest do
 
     test "reclassify_media_item/2 with force: true ignores override" do
       media_item = media_item_fixture()
-      {:ok, media_item} = Media.update_category(media_item, :cartoon_movie, override: true)
+
+      {:ok, media_item} =
+        Media.update_category(Scope.unrestricted(), media_item, :cartoon_movie, override: true)
 
       # Update metadata to indicate anime
       {:ok, media_item} =
@@ -1147,7 +1162,9 @@ defmodule Mydia.MediaTest do
         })
 
       # Set override on one
-      {:ok, overridden} = Media.update_category(movie, :cartoon_movie, override: true)
+      {:ok, overridden} =
+        Media.update_category(Scope.unrestricted(), movie, :cartoon_movie, override: true)
+
       assert overridden.category_override == true
 
       # Reclassify all
@@ -1182,7 +1199,7 @@ defmodule Mydia.MediaTest do
       assert anime.category == "anime_movie"
 
       # Manually change anime to a wrong category (for testing re-classification)
-      {:ok, _} = Media.update_category(anime, :movie)
+      {:ok, _} = Media.update_category(Scope.unrestricted(), anime, :movie)
 
       # Re-classify specific items
       {:ok, summary} = Media.reclassify_media_items([anime.id])
@@ -1210,7 +1227,9 @@ defmodule Mydia.MediaTest do
       assert movie.category == "anime_movie"
 
       # Set override to a different category
-      {:ok, overridden} = Media.update_category(movie, :movie, override: true)
+      {:ok, overridden} =
+        Media.update_category(Scope.unrestricted(), movie, :movie, override: true)
+
       assert overridden.category_override == true
       assert overridden.category == "movie"
 
@@ -1236,7 +1255,9 @@ defmodule Mydia.MediaTest do
         })
 
       # Set override to wrong category
-      {:ok, overridden} = Media.update_category(movie, :movie, override: true)
+      {:ok, overridden} =
+        Media.update_category(Scope.unrestricted(), movie, :movie, override: true)
+
       assert overridden.category == "movie"
       assert overridden.category_override == true
 
@@ -2875,7 +2896,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "movie.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(), item, delete_files: true)
 
       refute File.exists?(abs)
     end
@@ -2896,9 +2917,11 @@ defmodule Mydia.MediaTest do
         })
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 1}} =
-               Media.delete_media_item(Scope.unrestricted(),media_item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(), media_item, delete_files: true)
 
-      assert_raise Ecto.NoResultsError, fn -> Media.get_media_item!(Scope.unrestricted(), media_item.id) end
+      assert_raise Ecto.NoResultsError, fn ->
+        Media.get_media_item!(Scope.unrestricted(), media_item.id)
+      end
     end
 
     test "delete_media_items/2 returns count and error count", %{library_path: lp} do
@@ -2906,14 +2929,18 @@ defmodule Mydia.MediaTest do
       item2 = movie_with_file(lp, "b.mkv", "data")
 
       assert {:ok, 2, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_items(Scope.unrestricted(),[item1.id, item2.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(), [item1.id, item2.id],
+                 delete_files: true
+               )
     end
 
     test "delete_media_items/2 with delete_files: false reports zero errors", %{library_path: lp} do
       item = movie_with_file(lp, "keep.mkv", "data")
       abs = Path.join(lp.path, "keep.mkv")
 
-      assert {:ok, 1, %DiskRemoval{} = removal} = Media.delete_media_items(Scope.unrestricted(),[item.id])
+      assert {:ok, 1, %DiskRemoval{} = removal} =
+               Media.delete_media_items(Scope.unrestricted(), [item.id])
+
       assert removal == %DiskRemoval{}
       assert File.exists?(abs)
     end
@@ -2967,7 +2994,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "Show/S01E01.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(Scope.unrestricted(),media_item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(), media_item, delete_files: true)
 
       refute File.exists?(abs)
       refute candidate_for(file)
@@ -2980,7 +3007,7 @@ defmodule Mydia.MediaTest do
       abs = Path.join(lp.path, "Show/S01E02.mkv")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_item(Scope.unrestricted(),media_item)
+               Media.delete_media_item(Scope.unrestricted(), media_item)
 
       assert File.exists?(abs)
       assert candidate_for(file)
@@ -2991,7 +3018,7 @@ defmodule Mydia.MediaTest do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E03.mkv", "data")
 
       assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
-               Media.delete_media_items(Scope.unrestricted(),[media_item.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(), [media_item.id], delete_files: true)
 
       refute candidate_for(file)
     end
@@ -3001,7 +3028,9 @@ defmodule Mydia.MediaTest do
     } do
       {media_item, file} = show_with_episode_file(lp, "Show/S01E04.mkv", "data")
 
-      assert {:ok, 1, %DiskRemoval{files_failed: 0}} = Media.delete_media_items(Scope.unrestricted(),[media_item.id])
+      assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_items(Scope.unrestricted(), [media_item.id])
+
       assert candidate_for(file)
     end
   end
@@ -3063,7 +3092,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, %MediaItem{},
               %DiskRemoval{files_failed: 0, folders_removed: [^folder], folders_kept: []}} =
-               Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(), item, delete_files: true)
 
       refute File.exists?(folder)
       assert File.dir?(root)
@@ -3091,7 +3120,7 @@ defmodule Mydia.MediaTest do
       File.write!(Path.join(root, "Tin Kettle/Season 01/season.nfo"), "<season/>")
 
       assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0, folders_kept: []}} =
-               Media.delete_media_item(Scope.unrestricted(),show, delete_files: true)
+               Media.delete_media_item(Scope.unrestricted(), show, delete_files: true)
 
       refute File.exists?(Path.join(root, "Tin Kettle"))
     end
@@ -3110,7 +3139,7 @@ defmodule Mydia.MediaTest do
                 folders_kept: [
                   {^folder, {:blocked, [{:media_file, "Shared Reels/Reel Two.mkv"}]}}
                 ]
-              }} = Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
+              }} = Media.delete_media_item(Scope.unrestricted(), item, delete_files: true)
 
       refute File.exists?(Path.join(folder, "Reel One.mkv"))
       assert File.exists?(Path.join(folder, "Reel Two.mkv"))
@@ -3126,7 +3155,7 @@ defmodule Mydia.MediaTest do
               %DiskRemoval{
                 files_failed: 1,
                 folders_kept: [{^folder, {:blocked, [{:video, "Locked Reel/Locked Reel.mkv"}]}}]
-              }} = Media.delete_media_item(Scope.unrestricted(),item, delete_files: true)
+              }} = Media.delete_media_item(Scope.unrestricted(), item, delete_files: true)
 
       assert File.exists?(Path.join(folder, "Locked Reel.mkv"))
     end
@@ -3137,7 +3166,9 @@ defmodule Mydia.MediaTest do
       folder = Path.join(root, "Shared Reels")
 
       assert {:ok, 2, %DiskRemoval{files_failed: 0, folders_removed: [^folder]}} =
-               Media.delete_media_items(Scope.unrestricted(),[one.id, two.id], delete_files: true)
+               Media.delete_media_items(Scope.unrestricted(), [one.id, two.id],
+                 delete_files: true
+               )
 
       refute File.exists?(folder)
     end

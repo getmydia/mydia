@@ -2,11 +2,13 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
   @moduledoc """
   Resolves `addMovie`, `addTvShow` and `removeMediaItem`.
 
-  Adding goes through `Mydia.Media.Add.from_provider/4`, the entry point the
+  Adding goes through `Mydia.Media.Add.from_provider/5`, the entry point the
   search page's Add button uses, then `Mydia.Search.maybe_queue_search/2` for
-  `searchNow`, as the UI does. Removing is `Mydia.Media.delete_media_item/2`.
+  `searchNow`, as the UI does. Removing is `Mydia.Media.delete_media_item/3`.
+  Both run under `Scope.system/0`: only admin keys reach the Library API.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.Principal
   alias Mydia.Media
   alias Mydia.Media.Add
@@ -36,7 +38,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
 
     with {:ok, item} <- Loaders.item(input.id, ["input", "id"]),
          {:ok, _deleted, %DiskRemoval{files_failed: files_failed}} <-
-           Media.delete_media_item(item, opts) do
+           Media.delete_media_item(Scope.system(), item, opts) do
       {:ok, %{removed_id: item.id, files_not_deleted: files_failed, user_errors: []}}
     else
       {:error, %UserError{} = error} ->
@@ -55,8 +57,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.LibraryWrites do
   defp add(ref, media_type, input, principal) do
     case add_opts(input, principal) do
       {:ok, opts} ->
-        ref
-        |> Add.from_provider(media_type, nil, opts)
+        Scope.system()
+        |> Add.from_provider(ref, media_type, nil, opts)
         |> added(input[:search_now] == true)
 
       {:error, error} ->

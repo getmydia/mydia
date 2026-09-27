@@ -14,6 +14,7 @@ defmodule Mydia.Metrics.Measurements do
   require Logger
 
   alias Mydia.{Downloads, Jobs, Library, Media, Settings, Streaming}
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.ClientHealth
 
   @memory_kinds [:total, :processes, :binary, :ets, :atom]
@@ -53,8 +54,8 @@ defmodule Mydia.Metrics.Measurements do
 
   def library do
     safely(:library, fn ->
-      emit(:library_items, Media.count_movies(), %{type: "movie"})
-      emit(:library_items, Media.count_tv_shows(), %{type: "tv_show"})
+      emit(:library_items, Media.count_movies(Scope.system()), %{type: "movie"})
+      emit(:library_items, Media.count_tv_shows(Scope.system()), %{type: "tv_show"})
 
       counts = Media.episode_state_counts()
 

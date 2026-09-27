@@ -1,6 +1,9 @@
 defmodule MydiaWeb.Schema.PlaybackTest do
   use MydiaWeb.ConnCase
 
+  import Ecto.Query
+
+  alias Mydia.Accounts.Scope
   alias Mydia.Playback
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
@@ -72,6 +75,41 @@ defmodule MydiaWeb.Schema.PlaybackTest do
       end
 
     %{user: user, show: show, episodes: episodes}
+  end
+
+  describe "season mutations under an access restriction" do
+    setup ctx do
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^ctx.show.id),
+        set: [category: "tv_show"]
+      )
+
+      %{restricted: AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["movie"]})}
+    end
+
+    test "markSeasonWatched treats an out-of-bounds show as unknown", ctx do
+      result =
+        run_query(
+          @mark_season_watched_mutation,
+          %{"showId" => ctx.show.id, "seasonNumber" => 1},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Show not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, episode_id: hd(ctx.episodes).id) == nil
+    end
+
+    test "markEpisodesUpToWatched treats an out-of-bounds episode as unknown", ctx do
+      result =
+        run_query(
+          @mark_episodes_up_to_watched_mutation,
+          %{"episodeId" => List.last(ctx.episodes).id},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Episode not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, episode_id: hd(ctx.episodes).id) == nil
+    end
   end
 
   describe "markSeasonUnwatched mutation" do
@@ -338,7 +376,9 @@ defmodule MydiaWeb.Schema.PlaybackTest do
   end
 
   defp run_query(query, variables, user \\ nil) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user, do: %{current_user: user, current_scope: Scope.for_user(user)}, else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end

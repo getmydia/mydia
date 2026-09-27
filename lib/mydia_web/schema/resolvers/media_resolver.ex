@@ -467,7 +467,6 @@ defmodule MydiaWeb.Schema.Resolvers.MediaResolver do
   # Helper functions
 
   defp current_scope(%{context: context}), do: context[:current_scope]
-  defp current_scope(_info), do: nil
 
   defp format_progress(progress) do
     %{

@@ -188,7 +188,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
             "strategy" => "HLS_COPY",
             "startPosition" => 17
           },
-          context: %{current_user: user}
+          context: %{current_user: user, current_scope: Scope.for_user(user)}
         )
 
       assert {:ok, %{data: %{"startStreamingSession" => session}}} = result
@@ -207,7 +207,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
                      "strategy" => "HLS_COPY",
                      "startPosition" => 17
                    },
-                   context: %{current_user: user}
+                   context: %{current_user: user, current_scope: Scope.for_user(user)}
                  )
 
         assert again["sessionId"] == session["sessionId"]
@@ -372,7 +372,7 @@ defmodule MydiaWeb.Schema.StreamingTest do
       @end_streaming_session_mutation,
       MydiaWeb.Schema,
       variables: %{"sessionId" => session_id},
-      context: %{current_user: user}
+      context: %{current_user: user, current_scope: Scope.for_user(user)}
     )
   end
 end
