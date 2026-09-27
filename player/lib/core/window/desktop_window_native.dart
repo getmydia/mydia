@@ -63,6 +63,14 @@ Future<void> initDesktopWindow() async {
     return;
   }
 
+  if (defaultTargetPlatform == TargetPlatform.windows) {
+    try {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    } catch (e) {
+      debugPrint('[DesktopWindow] Failed to set title bar style: $e');
+    }
+  }
+
   final store = await _openStore();
   final controller = WindowGeometryController(
     window: const WindowManagerController(),
