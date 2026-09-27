@@ -287,7 +287,7 @@ defmodule Mydia.Upgrades.ComparatorTest do
   end
 
   describe "HDR signal reaches Comparator" do
-    # REGRESSION: Mydia.Upgrades.Attrs.canonical_hdr/1 guarded on
+    # REGRESSION: Mydia.Quality.Attrs.canonical_hdr/1 guarded on
     # is_binary(value). MediaFile.hdr_format and Quality.hdr_format both
     # store the Hdr module's canonical base atom (:hdr10, :hdr10_plus, :hlg),
     # never a string, so that guard silently returned nil for every real

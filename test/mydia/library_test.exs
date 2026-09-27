@@ -605,7 +605,7 @@ defmodule Mydia.LibraryTest do
 
       # audio_codec_raw keeps the analyzer's own string, which the
       # audio_codec column above has already lost the channel layout from
-      # ("AAC Stereo" -> "aac"). Mydia.Upgrades.Attrs reads it to recover
+      # ("AAC Stereo" -> "aac"). Mydia.Quality.Attrs reads it to recover
       # audio_channels and the Atmos/E-AC3 distinction, so asserting the
       # *production* write here is what stops that being silently dropped.
       assert %FileMetadata{

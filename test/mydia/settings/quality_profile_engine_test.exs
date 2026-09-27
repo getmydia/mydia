@@ -245,7 +245,7 @@ defmodule Mydia.Settings.QualityProfileEngineTest do
   describe "HDR scoring is not inverted" do
     # REGRESSION: QualityProfileEngine.extract_media_attributes/1 (formerly
     # build_media_attrs/2) passed media_file.hdr_format raw, using neither
-    # Upgrades.Attrs nor SearchScorer.normalize_hdr_format/1.
+    # Quality.Attrs nor SearchScorer.normalize_hdr_format/1.
     # score_from_preference_list/2 does an exact == test, so "Dolby Vision"
     # missed ["dolby_vision", ...] and scored 25.0, while a file with no HDR
     # at all hit the 50.0 fallback.

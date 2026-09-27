@@ -58,7 +58,7 @@ defmodule Mydia.Settings.QualityProfile do
   # Mydia.Quality.Sources.detect/1 folds "bdrip" into "BluRay" for the
   # indexer search/grab path, but the V3 release parser
   # (priv/release_parser/sources.exs) still emits canonical "BDRip" for
-  # on-disk files, and that value flows through Mydia.Upgrades.Attrs into
+  # on-disk files, and that value flows through Mydia.Quality.Attrs into
   # scoring. So "BDRip" remains a meaningful, selectable preference here.
   @valid_sources [
     "BluRay",

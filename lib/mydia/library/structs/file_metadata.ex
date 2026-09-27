@@ -42,7 +42,7 @@ defmodule Mydia.Library.Structs.FileMetadata do
     # both of those to a bare codec ("ac3", "truehd"), dropping the channel
     # layout and the Atmos/E-AC3 distinction. That is the right shape for
     # streaming-compatibility checks and the wrong shape for quality scoring,
-    # so the lossless string is preserved here for `Mydia.Upgrades.Attrs`.
+    # so the lossless string is preserved here for `Mydia.Quality.Attrs`.
     :audio_codec_raw,
 
     # H.264/AVC codec details

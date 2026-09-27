@@ -1762,7 +1762,7 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   # Comparator.upgrade?/6 (via Upgrades.filter_candidates/5) scores a
   # candidate's `.size` against the profile's `episode_min_size_mb` /
-  # `episode_max_size_mb` (see Mydia.Upgrades.Attrs.from_quality/3) - correct
+  # `episode_max_size_mb` (see Mydia.Quality.Attrs.from_quality/3) - correct
   # for a single-episode candidate, wrong for a season pack: `result.size`
   # there is the sum of every episode in the pack, not one episode's size.
   # Left unnormalized, any real pack with an `episode_max_size_mb` bound
