@@ -246,8 +246,7 @@ defmodule Mydia.Quality.AttrsTest do
   # from_media_file/2's metadata_source/1 (attrs.ex:191) reads metadata.source
   # directly - it does not parse relative_path itself, as the "lifts source
   # out of nested metadata" test above already establishes. So these fixtures
-  # pre-populate metadata.source with what Mydia.Quality.Sources.detect/1 (the
-  # same detector Task 3 wired into QualityProfileEngine.extract_source/1)
+  # pre-populate metadata.source with what Mydia.Quality.Sources.detect/1
   # would derive from the filename, rather than relying on from_media_file/2
   # to parse relative_path itself - it doesn't. That keeps the assertion
   # honest about what is actually under test: canonical_source/1's mapping,

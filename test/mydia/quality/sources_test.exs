@@ -140,6 +140,29 @@ defmodule Mydia.Quality.SourcesTest do
     end
   end
 
+  describe "detect/1 - on-disk relative paths" do
+    test "detects cam-tier releases already sitting in the library" do
+      # The real file the production instance imported on 2026-08-04.
+      path =
+        "Starfall Requiem (2026)/Starfall Requiem (2026) 1080p HQ HDTS - x264 - [Tel + Tam + Hin + Eng] - HQ Clean - 3.3GB.mkv"
+
+      assert Sources.cam_tier?(Sources.detect(path))
+    end
+
+    test "still detects good sources" do
+      assert Sources.detect("Neon Cascade (1999)/Neon.Cascade.1999.1080p.BluRay.x264.mkv") ==
+               "BluRay"
+
+      assert Sources.detect("Voyagers Reach (2014)/Voyagers.Reach.2014.2160p.WEB-DL.x265.mkv") ==
+               "WEB-DL"
+    end
+
+    test "returns nil when the path carries no source token" do
+      assert Sources.detect("Sugarcane Dreams (2023)/Sugarcane.Dreams.2023.1080p.mkv") ==
+               nil
+    end
+  end
+
   describe "all/0" do
     test "includes every cam-tier label" do
       for label <- Sources.cam_tier() do

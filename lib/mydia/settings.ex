@@ -86,32 +86,10 @@ defmodule Mydia.Settings do
 
   @doc """
   Updates a quality profile.
-
-  If quality_standards are changed, automatically triggers re-evaluation of all
-  associated media files in the background to ensure scores reflect the new criteria.
-
-  ## Options
-    - `:skip_reevaluation` - Skip automatic re-evaluation (default: false)
   """
-  @spec update_quality_profile(QualityProfile.t(), map(), keyword()) ::
+  @spec update_quality_profile(QualityProfile.t(), map()) ::
           {:ok, QualityProfile.t()} | {:error, Ecto.Changeset.t()}
-  defdelegate update_quality_profile(quality_profile, attrs, opts \\ []),
-    to: Mydia.Settings.QualityProfiles
-
-  @doc """
-  Triggers background re-evaluation of all files associated with a quality profile.
-
-  This is called automatically when a profile's quality_standards are updated.
-  It spawns a background task to re-evaluate all associated files without blocking.
-
-  ## Parameters
-    - `profile_id` - ID of the profile to re-evaluate
-
-  ## Returns
-    - `:ok` - Re-evaluation task spawned successfully
-  """
-  @spec trigger_profile_reevaluation(binary()) :: :ok
-  defdelegate trigger_profile_reevaluation(profile_id), to: Mydia.Settings.QualityProfiles
+  defdelegate update_quality_profile(quality_profile, attrs), to: Mydia.Settings.QualityProfiles
 
   @doc """
   Deletes a quality profile.

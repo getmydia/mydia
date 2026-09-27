@@ -74,56 +74,10 @@ defmodule Mydia.Settings.QualityProfiles do
     |> Repo.insert()
   end
 
-  def update_quality_profile(%QualityProfile{} = quality_profile, attrs, opts \\ []) do
-    skip_reevaluation = Keyword.get(opts, :skip_reevaluation, false)
-
-    changeset = QualityProfile.changeset(quality_profile, attrs)
-
-    # Check if quality_standards are changing
-    quality_standards_changed? =
-      Ecto.Changeset.get_change(changeset, :quality_standards) != nil
-
-    case Repo.update(changeset) do
-      {:ok, updated_profile} = result ->
-        # Trigger re-evaluation if quality_standards changed and not skipped
-        if quality_standards_changed? and not skip_reevaluation do
-          trigger_profile_reevaluation(updated_profile.id)
-        end
-
-        result
-
-      error ->
-        error
-    end
-  end
-
-  def trigger_profile_reevaluation(profile_id) do
-    Logger.info("Triggering background re-evaluation for quality profile",
-      profile_id: profile_id
-    )
-
-    # Spawn a supervised task to re-evaluate files
-    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
-      alias Mydia.Settings.QualityProfileEngine
-
-      case QualityProfileEngine.reevaluate_profile_files(profile_id) do
-        {:ok, summary} ->
-          Logger.info("Quality profile re-evaluation completed",
-            profile_id: profile_id,
-            processed: summary.processed,
-            updated: summary.updated,
-            errors: length(summary.errors)
-          )
-
-        {:error, reason} ->
-          Logger.error("Quality profile re-evaluation failed",
-            profile_id: profile_id,
-            reason: inspect(reason)
-          )
-      end
-    end)
-
-    :ok
+  def update_quality_profile(%QualityProfile{} = quality_profile, attrs) do
+    quality_profile
+    |> QualityProfile.changeset(attrs)
+    |> Repo.update()
   end
 
   def delete_quality_profile(%QualityProfile{} = quality_profile) do
