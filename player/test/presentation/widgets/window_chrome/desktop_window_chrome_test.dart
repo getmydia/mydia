@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
+import 'package:flutter/gestures.dart'
+    show PointerDeviceKind, kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,9 +91,31 @@ void main() {
       );
     });
 
+    test('true on windowed Windows', () {
+      expect(
+        shouldShowWindowChrome(
+          isWeb: false,
+          platform: TargetPlatform.windows,
+          isFullscreen: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('false in fullscreen Windows, where the window has no chrome to draw',
+        () {
+      expect(
+        shouldShowWindowChrome(
+          isWeb: false,
+          platform: TargetPlatform.windows,
+          isFullscreen: true,
+        ),
+        isFalse,
+      );
+    });
+
     for (final platform in [
       TargetPlatform.macOS,
-      TargetPlatform.windows,
       TargetPlatform.iOS,
       TargetPlatform.android,
     ]) {
@@ -114,6 +137,33 @@ void main() {
   // rounded app inside a square frame, or square app corners poking past a
   // rounded one.
   group('windowCornerRadiusFor', () {
+    test('returns 0.0 on Windows in all frame states', () {
+      for (final state in const [
+        WindowFrameState.floating,
+        WindowFrameState(maximized: true),
+        WindowFrameState(tiled: true),
+        WindowFrameState(fullscreen: true),
+        WindowFrameState(solidFrame: true),
+      ]) {
+        expect(
+          windowCornerRadiusFor(state, platform: TargetPlatform.windows),
+          0.0,
+          reason: '$state with explicit platform',
+        );
+      }
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        expect(
+          windowCornerRadiusFor(WindowFrameState.floating),
+          0.0,
+          reason: 'floating with defaultTargetPlatform == windows',
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
     for (final maximized in [false, true]) {
       for (final tiled in [false, true]) {
         for (final fullscreen in [false, true]) {
@@ -347,6 +397,118 @@ void main() {
         window: FakeWindowController(),
         body: () async {
           expect(find.byKey(DesktopWindowChrome.clipKey), findsNothing);
+        },
+      );
+    });
+
+    testWidgets('draws buttons on Windows in top-right corner', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.windows,
+        window: FakeWindowController(),
+        body: () async {
+          expect(find.byType(WindowButtonWidget), findsNWidgets(3));
+          expect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+            findsOneWidget,
+          );
+
+          final close = tester.getRect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.close)),
+          );
+          final maximize = tester.getRect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.maximize)),
+          );
+          final minimize = tester.getRect(
+            find.byKey(WindowButtonWidget.keyFor(WindowButton.minimize)),
+          );
+
+          expect(close.top, 0.0);
+          expect(close.right, 800.0);
+          expect(close.width, kWindowsCaptionButtonWidth);
+          expect(close.height, kWindowsTitleBarHeight);
+
+          expect(maximize.top, 0.0);
+          expect(maximize.right, close.left);
+          expect(maximize.width, kWindowsCaptionButtonWidth);
+          expect(maximize.height, kWindowsTitleBarHeight);
+
+          expect(minimize.top, 0.0);
+          expect(minimize.right, maximize.left);
+          expect(minimize.width, kWindowsCaptionButtonWidth);
+          expect(minimize.height, kWindowsTitleBarHeight);
+
+          expect(minimize.left, 800.0 - kWindowsCaptionButtonsReserve);
+        },
+      );
+    });
+
+    testWidgets('drops everything on Windows in fullscreen', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.windows,
+        window: FakeWindowController(),
+        fullscreen: ValueNotifier(true),
+        body: () async {
+          expect(find.byType(WindowButtonWidget), findsNothing);
+        },
+      );
+    });
+
+    testWidgets(
+        'on Windows, buttons hide when buttonsHidden is true and restore when hovered',
+        (tester) async {
+      final buttonsHidden = ValueNotifier(false);
+      await _pump(
+        tester,
+        platform: TargetPlatform.windows,
+        window: FakeWindowController(),
+        buttonsHidden: buttonsHidden,
+        body: () async {
+          expect(find.byType(WindowButtonWidget), findsNWidgets(3));
+
+          buttonsHidden.value = true;
+          await tester.pump();
+          expect(find.byType(WindowButtonWidget), findsNothing);
+
+          final gesture =
+              await tester.createGesture(kind: PointerDeviceKind.mouse);
+          await gesture.addPointer(location: Offset.zero);
+          addTearDown(gesture.removePointer);
+
+          // Move to caption button area at (750, 20)
+          await gesture.moveTo(const Offset(750, 20));
+          await tester.pump();
+
+          expect(find.byType(WindowButtonWidget), findsNWidgets(3));
+
+          // Move away
+          await gesture.moveTo(const Offset(400, 300));
+          await tester.pump();
+
+          expect(find.byType(WindowButtonWidget), findsNothing);
+        },
+      );
+    });
+
+    testWidgets('no clip on Windows', (tester) async {
+      await _pump(
+        tester,
+        platform: TargetPlatform.windows,
+        window: FakeWindowController(),
+        body: () async {
+          final clip =
+              tester.widget<ClipRRect>(find.byKey(DesktopWindowChrome.clipKey));
+          expect(clip.borderRadius, BorderRadius.zero);
+          expect(clip.clipBehavior, Clip.none);
         },
       );
     });

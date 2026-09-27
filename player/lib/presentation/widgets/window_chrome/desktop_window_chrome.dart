@@ -70,11 +70,15 @@ class DesktopWindowChrome extends StatelessWidget {
     final isWeb = kIsWeb;
     final platform = defaultTargetPlatform;
 
-    // Short-circuits before subscribing to any signal: off Linux (and on web,
-    // where `defaultTargetPlatform` reports the host OS but there is no
-    // window to decorate) nothing can flip this decision, so there is no
+    // Short-circuits before subscribing to any signal: off Linux and Windows
+    // (and on web, where `defaultTargetPlatform` reports the host OS but there
+    // is no window to decorate) nothing can flip this decision, so there is no
     // reason to rebuild on it.
-    if (isWeb || platform != TargetPlatform.linux) return child;
+    if (isWeb ||
+        (platform != TargetPlatform.linux &&
+            platform != TargetPlatform.windows)) {
+      return child;
+    }
 
     return ValueListenableBuilder<bool>(
       valueListenable: _fullscreen ?? windowFullscreen,
@@ -99,7 +103,7 @@ class DesktopWindowChrome extends StatelessWidget {
   }
 }
 
-/// The Linux branch of [DesktopWindowChrome].
+/// The Linux and Windows branch of [DesktopWindowChrome].
 ///
 /// Split into its own widget so the hover state that keeps the buttons alive
 /// under an approaching cursor has somewhere to live, without making the
@@ -191,54 +195,83 @@ class _WindowChromeState extends State<_WindowChrome> {
   ///   the buttons entry, with no child of its own and `opaque: false`. See
   ///   its own comment below for why it is a separate sibling rather than a
   ///   wrapper around the buttons.
-  List<Widget> _corners(DecorationLayout layout) => [
-        for (final (isStart, buttons) in [
-          (true, layout.start),
-          (false, layout.end),
-        ])
-          if (buttons.isNotEmpty) ...[
-            PositionedDirectional(
-              top: 0,
-              start: isStart ? 0 : null,
-              end: isStart ? null : 0,
-              height: kLinuxWindowChromeHeight,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: kLinuxChromeEdgePadding,
-                ),
-                child: _buttons(buttons),
-              ),
-            ),
-
-            // Topmost so nothing can shadow it, and `opaque: false` so it
-            // shadows nothing in turn. `RenderMouseRegion.hitTest` returns
-            // `super.hitTest(...) && opaque`, which still records the region
-            // for the mouse tracker while answering false, so the hit test
-            // carries on into the buttons entry beneath and every gesture
-            // there behaves exactly as it would with no hover region here at
-            // all. Wrapping the buttons in this `MouseRegion` instead of
-            // stacking it as a sibling, as an earlier version of this widget
-            // did, would make the *buttons'* own successful hit test return
-            // false too (the whole point of `opaque: false` is to always
-            // answer false), letting the tap fall through to whatever the
-            // corner sits over. That silently doubled every button press
-            // into a click on `WindowTitleRow`'s drag band underneath, which
-            // holds the gesture arena for `kDoubleTapTimeout` waiting to see
-            // if it becomes a double-click-to-maximize.
-            PositionedDirectional(
-              top: 0,
-              start: isStart ? 0 : null,
-              end: isStart ? null : 0,
-              height: kLinuxWindowChromeHeight,
-              width: _cornerWidth(buttons.length),
-              child: MouseRegion(
-                opaque: false,
-                onEnter: (_) => _setPointerOverButtons(true),
-                onExit: (_) => _setPointerOverButtons(false),
-              ),
-            ),
-          ],
+  List<Widget> _corners(DecorationLayout layout) {
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      const windowsButtons = [
+        WindowButton.minimize,
+        WindowButton.maximize,
+        WindowButton.close,
       ];
+      return [
+        PositionedDirectional(
+          top: 0,
+          end: 0,
+          height: kWindowsTitleBarHeight,
+          child: _buttons(windowsButtons, isWindows: true),
+        ),
+        PositionedDirectional(
+          top: 0,
+          end: 0,
+          height: kWindowsTitleBarHeight,
+          width: kWindowsCaptionButtonsReserve,
+          child: MouseRegion(
+            opaque: false,
+            onEnter: (_) => _setPointerOverButtons(true),
+            onExit: (_) => _setPointerOverButtons(false),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      for (final (isStart, buttons) in [
+        (true, layout.start),
+        (false, layout.end),
+      ])
+        if (buttons.isNotEmpty) ...[
+          PositionedDirectional(
+            top: 0,
+            start: isStart ? 0 : null,
+            end: isStart ? null : 0,
+            height: kLinuxWindowChromeHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: kLinuxChromeEdgePadding,
+              ),
+              child: _buttons(buttons),
+            ),
+          ),
+
+          // Topmost so nothing can shadow it, and `opaque: false` so it
+          // shadows nothing in turn. `RenderMouseRegion.hitTest` returns
+          // `super.hitTest(...) && opaque`, which still records the region
+          // for the mouse tracker while answering false, so the hit test
+          // carries on into the buttons entry beneath and every gesture
+          // there behaves exactly as it would with no hover region here at
+          // all. Wrapping the buttons in this `MouseRegion` instead of
+          // stacking it as a sibling, as an earlier version of this widget
+          // did, would make the *buttons'* own successful hit test return
+          // false too (the whole point of `opaque: false` is to always
+          // answer false), letting the tap fall through to whatever the
+          // corner sits over. That silently doubled every button press
+          // into a click on `WindowTitleRow`'s drag band underneath, which
+          // holds the gesture arena for `kDoubleTapTimeout` waiting to see
+          // if it becomes a double-click-to-maximize.
+          PositionedDirectional(
+            top: 0,
+            start: isStart ? 0 : null,
+            end: isStart ? null : 0,
+            height: kLinuxWindowChromeHeight,
+            width: _cornerWidth(buttons.length),
+            child: MouseRegion(
+              opaque: false,
+              onEnter: (_) => _setPointerOverButtons(true),
+              onExit: (_) => _setPointerOverButtons(false),
+            ),
+          ),
+        ],
+    ];
+  }
 
   /// Width of one side's button group exactly as `_buttons` draws it: edge
   /// padding on both sides of the row, plus the buttons themselves, the same
@@ -263,14 +296,17 @@ class _WindowChromeState extends State<_WindowChrome> {
   /// not actually read this widget's size (it is a sibling, not a wrapper,
   /// precisely so a hit on a real button is never swallowed), but keeping
   /// the two in agreement is what makes `_cornerWidth`'s doc comment true.
-  Widget _buttons(List<WindowButton> buttons) {
+  Widget _buttons(List<WindowButton> buttons, {bool isWindows = false}) {
     return ValueListenableBuilder<bool>(
       valueListenable: widget.buttonsHidden,
       builder: (context, hidden, _) {
         if (hidden && !_pointerOverButtons) {
           return SizedBox(
-            width: buttons.length * kLinuxWindowButtonExtent,
-            height: kLinuxWindowChromeHeight,
+            width: isWindows
+                ? kWindowsCaptionButtonsReserve
+                : buttons.length * kLinuxWindowButtonExtent,
+            height:
+                isWindows ? kWindowsTitleBarHeight : kLinuxWindowChromeHeight,
           );
         }
         return WindowButtons(buttons: buttons, controller: widget.controller);
@@ -293,14 +329,21 @@ bool shouldShowWindowChrome({
   required TargetPlatform platform,
   required bool isFullscreen,
 }) =>
-    !isWeb && platform == TargetPlatform.linux && !isFullscreen;
+    !isWeb &&
+    (platform == TargetPlatform.linux || platform == TargetPlatform.windows) &&
+    !isFullscreen;
 
 /// The radius `DesktopWindowChrome` clips the app to.
 ///
-/// Zero in every state where GTK squares its own frame (maximized, tiled,
-/// fullscreen, or compositor-less `solidFrame`), so the clip always follows
-/// the frame it sits in. Pure and exposed for the same reason as
+/// Zero on Windows, and zero in every state where GTK squares its own frame
+/// (maximized, tiled, fullscreen, or compositor-less `solidFrame`), so the clip
+/// always follows the frame it sits in. Pure and exposed for the same reason as
 /// [shouldShowWindowChrome].
 @visibleForTesting
-double windowCornerRadiusFor(WindowFrameState state) =>
-    !state.isFloating || state.solidFrame ? 0.0 : kLinuxWindowCornerRadius;
+double windowCornerRadiusFor(
+  WindowFrameState state, {
+  TargetPlatform? platform,
+}) {
+  if ((platform ?? defaultTargetPlatform) == TargetPlatform.windows) return 0.0;
+  return !state.isFloating || state.solidFrame ? 0.0 : kLinuxWindowCornerRadius;
+}

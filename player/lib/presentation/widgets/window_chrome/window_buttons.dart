@@ -43,7 +43,10 @@ class WindowButtons extends StatelessWidget {
               // moved. Distinct from `WindowButtonWidget.keyFor` so finders
               // addressing the button still match exactly one widget.
               key: ValueKey(button),
-              padding: const EdgeInsets.symmetric(horizontal: 2),
+              padding: EdgeInsets.symmetric(
+                horizontal:
+                    defaultTargetPlatform == TargetPlatform.windows ? 0 : 2,
+              ),
               child: WindowButtonWidget(
                 key: WindowButtonWidget.keyFor(button),
                 button: button,
