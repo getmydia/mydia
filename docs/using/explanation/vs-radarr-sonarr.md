@@ -66,22 +66,28 @@ no player; they are not trying to solve this problem. See
 This section is longer than the marketing instinct would like. It is also the
 more useful one.
 
-**Custom formats.** This is the big one. Radarr and Sonarr let you define named
-formats (release groups you trust, audio codecs you want, encoders you avoid)
-and assign each a score that feeds into release selection. It is the mechanism
-that makes TRaSH Guides possible, and it is genuinely powerful and genuinely
-well-designed. Mydia has ordered preference lists, and nothing resembling
-per-format scoring. It does have a blocked-tag filter, but it is not exposed in
-the interface, so in practice the ordered lists are the whole toolkit. Profiles derived from those guides ship in
-Mydia's preset gallery, and they translate the resolution, source, and size parts
-faithfully; the scoring layer has no equivalent to translate into. If custom
-formats are why your setup grabs what you want, Mydia will disappoint you today.
+**Custom formats.** Radarr and Sonarr let you define named formats (release
+groups you trust, audio codecs you want, encoders you avoid) and assign each a
+score that feeds into release selection. It is the mechanism that makes TRaSH
+Guides possible, and it is genuinely powerful and genuinely well-designed.
+Mydia has the same mechanism now: a
+[custom format](../../configuration/custom-formats.md) matches release titles
+with a regular expression, and a quality profile gives each match a score or a
+reject flag. Within a resolution tier the higher total format score wins
+before seeders, size, and source are compared, and it never folds into the
+quality score itself. What is still missing is the library. Radarr, Sonarr,
+and the TRaSH Guides project maintain hundreds of formats for release-group
+tiers and streaming services; Mydia ships six, all French audio tags, so
+matching a TRaSH setup here means writing most of the patterns yourself.
 
-The gap reaches into upgrades too. Both applications replace files
-automatically, but an *arr upgrade decision can be driven by custom format
-scores, so "upgrade only for a release group I trust" is expressible there and
-not here. Mydia compares the same ordered preference lists it uses everywhere
-else, on a single 0 to 100 quality score.
+The gap reaches partway into upgrades too. A sweep's candidate search does
+resolve custom formats and uses them to choose between several qualifying
+results, the same as any other search. But the test that decides whether a
+replacement is accepted at all, `Mydia.Upgrades.Comparator`, does not look at
+them: it scores both files through the same ordered preference lists
+everything else uses, on a single 0 to 100 quality score. An *arr upgrade
+decision can be driven by custom format scores alone; a Mydia one still
+cannot.
 
 **Indexer reliability.** Prowlarr has years of accumulated handling for the
 specific ways individual trackers misbehave, and far more people noticing within
@@ -123,7 +129,7 @@ Useful as a summary, but the sections above are where the actual argument is.
 | **Library management** | Yes | Yes | Yes |
 | **Download automation** | Yes | Yes | Yes |
 | **Quality profiles** | Yes | Advanced | Advanced |
-| **Custom formats** | Planned | Yes | Yes |
+| **Custom formats** | Yes | Yes | Yes |
 | **Automatic upgrades** | Yes (bounded daily sweep) | Yes | Yes |
 | **Media server integration** | Plex, Jellyfin | Plex, Kodi, Jellyfin | Plex, Kodi, Jellyfin |
 | **List import** | Experimental | Yes | Yes |
@@ -140,11 +146,11 @@ it out of proxy configuration, you would like to describe your instance in a fil
 and still change it at runtime, or you want the player app. It is also a
 reasonable choice if you enjoy being early to something and reporting bugs.
 
-**Radarr and Sonarr are the better choice if** your release selection or your
-upgrade rules depend on custom format scoring, indexer reliability is the thing
-you cannot compromise on, or you want software whose sharp edges have already
-been found by somebody else. None of those is a small consideration, and the
-last two apply to most people.
+**Radarr and Sonarr are the better choice if** your upgrade rules need custom
+format scoring or your setup leans on a mature format library like TRaSH
+Guides ships, indexer reliability is the thing you cannot compromise on, or you
+want software whose sharp edges have already been found by somebody else. None
+of those is a small consideration, and the last two apply to most people.
 
 They also coexist perfectly well. Running Prowlarr in front of Mydia is normal.
 Running Mydia alongside an existing *arr setup to see whether it fits, before

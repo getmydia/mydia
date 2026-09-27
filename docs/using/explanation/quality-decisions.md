@@ -377,10 +377,6 @@ Within a resolution tier, the higher total format score wins before seeders,
 size and source are compared, and a rejecting format drops the release
 outright. See [Custom Formats](../../configuration/custom-formats.md).
 
-PROPER and REPACK markers are parsed out of release names and are then not
-used for scoring. A PROPER does not currently rank above the release it
-corrects.
-
 ## Where to go next
 
 - [Quality profiles reference](../reference/quality-profiles.md) for the fields
