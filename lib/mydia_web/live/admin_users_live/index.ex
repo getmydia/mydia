@@ -372,18 +372,23 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   end
 
   def handle_event("submit_access", %{"access" => params}, socket) do
-    attrs = %{
-      allowed_categories: Map.get(params, "allowed_categories", []),
-      max_content_age: parse_age(Map.get(params, "max_content_age"))
-    }
-
-    case Accounts.upsert_access_restriction(socket.assigns.access_user, attrs) do
-      {:ok, _restriction} ->
-        {:noreply,
-         socket
-         |> assign(:show_access_modal, false)
-         |> put_flash(:info, "Access updated")
-         |> load_users()}
+    with {:ok, max_age} <- parse_age(Map.get(params, "max_content_age")),
+         attrs = %{
+           allowed_categories: Map.get(params, "allowed_categories", []),
+           max_content_age: max_age
+         },
+         {:ok, _restriction} <-
+           Accounts.upsert_access_restriction(socket.assigns.access_user, attrs) do
+      {:noreply,
+       socket
+       |> assign(:show_access_modal, false)
+       |> put_flash(:info, "Access updated")
+       |> load_users()}
+    else
+      # A value that is not a whole number must not read as "no limit" and
+      # silently lift an existing one.
+      :invalid_age ->
+        {:noreply, put_flash(socket, :error, "Choose an age rating from the list")}
 
       {:error, :admin} ->
         {:noreply, put_flash(socket, :error, "Admins always have full access")}
@@ -416,15 +421,17 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   # `Integer.parse/1` is used instead of `String.to_integer/1` because the
   # value arrives from a form post a caller fully controls; a crafted,
   # non-numeric `access[max_content_age]` must not crash the LiveView.
-  defp parse_age(nil), do: nil
-  defp parse_age(""), do: nil
+  defp parse_age(nil), do: {:ok, nil}
+  defp parse_age(""), do: {:ok, nil}
 
   defp parse_age(value) when is_binary(value) do
     case Integer.parse(value) do
-      {age, ""} -> age
-      _ -> nil
+      {age, ""} -> {:ok, age}
+      _ -> :invalid_age
     end
   end
+
+  defp parse_age(_value), do: :invalid_age
 
   defp error_message(changeset) do
     changeset

@@ -6,7 +6,7 @@ defmodule Mydia.Media.ProviderSwitch do
 
   This is the read side (`resolve_library_provider/1`, `provider_refresh_decision/1`,
   `find_reidentify_candidate/3`) plus the destructive switch
-  (`adopt_provider_switch/4`). It calls back into `Mydia.Media` for shared
+  (`adopt_provider_switch/5`). It calls back into `Mydia.Media` for shared
   persistence and scoring helpers.
   """
 
@@ -93,7 +93,7 @@ defmodule Mydia.Media.ProviderSwitch do
   Read-only: this does not mutate the item. Returns:
 
     * `{:confident, %SearchResult{}}` - near-exact title and matching year; the
-      caller may adopt it via `adopt_provider_switch/4`
+      caller may adopt it via `adopt_provider_switch/5`
     * `{:needs_picker, [%SearchResult{}]}` - ranked candidates for a manual pick
     * `{:error, reason}` - search failed
   """
@@ -191,11 +191,12 @@ defmodule Mydia.Media.ProviderSwitch do
   Returns `{:ok, media_item}` with the reconciled show, or `{:error, reason}`
   (leaving existing data intact on failure).
   """
-  @spec adopt_provider_switch(MediaItem.t(), struct(), atom(), map() | nil) ::
+  @spec adopt_provider_switch(Scope.t(), MediaItem.t(), struct(), atom(), map() | nil) ::
           {:ok, MediaItem.t()} | {:error, term()}
-  def adopt_provider_switch(media_item, candidate, target_provider, config \\ nil)
+  def adopt_provider_switch(scope, media_item, candidate, target_provider, config \\ nil)
 
   def adopt_provider_switch(
+        %Scope{} = scope,
         %MediaItem{type: "tv_show"} = item,
         candidate,
         target_provider,
@@ -273,9 +274,11 @@ defmodule Mydia.Media.ProviderSwitch do
           # Roll back (preserving the just-deleted episodes) instead of raising a
           # MatchError if the new provider id collides with another show's
           # unique constraint — the caller expects {:error, reason}, not a crash.
+          # The caller's scope judges the new metadata, so a restricted account
+          # cannot re-identify a show into a category or rating it may not see.
           updated =
             case Media.update_media_item(
-                   Scope.system(),
+                   scope,
                    item,
                    provider_switch_attrs(target_provider, new_id, metadata),
                    reason: "Provider switched to #{target_provider}"
@@ -326,7 +329,7 @@ defmodule Mydia.Media.ProviderSwitch do
     end
   end
 
-  def adopt_provider_switch(%MediaItem{type: type}, _candidate, _target, _config) do
+  def adopt_provider_switch(%Scope{}, %MediaItem{type: type}, _candidate, _target, _config) do
     {:error, {:invalid_type, "Expected tv_show, got #{type}"}}
   end
 

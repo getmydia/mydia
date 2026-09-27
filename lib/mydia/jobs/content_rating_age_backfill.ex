@@ -36,13 +36,13 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfill do
     updated =
       from(m in MediaItem,
         where: is_nil(m.content_rating_age) and not is_nil(m.metadata),
-        select: struct(m, [:id, :metadata])
+        select: struct(m, [:id, :metadata, :updated_at])
       )
       |> Repo.all()
       |> Enum.reduce(0, fn item, acc ->
         case derive(item) do
           nil -> acc
-          age -> acc + set_age(item.id, age)
+          age -> acc + set_age(item, age)
         end
       end)
 
@@ -58,9 +58,16 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfill do
 
   # update_all rather than a changeset, so the metadata blob is not rewritten
   # and updated_at does not move for a purely derived value.
-  defp set_age(id, age) do
+  #
+  # Guarded on the row being unchanged since it was read: a metadata refresh
+  # in between derives its own age through MediaItem.changeset/2 and bumps
+  # updated_at, and this stale value must not overwrite it.
+  defp set_age(%MediaItem{id: id, updated_at: updated_at}, age) do
     {count, _} =
-      Repo.update_all(from(m in MediaItem, where: m.id == ^id),
+      Repo.update_all(
+        from(m in MediaItem,
+          where: m.id == ^id and m.updated_at == ^updated_at and is_nil(m.content_rating_age)
+        ),
         set: [content_rating_age: age]
       )
 

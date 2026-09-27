@@ -64,24 +64,23 @@ defmodule MydiaWeb.AdminUsersLive.AccessRestrictionTest do
     assert has_element?(view, "#unrated-count")
   end
 
-  test "a non-numeric max_content_age does not crash the LiveView and sets no limit",
+  test "a malformed max_content_age is refused and keeps the existing limit",
        %{conn: conn} do
-    user = user_fixture()
+    user = restricted_user_fixture(%{max_content_age: 7})
     {:ok, view, _html} = live(conn, ~p"/admin/users")
 
     view |> element("#open-access-#{user.id}") |> render_click()
 
-    view
-    |> element("#access-form")
-    |> render_submit(%{
-      "access" => %{"allowed_categories" => [], "max_content_age" => "not-a-number"}
-    })
+    html =
+      view
+      |> element("#access-form")
+      |> render_submit(%{
+        "access" => %{"allowed_categories" => [], "max_content_age" => "13x"}
+      })
 
     assert Process.alive?(view.pid)
-
-    restriction = Accounts.get_access_restriction(user)
-
-    assert is_nil(restriction) || is_nil(restriction.max_content_age)
+    assert html =~ "Choose an age rating from the list"
+    assert Accounts.get_access_restriction(user).max_content_age == 7
   end
 
   # `parse_age/1` happily parses any well-formed integer string, including

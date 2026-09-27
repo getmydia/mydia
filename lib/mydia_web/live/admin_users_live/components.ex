@@ -53,31 +53,26 @@ defmodule MydiaWeb.AdminUsersLive.Components do
 
           <fieldset class="mt-6">
             <legend class="label-text font-semibold">Maximum age rating</legend>
-            <select
-              class="select select-bordered w-full mt-2"
-              name="access[max_content_age]"
+            <.input
+              type="select"
               id="access-max-age"
-            >
-              <option value="" selected={is_nil(@max_age)}>No limit</option>
-              <option
-                :for={{label, age} <- @thresholds}
-                value={age}
-                selected={@max_age == age}
-              >
-                {label}
-              </option>
-            </select>
+              name="access[max_content_age]"
+              value={@max_age}
+              prompt="No limit"
+              options={@thresholds}
+              container_class="mt-2"
+            />
             <p class="text-sm opacity-70 mt-2" id="unrated-count">
               Setting any limit also hides titles with no rating. {@unrated_count} of your library items currently have none.
             </p>
           </fieldset>
 
           <div class="modal-action">
-            <button type="button" class="btn btn-ghost" id="clear-access" phx-click="clear_access">
+            <.button type="button" class="btn btn-ghost" id="clear-access" phx-click="clear_access">
               Remove all restrictions
-            </button>
-            <button type="button" class="btn" phx-click="close_access_modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            </.button>
+            <.button type="button" class="btn" phx-click="close_access_modal">Cancel</.button>
+            <.button type="submit" variant="primary">Save</.button>
           </div>
         </.form>
       </div>

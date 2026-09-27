@@ -1,4 +1,4 @@
-defmodule MydiaWeb.RemoteFilter do
+defmodule Mydia.Media.RemoteFilter do
   @moduledoc """
   Filters metadata provider results against a caller's access scope.
 

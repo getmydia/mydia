@@ -20,7 +20,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
-  alias MydiaWeb.RemoteFilter
+  alias Mydia.Media.RemoteFilter
 
   import MydiaWeb.GridDensityComponents
 

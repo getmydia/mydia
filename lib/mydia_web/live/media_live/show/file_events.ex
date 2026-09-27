@@ -57,13 +57,15 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       )
 
     if candidate do
+      scope = socket.assigns.current_scope
+
       {:noreply,
        socket
        |> assign(:show_reidentify_modal, false)
        |> assign(:reidentifying, true)
        |> put_flash(:info, "Switching to #{provider_label(target)}...")
        |> start_async(:reidentify_adopt, fn ->
-         {target, ProviderSwitch.adopt_provider_switch(media_item, candidate, target)}
+         {target, ProviderSwitch.adopt_provider_switch(scope, media_item, candidate, target)}
        end)}
     else
       {:noreply,
@@ -84,10 +86,11 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   # async result: provider re-identification search
   def handle_reidentify_search_async({:ok, {target, {:confident, candidate}}}, socket) do
     media_item = socket.assigns.media_item
+    scope = socket.assigns.current_scope
 
     {:noreply,
      start_async(socket, :reidentify_adopt, fn ->
-       {target, ProviderSwitch.adopt_provider_switch(media_item, candidate, target)}
+       {target, ProviderSwitch.adopt_provider_switch(scope, media_item, candidate, target)}
      end)}
   end
 
@@ -131,6 +134,17 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
        "Switched to #{provider_label(target)}. Episodes were re-matched; " <>
          "episode-level watch history was reset."
      )}
+  end
+
+  def handle_reidentify_adopt_async(
+        {:ok, {_target, {:error, {:provider_switch_update_failed, :restricted}}}},
+        socket
+      ) do
+    {:noreply,
+     socket
+     |> assign(:reidentifying, false)
+     |> assign(:show_reidentify_modal, false)
+     |> put_flash(:error, Media.restricted_message())}
   end
 
   def handle_reidentify_adopt_async({:ok, {_target, {:error, reason}}}, socket) do

@@ -2485,7 +2485,7 @@ defmodule Mydia.Media do
   #   * `SeasonOrder.switch/3` remaps the episodes onto another of TVDB's
   #     parallel orderings. Writing the old ordering's coordinates back mixes
   #     the two under a `season_order` column that claims one.
-  #   * `ProviderSwitch.adopt_provider_switch/4` re-identifies the show
+  #   * `ProviderSwitch.adopt_provider_switch/5` re-identifies the show
   #     entirely, deleting and recreating every episode against a different
   #     provider. Writing the old provider's episodes into that is worse:
   #     the coordinates and the provider ids both belong to a series this is

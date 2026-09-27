@@ -11,6 +11,7 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Downloads.ClientHealth
   alias Mydia.Media
   alias Mydia.Media.RecentlyAdded
+  alias Mydia.Media.RemoteFilter
   alias Mydia.Library
   alias Mydia.Downloads
   alias Mydia.Metadata
@@ -486,6 +487,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, movies} ->
         enriched_movies =
           movies
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> Enum.take(@trending_rail_limit)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
@@ -508,6 +510,7 @@ defmodule MydiaWeb.DashboardLive.Index do
       {:ok, shows} ->
         enriched_shows =
           shows
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> Enum.take(@trending_rail_limit)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)

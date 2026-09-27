@@ -40,6 +40,7 @@ defmodule Mydia.Media.Restrictions do
   def apply_to_episodes(query, %Scope{} = scope) do
     from(e in query,
       join: m in MediaItem,
+      as: :restricted_show,
       on: m.id == e.media_item_id,
       where: ^dynamic_conditions(scope)
     )
@@ -83,7 +84,8 @@ defmodule Mydia.Media.Restrictions do
   end
 
   # The episode join needs the same predicates against the joined binding, which
-  # the query-macro forms above cannot express directly.
+  # the query-macro forms above cannot express directly. The binding is named so
+  # a caller's query that already joins something else cannot shift it.
   defp dynamic_conditions(%Scope{} = scope) do
     conditions = dynamic(true)
 
@@ -91,7 +93,7 @@ defmodule Mydia.Media.Restrictions do
       case scope.allowed_categories do
         nil -> conditions
         [] -> conditions
-        categories -> dynamic([_e, m], ^conditions and m.category in ^categories)
+        categories -> dynamic([restricted_show: m], ^conditions and m.category in ^categories)
       end
 
     case scope.max_content_age do
@@ -100,7 +102,7 @@ defmodule Mydia.Media.Restrictions do
 
       max_age ->
         dynamic(
-          [_e, m],
+          [restricted_show: m],
           ^conditions and not is_nil(m.content_rating_age) and m.content_rating_age <= ^max_age
         )
     end

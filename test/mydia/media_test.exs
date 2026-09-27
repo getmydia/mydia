@@ -2075,7 +2075,7 @@ defmodule Mydia.MediaTest do
     end
   end
 
-  describe "adopt_provider_switch/4 (U7)" do
+  describe "adopt_provider_switch/5 (U7)" do
     alias Mydia.Media.MediaItem
 
     import Mydia.MediaFixtures
@@ -2152,6 +2152,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, reconciled} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  picked,
                  ctx.candidate,
                  :tmdb,
@@ -2162,12 +2163,42 @@ defmodule Mydia.MediaTest do
       assert is_nil(Mydia.Repo.get!(MediaItem, reconciled.id).season_order)
     end
 
+    test "refuses a switch into metadata outside the caller's scope", ctx do
+      stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
+      stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
+
+      scope =
+        Scope.for_user(
+          Mydia.AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["anime_series"]})
+        )
+
+      episode_ids = fn ->
+        Mydia.Repo.all(
+          from(e in Mydia.Media.Episode, where: e.media_item_id == ^ctx.item.id, select: e.id)
+        )
+      end
+
+      before = episode_ids.()
+
+      assert {:error, {:provider_switch_update_failed, :restricted}} =
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 scope,
+                 ctx.item,
+                 ctx.candidate,
+                 :tmdb,
+                 ctx.config
+               )
+
+      assert episode_ids.() == before
+    end
+
     test "swaps provider ids, recreates episodes, and demotes episode files", ctx do
       stub_tmdb_show(ctx.bypass, ctx.new_id, "Switch Show", 2010)
       stub_tmdb_season(ctx.bypass, ctx.new_id, 1, [1, 2])
 
       assert {:ok, reconciled} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  ctx.item,
                  ctx.candidate,
                  :tmdb,
@@ -2204,6 +2235,7 @@ defmodule Mydia.MediaTest do
 
       assert {:error, _reason} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  ctx.item,
                  ctx.candidate,
                  :tmdb,
@@ -2224,6 +2256,7 @@ defmodule Mydia.MediaTest do
 
       assert {:error, :no_episodes} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  ctx.item,
                  ctx.candidate,
                  :tmdb,
@@ -2245,6 +2278,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, reconciled} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  item,
                  ctx.candidate,
                  :tmdb,
@@ -2293,7 +2327,7 @@ defmodule Mydia.MediaTest do
     end
   end
 
-  describe "adopt_provider_switch/4 TVDB target (U7)" do
+  describe "adopt_provider_switch/5 TVDB target (U7)" do
     import Mydia.MediaFixtures
     import Mydia.SettingsFixtures
 
@@ -2356,6 +2390,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, reconciled} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  ctx.item,
                  ctx.candidate,
                  :tvdb,
@@ -2395,6 +2430,7 @@ defmodule Mydia.MediaTest do
 
       assert {:ok, reconciled} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  item,
                  ctx.candidate,
                  :tvdb,
@@ -2410,6 +2446,7 @@ defmodule Mydia.MediaTest do
 
       assert {:error, {:missing_tvdb_season_id, 1}} =
                Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
                  ctx.item,
                  ctx.candidate,
                  :tvdb,
@@ -2559,7 +2596,13 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:error, _reason} =
-               Mydia.Media.ProviderSwitch.adopt_provider_switch(item, candidate, :tmdb, config)
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
+                 item,
+                 candidate,
+                 :tmdb,
+                 config
+               )
 
       # Nothing wiped: original episode and provider id intact.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode.id)
@@ -2624,7 +2667,13 @@ defmodule Mydia.MediaTest do
 
       # Returns an error instead of raising/crashing.
       assert {:error, _reason} =
-               Mydia.Media.ProviderSwitch.adopt_provider_switch(item, candidate, :tmdb, config)
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
+                 item,
+                 candidate,
+                 :tmdb,
+                 config
+               )
 
       # Transaction rolled back: original episode and provider id intact.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode.id)
@@ -2699,7 +2748,13 @@ defmodule Mydia.MediaTest do
       }
 
       assert {:error, {:incomplete_episode_recreation, 2, 1}} =
-               Mydia.Media.ProviderSwitch.adopt_provider_switch(item, candidate, :tmdb, config)
+               Mydia.Media.ProviderSwitch.adopt_provider_switch(
+                 Scope.unrestricted(),
+                 item,
+                 candidate,
+                 :tmdb,
+                 config
+               )
 
       # Rolled back: original episodes and provider id preserved.
       assert Mydia.Repo.get(Mydia.Media.Episode, old_episode_a.id)

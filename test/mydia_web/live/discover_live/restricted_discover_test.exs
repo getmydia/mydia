@@ -8,7 +8,7 @@ defmodule MydiaWeb.DiscoverLive.RestrictedDiscoverTest do
   alias Mydia.Accounts.Scope
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Structs.SearchResult
-  alias MydiaWeb.RemoteFilter
+  alias Mydia.Media.RemoteFilter
 
   # RemoteFilter.allow?/2 recovers a genre name from the genre id by reading
   # `Mydia.Metadata.genres/1`, which hits the relay on a cache miss. Warming

@@ -18,7 +18,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
-  alias MydiaWeb.RemoteFilter
+  alias Mydia.Media.RemoteFilter
 
   require Logger
 
