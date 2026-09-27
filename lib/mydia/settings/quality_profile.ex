@@ -5,6 +5,7 @@ defmodule Mydia.Settings.QualityProfile do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Quality.Attrs
   alias Mydia.Quality.Sources
   alias Mydia.Settings.JsonAtomMapType
 
@@ -643,7 +644,7 @@ defmodule Mydia.Settings.QualityProfile do
         100.0
 
       codecs when is_list(codecs) ->
-        score_from_preference_list(codec, codecs)
+        score_from_preference_list(codec, canonical_codecs(codecs))
 
       _ ->
         100.0
@@ -651,6 +652,16 @@ defmodule Mydia.Settings.QualityProfile do
   end
 
   defp score_video_codec(_standards, _media_attrs), do: 50.0
+
+  # Profiles may list release-naming synonyms ("hevc", "x265"), which
+  # validation accepts, while every scored input has been through
+  # Mydia.Quality.Attrs and says "h265". Fold the list the same way so a
+  # synonym still matches; the first position of a folded pair wins.
+  defp canonical_codecs(codecs) do
+    codecs
+    |> Enum.map(&(Attrs.canonical_video_codec(&1) || &1))
+    |> Enum.uniq()
+  end
 
   defp score_audio_codec(standards, %{audio_codec: codec}) when is_binary(codec) do
     case Map.get(standards, :preferred_audio_codecs) do

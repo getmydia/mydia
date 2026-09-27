@@ -215,4 +215,26 @@ defmodule Mydia.Settings.QualityProfileTest do
       assert violation =~ "HDR is required"
     end
   end
+
+  describe "video codec preferences use the canonical vocabulary" do
+    test "a hevc preference matches an h265 input" do
+      profile = %QualityProfile{quality_standards: %{preferred_video_codecs: ["hevc", "h264"]}}
+
+      %{breakdown: breakdown} =
+        QualityProfile.score_media_file(profile, %{video_codec: "h265", media_type: :movie})
+
+      assert breakdown.video_codec == 100.0
+    end
+
+    test "synonyms collapse to their first position" do
+      profile =
+        %QualityProfile{quality_standards: %{preferred_video_codecs: ["x265", "h264", "hevc"]}}
+
+      %{breakdown: breakdown} =
+        QualityProfile.score_media_file(profile, %{video_codec: "h264", media_type: :movie})
+
+      # ["h265", "h264"] after folding: h264 is last of two.
+      assert breakdown.video_codec == 60.0
+    end
+  end
 end
