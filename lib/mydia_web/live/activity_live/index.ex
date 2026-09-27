@@ -489,7 +489,8 @@ defmodule MydiaWeb.ActivityLive.Index do
       "custom_format_score" -> "Custom format"
       "title_relevance" -> "Title match"
       "title_match" -> "Title match"
-      # Soft-penalty contributions
+      # Soft-penalty contributions. size_penalty is no longer produced, but
+      # search events recorded before size became a hard limit still carry it.
       "size_penalty" -> "Size penalty"
       "seeder_penalty" -> "Seeder penalty"
       "identity_penalty" -> "Identity mismatch"

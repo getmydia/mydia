@@ -33,7 +33,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   - `:min_seeders` - Minimum seeder count (default: 0 for Usenet compatibility)
   - `:min_ratio` - Minimum seeder ratio as percentage (default: nil)
-  - `:size_range` - `{min_mb, max_mb}` tuple where either can be nil (default: `nil` = no filtering)
+  - `:size_range` - `{min_mb, max_mb}` tuple where either can be nil (default: `nil`, the profile's
+    range for `:media_type`). A release outside it breaks a limit.
   - `:preferred_qualities` - List of resolutions in preference order (for sorting)
   - `:blocked_tags` - List of strings to filter out from titles
   - `:search_query` - Original search query to score title relevance
@@ -44,18 +45,15 @@ defmodule Mydia.Indexers.ReleaseRanker do
     or for a movie a year more than one away) is removed before ranking. With no target nothing
     is removed. (default: `nil`)
   - `:apply_identity_removal` - Whether an `:identity_target` mismatch is removed (default:
-    `true`). Manual search passes `false`, for the same R8 reason as `:apply_source_exclusion`:
+    `true`). Manual search passes `false`, for the same R8 reason as `:apply_profile_limits`:
     the mismatch stays visible, ranked below every release that matches.
-  - `:apply_source_exclusion` - Whether `:quality_profile`'s `:excluded_sources` list is enforced
-    as a hard removal (default: `true`). The automatic search jobs leave this at the default.
-    Manual search deliberately passes `false`: per spec R8, manual search and manual grab are the
-    operator's explicit escape hatch and must not silently drop a release the profile excludes.
-  - `:apply_resolution_floor` - Whether `:quality_profile`'s `:min_resolution` is enforced as a
-    hard removal (default: `true`). A release below the floor is dropped rather than down-scored,
-    because there is no minimum-score threshold before grabbing, so the top of an all-below-floor
-    list is grabbed regardless. A release with no resolution token counts as
-    `QualityParser.assumed_resolution/0`. Manual search passes `false`, for the same R8 reason as
-    `:apply_source_exclusion`.
+  - `:apply_profile_limits` - Whether the quality profile's limits (see
+    `Mydia.Indexers.ProfileLimits`: excluded sources, min/max resolution,
+    require HDR, min/max size) remove releases (default: `true`). The automatic
+    and upgrade search jobs leave this at the default. Manual search passes
+    `false`: per spec R8, manual search and manual grab are the operator's
+    explicit escape hatch, so every release stays listed, violators below the
+    rest, each with `breakdown.limit_violation` set.
   - `:audio_policy` - `Mydia.Media.AudioLanguagePolicy` the results are ranked against. A
     release's language rank is the outermost sort key, ahead of resolution preference, so a
     release in a preferred language beats one without it among everything the hard removals
@@ -70,12 +68,19 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   alias Mydia.Downloads.ReleaseValidator
   alias Mydia.Indexers.ReleaseIdentity
-  alias Mydia.Indexers.{QualityParser, ReleaseLanguages, SearchResult, SearchScorer}
+
+  alias Mydia.Indexers.{
+    ProfileLimits,
+    QualityParser,
+    ReleaseLanguages,
+    SearchResult,
+    SearchScorer
+  }
+
   alias Mydia.Indexers.Structs.{RankedResult, ScoreBreakdown}
   alias Mydia.Library.ReleaseParser
   alias Mydia.Library.Structs.ParsedFileInfo
   alias Mydia.Media.AudioLanguagePolicy
-  alias Mydia.Quality.Sources
   alias Mydia.Settings.CustomFormats.Matcher
   alias Mydia.Settings.QualityProfile
 
@@ -97,8 +102,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
           expected_episode: non_neg_integer() | nil,
           min_post_age_minutes: non_neg_integer() | nil,
           now: DateTime.t() | nil,
-          apply_source_exclusion: boolean() | nil,
-          apply_resolution_floor: boolean() | nil,
+          apply_profile_limits: boolean() | nil,
           apply_identity_removal: boolean() | nil,
           custom_formats: [map()],
           audio_policy: AudioLanguagePolicy.t() | nil,
@@ -170,8 +174,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       results
       |> reject_invalid_releases()
       |> filter_acceptable(opts)
-      |> reject_excluded_sources(opts)
-      |> reject_below_min_resolution(opts)
+      |> ProfileLimits.reject(opts)
       |> reject_identity_mismatches(opts)
       |> Enum.map(fn result ->
         breakdown = calculate_score_breakdown(result, opts)
@@ -179,6 +182,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
       end)
       |> reject_zero_title_match(search_query)
       |> sort_by_score_and_preferences(preferred_qualities)
+      |> sink_limit_violations(opts)
       |> sink_identity_mismatches(opts)
 
     # Log the top 5 results after sorting
@@ -201,9 +205,9 @@ defmodule Mydia.Indexers.ReleaseRanker do
   @doc """
   Applies the surviving hard removals to a result list.
 
-  Only two hard removals remain — everything else (size, seeders, ratio,
-  identity) is now a soft scoring penalty applied during ranking, so weak
-  releases sink to the bottom instead of disappearing. Removes results that:
+  Only two hard removals remain here: seeders, ratio and identity are soft
+  scoring penalties, and quality-profile limits are removed by
+  `Mydia.Indexers.ProfileLimits`. Removes results that:
   - Contain any `:blocked_tags` in their title (R8)
   - Are NZB results posted more recently than `:min_post_age_minutes` (timing safeguard)
 
@@ -223,7 +227,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     now = Keyword.get(opts, :now) || DateTime.utc_now()
 
     # Only two hard removals survive here: user-blocked tags (R8) and the NZB
-    # post-age timing safeguard. Size, seeders, and ratio are no longer hard
+    # post-age timing safeguard. Seeders and ratio are not hard
     # filters — they become soft penalties applied during scoring (R4/R5), so a
     # weak release sinks to the bottom of the ranking instead of vanishing.
     Enum.filter(results, fn result ->
@@ -250,121 +254,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
           true
       end
     end)
-  end
-
-  # Drops releases whose parsed source appears in the profile's
-  # :excluded_sources list. This is a hard removal, not a penalty: there is no
-  # minimum-score threshold before grabbing, so a down-scored release is still
-  # downloaded whenever it is the only survivor, which is precisely the
-  # theatrical-window case this exists to prevent.
-  #
-  # A nil profile, an absent key, an empty list, or an unparseable source all
-  # mean "no exclusion". Exclusion is opt-in per profile and never global.
-  defp reject_excluded_sources(results, opts) do
-    case excluded_sources(opts) do
-      [] ->
-        results
-
-      excluded ->
-        Enum.filter(results, fn result ->
-          case result_source(result) do
-            nil ->
-              true
-
-            source ->
-              if source in excluded do
-                Logger.info(
-                  "[ReleaseRanker] Filtered out (excluded source #{source}): #{result.title}"
-                )
-
-                false
-              else
-                true
-              end
-          end
-        end)
-    end
-  end
-
-  # Resolves the effective excluded-sources list for this ranking pass. Reads
-  # :apply_source_exclusion (default true) *before* looking at the profile at
-  # all, so the opt-out is a positive flag the caller sets, never inferred
-  # from whether a profile happens to be present. Manual search passes a
-  # resolved profile (for scoring) and still must not filter — see the
-  # moduledoc and R8: manual search/grab is the operator's deliberate escape
-  # hatch from any exclusion the automatic path applies.
-  defp excluded_sources(opts) do
-    if Keyword.get(opts, :apply_source_exclusion, true) do
-      case Keyword.get(opts, :quality_profile) do
-        %{quality_standards: standards} when is_map(standards) ->
-          Map.get(standards, :excluded_sources) || []
-
-        _ ->
-          []
-      end
-    else
-      []
-    end
-  end
-
-  defp result_source(%SearchResult{quality: %{source: source}}) when is_binary(source), do: source
-  defp result_source(%SearchResult{title: title}) when is_binary(title), do: Sources.detect(title)
-  defp result_source(_), do: nil
-
-  # Drops releases below the profile's :min_resolution. A hard removal for the
-  # same reason excluded_sources is: there is no minimum-score threshold before
-  # grabbing, so the top of an all-bad list is grabbed regardless of how far it
-  # sits below the floor. A 1080p profile took a 360p XviD this way.
-  #
-  # A release with no resolution token counts as
-  # `QualityParser.assumed_resolution/0`, so an untagged SD rip cannot slip
-  # under the floor by being unreadable.
-  #
-  # An absent profile, an absent :min_resolution, or a resolution outside the
-  # canonical vocabulary all mean "no floor". Only :min_resolution gates;
-  # :max_resolution stays a scoring signal, since grabbing above the ceiling
-  # wastes disk but still yields a watchable file.
-  defp reject_below_min_resolution(results, opts) do
-    order = QualityProfile.valid_resolutions()
-
-    case min_resolution_floor(opts, order) do
-      nil ->
-        results
-
-      floor_index ->
-        Enum.filter(results, fn result ->
-          resolution = QualityParser.effective_resolution(result.quality)
-
-          case Enum.find_index(order, &(&1 == resolution)) do
-            index when is_integer(index) and index < floor_index ->
-              Logger.info(
-                "[ReleaseRanker] Filtered out (resolution #{resolution} below profile minimum " <>
-                  "#{Enum.at(order, floor_index)}): #{result.title}"
-              )
-
-              false
-
-            _ ->
-              true
-          end
-        end)
-    end
-  end
-
-  # Resolves the floor's index in the canonical ascending vocabulary, or nil
-  # for "no floor". Reads :apply_resolution_floor (default true) *before*
-  # looking at the profile, mirroring excluded_sources/1: the opt-out is a
-  # positive flag the caller sets. Manual search passes false so the operator
-  # keeps their deliberate escape hatch (R8).
-  defp min_resolution_floor(opts, order) do
-    with true <- Keyword.get(opts, :apply_resolution_floor, true),
-         %{quality_standards: standards} when is_map(standards) <-
-           Keyword.get(opts, :quality_profile),
-         min_resolution when is_binary(min_resolution) <- Map.get(standards, :min_resolution) do
-      Enum.find_index(order, &(&1 == min_resolution))
-    else
-      _ -> nil
-    end
   end
 
   ## Private Functions - Filtering
@@ -426,9 +315,8 @@ defmodule Mydia.Indexers.ReleaseRanker do
   end
 
   # Returns the name of the first rejecting format that matches, or nil.
-  # Rejection is a hard removal for the same reason excluded_sources is: there
-  # is no minimum-score threshold before grabbing, so a merely down-scored
-  # release is still downloaded when it is the only survivor.
+  # Rejection is a hard removal for the reason in ProfileLimits' moduledoc:
+  # there is no minimum score before grabbing.
   defp rejecting_format(%SearchResult{title: title}, custom_formats) do
     case Matcher.score_title(title, Enum.filter(custom_formats, & &1.reject)) do
       %{matched: [name | _]} -> name
@@ -478,7 +366,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
     # Size math sees a season pack per episode; everything else (display, grab)
     # keeps the real result.
-    sized_result = per_episode_sized(result, Keyword.get(opts, :episode_count))
+    sized_result = ProfileLimits.per_episode_sized(result, Keyword.get(opts, :episode_count))
     score_result = SearchScorer.score_result_with_breakdown(sized_result, scorer_opts)
 
     # Extract individual components for the breakdown struct
@@ -503,7 +391,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     # Soft penalties derived per-result from the ranking options. Each helper
     # returns a value <= 0.0 that is layered onto the base score. They stay at
     # 0.0 when the relevant option is absent or the result is within bounds.
-    size_penalty = size_penalty(sized_result, Keyword.get(opts, :size_range))
     seeder_penalty = seeder_penalty(result, opts)
     identity_penalty = identity_penalty(result, opts)
     audio = audio_fields(result, opts)
@@ -515,8 +402,7 @@ defmodule Mydia.Indexers.ReleaseRanker do
     seeder_ratio = if total_peers > 0, do: seeders / total_peers, else: 0.0
 
     # Add tag_bonus to the base score, then subtract any soft penalties.
-    total_score =
-      score_result.score + tag_bonus + size_penalty + seeder_penalty + identity_penalty
+    total_score = score_result.score + tag_bonus + seeder_penalty + identity_penalty
 
     Logger.info("""
     [ReleaseRanker] Score breakdown for: #{result.title}
@@ -546,9 +432,9 @@ defmodule Mydia.Indexers.ReleaseRanker do
         tag_bonus: round_score(tag_bonus),
         custom_format_score: custom_format_score,
         total: round_score(total_score),
-        size_penalty: round_score(size_penalty),
         seeder_penalty: round_score(seeder_penalty),
         identity_penalty: round_score(identity_penalty),
+        limit_violation: ProfileLimits.violation(result, opts),
         language_rank: audio.language_rank,
         language_matches: audio.language_matches,
         audio_languages: audio.audio_languages,
@@ -646,6 +532,18 @@ defmodule Mydia.Indexers.ReleaseRanker do
       matches ++ mismatches
     else
       ranked
+    end
+  end
+
+  # With limits switched off (manual search, R8) a release that breaks one stays
+  # listed below every release that does not. Identity mismatches are sunk
+  # after this, so identity stays the outermost tier.
+  defp sink_limit_violations(ranked, opts) do
+    if ProfileLimits.enforced?(opts) do
+      ranked
+    else
+      {clean, violating} = Enum.split_with(ranked, &is_nil(&1.breakdown.limit_violation))
+      clean ++ violating
     end
   end
 
@@ -764,7 +662,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
     blocked_tags = Keyword.get(opts, :blocked_tags, [])
     custom_formats = Keyword.get(opts, :custom_formats, [])
     identity_target = Keyword.get(opts, :identity_target)
-    floor_index = min_resolution_floor(opts, QualityProfile.valid_resolutions())
 
     results
     |> Enum.map(fn result ->
@@ -782,17 +679,10 @@ defmodule Mydia.Indexers.ReleaseRanker do
           audio_fields(result, opts)
         )
 
-      # Only hard removals are reported as rejections now; size/seeders/ratio
+      # Only hard removals are reported as rejections; seeder and ratio
       # shortcomings are penalties on accepted results (mirrors filter_acceptable
       # and the identity penalty, which must stay in lockstep — see Risks).
-      case get_rejection_reason(
-             result,
-             blocked_tags,
-             identity_target,
-             excluded_sources(opts),
-             custom_formats,
-             floor_index
-           ) do
+      case get_rejection_reason(result, blocked_tags, identity_target, custom_formats, opts) do
         nil ->
           # Accepted — record the full breakdown (including penalties) so the
           # Activity view can render the penalized-but-kept state.
@@ -811,7 +701,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
               title_match: breakdown.title_match,
               tag_bonus: breakdown.tag_bonus,
               custom_format_score: breakdown.custom_format_score,
-              size_penalty: breakdown.size_penalty,
               seeder_penalty: breakdown.seeder_penalty,
               identity_penalty: breakdown.identity_penalty
             }
@@ -894,15 +783,13 @@ defmodule Mydia.Indexers.ReleaseRanker do
   # Surface the soft-penalty contributions (and a convenience flag) so the
   # Activity view can distinguish a penalized-but-kept result from a clean OK.
   defp maybe_put_penalties(row, %{} = breakdown) do
-    size_penalty = Map.get(breakdown, :size_penalty, 0.0)
     seeder_penalty = Map.get(breakdown, :seeder_penalty, 0.0)
     identity_penalty = Map.get(breakdown, :identity_penalty, 0.0)
-    penalized = size_penalty < 0.0 or seeder_penalty < 0.0 or identity_penalty < 0.0
+    penalized = seeder_penalty < 0.0 or identity_penalty < 0.0
 
     Map.merge(row, %{
       "penalized" => penalized,
       "penalties" => %{
-        "size_penalty" => size_penalty,
         "seeder_penalty" => seeder_penalty,
         "identity_penalty" => identity_penalty
       }
@@ -912,19 +799,11 @@ defmodule Mydia.Indexers.ReleaseRanker do
   defp maybe_put_penalties(row, _), do: row
 
   # Returns a rejection reason string or nil if acceptable. The hard removals
-  # are invalid releases (validator), blocked tags, excluded sources, rejecting
-  # custom formats, sub-floor resolutions, and identity mismatches.
-  # Size/seeders/ratio are no longer rejection reasons — they are soft
-  # penalties on accepted results. The clause order mirrors the rank_all/2
-  # pipeline so the Activity stats and the actual ranking agree.
-  defp get_rejection_reason(
-         result,
-         blocked_tags,
-         identity_target,
-         excluded,
-         custom_formats,
-         floor_index
-       ) do
+  # are invalid releases (validator), blocked tags, rejecting custom formats,
+  # quality-profile limits (ProfileLimits) and identity mismatches. Seeders and
+  # ratio are soft penalties on accepted results. The clause order mirrors the
+  # rank_all/2 pipeline so the Activity stats and the actual ranking agree.
+  defp get_rejection_reason(result, blocked_tags, identity_target, custom_formats, opts) do
     cond do
       invalid_reason = invalid_release_reason(result) ->
         "invalid: #{invalid_reason}"
@@ -932,39 +811,16 @@ defmodule Mydia.Indexers.ReleaseRanker do
       blocked_tag = find_blocked_tag(result, blocked_tags) ->
         "blocked_tag: #{blocked_tag}"
 
-      (source = result_source(result)) && source in excluded ->
-        "excluded_source: #{source}"
-
       rejecting = rejecting_format(result, custom_formats) ->
         "custom_format: #{rejecting}"
 
-      below = below_min_resolution_reason(result, floor_index) ->
-        below
+      limit = ProfileLimits.enforced?(opts) && ProfileLimits.violation(result, opts) ->
+        limit
 
       mismatch = identity_mismatch_reason(result, identity_target) ->
         mismatch
 
       true ->
-        nil
-    end
-  end
-
-  # Mirrors reject_below_min_resolution/2. Names the assumed resolution
-  # explicitly when the title carried no token, so an operator reading the
-  # Activity view is not left wondering why a `resolution: null` row was cut.
-  defp below_min_resolution_reason(_result, nil), do: nil
-
-  defp below_min_resolution_reason(%SearchResult{quality: quality}, floor_index) do
-    order = QualityProfile.valid_resolutions()
-    resolution = QualityParser.effective_resolution(quality)
-    assumed? = is_nil(quality) or is_nil(quality.resolution)
-
-    case Enum.find_index(order, &(&1 == resolution)) do
-      index when is_integer(index) and index < floor_index ->
-        assumed_note = if assumed?, do: " (assumed, no resolution in title)", else: ""
-        "resolution_below_minimum: #{resolution}#{assumed_note} < #{Enum.at(order, floor_index)}"
-
-      _ ->
         nil
     end
   end
@@ -992,47 +848,12 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
   ## Private Functions - Soft Penalties
 
-  # Maximum size penalty. Deliberately modest so an out-of-range *correct*
-  # release can still outrank an in-range junk release (e.g. a CAM) on quality.
-  @max_size_penalty 15.0
   # Penalty for a torrent below the configured minimum seeders. Small — the
   # SearchScorer log10 seeder score and the zero-seeder 0.7 multiplier already
   # push low/dead torrents down; this just nudges sub-minimum ones a bit lower.
   @low_seeder_penalty 5.0
   # Penalty for a torrent below the configured minimum seeder ratio.
   @low_ratio_penalty 5.0
-
-  # Size penalty: proportional to how far the release size falls outside the
-  # configured range, capped at @max_size_penalty. In-range (or unconstrained)
-  # releases get 0.0. Returns a value <= 0.0.
-  defp size_penalty(_result, nil), do: 0.0
-
-  defp size_penalty(%SearchResult{size: size_bytes}, {min_mb, max_mb})
-       when is_integer(size_bytes) do
-    size_mb = bytes_to_mb(size_bytes)
-
-    cond do
-      min_mb != nil and size_mb < min_mb ->
-        scaled_size_penalty((min_mb - size_mb) / max(min_mb, 1))
-
-      max_mb != nil and size_mb > max_mb ->
-        scaled_size_penalty((size_mb - max_mb) / max(max_mb, 1))
-
-      true ->
-        0.0
-    end
-  end
-
-  defp size_penalty(_result, _size_range), do: 0.0
-
-  # Map a fractional distance outside the range (0.0..∞) to a penalty in
-  # (-@max_size_penalty .. 0.0]. A release at the boundary is 0; one at twice
-  # (or half) the bound is fully penalized.
-  defp scaled_size_penalty(fraction) when fraction <= 0.0, do: 0.0
-
-  defp scaled_size_penalty(fraction) do
-    -min(@max_size_penalty, fraction * @max_size_penalty)
-  end
 
   # Seeder/ratio penalty: layered on top of the existing low-seeder score and
   # zero-seeder multiplier. NZB results (nil seeders) are never penalized here.
@@ -1136,27 +957,6 @@ defmodule Mydia.Indexers.ReleaseRanker do
 
     # 10 points per matching tag
     matching_tags * 10.0
-  end
-
-  # A season pack's size is the sum of its episodes, while a profile's episode
-  # size bounds describe one episode. Without this division every normal pack
-  # took the full size penalty and lost file-size quality points, so the
-  # smallest packs won regardless of what they contained.
-  defp per_episode_sized(%SearchResult{size: size} = result, count)
-       when is_integer(size) and is_integer(count) and count > 1 do
-    if season_pack?(result), do: %{result | size: div(size, count)}, else: result
-  end
-
-  defp per_episode_sized(result, _count), do: result
-
-  defp season_pack?(%SearchResult{title: title}) do
-    case ReleaseParser.parse(title) do
-      %ParsedFileInfo{season: season, episodes: episodes} when is_integer(season) ->
-        episodes in [nil, []]
-
-      _ ->
-        false
-    end
   end
 
   # Detected audio languages and their rank against the search's policy. Runs

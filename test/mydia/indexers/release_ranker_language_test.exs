@@ -61,11 +61,31 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
     }
   end
 
+  # The language-ordering tests are about audio, not size or resolution: their
+  # season-pack fixtures run from 3 GB to 50 GB with no episode count, and one
+  # candidate (@feibanyama) is 2160p against a profile whose only preferred
+  # resolution is 1080p, so the hard size and resolution limits would remove
+  # most of them before ordering is ever observed. preferred_resolutions stays,
+  # since that soft preference (not a hard bound) is what these tests rank
+  # language against.
+  defp unsized_hd_profile do
+    %{
+      hd_profile()
+      | quality_standards:
+          Map.drop(hd_profile().quality_standards, [
+            :episode_min_size_mb,
+            :episode_max_size_mb,
+            :min_resolution,
+            :max_resolution
+          ])
+    }
+  end
+
   defp ranked_titles(policy) do
     opts =
       RankingOptions.build(%{
         media_type: :episode,
-        quality_profile: hd_profile(),
+        quality_profile: unsized_hd_profile(),
         custom_formats: [],
         audio_policy: policy,
         expected_season: 2
@@ -116,10 +136,12 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
       result(season_pack_dual, 50, 33_600)
     ]
 
+    # Same reasoning as unsized_hd_profile/0: the season pack here is 33,600 MB
+    # undivided (no episode_count), which is not what this test is about.
     opts =
       RankingOptions.build(%{
         media_type: :episode,
-        quality_profile: hd_profile(),
+        quality_profile: unsized_hd_profile(),
         custom_formats: [],
         audio_policy: AudioLanguagePolicy.new(["en"], :show, "ja"),
         expected_season: 3,
@@ -224,20 +246,21 @@ defmodule Mydia.Indexers.ReleaseRankerLanguageTest do
       )
     end
 
-    test "a pack within bounds per episode takes no size penalty" do
+    test "a pack within bounds per episode is not a size violation" do
       pack = result(@varyg, 16, 35_000)
 
-      assert ReleaseRanker.calculate_score_breakdown(pack, size_opts(episode_count: 24)).size_penalty ==
-               0.0
+      assert ReleaseRanker.calculate_score_breakdown(pack, size_opts(episode_count: 24)).limit_violation ==
+               nil
 
-      assert ReleaseRanker.calculate_score_breakdown(pack, size_opts([])).size_penalty < 0.0
+      assert "size_above_maximum: " <> _ =
+               ReleaseRanker.calculate_score_breakdown(pack, size_opts([])).limit_violation
     end
 
     test "a single episode is never divided, even in a season search" do
       episode = result("Kaiju.Garden.S02E01.1080p.CR.WEB-DL.AAC2.0.H.264-VARYG", 16, 35_000)
 
-      assert ReleaseRanker.calculate_score_breakdown(episode, size_opts(episode_count: 24)).size_penalty <
-               0.0
+      assert "size_above_maximum: " <> _ =
+               ReleaseRanker.calculate_score_breakdown(episode, size_opts(episode_count: 24)).limit_violation
     end
 
     test "RankingOptions passes the episode count through" do

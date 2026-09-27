@@ -20,9 +20,12 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
 
   Penalty fields are optional floats `<= 0.0` (default `0.0`) recording the
   soft-penalty contributions subtracted from `:total`:
-  - `:size_penalty` - Penalty for being outside the configured size range
   - `:seeder_penalty` - Penalty for low seeders / poor ratio
   - `:identity_penalty` - Penalty for episode/season identity mismatch or absence
+
+  `:limit_violation` (nil) is the first quality-profile limit the release breaks,
+  as reported by `Mydia.Indexers.ProfileLimits.violation/2`. Automatic search
+  removes such a release, so only manual search ever shows a non-nil value.
 
   Language fields (defaults in brackets), filled from the release title against
   the search's `Mydia.Media.AudioLanguagePolicy`:
@@ -51,9 +54,9 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
     :tag_bonus,
     :custom_format_score,
     :total,
-    size_penalty: 0.0,
     seeder_penalty: 0.0,
     identity_penalty: 0.0,
+    limit_violation: nil,
     language_rank: 0,
     language_matches: 0,
     audio_languages: [],
@@ -69,9 +72,9 @@ defmodule Mydia.Indexers.Structs.ScoreBreakdown do
           tag_bonus: float(),
           custom_format_score: integer(),
           total: float(),
-          size_penalty: float(),
           seeder_penalty: float(),
           identity_penalty: float(),
+          limit_violation: String.t() | nil,
           language_rank: non_neg_integer(),
           language_matches: non_neg_integer(),
           audio_languages: [String.t()],

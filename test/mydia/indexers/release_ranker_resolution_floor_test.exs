@@ -76,7 +76,6 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
         media_type: :episode,
         quality_profile: profile,
         preferred_qualities: ["1080p"],
-        size_range: {1024, 7680},
         search_query: "Example Show (2024) S02E01",
         identity_target: %Mydia.Indexers.ReleaseIdentity.Target{
           type: :tv_show,
@@ -129,10 +128,10 @@ defmodule Mydia.Indexers.ReleaseRankerResolutionFloorTest do
     end
   end
 
-  describe "apply_resolution_floor opt-out (manual search is the escape hatch)" do
-    test "apply_resolution_floor: false keeps a below-floor release" do
+  describe "apply_profile_limits opt-out (manual search is the escape hatch)" do
+    test "apply_profile_limits: false keeps a below-floor release" do
       ranked =
-        ReleaseRanker.rank_all([xvid_360p()], opts(hd_1080p(), apply_resolution_floor: false))
+        ReleaseRanker.rank_all([xvid_360p()], opts(hd_1080p(), apply_profile_limits: false))
 
       assert length(ranked) == 1
     end

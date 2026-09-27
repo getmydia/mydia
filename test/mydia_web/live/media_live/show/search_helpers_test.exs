@@ -268,7 +268,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
     end
   end
 
-  describe "sort_search_results_with_opts/3 does not apply source exclusion (R8)" do
+  describe "sort_search_results_with_opts/3 does not apply profile limits (R8)" do
     test "an excluded release survives manual quality-sort routing, unlike the automatic path" do
       profile = %QualityProfile{
         name: "Excludes telesync",
@@ -290,14 +290,14 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
 
       # Sanity check: the same profile/opts DO drop this release on the
       # automatic path (ReleaseRanker.rank_all/2 called directly, where
-      # apply_source_exclusion defaults to true). This proves the manual-path
+      # apply_profile_limits defaults to true). This proves the manual-path
       # assertion below is a genuine divergence and not a fixture that was
       # never going to be filtered in the first place.
       assert ReleaseRanker.rank_all(results, opts) == []
 
       # The manual search dialog routes quality-sorted results through
       # sort_search_results_with_opts/3, which internally passes
-      # apply_source_exclusion: false (see quality_sort_via_ranker/2). Per
+      # apply_profile_limits: false (see quality_sort_via_ranker/2). Per
       # spec R8, manual search/grab is the operator's explicit escape hatch
       # and must not silently drop this release the way the automatic path
       # does above.
@@ -331,6 +331,43 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
       sorted = SearchHelpers.sort_search_results(results, :quality, profile, :movie, nil)
 
       assert length(sorted) == 1
+    end
+
+    test "the quality sort keeps a release below the profile's size minimum, listed last" do
+      profile = %QualityProfile{
+        name: "Sized",
+        quality_standards: %{preferred_resolutions: ["1080p"], episode_min_size_mb: 512}
+      }
+
+      small = %SearchResult{
+        title: "Some.Show.S01E01.1080p.WEB-DL.x264-SMALL",
+        size: 300 * 1_048_576,
+        seeders: 500,
+        leechers: 0,
+        download_url: "magnet:?xt=urn:btih:small",
+        indexer: "TestIndexer",
+        quality: QualityParser.parse("Some.Show.S01E01.1080p.WEB-DL.x264-SMALL")
+      }
+
+      ok = %{
+        small
+        | title: "Some.Show.S01E01.1080p.WEB-DL.x264-OK",
+          size: 1000 * 1_048_576,
+          seeders: 5,
+          download_url: "magnet:?xt=urn:btih:ok"
+      }
+
+      opts =
+        RankingOptions.build(%{
+          media_type: :episode,
+          quality_profile: profile,
+          custom_formats: [],
+          audio_policy: nil
+        })
+
+      sorted = SearchHelpers.sort_search_results_with_opts([small, ok], :quality, opts)
+
+      assert Enum.map(sorted, & &1.title) == [ok.title, small.title]
     end
   end
 
@@ -435,7 +472,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchHelpersTest do
 
       data = SearchHelpers.profile_score_breakdown(result, opts)
 
-      assert data.breakdown.size_penalty == 0.0
+      assert data.breakdown.limit_violation == nil
       assert data.breakdown.seeder_penalty == 0.0
       assert data.breakdown.identity_penalty == 0.0
     end

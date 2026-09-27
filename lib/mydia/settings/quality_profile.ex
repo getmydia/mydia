@@ -733,23 +733,24 @@ defmodule Mydia.Settings.QualityProfile do
 
   defp score_source(_standards, _media_attrs), do: 50.0
 
-  defp score_file_size(standards, %{file_size_mb: size, media_type: :movie})
-       when is_number(size) do
-    min_size = Map.get(standards, :movie_min_size_mb)
-    max_size = Map.get(standards, :movie_max_size_mb)
-
-    score_from_range(size, min_size, max_size, nil)
-  end
-
-  defp score_file_size(standards, %{file_size_mb: size, media_type: :episode})
-       when is_number(size) do
-    min_size = Map.get(standards, :episode_min_size_mb)
-    max_size = Map.get(standards, :episode_max_size_mb)
+  defp score_file_size(standards, %{file_size_mb: size, media_type: media_type})
+       when is_number(size) and media_type in [:movie, :episode] do
+    {min_size, max_size} = size_bounds(standards, media_type)
 
     score_from_range(size, min_size, max_size, nil)
   end
 
   defp score_file_size(_standards, _media_attrs), do: 50.0
+
+  # The min/max size keys a profile's quality_standards uses for a given
+  # media type. Shared by score_file_size/2 (soft scoring) and
+  # size_violation/2 (hard limit) so the two can never disagree about which
+  # keys govern a movie vs. an episode.
+  defp size_bounds(standards, :movie),
+    do: {Map.get(standards, :movie_min_size_mb), Map.get(standards, :movie_max_size_mb)}
+
+  defp size_bounds(standards, :episode),
+    do: {Map.get(standards, :episode_min_size_mb), Map.get(standards, :episode_max_size_mb)}
 
   # Scores the best position any of the file's tokens reaches. A DV 8.1 file
   # offers ["dolby_vision", "hdr10"], so it matches an operator who listed
@@ -827,8 +828,35 @@ defmodule Mydia.Settings.QualityProfile do
           violations
       end
 
+    # File size is a hard limit like the resolution bounds, so a file outside
+    # the range for its media type reads as maximally upgradable. An unknown or
+    # zero size is no evidence either way.
+    violations =
+      case size_violation(standards, media_attrs) do
+        nil -> violations
+        message -> [message | violations]
+      end
+
     violations
   end
+
+  defp size_violation(standards, %{file_size_mb: size, media_type: media_type})
+       when is_number(size) and size > 0 and media_type in [:movie, :episode] do
+    {min_size, max_size} = size_bounds(standards, media_type)
+
+    cond do
+      is_number(min_size) and size < min_size ->
+        "File size #{round(size)} MB is below minimum #{min_size} MB"
+
+      is_number(max_size) and size > max_size ->
+        "File size #{round(size)} MB is above maximum #{max_size} MB"
+
+      true ->
+        nil
+    end
+  end
+
+  defp size_violation(_standards, _media_attrs), do: nil
 
   # Scores a value based on its position in a preference list
   # First item = 100, last item = 60, not in list = 25

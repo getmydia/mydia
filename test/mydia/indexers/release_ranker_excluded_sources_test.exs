@@ -144,25 +144,25 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
     end
   end
 
-  describe "apply_source_exclusion opt-out (R8: manual search is unaffected)" do
-    test "apply_source_exclusion: false skips the filter even with a profile and matching source" do
+  describe "apply_profile_limits opt-out (R8: manual search is unaffected)" do
+    test "apply_profile_limits: false skips the filter even with a profile and matching source" do
       # This is the raw ReleaseRanker-level opt-out that the manual search
       # dialog relies on (see MydiaWeb.MediaLive.Show.SearchHelpers
       # .quality_sort_via_ranker/2). Passing a profile that excludes the
       # source is not enough on its own to filter -- the caller must also
-      # leave apply_source_exclusion at its true default.
+      # leave apply_profile_limits at its true default.
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding(["Telesync"]),
-          apply_source_exclusion: false,
+          apply_profile_limits: false,
           identity_target: @target
         )
 
-      refute is_nil(result), "apply_source_exclusion: false must disable the hard filter"
+      refute is_nil(result), "apply_profile_limits: false must disable the hard filter"
       assert result.result.guid == "telesync-1"
     end
 
-    test "apply_source_exclusion defaults to true, so the automatic path keeps filtering" do
+    test "apply_profile_limits defaults to true, so the automatic path keeps filtering" do
       # Guards against the opt-out silently inverting: omitting the option
       # entirely (the shape every automatic search call site uses) must
       # still drop the excluded release, exactly like the bare-options tests
@@ -176,11 +176,11 @@ defmodule Mydia.Indexers.ReleaseRankerExcludedSourcesTest do
       assert result == nil
     end
 
-    test "apply_source_exclusion: true is equivalent to the default (explicit opt-in is harmless)" do
+    test "apply_profile_limits: true is equivalent to the default (explicit opt-in is harmless)" do
       result =
         ReleaseRanker.select_best_result([telesync()],
           quality_profile: profile_excluding(["Telesync"]),
-          apply_source_exclusion: true,
+          apply_profile_limits: true,
           identity_target: @target
         )
 

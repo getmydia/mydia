@@ -470,6 +470,11 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
       <%!-- Resolution Settings --%>
       <div class="divider">Resolution Settings</div>
 
+      <p id="resolution-limits-hint" class="text-xs text-base-content/70">
+        Automatic grabs and upgrades never go outside these. Manual search still lists
+        everything and marks what is outside.
+      </p>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="form-control">
           <label class="label">
@@ -598,13 +603,17 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
         />
         <label class="label">
           <span class="label-text-alt">
-            Reject torrents whose seeder/leecher ratio is below this value. Leave blank to disable.
+            A preference: torrents below this seeder/leecher ratio rank lower but can still be grabbed. Leave blank to disable.
           </span>
         </label>
       </div>
 
       <%!-- File Size Constraints --%>
-      <div class="divider">File Size Constraints (MB)</div>
+      <div class="divider">File Size Limits (MB)</div>
+      <p id="size-limits-hint" class="text-xs text-base-content/70">
+        Automatic grabs and upgrades never go outside these. A season pack is judged per
+        episode. Manual search still lists everything and marks what is outside.
+      </p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="form-control">
@@ -745,7 +754,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           <div>
             <span class="label-text font-semibold">Require HDR</span>
             <p class="text-xs text-base-content/70">
-              Only accept files with HDR support
+              Automatic grabs and upgrades skip releases without HDR in the name
             </p>
           </div>
         </label>

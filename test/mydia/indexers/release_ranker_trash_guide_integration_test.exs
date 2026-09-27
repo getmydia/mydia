@@ -62,11 +62,7 @@ defmodule Mydia.Indexers.ReleaseRankerTRaSHGuideIntegrationTest do
         # TRaSH prioritizes BluRay > WEB-DL for HD
         preferred_sources: ["BluRay", "WEB-DL", "WEBRip"],
         preferred_video_codecs: ["h265", "x265", "h264", "x264"],
-        preferred_audio_codecs: ["dts-hd", "truehd", "ac3", "aac"],
-        movie_min_size_mb: 4096,
-        movie_max_size_mb: 20480,
-        episode_min_size_mb: 500,
-        episode_max_size_mb: 4096
+        preferred_audio_codecs: ["dts-hd", "truehd", "ac3", "aac"]
       }
     }
   end

@@ -927,8 +927,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                 <% ring_value = max(0, trunc(score)) %>
                 <% has_penalty =
                   profile? &&
-                    (breakdown.size_penalty < 0.0 or breakdown.seeder_penalty < 0.0 or
-                       breakdown.identity_penalty < 0.0) %>
+                    (breakdown.seeder_penalty < 0.0 or breakdown.identity_penalty < 0.0 or
+                       not is_nil(breakdown.limit_violation)) %>
                 <%!-- Score display --%>
                 <%= if profile? do %>
                   <.score_trigger
@@ -1053,7 +1053,11 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
                     />
                     <%= if has_penalty do %>
                       <div class="divider my-1 text-xs opacity-50">Penalties</div>
-                      <.penalty_row label="Size penalty" score={breakdown.size_penalty} />
+                      <%= if breakdown.limit_violation do %>
+                        <div id={"#{id}-limit-violation"} class="text-xs text-warning py-1">
+                          Outside profile limits: {breakdown.limit_violation}
+                        </div>
+                      <% end %>
                       <.penalty_row label="Seeder penalty" score={breakdown.seeder_penalty} />
                       <.penalty_row label="Identity mismatch" score={breakdown.identity_penalty} />
                     <% end %>
