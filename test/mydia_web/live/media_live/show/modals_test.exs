@@ -271,7 +271,7 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
   end
 
   describe "manual_search_modal/1 row states" do
-    defp modal_html(result_extra) do
+    defp modal_html(result_extra, assigns_extra \\ %{}) do
       result =
         Map.merge(
           %Mydia.Indexers.SearchResult{
@@ -287,19 +287,25 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
           result_extra
         )
 
-      render_component(&Modals.manual_search_modal/1,
-        manual_search_context: %{type: :media_item},
-        media_item: %Mydia.Media.MediaItem{title: "Some Movie", type: "movie"},
-        manual_search_query: "Some Movie 2020",
-        searching: false,
-        results_empty?: false,
-        indexer_errors: [],
-        streams: %{search_results: [{"search-result-00000-1", result}]},
-        quality_filter: nil,
-        min_seeders: 0,
-        sort_by: :seeders,
-        close_after_grab: false
-      )
+      assigns =
+        Map.merge(
+          %{
+            manual_search_context: %{type: :media_item},
+            media_item: %Mydia.Media.MediaItem{title: "Some Movie", type: "movie"},
+            manual_search_query: "Some Movie 2020",
+            searching: false,
+            results_empty?: false,
+            indexer_errors: [],
+            streams: %{search_results: [{"search-result-00000-1", result}]},
+            quality_filter: nil,
+            min_seeders: 0,
+            sort_by: :seeders,
+            close_after_grab: false
+          },
+          assigns_extra
+        )
+
+      render_component(&Modals.manual_search_modal/1, assigns)
     end
 
     test "grab_failed renders a retry button with the reason" do
@@ -320,6 +326,38 @@ defmodule MydiaWeb.MediaLive.Show.ModalsTest do
       html = modal_html(%{downloading: true})
 
       assert html =~ "Grabbing…"
+    end
+
+    test "with a quality profile, the row renders a score badge and breakdown panel" do
+      profile = %Mydia.Settings.QualityProfile{
+        id: Ecto.UUID.generate(),
+        name: "Test Profile",
+        quality_standards: %{preferred_resolutions: ["1080p", "720p"]}
+      }
+
+      media_item = %Mydia.Media.MediaItem{
+        title: "Some Movie",
+        type: "movie",
+        quality_profile_id: profile.id,
+        quality_profile: profile
+      }
+
+      html =
+        modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264"}, %{media_item: media_item})
+
+      assert html =~ ~s(id="search-result-00000-1-score-badge")
+      assert html =~ ~s(id="search-result-00000-1-score-breakdown")
+      assert html =~ "Score breakdown"
+      assert html =~ ~s(id="search-result-00000-1-audio")
+    end
+
+    test "without a quality profile, the row shows the seeders circle, no score badge, and the audio badge still renders" do
+      html = modal_html(%{title: "Some.Movie.2020.1080p.ENG.x264", seeders: 12})
+
+      refute html =~ ~s(id="search-result-00000-1-score-badge")
+      refute html =~ ~s(id="search-result-00000-1-score-breakdown")
+      assert html =~ "12 seeders"
+      assert html =~ ~s(id="search-result-00000-1-audio")
     end
   end
 
