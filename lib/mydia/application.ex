@@ -266,7 +266,16 @@ defmodule Mydia.Application do
          Keyword.get(oban_config, :queues) == false do
       []
     else
-      [{Oban, Mydia.Player.prune_oban_config(oban_config)}]
+      runtime_oban =
+        case Application.get_env(:mydia, :runtime_config) do
+          %{oban: %Mydia.Config.Schema.Oban{} = oban} -> oban
+          _ -> nil
+        end
+
+      configured_oban = Mydia.Jobs.ObanConfig.apply_runtime_config(oban_config, runtime_oban)
+      final_config = Mydia.Player.prune_oban_config(configured_oban)
+
+      [{Oban, final_config}]
     end
   end
 

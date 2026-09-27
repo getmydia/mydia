@@ -8,21 +8,24 @@ stack. Two things about it are not obvious from reading the schema.
 `Mydia.Config.Schema`'s `database` embed is the one section that can never
 participate in the full merge. `Mydia.Config.Loader.load/1` calls
 `Settings.load_database_config()`, which queries the database, and `Mydia.Repo` is
-the second child in `Mydia.Application.children/1`. The Loader therefore always
+the second child in `Mydia.Application.children/1`. The full Loader therefore always
 runs after the Repo is up, so nothing it produces can configure that Repo.
 
 That is why the section sat declared, parsed, validated and documented while being
 completely inert (issue #503). It was written alongside its fifteen siblings
 without anyone noticing that its lifecycle differs.
 
-Wiring the database section through the Loader is structurally impossible rather
-than merely unimplemented. Config files cannot help either, since `config/dev.exs`
-and `config/test.exs` are evaluated before compilation and cannot call app code.
+SQLite pragmas are pinned in `Mydia.DB.Baseline` (WAL mode, immediate transactions,
+busy timeout, etc.) for write concurrency safety (#283) and are not operator-tunable.
 
-Repo settings must be resolved either in `config/runtime.exs` or in
-`Ecto.Repo.init/2`, reading YAML and env directly. `init/2` is the better seam: it
-runs at Repo boot with all modules loaded and applies uniformly to dev, test and
-prod.
+`database.path` and `database.pool_size` are the only two settings in the schema.
+They are loaded during phase one (`sources: [:yaml, :env]`) and applied via
+`Mydia.Repo.init/2`, which runs at Repo boot with all modules loaded and applies
+uniformly to dev, test, and prod.
+
+Oban settings (`poll_interval` and `max_age_days`) are likewise loaded from
+`:runtime_config` and applied via `Mydia.Jobs.ObanConfig` when Oban starts in the
+supervision tree (`Mydia.Application.children/1`).
 
 ## parse_atom/1 mints atoms, so do not reuse it
 
