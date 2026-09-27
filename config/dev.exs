@@ -30,22 +30,7 @@ case database_adapter do
       database: Path.expand("../mydia_dev.db", __DIR__),
       pool_size: 5,
       stacktrace: true,
-      show_sensitive_data_on_connection_error: true,
-      # SQLite-specific optimizations
-      # Increased timeout to handle long-running library scans (60 seconds)
-      timeout: 60_000,
-      journal_mode: :wal,
-      # 64MB cache
-      cache_size: -64000,
-      temp_store: :memory,
-      synchronous: :normal,
-      foreign_keys: :on,
-      # Increased busy_timeout to handle concurrent writes during library scans
-      busy_timeout: 30_000,
-      # BEGIN IMMEDIATE rather than BEGIN DEFERRED. A deferred transaction that
-      # reads before it writes gets SQLITE_BUSY_SNAPSHOT under WAL with no busy
-      # handler invoked, so busy_timeout above never applies to it. See #283.
-      default_transaction_mode: :immediate
+      show_sensitive_data_on_connection_error: true
 end
 
 # For development, we disable any cache and enable

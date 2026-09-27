@@ -39,6 +39,10 @@ defmodule Mydia.Repo do
   alias Mydia.Events
   alias Mydia.Repo.ForeignKeyGuard
 
+  def init(_context, config) do
+    {:ok, Mydia.DB.Baseline.apply_to(config, __adapter__())}
+  end
+
   # Ecto blesses only default_options/1, prepare_query/3 and
   # prepare_transaction/2 as overridable, but `use Ecto.Repo` defines these in
   # this module, so defoverridable and super apply normally. Both arities are
