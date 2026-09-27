@@ -8,6 +8,7 @@ defmodule Mydia.P2p.Server do
   use GenServer
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Auth.Guardian
   alias Mydia.P2p
   alias Mydia.RemoteAccess
@@ -1106,6 +1107,7 @@ defmodule Mydia.P2p.Server do
         context =
           %{
             current_user: user,
+            current_scope: Scope.for_user(user),
             source: source,
             peer_connection_type: peer_connection_type
           }

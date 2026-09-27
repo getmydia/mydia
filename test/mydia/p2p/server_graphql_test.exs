@@ -83,4 +83,54 @@ defmodule Mydia.P2p.ServerGraphQLTest do
       assert response.data =~ "RootQueryType"
     end
   end
+
+  # Every media resolver reads the caller's access scope from the context. A
+  # paired player's GraphQL arrives here rather than through AbsintheContext,
+  # so without the scope every library query from the app failed.
+  describe "an authenticated request's access scope" do
+    setup do
+      set_remote_access(true)
+      on_exit(&reset_remote_access/0)
+
+      movie = Mydia.MediaFixtures.media_item_fixture(%{type: "movie", title: "Lantern Quay"})
+
+      Mydia.Repo.update_all(
+        Ecto.Query.from(m in Mydia.Media.MediaItem, where: m.id == ^movie.id),
+        set: [category: "movie"]
+      )
+
+      %{movie: movie}
+    end
+
+    defp movie_request(user, movie) do
+      {:ok, token, _claims} =
+        Mydia.Auth.Guardian.encode_and_sign(user, %{}, token_type: :access)
+
+      Server.graphql_response(
+        %GraphQLRequest{
+          query: "query($id: ID!) { movie(id: $id) { title } }",
+          variables: Jason.encode!(%{"id" => movie.id}),
+          auth_token: token
+        },
+        nil
+      )
+    end
+
+    test "resolves a library read for a user", %{movie: movie} do
+      response = movie_request(Mydia.AccountsFixtures.user_fixture(), movie)
+
+      assert response.errors == nil
+      assert response.data =~ "Lantern Quay"
+    end
+
+    test "hides a title outside the user's restriction", %{movie: movie} do
+      user =
+        Mydia.AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      response = movie_request(user, movie)
+
+      assert response.errors =~ "Movie not found"
+      refute response.data =~ "Lantern Quay"
+    end
+  end
 end
