@@ -364,7 +364,7 @@ Read the relevant one before working in that area:
 | `lib/mydia/metadata/README.md` | what TVDB and TMDB actually send |
 | `lib/mydia/streaming/README.md` | where codec data lives, streaming candidates |
 | `lib/mydia/config/README.md` | layered config lifecycle |
-| `lib/mydia/downloads/README.md`, `lib/mydia/indexers/README.md` | trackerless releases, Torznab categories |
+| `lib/mydia/downloads/README.md`, `lib/mydia/indexers/README.md` | trackerless releases, Torznab categories, release ranking |
 | `native/README.md`, `plugins/README.md` | NIF crates, p2p, wasip2 guests |
 | `.github/ci.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
 | `player/docs/` | player workflow, testing, Riverpod, packaging |

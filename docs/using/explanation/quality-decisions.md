@@ -244,8 +244,8 @@ configuration, and the shipped default is an empty list.
 So the mechanism exists and works, and for practical purposes it is not part of
 the configuration surface today. It is listed among the hard rejections above for
 completeness rather than because it is likely to be your answer. The same is true
-of the preferred-tag bonus mentioned later on this page: implemented, reachable
-only from job arguments, and empty in a running instance.
+of the preferred-tag bonus: implemented, reachable only from job arguments, and
+empty in a running instance.
 
 ## How upgrades are decided
 
@@ -369,28 +369,17 @@ PROPER and REPACK markers are still not scored. A PROPER replaces the release it
 corrects only if it happens to score higher on the profile dimensions above,
 which is not what the marker is for.
 
-## There are no custom formats
+## Custom formats are a separate sort key
 
-Radarr and Sonarr let you define named custom formats with individual scores:
-release groups you trust, audio formats you want, encoders you avoid, each
-contributing points to a total. That model is the main reason the *arr stack's
-quality handling is more expressive than Mydia's, and it is genuinely more
-expressive.
+Custom formats match release titles with patterns, and a quality profile gives
+each match a score or a reject flag. They do not add to the quality score.
+Within a resolution tier, the higher total format score wins before seeders,
+size and source are compared, and a rejecting format drops the release
+outright. See [Custom Formats](../../configuration/custom-formats.md).
 
-Mydia has three term-based mechanisms and none of them is a custom format. Only
-one of the three is configurable: resolution, codec, source, audio, and HDR
-preferences are ordered lists scored by position. The other two, blocked tags
-and a preferred-tag bonus, are implemented in the ranking code and not reachable
-from the interface, as described above.
-
-PROPER and REPACK markers are parsed out of release names and are then not used
-for scoring. A PROPER does not currently rank above the release it corrects.
-
-This is a real capability gap, not a philosophical difference, and it is the
-honest answer to "can I replicate my TRaSH Guides setup". The preset gallery
-includes profiles derived from those guides, and they translate the resolution,
-source, and size parts faithfully; the per-format scoring that makes those guides
-powerful has no equivalent to translate into.
+PROPER and REPACK markers are parsed out of release names and are then not
+used for scoring. A PROPER does not currently rank above the release it
+corrects.
 
 ## Where to go next
 
