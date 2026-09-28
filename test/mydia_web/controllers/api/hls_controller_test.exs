@@ -26,7 +26,7 @@ defmodule MydiaWeb.Api.HlsControllerTest do
   alias Mydia.Subtitles.ImageTrack
 
   setup do
-    {_user, token} = create_user_and_token()
+    {user, token} = create_user_and_token()
 
     temp_dir = Path.join(System.tmp_dir!(), "hls_ctrl_#{System.unique_integer([:positive])}")
     File.mkdir_p!(temp_dir)
@@ -34,30 +34,36 @@ defmodule MydiaWeb.Api.HlsControllerTest do
 
     session_id = "hls-ctrl-#{System.unique_integer([:positive])}"
 
-    {:ok, token: token, temp_dir: temp_dir, session_id: session_id}
+    {:ok, user: user, token: token, temp_dir: temp_dir, session_id: session_id}
   end
 
   # Registers the stub session for the given info, defaulting to an unused
   # media_file_id: most cases here never reach materialize/3 because the
   # file already exists on disk or the name never parses as a subtitle.
-  defp register_session(session_id, temp_dir, media_file_id \\ "unused") do
-    {:ok, _pid} =
+  defp register_session(session_id, temp_dir, user_id) do
+    register_session(session_id, temp_dir, "unused", user_id)
+  end
+
+  defp register_session(session_id, temp_dir, media_file_id, user_id) do
+    {:ok, pid} =
       HlsSessionStub.start_link(session_id, %{
         media_file_id: media_file_id,
-        temp_dir: temp_dir
+        temp_dir: temp_dir,
+        user_id: user_id
       })
 
-    :ok
+    {:ok, pid}
   end
 
   describe "GET /api/v1/hls/:session_id/:segment" do
     test "a materialized subtitle returns 200 with a text/vtt content type", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
       File.write!(Path.join(dir, "subs_2.vtt"), "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n")
 
       conn =
@@ -75,6 +81,7 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "an image-based subtitle track returns 415, not 404", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
@@ -87,7 +94,7 @@ defmodule MydiaWeb.Api.HlsControllerTest do
           }
         })
 
-      register_session(session_id, dir, media_file.id)
+      register_session(session_id, dir, media_file.id, user.id)
 
       conn =
         conn
@@ -102,10 +109,11 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "a traversal-shaped segment name returns 403", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
 
       conn =
         conn
@@ -118,10 +126,11 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "an ordinary segment name still falls through to normal file serving", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
       File.write!(Path.join(dir, "segment_001.ts"), "tsdata")
 
       conn =
@@ -139,10 +148,11 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "an unmaterialized, nonexistent segment still returns 404", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
 
       conn =
         conn
@@ -152,8 +162,13 @@ defmodule MydiaWeb.Api.HlsControllerTest do
       assert conn.status == 404
     end
 
-    test "requires authentication", %{conn: conn, temp_dir: dir, session_id: session_id} do
-      register_session(session_id, dir)
+    test "requires authentication", %{
+      conn: conn,
+      user: user,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir, user.id)
 
       conn = get(conn, "/api/v1/hls/#{session_id}/segment_001.ts")
 
@@ -165,10 +180,11 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "an ordinary track_id still serves the variant playlist", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
       track_dir = Path.join(dir, "0")
       File.mkdir_p!(track_dir)
       File.write!(Path.join(track_dir, "index.m3u8"), "#EXTM3U\n")
@@ -192,10 +208,11 @@ defmodule MydiaWeb.Api.HlsControllerTest do
     test "a traversal-shaped track_id returns 403", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
-      register_session(session_id, dir)
+      register_session(session_id, dir, user.id)
 
       conn =
         conn
@@ -207,7 +224,7 @@ defmodule MydiaWeb.Api.HlsControllerTest do
   end
 
   describe "GET /api/v1/hls/:session_id/subs_<index>.mks" do
-    setup %{temp_dir: dir, session_id: session_id} do
+    setup %{temp_dir: dir, session_id: session_id, user: user} do
       media_file =
         media_file_fixture(%{
           metadata: %FileMetadata{
@@ -229,7 +246,7 @@ defmodule MydiaWeb.Api.HlsControllerTest do
         File.rm_rf(Path.dirname(cached))
       end)
 
-      register_session(session_id, dir, media_file.id)
+      register_session(session_id, dir, media_file.id, user.id)
       {:ok, cached: cached}
     end
 
@@ -298,6 +315,85 @@ defmodule MydiaWeb.Api.HlsControllerTest do
         |> get("/api/v1/hls/#{session_id}/subs_2.mks")
 
       assert conn.status == 404
+    end
+  end
+
+  describe "user isolation" do
+    test "a user cannot access another user's master playlist", %{
+      conn: conn,
+      user: user,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir, user.id)
+      {_other_user, other_token} = create_user_and_token()
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{other_token}")
+        |> get("/api/v1/hls/#{session_id}/index.m3u8")
+
+      assert conn.status == 404
+      assert json_response(conn, 404)["error"] =~ "HLS session not found"
+    end
+
+    test "a user cannot access another user's variant playlist", %{
+      conn: conn,
+      user: user,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir, user.id)
+      track_dir = Path.join(dir, "0")
+      File.mkdir_p!(track_dir)
+      File.write!(Path.join(track_dir, "index.m3u8"), "#EXTM3U\n")
+      {_other_user, other_token} = create_user_and_token()
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{other_token}")
+        |> get("/api/v1/hls/#{session_id}/0/index.m3u8")
+
+      assert conn.status == 404
+      assert json_response(conn, 404)["error"] =~ "HLS session not found"
+    end
+
+    test "a user cannot access another user's segments", %{
+      conn: conn,
+      user: user,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      register_session(session_id, dir, user.id)
+      File.write!(Path.join(dir, "segment_001.ts"), "tsdata")
+      {_other_user, other_token} = create_user_and_token()
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{other_token}")
+        |> get("/api/v1/hls/#{session_id}/segment_001.ts")
+
+      assert conn.status == 404
+      assert json_response(conn, 404)["error"] =~ "HLS session not found"
+    end
+
+    test "a user cannot terminate another user's session", %{
+      conn: conn,
+      user: user,
+      temp_dir: dir,
+      session_id: session_id
+    } do
+      {:ok, pid} = register_session(session_id, dir, "unused", user.id)
+      {_other_user, other_token} = create_user_and_token()
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{other_token}")
+        |> delete("/api/v1/hls/#{session_id}")
+
+      assert conn.status == 200
+      assert json_response(conn, 200)["status"] == "not_found"
+      assert Process.alive?(pid)
     end
   end
 end

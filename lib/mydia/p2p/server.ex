@@ -694,7 +694,7 @@ defmodule Mydia.P2p.Server do
             handle_download_stream(resource, stream_id, job_id, req)
 
           true ->
-            handle_hls_session_stream(resource, stream_id, req)
+            handle_hls_session_stream(resource, stream_id, user, req)
         end
 
       {:error, _reason} ->
@@ -704,9 +704,9 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp handle_hls_session_stream(resource, stream_id, req) do
-    # Look up the session by session_id
-    case lookup_hls_session(req.session_id) do
+  defp handle_hls_session_stream(resource, stream_id, user, req) do
+    # Look up the session by session_id and user_id
+    case lookup_hls_session(req.session_id, user.id) do
       {:ok, pid, session_info} ->
         # Wait for the session to be ready (FFmpeg has created initial files)
         case HlsSession.await_ready(pid, @session_ready_timeout) do
@@ -807,14 +807,15 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp lookup_hls_session(session_id) do
+  @doc false
+  def lookup_hls_session(session_id, user_id) do
     case Registry.lookup(Mydia.Streaming.HlsSessionRegistry, {:session, session_id}) do
-      [{pid, info}] ->
+      [{pid, %{user_id: ^user_id} = info}] ->
         # Trigger heartbeat to keep session alive
         HlsSession.heartbeat(pid)
         {:ok, pid, info}
 
-      [] ->
+      _ ->
         {:error, :not_found}
     end
   end

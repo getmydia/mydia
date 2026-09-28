@@ -367,6 +367,28 @@ defmodule MydiaWeb.Schema.StreamingTest do
     end
   end
 
+  describe "endStreamingSession mutation" do
+    test "a user cannot terminate another user's session" do
+      user_a = AccountsFixtures.user_fixture()
+      user_b = AccountsFixtures.user_fixture()
+      session_id = "graphql-test-#{System.unique_integer([:positive])}"
+
+      {:ok, pid} =
+        Mydia.Streaming.HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: "/tmp", user_id: user_a.id}
+        )
+
+      # User B attempts to end User A's session
+      assert {:ok, %{data: %{"endStreamingSession" => true}}} = stop_session(session_id, user_b)
+      assert Process.alive?(pid)
+
+      # User A ends their own session
+      assert {:ok, %{data: %{"endStreamingSession" => true}}} = stop_session(session_id, user_a)
+      refute Process.alive?(pid)
+    end
+  end
+
   defp stop_session(session_id, user) do
     Absinthe.run(
       @end_streaming_session_mutation,
