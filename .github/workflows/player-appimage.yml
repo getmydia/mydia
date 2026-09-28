@@ -1,0 +1,72 @@
+name: Player / AppImage
+
+# Builds the self-contained x86_64 AppImage in ubuntu:22.04, which sets its
+# glibc floor. See player/docs/packaging.md.
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      version_code:
+        type: string
+        required: true
+      dry_run:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build AppImage
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    # A cold build compiles FFmpeg, libass, libplacebo and mpv before Flutter.
+    timeout-minutes: 60
+    steps:
+      # Before checkout, which falls back to a tarball without git and leaves
+      # Flutter's own git checks nothing to read. zstd lets actions/cache work.
+      - name: Install git and zstd
+        run: apt-get update && apt-get install -y --no-install-recommends git zstd ca-certificates
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Read the mpv stack pins
+        id: pins
+        run: echo "key=$(player/appimage/pins.sh | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the mpv stack
+        uses: actions/cache@v4
+        with:
+          path: /opt/mpv-prefix
+          key: appimage-mpv-${{ steps.pins.outputs.key }}-${{ hashFiles('player/appimage/build.sh') }}
+
+      - name: Stamp the version
+        working-directory: player
+        run: |
+          sed -i "s/^version: .*/version: ${{ inputs.version }}+${{ inputs.version_code }}/" pubspec.yaml
+
+      - name: Build
+        env:
+          MYDIA_VERSION: ${{ inputs.version }}
+        run: player/appimage/build.sh
+
+      - name: Smoke test
+        run: player/appimage/smoke-test.sh player/build/appimage/Mydia_Player-x86_64.AppImage
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mydia-player-linux-appimage
+          path: player/build/appimage/Mydia_Player-x86_64.AppImage
+          retention-days: 30

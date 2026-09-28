@@ -37,7 +37,7 @@ on:
         type: boolean
         default: false
       allow_missing:
-        description: "Comma-separated platforms whose failure must not block publish (android,ios,macos,windows,linux,flatpak,docker)"
+        description: "Comma-separated platforms whose failure must not block publish (android,ios,macos,windows,linux,appimage,flatpak,docker)"
         required: false
         default: ''
 
@@ -514,6 +514,16 @@ jobs:
       version_code: ${{ needs.prepare.outputs.version_code }}
       dry_run: ${{ inputs.dry_run }}
 
+
+  player-appimage:
+    needs: prepare
+    uses: ./.github/workflows/player-appimage.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}
+
   player-flatpak:
     name: Player / Flatpak
     needs: prepare
@@ -539,6 +549,7 @@ jobs:
       - player-macos
       - player-windows
       - player-linux
+      - player-appimage
       - player-flatpak
     runs-on: ubuntu-latest
     permissions:
@@ -554,6 +565,7 @@ jobs:
           RESULT_MACOS: ${{ needs.player-macos.result }}
           RESULT_WINDOWS: ${{ needs.player-windows.result }}
           RESULT_LINUX: ${{ needs.player-linux.result }}
+          RESULT_APPIMAGE: ${{ needs.player-appimage.result }}
           RESULT_FLATPAK: ${{ needs.player-flatpak.result }}
         run: |
           set -euo pipefail
@@ -579,6 +591,7 @@ jobs:
             "macos:$RESULT_MACOS" \
             "windows:$RESULT_WINDOWS" \
             "linux:$RESULT_LINUX" \
+            "appimage:$RESULT_APPIMAGE" \
             "flatpak:$RESULT_FLATPAK"; do
             name="${entry%%:*}"
             result="${entry#*:}"
@@ -638,6 +651,10 @@ jobs:
           [ -d "mydia-player-linux-bundle" ] && \
             chmod +x mydia-player-linux-bundle/mydia-player && \
             tar -czf mydia-player-linux-v${{ needs.prepare.outputs.version }}.tar.gz -C mydia-player-linux-bundle . || true
+
+          [ -f "mydia-player-linux-appimage/Mydia_Player-x86_64.AppImage" ] && \
+            mv mydia-player-linux-appimage/Mydia_Player-x86_64.AppImage \
+              mydia-player-linux-v${{ needs.prepare.outputs.version }}-x86_64.AppImage || true
 
           [ -d "mydia-player-macos-appcast" ] && \
             mv mydia-player-macos-appcast/appcast.xml . || true
@@ -704,6 +721,7 @@ jobs:
             "mydia-player-macos-*.dmg" \
             "mydia-player-windows-*.exe" \
             "mydia-player-linux-*.tar.gz" \
+            "mydia-player-linux-*.AppImage" \
             "appcast.xml"; do
             for f in $pattern; do
               FILES+=("$f")
