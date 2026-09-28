@@ -52,7 +52,8 @@ const platforms: Platform[] = [
     tagline: 'x64 installer',
     icon: 'M3 5.548l7.06-0.966v6.817H3V5.548zm0 12.905l7.06 0.966v-6.819H3v5.853zm7.862 1.075L21 21V12.601H10.862v6.927zM10.862 4.472v6.929H21V3L10.862 4.472z',
     options: [{ label: 'Download installer', href: '/download/windows', primary: true }],
-    note: 'Installs for your user only, so it needs no admin rights. The build is not code signed, so Windows shows a SmartScreen warning the first time. Choose More info, then Run anyway.',
+    commands: 'irm https://mydia.dev/install.ps1 | iex',
+    note: 'Paste the command into PowerShell to install without a SmartScreen prompt. The downloaded installer is not code signed, so Windows warns the first time you open it: choose More info, then Run anyway. Either way it installs for your user only and needs no admin rights.',
     sizeFor: 'windows',
   },
   {
