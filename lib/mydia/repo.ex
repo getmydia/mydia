@@ -39,6 +39,47 @@ defmodule Mydia.Repo do
   alias Mydia.Events
   alias Mydia.Repo.ForeignKeyGuard
 
+  def init(_context, config) do
+    adapter = __adapter__()
+
+    config =
+      config
+      |> Mydia.DB.Baseline.apply_to(adapter)
+      |> overlay_runtime_config(adapter)
+
+    {:ok, config}
+  end
+
+  defp overlay_runtime_config(config, adapter) do
+    case Application.get_env(:mydia, :runtime_config) do
+      %{database: %{path: path, pool_size: pool_size}} ->
+        config
+        |> maybe_overlay_database_path(path, adapter)
+        |> maybe_overlay_pool_size(pool_size)
+
+      _ ->
+        config
+    end
+  end
+
+  defp maybe_overlay_database_path(config, path, Ecto.Adapters.SQLite3) when is_binary(path) do
+    if sandbox_pool?(config) and is_nil(System.get_env("DATABASE_PATH")) do
+      config
+    else
+      Keyword.put(config, :database, path)
+    end
+  end
+
+  defp maybe_overlay_database_path(config, _path, _adapter), do: config
+
+  defp maybe_overlay_pool_size(config, pool_size) when is_integer(pool_size) and pool_size > 0 do
+    Keyword.put(config, :pool_size, pool_size)
+  end
+
+  defp maybe_overlay_pool_size(config, _pool_size), do: config
+
+  defp sandbox_pool?(config), do: Keyword.get(config, :pool) == Ecto.Adapters.SQL.Sandbox
+
   # Ecto blesses only default_options/1, prepare_query/3 and
   # prepare_transaction/2 as overridable, but `use Ecto.Repo` defines these in
   # this module, so defoverridable and super apply normally. Both arities are

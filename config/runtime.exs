@@ -118,19 +118,6 @@ if config_env() == :prod do
       config :mydia, Mydia.Repo,
         database: database_path,
         pool_size: String.to_integer(System.get_env("POOL_SIZE") || "5"),
-        # SQLite-specific optimizations for production
-        # Increased timeout to handle long-running library scans (60 seconds)
-        timeout: 60_000,
-        journal_mode: :wal,
-        # 64MB cache
-        cache_size: -64000,
-        temp_store: :memory,
-        synchronous: :normal,
-        foreign_keys: :on,
-        # Increased busy_timeout to handle concurrent writes during library scans
-        busy_timeout: 30_000,
-        # BEGIN IMMEDIATE rather than BEGIN DEFERRED. See #283.
-        default_transaction_mode: :immediate,
         # Mydia.Perf keys query timings by the calling function; the
         # stacktrace capture follows the metrics switch above.
         stacktrace: perf_metrics_enabled?

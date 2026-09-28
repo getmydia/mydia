@@ -35,18 +35,7 @@ case database_adapter do
       database: Path.expand("../mydia_test.db", __DIR__),
       pool_size: 5,
       pool: Ecto.Adapters.SQL.Sandbox,
-      # SQLite-specific settings for better test concurrency
-      journal_mode: :wal,
-      cache_size: -64000,
-      temp_store: :memory,
-      pool_timeout: 60_000,
-      timeout: 60_000,
-      # Increase busy timeout to handle concurrent writes
-      busy_timeout: 30_000,
-      # See config/dev.exs. The SQL sandbox begins with mode: :transaction,
-      # which exqlite maps to a plain BEGIN, so this does not change how the
-      # sandbox wraps tests.
-      default_transaction_mode: :immediate
+      pool_timeout: 60_000
 end
 
 # We run a server during test for Wallaby browser-based feature tests.

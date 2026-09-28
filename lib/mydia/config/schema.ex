@@ -71,14 +71,13 @@ defmodule Mydia.Config.Schema do
       field :guardian_secret_key, :string
     end
 
+    # Only path and pool_size are operator-configurable. Every other SQLite
+    # setting is pinned in Mydia.DB.Baseline, because journal mode and
+    # transaction mode are correctness settings rather than tuning knobs.
+    # See issue #503.
     embeds_one :database, Database, on_replace: :update, primary_key: false do
       field :path, :string, default: "mydia_dev.db"
       field :pool_size, :integer, default: 5
-      field :timeout, :integer, default: 5000
-      field :cache_size, :integer, default: -64_000
-      field :busy_timeout, :integer, default: 5000
-      field :journal_mode, :string, default: "wal"
-      field :synchronous, :string, default: "normal"
     end
 
     embeds_one :auth, Auth, on_replace: :update, primary_key: false do
@@ -448,21 +447,9 @@ defmodule Mydia.Config.Schema do
 
   defp database_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [
-      :path,
-      :pool_size,
-      :timeout,
-      :cache_size,
-      :busy_timeout,
-      :journal_mode,
-      :synchronous
-    ])
+    |> cast(attrs, [:path, :pool_size])
     |> validate_required([:path, :pool_size])
     |> validate_number(:pool_size, greater_than: 0)
-    |> validate_number(:timeout, greater_than: 0)
-    |> validate_number(:busy_timeout, greater_than: 0)
-    |> validate_inclusion(:journal_mode, ["delete", "truncate", "persist", "memory", "wal"])
-    |> validate_inclusion(:synchronous, ["off", "normal", "full", "extra"])
   end
 
   defp auth_changeset(schema, attrs) do
