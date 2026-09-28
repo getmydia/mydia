@@ -1,4 +1,4 @@
-# Player packaging: Windows, iOS, fastlane
+# Player packaging: Windows, iOS, fastlane, AppImage
 
 ## The Windows player ships without the VC++ runtime
 
@@ -169,3 +169,42 @@ stable native name and icon. Run the script by hand for the full treatment;
 `git checkout -- player/ && rm -f player/.build-channel` undoes it. The
 marker file is ignored by git, and a leftover one makes the next local Flatpak
 build use the old channel.
+
+## The Linux AppImage builds its own mpv on Ubuntu 22.04
+
+`player/appimage/build.sh` runs in `ubuntu:22.04`, which sets the glibc floor at
+2.35: Debian 12, RHEL 9, Mint 21 and anything newer. Building on a newer image
+raises that floor for every user, so the base moves only on purpose.
+
+22.04's own mpv is 0.34 with FFmpeg 4.4. media_kit would load it (it tries
+`libmpv.so`, `libmpv.so.2`, then `libmpv.so.1`), but it is years behind the
+Flatpak. So the build compiles FFmpeg, libass, libplacebo and mpv. The last
+three use the tags in `player/flatpak/dev.mydia.player.yml`, read by
+`player/appimage/pins.sh`, so the two Linux packages play through the same mpv;
+`player/appimage/test/pins-test.sh` fails if the manifest changes shape. FFmpeg
+is pinned in `pins.sh` itself, because the Flatpak takes it from the GNOME
+runtime. mpv 0.41 needs FFmpeg 6.1 or newer and meson 1.3 or newer, which is
+why both come from outside apt.
+
+libplacebo is built without Vulkan. media_kit_video draws through mpv's OpenGL
+render API, and Vulkan would pull in shaderc and glslang for nothing.
+
+`AppRun` sets `LIBMPV_LIBRARY_PATH` to the bundled `libmpv.so.2`. media_kit
+checks it before any library name; without it, a host with `libmpv-dev`
+installed resolves media_kit's first guess, `libmpv.so`, to the host's mpv.
+
+GitHub runners and containers have no FUSE, so CI runs the image with
+`APPIMAGE_EXTRACT_AND_RUN=1`. `smoke-test.sh` runs it under Xvfb for ten
+seconds, then extracts it and runs `ldd` over every bundled ELF, because
+media_kit dlopens libmpv and a short run proves only what it loaded.
+
+Build locally with:
+
+    docker run --rm -v "$PWD:/src" -w /src -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+      ubuntu:22.04 player/appimage/build.sh
+
+The AppImage updates itself from the `linux-appimage` slot of
+`releases.json`. `AppImageUpdater` downloads beside the `.AppImage` file,
+checks the ELF and AppImage type 2 magic, and renames over it, so the file keeps
+its name and desktop entries from AppImageLauncher or Gear Lever keep working.
+A tarball install reads the `linux` slot and never sees an AppImage.
