@@ -50,7 +50,9 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
     "/api/v1/download/job/:job_id/status" => "needs a transcode job",
     "/api/v1/download/job/:job_id/file" => "needs a transcode job",
     "/admin/jobs" => "admin Oban dashboard; Oban is not started in tests",
-    "/admin/transcodes" => "admin transcode dashboard; needs Oban job streams in tests"
+    "/admin/transcodes" =>
+      "pre-existing, unrelated to scope: the template reads @streams.jobs.list, " <>
+        "which LiveView 1.2 streams no longer have, so its static render raises"
   }
 
   # Routes naming a seeded record must render it, not bounce to "/" or 404.
