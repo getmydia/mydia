@@ -12,9 +12,11 @@
 # -v "$HOME/.cache/mydia-mpv-prefix:/opt/mpv-prefix" to keep the mpv stack
 # between runs.
 #
-# 22.04 sets the glibc floor (2.35). Flutter comes from player/.fvmrc and Rust
-# from rust-toolchain.toml, as in player/flatpak/build.sh; neither version is
-# named here (see the pin guards in ci-nix.yml and ci.yml).
+# 22.04 sets the glibc floor at 2.35.
+# The Flutter SDK comes from player/.fvmrc and Rust from rust-toolchain.toml,
+# as in player/flatpak/build.sh; neither version is named here (see the pin
+# guards in ci-nix.yml and ci.yml, which fail on a line naming the SDK next to
+# anything that looks like a version).
 set -euo pipefail
 
 ROOT="$PWD"
