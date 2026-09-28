@@ -447,7 +447,17 @@ defmodule Mydia.Accounts do
   """
   @spec refresh_access_restrictions_flag() :: :ok
   def refresh_access_restrictions_flag do
-    :persistent_term.put(@restrictions_flag, Repo.exists?(AccessRestriction))
+    if Repo.exists?(AccessRestriction) do
+      :persistent_term.put(@restrictions_flag, true)
+    else
+      # The endpoint is already serving while this runs, so an admin can save
+      # the first restriction between the count above and this write. Its
+      # upsert commits before it marks the flag, so either that mark lands
+      # after this false, or its row is visible to the second count below.
+      :persistent_term.put(@restrictions_flag, false)
+      if Repo.exists?(AccessRestriction), do: :persistent_term.put(@restrictions_flag, true)
+    end
+
     :ok
   rescue
     error ->

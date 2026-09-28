@@ -33,7 +33,8 @@ defmodule Mydia.Accounts.Scope do
         }
 
   @doc """
-  Builds the scope for a user, loading their restriction row if there may be one. See Mydia.Accounts.access_restrictions_possible?/0.
+  Builds the scope for a user, loading their restriction row if there may be
+  one. See `Mydia.Accounts.access_restrictions_possible?/0`.
   """
   @spec for_user(User.t()) :: t()
   def for_user(%User{role: "admin"} = user), do: %__MODULE__{user: user}
