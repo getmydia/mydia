@@ -152,15 +152,13 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
 
           path = Map.get(paths, route.path, route.path)
 
-          cond do
-            path == route.path and String.contains?(route.path, [":", "*"]) ->
-              ["#{route.path}: has params but no entry in filled_paths/1" | acc]
-
-            true ->
-              case check(conn, route.path, path) do
-                :ok -> acc
-                {:error, reason} -> ["#{route.path} (#{path}): #{reason}" | acc]
-              end
+          if path == route.path and String.contains?(route.path, [":", "*"]) do
+            ["#{route.path}: has params but no entry in filled_paths/1" | acc]
+          else
+            case check(conn, route.path, path) do
+              :ok -> acc
+              {:error, reason} -> ["#{route.path} (#{path}): #{reason}" | acc]
+            end
           end
       end
 
