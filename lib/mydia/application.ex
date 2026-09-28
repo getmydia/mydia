@@ -96,6 +96,11 @@ defmodule Mydia.Application do
         # once drained, this is one query returning nothing. enqueue_once/0
         # protects its own Oban.insert/1 call.
         Mydia.Jobs.ShowFileRepair.enqueue_once()
+        # Derives content_rating_age for rows written before the column
+        # existed. Without it every existing title stays unrated, and the first
+        # age limit an admin sets hides the whole library. Idempotent by row
+        # state; enqueue_once/0 never raises.
+        Mydia.Jobs.ContentRatingAgeBackfill.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end

@@ -62,4 +62,37 @@ defmodule Mydia.Jobs.ContentRatingAgeBackfillTest do
 
     assert Repo.get!(MediaItem, item.id).content_rating_age == 0
   end
+
+  test "walks the library in batches until every row is filled" do
+    items = for _ <- 1..5, do: item_with_rating("TV-14")
+
+    assert :ok = perform_job(ContentRatingAgeBackfill, %{"batch_size" => 2})
+
+    for item <- items do
+      assert Repo.get!(MediaItem, item.id).content_rating_age == 14
+    end
+  end
+
+  test "an unrecognized rating does not stall the batches behind it" do
+    unrecognized = for _ <- 1..3, do: item_with_rating("NOT-A-RATING")
+    recognized = item_with_rating("TV-14")
+
+    assert :ok = perform_job(ContentRatingAgeBackfill, %{"batch_size" => 2})
+
+    assert Repo.get!(MediaItem, recognized.id).content_rating_age == 14
+    for item <- unrecognized, do: assert(Repo.get!(MediaItem, item.id).content_rating_age == nil)
+  end
+
+  describe "enqueue_once/0" do
+    test "does not raise when no Oban instance is registered" do
+      # Oban is not started in the test environment, so Oban.insert/1 raises
+      # here exactly as it would at boot with no instance registered.
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert :ok = ContentRatingAgeBackfill.enqueue_once()
+        end)
+
+      assert log =~ "failed to enqueue"
+    end
+  end
 end
