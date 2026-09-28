@@ -637,6 +637,8 @@ jobs:
           ls -R artifacts/
 
       - name: Create release archives
+        env:
+          APPIMAGE_RESULT: ${{ needs.player-appimage.result }}
         run: |
           cd artifacts
           [ -d "mydia-player-android-apk" ] && \
@@ -652,7 +654,10 @@ jobs:
             chmod +x mydia-player-linux-bundle/mydia-player && \
             tar -czf mydia-player-linux-v${{ needs.prepare.outputs.version }}.tar.gz -C mydia-player-linux-bundle . || true
 
-          [ -f "mydia-player-linux-appimage/Mydia_Player-x86_64.AppImage" ] && \
+          # The artifact uploads before the smoke job runs, so it exists even
+          # when that job failed. A waived failure must leave it unpublished.
+          [ "$APPIMAGE_RESULT" = success ] && \
+            [ -f "mydia-player-linux-appimage/Mydia_Player-x86_64.AppImage" ] && \
             mv mydia-player-linux-appimage/Mydia_Player-x86_64.AppImage \
               mydia-player-linux-v${{ needs.prepare.outputs.version }}-x86_64.AppImage || true
 

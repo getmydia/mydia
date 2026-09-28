@@ -725,6 +725,8 @@ jobs:
     # 25+ minutes of mpv compile on a cold cache, so only when the packaging
     # itself changed. Release builds always run it.
     if: needs.changes.outputs.appimage == 'true'
+    permissions:
+      contents: read
     uses: ./.github/workflows/player-appimage.yml
     with:
       sha: ${{ github.event.pull_request.head.sha || github.sha }}

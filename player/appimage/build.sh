@@ -64,9 +64,15 @@ fetch() { # url tag dir
   [ -d "$SRC_DIR/$3" ] || git clone --depth 1 --recurse-submodules --branch "$2" "$1" "$SRC_DIR/$3"
 }
 
-if [ -e "$MPV_PREFIX/lib/libmpv.so.2" ]; then
+# The stamp records what the prefix was built from. A persistent local mount
+# otherwise keeps serving the old stack after a pin changes. The Wayland tags
+# below are part of the stack too, so the stamp hashes this script as well.
+STAMP="$("$ROOT/player/appimage/pins.sh"; sha256sum "$ROOT/player/appimage/build.sh" | cut -d' ' -f1)"
+if [ -e "$MPV_PREFIX/lib/libmpv.so.2" ] && [ "$(cat "$MPV_PREFIX/.pins" 2>/dev/null)" = "$STAMP" ]; then
   echo "Reusing $MPV_PREFIX (cached)"
 else
+  # fetch() skips a checkout that already exists, so old sources would win.
+  rm -rf "${MPV_PREFIX:?}"/* "${SRC_DIR:?}"/*
   fetch https://github.com/FFmpeg/FFmpeg.git "$FFMPEG_TAG" ffmpeg
   (cd "$SRC_DIR/ffmpeg" && ./configure --prefix="$MPV_PREFIX" \
       --enable-shared --disable-static --disable-programs --disable-doc \
@@ -108,6 +114,7 @@ else
     -Dmanpage-build=disabled -Dlua=disabled -Dwerror=false \
     -Dgl=enabled -Degl=enabled -Dx11=enabled -Dwayland=enabled -Dvaapi=enabled
   meson install -C "$SRC_DIR/mpv/build"
+  printf '%s' "$STAMP" > "$MPV_PREFIX/.pins"
 fi
 
 # --- Flutter and Rust --------------------------------------------------------
