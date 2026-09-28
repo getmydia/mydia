@@ -56,7 +56,7 @@ defmodule MydiaWeb.AdminNavLiveTest do
       guest = user_fixture(%{role: "guest"})
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Mydia.Accounts.Scope.unrestricted(), %{
           media_type: "movie",
           title: "The Paper Orchard",
           year: 2024,

@@ -3,9 +3,12 @@ defmodule Mydia.Media.AddTest do
 
   import ExUnit.CaptureLog
   import Mydia.SettingsFixtures
+  import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.Add
   alias Mydia.Media.MediaItem
+  alias Mydia.Metadata.Structs.MediaMetadata
 
   defp relay_config(bypass) do
     %{
@@ -90,8 +93,8 @@ defmodule Mydia.Media.AddTest do
       assert {:error, {:metadata, _reason}} =
                Add.resolve_attrs({:tvdb, tvdb_id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
-      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: tvdb_id})
     end
   end
 
@@ -101,7 +104,8 @@ defmodule Mydia.Media.AddTest do
       id = System.unique_integer([:positive])
       stub_tmdb_movie(bypass, id, "Created Movie", "/created.jpg")
 
-      assert {:ok, item} = Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
+      assert {:ok, item} =
+               Add.from_provider(Scope.unrestricted(), {:tmdb, id}, :movie, relay_config(bypass))
 
       assert item.title == "Created Movie"
       assert item.tmdb_id == id
@@ -114,9 +118,9 @@ defmodule Mydia.Media.AddTest do
       Bypass.down(bypass)
 
       assert {:error, {:metadata, _reason}} =
-               Add.from_provider({:tmdb, id}, :movie, relay_config(bypass))
+               Add.from_provider(Scope.unrestricted(), {:tmdb, id}, :movie, relay_config(bypass))
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: id})
     end
 
     test "creates nothing when a TVDB ref is sent down the movie path" do
@@ -124,10 +128,67 @@ defmodule Mydia.Media.AddTest do
       tvdb_id = System.unique_integer([:positive])
 
       assert {:error, {:metadata, :tvdb_ref_for_movie}} =
-               Add.from_provider({:tvdb, tvdb_id}, :movie, relay_config(bypass))
+               Add.from_provider(
+                 Scope.unrestricted(),
+                 {:tvdb, tvdb_id},
+                 :movie,
+                 relay_config(bypass)
+               )
 
-      refute Mydia.Media.find_by_external_ids(%{tmdb: tvdb_id})
-      refute Mydia.Media.find_by_external_ids(%{tvdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: tvdb_id})
+      refute Mydia.Media.find_by_external_ids(Scope.unrestricted(), %{tvdb: tvdb_id})
+    end
+  end
+
+  describe "from_attrs/4 with a restricted scope" do
+    # Media.create_media_item/3 can now refuse a write with {:error, :restricted}
+    # (a bare atom, not a changeset). insert_media_item/4 used to wrap every
+    # create_media_item error the same way, as {:error, {:changeset, reason}},
+    # which turned :restricted into {:error, {:changeset, :restricted}}. Every
+    # caller that ran that second element through
+    # MediaAddHelpers.format_changeset_errors/1 -- the "Add to Library" flow on
+    # Dashboard, Discover, the media detail franchise rail and recommendations
+    # rail -- would then crash calling Ecto.Changeset.traverse_errors/2 on an
+    # atom. This pins the fix: the atom must come back bare.
+    test "passes :restricted through bare rather than wrapping it as a changeset error" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      attrs = %{
+        type: "movie",
+        title: "Out Of Bounds",
+        year: 2024,
+        tmdb_id: System.unique_integer([:positive]),
+        metadata: %MediaMetadata{
+          provider_id: "1",
+          provider: :tmdb,
+          media_type: :movie,
+          genres: ["Thriller"],
+          content_rating: "R"
+        }
+      }
+
+      assert {:error, :restricted} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+    end
+
+    test "an in-bounds item still creates normally under a restricted scope" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      attrs = %{
+        type: "movie",
+        title: "In Bounds Cartoon",
+        year: 2024,
+        tmdb_id: System.unique_integer([:positive]),
+        metadata: %MediaMetadata{
+          provider_id: "2",
+          provider: :tmdb,
+          media_type: :movie,
+          genres: ["Animation"],
+          content_rating: "G"
+        }
+      }
+
+      assert {:ok, item} = Add.from_attrs(scope, attrs, nil, skip_episode_refresh: true)
+      assert item.category == "cartoon_movie"
     end
   end
 
@@ -280,7 +341,7 @@ defmodule Mydia.Media.AddTest do
         monitored: true
       }
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs)
+      assert {:error, {:already_in_library, found}} = Add.from_attrs(Scope.unrestricted(), attrs)
 
       assert found.id == existing.id
       assert found.tmdb_id == tmdb_id
@@ -311,7 +372,8 @@ defmodule Mydia.Media.AddTest do
 
       before_count = Repo.aggregate(MediaItem, :count)
 
-      assert {:ok, added} = Add.from_attrs(attrs, nil, skip_episode_refresh: true)
+      assert {:ok, added} =
+               Add.from_attrs(Scope.unrestricted(), attrs, nil, skip_episode_refresh: true)
 
       assert added.imdb_id == shared_imdb_id
       assert Repo.aggregate(MediaItem, :count) == before_count + 1
@@ -354,7 +416,8 @@ defmodule Mydia.Media.AddTest do
       assert is_nil(attrs.tvdb_id)
       assert attrs.metadata.external_ids.tvdb == taken_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tmdb_id == tmdb_id
@@ -399,7 +462,8 @@ defmodule Mydia.Media.AddTest do
       assert attrs.tvdb_id == fuzzy_tvdb_id
       assert attrs.metadata.external_ids.tvdb == taken_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tvdb_id == taken_tvdb_id
@@ -440,11 +504,12 @@ defmodule Mydia.Media.AddTest do
       assert attrs.tvdb_id == fuzzy_tvdb_id
       assert is_nil(attrs.metadata.external_ids.tvdb)
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert is_nil(found.tvdb_id)
-      assert is_nil(Mydia.Media.get_media_item!(existing.id).tvdb_id)
+      assert is_nil(Mydia.Media.get_media_item!(Scope.unrestricted(), existing.id).tvdb_id)
     end
 
     # The other half of the rule above: an id the provider itself
@@ -470,7 +535,8 @@ defmodule Mydia.Media.AddTest do
 
       assert attrs.metadata.external_ids.tvdb == exact_tvdb_id
 
-      assert {:error, {:already_in_library, found}} = Add.from_attrs(attrs, relay_config(bypass))
+      assert {:error, {:already_in_library, found}} =
+               Add.from_attrs(Scope.unrestricted(), attrs, relay_config(bypass))
 
       assert found.id == existing.id
       assert found.tvdb_id == exact_tvdb_id

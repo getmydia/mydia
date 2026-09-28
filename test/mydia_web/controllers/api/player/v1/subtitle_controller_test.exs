@@ -3,6 +3,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{Media, Repo}
 
   setup do
@@ -18,7 +19,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
 
     # Create test media item (movie)
     {:ok, movie} =
-      Media.create_media_item(%{
+      Media.create_media_item(Scope.unrestricted(), %{
         title: "Test Movie",
         type: "movie",
         library_path_id: library_path.id,
@@ -40,6 +41,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleControllerTest do
     # Create test episode (skip auto episode refresh to avoid unique constraint violations)
     {:ok, tv_show} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           title: "Test Show",
           type: "tv_show",

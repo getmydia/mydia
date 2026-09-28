@@ -10,6 +10,7 @@ defmodule Mydia.Media.LibraryStatusMapTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   test "keys a movie and a show sharing one tmdb id separately" do
@@ -20,7 +21,7 @@ defmodule Mydia.Media.LibraryStatusMapTest do
     show =
       media_item_fixture(%{type: "tv_show", title: "Harbour Lights: The Series", tmdb_id: shared})
 
-    map = Media.get_library_status_map()
+    map = Media.get_library_status_map(Scope.unrestricted())
 
     assert map[{:movie, :tmdb, shared}][:id] == movie.id
     assert map[{:tv_show, :tmdb, shared}][:id] == show.id
@@ -32,7 +33,7 @@ defmodule Mydia.Media.LibraryStatusMapTest do
     by_tmdb = media_item_fixture(%{type: "tv_show", title: "Signal Hill", tmdb_id: shared})
     by_tvdb = media_item_fixture(%{type: "tv_show", title: "Second Signal", tvdb_id: shared})
 
-    map = Media.get_library_status_map()
+    map = Media.get_library_status_map(Scope.unrestricted())
 
     assert map[{:tv_show, :tmdb, shared}][:id] == by_tmdb.id
     assert map[{:tv_show, :tvdb, shared}][:id] == by_tvdb.id
@@ -50,7 +51,7 @@ defmodule Mydia.Media.LibraryStatusMapTest do
         tvdb_id: tvdb_id
       })
 
-    map = Media.get_library_status_map()
+    map = Media.get_library_status_map(Scope.unrestricted())
 
     assert map[{:tv_show, :tmdb, tmdb_id}][:id] == show.id
     assert map[{:tv_show, :tvdb, tvdb_id}][:id] == show.id
@@ -67,13 +68,13 @@ defmodule Mydia.Media.LibraryStatusMapTest do
     })
 
     assert %{in_library: true, monitored: false, type: "movie"} =
-             Media.get_library_status_map()[{:movie, :tmdb, tmdb_id}]
+             Media.get_library_status_map(Scope.unrestricted())[{:movie, :tmdb, tmdb_id}]
   end
 
   test "skips rows with no provider id at all" do
     media_item_fixture(%{type: "movie", title: "No Provider Ids", imdb_id: "tt9999999"})
 
-    refute Enum.any?(Media.get_library_status_map(), fn {_key, entry} ->
+    refute Enum.any?(Media.get_library_status_map(Scope.unrestricted()), fn {_key, entry} ->
              entry[:type] == "movie" and entry[:id] == nil
            end)
   end

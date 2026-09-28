@@ -53,7 +53,11 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEventsTest do
 
   test "reset to auto clears override", %{conn: conn} do
     item = media_item_fixture(%{type: "movie", title: "Tidepool Academy", year: 2024})
-    {:ok, locked} = Media.update_category(item, :cartoon_movie, override: true)
+
+    {:ok, locked} =
+      Media.update_category(Mydia.Accounts.Scope.unrestricted(), item, :cartoon_movie,
+        override: true
+      )
 
     {:ok, view, _html} = live(conn, ~p"/media/#{locked.id}")
 

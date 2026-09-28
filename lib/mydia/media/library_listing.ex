@@ -19,6 +19,7 @@ defmodule Mydia.Media.LibraryListing do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Download
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaFileEpisode
@@ -28,6 +29,7 @@ defmodule Mydia.Media.LibraryListing do
   alias Mydia.Media.AvailabilityStatus
   alias Mydia.Media.Episode
   alias Mydia.Media.LibraryRow
+  alias Mydia.Media.Restrictions
   alias Mydia.Media.MediaItem
   alias Mydia.Playback.Progress
   alias Mydia.Repo
@@ -69,21 +71,20 @@ defmodule Mydia.Media.LibraryListing do
   `total_size` is the bytes on disk across every matching row, not only the
   page, so a filtered listing can report what the filter actually costs.
 
-  Filter options go to `Mydia.Media.media_items_query/1`: `:base_query`,
-  `:exclude_categories`, `:type`, `:monitored`, `:library_path_id`. Applied in
-  memory: `:search`, `:quality`, `:progress`, `:sort_by`, then `:offset`
-  (default 0) and `:limit`.
+  Filter options go to `Mydia.Media.media_items_query/2`, along with the
+  scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
+  `:monitored`, `:library_path_id`. Applied in memory: `:search`, `:quality`,
+  `:progress`, `:sort_by`, then `:offset` (default 0) and `:limit`.
   """
-  @spec page(keyword()) :: page()
-  def page(opts) do
+  @spec page(Scope.t(), keyword()) :: page()
+  def page(%Scope{} = scope, opts) do
     user_id = Keyword.fetch!(opts, :user_id)
     limit = Keyword.fetch!(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
 
     rows =
-      opts
-      |> Keyword.take(@filter_keys)
-      |> Media.media_items_query()
+      scope
+      |> Media.media_items_query(Keyword.take(opts, @filter_keys))
       |> build_rows()
       |> search(Keyword.get(opts, :search) || "")
       |> filter_quality(Keyword.get(opts, :quality))
@@ -101,11 +102,13 @@ defmodule Mydia.Media.LibraryListing do
 
   @doc """
   The row for one item, with `user_id`'s playback progress, or nil if the item
-  does not exist. Used to refresh a single card after it changes.
+  does not exist or the scope cannot see it. Used to refresh a single card after
+  it changes.
   """
-  @spec row(binary(), binary()) :: LibraryRow.t() | nil
-  def row(id, user_id) do
+  @spec row(Scope.t(), binary(), binary()) :: LibraryRow.t() | nil
+  def row(%Scope{} = scope, id, user_id) do
     from(m in MediaItem, where: m.id == ^id)
+    |> Restrictions.apply(scope)
     |> build_rows()
     |> put_progress(user_id)
     |> List.first()
@@ -386,9 +389,9 @@ defmodule Mydia.Media.LibraryListing do
   #
   # Enum.sort_by/3 is stable, so a sort on total_size alone would only
   # preserve the incoming row order for ties. That incoming order comes from
-  # Media.media_items_query/1, which has no ORDER BY, so it is whatever the
+  # Media.media_items_query/2, which has no ORDER BY, so it is whatever the
   # database happens to return for an unordered scan and it can change
-  # between two requests for the same page. page/1 re-sorts the whole list on
+  # between two requests for the same page. page/2 re-sorts the whole list on
   # every request, including each load_more, so an unstable tie group
   # reshuffles, duplicating or skipping rows across the page boundary. The
   # sort key below is total, breaking ties by title and then id so the same

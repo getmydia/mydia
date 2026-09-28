@@ -47,7 +47,9 @@ defmodule Mydia.Collections.SmartRules do
 
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Restrictions
   alias Mydia.Repo
   alias Mydia.DB
 
@@ -162,18 +164,26 @@ defmodule Mydia.Collections.SmartRules do
     - `:limit` - Override the limit in rules
     - `:offset` - Number of items to skip
 
+  `scope`, when given, applies `Mydia.Media.Restrictions.apply/2` right after
+  the base `MediaItem` query is built, so a restricted caller never sees rows
+  outside their allowed categories or age limit, however permissive the rules
+  themselves are. `nil` (the default) applies no restriction, which keeps this
+  a backwards-compatible arity for callers with no scope to give, such as
+  `Collections.item_count/1`.
+
   Returns `{:ok, items}` on success or `{:error, reason}` on failure.
-  For backwards compatibility, you can also use `execute_query!/2` which
+  For backwards compatibility, you can also use `execute_query!/3` which
   returns items directly or an empty list on error.
   """
-  def execute_query(rules, opts \\ [])
+  def execute_query(rules, opts \\ [], scope \\ nil)
 
-  def execute_query(rules, opts) when is_map(rules) do
+  def execute_query(rules, opts, scope) when is_map(rules) do
     case query(rules) do
       {:ok, q} ->
         try do
           items =
             q
+            |> maybe_apply_scope(scope)
             |> apply_sort(rules)
             |> apply_limit(rules, opts)
             |> apply_offset(opts)
@@ -194,19 +204,19 @@ defmodule Mydia.Collections.SmartRules do
     end
   end
 
-  def execute_query(rules, opts) when is_binary(rules) do
+  def execute_query(rules, opts, scope) when is_binary(rules) do
     case Jason.decode(rules) do
-      {:ok, decoded} -> execute_query(decoded, opts)
+      {:ok, decoded} -> execute_query(decoded, opts, scope)
       {:error, _} -> {:error, "Invalid JSON"}
     end
   end
 
   @doc """
   Executes a smart rules query and returns items directly.
-  Returns an empty list on any error.
+  Returns an empty list on any error. See `execute_query/3` for `scope`.
   """
-  def execute_query!(rules, opts \\ []) do
-    case execute_query(rules, opts) do
+  def execute_query!(rules, opts \\ [], scope \\ nil) do
+    case execute_query(rules, opts, scope) do
       {:ok, items} -> items
       {:error, _} -> []
     end
@@ -214,14 +224,17 @@ defmodule Mydia.Collections.SmartRules do
 
   @doc """
   Returns the count of items matching the smart rules.
-  Returns 0 on any error.
+  Returns 0 on any error. See `execute_query/3` for `scope`.
   """
-  def execute_count(rules) when is_map(rules) do
+  def execute_count(rules, scope \\ nil)
+
+  def execute_count(rules, scope) when is_map(rules) do
     case validate(rules) do
       {:ok, _} ->
         try do
           rules
           |> build_query()
+          |> maybe_apply_scope(scope)
           |> apply_limit(rules, [])
           |> Repo.aggregate(:count)
         rescue
@@ -234,9 +247,9 @@ defmodule Mydia.Collections.SmartRules do
     end
   end
 
-  def execute_count(rules) when is_binary(rules) do
+  def execute_count(rules, scope) when is_binary(rules) do
     case Jason.decode(rules) do
-      {:ok, decoded} -> execute_count(decoded)
+      {:ok, decoded} -> execute_count(decoded, scope)
       {:error, _} -> 0
     end
   end
@@ -244,9 +257,10 @@ defmodule Mydia.Collections.SmartRules do
   @doc """
   Returns a preview of items matching the rules (limited to 10 items).
   Useful for showing users what a smart collection will contain.
+  See `execute_query/3` for `scope`.
   """
-  def preview(rules, limit \\ 10) do
-    execute_query!(rules, limit: limit)
+  def preview(rules, limit \\ 10, scope \\ nil) do
+    execute_query!(rules, [limit: limit], scope)
   end
 
   @doc """
@@ -491,6 +505,11 @@ defmodule Mydia.Collections.SmartRules do
       end)
     end
   end
+
+  # Applied right after `build_query/1` while `MediaItem` is still the query's
+  # only binding, so `Restrictions.apply/2` attaches its `where` clauses there.
+  defp maybe_apply_scope(query, nil), do: query
+  defp maybe_apply_scope(query, %Scope{} = scope), do: Restrictions.apply(query, scope)
 
   defp apply_condition(query, condition, match_type) do
     field = Map.get(condition, "field")

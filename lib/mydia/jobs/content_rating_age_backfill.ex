@@ -1,0 +1,122 @@
+defmodule Mydia.Jobs.ContentRatingAgeBackfill do
+  @moduledoc """
+  Derives `media_items.content_rating_age` for rows written before that column
+  existed.
+
+  Pure computation over metadata already stored, with no network calls, so it
+  finishes in one pass over the library. It cannot help a title that has no
+  rating stored at all, which on a default install is every TVDB-sourced show
+  until a metadata refresh reaches it.
+
+  Idempotent and cheap to re-run, but not self-limiting: a row whose rating
+  is absent or unrecognized derives to `nil`, `content_rating_age` stays
+  NULL, and the row keeps matching `is_nil(content_rating_age)` on every
+  future run until a metadata refresh gives it a recognizable rating.
+
+  Enqueued on every boot by `enqueue_once/0`. It walks the unrated rows in
+  keyset batches of 500 so a large library is never loaded at once. Rows with
+  an unrecognized rating stay NULL and are re-read on each boot, so the per
+  boot cost is one pass over that remainder, which only a metadata refresh
+  shrinks.
+  """
+
+  use Oban.Worker,
+    queue: :media,
+    max_attempts: 3,
+    unique: [
+      period: 3_600,
+      states: [:suspended, :available, :scheduled, :executing, :retryable]
+    ]
+
+  import Ecto.Query
+
+  require Logger
+
+  alias Mydia.Media.ContentRating
+  alias Mydia.Media.MediaItem
+  alias Mydia.Repo
+
+  @batch_size 500
+
+  @spec perform(Oban.Job.t()) :: :ok
+  @impl Oban.Worker
+  def perform(%Oban.Job{args: args}) do
+    batch_size = Map.get(args, "batch_size", @batch_size)
+    updated = backfill_after(nil, batch_size, 0)
+
+    Logger.info("ContentRatingAgeBackfill filled #{updated} media items")
+
+    :ok
+  end
+
+  @doc """
+  Enqueues one run. Called at boot; never raises, matching
+  `Mydia.Jobs.HdrBackfill.enqueue_once/0`.
+  """
+  @spec enqueue_once() :: :ok
+  def enqueue_once do
+    %{} |> new() |> Oban.insert()
+    :ok
+  rescue
+    error ->
+      Logger.warning("ContentRatingAgeBackfill: failed to enqueue on boot", error: inspect(error))
+      :ok
+  end
+
+  # Keyset pagination on id: a row this pass fills drops out of the predicate,
+  # and a row it cannot fill stays behind the cursor, so neither repeats.
+  defp backfill_after(after_id, batch_size, acc) do
+    case next_batch(after_id, batch_size) do
+      [] ->
+        acc
+
+      batch ->
+        acc =
+          Enum.reduce(batch, acc, fn item, acc ->
+            case derive(item) do
+              nil -> acc
+              age -> acc + set_age(item, age)
+            end
+          end)
+
+        backfill_after(List.last(batch).id, batch_size, acc)
+    end
+  end
+
+  defp next_batch(after_id, batch_size) do
+    from(m in MediaItem,
+      where: is_nil(m.content_rating_age) and not is_nil(m.metadata),
+      order_by: m.id,
+      limit: ^batch_size,
+      select: struct(m, [:id, :metadata, :updated_at])
+    )
+    |> after_id(after_id)
+    |> Repo.all()
+  end
+
+  defp after_id(query, nil), do: query
+  defp after_id(query, id), do: from(m in query, where: m.id > ^id)
+
+  defp derive(%MediaItem{metadata: %{content_rating: rating}}),
+    do: ContentRating.min_age(rating)
+
+  defp derive(_item), do: nil
+
+  # update_all rather than a changeset, so the metadata blob is not rewritten
+  # and updated_at does not move for a purely derived value.
+  #
+  # Guarded on the row being unchanged since it was read: a metadata refresh
+  # in between derives its own age through MediaItem.changeset/2 and bumps
+  # updated_at, and this stale value must not overwrite it.
+  defp set_age(%MediaItem{id: id, updated_at: updated_at}, age) do
+    {count, _} =
+      Repo.update_all(
+        from(m in MediaItem,
+          where: m.id == ^id and m.updated_at == ^updated_at and is_nil(m.content_rating_age)
+        ),
+        set: [content_rating_age: age]
+      )
+
+    count
+  end
+end

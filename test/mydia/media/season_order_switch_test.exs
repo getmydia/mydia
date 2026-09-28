@@ -13,6 +13,7 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MediaItem
   alias Mydia.Media.SeasonOrder
@@ -92,15 +93,15 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
   end
 
   defp coordinates(show) do
-    show.id
-    |> Media.list_episodes()
+    Scope.unrestricted()
+    |> Media.list_episodes(show.id)
     |> Enum.map(&{&1.season_number, &1.episode_number})
     |> Enum.sort()
   end
 
   defp provider_ids(show) do
-    show.id
-    |> Media.list_episodes()
+    Scope.unrestricted()
+    |> Media.list_episodes(show.id)
     |> Enum.map(& &1.provider_episode_id)
     |> Enum.sort()
   end
@@ -119,7 +120,9 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
       stub_series(bypass, tvdb_id, official_id, dvd_ids)
 
       show = untagged_show(tvdb_id)
-      ids_before = show.id |> Media.list_episodes() |> Enum.map(& &1.id) |> Enum.sort()
+
+      ids_before =
+        Media.list_episodes(Scope.unrestricted(), show.id) |> Enum.map(& &1.id) |> Enum.sort()
 
       assert {:ok, 4} = SeasonOrder.switch(show, :dvd, config(bypass))
 
@@ -128,7 +131,9 @@ defmodule Mydia.Media.SeasonOrderSwitchTest do
 
       # Same rows throughout: file links, watch history and monitored flags
       # ride on these ids.
-      assert show.id |> Media.list_episodes() |> Enum.map(& &1.id) |> Enum.sort() == ids_before
+      assert Media.list_episodes(Scope.unrestricted(), show.id)
+             |> Enum.map(& &1.id)
+             |> Enum.sort() == ids_before
 
       assert Repo.get!(MediaItem, show.id).season_order == :dvd
     end

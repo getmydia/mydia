@@ -3,6 +3,7 @@ defmodule Mydia.Media.UpdateAuditTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.{Events, Media}
   alias Mydia.Events.Presentation
 
@@ -19,7 +20,10 @@ defmodule Mydia.Media.UpdateAuditTest do
     before = length(updated_events(item))
 
     assert {:ok, _} =
-             Media.update_media_item(item, %{metadata: %{vote_average: 7.84}},
+             Media.update_media_item(
+               Scope.unrestricted(),
+               item,
+               %{metadata: %{vote_average: 7.84}},
                reason: "Metadata refreshed"
              )
 
@@ -31,7 +35,10 @@ defmodule Mydia.Media.UpdateAuditTest do
     before = updated_events(item)
 
     assert {:ok, _} =
-             Media.update_media_item(item, %{metadata: %{vote_average: 7.9}},
+             Media.update_media_item(
+               Scope.unrestricted(),
+               item,
+               %{metadata: %{vote_average: 7.9}},
                reason: "Metadata refreshed"
              )
 

@@ -4,7 +4,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
   """
 
   alias Mydia.{Media, Playback, Repo}
-  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.{Episode, MediaItem, Restrictions}
 
   def update_movie_progress(_parent, args, %{context: context}) do
     %{movie_id: movie_id, position_seconds: position} = args
@@ -78,7 +78,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.mark_watched(user.id, media_item_id: movie_id) do
           {:ok, _progress} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
           {:error, :not_found} ->
@@ -89,7 +89,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
                    watched: true
                  }) do
               {:ok, _} ->
-                movie = Media.get_media_item!(movie_id)
+                movie = Media.get_media_item!(context[:current_scope], movie_id)
                 {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
               {:error, changeset} ->
@@ -107,11 +107,11 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.delete_progress(user.id, media_item_id: movie_id) do
           {:ok, _} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
 
           {:error, :not_found} ->
-            movie = Media.get_media_item!(movie_id)
+            movie = Media.get_media_item!(context[:current_scope], movie_id)
             {:ok, Map.put(movie, :added_at, movie.inserted_at)}
         end
     end
@@ -125,7 +125,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.mark_watched(user.id, episode_id: episode_id) do
           {:ok, _progress} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
           {:error, :not_found} ->
             # Create watched progress if it doesn't exist
@@ -135,7 +135,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
                    watched: true
                  }) do
               {:ok, _} ->
-                {:ok, Media.get_episode!(episode_id)}
+                {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
               {:error, changeset} ->
                 {:error, format_changeset_errors(changeset)}
@@ -152,10 +152,10 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
       user ->
         case Playback.delete_progress(user.id, episode_id: episode_id) do
           {:ok, _} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
 
           {:error, :not_found} ->
-            {:ok, Media.get_episode!(episode_id)}
+            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
         end
     end
   end
@@ -168,7 +168,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        with {:ok, show} <- load_show(show_id) do
+        with {:ok, show} <- load_show(context[:current_scope], show_id) do
           :ok = Playback.mark_season_watched(user.id, show_id, season_number)
           {:ok, show}
         end
@@ -183,7 +183,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        with {:ok, show} <- load_show(show_id),
+        with {:ok, show} <- load_show(context[:current_scope], show_id),
              :ok <- Playback.mark_season_unwatched(user.id, show_id, season_number) do
           {:ok, show}
         end
@@ -196,8 +196,8 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        with {:ok, episode} <- load_episode(episode_id),
-             {:ok, show} <- load_show(episode.media_item_id) do
+        with {:ok, episode} <- load_episode(context[:current_scope], episode_id),
+             {:ok, show} <- load_show(context[:current_scope], episode.media_item_id) do
           :ok = Playback.mark_episodes_up_to_watched(user.id, episode_id)
           {:ok, show}
         end
@@ -255,16 +255,18 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
 
   # Private helper functions
 
-  # Safe loaders return an error tuple (not a raised 500) for unknown ids.
-  defp load_show(show_id) do
-    case Repo.get(MediaItem, show_id) do
+  # Safe loaders return an error tuple (not a raised 500) for unknown ids. A
+  # title outside the caller's scope reads as unknown, so a restricted account
+  # can neither see it nor change its watch state.
+  defp load_show(scope, show_id) do
+    case MediaItem |> Restrictions.apply(scope) |> Repo.get(show_id) do
       nil -> {:error, "Show not found"}
       show -> {:ok, Map.put(show, :added_at, show.inserted_at)}
     end
   end
 
-  defp load_episode(episode_id) do
-    case Repo.get(Episode, episode_id) do
+  defp load_episode(scope, episode_id) do
+    case Episode |> Restrictions.apply_to_episodes(scope) |> Repo.get(episode_id) do
       nil -> {:error, "Episode not found"}
       episode -> {:ok, episode}
     end

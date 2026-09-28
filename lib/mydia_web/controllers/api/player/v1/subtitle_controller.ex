@@ -15,6 +15,7 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
   alias Mydia.Subtitles.Extractor
+  alias MydiaWeb.MediaAccess
 
   require Logger
 
@@ -46,13 +47,21 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
     - 500: Server error
   """
   def index(conn, %{"type" => type, "id" => id}) do
-    case resolve_media_file(type, id) do
+    case resolve_media_file(conn.assigns.current_scope, type, id) do
       {:ok, media_file} ->
-        tracks = Extractor.list_subtitle_tracks(media_file)
+        case MediaAccess.authorize_media_file(conn, media_file) do
+          :denied ->
+            conn
+            |> put_status(:not_found)
+            |> json(%{error: "Media not found"})
 
-        json(conn, %{
-          data: tracks
-        })
+          :ok ->
+            tracks = Extractor.list_subtitle_tracks(media_file)
+
+            json(conn, %{
+              data: tracks
+            })
+        end
 
       {:error, :not_found} ->
         conn
@@ -98,57 +107,16 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
     # Parse track_id - could be integer (embedded) or string (external)
     track_id = parse_track_id(track_param)
 
-    case resolve_media_file(type, id) do
+    case resolve_media_file(conn.assigns.current_scope, type, id) do
       {:ok, media_file} ->
-        case Mydia.Subtitles.Delivery.content(media_file, track_id, format) do
-          {:ok, body} ->
+        case MediaAccess.authorize_media_file(conn, media_file) do
+          :denied ->
             conn
-            |> put_resp_header("content-type", get_subtitle_mime_type(format))
-            |> put_resp_header(
-              "content-disposition",
-              "inline; filename=\"subtitle-#{track_id}.#{format}\""
-            )
-            |> send_resp(200, body)
+            |> put_status(:not_found)
+            |> json(%{error: "Media not found"})
 
-          {:error, :image_subtitle} ->
-            conn
-            |> put_status(:unsupported_media_type)
-            |> json(%{error: "Image-based subtitles cannot be converted to text"})
-
-          {:error, :subtitle_not_found} ->
-            conn |> put_status(:not_found) |> json(%{error: "Subtitle track not found"})
-
-          {:error, :file_not_found} ->
-            conn |> put_status(:not_found) |> json(%{error: "Subtitle file not found on disk"})
-
-          {:error, :unauthorized} ->
-            conn |> put_status(:forbidden) |> json(%{error: "Unauthorized access to subtitle"})
-
-          {:error, :media_file_not_found} ->
-            conn |> put_status(:not_found) |> json(%{error: "Media file not found on disk"})
-
-          # An unsupported `format` is the caller asking for something that does
-          # not exist, not the server failing. It arrives from a query
-          # parameter, so it is entirely client-controlled.
-          {:error, {:unsupported_format, requested}} ->
-            conn
-            |> put_status(:bad_request)
-            |> json(%{
-              error: "Unsupported subtitle format",
-              requested: to_string(requested),
-              supported: Mydia.Subtitles.Subtitle.supported_formats()
-            })
-
-          {:error, reason} ->
-            Logger.error("Failed to deliver subtitle",
-              media_file_id: media_file.id,
-              track_id: track_id,
-              reason: inspect(reason)
-            )
-
-            conn
-            |> put_status(:internal_server_error)
-            |> json(%{error: "Failed to extract subtitle track"})
+          :ok ->
+            deliver_subtitle(conn, media_file, track_id, format)
         end
 
       {:error, :not_found} ->
@@ -170,13 +138,66 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
   ## Private Functions
 
+  defp deliver_subtitle(conn, media_file, track_id, format) do
+    case Mydia.Subtitles.Delivery.content(media_file, track_id, format) do
+      {:ok, body} ->
+        conn
+        |> put_resp_header("content-type", get_subtitle_mime_type(format))
+        |> put_resp_header(
+          "content-disposition",
+          "inline; filename=\"subtitle-#{track_id}.#{format}\""
+        )
+        |> send_resp(200, body)
+
+      {:error, :image_subtitle} ->
+        conn
+        |> put_status(:unsupported_media_type)
+        |> json(%{error: "Image-based subtitles cannot be converted to text"})
+
+      {:error, :subtitle_not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "Subtitle track not found"})
+
+      {:error, :file_not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "Subtitle file not found on disk"})
+
+      {:error, :unauthorized} ->
+        conn |> put_status(:forbidden) |> json(%{error: "Unauthorized access to subtitle"})
+
+      {:error, :media_file_not_found} ->
+        conn |> put_status(:not_found) |> json(%{error: "Media file not found on disk"})
+
+      # An unsupported `format` is the caller asking for something that does
+      # not exist, not the server failing. It arrives from a query
+      # parameter, so it is entirely client-controlled.
+      {:error, {:unsupported_format, requested}} ->
+        conn
+        |> put_status(:bad_request)
+        |> json(%{
+          error: "Unsupported subtitle format",
+          requested: to_string(requested),
+          supported: Mydia.Subtitles.Subtitle.supported_formats()
+        })
+
+      {:error, reason} ->
+        Logger.error("Failed to deliver subtitle",
+          media_file_id: media_file.id,
+          track_id: track_id,
+          reason: inspect(reason)
+        )
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Failed to extract subtitle track"})
+    end
+  end
+
   # Resolves a media file from type and ID
-  defp resolve_media_file(type, id) do
+  defp resolve_media_file(scope, type, id) do
     case type do
       "movie" ->
         try do
           media_item =
-            Mydia.Media.get_media_item!(id, preload: [media_files: active_files_query()])
+            Mydia.Media.get_media_item!(scope, id, preload: [media_files: active_files_query()])
 
           case FileRanking.best(media_item.media_files) do
             nil -> {:error, :no_media_files}
@@ -188,7 +209,8 @@ defmodule MydiaWeb.Api.Player.V1.SubtitleController do
 
       "episode" ->
         try do
-          episode = Mydia.Media.get_episode!(id, preload: [media_files: active_files_query()])
+          episode =
+            Mydia.Media.get_episode!(scope, id, preload: [media_files: active_files_query()])
 
           case FileRanking.best(episode.media_files) do
             nil -> {:error, :no_media_files}

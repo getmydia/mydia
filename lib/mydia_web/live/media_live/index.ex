@@ -169,9 +169,15 @@ defmodule MydiaWeb.MediaLive.Index do
     pinned = Collections.pinned_categories(socket.assigns[:sections] || [])
 
     cond do
-      Accounts.anime_nudge_dismissed?(user) -> false
-      Enum.any?(anime, &(&1 in pinned)) -> false
-      true -> Media.count_media_items(category_in: anime) >= @anime_nudge_threshold
+      Accounts.anime_nudge_dismissed?(user) ->
+        false
+
+      Enum.any?(anime, &(&1 in pinned)) ->
+        false
+
+      true ->
+        Media.count_media_items(socket.assigns.current_scope, category_in: anime) >=
+          @anime_nudge_threshold
     end
   end
 
@@ -392,7 +398,7 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("batch_monitor", _params, socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
 
-    case Media.update_media_items_monitored(selected_ids, true) do
+    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, true) do
       {:ok, count} ->
         {:noreply,
          socket
@@ -409,7 +415,7 @@ defmodule MydiaWeb.MediaLive.Index do
   def handle_event("batch_unmonitor", _params, socket) do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
 
-    case Media.update_media_items_monitored(selected_ids, false) do
+    case Media.update_media_items_monitored(socket.assigns.current_scope, selected_ids, false) do
       {:ok, count} ->
         {:noreply,
          socket
@@ -424,15 +430,22 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("toggle_item_monitored", %{"id" => id}, socket) do
-    media_item = Media.get_media_item!(id)
+    media_item = Media.get_media_item!(socket.assigns.current_scope, id)
     new_monitored_status = !media_item.monitored
 
-    case Media.update_media_item(media_item, %{monitored: new_monitored_status},
+    case Media.update_media_item(
+           socket.assigns.current_scope,
+           media_item,
+           %{monitored: new_monitored_status},
            reason: if(new_monitored_status, do: "Monitoring enabled", else: "Monitoring disabled")
          ) do
       {:ok, _updated_item} ->
         socket =
-          case LibraryListing.row(id, socket.assigns.current_user.id) do
+          case LibraryListing.row(
+                 socket.assigns.current_scope,
+                 id,
+                 socket.assigns.current_user.id
+               ) do
             nil -> socket
             row -> stream_insert(socket, :media_items, row)
           end
@@ -530,7 +543,9 @@ defmodule MydiaWeb.MediaLive.Index do
     selected_ids = MapSet.to_list(socket.assigns.selected_ids)
     delete_files = socket.assigns.delete_files
 
-    case Media.delete_media_items(selected_ids, delete_files: delete_files) do
+    case Media.delete_media_items(socket.assigns.current_scope, selected_ids,
+           delete_files: delete_files
+         ) do
       {:ok, count, %DiskRemoval{} = removal} ->
         {kind, message} = DiskRemovalFlash.for_items(count, delete_files, removal)
 
@@ -575,7 +590,7 @@ defmodule MydiaWeb.MediaLive.Index do
       |> maybe_add_attr(:quality_profile_id, params["quality_profile_id"])
       |> maybe_add_attr(:monitored, params["monitored"])
 
-    case Media.update_media_items_batch(selected_ids, attrs) do
+    case Media.update_media_items_batch(socket.assigns.current_scope, selected_ids, attrs) do
       {:ok, count} ->
         {:noreply,
          socket
@@ -594,13 +609,14 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   def handle_event("show_add_to_collection", _params, socket) do
-    user = socket.assigns.current_scope.user
+    scope = socket.assigns.current_scope
+    user = scope.user
     user_collections = Collections.list_collections(user, type: "manual", include_shared: false)
 
     # Add item counts for each collection
     user_collections_with_counts =
       Enum.map(user_collections, fn collection ->
-        %{collection | item_count: Collections.item_count(collection)}
+        %{collection | item_count: Collections.item_count(scope, collection)}
       end)
 
     {:noreply,
@@ -920,7 +936,11 @@ defmodule MydiaWeb.MediaLive.Index do
     offset = if page == 0, do: 0, else: @items_per_page + (page - 1) * @items_per_scroll
     limit = if page == 0, do: @items_per_page, else: @items_per_scroll
 
-    listing = LibraryListing.page(listing_opts(socket.assigns, offset: offset, limit: limit))
+    listing =
+      LibraryListing.page(
+        socket.assigns.current_scope,
+        listing_opts(socket.assigns, offset: offset, limit: limit)
+      )
 
     socket
     |> assign(:has_more, listing.has_more?)
@@ -935,7 +955,11 @@ defmodule MydiaWeb.MediaLive.Index do
   # Selects everything the current filters match, including items past the
   # rendered page. limit: 0 skips loading progress for rows nobody renders.
   defp select_all_visible(socket) do
-    %{visible_ids: ids} = LibraryListing.page(listing_opts(socket.assigns, offset: 0, limit: 0))
+    %{visible_ids: ids} =
+      LibraryListing.page(
+        socket.assigns.current_scope,
+        listing_opts(socket.assigns, offset: 0, limit: 0)
+      )
 
     assign(socket, :selected_ids, ids)
   end

@@ -6,6 +6,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.MediaRequests
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.MediaLive.Show.RecommendationEvents
@@ -33,8 +34,11 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       selected_item: nil
     }
 
+    merged = Map.merge(defaults, assigns)
+    merged = Map.put_new(merged, :current_scope, Scope.for_user(merged.current_user))
+
     %Phoenix.LiveView.Socket{
-      assigns: Map.merge(defaults, assigns),
+      assigns: merged,
       private: %{live_temp: %{}}
     }
   end
@@ -63,7 +67,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       untouched_tmdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Requested Rec",
           tmdb_id: requested_tmdb_id,
@@ -113,7 +117,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       requested_tmdb_id = System.unique_integer([:positive])
 
       {:ok, _request} =
-        MediaRequests.create_request(%{
+        MediaRequests.create_request(Scope.unrestricted(), %{
           media_type: "movie",
           title: "Requested Rec",
           tmdb_id: requested_tmdb_id,
@@ -133,6 +137,51 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
         )
 
       assert Map.get(requested, :request_status) == nil
+    end
+
+    # If handle_load_result/2 ever stopped piping results through
+    # RemoteFilter.filter/2 (or passed the wrong scope), this is the test
+    # that would catch it. Both prior tests in this describe block use an
+    # unrestricted scope (the default stub_socket/1 fills in via
+    # Scope.for_user/1 on a plain "user"), which never exercises the filter
+    # at all.
+    test "a category-restricted scope drops an out-of-bounds recommendation" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      # No genre_ids set, so it classifies as plain "movie" -- out of bounds
+      # for a cartoon_movie-only scope.
+      results = [result(%{provider_id: to_string(System.unique_integer([:positive]))})]
+
+      socket = stub_socket(%{media_item: current, current_scope: scope})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      assert socket.assigns.recommendations == []
+    end
+
+    test "an unrestricted scope keeps the same recommendation" do
+      current =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Current",
+          tmdb_id: System.unique_integer([:positive])
+        })
+
+      tmdb_id = System.unique_integer([:positive])
+      results = [result(%{provider_id: to_string(tmdb_id)})]
+
+      socket = stub_socket(%{media_item: current, current_scope: Scope.unrestricted()})
+
+      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
+
+      assert Enum.any?(socket.assigns.recommendations, &(&1.provider_id == to_string(tmdb_id)))
     end
   end
 

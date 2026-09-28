@@ -7,7 +7,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
   alias Mydia.Media
   alias MydiaWeb.Live.Authorization
 
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
+  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
 
   def show_category_modal(_params, socket) do
     media_item = socket.assigns.media_item
@@ -61,7 +61,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
           _ -> false
         end
 
-      case Media.update_category(media_item, category,
+      case Media.update_category(socket.assigns.current_scope, media_item, category,
              override: override,
              reason: "Category updated",
              actor_type: :user,
@@ -74,6 +74,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
            |> assign(:show_category_modal, false)
            |> assign(:category_form, nil)
            |> put_flash(:info, "Category updated successfully")}
+
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply, assign(socket, :category_form, Phoenix.Component.to_form(changeset))}
@@ -89,7 +92,7 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       media_item = socket.assigns.media_item
       new_category = Mydia.Media.CategoryClassifier.classify(media_item)
 
-      case Media.update_category(media_item, new_category,
+      case Media.update_category(socket.assigns.current_scope, media_item, new_category,
              override: false,
              reason: "Category reset to auto-detected",
              actor_type: :user,
@@ -105,6 +108,9 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
              :info,
              "Category reset to auto-detected: #{category_display_name(new_category)}"
            )}
+
+        {:error, :restricted} ->
+          {:noreply, put_flash(socket, :error, Media.restricted_message())}
 
         {:error, %Ecto.Changeset{} = changeset} ->
           {:noreply,
@@ -131,12 +137,13 @@ defmodule MydiaWeb.MediaLive.Show.CategoryEvents do
       quality_profile_id = if profile_id == "", do: nil, else: profile_id
 
       case Media.update_media_item(
+             socket.assigns.current_scope,
              media_item,
              %{quality_profile_id: quality_profile_id},
              reason: "Quality profile updated"
            ) do
         {:ok, _updated_item} ->
-          reloaded_item = load_media_item(media_item.id)
+          reloaded_item = load_media_item(socket.assigns.current_scope, media_item.id)
 
           {:noreply,
            socket

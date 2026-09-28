@@ -28,6 +28,8 @@ defmodule Mydia.Accounts.User do
           totp_enabled_at: DateTime.t() | nil,
           totp_last_used_at: DateTime.t() | nil,
           preference: Mydia.Accounts.UserPreference.t() | nil | Ecto.Association.NotLoaded.t(),
+          access_restriction:
+            Mydia.Accounts.AccessRestriction.t() | nil | Ecto.Association.NotLoaded.t(),
           api_keys: [Mydia.Accounts.ApiKey.t()] | Ecto.Association.NotLoaded.t(),
           media_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
           approved_requests: [Mydia.Media.MediaRequest.t()] | Ecto.Association.NotLoaded.t(),
@@ -53,6 +55,7 @@ defmodule Mydia.Accounts.User do
     field :totp_last_used_at, :utc_datetime
 
     has_one :preference, Mydia.Accounts.UserPreference
+    has_one :access_restriction, Mydia.Accounts.AccessRestriction
     has_many :api_keys, Mydia.Accounts.ApiKey
     has_many :recovery_codes, Mydia.Accounts.RecoveryCode
     has_many :passkeys, Mydia.Accounts.Passkey

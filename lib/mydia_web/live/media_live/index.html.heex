@@ -12,7 +12,7 @@
           <h1 id="section-heading" class="text-3xl font-bold">{@page_title}</h1>
         </div>
         <%!-- What the active search and filters actually match, and cost.
-              Both figures come from LibraryListing.page/1, which already
+              Both figures come from LibraryListing.page/2, which already
               walks every matching row before it paginates. --%>
         <div :if={@loading?} class="skeleton h-9 w-48 mt-1"></div>
         <div :if={not @loading?} class="stats stats-horizontal bg-transparent mt-1">

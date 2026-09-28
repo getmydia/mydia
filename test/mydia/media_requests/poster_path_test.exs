@@ -3,6 +3,7 @@ defmodule Mydia.MediaRequests.PosterPathTest do
 
   import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaRequest
   alias Mydia.MediaRequests
 
@@ -63,7 +64,7 @@ defmodule Mydia.MediaRequests.PosterPathTest do
     user = user_fixture(%{role: "guest"})
 
     {:ok, request} =
-      MediaRequests.create_request(%{
+      MediaRequests.create_request(Scope.unrestricted(), %{
         media_type: "movie",
         title: "Stub Movie",
         year: 1999,

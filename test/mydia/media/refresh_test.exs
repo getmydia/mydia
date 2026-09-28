@@ -429,6 +429,7 @@ defmodule Mydia.Media.RefreshTest do
   end
 
   describe "run/2 reclassification" do
+    alias Mydia.Accounts.Scope
     alias Mydia.Media
     alias Mydia.Repo
 
@@ -529,7 +530,9 @@ defmodule Mydia.Media.RefreshTest do
           metadata_source: :tvdb
         })
 
-      assert {:ok, item} = Media.update_category(item, :tv_show, override: true)
+      assert {:ok, item} =
+               Media.update_category(Scope.unrestricted(), item, :tv_show, override: true)
+
       assert item.category_override
 
       assert {:ok, _} = Refresh.run(item, config: config, fetch_episodes: false)

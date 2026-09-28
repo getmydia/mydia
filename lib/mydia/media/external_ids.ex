@@ -19,6 +19,7 @@ defmodule Mydia.Media.ExternalIds do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -103,7 +104,7 @@ defmodule Mydia.Media.ExternalIds do
   end
 
   defp conflicting_item(provider, id, type, exclude_id) do
-    case Media.find_by_external_ids(%{provider => id}, type: type) do
+    case Media.find_by_external_ids(Scope.system(), %{provider => id}, type: type) do
       nil -> nil
       %{id: ^exclude_id} -> nil
       item -> item

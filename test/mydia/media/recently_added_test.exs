@@ -1,8 +1,11 @@
 defmodule Mydia.Media.RecentlyAddedTest do
   use Mydia.DataCase, async: true
 
+  import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
+  alias Mydia.Media.MediaItem
   alias Mydia.Media.RecentlyAdded
 
   # Two years back, well outside any 30-day window.
@@ -145,7 +148,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       episode = episode_fixture(%{media_item_id: show.id, season_number: 4, episode_number: 2})
       backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert [entry] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert entry.media_item.id == show.id
       assert entry.content_added_at == @yesterday
       assert entry.new_episode_count == 1
@@ -157,7 +160,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       episode = episode_fixture(%{media_item_id: show.id})
       backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @long_ago)
 
-      assert RecentlyAdded.list_recent(since: since) == []
+      assert RecentlyAdded.list_recent(Scope.unrestricted(), since: since) == []
     end
 
     test "counts only episodes first filled inside the window", %{since: since} do
@@ -168,7 +171,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       backdate_media_file(media_file_fixture(%{episode_id: old_ep.id}), @long_ago)
       backdate_media_file(media_file_fixture(%{episode_id: new_ep.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert [entry] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert entry.new_episode_count == 1
       assert entry.latest_episode.id == new_ep.id
     end
@@ -177,7 +180,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       movie = media_item_fixture(%{type: "movie"})
       backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert [entry] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert entry.media_item.id == movie.id
       assert entry.new_episode_count == nil
       assert entry.latest_episode == nil
@@ -188,7 +191,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       show = media_item_fixture(%{type: "tv_show"})
       backdate_media_file(legacy_show_media_file_fixture(%{media_item_id: show.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert [entry] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert entry.new_episode_count == 1
       assert entry.latest_episode == nil
     end
@@ -201,7 +204,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       backdate_media_file(media_file_fixture(%{episode_id: old_ep.id}), @long_ago)
       backdate_media_file(legacy_show_media_file_fixture(%{media_item_id: show.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since)
+      assert [entry] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert entry.new_episode_count == 1
       assert entry.latest_episode == nil
     end
@@ -213,7 +216,7 @@ defmodule Mydia.Media.RecentlyAddedTest do
       backdate_media_file(media_file_fixture(%{media_item_id: older.id}), @last_week)
       backdate_media_file(media_file_fixture(%{media_item_id: newer.id}), @yesterday)
 
-      assert [first, second] = RecentlyAdded.list_recent(since: since)
+      assert [first, second] = RecentlyAdded.list_recent(Scope.unrestricted(), since: since)
       assert first.media_item.id == newer.id
       assert second.media_item.id == older.id
     end
@@ -226,7 +229,9 @@ defmodule Mydia.Media.RecentlyAddedTest do
       backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
       backdate_media_file(media_file_fixture(%{episode_id: episode.id}), @yesterday)
 
-      assert [entry] = RecentlyAdded.list_recent(since: since, types: ["movie"])
+      assert [entry] =
+               RecentlyAdded.list_recent(Scope.unrestricted(), since: since, types: ["movie"])
+
       assert entry.media_item.id == movie.id
     end
 
@@ -236,7 +241,28 @@ defmodule Mydia.Media.RecentlyAddedTest do
         backdate_media_file(media_file_fixture(%{media_item_id: movie.id}), @yesterday)
       end
 
-      assert length(RecentlyAdded.list_recent(since: since, limit: 2)) == 2
+      assert length(RecentlyAdded.list_recent(Scope.unrestricted(), since: since, limit: 2)) == 2
     end
+
+    test "hides what the scope cannot see before applying the limit" do
+      allowed = media_item_fixture(%{type: "movie", title: "Paper Kite Parade"})
+      hidden = media_item_fixture(%{type: "movie", title: "Nightglass Harbor"})
+      recategorize(allowed, "cartoon_movie")
+      recategorize(hidden, "movie")
+
+      backdate_media_file(media_file_fixture(%{media_item_id: allowed.id}), @last_week)
+      backdate_media_file(media_file_fixture(%{media_item_id: hidden.id}), @yesterday)
+
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      assert [entry] = RecentlyAdded.list_recent(scope, since: @long_ago, limit: 1)
+      assert entry.media_item.id == allowed.id
+    end
+  end
+
+  defp recategorize(media_item, category) do
+    Repo.update_all(from(m in MediaItem, where: m.id == ^media_item.id),
+      set: [category: category]
+    )
   end
 end

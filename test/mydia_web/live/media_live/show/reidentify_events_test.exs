@@ -186,6 +186,7 @@ defmodule MydiaWeb.MediaLive.Show.ReidentifyEventsTest do
       socket =
         stub_socket(%{
           media_item: media_item,
+          current_scope: Mydia.Accounts.Scope.unrestricted(),
           reidentifying: true,
           show_reidentify_modal: true,
           reidentify_candidates: [candidate(1)]

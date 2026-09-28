@@ -8,7 +8,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
 
   import Phoenix.Component, only: [assign: 3]
   import Phoenix.LiveView, only: [put_flash: 3, start_async: 3]
-  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 1]
+  import MydiaWeb.MediaLive.Show.Loaders, only: [load_media_item: 2]
 
   alias Mydia.Library.FileRenamer
   alias MydiaWeb.MediaLive.Show.RenameSelection
@@ -16,7 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
   require Logger
 
   def show_rename_modal(_params, socket) do
-    media_item = load_media_item(socket.assigns.media_item.id)
+    media_item = load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
     previews = FileRenamer.generate_rename_previews_for_media_item(media_item)
 
     {:noreply,
@@ -74,7 +74,10 @@ defmodule MydiaWeb.MediaLive.Show.RenameEvents do
     {:noreply,
      socket
      |> reset()
-     |> assign(:media_item, load_media_item(socket.assigns.media_item.id))
+     |> assign(
+       :media_item,
+       load_media_item(socket.assigns.current_scope, socket.assigns.media_item.id)
+     )
      |> put_flash(flash_type, message)}
   end
 

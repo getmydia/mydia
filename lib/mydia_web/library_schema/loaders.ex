@@ -5,8 +5,12 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
   Every mutation that takes an id needs the same three answers (malformed, names
   nothing, found) and the same preloads before `MediaItemView.item_map/2` can
   run, so they live here once.
+
+  The Library API only admits admin keys, and an admin is never restricted, so
+  its reads and writes run under `Scope.system/0`.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads
   alias Mydia.Downloads.Download
   alias Mydia.Library.MediaFile
@@ -56,13 +60,14 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
   @doc """
   The episode `id` names, with the media files `hasFile` reads.
 
-  `get_episode!/2` is the context's only single-episode getter, hence the rescue.
+  `get_episode!/3` is the context's only single-episode getter, hence the rescue.
   """
   @spec episode(term(), [String.t()]) :: {:ok, Episode.t()} | {:error, UserError.t()}
   def episode(id, field) do
     with {:ok, id} <- UserError.cast_id(id, field) do
       try do
-        {:ok, Media.get_episode!(id, preload: [media_files: MediaFile.versions()])}
+        {:ok,
+         Media.get_episode!(Scope.system(), id, preload: [media_files: MediaFile.versions()])}
       rescue
         Ecto.NoResultsError -> {:error, UserError.not_found("episode", field)}
       end
@@ -88,7 +93,7 @@ defmodule MydiaWeb.LibrarySchema.Loaders do
     do: {:error, UserError.new(:invalid_input, "Only TV shows have seasons and episodes", field)}
 
   defp load(id) do
-    case Media.list_media_items(ids: [id], preload: MediaItemView.preloads()) do
+    case Media.list_media_items(Scope.system(), ids: [id], preload: MediaItemView.preloads()) do
       [item | _] -> item
       [] -> nil
     end

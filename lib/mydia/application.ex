@@ -72,6 +72,10 @@ defmodule Mydia.Application do
         Mydia.Library.StartupSync.sync_all()
         # Check for database integrity issues and queue repairs if needed
         Mydia.Library.DatabaseHealthCheck.run()
+        # Lets Scope.for_user/1 skip its per-request restriction lookup on
+        # installs with no restricted accounts. Until this runs the flag is
+        # absent, which reads as "look it up". Never raises.
+        Mydia.Accounts.refresh_access_restrictions_flag()
         # One-shot HDR backfill. Idempotent by row state, so enqueuing on
         # every boot is harmless once the set has drained. enqueue_once/0
         # protects its own Oban.insert/1 call (never raises), matching the
@@ -92,6 +96,11 @@ defmodule Mydia.Application do
         # once drained, this is one query returning nothing. enqueue_once/0
         # protects its own Oban.insert/1 call.
         Mydia.Jobs.ShowFileRepair.enqueue_once()
+        # Derives content_rating_age for rows written before the column
+        # existed. Without it every existing title stays unrated, and the first
+        # age limit an admin sets hides the whole library. Idempotent by row
+        # state; enqueue_once/0 never raises.
+        Mydia.Jobs.ContentRatingAgeBackfill.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end

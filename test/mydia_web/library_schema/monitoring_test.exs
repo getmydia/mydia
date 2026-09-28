@@ -1,6 +1,7 @@
 defmodule MydiaWeb.LibrarySchema.MonitoringTest do
   use MydiaWeb.ConnCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.Principal
   alias Mydia.Media
 
@@ -31,7 +32,7 @@ defmodule MydiaWeb.LibrarySchema.MonitoringTest do
 
       assert payload["userErrors"] == []
       assert payload["mediaItem"] == %{"id" => item.id, "monitored" => false}
-      refute Media.get_media_item!(item.id).monitored
+      refute Media.get_media_item!(Scope.unrestricted(), item.id).monitored
     end
 
     test "an id that names nothing is NOT_FOUND on id" do
@@ -118,7 +119,7 @@ defmodule MydiaWeb.LibrarySchema.MonitoringTest do
 
       assert payload["userErrors"] == []
       assert payload["episode"] == %{"id" => episode.id, "monitored" => false, "hasFile" => false}
-      refute Media.get_episode!(episode.id).monitored
+      refute Media.get_episode!(Scope.unrestricted(), episode.id).monitored
     end
 
     test "an id that names nothing is NOT_FOUND on id" do

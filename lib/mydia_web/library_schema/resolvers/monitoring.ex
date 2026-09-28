@@ -8,6 +8,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Monitoring do
   `apply_episode_monitoring/2` take no actor.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.Principal
   alias Mydia.Media
   alias MydiaWeb.LibrarySchema.Loaders
@@ -19,7 +20,8 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Monitoring do
     opts = Principal.actor_opts(resolution.context.principal) ++ [reason: reason(monitored)]
 
     with {:ok, item} <- Loaders.item(id, ["id"]),
-         {:ok, _updated} <- Media.update_media_item(item, %{monitored: monitored}, opts) do
+         {:ok, _updated} <-
+           Media.update_media_item(Scope.system(), item, %{monitored: monitored}, opts) do
       {:ok, item_payload(item.id)}
     else
       error -> {:ok, item_failure(error)}

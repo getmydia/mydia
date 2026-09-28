@@ -11,6 +11,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
   """
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
 
   describe "tmdb_id" do
@@ -18,7 +19,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
       id = System.unique_integer([:positive])
 
       assert {:ok, movie} =
-               Media.create_media_item(%{
+               Media.create_media_item(Scope.unrestricted(), %{
                  type: "movie",
                  title: "Cinder Lantern",
                  year: 2014,
@@ -27,6 +28,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
 
       assert {:ok, show} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Cinder Lantern", tmdb_id: id},
                  skip_episode_refresh: true
                )
@@ -40,12 +42,14 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
 
       assert {:ok, _} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Harrow Bay", tmdb_id: id},
                  skip_episode_refresh: true
                )
 
       assert {:error, changeset} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Harrow Bay Redux", tmdb_id: id},
                  skip_episode_refresh: true
                )
@@ -59,7 +63,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
       id = System.unique_integer([:positive])
 
       assert {:ok, movie} =
-               Media.create_media_item(%{
+               Media.create_media_item(Scope.unrestricted(), %{
                  type: "movie",
                  title: "Pale Orchard",
                  year: 2018,
@@ -68,6 +72,7 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
 
       assert {:ok, show} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Pale Orchard", tvdb_id: id},
                  skip_episode_refresh: true
                )
@@ -81,12 +86,14 @@ defmodule Mydia.Media.ProviderIdUniquenessTest do
 
       assert {:ok, _} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Vellum Coast", tvdb_id: id},
                  skip_episode_refresh: true
                )
 
       assert {:error, changeset} =
                Media.create_media_item(
+                 Scope.unrestricted(),
                  %{type: "tv_show", title: "Vellum Coast Redux", tvdb_id: id},
                  skip_episode_refresh: true
                )

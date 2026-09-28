@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Schema.Resolvers.SubtitlePreferenceTest do
   use MydiaWeb.ConnCase, async: false
 
+  import Ecto.Query
   import Mydia.MediaFixtures
 
   alias Mydia.AccountsFixtures
@@ -144,6 +145,24 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitlePreferenceTest do
       result = graphql(conn, @mutation, %{"fileId" => media_file.id, "mode" => "OFF"})
 
       assert [%{"message" => "Authentication required"}] = result["errors"]
+    end
+
+    test "treats a file outside the caller's access restriction as unknown", %{conn: conn} do
+      film = media_item_fixture(%{type: "movie", title: @film_title})
+      media_file = media_file_fixture(%{media_item_id: film.id})
+
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^film.id),
+        set: [category: "movie"]
+      )
+
+      user = AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+      conn = log_in_user(conn, user)
+
+      result = graphql(conn, @mutation, %{"fileId" => media_file.id, "mode" => "OFF"})
+
+      assert [%{"message" => "File not found"}] = result["errors"]
+      assert Mydia.Streaming.SubtitlePreferences.get(user.id, film.id) == nil
     end
   end
 

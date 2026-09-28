@@ -14,6 +14,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Download
   alias Mydia.Downloads.History
   alias Mydia.Library
@@ -45,8 +46,8 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
   # consumer's claims.
   defp view!(id) do
     item =
-      id
-      |> Media.get_media_item!()
+      Scope.unrestricted()
+      |> Media.get_media_item!(id)
       |> Repo.preload(MediaItemView.preloads())
 
     map = MediaItemView.item_map(item, RevisionFeed.changed_at!(id))
@@ -79,11 +80,13 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
     inserted = marker!(item.id)
     refute inserted.deleted
 
-    {:ok, _} = Mydia.Media.update_media_item(item, %{title: "After"})
+    {:ok, _} = Mydia.Media.update_media_item(Scope.unrestricted(), item, %{title: "After"})
     updated = assert_advanced(item.id, inserted)
     refute updated.deleted
 
-    {:ok, _deleted, _files_not_deleted} = Mydia.Media.delete_media_item(item)
+    {:ok, _deleted, _files_not_deleted} =
+      Mydia.Media.delete_media_item(Scope.unrestricted(), item)
+
     tombstone = assert_advanced(item.id, updated)
     assert tombstone.deleted
   end
@@ -367,7 +370,8 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
 
     listed = marker!(show.id)
 
-    {:ok, _deleted, %Mydia.Media.DiskRemoval{files_failed: 0}} = Media.delete_media_item(show)
+    {:ok, _deleted, %Mydia.Media.DiskRemoval{files_failed: 0}} =
+      Media.delete_media_item(Scope.unrestricted(), show)
 
     tombstone = assert_advanced(show.id, listed)
     assert tombstone.deleted
@@ -400,7 +404,7 @@ defmodule Mydia.LibraryApi.RevisionTriggersTest do
     {:ok, _} = Media.update_episode(episode, %{monitored: false})
     after_episode = marker!(show.id).revision
 
-    {:ok, _} = Media.update_media_item(show, %{title: "Renamed Show"})
+    {:ok, _} = Media.update_media_item(Scope.unrestricted(), show, %{title: "Renamed Show"})
     after_show = marker!(show.id).revision
 
     {:ok, _} = History.mark_download_failed(download, "nope")

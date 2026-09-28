@@ -1,19 +1,69 @@
 defmodule MydiaWeb.Api.MediaControllerTest do
+  @moduledoc """
+  `perform_manual_match/5` used to fold every `Media.update_media_item/4`
+  error into `json(%{error: "Failed to update media item: \#{inspect(reason)}"})`,
+  which is harmless for an `Ecto.Changeset` but literally returned the string
+  ":restricted" once the update could fail that way -- an internal atom
+  leaking straight into the API response body.
+  """
+
   # Mutates the global :mydia, :metadata_relay_url application env to point
   # at a Bypass server, so this file cannot run concurrently with itself or
   # with anything else touching the same key.
   use MydiaWeb.ConnCase, async: false
 
+  import Mydia.AccountsFixtures
+
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
+  alias Mydia.Metadata.Provider
+  alias Mydia.Metadata.Structs.{EpisodeData, ImagesResponse, MediaMetadata}
 
-  setup do
-    {user, token} = MydiaWeb.AuthHelpers.create_user_and_token()
-    {:ok, movie} = create_media_item("movie")
+  # media_controller.ex's extract_year/1 reads metadata.release_date.year, so
+  # unlike most other test doubles in this suite it needs a real %Date{}
+  # rather than the ISO string most providers store on the struct.
+  defmodule LiveActionProvider do
+    @behaviour Mydia.Metadata.Provider
 
-    {:ok, user: user, token: token, movie: movie}
+    @impl true
+    def test_connection(_config), do: {:ok, %{status: "ok"}}
+
+    @impl true
+    def search(_config, _query, _opts), do: {:ok, []}
+
+    @impl true
+    def fetch_by_ref(_config, {_provider, id}, _opts) do
+      {:ok,
+       %MediaMetadata{
+         provider_id: to_string(id),
+         provider: :metadata_relay,
+         media_type: :movie,
+         id: id,
+         title: "Live Action Rematch",
+         release_date: ~D[2015-06-01],
+         genres: ["Action"]
+       }}
+    end
+
+    @impl true
+    def fetch_images_by_ref(_config, _ref, _opts),
+      do: {:ok, ImagesResponse.new(%{posters: [], backdrops: [], logos: []})}
+
+    @impl true
+    def fetch_season_by_ref(_config, _ref, _season, _opts), do: {:ok, %{}}
+
+    @impl true
+    def fetch_trending(_config, _opts), do: {:ok, []}
   end
 
   describe "POST /api/v1/media/:id/match" do
+    setup do
+      {user, token} = MydiaWeb.AuthHelpers.create_user_and_token()
+      {:ok, movie} = create_media_item("movie")
+
+      {:ok, user: user, token: token, movie: movie}
+    end
+
     test "returns 400 instead of crashing when provider_id is not numeric", %{
       conn: conn,
       token: token,
@@ -54,19 +104,13 @@ defmodule MydiaWeb.Api.MediaControllerTest do
       assert json_response(conn, 400)["error"] =~ "provider_id"
     end
 
-    # A numeric provider_id reaches the relay and the DB update commits --
-    # proving the fix (Integer.parse feeding a real integer ref, rather than
-    # the crash this finding is about). The endpoint cannot be asserted all
-    # the way to a 200 here: `serialize_media_item/1` reads
-    # `media_item.overview`, `.poster_url`, `.backdrop_url`, `.genres`,
-    # `.runtime` and `.status`, none of which are fields on
-    # `Mydia.Media.MediaItem` (metadata lives in the single `:metadata`
-    # column instead). That is a pre-existing defect, unrelated to the
-    # provider-ref work this branch is about and already present on
-    # origin/master, so it is out of scope here -- but it means every
-    # successful match 500s today. This test pins that down so a future fix
-    # of the serializer is the thing that turns it green, rather than
-    # silently dropping coverage of the numeric happy path.
+    # A numeric provider_id reaches the relay, the DB update commits, and the
+    # response serializes. The serializer used to read `media_item.overview`,
+    # `.poster_url`, `.backdrop_url`, `.genres`, `.runtime` and `.status`
+    # straight off `%MediaItem{}`, where none of them are fields (metadata
+    # lives in the single `:metadata` column), so every successful match
+    # raised KeyError. That is fixed here, so this asserts the 200 rather
+    # than pinning the crash.
     test "reaches the relay and updates the row on a numeric provider_id", %{
       conn: conn,
       token: token,
@@ -100,19 +144,76 @@ defmodule MydiaWeb.Api.MediaControllerTest do
         |> Plug.Conn.resp(200, Jason.encode!(body))
       end)
 
-      assert_raise KeyError, ~r/:overview/, fn ->
+      conn =
         conn
         |> put_req_header("authorization", "Bearer #{token}")
         |> post("/api/v1/media/#{movie.id}/match", %{
           "provider_id" => to_string(tmdb_id),
           "provider_type" => "tmdb"
         })
-      end
 
-      updated = Media.get_media_item!(movie.id)
+      assert json_response(conn, 200)
+
+      updated = Media.get_media_item!(Scope.unrestricted(), movie.id)
       assert updated.tmdb_id == tmdb_id
       assert updated.title == "Rebound Signal"
     end
+  end
+
+  describe "POST /api/v1/media/:id/match under a restricted scope" do
+    setup do
+      Provider.Registry.register(:metadata_relay, LiveActionProvider)
+      on_exit(fn -> Mydia.Metadata.register_providers() end)
+      :ok
+    end
+
+    test "manually matching a restricted title returns a friendly message, not a raw atom",
+         %{conn: conn} do
+      movie = cartoon_movie()
+
+      restricted =
+        restricted_user_fixture(%{role: "user", allowed_categories: ["cartoon_movie"]})
+
+      conn =
+        conn
+        |> log_in_user(restricted)
+        |> post(~p"/api/v1/media/#{movie.id}/match", %{
+          "provider_id" => "12345",
+          "provider_type" => "tmdb"
+        })
+
+      assert %{"error" => message} = json_response(conn, 403)
+      assert message == Media.restricted_message()
+      refute message =~ ":restricted"
+
+      # The stored item is untouched -- still the animated original, not the
+      # live-action match that was refused.
+      unchanged = Media.get_media_item!(Scope.unrestricted(), movie.id)
+      assert unchanged.category == "cartoon_movie"
+    end
+  end
+
+  defp cartoon_movie do
+    {:ok, item} =
+      Media.create_media_item(
+        Scope.system(),
+        %{
+          type: "movie",
+          title: "Cartoon Original",
+          year: 2020,
+          tmdb_id: System.unique_integer([:positive]),
+          metadata: %MediaMetadata{
+            provider_id: "9001",
+            provider: :tmdb,
+            media_type: :movie,
+            genres: ["Animation"]
+          }
+        },
+        skip_episode_refresh: true
+      )
+
+    assert item.category == "cartoon_movie"
+    item
   end
 
   # skip_episode_refresh: true keeps this at the controller's own validation
@@ -121,6 +222,7 @@ defmodule MydiaWeb.Api.MediaControllerTest do
   # uses for its own create_media_item/1 helper.
   defp create_media_item(type) do
     Media.create_media_item(
+      Scope.system(),
       %{
         title: "Test #{type} #{System.unique_integer([:positive])}",
         tmdb_id: System.unique_integer([:positive]),
@@ -130,5 +232,90 @@ defmodule MydiaWeb.Api.MediaControllerTest do
       },
       skip_episode_refresh: true
     )
+  end
+
+  describe "serialization" do
+    setup do
+      Provider.Registry.register(:metadata_relay, LiveActionProvider)
+      on_exit(fn -> Mydia.Metadata.register_providers() end)
+      :ok
+    end
+
+    test "a successful match serializes without raising", %{conn: conn} do
+      {:ok, movie} =
+        Media.create_media_item(
+          Scope.system(),
+          %{
+            type: "movie",
+            title: "Placeholder Title",
+            year: 1999,
+            tmdb_id: System.unique_integer([:positive]),
+            metadata: %MediaMetadata{
+              provider_id: "1",
+              provider: :tmdb,
+              media_type: :movie,
+              genres: ["Drama"]
+            }
+          },
+          skip_episode_refresh: true
+        )
+
+      conn =
+        conn
+        |> log_in_user(create_test_user())
+        |> post(~p"/api/v1/media/#{movie.id}/match", %{
+          "provider_id" => "12345",
+          "provider_type" => "tmdb"
+        })
+
+      assert %{"data" => data} = json_response(conn, 200)
+
+      # These used to raise KeyError: serialize_media_item/1 read them straight
+      # off %MediaItem{}, which carries no such top-level columns, instead of
+      # off media_item.metadata (see LiveActionProvider's fetch_by_id/3 above).
+      assert data["title"] == "Live Action Rematch"
+      assert data["year"] == 2015
+      assert data["genres"] == ["Action"]
+      assert data["overview"] == nil
+      assert data["poster_url"] == nil
+      assert data["backdrop_url"] == nil
+      assert data["runtime"] == nil
+      assert data["status"] == nil
+    end
+
+    test "an episode with metadata serializes without raising", %{conn: conn} do
+      {:ok, show} =
+        Media.create_media_item(
+          Scope.system(),
+          %{type: "tv_show", title: "Stub Series", year: 2010},
+          skip_episode_refresh: true
+        )
+
+      {:ok, _episode} =
+        Media.create_episode(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          title: "Pilot",
+          metadata: %EpisodeData{
+            season_number: 1,
+            episode_number: 1,
+            overview: "The one where it all begins.",
+            still_path: "/pilot-still.jpg"
+          }
+        })
+
+      conn =
+        conn
+        |> log_in_user(create_test_user())
+        |> get(~p"/api/v1/media/#{show.id}")
+
+      # serialize_episodes/1 read episode.overview and episode.still_url
+      # directly off %Episode{}, which -- like MediaItem -- carries neither as a
+      # top-level column; both live under episode.metadata.
+      assert %{"data" => %{"episodes" => [episode]}} = json_response(conn, 200)
+      assert episode["overview"] == "The one where it all begins."
+      assert episode["still_url"] =~ "pilot-still.jpg"
+    end
   end
 end

@@ -3,6 +3,7 @@ defmodule Mydia.Media.CategoryUpdateTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Events
   alias Mydia.Media
   alias Mydia.Media.MediaItem
@@ -14,7 +15,7 @@ defmodule Mydia.Media.CategoryUpdateTest do
       assert item.category == "movie"
 
       assert {:ok, updated} =
-               Media.update_category(item, :anime_movie,
+               Media.update_category(Scope.unrestricted(), item, :anime_movie,
                  reason: "Category updated",
                  actor_type: :user,
                  actor_id: "user-1"
@@ -38,7 +39,7 @@ defmodule Mydia.Media.CategoryUpdateTest do
       item = media_item_fixture(%{type: "movie"})
 
       assert {:ok, updated} =
-               Media.update_category(item, :cartoon_movie,
+               Media.update_category(Scope.unrestricted(), item, :cartoon_movie,
                  override: true,
                  reason: "Category updated",
                  actor_type: :user,
@@ -62,7 +63,7 @@ defmodule Mydia.Media.CategoryUpdateTest do
       item = media_item_fixture(%{type: "movie"})
 
       assert {:ok, _} =
-               Media.update_category(item, :movie,
+               Media.update_category(Scope.unrestricted(), item, :movie,
                  override: false,
                  reason: "Category updated",
                  actor_type: :user,
@@ -78,10 +79,12 @@ defmodule Mydia.Media.CategoryUpdateTest do
 
     test "clearing override persists category_override false" do
       item = media_item_fixture(%{type: "movie"})
-      {:ok, item} = Media.update_category(item, :cartoon_movie, override: true)
+
+      {:ok, item} =
+        Media.update_category(Scope.unrestricted(), item, :cartoon_movie, override: true)
 
       assert {:ok, updated} =
-               Media.update_category(item, :movie,
+               Media.update_category(Scope.unrestricted(), item, :movie,
                  override: false,
                  reason: "Category reset to auto-detected",
                  actor_type: :user,
@@ -96,7 +99,10 @@ defmodule Mydia.Media.CategoryUpdateTest do
       item = media_item_fixture(%{type: "movie"})
 
       assert {:ok, updated} =
-               Media.update_media_item(item, %{category: "anime_movie", category_override: true})
+               Media.update_media_item(Scope.unrestricted(), item, %{
+                 category: "anime_movie",
+                 category_override: true
+               })
 
       assert updated.category == "movie"
       assert Repo.get!(MediaItem, item.id).category == "movie"

@@ -3,6 +3,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
   use MydiaWeb.ConnCase, async: false
   use Oban.Testing, repo: Mydia.Repo
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.Principal
   alias Mydia.Media
 
@@ -102,7 +103,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
              } =
                payload["mediaItem"]
 
-      assert Media.find_by_external_ids(%{tmdb: id}, type: "movie")
+      assert Media.find_by_external_ids(Scope.unrestricted(), %{tmdb: id}, type: "movie")
       refute_enqueued(worker: Mydia.Jobs.MovieSearch)
     end
 
@@ -233,7 +234,7 @@ defmodule MydiaWeb.LibrarySchema.LibraryWritesTest do
                "userErrors" => []
              }
 
-      assert Media.list_media_items(ids: [item.id]) == []
+      assert Media.list_media_items(Scope.unrestricted(), ids: [item.id]) == []
     end
 
     test "an id that names nothing is NOT_FOUND on input.id" do

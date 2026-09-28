@@ -25,11 +25,17 @@ defmodule Mydia.Accounts do
     RecoveryCode,
     Passkey,
     Passkeys,
-    Totp
+    Totp,
+    AccessRestriction
   }
 
   @changelog_key "last_seen_changelog_version"
   @anime_nudge_key "anime_nudge_dismissed"
+
+  # Whether any user_access_restrictions row may exist. Read on every
+  # non-admin request by Scope.for_user/1 to skip a query on installs that
+  # never restrict anyone. See access_restrictions_possible?/0.
+  @restrictions_flag {__MODULE__, :access_restrictions?}
 
   ## Users
 
@@ -379,6 +385,99 @@ defmodule Mydia.Accounts do
   def change_user(%User{} = user, attrs \\ %{}) do
     User.changeset(user, attrs)
   end
+
+  ## Access Restrictions
+
+  @doc """
+  Returns the access restriction for a user, or nil when unrestricted.
+  """
+  @spec get_access_restriction(User.t()) :: AccessRestriction.t() | nil
+  def get_access_restriction(%User{id: user_id}) do
+    Repo.get_by(AccessRestriction, user_id: user_id)
+  end
+
+  @doc """
+  Creates or replaces a user's access restriction.
+
+  Refuses admins outright. An admin resolves to an unrestricted scope no matter
+  what rows exist, so storing a restriction for one would be a row that lies
+  about what the system does.
+  """
+  @spec upsert_access_restriction(User.t(), map()) ::
+          {:ok, AccessRestriction.t()} | {:error, Ecto.Changeset.t()} | {:error, :admin}
+  def upsert_access_restriction(%User{role: "admin"}, _attrs), do: {:error, :admin}
+
+  def upsert_access_restriction(%User{id: user_id} = user, attrs) do
+    existing = get_access_restriction(user) || %AccessRestriction{user_id: user_id}
+
+    existing
+    |> AccessRestriction.changeset(attrs)
+    |> Repo.insert_or_update()
+    |> tap(&mark_restrictions_present/1)
+  end
+
+  @doc """
+  Removes a user's access restriction, returning them to unrestricted access.
+  """
+  @spec clear_access_restriction(User.t()) :: :ok
+  def clear_access_restriction(%User{} = user) do
+    case get_access_restriction(user) do
+      nil -> :ok
+      restriction -> Repo.delete!(restriction) && :ok
+    end
+  end
+
+  @doc """
+  False only when a boot-time count found no restriction rows and none has been
+  written since, so `Mydia.Accounts.Scope.for_user/1` can skip its lookup.
+
+  Fails safe: an absent flag reads as true. Only
+  `refresh_access_restrictions_flag/0` writes false, and clearing a
+  restriction never does, so there is no window in which a real row is
+  ignored. A stale true costs one indexed lookup per request, which is the
+  behaviour without the flag.
+  """
+  @spec access_restrictions_possible?() :: boolean()
+  def access_restrictions_possible?, do: :persistent_term.get(@restrictions_flag, true)
+
+  @doc """
+  Recounts restriction rows and stores the result. Called once at boot.
+
+  Never raises: on any error the flag is erased, which reads as "possible".
+  """
+  @spec refresh_access_restrictions_flag() :: :ok
+  def refresh_access_restrictions_flag do
+    if Repo.exists?(AccessRestriction) do
+      :persistent_term.put(@restrictions_flag, true)
+    else
+      # The endpoint is already serving while this runs, so an admin can save
+      # the first restriction between the count above and this write. Its
+      # upsert commits before it marks the flag, so either that mark lands
+      # after this false, or its row is visible to the second count below.
+      :persistent_term.put(@restrictions_flag, false)
+      if Repo.exists?(AccessRestriction), do: :persistent_term.put(@restrictions_flag, true)
+    end
+
+    :ok
+  rescue
+    error ->
+      Logger.warning("Access restriction flag: recount failed, lookups stay on",
+        error: inspect(error)
+      )
+
+      :persistent_term.erase(@restrictions_flag)
+      :ok
+  end
+
+  # persistent_term writes trigger a global GC scan, so skip the put when the
+  # flag is already true.
+  defp mark_restrictions_present({:ok, _restriction}) do
+    if :persistent_term.get(@restrictions_flag, nil) != true do
+      :persistent_term.put(@restrictions_flag, true)
+    end
+  end
+
+  defp mark_restrictions_present(_error), do: :ok
 
   @doc """
   Verifies a user's password.

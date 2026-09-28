@@ -10,6 +10,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.RevisionFeed
   alias Mydia.Media
   alias Mydia.Metadata
@@ -96,7 +97,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
       end)
 
     Enum.reduce(by_type, %{}, fn {type, ids, group}, acc ->
-      found = Media.library_status_for_tmdb_ids(ids, to_string(type))
+      found = Media.library_status_for_tmdb_ids(Scope.system(), ids, to_string(type))
 
       Enum.reduce(group, acc, fn result, acc ->
         case parse_id(result.provider_id) do
@@ -115,7 +116,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
 
   defp tvdb_index(results) do
     Enum.reduce(results, %{}, fn result, acc ->
-      case Media.find_by_external_ids(%{tvdb: result.provider_id},
+      case Media.find_by_external_ids(Scope.system(), %{tvdb: result.provider_id},
              type: to_string(result.media_type)
            ) do
         nil -> acc
@@ -138,7 +139,9 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Lookup do
         {:ok, %{}}
 
       ids ->
-        found = Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
+        found =
+          Media.list_media_items(Scope.system(), ids: ids, preload: MediaItemView.preloads())
+
         by_id = Map.new(found, &{&1.id, &1})
 
         with {:ok, changed_at_by_id} <- RevisionFeed.live_changed_at_by_ids(Map.keys(by_id)) do

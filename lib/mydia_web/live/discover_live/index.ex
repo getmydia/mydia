@@ -20,6 +20,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
+  alias Mydia.Media.RemoteFilter
 
   import MydiaWeb.GridDensityComponents
 
@@ -138,7 +139,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         end
 
       # Load library status map
-      library_status_map = Media.get_library_status_map()
+      library_status_map = Media.get_library_status_map(socket.assigns.current_scope)
 
       # request_status only ever affects the Request button, which only a
       # guest sees (Authorization.can_submit_request?/1), so a viewer who
@@ -555,6 +556,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> Keyword.put_new(:actor_id, socket.assigns.current_user.id)
 
     case MediaAddHelpers.handle_add_media_to_library(
+           socket.assigns.current_scope,
            ref,
            media_type,
            socket.assigns.library_status_map,
@@ -611,6 +613,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> DetailModal.refresh_selected([items, recommendations])
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
+      {:error, :restricted} ->
+        {:noreply,
+         socket
+         |> clear_adding(ref)
+         |> put_flash(:error, Media.restricted_message())}
+
       {:error, {:changeset, changeset}} ->
         {:noreply,
          socket
@@ -630,6 +638,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp submit_request(socket, item, media_type) do
     case MediaRequestHelpers.handle_request_media(
+           socket.assigns.current_scope,
            item,
            media_type,
            socket.assigns.current_user.id
@@ -710,6 +719,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # title they have already requested, which the duplicate check then rejects.
   defp enrich_recommendations(socket, results) do
     results
+    |> RemoteFilter.filter(socket.assigns.current_scope)
     |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end
@@ -724,6 +734,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp request_error_message(:duplicate_media), do: "That title is already in the library."
   defp request_error_message(:duplicate_request), do: "Someone has already requested that title."
+  defp request_error_message(:restricted), do: Media.restricted_message()
 
   defp request_error_message(%Ecto.Changeset{} = changeset),
     do: "Could not submit the request: #{MediaAddHelpers.format_changeset_errors(changeset)}"
@@ -747,6 +758,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
         enriched =
           results
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -770,6 +782,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         # Search returns a flat list
         enriched =
           results
+          |> RemoteFilter.filter(socket.assigns.current_scope)
           |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
@@ -836,7 +849,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   defp build_discover_opts(assigns) do
-    opts = [page: assigns.page]
+    opts =
+      [page: assigns.page] ++ RemoteFilter.discover_params(assigns.current_scope)
 
     opts =
       if assigns.selected_genres != [] do

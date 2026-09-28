@@ -7,6 +7,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Media
   alias Mydia.Playback
@@ -93,7 +94,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
 
   defp movie!(imdb) do
     {:ok, item} =
-      Media.create_media_item(%{
+      Media.create_media_item(Scope.unrestricted(), %{
         title: "Movie #{imdb}",
         type: "movie",
         year: 2024,
@@ -109,6 +110,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   defp show_with_episode!(tvdb, season, episode) do
     {:ok, show} =
       Media.create_media_item(
+        Scope.unrestricted(),
         %{
           title: "Show #{tvdb}",
           type: "tv_show",
@@ -270,10 +272,10 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
 
     assert {:ok, _result} = Plugins.invoke_plugin_schedule(@slug)
 
-    refute Collections.is_favorite?(user, owned.id),
+    refute Collections.is_favorite?(Scope.for_user(user), owned.id),
            "an item we pushed must never be favorited back"
 
-    assert Collections.is_favorite?(user, wanted.id),
+    assert Collections.is_favorite?(Scope.for_user(user), wanted.id),
            "a catalogued-but-unowned plan-to-watch item should become a favorite"
   end
 

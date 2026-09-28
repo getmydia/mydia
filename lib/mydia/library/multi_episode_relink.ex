@@ -18,6 +18,7 @@ defmodule Mydia.Library.MultiEpisodeRelink do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library
   alias Mydia.Library.MediaFile
   alias Mydia.Library.ReleaseParser
@@ -110,7 +111,7 @@ defmodule Mydia.Library.MultiEpisodeRelink do
     if length(episode_numbers) > 1 do
       episodes =
         episode_numbers
-        |> Enum.map(&Media.get_episode_by_number(media_item_id, season, &1))
+        |> Enum.map(&Media.get_episode_by_number(Scope.system(), media_item_id, season, &1))
         |> Enum.reject(&is_nil/1)
 
       link_if_new(id, episodes)

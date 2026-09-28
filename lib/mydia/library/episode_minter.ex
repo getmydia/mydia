@@ -50,6 +50,7 @@ defmodule Mydia.Library.EpisodeMinter do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser.EpisodeTitle
   alias Mydia.Media
   alias Mydia.Media.{Episode, MediaItem}
@@ -83,7 +84,12 @@ defmodule Mydia.Library.EpisodeMinter do
           {:ok, Episode.t()} | {:error, :implausible} | {:error, Ecto.Changeset.t()}
   def mint(%MediaItem{} = media_item, season_number, episode_number, filename) do
     if mintable?(media_item, season_number, episode_number) do
-      case Media.get_episode_by_number(media_item.id, season_number, episode_number) do
+      case Media.get_episode_by_number(
+             Scope.system(),
+             media_item.id,
+             season_number,
+             episode_number
+           ) do
         nil -> create(media_item, season_number, episode_number, filename)
         existing -> {:ok, existing}
       end
@@ -120,7 +126,12 @@ defmodule Mydia.Library.EpisodeMinter do
 
       {:error, changeset} ->
         # A concurrent minter won the unique index. Its row is the answer.
-        case Media.get_episode_by_number(media_item.id, season_number, episode_number) do
+        case Media.get_episode_by_number(
+               Scope.system(),
+               media_item.id,
+               season_number,
+               episode_number
+             ) do
           nil -> {:error, changeset}
           existing -> {:ok, existing}
         end

@@ -1,9 +1,13 @@
 defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
   use MydiaWeb.ConnCase, async: false
 
+  import Ecto.Query
+
   alias Mydia.AccountsFixtures
   alias Mydia.Library.Structs.FileMetadata
   alias Mydia.Library.Structs.StreamInfo
+  alias Mydia.Media
+  alias Mydia.Media.MediaItem
   alias Mydia.MediaFixtures
   alias Mydia.Repo
   alias Mydia.SettingsFixtures
@@ -222,6 +226,65 @@ defmodule MydiaWeb.Schema.SubtitleContentQueryTest do
           refute Enum.any?(cache_files, &String.starts_with?(&1, "2-")),
                  "the untouched track (2) was extracted too: #{inspect(cache_files)}"
       end
+    end
+  end
+
+  describe "a restricted movie's file" do
+    # Task 7 review finding 2: subtitle_content/3 loaded the media file
+    # directly via Library.get_media_file!/2 with no restriction check at
+    # all, so a restricted account could read subtitle bodies for a movie
+    # outside its allowed categories. Uses the same real-sidecar setup as
+    # "an external sidecar" above (no ffmpeg needed) so that removing the
+    # guard makes this test observe real subtitle text instead of nil,
+    # rather than nil for an unrelated reason.
+    setup %{conn: conn} do
+      user = AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      {:ok, item} =
+        Media.create_media_item(
+          Mydia.Accounts.Scope.system(),
+          %{type: "movie", title: "Restricted Subtitle Movie", year: 2024},
+          skip_episode_refresh: true
+        )
+
+      Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [category: "movie"])
+
+      media_file = MediaFixtures.media_file_fixture(%{media_item_id: item.id})
+
+      dir =
+        Path.join(
+          System.tmp_dir!(),
+          "mydia-subtitle-content-query-restricted-test-#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(dir)
+      path = Path.join(dir, "movie.en.srt")
+      File.write!(path, @srt_a)
+      on_exit(fn -> File.rm_rf(dir) end)
+
+      {:ok, subtitle} =
+        %Subtitle{}
+        |> Subtitle.changeset(%{
+          media_file_id: media_file.id,
+          language: "en",
+          format: "srt",
+          subtitle_hash: "hash-#{System.unique_integer([:positive])}",
+          file_path: path,
+          provider: "relay"
+        })
+        |> Repo.insert()
+
+      {:ok, conn: log_in_user(conn, user), media_file: media_file, subtitle: subtitle}
+    end
+
+    test "returns nil rather than the subtitle body", %{
+      conn: conn,
+      media_file: media_file,
+      subtitle: sub
+    } do
+      conn = query(conn, media_file.id, sub.id)
+
+      assert %{"data" => %{"subtitleContent" => nil}} = json_response(conn, 200)
     end
   end
 

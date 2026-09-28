@@ -33,13 +33,13 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
   end
 
   @spec recently_added(map(), map(), Absinthe.Resolution.t()) :: {:ok, term()} | {:error, term()}
-  def recently_added(_parent, args, _info) do
+  def recently_added(_parent, args, info) do
     first = Map.get(args, :first, 20)
     after_cursor = Map.get(args, :after)
     thirty_days_ago = DateTime.add(DateTime.utc_now(), -30, :day)
 
     entries =
-      RecentlyAdded.list_recent(
+      RecentlyAdded.list_recent(info.context[:current_scope],
         since: thirty_days_ago,
         types: requested_types(Map.get(args, :types)),
         limit: pagination_limit(first, after_cursor)
@@ -108,7 +108,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
 
       user ->
         favorites =
-          Media.list_user_favorites(user.id)
+          Media.list_user_favorites(resolution.context[:current_scope], user.id)
           |> maybe_filter_by_type(types)
           |> maybe_filter_by_category(category)
           |> sort_items(sort, resolution)
@@ -140,7 +140,7 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       user ->
         opts = [has_files: true]
         opts = if category, do: Keyword.put(opts, :category, to_string(category)), else: opts
-        media_items = Media.list_media_items(opts)
+        media_items = Media.list_media_items(resolution.context[:current_scope], opts)
 
         watched_ids =
           Playback.list_user_progress(user.id, watched: true)

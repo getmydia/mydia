@@ -3,6 +3,7 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
 
   import Mydia.MediaFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.Media
 
@@ -94,7 +95,7 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
     assert {:ok, %{data: data}} =
              Absinthe.run(query, MydiaWeb.Schema,
                variables: variables,
-               context: %{current_user: user}
+               context: %{current_user: user, current_scope: Scope.for_user(user)}
              )
 
     data
@@ -105,7 +106,9 @@ defmodule MydiaWeb.Schema.DiscoveryFiltersTest do
   end
 
   defp set_category!(media_item, category) do
-    {:ok, updated} = Media.update_category(media_item, category, override: true)
+    {:ok, updated} =
+      Media.update_category(Scope.unrestricted(), media_item, category, override: true)
+
     updated
   end
 end

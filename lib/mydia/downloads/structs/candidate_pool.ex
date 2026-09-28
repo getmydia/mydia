@@ -9,6 +9,7 @@ defmodule Mydia.Downloads.Structs.CandidatePool do
   `TorrentMatcher.find_top_candidates_in/3`.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media
   alias Mydia.Media.MediaItem
 
@@ -31,8 +32,8 @@ defmodule Mydia.Downloads.Structs.CandidatePool do
     base = if Keyword.get(opts, :monitored_only, false), do: [monitored: true], else: []
 
     %__MODULE__{
-      movies: Media.list_media_items([{:type, "movie"} | base]),
-      tv_shows: Media.list_media_items([{:type, "tv_show"} | base])
+      movies: Media.list_media_items(Scope.system(), [{:type, "movie"} | base]),
+      tv_shows: Media.list_media_items(Scope.system(), [{:type, "tv_show"} | base])
     }
   end
 end

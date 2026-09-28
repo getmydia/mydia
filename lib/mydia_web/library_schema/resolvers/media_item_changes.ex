@@ -15,6 +15,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.MediaItemChanges do
   so is better than dropping the edge and losing the change.
   """
 
+  alias Mydia.Accounts.Scope
   alias Mydia.LibraryApi.MediaItemRevision
   alias Mydia.LibraryApi.RevisionCursor
   alias Mydia.LibraryApi.RevisionFeed
@@ -48,7 +49,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.MediaItemChanges do
   defp load_items([]), do: %{}
 
   defp load_items(ids) do
-    found = Media.list_media_items(ids: ids, preload: MediaItemView.preloads())
+    found = Media.list_media_items(Scope.system(), ids: ids, preload: MediaItemView.preloads())
     Map.new(found, &{&1.id, &1})
   end
 

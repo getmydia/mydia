@@ -1,6 +1,7 @@
 defmodule MydiaWeb.Schema.NextUpTest do
   use MydiaWeb.ConnCase
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Playback
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
@@ -195,7 +196,9 @@ defmodule MydiaWeb.Schema.NextUpTest do
   end
 
   defp run_query(query, variables, user \\ nil) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user, do: %{current_user: user, current_scope: Scope.for_user(user)}, else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end
