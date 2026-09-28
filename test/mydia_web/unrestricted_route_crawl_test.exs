@@ -49,6 +49,9 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
     "/api/v1/hls/:session_id/:segment" => "needs a live HLS session",
     "/api/v1/download/job/:job_id/status" => "needs a transcode job",
     "/api/v1/download/job/:job_id/file" => "needs a transcode job",
+    "/admin/remote-access" =>
+      "reads no media; its render detects the public IP over the network, which " <>
+        "admin_remote_access_live_test.exs disables through global app env",
     "/admin/jobs" => "admin Oban dashboard; Oban is not started in tests",
     "/admin/transcodes" =>
       "pre-existing, unrelated to scope: the template reads @streams.jobs.list, " <>
