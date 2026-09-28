@@ -61,12 +61,36 @@ jobs:
           MYDIA_VERSION: ${{ inputs.version }}
         run: player/appimage/build.sh
 
-      - name: Smoke test
-        run: player/appimage/smoke-test.sh player/build/appimage/Mydia_Player-x86_64.AppImage
-
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: mydia-player-linux-appimage
           path: player/build/appimage/Mydia_Player-x86_64.AppImage
           retention-days: 30
+
+  smoke:
+    name: Smoke test AppImage
+    needs: build
+    runs-on: ubuntu-latest
+    # A fresh 22.04, not the build image: its -dev packages would supply any
+    # library the AppImage forgot to bundle. A failure here fails this
+    # workflow, which release.yml's publish gate treats as a failed platform.
+    container: ubuntu:22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Download artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mydia-player-linux-appimage
+          path: appimage
+
+      - name: Smoke test
+        run: |
+          chmod +x appimage/Mydia_Player-x86_64.AppImage
+          player/appimage/smoke-test.sh --install-host-baseline appimage/Mydia_Player-x86_64.AppImage

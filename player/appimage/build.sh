@@ -3,8 +3,14 @@
 # repository root as the working directory:
 #
 #   docker run --rm -v "$PWD:/src" -w /src \
+#     -v "$(git rev-parse --git-common-dir):$(git rev-parse --git-common-dir)" \
 #     -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
 #     ubuntu:22.04 player/appimage/build.sh
+#
+# The second mount only matters in a git worktree, whose .git file points at
+# the main checkout's .git by absolute path. Add
+# -v "$HOME/.cache/mydia-mpv-prefix:/opt/mpv-prefix" to keep the mpv stack
+# between runs.
 #
 # 22.04 sets the glibc floor (2.35). Flutter comes from player/.fvmrc and Rust
 # from rust-toolchain.toml, as in player/flatpak/build.sh; neither version is
@@ -18,21 +24,11 @@ MPV_PREFIX="${MPV_PREFIX:-/opt/mpv-prefix}"
 SRC_DIR="$OUT/src"
 mkdir -p "$BUILD_HOME" "$SRC_DIR"
 
-# Hands build output back to the invoking user on a local run, where the
-# container's root would otherwise own player/build.
-restore_build_outputs() {
-  chown -R "${HOST_UID:-0}:${HOST_GID:-${HOST_UID:-0}}" "$ROOT/player/build" \
-    "$ROOT/player/.build-channel" 2>/dev/null || true
-  if [ -f "$ROOT/.git.appimage-bak" ]; then
-    mv -f "$ROOT/.git.appimage-bak" "$ROOT/.git"
-  fi
-  if [ -f "$ROOT/player/linux/runner/CMakeLists.txt.appimage-bak" ]; then
-    mv -f "$ROOT/player/linux/runner/CMakeLists.txt.appimage-bak" \
-      "$ROOT/player/linux/runner/CMakeLists.txt"
-  fi
-}
+# Hands the tree back to the invoking user on a local run. The container runs
+# as root, and pub get and build_runner write outside player/build too
+# (.dart_tool, the per-platform flutter/ephemeral dirs, generated sources).
 if [ -n "${HOST_UID:-}" ]; then
-  trap restore_build_outputs EXIT
+  trap 'chown -R "$HOST_UID:${HOST_GID:-$HOST_UID}" "$ROOT/player" 2>/dev/null || true' EXIT
 fi
 
 # --- System packages ---------------------------------------------------------
@@ -50,8 +46,7 @@ apt-get install -y --no-install-recommends \
   libegl-dev libgl-dev libx11-dev libxext-dev libxpresent-dev libxrandr-dev \
   libxss-dev libxv-dev libwayland-dev wayland-protocols libxkbcommon-dev \
   libpulse-dev libasound2-dev \
-  librsvg2-bin desktop-file-utils xvfb xauth \
-  libegl1-mesa libgl1-mesa-dri libgles2
+  librsvg2-bin desktop-file-utils xvfb xauth
 # wayland-scanner needs libxml-2.0 at build time (libxml2-dev).
 # libass autogen.sh calls autoreconf, which lives in the autoconf package.
 # mpv 0.41 needs meson 1.3; 22.04 ships 0.61. libplacebo's generator needs jinja2.
@@ -114,21 +109,6 @@ else
 fi
 
 # --- Flutter and Rust --------------------------------------------------------
-# Docker bind-mounts only /src; a worktree .git file points at a gitdir the
-# container cannot see. Point it at a throwaway bare repo for this run, restored
-# on EXIT (see restore_build_outputs).
-if [ -f "$ROOT/.git" ] && grep -q '^gitdir: ' "$ROOT/.git"; then
-  worktree_gitdir=$(sed -n 's/^gitdir: //p' "$ROOT/.git" | tr -d '[:space:]')
-  if [ -n "$worktree_gitdir" ] && [ ! -e "$worktree_gitdir/HEAD" ]; then
-    bare="$OUT/worktree-gitdir"
-    rm -rf "$bare"
-    git init -q --bare "$bare"
-    cp -a "$ROOT/.git" "$ROOT/.git.appimage-bak"
-    # Relative to the worktree root so the pointer stays valid on the host bind mount.
-    printf 'gitdir: %s\n' "player/build/appimage/worktree-gitdir" > "$ROOT/.git"
-    trap restore_build_outputs EXIT
-  fi
-fi
 export HOME="$BUILD_HOME" PUB_CACHE="$BUILD_HOME/.pub-cache"
 FLUTTER_VERSION="$(python3 -c 'import json;print(json.load(open("player/.fvmrc"))["flutter"])')"
 if [ ! -x "$BUILD_HOME/flutter/bin/flutter" ]; then
@@ -145,23 +125,6 @@ flutter config --no-analytics --no-cli-animations
 rustup show
 
 # --- Flutter build -----------------------------------------------------------
-# 22.04 ships glib 2.72; the Linux runner uses G_CONNECT_DEFAULT (2.74+).
-cat > "$OUT/glib-compat.h" << 'EOF'
-#pragma once
-#include <glib-object.h>
-#ifndef G_CONNECT_DEFAULT
-#define G_CONNECT_DEFAULT ((GConnectFlags)0)
-#endif
-EOF
-# Flutter's linux cmake ignores CXX/CMAKE_CXX_COMPILER; patch the runner target.
-RUNNER_CMAKE="$ROOT/player/linux/runner/CMakeLists.txt"
-GLIB_HDR="$OUT/glib-compat.h"
-[ -f "$RUNNER_CMAKE.appimage-bak" ] || cp -a "$RUNNER_CMAKE" "$RUNNER_CMAKE.appimage-bak"
-cp -a "$RUNNER_CMAKE.appimage-bak" "$RUNNER_CMAKE"
-sed -i "/^apply_standard_settings(\${BINARY_NAME})$/a\\
-# APPIMAGE_GLIB_COMPAT: 22.04 glib lacks G_CONNECT_DEFAULT (see player/appimage/build.sh).\\
-target_compile_options(\${BINARY_NAME} PRIVATE \"-include${GLIB_HDR}\")" "$RUNNER_CMAKE"
-
 cd "$ROOT/player"
 flutter pub get --enforce-lockfile
 flutter pub run build_runner build --delete-conflicting-outputs
@@ -204,54 +167,12 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 DEPLOY_GTK_VERSION=3 linuxdeploy --appdir "$APPDIR" \
   --deploy-deps-only "$APPDIR/usr/lib/mydia-player" \
   --plugin gtk
-# linuxdeploy blacklists some GTK deps; vendor any ELF dependency outside AppDir (smoke-test).
-# Resolve like AppRun so we do not rely on the build image's system libs.
-export LD_LIBRARY_PATH="$APPDIR/usr/lib/mydia-player/lib:$APPDIR/usr/lib"
-glibc_re='^(ld-linux|libc\.so|libm\.so|libdl\.so|libpthread\.so|librt\.so|libgcc_s\.so|libstdc\+\+\.so|libresolv\.so|libnss_|libutil\.so)'
-for _ in $(seq 1 40); do
-  copied=0
-  while IFS= read -r -d '' elf; do
-    file -b "$elf" | grep -q ELF || continue
-    while IFS= read -r line; do
-      case "$line" in
-        NOTFOUND:*)
-          name="${line#NOTFOUND:}"
-          name="${name%;}"
-          path=$(ldconfig -p 2>/dev/null | awk -v n="$name" '$1==n {print $NF; exit}')
-          ;;
-        /*)
-          path="$line"
-          ;;
-        *)
-          continue
-          ;;
-      esac
-      [ -z "${path:-}" ] || [ ! -f "$path" ] && continue
-      case "$path" in "$APPDIR"/*) continue ;; esac
-      base=$(basename "$path")
-      echo "$base" | grep -qE "$glibc_re" && continue
-      # linuxdeploy blacklists GL/EGL driver entry points; still vendor libGLdispatch etc.
-      echo "$base" | grep -qE '^lib(EGL\.so|GL\.so|GLX\.so|GLES)' && continue
-      if [ ! -e "$APPDIR/usr/lib/$base" ]; then
-        install -m644 "$path" "$APPDIR/usr/lib/$base"
-        copied=1
-      fi
-    done < <(
-      ldd "$elf" 2>/dev/null | awk '
-        /=> \// { print $3 }
-        /=> not found/ { print "NOTFOUND:" $1 }
-      '
-    )
-  done < <(find "$APPDIR/usr/lib" "$APPDIR/usr/lib/mydia-player" -type f \( -name '*.so*' -o -name mydia-player \) -print0)
-  [ "$copied" = 0 ] && break
-done
-# Flutter needs Mesa GL/EGL on minimal hosts; linuxdeploy leaves GL/EGL to the distro.
-for lib in libEGL.so.1 libEGL_mesa.so.0 libGL.so.1 libGLX.so.0 libGLESv2.so.2 libglapi.so.0 libgbm.so.1 libGLdispatch.so.0 libdrm.so.2; do
-  install -m644 "/lib/x86_64-linux-gnu/$lib" "$APPDIR/usr/lib/"
-done
-install -d "$APPDIR/usr/share/glvnd/egl_vendor.d" "$APPDIR/usr/lib/dri"
-install -Dm644 /usr/share/glvnd/egl_vendor.d/50_mesa.json "$APPDIR/usr/share/glvnd/egl_vendor.d/50_mesa.json"
-install -m644 /usr/lib/x86_64-linux-gnu/dri/swrast_dri.so "$APPDIR/usr/lib/dri/"
+# Everything on the AppImage excludelist (GL/EGL, X11/xcb, fontconfig,
+# freetype, ALSA...) is left to the host on purpose: a bundled GL stack would
+# force software rendering and break NVIDIA. The one exception is
+# libwayland-client, which is on the list but must be ours: mpv 0.41 needs
+# 1.21+, and a 22.04-era host has 1.20.
+install -m644 "$MPV_PREFIX/lib/libwayland-client.so.0" "$APPDIR/usr/lib/"
 test -e "$APPDIR/usr/lib/libmpv.so.2" || { echo "libmpv.so.2 was not bundled" >&2; exit 1; }
 
 ARCH=x86_64 appimagetool --no-appstream "$APPDIR" "$OUT/Mydia_Player-x86_64.AppImage"

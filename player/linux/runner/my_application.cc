@@ -4,6 +4,12 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// G_CONNECT_DEFAULT arrived in GLib 2.74. The AppImage builds on Ubuntu 22.04,
+// which ships 2.72, and the value is just "no flags".
+#ifndef G_CONNECT_DEFAULT
+#define G_CONNECT_DEFAULT ((GConnectFlags)0)
+#endif
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;

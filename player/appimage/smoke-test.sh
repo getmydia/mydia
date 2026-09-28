@@ -3,8 +3,27 @@
 # dynamic linker error, then checks every bundled ELF resolves. The AppImage
 # counterpart of player/flatpak/smoke-test.sh.
 #
-# Usage: player/appimage/smoke-test.sh <path-to-AppImage>
+# Usage: player/appimage/smoke-test.sh [--install-host-baseline] <path-to-AppImage>
+#
+# Run it in a clean ubuntu:22.04 with --install-host-baseline, never in the
+# build image, whose -dev packages would hide a library the AppImage forgot.
+# The baseline is exactly the AppImage excludelist's contract: the GL stack,
+# X11/xcb, fontconfig, freetype, ALSA and friends that every desktop provides
+# and that the AppImage must not bundle. If the test fails for a library
+# outside this list, bundle that library; never grow this list to make it pass.
 set -euo pipefail
+
+if [ "${1:-}" = --install-host-baseline ]; then
+  shift
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends \
+    xvfb xauth file \
+    libgl1 libegl1 libgles2 libgl1-mesa-dri libgbm1 libdrm2 libglx0 \
+    libx11-6 libx11-xcb1 libxcb1 libxcb-dri2-0 libxcb-dri3-0 \
+    libfontconfig1 libfreetype6 libharfbuzz0b libfribidi0 libexpat1 \
+    libasound2 libgpg-error0 libcom-err2 libgmp10 libuuid1 zlib1g >/dev/null
+fi
 
 IMAGE="$(readlink -f "${1:?AppImage path required}")"
 WORK="$(mktemp -d)"

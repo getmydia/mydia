@@ -8,9 +8,16 @@
 # libmpv.so, to the host's own mpv.
 HERE="$(dirname "$(readlink -f "$0")")"
 BUNDLE="$HERE/usr/lib/mydia-player"
+
+# linuxdeploy's GTK plugin leaves its environment (pixbuf loader cache,
+# GSettings schemas, GTK module paths) in apprun-hooks/, and only wraps an
+# AppRun it generated itself. Without these the bundled GTK reads the host's
+# caches, built for a different GTK.
+export APPDIR="${APPDIR:-$HERE}"
+for hook in "$HERE"/apprun-hooks/*.sh; do
+  [ -e "$hook" ] && . "$hook"
+done
+
 export LD_LIBRARY_PATH="$BUNDLE/lib:$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export LIBMPV_LIBRARY_PATH="$HERE/usr/lib/libmpv.so.2"
-# GLVND needs our vendor ICD on hosts with no Mesa packages (smoke-test / minimal distros).
-export __EGL_VENDOR_LIBRARY_DIRS="$HERE/usr/share/glvnd/egl_vendor.d"
-export LIBGL_DRIVERS_PATH="$HERE/usr/lib/dri${LIBGL_DRIVERS_PATH:+:$LIBGL_DRIVERS_PATH}"
 exec "$BUNDLE/mydia-player" "$@"
