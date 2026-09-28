@@ -1,0 +1,16 @@
+#!/bin/sh
+# Entry point inside the AppImage. The Flatpak sets LD_LIBRARY_PATH=/app/lib
+# for the reason this does: media_kit dlopens libmpv by bare name, which only
+# searches LD_LIBRARY_PATH and the system paths.
+#
+# LIBMPV_LIBRARY_PATH is read by media_kit before any name. Without it, a host
+# with libmpv-dev installed would resolve media_kit's first candidate,
+# libmpv.so, to the host's own mpv.
+HERE="$(dirname "$(readlink -f "$0")")"
+BUNDLE="$HERE/usr/lib/mydia-player"
+export LD_LIBRARY_PATH="$BUNDLE/lib:$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBMPV_LIBRARY_PATH="$HERE/usr/lib/libmpv.so.2"
+# GLVND needs our vendor ICD on hosts with no Mesa packages (smoke-test / minimal distros).
+export __EGL_VENDOR_LIBRARY_DIRS="$HERE/usr/share/glvnd/egl_vendor.d"
+export LIBGL_DRIVERS_PATH="$HERE/usr/lib/dri${LIBGL_DRIVERS_PATH:+:$LIBGL_DRIVERS_PATH}"
+exec "$BUNDLE/mydia-player" "$@"
