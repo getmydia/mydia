@@ -33,22 +33,21 @@ defmodule Mydia.Accounts.Scope do
         }
 
   @doc """
-  Builds the scope for a user, loading their restriction row if there is one.
+  Builds the scope for a user, loading their restriction row if there may be one. See Mydia.Accounts.access_restrictions_possible?/0.
   """
   @spec for_user(User.t()) :: t()
   def for_user(%User{role: "admin"} = user), do: %__MODULE__{user: user}
 
   def for_user(%User{} = user) do
-    case Accounts.get_access_restriction(user) do
-      nil ->
-        %__MODULE__{user: user}
-
-      %AccessRestriction{} = restriction ->
-        %__MODULE__{
-          user: user,
-          allowed_categories: presence(restriction.allowed_categories),
-          max_content_age: restriction.max_content_age
-        }
+    with true <- Accounts.access_restrictions_possible?(),
+         %AccessRestriction{} = restriction <- Accounts.get_access_restriction(user) do
+      %__MODULE__{
+        user: user,
+        allowed_categories: presence(restriction.allowed_categories),
+        max_content_age: restriction.max_content_age
+      }
+    else
+      _no_restriction -> %__MODULE__{user: user}
     end
   end
 

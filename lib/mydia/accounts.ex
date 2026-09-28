@@ -32,6 +32,11 @@ defmodule Mydia.Accounts do
   @changelog_key "last_seen_changelog_version"
   @anime_nudge_key "anime_nudge_dismissed"
 
+  # Whether any user_access_restrictions row may exist. Read on every
+  # non-admin request by Scope.for_user/1 to skip a query on installs that
+  # never restrict anyone. See access_restrictions_possible?/0.
+  @restrictions_flag {__MODULE__, :access_restrictions?}
+
   ## Users
 
   @doc """
@@ -408,6 +413,7 @@ defmodule Mydia.Accounts do
     existing
     |> AccessRestriction.changeset(attrs)
     |> Repo.insert_or_update()
+    |> tap(&mark_restrictions_present/1)
   end
 
   @doc """
@@ -420,6 +426,48 @@ defmodule Mydia.Accounts do
       restriction -> Repo.delete!(restriction) && :ok
     end
   end
+
+  @doc """
+  False only when a boot-time count found no restriction rows and none has been
+  written since, so `Mydia.Accounts.Scope.for_user/1` can skip its lookup.
+
+  Fails safe: an absent flag reads as true. Only
+  `refresh_access_restrictions_flag/0` writes false, and clearing a
+  restriction never does, so there is no window in which a real row is
+  ignored. A stale true costs one indexed lookup per request, which is the
+  behaviour without the flag.
+  """
+  @spec access_restrictions_possible?() :: boolean()
+  def access_restrictions_possible?, do: :persistent_term.get(@restrictions_flag, true)
+
+  @doc """
+  Recounts restriction rows and stores the result. Called once at boot.
+
+  Never raises: on any error the flag is erased, which reads as "possible".
+  """
+  @spec refresh_access_restrictions_flag() :: :ok
+  def refresh_access_restrictions_flag do
+    :persistent_term.put(@restrictions_flag, Repo.exists?(AccessRestriction))
+    :ok
+  rescue
+    error ->
+      Logger.warning("Access restriction flag: recount failed, lookups stay on",
+        error: inspect(error)
+      )
+
+      :persistent_term.erase(@restrictions_flag)
+      :ok
+  end
+
+  # persistent_term writes trigger a global GC scan, so skip the put when the
+  # flag is already true.
+  defp mark_restrictions_present({:ok, _restriction}) do
+    if :persistent_term.get(@restrictions_flag, nil) != true do
+      :persistent_term.put(@restrictions_flag, true)
+    end
+  end
+
+  defp mark_restrictions_present(_error), do: :ok
 
   @doc """
   Verifies a user's password.
