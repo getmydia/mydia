@@ -39,7 +39,7 @@
         Write-Host 'Mydia Player is installed. Open it from the Start menu.'
     }
     catch {
-        throw "Mydia Player was not installed: $($_.Exception.Message) You can download the installer instead from $manualUrl"
+        throw "Mydia Player was not installed: $($_.Exception.Message)`nYou can download the installer instead from $manualUrl"
     }
     finally {
         Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
