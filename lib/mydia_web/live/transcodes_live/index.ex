@@ -31,7 +31,7 @@ defmodule MydiaWeb.TranscodesLive.Index do
 
       if job do
         Downloads.cancel_transcode_job(job)
-        {:noreply, put_flash(socket, :info, "Job cancelled")}
+        {:noreply, socket |> put_flash(:info, "Job cancelled") |> load_jobs()}
       else
         {:noreply, put_flash(socket, :error, "Job not found")}
       end
@@ -48,10 +48,9 @@ defmodule MydiaWeb.TranscodesLive.Index do
   defp load_jobs(socket) do
     jobs = Downloads.list_transcode_jobs(preload: [:media_file])
 
-    # Enrich with media info if possible (media_file -> library_path -> media_item)
-    # Ideally we'd preload deeper, but for now let's just show basic info
-
-    stream(socket, :jobs, jobs, reset: true)
+    socket
+    |> assign(:jobs_empty?, Enum.empty?(jobs))
+    |> stream(:jobs, jobs, reset: true)
   end
 
   defp status_badge_class(status) do
@@ -66,4 +65,16 @@ defmodule MydiaWeb.TranscodesLive.Index do
 
   defp format_progress(nil), do: "0%"
   defp format_progress(progress), do: "#{Float.round(progress * 100, 1)}%"
+
+  defp format_started_at(nil), do: "Pending"
+  defp format_started_at(%DateTime{} = dt), do: Timex.from_now(dt)
+  defp format_started_at(_), do: "N/A"
+
+  defp media_name(job) do
+    case job.media_file do
+      %{relative_path: path} when is_binary(path) and path != "" -> Path.basename(path)
+      %{path: path} when is_binary(path) and path != "" -> Path.basename(path)
+      _ -> job.media_file_id
+    end
+  end
 end
