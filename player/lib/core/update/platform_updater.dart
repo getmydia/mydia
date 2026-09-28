@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../domain/models/available_update.dart';
 import 'updaters/android_updater.dart';
+import 'updaters/appimage_updater.dart';
 import 'updaters/linux_updater.dart';
 import 'updaters/macos_updater.dart';
 import 'updaters/windows_updater.dart';
@@ -35,7 +36,12 @@ abstract class PlatformUpdater {
     if (Platform.isAndroid) return AndroidUpdater();
     if (Platform.isWindows) return WindowsUpdater();
     if (Platform.isMacOS) return MacOSUpdater();
-    if (Platform.isLinux) return LinuxUpdater();
+    if (Platform.isLinux) {
+      final appImage = AppImageUpdater.runningAppImagePath();
+      return appImage != null
+          ? AppImageUpdater(appImagePath: appImage)
+          : LinuxUpdater();
+    }
     return null;
   }
 }
