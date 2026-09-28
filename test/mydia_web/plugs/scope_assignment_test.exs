@@ -43,8 +43,12 @@ defmodule MydiaWeb.Plugs.ScopeAssignmentTest do
     user = restricted_user_fixture(%{max_content_age: 7})
     {:ok, _record, plain_key} = Mydia.Accounts.create_api_key(user.id, %{name: "Scope Key"})
 
+    # ApiAuth rate-limits API keys per client IP in a global ETS table, and
+    # other tests (some async) spend failed attempts from 127.0.0.1. A
+    # dedicated address keeps this request out of their bucket, so it is never
+    # answered 429 before a scope is assigned.
     conn =
-      conn
+      %{conn | remote_ip: {10, 91, 0, 42}}
       |> put_req_header("x-api-key", plain_key)
       |> get(~p"/api/v1/indexers")
 
