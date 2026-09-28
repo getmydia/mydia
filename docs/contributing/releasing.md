@@ -584,7 +584,7 @@ leapfrog.
 - **Workflow Artifacts:** All built binaries are uploaded as GitHub Actions artifacts attached to the workflow run (retained for 30 days):
   - Android: signed release universal APK (`mydia-player-android-apk`) and Android App Bundle (`.aab`) ready for direct sideloading and testing on Android phones and TVs
   - macOS: signed and notarized DMG disk image
-  - Windows: signed Inno Setup executable installer
+  - Windows: unsigned Inno Setup executable installer
   - Linux: standalone `.tar.gz` bundle
   - iOS: zipped `.xcarchive` and IPA artifacts
 

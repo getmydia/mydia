@@ -136,7 +136,7 @@ peer-to-peer connection. No port forwarding, no VPN.
 | Android | [Download APK](https://mydia.dev/download/android) | Allow installs from unknown sources; updates itself afterward, track chosen in Settings |
 | iOS | [Install via TestFlight](https://testflight.apple.com/join/KFSYxaQP) | Needs the TestFlight app |
 | macOS | [Download .dmg](https://mydia.dev/download/macos) | Notarized, updates itself |
-| Windows | [Download installer](https://mydia.dev/download/windows) | Per-user install, unsigned build |
+| Windows | `irm https://mydia.dev/install.ps1 \| iex` in PowerShell, or [download installer](https://mydia.dev/download/windows) | Per-user install. The command avoids the SmartScreen prompt the unsigned installer gets |
 | Linux | [Flatpak](https://mydia.dev/download/flatpak) or [.tar.gz](https://mydia.dev/download/linux) | Flatpak recommended |
 | Web | Served by your own Mydia server at `/player` | Nothing to install |
 
