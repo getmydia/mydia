@@ -1,0 +1,23 @@
+#!/bin/sh
+# Entry point inside the AppImage. The Flatpak sets LD_LIBRARY_PATH=/app/lib
+# for the reason this does: media_kit dlopens libmpv by bare name, which only
+# searches LD_LIBRARY_PATH and the system paths.
+#
+# LIBMPV_LIBRARY_PATH is read by media_kit before any name. Without it, a host
+# with libmpv-dev installed would resolve media_kit's first candidate,
+# libmpv.so, to the host's own mpv.
+HERE="$(dirname "$(readlink -f "$0")")"
+BUNDLE="$HERE/usr/lib/mydia-player"
+
+# linuxdeploy's GTK plugin leaves its environment (pixbuf loader cache,
+# GSettings schemas, GTK module paths) in apprun-hooks/, and only wraps an
+# AppRun it generated itself. Without these the bundled GTK reads the host's
+# caches, built for a different GTK.
+export APPDIR="${APPDIR:-$HERE}"
+for hook in "$HERE"/apprun-hooks/*.sh; do
+  [ -e "$hook" ] && . "$hook"
+done
+
+export LD_LIBRARY_PATH="$BUNDLE/lib:$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LIBMPV_LIBRARY_PATH="$HERE/usr/lib/libmpv.so.2"
+exec "$BUNDLE/mydia-player" "$@"

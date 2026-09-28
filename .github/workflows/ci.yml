@@ -143,8 +143,8 @@ jobs:
           # The Flatpak build installs rustup with --default-toolchain none and
           # lets it resolve rust-toolchain.toml, so nothing under player/flatpak
           # may name a channel.
-          if grep -rnE -- '--default-toolchain[[:space:]]+[0-9]|^[[:space:]]*channel[[:space:]]*=' player/flatpak/; then
-            echo "::error::player/flatpak pins a Rust version; rustup resolves rust-toolchain.toml on its own"
+          if grep -rnE -- '--default-toolchain[[:space:]]+[0-9]|^[[:space:]]*channel[[:space:]]*=' player/flatpak/ player/appimage/; then
+            echo "::error::player/flatpak or player/appimage pins a Rust version; rustup resolves rust-toolchain.toml on its own"
             FAIL=1
           fi
           exit "$FAIL"

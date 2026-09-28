@@ -33,6 +33,7 @@ jobs:
       pull-requests: read
     outputs:
       player: ${{ steps.filter.outputs.player }}
+      appimage: ${{ steps.filter.outputs.appimage }}
 
     steps:
       # The single source of truth for what this workflow cares about:
@@ -56,6 +57,9 @@ jobs:
       #                                  `paths:` filter it replaced didn't
       #                                  watch this file either.
       #   .github/workflows/ci-player.yml
+      #   player/appimage/
+      #   player/flatpak/dev.mydia.player.yml
+      #   .github/workflows/player-appimage.yml
       - name: Decide whether player code changed
         id: filter
         env:
@@ -82,6 +86,7 @@ jobs:
                            --paginate --jq '.[] | .filename, (.previous_filename // empty)' || echo "")"
               if [ -z "$changed" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "Could not compute the change set; running everything."
                 exit 0
               fi
@@ -92,6 +97,7 @@ jobs:
               # silently skipping.
               if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "No usable base commit; running everything."
                 exit 0
               fi
@@ -99,12 +105,14 @@ jobs:
                            --jq '.files[].filename' || echo "")"
               if [ -z "$changed" ]; then
                 echo "player=true" >> "$GITHUB_OUTPUT"
+                echo "appimage=true" >> "$GITHUB_OUTPUT"
                 echo "Could not compute the change set; running everything."
                 exit 0
               fi
               ;;
             *)
               echo "player=true" >> "$GITHUB_OUTPUT"
+              echo "appimage=true" >> "$GITHUB_OUTPUT"
               echo "Event $EVENT has no change set; running everything."
               exit 0
               ;;
@@ -116,6 +124,12 @@ jobs:
           else
             echo "player=false" >> "$GITHUB_OUTPUT"
             echo "No player-relevant changes."
+          fi
+
+          if printf '%s\n' "$changed" | grep -qE '^(player/appimage/|player/flatpak/dev\.mydia\.player\.yml$|\.github/workflows/player-appimage\.yml$)'; then
+            echo "appimage=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "appimage=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Moved here from ci.yml, which has no path filter and therefore ran the
@@ -629,6 +643,10 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         run: ./player/tool/test/apply-channel-test.sh
 
+      - name: Test the AppImage pins
+        if: needs.changes.outputs.player == 'true'
+        run: ./player/appimage/test/pins-test.sh
+
       # Seconds, not minutes. Catches most manifest metadata mistakes long
       # before the full flatpak-build job below finishes compiling mpv.
       - name: Install validators
@@ -700,3 +718,19 @@ jobs:
             staged "$PWD/staged-repo"
           flatpak install --user -y --reinstall staged dev.mydia.player
           ./player/flatpak/smoke-test.sh stable
+
+  appimage-build:
+    name: AppImage / Build
+    needs: changes
+    # 25+ minutes of mpv compile on a cold cache, so only when the packaging
+    # itself changed. Release builds always run it.
+    if: needs.changes.outputs.appimage == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/player-appimage.yml
+    with:
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      version: 0.0.0-ci
+      version_code: '1'
+      dry_run: true
+

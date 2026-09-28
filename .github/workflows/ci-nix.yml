@@ -42,7 +42,7 @@ jobs:
           hits="$(
             git ls-files -z \
                 '*.nix' '.github/workflows/*' '*Dockerfile*' '*compose*.yml' \
-                'scripts/*' 'dev' 'player/flatpak/*' \
+                'scripts/*' 'dev' 'player/flatpak/*' 'player/appimage/*' \
               | xargs -0 grep -HnIiE 'flutter' \
               | grep -vE ':[[:space:]]*uses:[[:space:]]*[^[:space:]]+@' \
               | grep -E '[0-9]+\.[0-9]+|[Ff]lutter[0-9]' \

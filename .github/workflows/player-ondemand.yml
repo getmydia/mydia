@@ -27,6 +27,10 @@ on:
         description: 'Build Linux (.tar.gz bundle)'
         type: boolean
         default: false
+      build_appimage:
+        description: 'Build Linux AppImage (artifact only)'
+        type: boolean
+        default: false
       build_flatpak:
         description: 'Build Linux Flatpak and publish it to the dev channel (mydia-dev)'
         type: boolean
@@ -243,6 +247,18 @@ jobs:
     if: inputs.build_linux
     needs: prepare
     uses: ./.github/workflows/player-linux.yml
+    with:
+      sha: ${{ needs.prepare.outputs.sha }}
+      version: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.version_code }}
+      dry_run: ${{ inputs.dry_run }}
+
+
+  player-appimage:
+    name: Player / AppImage
+    if: inputs.build_appimage
+    needs: prepare
+    uses: ./.github/workflows/player-appimage.yml
     with:
       sha: ${{ needs.prepare.outputs.sha }}
       version: ${{ needs.prepare.outputs.version }}

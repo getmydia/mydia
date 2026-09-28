@@ -1,4 +1,4 @@
-# Player packaging: Windows, iOS, fastlane
+# Player packaging: Windows, iOS, fastlane, AppImage
 
 ## The Windows player ships without the VC++ runtime
 
@@ -169,3 +169,73 @@ stable native name and icon. Run the script by hand for the full treatment;
 `git checkout -- player/ && rm -f player/.build-channel` undoes it. The
 marker file is ignored by git, and a leftover one makes the next local Flatpak
 build use the old channel.
+
+## The Linux AppImage builds its own mpv on Ubuntu 22.04
+
+`player/appimage/build.sh` runs in `ubuntu:22.04`, which sets the glibc floor at
+2.35: Debian 12, RHEL 9, Mint 21 and anything newer. Building on a newer image
+raises that floor for every user, so the base moves only on purpose.
+
+22.04's own mpv is 0.34 with FFmpeg 4.4. media_kit would load it (it tries
+`libmpv.so`, `libmpv.so.2`, then `libmpv.so.1`), but it is years behind the
+Flatpak. So the build compiles FFmpeg, libass, libplacebo and mpv. The last
+three use the tags in `player/flatpak/dev.mydia.player.yml`, read by
+`player/appimage/pins.sh`, so the two Linux packages play through the same mpv;
+`player/appimage/test/pins-test.sh` fails if the manifest changes shape. FFmpeg
+is pinned in `pins.sh` itself, because the Flatpak takes it from the GNOME
+runtime. mpv 0.41 needs FFmpeg 6.1 or newer and meson 1.3 or newer, which is
+why both come from outside apt. So is Wayland: mpv 0.41 needs libwayland-client
+1.21 and wayland-protocols 1.41, against 22.04's 1.20 and 1.25.
+
+The AppImage bundles nothing on the AppImage project's
+[excludelist](https://github.com/AppImageCommunity/pkg2appimage/blob/master/excludelist):
+the GL/EGL stack, X11/xcb, fontconfig, freetype, ALSA and the rest are the
+host's. A bundled GL stack runs on a bare container and nowhere else properly:
+it forces software rendering and breaks NVIDIA outright. An early draft of the
+build did exactly that to get the smoke test green, so the rule is written down
+here. The
+single exception is libwayland-client, which must be the bundled 1.22 for the
+reason above. The runner's `G_CONNECT_DEFAULT` needs GLib 2.74, and 22.04 has
+2.72, so `my_application.cc` defines it when GLib does not.
+
+libplacebo is built without Vulkan. media_kit_video draws through mpv's OpenGL
+render API, and Vulkan would pull in shaderc and glslang for nothing.
+
+`AppRun` sets `LIBMPV_LIBRARY_PATH` to the bundled `libmpv.so.2`. media_kit
+checks it before any library name; without it, a host with `libmpv-dev`
+installed resolves media_kit's first guess, `libmpv.so`, to the host's mpv.
+
+GitHub runners and containers have no FUSE, so CI runs the image with
+`APPIMAGE_EXTRACT_AND_RUN=1`. `smoke-test.sh` runs it under Xvfb for ten
+seconds, then extracts it and runs `ldd` over every bundled ELF, because
+media_kit dlopens libmpv and a short run proves only what it loaded. CI runs it
+in a fresh `ubuntu:22.04` with `--install-host-baseline`, which installs the
+excludelist's libraries and nothing else. Running it in the build image proves
+nothing, since the `-dev` packages there supply whatever the AppImage forgot.
+When it fails on a library outside the baseline, bundle that library; never
+add to the baseline to get it passing.
+
+Build locally with:
+
+    docker run --rm -v "$PWD:/src" -w /src \
+      -v "$(git rev-parse --git-common-dir):$(git rev-parse --git-common-dir)" \
+      -v "$HOME/.cache/mydia-mpv-prefix:/opt/mpv-prefix" \
+      -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+      ubuntu:22.04 player/appimage/build.sh
+
+The `--git-common-dir` mount is for worktrees, whose `.git` file points at the
+main checkout by absolute path. The prefix mount keeps the mpv stack between
+runs. The container's `pub get` rewrites `player/.dart_tool/package_config.json`
+with `/src/...` paths, so every host test fails to find `flutter_test`
+afterwards; run `./dev flutter pub get` before testing again. Then smoke-test it
+the way CI does:
+
+    docker run --rm -v "$PWD:/src:ro" -w /src ubuntu:22.04 \
+      player/appimage/smoke-test.sh --install-host-baseline \
+      player/build/appimage/Mydia_Player-x86_64.AppImage
+
+The AppImage updates itself from the `linux-appimage` slot of
+`releases.json`. `AppImageUpdater` downloads beside the `.AppImage` file,
+checks the ELF and AppImage type 2 magic, and renames over it, so the file keeps
+its name and desktop entries from AppImageLauncher or Gear Lever keep working.
+A tarball install reads the `linux` slot and never sees an AppImage.
