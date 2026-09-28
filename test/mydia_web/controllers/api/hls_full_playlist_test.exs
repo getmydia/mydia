@@ -15,7 +15,7 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
   alias Mydia.Streaming.SegmentPlan
 
   setup do
-    {_user, token} = create_user_and_token()
+    {user, token} = create_user_and_token()
 
     temp_dir = Path.join(System.tmp_dir!(), "hls_full_#{System.unique_integer([:positive])}")
     File.mkdir_p!(temp_dir)
@@ -23,7 +23,7 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
 
     session_id = "hls-full-#{System.unique_integer([:positive])}"
 
-    {:ok, token: token, temp_dir: temp_dir, session_id: session_id}
+    {:ok, user: user, token: token, temp_dir: temp_dir, session_id: session_id}
   end
 
   describe "playlist rendering" do
@@ -58,6 +58,7 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
     test "a full session's playlist is served with the HLS content type", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
@@ -65,9 +66,11 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
       playlist_text = SegmentPlan.playlist(plan)
 
       {:ok, _pid} =
-        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
-          playlist: {:ok, playlist_text}
-        })
+        HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: dir, user_id: user.id},
+          %{playlist: {:ok, playlist_text}}
+        )
 
       conn =
         conn
@@ -85,6 +88,7 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
     test "a full-mode segment is served from the path the session resolves", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
@@ -92,9 +96,11 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
       File.write!(segment_path, "tsdata")
 
       {:ok, _pid} =
-        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
-          request_segment: {:ok, segment_path}
-        })
+        HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: dir, user_id: user.id},
+          %{request_segment: {:ok, segment_path}}
+        )
 
       conn =
         conn
@@ -110,13 +116,16 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
     test "a segment timeout returns 503 with Retry-After, not 404", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
       {:ok, _pid} =
-        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
-          request_segment: {:error, :timeout}
-        })
+        HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: dir, user_id: user.id},
+          %{request_segment: {:error, :timeout}}
+        )
 
       conn =
         conn
@@ -131,13 +140,16 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
     test "an out-of-range segment index returns 404, not 503", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
       {:ok, _pid} =
-        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
-          request_segment: {:error, :out_of_range}
-        })
+        HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: dir, user_id: user.id},
+          %{request_segment: {:error, :out_of_range}}
+        )
 
       conn =
         conn
@@ -158,15 +170,18 @@ defmodule MydiaWeb.Api.HlsFullPlaylistTest do
     test "a subtitle name still routes to the window path, not request_segment", %{
       conn: conn,
       token: token,
+      user: user,
       temp_dir: dir,
       session_id: session_id
     } do
       File.write!(Path.join(dir, "subs_2.vtt"), "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n")
 
       {:ok, _pid} =
-        HlsSessionStub.start_link(session_id, %{media_file_id: "unused", temp_dir: dir}, %{
-          request_segment: {:error, :timeout}
-        })
+        HlsSessionStub.start_link(
+          session_id,
+          %{media_file_id: "unused", temp_dir: dir, user_id: user.id},
+          %{request_segment: {:error, :timeout}}
+        )
 
       conn =
         conn

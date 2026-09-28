@@ -149,8 +149,8 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
       nil ->
         {:error, "Authentication required"}
 
-      _user ->
-        terminate_session(session_id)
+      user ->
+        terminate_session(session_id, user.id)
     end
   end
 
@@ -577,20 +577,20 @@ defmodule MydiaWeb.Schema.Resolvers.StreamingResolver do
 
   defp get_duration_from_metadata(_), do: nil
 
-  defp terminate_session(session_id) do
+  defp terminate_session(session_id, user_id) do
     # Look up session by session_id in the registry
     registry_key = {:session, session_id}
 
     case Registry.lookup(Mydia.Streaming.HlsSessionRegistry, registry_key) do
-      [{pid, _meta}] ->
+      [{pid, %{user_id: ^user_id}}] ->
         # Stop the session
         HlsSession.stop(pid)
         Logger.info("Terminated streaming session #{session_id}")
         {:ok, true}
 
-      [] ->
-        # Session not found, but that's okay (may have already timed out)
-        Logger.debug("Session #{session_id} not found, may have already terminated")
+      _ ->
+        # Session not found or not owned by user, but that's okay (may have already timed out)
+        Logger.debug("Session #{session_id} not found for user #{user_id}")
         {:ok, true}
     end
   end

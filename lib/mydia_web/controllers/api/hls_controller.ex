@@ -555,11 +555,11 @@ defmodule MydiaWeb.Api.HlsController do
     end
   end
 
-  defp find_session_by_id(session_id, _user_id) do
-    # O(1) lookup using Registry
+  defp find_session_by_id(session_id, user_id) do
+    # O(1) lookup using Registry with user ownership check
     case Registry.lookup(Mydia.Streaming.HlsSessionRegistry, {:session, session_id}) do
-      [{pid, _meta}] -> {:ok, pid}
-      [] -> {:error, :session_not_found}
+      [{pid, %{user_id: ^user_id}}] -> {:ok, pid}
+      _ -> {:error, :session_not_found}
     end
   end
 
