@@ -68,9 +68,9 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
     "/api/v1/media/:id"
   ]
 
-  # LiveViews whose scoped reads happen only behind connected?/1. Filled in by
-  # Step 3; keep it short, each entry costs a connected mount.
-  @connected_mount []
+  # Static renders only. A review of every `connected?(socket)` branch in the
+  # exercised LiveViews found no scoped read that happens only on a connected
+  # mount. A LiveView that adds one needs its own connected-mount test.
 
   defp seed do
     user = user_fixture()
@@ -169,12 +169,7 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
   end
 
   defp check(conn, route_path, path) do
-    result =
-      if route_path in @connected_mount,
-        do: connected(conn, path),
-        else: static(conn, route_path, path)
-
-    with :ok <- result, do: no_missing_scope()
+    with :ok <- static(conn, route_path, path), do: no_missing_scope()
   end
 
   defp static(conn, route_path, path) do
@@ -193,16 +188,6 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
 
       true ->
         :ok
-    end
-  rescue
-    error -> {:error, "raised " <> Exception.format_banner(:error, error, __STACKTRACE__)}
-  end
-
-  defp connected(conn, path) do
-    case Phoenix.LiveViewTest.live(conn, path) do
-      {:ok, _view, _html} -> :ok
-      {:error, {:redirect, %{to: "/"}}} -> {:error, "connected mount bounced to /"}
-      {:error, {_kind, _redirect}} -> :ok
     end
   rescue
     error -> {:error, "raised " <> Exception.format_banner(:error, error, __STACKTRACE__)}
