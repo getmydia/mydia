@@ -20,6 +20,7 @@ defmodule MydiaWeb.MediaAccess do
   import Ecto.Query
 
   alias Mydia.Accounts.Scope
+  alias MydiaWeb.MediaAccess.MissingScopeError
   alias Mydia.Library.MediaFile
   alias Mydia.Media.Episode
   alias Mydia.Media.MediaItem
@@ -55,8 +56,26 @@ defmodule MydiaWeb.MediaAccess do
     end
   end
 
-  # No scope assigned means no auth boundary ran. Deny rather than assume.
-  defp authorize(_scope, _file), do: :denied
+  # No scope assigned means no auth boundary ran. Deny rather than assume, and
+  # say so: for an unrestricted account this denial is a 404 that looks exactly
+  # like a missing file, so nothing else would ever surface it. The telemetry
+  # event is what tests assert on; CrashReporter.report/3 is a no-op while
+  # crash reporting is disabled.
+  defp authorize(_scope, _file) do
+    report_missing_scope()
+    :denied
+  end
+
+  defp report_missing_scope do
+    {:current_stacktrace, [_process_info | stacktrace]} =
+      Process.info(self(), :current_stacktrace)
+
+    :telemetry.execute([:mydia, :media_access, :missing_scope], %{count: 1}, %{
+      stacktrace: stacktrace
+    })
+
+    Mydia.CrashReporter.report(%MissingScopeError{}, stacktrace, %{component: "media_access"})
+  end
 
   defp owning_item(%MediaFile{media_item_id: id}) when is_binary(id), do: Repo.get(MediaItem, id)
 
