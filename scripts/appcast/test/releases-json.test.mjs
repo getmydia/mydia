@@ -253,3 +253,29 @@ test('buildReleasesModel skips a dev build missing platform, build, or file', ()
   assert.equal(buildReleasesModel([], [missingBuild]).platforms.android.dev, undefined)
   assert.equal(buildReleasesModel([], [missingFile]).platforms.android.dev, undefined)
 })
+
+test('the tarball and the AppImage each fill only their own slot', () => {
+  const both = release('v0.17.0', {
+    assets: [
+      asset('mydia-player-linux-v0.17.0.tar.gz', 55000000),
+      asset('mydia-player-linux-v0.17.0-x86_64.AppImage', 140000000),
+    ],
+  })
+
+  const model = buildReleasesModel([both], [])
+
+  assert.equal(
+    model.platforms.linux.stable.url,
+    'https://github.example.invalid/mydia-player-linux-v0.17.0.tar.gz',
+  )
+  assert.equal(
+    model.platforms['linux-appimage'].stable.url,
+    'https://github.example.invalid/mydia-player-linux-v0.17.0-x86_64.AppImage',
+  )
+  assert.equal(model.platforms['linux-appimage'].stable.size, 140000000)
+})
+
+test('a release with only a tarball leaves the AppImage slot empty', () => {
+  const model = buildReleasesModel([stable], [])
+  assert.equal(model.platforms['linux-appimage'].stable, undefined)
+})

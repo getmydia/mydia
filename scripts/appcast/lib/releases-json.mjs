@@ -18,6 +18,10 @@ export const ASSET_PATTERNS = {
   android: /^mydia-player-android-v.*\.apk$/,
   windows: /^mydia-player-windows-v.*\.exe$/,
   linux: /^mydia-player-linux-v.*\.tar\.gz$/,
+  // Its own slot, not a second linux asset: every tarball install runs
+  // `tar -xzf` on whatever the linux slot names, and each install stays on
+  // the format it started with.
+  'linux-appimage': /^mydia-player-linux-v.*-x86_64\.AppImage$/,
   macos: /^mydia-player-macos-v.*\.dmg$/,
 }
 
