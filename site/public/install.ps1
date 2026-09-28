@@ -16,15 +16,21 @@
     # Windows PowerShell 5.1 redraws its progress bar for every chunk, which
     # makes a large download many times slower.
     $ProgressPreference = 'SilentlyContinue'
-    # 5.1 on older .NET defaults to TLS 1.0/1.1, which GitHub refuses.
-    [Net.ServicePointManager]::SecurityProtocol =
-        [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
     $downloadUrl = 'https://mydia.dev/download/windows'
     $manualUrl = 'https://mydia.dev/download#windows'
-    $installer = Join-Path $env:TEMP 'mydia-player-setup.exe'
+    # A unique name per run, so a second session or a leftover file from an
+    # earlier run that is still locked cannot collide with this one.
+    $installer = Join-Path $env:TEMP "mydia-player-setup-$([guid]::NewGuid().ToString('N')).exe"
+    # SecurityProtocol is process-wide, so the script block does not scope it.
+    # Save it here and put it back in finally.
+    $securityProtocol = [Net.ServicePointManager]::SecurityProtocol
 
     try {
+        # 5.1 on older .NET defaults to TLS 1.0/1.1, which GitHub refuses.
+        [Net.ServicePointManager]::SecurityProtocol =
+            $securityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
         Write-Host 'Downloading Mydia Player...'
         # -UseBasicParsing keeps 5.1 off the Internet Explorer engine, which
         # fails where IE was never set up. PowerShell 7 ignores it.
@@ -42,6 +48,7 @@
         throw "Mydia Player was not installed: $($_.Exception.Message)`nYou can download the installer instead from $manualUrl"
     }
     finally {
+        [Net.ServicePointManager]::SecurityProtocol = $securityProtocol
         Remove-Item -LiteralPath $installer -Force -ErrorAction SilentlyContinue
     }
 }
