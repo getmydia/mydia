@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
     show debugPrint, kIsWeb, visibleForTesting;
 
 import '../../domain/models/available_update.dart';
+import 'updaters/appimage_updater.dart';
 import 'update_track.dart';
 
 /// One build, as releases.json describes it.
@@ -91,6 +92,9 @@ class UpdateFeedClient {
         isWindows: !kIsWeb && Platform.isWindows,
         isLinux: !kIsWeb && Platform.isLinux,
         isMacOS: !kIsWeb && Platform.isMacOS,
+        isAppImage: !kIsWeb &&
+            Platform.isLinux &&
+            AppImageUpdater.runningAppImagePath() != null,
       );
 
   /// The mapping itself, separated from the platform lookups so every branch
@@ -106,11 +110,13 @@ class UpdateFeedClient {
     required bool isWindows,
     required bool isLinux,
     required bool isMacOS,
+    required bool isAppImage,
   }) {
     if (isWeb) return null;
     if (isAndroid) return 'android';
     if (isWindows) return 'windows';
-    if (isLinux) return 'linux';
+    // Its own slot: a tarball install extracts whatever the linux slot names.
+    if (isLinux) return isAppImage ? 'linux-appimage' : 'linux';
     if (isMacOS) return 'macos';
     return null;
   }

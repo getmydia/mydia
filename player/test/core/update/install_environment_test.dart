@@ -121,6 +121,31 @@ void main() {
     });
   });
 
+  group('InstallEnvironment.probeDirectory', () {
+    test('an AppImage probes the directory holding the AppImage file', () {
+      // The executable runs from a read-only squashfs mount, so probing its
+      // directory would call every AppImage read-only.
+      expect(
+        InstallEnvironment.probeDirectory(
+          appImagePath: '/home/u/Apps/Mydia_Player-x86_64.AppImage',
+          resolvedExecutable:
+              '/tmp/.mount_MydiaXYZ/usr/lib/mydia-player/mydia-player',
+        ),
+        '/home/u/Apps',
+      );
+    });
+
+    test('anything else probes the directory holding the executable', () {
+      expect(
+        InstallEnvironment.probeDirectory(
+          appImagePath: null,
+          resolvedExecutable: '/home/u/mydia-player/mydia-player',
+        ),
+        '/home/u/mydia-player',
+      );
+    });
+  });
+
   group('InstallEnvironment.detect', () {
     test('agrees with resolve on the platform under test', () {
       // Guards the wiring between the lookups and the decision. Only the

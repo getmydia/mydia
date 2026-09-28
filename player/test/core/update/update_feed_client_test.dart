@@ -128,6 +128,7 @@ void main() {
       bool isWindows = false,
       bool isLinux = false,
       bool isMacOS = false,
+      bool isAppImage = false,
     }) =>
         UpdateFeedClient.resolveSlug(
           isWeb: isWeb,
@@ -135,6 +136,7 @@ void main() {
           isWindows: isWindows,
           isLinux: isLinux,
           isMacOS: isMacOS,
+          isAppImage: isAppImage,
         );
 
     test('each platform maps to its own slug', () {
@@ -155,6 +157,15 @@ void main() {
       // ordering: a stray isAndroid: true on a web build must not leak
       // through.
       expect(slug(isWeb: true, isAndroid: true), isNull);
+    });
+
+    test('an AppImage asks for its own slot', () {
+      expect(slug(isLinux: true, isAppImage: true), 'linux-appimage');
+    });
+
+    test('isAppImage means nothing off Linux', () {
+      expect(slug(isWindows: true, isAppImage: true), 'windows');
+      expect(slug(isMacOS: true, isAppImage: true), 'macos');
     });
   });
 }

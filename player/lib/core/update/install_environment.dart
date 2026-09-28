@@ -2,6 +2,7 @@ import 'dart:io' show File, Platform;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import 'updaters/appimage_updater.dart';
 import 'updaters/linux_updater.dart';
 
 /// How the running install can be replaced.
@@ -28,7 +29,12 @@ enum InstallEnvironment {
         flatpakId: Platform.environment['FLATPAK_ID'],
         flatpakInfoExists:
             Platform.isLinux && File('/.flatpak-info').existsSync(),
-        installDirWritable: installDirWritable(),
+        installDirWritable: installDirWritable(
+          path: probeDirectory(
+            appImagePath: AppImageUpdater.runningAppImagePath(),
+            resolvedExecutable: Platform.resolvedExecutable,
+          ),
+        ),
       );
 
   /// The decision itself, separated from the platform lookups so every branch
@@ -74,4 +80,16 @@ enum InstallEnvironment {
     final target = path ?? File(Platform.resolvedExecutable).parent.path;
     return LinuxUpdater.installDirWritable(path: target);
   }
+
+  /// The directory whose writability decides whether an update can land.
+  ///
+  /// An AppImage replaces its own `.AppImage` file, so that file's directory
+  /// is what matters. The executable itself runs from a read-only squashfs
+  /// mount under /tmp and would make every AppImage look read-only.
+  @visibleForTesting
+  static String probeDirectory({
+    required String? appImagePath,
+    required String resolvedExecutable,
+  }) =>
+      File(appImagePath ?? resolvedExecutable).parent.path;
 }
