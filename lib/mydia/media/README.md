@@ -30,7 +30,7 @@ The show itself never owns a version. `MediaFile.changeset/2` and
 `episode_id` is NULL, unless `extra_kind` is set. Such a row rendered as a loose
 file on the show page and no episode could reach it; download import, the
 show-page re-scan and re-match all used to write it. A TV file with no
-resolvable episode is an import candidate (`ImportCandidates.stage_show_file/3`)
+resolvable episode is an import candidate (`ImportCandidates.stage_item_file/3`)
 or, during download import, an `unresolved_files` entry on the download.
 `Mydia.Jobs.ShowFileRepair` clears rows written before the guard. The check runs
 on every insert, and on an update whenever a parent column or `extra_kind` is

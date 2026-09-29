@@ -438,7 +438,7 @@ defmodule Mydia.Library.MediaFile do
 
   # A TV file belongs to an episode. One attached straight to its show renders as
   # a loose file on the show page and no episode reaches it; an unmatched TV file
-  # is an import candidate instead (Mydia.ImportCandidates.stage_show_file/3).
+  # is an import candidate instead (Mydia.ImportCandidates.stage_item_file/3).
   # Extras may sit on the show. The check runs on every insert, and on an update
   # whenever a parent column or extra_kind is written, so a legacy row can still
   # be updated (or trashed and restored) until Mydia.Jobs.ShowFileRepair clears

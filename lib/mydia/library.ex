@@ -2053,7 +2053,7 @@ defmodule Mydia.Library do
   end
 
   defp stage_series_file(file_info, media_item, library_path, relative_path) do
-    case Mydia.ImportCandidates.stage_show_file(media_item, library_path, %{
+    case Mydia.ImportCandidates.stage_item_file(media_item, library_path, %{
            relative_path: relative_path,
            size: file_info.size,
            discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)

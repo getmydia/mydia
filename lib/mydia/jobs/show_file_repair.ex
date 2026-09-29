@@ -11,7 +11,7 @@ defmodule Mydia.Jobs.ShowFileRepair do
   For each affected show this re-links whatever the filename names via
   `Mydia.Library.match_files_to_episodes/1`, then demotes the rest to import
   candidates under the show's provider identity
-  (`Mydia.ImportCandidates.stage_show_file/3`), deleting the row but not the
+  (`Mydia.ImportCandidates.stage_item_file/3`), deleting the row but not the
   bytes. Trashed rows are left for `TrashCleanup`, and extras (`extra_kind`
   set) may legitimately sit on the show. A row with no library path or
   relative path cannot key a candidate, so it is left in place and counted as
@@ -177,7 +177,7 @@ defmodule Mydia.Jobs.ShowFileRepair do
   defp demote(show, file) do
     Repo.transaction(fn ->
       with {:ok, _candidate} <-
-             ImportCandidates.stage_show_file(show, file.library_path, %{
+             ImportCandidates.stage_item_file(show, file.library_path, %{
                relative_path: file.relative_path,
                size: file.size,
                discovered_at: file.inserted_at

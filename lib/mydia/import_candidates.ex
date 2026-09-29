@@ -274,16 +274,28 @@ defmodule Mydia.ImportCandidates do
     count
   end
 
-  @spec demote_episode_files(Episode.t()) :: {:ok, :ok} | {:error, term()}
-  def demote_episode_files(%Episode{} = episode) do
+  @doc """
+  Moves an episode's files into `import_candidates`, deleting their
+  `media_files` rows and keeping the bytes on disk.
+
+  `dismiss: true` parks the candidates as dismissed. Removal from the library
+  uses it so no scan or bulk accept re-imports what the user removed. Deleting
+  an episode or switching provider keeps the default, because those files are
+  still wanted, only their parent changed.
+  """
+  @spec demote_episode_files(Episode.t(), keyword()) :: {:ok, :ok} | {:error, term()}
+  def demote_episode_files(%Episode{} = episode, opts \\ []) do
+    dismissed_at = if Keyword.get(opts, :dismiss, false), do: now()
+
     Repo.transaction(fn ->
       episode = Repo.preload(episode, [:media_item, media_files: :library_path])
 
       Enum.each(episode.media_files, fn file ->
-        case stage_show_file(episode.media_item, file.library_path, %{
+        case stage_item_file(episode.media_item, file.library_path, %{
                relative_path: file.relative_path,
                size: file.size,
                discovered_at: file.inserted_at,
+               dismissed_at: dismissed_at,
                parsed_info: %{
                  "season" => episode.season_number,
                  "episodes" => [episode.episode_number]
@@ -301,33 +313,70 @@ defmodule Mydia.ImportCandidates do
   end
 
   @doc """
-  Stages a TV file that belongs to `show` but to none of its episodes.
+  Moves a movie's live files into `import_candidates` and deletes their rows.
 
-  The candidate carries the show's provider identity, so `/import` offers the
-  right show, and `media_type: "tv_show"`. A TV file is never a `media_files`
-  row attached to the show itself: `Mydia.Library.MediaFile.changeset/2`
-  refuses that shape, and this is where such a file goes instead.
-  It also carries the show's title and year. Without them the group has a
-  provider id and no title, and the review row renders an arrow pointing at
-  nothing.
+  Trashed rows are skipped: their files already left disk, so a candidate
+  would point at nothing. Rows with no library path or relative path predate
+  path-keyed storage and cannot be addressed as a candidate; they are left for
+  the item's cascade delete. `dismiss:` behaves as in `demote_episode_files/2`.
+  """
+  @spec demote_movie_files(Media.MediaItem.t(), keyword()) :: {:ok, :ok} | {:error, term()}
+  def demote_movie_files(%Media.MediaItem{} = movie, opts \\ []) do
+    dismissed_at = if Keyword.get(opts, :dismiss, false), do: now()
+
+    Repo.transaction(fn ->
+      MediaFile
+      |> where(
+        [f],
+        f.media_item_id == ^movie.id and is_nil(f.trashed_at) and
+          not is_nil(f.library_path_id) and not is_nil(f.relative_path)
+      )
+      |> preload(:library_path)
+      |> Repo.all()
+      |> Enum.each(fn file ->
+        case stage_item_file(movie, file.library_path, %{
+               relative_path: file.relative_path,
+               size: file.size,
+               discovered_at: file.inserted_at,
+               dismissed_at: dismissed_at
+             }) do
+          {:ok, _candidate} -> Repo.delete!(file)
+          {:error, changeset} -> Repo.rollback(changeset)
+        end
+      end)
+
+      :ok
+    end)
+  end
+
+  @doc """
+  Stages a file under `item`'s provider identity, title and year.
+
+  `media_type` follows the item's type. For a show this is where a TV file
+  that belongs to none of its episodes goes: a TV file is never a
+  `media_files` row attached to the show itself
+  (`Mydia.Library.MediaFile.changeset/2` refuses that shape). The title and
+  year matter: without them the review row has a provider id and nothing to
+  name it by.
 
   `attrs` needs `:relative_path`, `:size` and `:discovered_at`. `:parsed_info`
   (string keys) is optional and is derived from the filename when absent.
+  `:dismissed_at` is optional and parks the candidate as dismissed.
   """
-  @spec stage_show_file(Media.MediaItem.t(), LibraryPath.t(), map()) ::
+  @spec stage_item_file(Media.MediaItem.t(), LibraryPath.t(), map()) ::
           {:ok, ImportCandidate.t()} | {:error, Ecto.Changeset.t()}
-  def stage_show_file(%Media.MediaItem{} = show, %LibraryPath{} = library_path, attrs) do
+  def stage_item_file(%Media.MediaItem{} = item, %LibraryPath{} = library_path, attrs) do
     relative_path = Map.fetch!(attrs, :relative_path)
 
     anchor =
       PathAnchor.anchor_for(Path.join(library_path.path, relative_path), library_path.path)
 
-    {provider_type, provider_id} = provider_identity(show)
+    {provider_type, provider_id} = provider_identity(item)
 
     parsed_info =
       attrs
       |> Map.get_lazy(:parsed_info, fn -> filename_parsed_info(relative_path) end)
-      |> Map.put("type", "tv_show")
+      |> Map.put("type", item.type)
 
     upsert(%{
       library_path_id: library_path.id,
@@ -335,11 +384,12 @@ defmodule Mydia.ImportCandidates do
       anchor_key: anchor.cluster_key,
       size: Map.fetch!(attrs, :size),
       discovered_at: Map.fetch!(attrs, :discovered_at),
+      dismissed_at: Map.get(attrs, :dismissed_at),
       provider_type: provider_type,
       provider_id: provider_id,
-      title: show.title,
-      year: show.year,
-      media_type: "tv_show",
+      title: item.title,
+      year: item.year,
+      media_type: item.type,
       parsed_info: parsed_info
     })
   end
@@ -532,7 +582,8 @@ defmodule Mydia.ImportCandidates do
 
   defp apply_search(query, _), do: query
 
-  defp escape_like(term) do
+  @doc false
+  def escape_like(term) do
     term
     |> String.replace("\\", "\\\\")
     |> String.replace("%", "\\%")
@@ -2089,16 +2140,18 @@ defmodule Mydia.ImportCandidates do
     end
   end
 
-  defp provider_identity(%{metadata_source: :tmdb, tmdb_id: id}) when not is_nil(id),
+  @doc false
+  @spec provider_identity(map()) :: {String.t() | nil, String.t() | nil}
+  def provider_identity(%{metadata_source: :tmdb, tmdb_id: id}) when not is_nil(id),
     do: {"tmdb", Integer.to_string(id)}
 
-  defp provider_identity(%{metadata_source: :tvdb, tvdb_id: id}) when not is_nil(id),
+  def provider_identity(%{metadata_source: :tvdb, tvdb_id: id}) when not is_nil(id),
     do: {"tvdb", Integer.to_string(id)}
 
-  defp provider_identity(%{metadata_source: :tmdb}), do: {"tmdb", nil}
-  defp provider_identity(%{metadata_source: :tvdb}), do: {"tvdb", nil}
+  def provider_identity(%{metadata_source: :tmdb}), do: {"tmdb", nil}
+  def provider_identity(%{metadata_source: :tvdb}), do: {"tvdb", nil}
 
-  defp provider_identity(%{tvdb_id: id}) when not is_nil(id), do: {"tvdb", Integer.to_string(id)}
-  defp provider_identity(%{tmdb_id: id}) when not is_nil(id), do: {"tmdb", Integer.to_string(id)}
-  defp provider_identity(_), do: {nil, nil}
+  def provider_identity(%{tvdb_id: id}) when not is_nil(id), do: {"tvdb", Integer.to_string(id)}
+  def provider_identity(%{tmdb_id: id}) when not is_nil(id), do: {"tmdb", Integer.to_string(id)}
+  def provider_identity(_), do: {nil, nil}
 end

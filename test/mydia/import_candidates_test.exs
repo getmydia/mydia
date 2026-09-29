@@ -1090,14 +1090,14 @@ defmodule Mydia.ImportCandidatesTest do
     end
   end
 
-  describe "stage_show_file/3" do
+  describe "stage_item_file/3" do
     test "stages a file under its show's provider identity, parsing the filename" do
       lp = library_path_fixture(%{type: "series"})
       show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast", tvdb_id: 900_003})
       relative = "Lantern Coast/Season 02/Lantern.Coast.S02E04.1080p.mkv"
 
       assert {:ok, candidate} =
-               ImportCandidates.stage_show_file(show, lp, %{
+               ImportCandidates.stage_item_file(show, lp, %{
                  relative_path: relative,
                  size: 42,
                  discovered_at: ~U[2026-09-01 12:00:00Z]
@@ -1120,7 +1120,7 @@ defmodule Mydia.ImportCandidatesTest do
       relative = "Lantern Coast/Season 03/unnamed.mkv"
 
       assert {:ok, _candidate} =
-               ImportCandidates.stage_show_file(show, lp, %{
+               ImportCandidates.stage_item_file(show, lp, %{
                  relative_path: relative,
                  size: 42,
                  discovered_at: ~U[2026-09-01 12:00:00Z],
@@ -1145,7 +1145,7 @@ defmodule Mydia.ImportCandidatesTest do
         })
 
       assert {:ok, candidate} =
-               ImportCandidates.stage_show_file(show, lp, %{
+               ImportCandidates.stage_item_file(show, lp, %{
                  relative_path: "Lantern Coast/Season 01/extended-cut.mkv",
                  size: 42,
                  discovered_at: ~U[2026-09-01 12:00:00Z]
@@ -1155,6 +1155,144 @@ defmodule Mydia.ImportCandidatesTest do
 
       assert ImportCandidates.get_group(lp.id, candidate.anchor_key).suggested_title ==
                "Lantern Coast"
+    end
+
+    test "stages a movie file as a movie candidate under its tmdb identity" do
+      lp = library_path_fixture(%{type: "movies"})
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          tmdb_id: 900_101,
+          metadata_source: :tmdb
+        })
+
+      relative = "Zephyr Station (2030)/Zephyr.Station.2030.1080p.mkv"
+
+      assert {:ok, candidate} =
+               ImportCandidates.stage_item_file(movie, lp, %{
+                 relative_path: relative,
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z]
+               })
+
+      assert candidate.media_type == "movie"
+      assert {candidate.provider_type, candidate.provider_id} == {"tmdb", "900101"}
+      assert {candidate.title, candidate.year} == {"Zephyr Station", 2030}
+      assert candidate.parsed_info["type"] == "movie"
+      assert candidate.dismissed_at == nil
+    end
+
+    test "stamps dismissed_at when the caller passes one" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_102, metadata_source: :tmdb})
+
+      assert {:ok, candidate} =
+               ImportCandidates.stage_item_file(movie, lp, %{
+                 relative_path: "Parked/parked.mkv",
+                 size: 42,
+                 discovered_at: ~U[2026-09-01 12:00:00Z],
+                 dismissed_at: ~U[2026-09-02 12:00:00Z]
+               })
+
+      assert candidate.dismissed_at == ~U[2026-09-02 12:00:00Z]
+    end
+  end
+
+  describe "demote_movie_files/2 and demote_episode_files/2" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "mydia_demote_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf(root) end)
+      %{root: root}
+    end
+
+    test "demote_movie_files stages each live file and deletes its row", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_103, metadata_source: :tmdb})
+
+      file =
+        media_file_fixture(
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Emberline (2029)/Emberline.mkv"
+        )
+
+      assert {:ok, :ok} = ImportCandidates.demote_movie_files(movie)
+
+      refute Mydia.Repo.get(Mydia.Library.MediaFile, file.id)
+      candidate = ImportCandidates.get_by_path(lp.id, file.relative_path)
+      assert candidate.media_type == "movie"
+      assert candidate.provider_id == "900103"
+      assert candidate.dismissed_at == nil
+    end
+
+    test "demote_movie_files dismiss: true stamps dismissed_at", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_104, metadata_source: :tmdb})
+
+      file =
+        media_file_fixture(
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Starveil (2031)/Starveil.mkv"
+        )
+
+      assert {:ok, :ok} = ImportCandidates.demote_movie_files(movie, dismiss: true)
+      assert %DateTime{} = ImportCandidates.get_by_path(lp.id, file.relative_path).dismissed_at
+    end
+
+    test "demote_movie_files skips trashed rows", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_105, metadata_source: :tmdb})
+
+      file =
+        media_file_fixture(
+          media_item_id: movie.id,
+          library_path_id: lp.id,
+          relative_path: "Gone/gone.mkv"
+        )
+
+      file
+      |> Ecto.Changeset.change(trashed_at: DateTime.utc_now() |> DateTime.truncate(:second))
+      |> Mydia.Repo.update!()
+
+      assert {:ok, :ok} = ImportCandidates.demote_movie_files(movie, dismiss: true)
+      refute ImportCandidates.get_by_path(lp.id, "Gone/gone.mkv")
+    end
+
+    test "demote_episode_files dismiss: true stamps dismissed_at", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", tvdb_id: 900_106})
+      episode = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 2)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Lantern Coast/S01E02.mkv"
+        )
+
+      assert {:ok, :ok} = ImportCandidates.demote_episode_files(episode, dismiss: true)
+      assert %DateTime{} = ImportCandidates.get_by_path(lp.id, file.relative_path).dismissed_at
+    end
+
+    test "demote_episode_files defaults to undismissed", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", tvdb_id: 900_107})
+      episode = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 3)
+
+      file =
+        media_file_fixture(
+          episode_id: episode.id,
+          library_path_id: lp.id,
+          relative_path: "Lantern Coast/S01E03.mkv"
+        )
+
+      assert {:ok, :ok} = ImportCandidates.demote_episode_files(episode)
+      assert ImportCandidates.get_by_path(lp.id, file.relative_path).dismissed_at == nil
     end
   end
 
