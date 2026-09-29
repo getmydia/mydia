@@ -258,6 +258,23 @@ away. The returned candidate carries `returned_at`, which keeps it out of
 unattended promotion (`FileIngest`), out of the ready band, and out of
 `queue_accept_all_matched/1`. Only an explicit Accept in `/review` puts it back.
 
+## Removing an item keeps its files as parked candidates
+
+"Remove from Library" (`delete_files: false`) stages every live file of the
+item, movie or show, as an import candidate carrying the item's provider
+identity, title and year, with `dismissed_at` set
+(`ImportCandidates.demote_movie_files/2` and `demote_episode_files/2` with
+`dismiss: true`). Scans never re-match or promote a dismissed candidate, so the
+item stays removed. Deleting a single episode and switching provider demote
+without dismissing, because those files are still wanted.
+
+"Find file" on a movie or episode with no file ranks candidates
+(`Mydia.Library.CandidateSuggestions`) and attaches one in place with
+`CandidatePromotion.attach/3`, which skips the metadata relay because the item
+already exists. It never lists files attached to another item. The scan button
+next to it starts review-mode import runs only, so nothing is promoted without
+an explicit choice.
+
 ## An empty scan trashes the whole library
 
 A library scan returning zero files classifies every existing `media_file` under
