@@ -217,9 +217,12 @@ defmodule Mydia.Library do
   @spec attach_candidate(binary(), Mydia.Media.MediaItem.t() | Mydia.Media.Episode.t()) ::
           {:ok, MediaFile.t()} | {:error, term()}
   def attach_candidate(candidate_id, target) do
-    case Repo.get(Mydia.Library.ImportCandidate, candidate_id) do
-      nil -> {:error, {:candidate_missing, candidate_id}}
-      candidate -> Mydia.Library.CandidatePromotion.attach(candidate, target, [])
+    with {:ok, _uuid} <- Ecto.UUID.cast(candidate_id),
+         %Mydia.Library.ImportCandidate{} = candidate <-
+           Repo.get(Mydia.Library.ImportCandidate, candidate_id) do
+      Mydia.Library.CandidatePromotion.attach(candidate, target, [])
+    else
+      _missing -> {:error, {:candidate_missing, candidate_id}}
     end
   end
 

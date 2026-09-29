@@ -123,4 +123,61 @@ defmodule MydiaWeb.MediaLive.FindFileTest do
     assert [%{mode: :review}] = Repo.all(Mydia.Library.ImportRun)
     assert has_element?(view, "#find-file-scanning")
   end
+
+  # A run that finishes before the view subscribes would never broadcast to
+  # it. Forcing that race is not deterministic, so this pins the settle path
+  # the post-subscribe re-read shares with the broadcast handler.
+  test "a finished run clears the scanning indicator", %{conn: conn, tmp_dir: tmp} do
+    library_path_fixture(%{type: "movies", path: tmp})
+    movie = media_item_fixture(%{type: "movie"})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    view |> element("#find-file-button") |> render_click()
+    view |> element("#find-file-scan") |> render_click()
+    assert has_element?(view, "#find-file-scanning")
+
+    [run] = Repo.all(Mydia.Library.ImportRun)
+    send(view.pid, {:import_run_progress, %{run | status: :done}})
+    render(view)
+
+    refute has_element?(view, "#find-file-scanning")
+  end
+
+  test "a repeated scan click keeps a single scanning entry", %{conn: conn, tmp_dir: tmp} do
+    library_path_fixture(%{type: "movies", path: tmp})
+    movie = media_item_fixture(%{type: "movie"})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    view |> element("#find-file-button") |> render_click()
+    view |> element("#find-file-scan") |> render_click()
+    view |> element("#find-file-scan") |> render_click()
+
+    [run] = Repo.all(Mydia.Library.ImportRun)
+    send(view.pid, {:import_run_progress, %{run | status: :done}})
+    render(view)
+
+    refute has_element?(view, "#find-file-scanning")
+  end
+
+  test "an episode of another show does not open the dialog", %{conn: conn} do
+    show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+    other = media_item_fixture(%{type: "tv_show", title: "Quillmere Bay"})
+    episode = episode_fixture(media_item_id: other.id, season_number: 1, episode_number: 1)
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    html = render_click(view, "open_find_file", %{"episode-id" => episode.id})
+
+    refute has_element?(view, "#find-file-modal")
+    assert html =~ "not on this page"
+  end
+
+  test "a malformed episode id flashes instead of crashing", %{conn: conn} do
+    show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{show.id}")
+    html = render_click(view, "open_find_file", %{"episode-id" => "not-a-uuid"})
+
+    refute has_element?(view, "#find-file-modal")
+    assert html =~ "not on this page"
+  end
 end

@@ -626,6 +626,13 @@ defmodule Mydia.Library.CandidatePromotionTest do
       assert {:error, {:candidate_missing, ^id}} = Mydia.Library.attach_candidate(id, movie)
     end
 
+    test "Library.attach_candidate/2 reports a malformed candidate id as missing" do
+      movie = media_item_fixture(%{type: "movie"})
+
+      assert {:error, {:candidate_missing, "not-a-uuid"}} =
+               Mydia.Library.attach_candidate("not-a-uuid", movie)
+    end
+
     test "refuses a path another file already owns", %{root: root} do
       lp = library_path_fixture(%{type: "movies", path: root})
       movie = media_item_fixture(%{type: "movie"})

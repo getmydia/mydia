@@ -29,6 +29,8 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   def open(params, socket) do
     with :ok <- Authorization.authorize_update_media(socket),
          {:ok, target} <- target(params, socket) do
+      unsubscribe_all(socket)
+
       {:noreply,
        socket
        |> assign(find_file_target: target, find_file_query: "", find_file_runs: %{})
@@ -51,18 +53,13 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   def scan(_params, socket) do
     with :ok <- Authorization.authorize_update_media(socket),
          %{} = target <- socket.assigns.find_file_target do
-      runs =
+      socket =
         target
         |> Library.start_review_scans(socket.assigns.current_user.id)
-        |> Map.new(fn run ->
-          if connected?(socket) do
-            Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run.id))
-          end
+        |> Enum.reject(&Map.has_key?(socket.assigns.find_file_runs, &1.id))
+        |> Enum.reduce(socket, &track_run/2)
 
-          {run.id, library_name(run.library_path_id)}
-        end)
-
-      {:noreply, assign(socket, :find_file_runs, Map.merge(socket.assigns.find_file_runs, runs))}
+      {:noreply, socket}
     else
       {:unauthorized, socket} -> {:noreply, socket}
       nil -> {:noreply, socket}
@@ -106,6 +103,31 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
 
   def deferred_refresh(socket) do
     {:noreply, socket |> assign(:find_file_refresh_pending, false) |> refresh()}
+  end
+
+  # Subscribe, then re-read the run: one that finished before the subscribe
+  # already sent its terminal broadcast, so it settles here instead.
+  defp track_run(run, socket) do
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, ImportRunJob.progress_topic(run.id))
+    end
+
+    socket =
+      assign(
+        socket,
+        :find_file_runs,
+        Map.put(socket.assigns.find_file_runs, run.id, library_name(run.library_path_id))
+      )
+
+    case Library.get_import_run(run.id) do
+      %ImportRun{status: status} = current ->
+        if status in ImportRun.active_statuses(),
+          do: socket,
+          else: socket |> settle_run(current) |> schedule_refresh()
+
+      nil ->
+        socket |> drop_run(run) |> schedule_refresh()
+    end
   end
 
   defp settle_run(socket, run) do
@@ -155,8 +177,11 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   defp target(%{"episode-id" => episode_id}, socket) do
     media_item = socket.assigns.media_item
 
-    case Media.get_episode!(socket.assigns.current_scope, episode_id, preload: [:media_item]) do
-      %{media_item_id: id} = episode when id == media_item.id -> {:ok, episode}
+    with {:ok, _uuid} <- Ecto.UUID.cast(episode_id),
+         %{media_item_id: id} = episode when id == media_item.id <-
+           Media.get_episode!(socket.assigns.current_scope, episode_id, preload: [:media_item]) do
+      {:ok, episode}
+    else
       _other -> :error
     end
   rescue
