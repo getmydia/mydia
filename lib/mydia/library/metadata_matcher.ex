@@ -15,12 +15,24 @@ defmodule Mydia.Library.MetadataMatcher do
   alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser, as: FileParser
+  alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.Structs.MatchResult
   alias Mydia.Library.Text
+  alias Mydia.Media.MediaItem
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.MediaMetadata
 
   @type match_result :: MatchResult.t()
+
+  # A library item whose clean-title key equals the parsed title's is the same
+  # title, so a local match clears `ImportCandidates.auto_accept_threshold/0`.
+  @local_match_confidence 0.95
+
+  # Under `ImportCandidates.auto_accept_threshold/0`. A file naming an episode
+  # the matched show does not have is more often another show's file than a
+  # missing row, and promoting it would mint that episode on the wrong show, so
+  # it waits in /review with the suggestion shown.
+  @missing_episode_confidence 0.6
 
   # Cost of a known-wrong year on an otherwise plausible title. Sized against
   # `Mydia.ImportCandidates`' 0.85 auto-accept threshold: an exact title match
@@ -661,20 +673,18 @@ defmodule Mydia.Library.MetadataMatcher do
 
   # Try to find a matching movie in the local database
   defp find_local_movie(parsed) do
-    # Search for movies with matching title (case-insensitive)
-    media_items =
-      Media.list_media_items(Scope.system())
+    candidates =
+      Scope.system()
+      |> Media.list_media_items(type: "movie")
       |> Enum.filter(fn item ->
-        item.type == "movie" &&
-          titles_match?(item.title, parsed.title) &&
-          years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item_year(item), parsed.year)
       end)
 
-    case media_items do
-      [] ->
+    case pick_local(candidates, parsed.year) do
+      nil ->
         {:error, :no_local_match}
 
-      [item | _] ->
+      item ->
         # Found a match! Return a match_result struct
         {pid, ptype} = provider_id_for_item(item, :movie)
 
@@ -684,7 +694,7 @@ defmodule Mydia.Library.MetadataMatcher do
            provider_type: ptype || :tmdb,
            title: item.title,
            year: item.year,
-           match_confidence: 0.95,
+           match_confidence: @local_match_confidence,
            metadata: convert_db_metadata(item.metadata, item, :movie),
            parsed_info: parsed,
            from_local_db: true
@@ -694,20 +704,18 @@ defmodule Mydia.Library.MetadataMatcher do
 
   # Try to find a matching TV show in the local database
   defp find_local_tv_show(parsed) do
-    # Search for TV shows with matching title (case-insensitive)
-    media_items =
-      Media.list_media_items(Scope.system())
+    candidates =
+      Scope.system()
+      |> Media.list_media_items(type: "tv_show")
       |> Enum.filter(fn item ->
-        item.type == "tv_show" &&
-          titles_match?(item.title, parsed.title) &&
-          years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item_year(item), parsed.year)
       end)
 
-    case media_items do
-      [] ->
+    case pick_local(candidates, parsed.year) do
+      nil ->
         {:error, :no_local_match}
 
-      [item | _] ->
+      item ->
         # Use tvdb_id if available, fall back to tmdb_id
         {provider_id, provider_type} =
           if item.tvdb_id do
@@ -722,7 +730,7 @@ defmodule Mydia.Library.MetadataMatcher do
            provider_type: provider_type,
            title: item.title,
            year: item.year,
-           match_confidence: 0.95,
+           match_confidence: local_tv_confidence(item, parsed),
            metadata: convert_db_metadata(item.metadata, item, :tv_show),
            parsed_info: parsed,
            from_local_db: true
@@ -730,17 +738,67 @@ defmodule Mydia.Library.MetadataMatcher do
     end
   end
 
-  # Check if two titles match (case-insensitive, normalized)
-  defp titles_match?(title1, title2) when is_binary(title1) and is_binary(title2) do
-    normalized1 = normalize_title(title1)
-    normalized2 = normalize_title(title2)
+  # A file naming a season/episode the matched show does not have is weaker
+  # evidence than a plain title match: it is more often another show entirely
+  # than a gap in this show's episode list. `known` is empty for a show with no
+  # episode rows yet (freshly created, or metadata not fetched), which carries
+  # no evidence either way, so it is treated as passing rather than failing.
+  defp local_tv_confidence(item, %{season: season, episodes: [_ | _] = episodes})
+       when is_integer(season) do
+    known = Media.episode_coordinates(item.id)
 
-    # Use title similarity to allow for small differences
-    # Lower threshold (0.70) to handle cases where file parser includes extra metadata tags
-    title_similarity(normalized1, normalized2) >= 0.70
+    if MapSet.size(known) == 0 or Enum.all?(episodes, &MapSet.member?(known, {season, &1})) do
+      @local_match_confidence
+    else
+      @missing_episode_confidence
+    end
   end
 
-  defp titles_match?(_title1, _title2), do: false
+  defp local_tv_confidence(_item, _parsed), do: @local_match_confidence
+
+  # Exact clean-title key, the way Sonarr and Radarr compare titles. This used
+  # to accept Jaro >= 0.70 or plain containment against every library item,
+  # which filed a show under any other show sharing a substring or most of its
+  # letters (#957). Anything short of an exact key goes to the provider search,
+  # which scores candidates properly and resolves back to an owned item by
+  # provider id. Also compared: the item's alternate titles
+  # (`TargetContext.alt_titles/1` -- `original_title` plus any provider
+  # `alternative_titles`, no preloads needed), so a file still named after a
+  # show's original or since-renamed title still clears the local match.
+  defp same_title?(%MediaItem{title: item_title} = item, parsed_title)
+       when is_binary(item_title) and is_binary(parsed_title) do
+    key = Text.match_key(parsed_title)
+    {bare, _year} = split_title_year(item_title)
+
+    candidate_keys =
+      [item_title, bare | TargetContext.alt_titles(item)]
+      |> Enum.map(&Text.match_key/1)
+
+    key != "" and key in candidate_keys
+  end
+
+  defp same_title?(_item, _parsed_title), do: false
+
+  # One candidate wins outright. Several sharing a key (a remake, a revival) are
+  # settled by an exact year; otherwise the provider search decides.
+  defp pick_local([], _year), do: nil
+  defp pick_local([item], _year), do: item
+
+  defp pick_local(items, year) when is_integer(year) do
+    case Enum.filter(items, &(item_year(&1) == year)) do
+      [item] -> item
+      _ -> nil
+    end
+  end
+
+  defp pick_local(_items, _year), do: nil
+
+  # The item's year, falling back to a provider `(YYYY)` suffix on its title.
+  # `same_title?/2` strips that suffix to compare titles, so without this an
+  # item stored as "Quillon (2021)" with no `year` would pass the year check
+  # for a file from any year.
+  defp item_year(%MediaItem{year: year}) when is_integer(year), do: year
+  defp item_year(%MediaItem{title: title}), do: title |> split_title_year() |> elem(1)
 
   # Check if years are compatible (nil means no year constraint)
   defp years_compatible?(nil, _parsed_year), do: true

@@ -1349,6 +1349,22 @@ defmodule Mydia.Media do
   end
 
   @doc """
+  Every `{season_number, episode_number}` pair recorded for a show, specials
+  included. Empty when the show has no episode rows yet.
+
+  Lets the import matcher tell a file naming an episode the show has from one
+  naming an episode it does not, without loading episode structs.
+  """
+  @spec episode_coordinates(binary()) :: MapSet.t({integer(), integer()})
+  def episode_coordinates(media_item_id) do
+    Episode
+    |> where([e], e.media_item_id == ^media_item_id)
+    |> select([e], {e.season_number, e.episode_number})
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
+  @doc """
   Gets the next episode for the given episode.
   Returns the next episode in the same season if available,
   otherwise returns the first episode of the next season.

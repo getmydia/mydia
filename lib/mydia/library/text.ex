@@ -26,7 +26,7 @@ defmodule Mydia.Library.Text do
   same staged comparison the metadata matcher uses (light
   normalization → full normalization → Jaro distance). No threshold is
   baked in — callers decide what value to gate on (the metadata
-  matcher's `same_title?/2` keeps using 0.70).
+  matcher's local lookup no longer uses it; it compares `match_key/1`).
   """
 
   @doc """

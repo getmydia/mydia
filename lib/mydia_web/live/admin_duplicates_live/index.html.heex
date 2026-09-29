@@ -22,6 +22,12 @@
         returning={@returning}
         overridden?={@review_overrides != %{}}
       />
+
+      <.live_component
+        module={MydiaWeb.AdminDuplicatesLive.MisfiledComponent}
+        id="misfiled"
+        current_scope={@current_scope}
+      />
     </div>
 
     <%!-- Trash Confirmation Modal --%>

@@ -3989,6 +3989,23 @@ defmodule Mydia.MediaTest do
     end
   end
 
+  describe "episode_coordinates/1" do
+    import Mydia.MediaFixtures
+
+    test "returns every season/episode pair the show has" do
+      show = media_item_fixture(%{type: "tv_show"})
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+      episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 4})
+
+      assert Media.episode_coordinates(show.id) == MapSet.new([{1, 1}, {2, 4}])
+    end
+
+    test "is empty for a show with no episode rows" do
+      show = media_item_fixture(%{type: "tv_show"})
+      assert Media.episode_coordinates(show.id) == MapSet.new()
+    end
+  end
+
   describe "update_media_item/3 change tracking" do
     import Mydia.MediaFixtures
 
