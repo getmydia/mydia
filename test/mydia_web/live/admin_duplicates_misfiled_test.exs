@@ -6,6 +6,7 @@ defmodule MydiaWeb.AdminDuplicatesMisfiledTest do
   import Mydia.SettingsFixtures
 
   alias Mydia.Accounts
+  alias Mydia.Library.CrashingMisfileScanner
   alias Mydia.Library.ImportCandidate
   alias Mydia.Repo
 
@@ -101,6 +102,29 @@ defmodule MydiaWeb.AdminDuplicatesMisfiledTest do
 
     assert has_element?(view, "#misfiled-leave-#{stray.id}[checked]")
     assert has_element?(view, "#misfiled-send-item-#{show.id}[disabled]")
+  end
+
+  @tag :capture_log
+  test "a failed scan shows the error and re-enables the scan button", %{conn: conn} do
+    previous = Application.get_env(:mydia, :misfile_scanner_module)
+    Application.put_env(:mydia, :misfile_scanner_module, CrashingMisfileScanner)
+
+    on_exit(fn ->
+      case previous do
+        nil -> Application.delete_env(:mydia, :misfile_scanner_module)
+        mod -> Application.put_env(:mydia, :misfile_scanner_module, mod)
+      end
+    end)
+
+    {:ok, view, _html} = live(conn, ~p"/admin/duplicates")
+
+    refute has_element?(view, "#misfiled-error")
+
+    view |> element("#misfiled-scan") |> render_click()
+    render_async(view)
+
+    assert has_element?(view, "#misfiled-error[role=alert]")
+    refute has_element?(view, "#misfiled-scan[disabled]")
   end
 
   test "an item where nothing binds defaults to Leave and cannot be emptied", %{conn: conn} do

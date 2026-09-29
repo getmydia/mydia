@@ -39,7 +39,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
     {:noreply,
      socket
      |> assign(scanning?: true, scan_failed?: false)
-     |> start_async(:scan, fn -> Misfile.scan() end)}
+     |> start_async(:scan, fn -> scanner().scan() end)}
   end
 
   def handle_event("leave_file", %{"subject" => item_id, "file" => file_id}, socket) do
@@ -77,6 +77,11 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
     Logger.error("Misfiled scan failed", reason: inspect(reason))
     {:noreply, assign(socket, scanning?: false, scan_failed?: true)}
   end
+
+  # Resolvable via config so tests can force the scan-failure path with a
+  # deterministic stand-in instead of relying on library data that happens to
+  # make the real scan raise (mirrors JobManager's :transcoder_module).
+  defp scanner, do: Application.get_env(:mydia, :misfile_scanner_module, Misfile)
 
   defp send_files(socket, []), do: socket
 
@@ -212,7 +217,7 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
         see them. Scanning reads every file in the library and can take a while.
       </p>
 
-      <div :if={@scan_failed?} id="misfiled-error" class="alert alert-error text-sm">
+      <div :if={@scan_failed?} id="misfiled-error" role="alert" class="alert alert-error text-sm">
         The scan failed. Check the server logs, then try again.
       </div>
 

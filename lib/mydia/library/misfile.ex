@@ -19,6 +19,13 @@ defmodule Mydia.Library.Misfile do
 
   `scan/0` applies it to every item in the library, and `send_to_review/2`
   detaches suspects after re-verifying them.
+
+  After a provider rename, a file still named by the item's old title is
+  flagged as unbound unless that old name is among the item's alternate
+  titles (`TargetContext.alt_titles/1`). Such an item usually still has other
+  files that do bind, so it lands in ordinary Review rather than the
+  `nothing_binds?` bucket -- and sending it there is reversible: the bytes
+  stay in place, and `/review` can reattach them.
   """
 
   import Ecto.Query
