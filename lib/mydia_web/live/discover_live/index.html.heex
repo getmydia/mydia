@@ -132,7 +132,10 @@
                       <button
                         id="discover-home-country-change"
                         type="button"
-                        phx-click="open_home_country_picker"
+                        phx-click={
+                          JS.push("open_home_country_picker")
+                          |> JS.focus(to: "#discover-home-country-picker select")
+                        }
                       >
                         Change country
                       </button>
@@ -167,6 +170,7 @@
               >
                 <select
                   name="country"
+                  phx-mounted={JS.focus()}
                   class="select select-bordered select-xs"
                   aria-label="Home country"
                 >

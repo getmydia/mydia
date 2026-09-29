@@ -121,6 +121,22 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       assert has_element?(view, "#discover-home-country-add")
     end
 
+    test "a forged or blank country is ignored", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-home-country-add") |> render_click()
+
+      for code <- ["XX", ""] do
+        view
+        |> element("#discover-home-country-picker")
+        |> render_change(%{"country" => code})
+      end
+
+      assert home_country(user) == nil
+      refute has_element?(view, "#discover-home-tab")
+      assert has_element?(view, "#discover-home-country-picker")
+    end
+
     test "picking a country saves it and opens its tab", %{conn: conn, user: user, bypass: bypass} do
       stub_discover(bypass)
       {:ok, view, _html} = live(conn, ~p"/discover")
