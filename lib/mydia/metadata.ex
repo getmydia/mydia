@@ -716,8 +716,8 @@ defmodule Mydia.Metadata do
 
   ## Parameters
     - `media_type` - :movie or :tv_show
-    - `opts` - Filter options including :genres, :year, :original_language, :min_rating, :sort_by,
-      :page, :certification_country and :certification_lte
+    - `opts` - Filter options including :genres, :year, :original_language, :origin_country,
+      :min_rating, :sort_by, :page, :certification_country and :certification_lte
 
   ## Examples
 
@@ -736,12 +736,13 @@ defmodule Mydia.Metadata do
     sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
     certification_country = Keyword.get(opts, :certification_country)
     certification_lte = Keyword.get(opts, :certification_lte)
+    origin_country = Keyword.get(opts, :origin_country)
 
     # The certification ceiling varies per caller, so it has to be part of the
     # key. Leaving it out would let an unrestricted browse populate the entry
     # that a restricted account then reads, and vice versa.
     cache_key =
-      "discover:#{media_type}:#{genres}:#{original_language}:#{year}:#{min_rating}:#{sort_by}:#{page}:#{certification_country}:#{certification_lte}"
+      "discover:#{media_type}:#{genres}:#{original_language}:#{year}:#{min_rating}:#{sort_by}:#{page}:#{certification_country}:#{certification_lte}:#{origin_country}"
 
     Cache.fetch(
       cache_key,
