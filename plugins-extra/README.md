@@ -1,7 +1,7 @@
 # Extra plugins
 
 Plugins here are published to the official index at
-`https://plugins.getmydia.com/index.json` and installed by operators from
+`https://plugins.mydia.dev/index.json` and installed by operators from
 Admin > System > Plugins. They are **not** part of the Mydia image.
 
 `plugins/` is different: the `:plugins` Mix compiler builds every

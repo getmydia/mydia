@@ -12,7 +12,7 @@
 # does not have to compile the whole application. Manifest validation against
 # Mydia.Plugins.Manifest happens in the test suite instead.
 defmodule BuildPluginIndex do
-  @default_base_url "https://plugins.getmydia.com"
+  @default_base_url "https://plugins.mydia.dev"
 
   def main(argv) do
     {opts, _rest, invalid} =
