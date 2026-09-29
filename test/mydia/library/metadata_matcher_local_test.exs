@@ -153,6 +153,65 @@ defmodule Mydia.Library.MetadataMatcherLocalTest do
     end
   end
 
+  describe "local TV match episode check" do
+    setup do
+      show =
+        media_item_fixture(%{type: "tv_show", title: "Harbor Lights", year: 2013, tvdb_id: 920})
+
+      %{show: show}
+    end
+
+    test "keeps full confidence when the parsed episode exists", %{show: show, config: config} do
+      episode_fixture(%{media_item_id: show.id, season_number: 2, episode_number: 3})
+
+      assert {:ok, match} =
+               MetadataMatcher.match_tv_show(tv("Harbor Lights", 2013, 2, [3]), config)
+
+      assert match.match_confidence == 0.95
+    end
+
+    test "drops below auto-accept when the parsed episode is missing", %{
+      show: show,
+      config: config
+    } do
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      assert {:ok, match} =
+               MetadataMatcher.match_tv_show(tv("Harbor Lights", 2013, 3, [10]), config)
+
+      assert match.from_local_db
+      assert match.match_confidence < Mydia.ImportCandidates.auto_accept_threshold()
+    end
+
+    test "drops below auto-accept when one episode of a multi-episode file is missing", %{
+      show: show,
+      config: config
+    } do
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      assert {:ok, match} =
+               MetadataMatcher.match_tv_show(tv("Harbor Lights", 2013, 1, [1, 2]), config)
+
+      assert match.match_confidence < Mydia.ImportCandidates.auto_accept_threshold()
+    end
+
+    test "skips the check for a show with no episode rows", %{config: config} do
+      assert {:ok, match} =
+               MetadataMatcher.match_tv_show(tv("Harbor Lights", 2013, 3, [10]), config)
+
+      assert match.match_confidence == 0.95
+    end
+
+    test "skips the check for a parse with no episode number", %{show: show, config: config} do
+      episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
+
+      assert {:ok, match} =
+               MetadataMatcher.match_tv_show(tv("Harbor Lights", 2013, 4, []), config)
+
+      assert match.match_confidence == 0.95
+    end
+  end
+
   describe "local movie match" do
     test "refuses a year-adjacent movie that only contains the title", %{
       bypass: bypass,

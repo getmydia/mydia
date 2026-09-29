@@ -26,6 +26,12 @@ defmodule Mydia.Library.MetadataMatcher do
   # title, so a local match clears `ImportCandidates.auto_accept_threshold/0`.
   @local_match_confidence 0.95
 
+  # Under `ImportCandidates.auto_accept_threshold/0`. A file naming an episode
+  # the matched show does not have is more often another show's file than a
+  # missing row, and promoting it would mint that episode on the wrong show, so
+  # it waits in /review with the suggestion shown.
+  @missing_episode_confidence 0.6
+
   # Cost of a known-wrong year on an otherwise plausible title. Sized against
   # `Mydia.ImportCandidates`' 0.85 auto-accept threshold: an exact title match
   # cannot score below 0.9, so anything at or under 0.10 leaves a contradicted
@@ -722,13 +728,31 @@ defmodule Mydia.Library.MetadataMatcher do
            provider_type: provider_type,
            title: item.title,
            year: item.year,
-           match_confidence: @local_match_confidence,
+           match_confidence: local_tv_confidence(item, parsed),
            metadata: convert_db_metadata(item.metadata, item, :tv_show),
            parsed_info: parsed,
            from_local_db: true
          )}
     end
   end
+
+  # A file naming a season/episode the matched show does not have is weaker
+  # evidence than a plain title match: it is more often another show entirely
+  # than a gap in this show's episode list. `known` is empty for a show with no
+  # episode rows yet (freshly created, or metadata not fetched), which carries
+  # no evidence either way, so it is treated as passing rather than failing.
+  defp local_tv_confidence(item, %{season: season, episodes: [_ | _] = episodes})
+       when is_integer(season) do
+    known = Media.episode_coordinates(item.id)
+
+    if MapSet.size(known) == 0 or Enum.all?(episodes, &MapSet.member?(known, {season, &1})) do
+      @local_match_confidence
+    else
+      @missing_episode_confidence
+    end
+  end
+
+  defp local_tv_confidence(_item, _parsed), do: @local_match_confidence
 
   # Exact clean-title key, the way Sonarr and Radarr compare titles. This used
   # to accept Jaro >= 0.70 or plain containment against every library item,
