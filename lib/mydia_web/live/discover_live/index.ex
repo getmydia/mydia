@@ -12,6 +12,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
+  alias Mydia.Metadata.Countries
   alias Mydia.Metadata.Ref
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Settings
@@ -60,6 +61,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       socket
       |> assign(:page_title, "Discover")
       |> assign(:languages, MydiaWeb.Languages.all())
+      |> assign(:countries, Countries.all())
       |> assign(:sort_options, @sort_options)
       |> assign(:items, [])
       |> assign(:visible_items, [])
@@ -94,6 +96,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
       selected_language = params["language"]
+      selected_country = parse_country_param(params["country"])
       selected_year = parse_year_param(params["year"])
       min_rating = parse_rating_param(params["rating"])
       sort_by = params["sort"] || "popularity.desc"
@@ -101,7 +104,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       # Determine if filters are active or discover mode is explicitly selected
       filters_active? =
-        selected_genres != [] or selected_language != nil or
+        selected_genres != [] or selected_language != nil or selected_country != nil or
           selected_year != nil or min_rating != nil
 
       effective_category =
@@ -119,6 +122,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:search_mode, search_mode)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
+        |> assign(:selected_country, selected_country)
         |> assign(:selected_year, selected_year)
         |> assign(:min_rating, min_rating)
         |> assign(:sort_by, sort_by)
@@ -172,6 +176,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
        |> assign(:selected_language, nil)
+       |> assign(:selected_country, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")}
@@ -214,6 +219,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       build_url_params(socket.assigns,
         genre: params["genre"],
         language: params["language"],
+        country: params["country"],
         year: params["year"],
         rating: params["rating"],
         sort: params["sort"]
@@ -867,6 +873,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
       end
 
     opts =
+      if assigns.selected_country do
+        Keyword.put(opts, :origin_country, assigns.selected_country)
+      else
+        opts
+      end
+
+    opts =
       if assigns.selected_year do
         Keyword.put(opts, :year, assigns.selected_year)
       else
@@ -914,6 +927,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if language && language != "", do: Map.put(params, "language", language), else: params
 
+    country = Keyword.get(overrides, :country, assigns.selected_country)
+
+    params =
+      if country && country != "", do: Map.put(params, "country", country), else: params
+
     year = Keyword.get(overrides, :year, assigns.selected_year)
     params = if year && year != "", do: Map.put(params, "year", to_string(year)), else: params
 
@@ -948,6 +966,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp parse_category("on_the_air", :tv_show), do: :on_the_air
   defp parse_category("airing_today", :tv_show), do: :airing_today
   defp parse_category(_, _), do: :trending
+
+  # URL params are user-typed: an unlisted or lowercase code is dropped rather
+  # than sent to TMDB.
+  defp parse_country_param(code) do
+    if Countries.valid_code?(code), do: code, else: nil
+  end
 
   defp parse_genres_param(nil), do: []
   defp parse_genres_param(""), do: []

@@ -132,6 +132,14 @@
                   </option>
                 <% end %>
               </select>
+              <select name="country" class="select select-bordered select-sm join-item">
+                <option value="">All Countries</option>
+                <%= for {code, name} <- @countries do %>
+                  <option value={code} selected={@selected_country == code}>
+                    {Countries.flag(code)} {name}
+                  </option>
+                <% end %>
+              </select>
 
               <select name="year" class="select select-bordered select-sm join-item">
                 <option value="">All Years</option>

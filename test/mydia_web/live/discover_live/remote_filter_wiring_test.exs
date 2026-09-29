@@ -46,7 +46,9 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
       total_pages: 1,
       has_more: false,
       load_error: nil,
-      loading: true
+      loading: true,
+      selected_country: nil,
+      home_country: nil
     }
 
     %Phoenix.LiveView.Socket{assigns: Map.merge(defaults, assigns)}
