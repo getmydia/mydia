@@ -17,6 +17,19 @@ defmodule Mydia.Library.BatchMatcher do
   The groups themselves still run concurrently, so throughput is unchanged
   while relay traffic drops to roughly one search per distinct anchor.
 
+  `MetadataMatcher`'s local-match checks -- the title equality in
+  `same_title?/2` and the missing-episode confidence penalty in
+  `local_tv_confidence/2` -- run against the head file's parsed title and
+  season/episode only. `reuse/2` then copies the head's `match_confidence`,
+  `provider_id` and `title` verbatim onto every tail file, re-deriving only
+  `parsed_info`, so a tail file is never itself checked against those rules.
+  A stray file sitting inside a correctly-matched anchor folder therefore
+  inherits the head's match at import time regardless of what its own
+  filename says. That gap is closed after the fact, not before it:
+  `Mydia.Library.Misfile.scan/0` (the Misfiled section of the duplicates
+  page) parses every file independently and flags one whose name does not
+  bind to the item it landed on.
+
   The resolver itself is a `Mydia.Library.Matcher` behaviour passed in as
   `:matcher` rather than hard-wired to `Mydia.Library.MetadataMatcher`, so
   tests can supply a deterministic stub instead of standing up a relay.

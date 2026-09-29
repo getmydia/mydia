@@ -64,6 +64,12 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
   also why a send has no Undo of its own. `Mydia.Library.Prune.send_to_review/2`
   re-verifies every id and refuses to empty an item, so the page is not the
   security boundary here either.
+
+  ## Misfiled
+
+  Files filed against the wrong item that collide with nothing never reach a
+  group. `MydiaWeb.AdminDuplicatesLive.MisfiledComponent` finds them with an
+  on-demand scan and reports its sends through `handle_info/2`.
   """
 
   use MydiaWeb, :live_view
@@ -275,6 +281,19 @@ defmodule MydiaWeb.AdminDuplicatesLive.Index do
      socket
      |> report_run(result, label)
      |> assign(:show_trash_modal, false)
+     |> load_plan()}
+  end
+
+  # MydiaWeb.AdminDuplicatesLive.MisfiledComponent sends through
+  # Mydia.Library.Misfile and reports back here, so a send from either section
+  # gets the same flash and toast. The plan reloads because a detached file may
+  # have been part of a duplicate group.
+  @impl true
+  def handle_info({:misfiled_sent, result}, socket) do
+    {:noreply,
+     socket
+     |> maybe_flash_problems(result)
+     |> maybe_set_review_run(result, "from Misfiled")
      |> load_plan()}
   end
 
