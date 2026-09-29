@@ -191,7 +191,12 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   defp target(_params, %{assigns: %{media_item: %{type: "movie"} = movie}}), do: {:ok, movie}
   defp target(_params, _socket), do: :error
 
-  defp library_name(library_path_id), do: Settings.get_library_path!(library_path_id).path
+  # A library path deleted while its scan starts must not crash the dialog.
+  defp library_name(library_path_id) do
+    Settings.get_library_path!(library_path_id).path
+  rescue
+    Ecto.NoResultsError -> "a removed library"
+  end
 
   defp error_message({:duplicate_path, _, _}), do: "That file was just taken by another item"
   defp error_message({:candidate_missing, _}), do: "That file was just taken by another item"
