@@ -15,6 +15,17 @@ defmodule Mydia.Library.Misfile do
   When no file binds, every unbound file is a suspect and `nothing_binds?` is
   true, which lets a caller tell "nothing here matches" apart from "one stray".
 
+  ## Why the scan needs a stricter title rule
+
+  The parser's binding flag (`:binding_suspect` / `:parsed_title_unbound`)
+  fires only below 0.5 title similarity, the same loose score that let #957
+  through -- on its own it would miss most of the reported pairs. `scan/0` and
+  `send_to_review/2` therefore also pass `strict_titles: true`, which counts a
+  file as unbound when its untargeted parsed title falls under 0.75 word
+  coverage against every one of the item's names, `Mydia.Downloads.TorrentMatcher`'s
+  floor for the same one-directional measure. `Eligibility` keeps the looser
+  flag-only rule, so the duplicates page's existing gates do not change.
+
   `Mydia.Library.Prune.Eligibility` applies this to duplicate groups.
 
   `scan/0` applies it to every item in the library, and `send_to_review/2`
