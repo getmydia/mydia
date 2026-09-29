@@ -7,6 +7,7 @@ on:
   push:
     tags: ['plugins-v*']
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'plugins-extra/**'
       - 'native/mydia_plugin_sdk/**'
