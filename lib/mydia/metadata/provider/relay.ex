@@ -1169,7 +1169,7 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   @doc """
-  Discovers media with filters (genre, year, language, rating, sort).
+  Discovers media with filters (genre, year, language, origin country, rating, sort).
 
   Returns `{:ok, %{results: [SearchResult], page: int, total_pages: int}}`.
   """
@@ -1178,6 +1178,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     page = Keyword.get(opts, :page, 1)
     genres = Keyword.get(opts, :genres)
     original_language = Keyword.get(opts, :original_language)
+    origin_country = Keyword.get(opts, :origin_country)
     year = Keyword.get(opts, :year)
     min_rating = Keyword.get(opts, :min_rating)
     sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
@@ -1198,6 +1199,7 @@ defmodule Mydia.Metadata.Provider.Relay do
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
       |> maybe_add_param(:with_original_language, original_language)
+      |> maybe_add_param(:with_origin_country, origin_country)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)
       |> maybe_add_param(:certification_country, certification_country)

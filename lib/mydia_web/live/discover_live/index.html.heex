@@ -81,31 +81,121 @@
               </button>
             </div>
           <% else %>
-            <div role="tablist" class="tabs tabs-box w-fit">
-              <%= for {cat_key, cat_label} <- @categories do %>
+            <div class="flex flex-wrap items-center gap-2">
+              <div role="tablist" class="tabs tabs-box w-fit">
+                <%= for {cat_key, cat_label} <- @categories do %>
+                  <button
+                    role="tab"
+                    phx-click="switch_category"
+                    phx-value-category={cat_key}
+                    class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                  >
+                    {cat_label}
+                  </button>
+                <% end %>
+                <button
+                  :if={@home_country}
+                  id="discover-home-tab"
+                  role="tab"
+                  phx-click="switch_category"
+                  phx-value-category="home"
+                  class={["tab tab-sm gap-1", @category == :home && "tab-active"]}
+                >
+                  <span aria-hidden="true">{Countries.flag(@home_country)}</span>
+                  {Countries.name(@home_country)}
+                </button>
                 <button
                   role="tab"
                   phx-click="switch_category"
-                  phx-value-category={cat_key}
-                  class={["tab tab-sm", @category == cat_key && "tab-active"]}
+                  phx-value-category="discover"
+                  class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
                 >
-                  {cat_label}
+                  <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
+                </button>
+              </div>
+
+              <%= if @home_country do %>
+                <div id="discover-home-country-menu" class="dropdown dropdown-end">
+                  <div
+                    tabindex="0"
+                    role="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    aria-label="Home country options"
+                  >
+                    <.icon name="hero-ellipsis-vertical" class="w-4 h-4" />
+                  </div>
+                  <ul
+                    tabindex="0"
+                    class="dropdown-content menu bg-base-100 rounded-box z-10 w-44 p-2 shadow"
+                  >
+                    <li>
+                      <button
+                        id="discover-home-country-change"
+                        type="button"
+                        phx-click={
+                          JS.push("open_home_country_picker")
+                          |> JS.focus(to: "#discover-home-country-picker select")
+                        }
+                      >
+                        Change country
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        id="discover-home-country-remove"
+                        type="button"
+                        phx-click="remove_home_country"
+                      >
+                        Remove tab
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              <% else %>
+                <button
+                  id="discover-home-country-add"
+                  type="button"
+                  phx-click="open_home_country_picker"
+                  class="btn btn-ghost btn-xs gap-1 text-base-content/60 hover:text-base-content transition-colors"
+                >
+                  <.icon name="hero-plus" class="w-3.5 h-3.5" /> Home country
                 </button>
               <% end %>
-              <button
-                role="tab"
-                phx-click="switch_category"
-                phx-value-category="discover"
-                class={["tab tab-sm gap-1", @category == :discover && "tab-active"]}
+
+              <form
+                :if={@home_country_picker_open}
+                id="discover-home-country-picker"
+                phx-change="set_home_country"
+                class="flex items-center gap-1"
               >
-                <.icon name="hero-adjustments-horizontal" class="w-3.5 h-3.5" /> Custom
-              </button>
+                <select
+                  name="country"
+                  phx-mounted={JS.focus()}
+                  class="select select-bordered select-xs"
+                  aria-label="Home country"
+                >
+                  <option value="">Pick a country</option>
+                  <%= for {code, name} <- @countries do %>
+                    <option value={code} selected={@home_country == code}>
+                      {Countries.flag(code)} {name}
+                    </option>
+                  <% end %>
+                </select>
+                <button
+                  type="button"
+                  phx-click="close_home_country_picker"
+                  class="btn btn-ghost btn-xs btn-circle"
+                  aria-label="Cancel"
+                >
+                  <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
+                </button>
+              </form>
             </div>
           <% end %>
         </div>
 
         <%!-- Filter controls — only visible in custom/discover mode --%>
-        <%= if @category == :discover do %>
+        <%= if @category in [:discover, :home] do %>
           <form
             id="discover-filter-form"
             phx-change="apply_filters"
@@ -129,6 +219,18 @@
                 <%= for {code, name} <- @languages do %>
                   <option value={code} selected={@selected_language == code}>
                     {name}
+                  </option>
+                <% end %>
+              </select>
+              <select
+                :if={@category == :discover}
+                name="country"
+                class="select select-bordered select-sm join-item"
+              >
+                <option value="">All Countries</option>
+                <%= for {code, name} <- @countries do %>
+                  <option value={code} selected={@selected_country == code}>
+                    {Countries.flag(code)} {name}
                   </option>
                 <% end %>
               </select>

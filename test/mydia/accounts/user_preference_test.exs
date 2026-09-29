@@ -225,4 +225,54 @@ defmodule Mydia.Accounts.UserPreferenceTest do
 
     assert changeset.valid?
   end
+
+  describe "discover_home_country" do
+    test "is nil when unset" do
+      assert UserPreference.discover_home_country(%UserPreference{preferences: %{}}) == nil
+    end
+
+    test "accepts a listed code and reads it back" do
+      changeset =
+        UserPreference.changeset(%UserPreference{}, %{
+          preferences: %{"discover_home_country" => "CA"}
+        })
+
+      assert changeset.valid?
+
+      pref = %UserPreference{preferences: %{"discover_home_country" => "CA"}}
+      assert UserPreference.discover_home_country(pref) == "CA"
+    end
+
+    test "rejects an unlisted or lowercase code" do
+      for value <- ["XX", "ca", 42] do
+        changeset =
+          UserPreference.changeset(%UserPreference{}, %{
+            preferences: %{"discover_home_country" => value}
+          })
+
+        refute changeset.valid?, "expected #{inspect(value)} to be rejected"
+      end
+    end
+
+    test "nil clears it" do
+      pref = %UserPreference{preferences: %{"discover_home_country" => "CA"}}
+
+      changeset =
+        UserPreference.update_preferences_changeset(pref, %{"discover_home_country" => nil})
+
+      assert changeset.valid?
+    end
+
+    test "a stored code that is no longer listed reads as nil" do
+      pref = %UserPreference{preferences: %{"discover_home_country" => "ZZ"}}
+      assert UserPreference.discover_home_country(pref) == nil
+    end
+
+    test "a stale stored code does not block an unrelated save" do
+      pref = %UserPreference{preferences: %{"discover_home_country" => "ZZ"}}
+      changeset = UserPreference.update_preferences_changeset(pref, %{"theme" => "dark"})
+
+      assert changeset.valid?
+    end
+  end
 end

@@ -12,6 +12,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.AddDefaults
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
+  alias Mydia.Metadata.Countries
   alias Mydia.Metadata.Ref
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Settings
@@ -60,6 +61,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       socket
       |> assign(:page_title, "Discover")
       |> assign(:languages, MydiaWeb.Languages.all())
+      |> assign(:countries, Countries.all())
       |> assign(:sort_options, @sort_options)
       |> assign(:items, [])
       |> assign(:visible_items, [])
@@ -79,6 +81,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:quality_profiles, Settings.list_quality_profiles())
       |> GridDensity.assign_current(session)
       |> assign_hide_owned()
+      |> assign_home_country()
+      |> assign(:home_country_picker_open, false)
 
     {:ok, socket}
   end
@@ -94,6 +98,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
       selected_language = params["language"]
+      selected_country = parse_country_param(params["country"])
       selected_year = parse_year_param(params["year"])
       min_rating = parse_rating_param(params["rating"])
       sort_by = params["sort"] || "popularity.desc"
@@ -101,11 +106,23 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       # Determine if filters are active or discover mode is explicitly selected
       filters_active? =
-        selected_genres != [] or selected_language != nil or
+        selected_genres != [] or selected_language != nil or selected_country != nil or
           selected_year != nil or min_rating != nil
 
+      # The home tab needs a saved country. Without one (an old link, or the
+      # tab was just removed) it falls back the same way an unknown category
+      # does. Filters stay on the home tab rather than switching to Custom.
+      category =
+        if category == :home and is_nil(socket.assigns.home_country),
+          do: :trending,
+          else: category
+
       effective_category =
-        if filters_active? or category == :discover, do: :discover, else: category
+        cond do
+          category == :home -> :home
+          filters_active? or category == :discover -> :discover
+          true -> category
+        end
 
       categories =
         if media_type == :tv_show, do: @tv_categories, else: @movie_categories
@@ -119,6 +136,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:search_mode, search_mode)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
+        |> assign(:selected_country, selected_country)
         |> assign(:selected_year, selected_year)
         |> assign(:min_rating, min_rating)
         |> assign(:sort_by, sort_by)
@@ -172,6 +190,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
        |> assign(:selected_language, nil)
+       |> assign(:selected_country, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")}
@@ -214,6 +233,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       build_url_params(socket.assigns,
         genre: params["genre"],
         language: params["language"],
+        country: params["country"],
         year: params["year"],
         rating: params["rating"],
         sort: params["sort"]
@@ -347,7 +367,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
     # A rejected write leaves the toggle where it was rather than flipping the
     # grid for a preference that will be gone on the next mount.
-    case persist_hide_owned(socket, value) do
+    case persist_preference(socket, "discover_hide_owned", value) do
       :ok ->
         {:noreply,
          socket
@@ -360,7 +380,57 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
-  defp persist_hide_owned(socket, value) do
+  def handle_event("open_home_country_picker", _params, socket) do
+    {:noreply, assign(socket, :home_country_picker_open, true)}
+  end
+
+  def handle_event("close_home_country_picker", _params, socket) do
+    {:noreply, assign(socket, :home_country_picker_open, false)}
+  end
+
+  # The blank placeholder option and any client-forged code both land here
+  # and are ignored; only a listed code is saved.
+  def handle_event("set_home_country", %{"country" => code}, socket) do
+    if Countries.valid_code?(code) do
+      case persist_preference(socket, "discover_home_country", code) do
+        :ok ->
+          params = %{"type" => to_string(socket.assigns.media_type), "category" => "home"}
+
+          {:noreply,
+           socket
+           |> assign(:home_country, code)
+           |> assign(:home_country_picker_open, false)
+           |> push_patch(to: ~p"/discover?#{params}")}
+
+        :error ->
+          {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_home_country", _params, socket) do
+    case persist_preference(socket, "discover_home_country", nil) do
+      :ok ->
+        socket =
+          socket
+          |> assign(:home_country, nil)
+          |> assign(:home_country_picker_open, false)
+
+        if socket.assigns.category == :home do
+          params = %{"type" => to_string(socket.assigns.media_type)}
+          {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
+        else
+          {:noreply, socket}
+        end
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
+    end
+  end
+
+  defp persist_preference(socket, key, value) do
     case socket.assigns[:current_user] do
       nil ->
         :ok
@@ -368,9 +438,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       user ->
         preference = Accounts.get_user_preference!(user)
 
-        case Accounts.update_preference(preference, %{
-               "preferences" => %{"discover_hide_owned" => value}
-             }) do
+        case Accounts.update_preference(preference, %{"preferences" => %{key => value}}) do
           {:ok, _} -> :ok
           {:error, _changeset} -> :error
         end
@@ -406,7 +474,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
           config = Metadata.default_relay_config()
           Metadata.search_cached(config, search_query, media_type: media_type, page: page)
 
-        category == :discover ->
+        category in [:discover, :home] ->
           discover_opts = build_discover_opts(socket.assigns)
           Metadata.discover(media_type, discover_opts)
 
@@ -436,7 +504,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
           config = Metadata.default_relay_config()
           Metadata.search_cached(config, search_query, media_type: media_type, page: page)
 
-        category == :discover ->
+        category in [:discover, :home] ->
           discover_opts = build_discover_opts(socket.assigns) |> Keyword.put(:page, page)
           Metadata.discover(media_type, discover_opts)
 
@@ -753,6 +821,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :hide_owned, value)
   end
 
+  defp assign_home_country(socket) do
+    value =
+      case socket.assigns[:current_user] do
+        nil -> nil
+        user -> user |> Accounts.get_user_preference!() |> UserPreference.discover_home_country()
+      end
+
+    assign(socket, :home_country, value)
+  end
+
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
@@ -866,6 +944,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
+    # On the home tab the saved country wins over any one-off ?country=.
+    country =
+      if assigns.category == :home, do: assigns.home_country, else: assigns.selected_country
+
+    opts =
+      if country do
+        Keyword.put(opts, :origin_country, country)
+      else
+        opts
+      end
+
     opts =
       if assigns.selected_year do
         Keyword.put(opts, :year, assigns.selected_year)
@@ -914,6 +1003,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if language && language != "", do: Map.put(params, "language", language), else: params
 
+    country = Keyword.get(overrides, :country, assigns.selected_country)
+
+    params =
+      if country && country != "", do: Map.put(params, "country", country), else: params
+
     year = Keyword.get(overrides, :year, assigns.selected_year)
     params = if year && year != "", do: Map.put(params, "year", to_string(year)), else: params
 
@@ -942,12 +1036,19 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp parse_category(nil, _), do: :trending
   defp parse_category("discover", _), do: :discover
+  defp parse_category("home", _), do: :home
   defp parse_category("popular", _), do: :popular
   defp parse_category("upcoming", :movie), do: :upcoming
   defp parse_category("now_playing", :movie), do: :now_playing
   defp parse_category("on_the_air", :tv_show), do: :on_the_air
   defp parse_category("airing_today", :tv_show), do: :airing_today
   defp parse_category(_, _), do: :trending
+
+  # URL params are user-typed: an unlisted or lowercase code is dropped rather
+  # than sent to TMDB.
+  defp parse_country_param(code) do
+    if Countries.valid_code?(code), do: code, else: nil
+  end
 
   defp parse_genres_param(nil), do: []
   defp parse_genres_param(""), do: []
