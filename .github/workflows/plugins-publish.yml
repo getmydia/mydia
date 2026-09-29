@@ -2,7 +2,7 @@ name: Publish Extra Plugins
 
 # Builds every crate under plugins-extra/ and publishes the official plugin
 # index (https://plugins.mydia.dev/index.json). Pull requests only build and
-# test; tags and manual runs also deploy.
+# test; tag pushes and manual runs on master also deploy.
 on:
   push:
     tags: ['plugins-v*']
@@ -16,8 +16,11 @@ on:
       - '.github/workflows/plugins-publish.yml'
   workflow_dispatch:
 
+# Every run that can deploy shares one group and is never cancelled, so two
+# deploys cannot race on the same Pages site. Pull request runs only build and
+# get a per-ref group that cancels superseded runs.
 concurrency:
-  group: plugins-publish-${{ github.ref }}
+  group: ${{ github.event_name == 'pull_request' && format('plugins-publish-pr-{0}', github.ref) || 'plugins-publish-deploy' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
