@@ -76,6 +76,28 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     assert output =~ "echo_panel.wasm"
   end
 
+  test "refuses two crates that declare the same slug", ctx do
+    File.mkdir_p!(Path.join(ctx.crates, "echo_twin"))
+
+    File.write!(
+      Path.join([ctx.crates, "echo_twin", "manifest.json"]),
+      Jason.encode!(%{@manifest | "version" => "0.4.0"})
+    )
+
+    File.write!(Path.join(ctx.wasm_dir, "echo_panel.wasm"), "one")
+    File.write!(Path.join(ctx.wasm_dir, "echo_twin.wasm"), "two")
+
+    {output, status} =
+      run(["--crates-dir", ctx.crates, "--wasm-dir", ctx.wasm_dir, "--out", ctx.out])
+
+    assert status != 0
+    assert output =~ "echo-panel"
+    assert output =~ "echo_panel/manifest.json"
+    assert output =~ "echo_twin/manifest.json"
+    refute File.exists?(Path.join(ctx.out, "index.json"))
+    refute File.exists?(Path.join(ctx.out, "packages"))
+  end
+
   test "writes an empty index when there are no crates", ctx do
     empty = Path.join([ctx.out, "..", "empty"]) |> Path.expand()
     File.mkdir_p!(empty)

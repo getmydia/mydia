@@ -27,17 +27,36 @@ defmodule BuildPluginIndex do
     base_url = String.trim_trailing(opts[:base_url] || @default_base_url, "/")
     crates_dir = opts[:crates_dir] || "plugins-extra"
 
-    entries =
+    manifest_paths =
       crates_dir
       |> Path.join("*/manifest.json")
       |> Path.wildcard()
       |> Enum.sort()
-      |> Enum.map(&build_entry(&1, wasm_dir, out, base_url))
+
+    reject_duplicate_slugs(manifest_paths)
+
+    entries = Enum.map(manifest_paths, &build_entry(&1, wasm_dir, out, base_url))
 
     File.mkdir_p!(out)
     index_path = Path.join(out, "index.json")
     File.write!(index_path, JSON.encode!(%{"version" => 1, "plugins" => entries}))
     IO.puts("wrote #{length(entries)} plugin(s) to #{index_path}")
+  end
+
+  # Two crates with one slug would write the same package path, the second
+  # silently replacing the first while both catalog entries survive.
+  defp reject_duplicate_slugs(manifest_paths) do
+    Enum.reduce(manifest_paths, %{}, fn path, seen ->
+      slug = path |> File.read!() |> JSON.decode!() |> required("slug", path)
+
+      case seen do
+        %{^slug => first} ->
+          fail("duplicate slug \"#{slug}\" in #{first} and #{path}")
+
+        _ ->
+          Map.put(seen, slug, path)
+      end
+    end)
   end
 
   defp build_entry(manifest_path, wasm_dir, out, base_url) do
