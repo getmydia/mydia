@@ -731,7 +731,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   defp suggestion_line(%{provider_id: nil}), do: "No provider match"
 
-  # A provider id with no title: rows staged before `stage_show_file/3` wrote
+  # A provider id with no title: rows staged before `stage_item_file/3` wrote
   # the show's title, and the leftovers `create_local_show/2` stamps local.
   # Both used to render an arrow pointing at nothing.
   defp suggestion_line(%{provider_type: "local", suggested_title: title})

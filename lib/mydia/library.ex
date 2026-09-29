@@ -211,6 +211,22 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Attaches the import candidate `candidate_id` to an existing movie or
+  episode. See `Mydia.Library.CandidatePromotion.attach/3`.
+  """
+  @spec attach_candidate(binary(), Mydia.Media.MediaItem.t() | Mydia.Media.Episode.t()) ::
+          {:ok, MediaFile.t()} | {:error, term()}
+  def attach_candidate(candidate_id, target) do
+    with {:ok, _uuid} <- Ecto.UUID.cast(candidate_id),
+         %Mydia.Library.ImportCandidate{} = candidate <-
+           Repo.get(Mydia.Library.ImportCandidate, candidate_id) do
+      Mydia.Library.CandidatePromotion.attach(candidate, target, [])
+    else
+      _missing -> {:error, {:candidate_missing, candidate_id}}
+    end
+  end
+
+  @doc """
   Creates a media file during library scanning.
   Parent association is optional and will be set later during metadata enrichment.
 
@@ -332,7 +348,7 @@ defmodule Mydia.Library do
 
     changeset = UpgradeFinalize.new(%{"media_file_id" => media_file_id})
 
-    case insert_upgrade_finalize_job(changeset) do
+    case Mydia.Jobs.insert(changeset) do
       {:ok, _job} ->
         :ok
 
@@ -344,12 +360,6 @@ defmodule Mydia.Library do
 
         :ok
     end
-  end
-
-  defp insert_upgrade_finalize_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
   end
 
   defp apply_analysis_success(%MediaFile{} = media_file, result) do
@@ -2053,7 +2063,7 @@ defmodule Mydia.Library do
   end
 
   defp stage_series_file(file_info, media_item, library_path, relative_path) do
-    case Mydia.ImportCandidates.stage_show_file(media_item, library_path, %{
+    case Mydia.ImportCandidates.stage_item_file(media_item, library_path, %{
            relative_path: relative_path,
            size: file_info.size,
            discovered_at: DateTime.utc_now() |> DateTime.truncate(:second)
@@ -2250,7 +2260,7 @@ defmodule Mydia.Library do
   def trigger_library_scan(library_path_id) do
     %{library_path_id: library_path_id}
     |> Mydia.Jobs.LibraryScanner.new()
-    |> insert_scan_job()
+    |> Mydia.Jobs.insert()
   end
 
   @doc """
@@ -2270,17 +2280,7 @@ defmodule Mydia.Library do
   def trigger_full_library_scan(opts \\ []) do
     %{}
     |> Mydia.Jobs.LibraryScanner.new(Keyword.take(opts, [:schedule_in]))
-    |> insert_scan_job()
-  end
-
-  # Insert an Oban job, falling back to a direct Repo insert when Oban's
-  # engine is disabled (test mode, config/test.exs sets engine: false so no
-  # Oban instance is running). Mirrors the pattern used by
-  # Mydia.Downloads.Queue.insert_job/1 and Mydia.Jobs.DownloadMonitor.
-  defp insert_scan_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
+    |> Mydia.Jobs.insert()
   end
 
   @doc """
@@ -2646,6 +2646,69 @@ defmodule Mydia.Library do
     attrs
     |> ImportRun.create_changeset()
     |> Repo.insert()
+  end
+
+  @doc """
+  Starts a review-mode import run for every enabled library path that could
+  hold `target` (a movie or an episode), or reuses the path's active run.
+
+  Review mode records and matches files but never promotes, so this is safe
+  to offer from an item page: it refreshes the candidates "Find file" ranks
+  and imports nothing on its own.
+  """
+  @spec start_review_scans(Mydia.Media.MediaItem.t() | Mydia.Media.Episode.t(), term()) ::
+          [ImportRun.t()]
+  def start_review_scans(target, user_id) do
+    types = Mydia.Library.CandidateSuggestions.compatible_library_types(target)
+
+    Mydia.Settings.LibraryPath
+    |> where([lp], lp.type in ^types and (lp.disabled == false or is_nil(lp.disabled)))
+    |> Repo.all()
+    |> Enum.flat_map(fn library_path ->
+      case active_import_run(library_path.id) do
+        %ImportRun{} = run -> [run]
+        nil -> start_review_run(library_path, user_id)
+      end
+    end)
+  end
+
+  defp start_review_run(library_path, user_id) do
+    # The run and its job commit together: a run with no job would stay
+    # active forever and block every later scan of the path.
+    result =
+      Repo.transaction(fn ->
+        with {:ok, run} <-
+               create_import_run(%{
+                 library_path_id: library_path.id,
+                 user_id: user_id,
+                 mode: :review
+               }),
+             {:ok, _job} <-
+               %{"import_run_id" => run.id}
+               |> Mydia.Jobs.ImportRun.new()
+               |> Mydia.Jobs.insert() do
+          run
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end)
+
+    case result do
+      {:ok, run} ->
+        [run]
+
+      # Lost the one-active-run race to another starter; use theirs.
+      {:error, %Ecto.Changeset{data: %ImportRun{}}} ->
+        List.wrap(active_import_run(library_path.id))
+
+      {:error, reason} ->
+        Logger.warning("Failed to enqueue review scan",
+          library_path_id: library_path.id,
+          reason: inspect(reason)
+        )
+
+        []
+    end
   end
 
   @doc """

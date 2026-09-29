@@ -788,19 +788,18 @@ defmodule Mydia.Media do
 
     result =
       Repo.transaction(fn ->
-        # Demoting into `import_candidates` exists so a file surviving on
-        # disk becomes answerable import work again -- exactly backwards
-        # when `delete_files: true` is about to remove that same file's
-        # bytes. Demoting it first would leave a phantom candidate pointing
-        # at a path that no longer exists. The episode media_file rows still
+        # When `delete_files` is false, the kept files are parked as
+        # dismissed candidates (see `park_media_item_files/1`). When true,
+        # episode rows are removed without that side effect because the
+        # bytes are about to go: a candidate would be a phantom pointing at
+        # a path that no longer exists. The episode media_file rows still
         # have to go before `Repo.delete(media_item)` cascades to the
         # episodes themselves, since `media_files.episode_id` is
-        # `ON DELETE NO ACTION` -- `delete_media_item_episode_files/1`
-        # removes them without the demotion side effect.
+        # `ON DELETE NO ACTION`.
         if delete_files do
           delete_media_item_episode_files(media_item)
         else
-          demote_media_item_episodes(media_item)
+          park_media_item_files(media_item)
         end
 
         case Repo.delete(media_item) do
@@ -1023,19 +1022,21 @@ defmodule Mydia.Media do
 
     result =
       Repo.transaction(fn ->
-        # See the comment in `delete_media_item/2`: demoting into
-        # `import_candidates` when the files are about to be deleted from
-        # disk anyway would leave phantom candidates pointing at paths that
-        # no longer exist.
-        tv_shows =
+        # See the comment in `delete_media_item/2`: parking files as
+        # `import_candidates` when they are about to be deleted from disk
+        # anyway would leave phantom candidates pointing at paths that no
+        # longer exist.
+        items =
           MediaItem
-          |> where([m], m.id in ^ids and m.type == "tv_show")
+          |> where([m], m.id in ^ids)
           |> Repo.all()
 
         if delete_files do
-          Enum.each(tv_shows, &delete_media_item_episode_files/1)
+          items
+          |> Enum.filter(&(&1.type == "tv_show"))
+          |> Enum.each(&delete_media_item_episode_files/1)
         else
-          Enum.each(tv_shows, &demote_media_item_episodes/1)
+          Enum.each(items, &park_media_item_files/1)
         end
 
         # Delete the media items (and cascade delete all related DB records).
@@ -1660,21 +1661,30 @@ defmodule Mydia.Media do
     end)
   end
 
-  defp demote_media_item_episodes(%MediaItem{type: "tv_show"} = media_item) do
+  # Removing an item while keeping its files parks those files as dismissed
+  # import candidates: recorded, findable from "Find file" and the dismissed
+  # filter on /review, and skipped by every scan, so nothing re-imports what
+  # the user removed.
+  defp park_media_item_files(%MediaItem{type: "tv_show"} = media_item) do
     Episode
     |> where([episode], episode.media_item_id == ^media_item.id)
     |> Repo.all()
     |> Enum.each(fn episode ->
-      case Mydia.ImportCandidates.demote_episode_files(episode) do
+      case Mydia.ImportCandidates.demote_episode_files(episode, dismiss: true) do
         {:ok, :ok} -> :ok
         {:error, reason} -> Repo.rollback(reason)
       end
     end)
   end
 
-  defp demote_media_item_episodes(%MediaItem{}), do: :ok
+  defp park_media_item_files(%MediaItem{} = media_item) do
+    case Mydia.ImportCandidates.demote_movie_files(media_item, dismiss: true) do
+      {:ok, :ok} -> :ok
+      {:error, reason} -> Repo.rollback(reason)
+    end
+  end
 
-  # The `delete_files: true` counterpart to `demote_media_item_episodes/1`:
+  # The `delete_files: true` counterpart to `park_media_item_files/1`:
   # removes the media_file rows for every episode of this show, without
   # creating an `import_candidates` row for any of them. Still has to run
   # before `Repo.delete(media_item)` (or a bulk `Repo.delete_all/1` over

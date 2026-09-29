@@ -292,6 +292,21 @@ defmodule Mydia.Jobs.LibraryScannerDiscoveryTest do
       assert Repo.aggregate(MediaFile, :count) == 0
     end
 
+    test "does not re-import a movie the user removed while keeping its file", %{
+      tmp_dir: tmp_dir
+    } do
+      lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: true})
+      owned = owned_file_on_disk(lp, relative_path: "Emberline (2029)/Emberline.2029.mkv")
+      movie = Repo.get!(Mydia.Media.MediaItem, owned.media_file.media_item_id)
+
+      assert {:ok, _, _} =
+               Mydia.Media.delete_media_item(Mydia.Accounts.Scope.unrestricted(), movie)
+
+      assert :ok = scan(lp, matcher: RaisingMatcher)
+      assert Repo.aggregate(MediaFile, :count) == 0
+      assert %{dismissed_at: %DateTime{}} = Repo.one!(ImportCandidate)
+    end
+
     test "a deleted owned file is trashed even while discovery also runs", %{tmp_dir: tmp_dir} do
       lp = library_path_fixture(%{path: tmp_dir, type: "movies", auto_import: true})
       owned = owned_file_on_disk(lp)

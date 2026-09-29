@@ -154,6 +154,15 @@ defmodule MydiaWeb.MediaLive.Show.Components do
           >
             <.icon name="hero-magnifying-glass" class="w-5 h-5" /> Manual
           </button>
+          <button
+            :if={@media_item.type == "movie" and not has_media_files?(@media_item)}
+            type="button"
+            id="find-file-button"
+            phx-click="open_find_file"
+            class="btn btn-outline col-span-2"
+          >
+            <.icon name="hero-document-magnifying-glass" class="w-5 h-5" /> Find file on disk
+          </button>
 
           <%!-- Favorite and Collection actions --%>
           <button

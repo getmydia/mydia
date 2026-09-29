@@ -13,6 +13,13 @@ defmodule MydiaWeb.MediaLive.Show.Helpers do
 
   require Logger
 
+  def find_file_title(%Mydia.Media.Episode{} = episode) do
+    "S#{String.pad_leading(Integer.to_string(episode.season_number), 2, "0")}" <>
+      "E#{String.pad_leading(Integer.to_string(episode.episode_number), 2, "0")}"
+  end
+
+  def find_file_title(%Mydia.Media.MediaItem{title: title}), do: title
+
   def has_media_files?(media_item) do
     # Check if media item has any files (movie files or episode files)
     movie_files = (media_item.media_files || []) != []

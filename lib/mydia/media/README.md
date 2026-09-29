@@ -30,7 +30,7 @@ The show itself never owns a version. `MediaFile.changeset/2` and
 `episode_id` is NULL, unless `extra_kind` is set. Such a row rendered as a loose
 file on the show page and no episode could reach it; download import, the
 show-page re-scan and re-match all used to write it. A TV file with no
-resolvable episode is an import candidate (`ImportCandidates.stage_show_file/3`)
+resolvable episode is an import candidate (`ImportCandidates.stage_item_file/3`)
 or, during download import, an `unresolved_files` entry on the download.
 `Mydia.Jobs.ShowFileRepair` clears rows written before the guard. The check runs
 on every insert, and on an update whenever a parent column or `extra_kind` is
@@ -257,6 +257,23 @@ keeps loose bonus content (the Monsters University shape above) from being sent
 away. The returned candidate carries `returned_at`, which keeps it out of
 unattended promotion (`FileIngest`), out of the ready band, and out of
 `queue_accept_all_matched/1`. Only an explicit Accept in `/review` puts it back.
+
+## Removing an item keeps its files as parked candidates
+
+"Remove from Library" (`delete_files: false`) stages every live file of the
+item, movie or show, as an import candidate carrying the item's provider
+identity, title and year, with `dismissed_at` set
+(`ImportCandidates.demote_movie_files/2` and `ImportCandidates.demote_episode_files/2` with
+`dismiss: true`). Scans never re-match or promote a dismissed candidate, so the
+item stays removed. Deleting a single episode and switching provider demote
+without dismissing, because those files are still wanted.
+
+"Find file" on a movie or episode with no file ranks candidates
+(`Mydia.Library.CandidateSuggestions`) and attaches one in place with
+`CandidatePromotion.attach/3`, which skips the metadata relay because the item
+already exists. It never lists files attached to another item. The scan button
+next to it starts review-mode import runs only, so nothing is promoted without
+an explicit choice.
 
 ## An empty scan trashes the whole library
 

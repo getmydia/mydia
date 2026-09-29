@@ -402,7 +402,7 @@ round trips. A deduped insert returns `{:ok, %Oban.Job{conflict?: true}}`, so
 check that flag if you report a count to the user. Because `config/test.exs` sets
 `engine: false`, `Oban.insert/1` raises in tests and every call site needs the
 repo's `rescue RuntimeError -> Repo.insert(changeset)` fallback, as in
-`Mydia.Downloads.Queue.insert_job/1`. No test can exercise real Oban uniqueness,
+`Mydia.Jobs.insert/1`. No test can exercise real Oban uniqueness,
 so verify it from Oban's source and do not write a dedup test that would only
 exercise the fallback.
 
