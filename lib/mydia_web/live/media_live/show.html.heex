@@ -414,6 +414,14 @@
   <%= if @show_reidentify_modal do %>
     <Modals.reidentify_modal provider={@reidentify_provider} candidates={@reidentify_candidates} />
   <% end %>
+  <%= if @find_file_target do %>
+    <FindFileComponents.find_file_modal
+      title={find_file_title(@find_file_target)}
+      query={@find_file_query}
+      suggestions={@find_file_suggestions}
+      scanning={Map.values(@find_file_runs)}
+    />
+  <% end %>
   <%= if @show_manual_search_modal do %>
     <Modals.manual_search_modal
       manual_search_context={@manual_search_context}
