@@ -211,6 +211,19 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Attaches the import candidate `candidate_id` to an existing movie or
+  episode. See `Mydia.Library.CandidatePromotion.attach/3`.
+  """
+  @spec attach_candidate(binary(), Mydia.Media.MediaItem.t() | Mydia.Media.Episode.t()) ::
+          {:ok, MediaFile.t()} | {:error, term()}
+  def attach_candidate(candidate_id, target) do
+    case Repo.get(Mydia.Library.ImportCandidate, candidate_id) do
+      nil -> {:error, {:candidate_missing, candidate_id}}
+      candidate -> Mydia.Library.CandidatePromotion.attach(candidate, target, [])
+    end
+  end
+
+  @doc """
   Creates a media file during library scanning.
   Parent association is optional and will be set later during metadata enrichment.
 

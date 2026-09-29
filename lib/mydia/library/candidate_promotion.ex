@@ -29,6 +29,109 @@ defmodule Mydia.Library.CandidatePromotion do
 
   def promote_group([], _match, _opts), do: {:error, :empty_group}
 
+  @doc """
+  Attaches one candidate to an item that already exists: a movie
+  `%MediaItem{}` or an `%Episode{}` with `:media_item` preloaded.
+
+  Unlike `promote_group/3` there is no metadata step, because the target is
+  already in the library. It shares the same locking and file-insert path, so
+  it cannot race a promotion of the same candidate. A dismissed candidate is
+  fine: parked files are exactly what this is for. A candidate with a queued
+  operation is refused, since that operation already decided its fate.
+
+  For an episode, a file whose parsed episodes span several episodes of the
+  target's season (and include the target) is linked to each one that exists.
+  None are minted.
+  """
+  @spec attach(ImportCandidate.t(), Media.MediaItem.t() | Media.Episode.t(), keyword()) ::
+          {:ok, MediaFile.t()} | {:error, term()}
+  def attach(%ImportCandidate{} = candidate, target, opts) do
+    candidate = Repo.preload(candidate, :library_path)
+
+    with :ok <- on_disk(candidate),
+         {:ok, parent, extra_episode_ids} <- attach_parent(candidate, target),
+         {:ok, media_file} <- commit_attach(candidate, parent, extra_episode_ids, opts) do
+      MetadataEnricher.finalize(attach_media_item(target))
+      Sidecars.reconcile_all(Repo.preload([media_file], :library_path))
+      {:ok, media_file}
+    end
+  end
+
+  defp on_disk(%ImportCandidate{library_path: nil} = candidate),
+    do: {:error, {:library_path_missing, candidate.library_path_id}}
+
+  defp on_disk(candidate) do
+    if File.exists?(ImportCandidate.absolute_path(candidate)) do
+      :ok
+    else
+      Repo.delete(candidate)
+      {:error, :file_missing}
+    end
+  end
+
+  defp attach_parent(_candidate, %Media.MediaItem{type: "movie"} = movie),
+    do: {:ok, %{media_item_id: movie.id}, []}
+
+  defp attach_parent(candidate, %Media.Episode{} = episode),
+    do: {:ok, %{episode_id: episode.id}, sibling_episode_ids(candidate, episode)}
+
+  defp attach_parent(_candidate, target), do: {:error, {:incompatible_target, target}}
+
+  defp sibling_episode_ids(%ImportCandidate{parsed_info: parsed_info}, episode) do
+    parsed_info = parsed_info || %{}
+    numbers = Map.get(parsed_info, "episodes") || []
+
+    if Map.get(parsed_info, "season") == episode.season_number and
+         episode.episode_number in numbers and length(numbers) > 1 do
+      Media.Episode
+      |> where(
+        [e],
+        e.media_item_id == ^episode.media_item_id and e.season_number == ^episode.season_number and
+          e.episode_number in ^numbers and e.id != ^episode.id
+      )
+      |> select([e], e.id)
+      |> Repo.all()
+    else
+      []
+    end
+  end
+
+  defp attach_media_item(%Media.MediaItem{} = movie), do: movie
+  defp attach_media_item(%Media.Episode{media_item: %Media.MediaItem{} = show}), do: show
+
+  defp commit_attach(candidate, parent, extra_episode_ids, opts) do
+    transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
+
+    ownership_attempt(opts)
+
+    Repo.transaction(
+      fn ->
+        ownership_boundary(opts)
+
+        with :ok <- lock_group([candidate]),
+             {:ok, [locked]} <- reread_candidates([candidate]),
+             :ok <- not_queued(locked),
+             :ok <- ensure_path_available(locked),
+             {:ok, media_file} <- insert_file(locked, parent),
+             {:ok, _} <- link_extra_episodes(media_file, extra_episode_ids),
+             :ok <- delete_candidates([locked]) do
+          media_file
+        else
+          {:error, reason} -> Repo.rollback(reason)
+        end
+      end,
+      transaction_opts
+    )
+  end
+
+  defp not_queued(%ImportCandidate{queued_op: nil}), do: :ok
+  defp not_queued(_candidate), do: {:error, :queued}
+
+  defp link_extra_episodes(_media_file, []), do: {:ok, :none}
+
+  defp link_extra_episodes(media_file, episode_ids),
+    do: Mydia.Library.add_episode_links(media_file, episode_ids)
+
   defp commit_group(candidates, snapshot, preparation, opts) do
     transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
 

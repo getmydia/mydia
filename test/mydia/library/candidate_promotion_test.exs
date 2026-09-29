@@ -486,4 +486,129 @@ defmodule Mydia.Library.CandidatePromotionTest do
       refute Repo.get(ImportCandidate, candidate.id)
     end)
   end
+
+  describe "attach/3" do
+    setup do
+      root = Path.join(System.tmp_dir!(), "mydia_attach_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(root)
+      on_exit(fn -> File.rm_rf(root) end)
+      %{root: root}
+    end
+
+    defp on_disk(root, rel) do
+      abs = Path.join(root, rel)
+      File.mkdir_p!(Path.dirname(abs))
+      File.write!(abs, "data")
+      rel
+    end
+
+    test "attaches a candidate to a movie and deletes the candidate", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie", title: "Zephyr Station", year: 2030})
+      rel = on_disk(root, "Zephyr Station (2030)/zs.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel, size: 4)
+
+      assert {:ok, %MediaFile{} = file} = CandidatePromotion.attach(candidate, movie, [])
+      assert file.media_item_id == movie.id
+      assert file.relative_path == rel
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "attaches a dismissed candidate", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "Parked/parked.mkv")
+
+      candidate =
+        import_candidate_fixture(
+          library_path_id: lp.id,
+          relative_path: rel,
+          dismissed_at: ~U[2026-09-01 00:00:00Z]
+        )
+
+      assert {:ok, _file} = CandidatePromotion.attach(candidate, movie, [])
+    end
+
+    test "attaches to an episode and links it", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+      episode = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 3)
+      rel = on_disk(root, "Lantern Coast/whatever.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+
+      episode = Repo.preload(episode, :media_item)
+      assert {:ok, file} = CandidatePromotion.attach(candidate, episode, [])
+      assert file.episode_id == episode.id
+      assert [%{id: id}] = Repo.preload(Repo.reload!(episode), :media_files).media_files
+      assert id == file.id
+    end
+
+    test "links every existing episode a multi-episode file names", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+      e1 = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 1)
+      e2 = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 2)
+      rel = on_disk(root, "Lantern Coast/Lantern.Coast.S01E01E02.mkv")
+
+      candidate =
+        import_candidate_fixture(
+          library_path_id: lp.id,
+          relative_path: rel,
+          parsed_info: %{"season" => 1, "episodes" => [1, 2, 3]}
+        )
+
+      assert {:ok, file} = CandidatePromotion.attach(candidate, Repo.preload(e1, :media_item), [])
+
+      linked =
+        Mydia.Library.MediaFileEpisode
+        |> where([l], l.media_file_id == ^file.id)
+        |> select([l], l.episode_id)
+        |> Repo.all()
+        |> MapSet.new()
+
+      assert linked == MapSet.new([e1.id, e2.id])
+    end
+
+    test "refuses a path another file already owns", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      other = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "Taken/taken.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+      media_file_fixture(media_item_id: other.id, library_path_id: lp.id, relative_path: rel)
+
+      assert {:error, {:duplicate_path, _, ^rel}} =
+               CandidatePromotion.attach(candidate, movie, [])
+    end
+
+    test "refuses a candidate deleted meanwhile", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "Vanished/v.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+      Repo.delete!(candidate)
+
+      assert {:error, {:candidate_missing, _}} = CandidatePromotion.attach(candidate, movie, [])
+    end
+
+    test "refuses and removes a candidate whose file left disk", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: "nope.mkv")
+
+      assert {:error, :file_missing} = CandidatePromotion.attach(candidate, movie, [])
+      refute Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "refuses a candidate with a queued operation", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "Queued/q.mkv")
+
+      candidate =
+        import_candidate_fixture(library_path_id: lp.id, relative_path: rel, queued_op: "accept")
+
+      assert {:error, :queued} = CandidatePromotion.attach(candidate, movie, [])
+    end
+  end
 end
