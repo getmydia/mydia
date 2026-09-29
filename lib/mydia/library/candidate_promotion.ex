@@ -127,6 +127,7 @@ defmodule Mydia.Library.CandidatePromotion do
              {:ok, [reread]} <- reread_candidates([candidate]),
              locked = Repo.preload(reread, :library_path),
              :ok <- not_queued(locked),
+             :ok <- compatible_media_type(locked, target),
              :ok <- on_disk(locked),
              :ok <- ensure_path_available(locked),
              {:ok, media_file} <- insert_file(locked, parent),
@@ -140,6 +141,19 @@ defmodule Mydia.Library.CandidatePromotion do
       transaction_opts
     )
   end
+
+  # Same rule promote_group applies through resolve_parent: a candidate
+  # classified as one kind never attaches to an item of the other.
+  defp compatible_media_type(%ImportCandidate{media_type: nil}, _target), do: :ok
+
+  defp compatible_media_type(%ImportCandidate{media_type: type}, target) do
+    if type == expected_media_type(target),
+      do: :ok,
+      else: {:error, {:incompatible_media_type, type}}
+  end
+
+  defp expected_media_type(%Media.MediaItem{type: "movie"}), do: "movie"
+  defp expected_media_type(%Media.Episode{}), do: "tv_show"
 
   defp not_queued(%ImportCandidate{queued_op: nil}), do: :ok
   defp not_queued(_candidate), do: {:error, :queued}

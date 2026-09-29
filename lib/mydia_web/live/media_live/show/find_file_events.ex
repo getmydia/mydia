@@ -170,6 +170,10 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
 
   defp error_message({:duplicate_path, _, _}), do: "That file was just taken by another item"
   defp error_message({:candidate_missing, _}), do: "That file was just taken by another item"
+
+  defp error_message({:incompatible_media_type, _}),
+    do: "That file is not the right kind for this item"
+
   defp error_message(:file_missing), do: "That file is no longer on disk"
   defp error_message(:queued), do: "That file is already being imported or deleted"
   defp error_message({:library_path_missing, _}), do: "That file's library is gone"

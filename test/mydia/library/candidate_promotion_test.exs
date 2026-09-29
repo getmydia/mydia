@@ -642,6 +642,41 @@ defmodule Mydia.Library.CandidatePromotionTest do
       refute Repo.get(ImportCandidate, candidate.id)
     end
 
+    test "refuses a tv_show candidate for a movie and writes nothing", %{root: root} do
+      lp = library_path_fixture(%{type: "mixed", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "Wrong/kind.mkv")
+
+      candidate =
+        import_candidate_fixture(
+          library_path_id: lp.id,
+          relative_path: rel,
+          media_type: "tv_show"
+        )
+
+      assert {:error, {:incompatible_media_type, "tv_show"}} =
+               CandidatePromotion.attach(candidate, movie, [])
+
+      assert Repo.get(ImportCandidate, candidate.id)
+      refute Repo.exists?(from f in MediaFile, where: f.relative_path == ^rel)
+    end
+
+    test "refuses a movie candidate for an episode and writes nothing", %{root: root} do
+      lp = library_path_fixture(%{type: "mixed", path: root})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+      episode = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 1)
+      rel = on_disk(root, "Wrong/kind2.mkv")
+
+      candidate =
+        import_candidate_fixture(library_path_id: lp.id, relative_path: rel, media_type: "movie")
+
+      assert {:error, {:incompatible_media_type, "movie"}} =
+               CandidatePromotion.attach(candidate, Repo.preload(episode, :media_item), [])
+
+      assert Repo.get(ImportCandidate, candidate.id)
+      refute Repo.exists?(from f in MediaFile, where: f.relative_path == ^rel)
+    end
+
     test "refuses a candidate deleted meanwhile", %{root: root} do
       lp = library_path_fixture(%{type: "movies", path: root})
       movie = media_item_fixture(%{type: "movie"})
