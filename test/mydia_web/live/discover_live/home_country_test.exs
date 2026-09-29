@@ -5,8 +5,10 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
   import Mydia.MetadataCacheHelpers
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.UserPreference
   alias Mydia.Metadata.Cache
+  alias MydiaWeb.DiscoverLive.Index
 
   setup %{conn: conn} do
     bypass = Bypass.open()
@@ -101,6 +103,174 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
         view,
         ~p"/discover?#{%{"category" => "discover", "country" => "CA", "type" => "movie"}}"
       )
+    end
+  end
+
+  defp set_home_country(user, code) do
+    pref = Accounts.get_user_preference!(user)
+
+    {:ok, _} =
+      Accounts.update_preference(pref, %{"preferences" => %{"discover_home_country" => code}})
+  end
+
+  describe "the home country tab" do
+    test "with no preference there is no tab, only the add control", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      refute has_element?(view, "#discover-home-tab")
+      assert has_element?(view, "#discover-home-country-add")
+    end
+
+    test "picking a country saves it and opens its tab", %{conn: conn, user: user, bypass: bypass} do
+      stub_discover(bypass)
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      view |> element("#discover-home-country-add") |> render_click()
+      assert has_element?(view, "#discover-home-country-picker")
+
+      view
+      |> element("#discover-home-country-picker")
+      |> render_change(%{"country" => "CA"})
+
+      assert_patch(view, ~p"/discover?#{%{"category" => "home", "type" => "movie"}}")
+      assert home_country(user) == "CA"
+      assert has_element?(view, "#discover-home-tab.tab-active", "Canada")
+      refute has_element?(view, "#discover-home-country-picker")
+      assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
+      assert has_element?(view, "#discover-grid h3", "Frostbound Ferry")
+    end
+
+    test "the saved tab shows on the next mount", %{conn: conn, user: user} do
+      set_home_country(user, "CA")
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+
+      assert has_element?(view, "#discover-home-tab", "Canada")
+      refute has_element?(view, "#discover-home-tab.tab-active")
+      refute has_element?(view, "#discover-home-country-add")
+    end
+
+    test "removing the tab clears the preference", %{conn: conn, user: user, bypass: bypass} do
+      stub_discover(bypass)
+      set_home_country(user, "CA")
+
+      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
+
+      view |> element("#discover-home-country-remove") |> render_click()
+
+      assert_patch(view, ~p"/discover?#{%{"type" => "movie"}}")
+      assert home_country(user) == nil
+      refute has_element?(view, "#discover-home-tab")
+      assert has_element?(view, "#discover-home-country-add")
+    end
+
+    test "category=home with no preference falls back to Trending", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
+
+      refute has_element?(view, "#discover-home-tab")
+      assert has_element?(view, "[role='tab'].tab-active", "Trending")
+      refute_received {:discover_query, _}
+    end
+
+    test "filters apply inside the tab, and the tab's country wins over ?country=",
+         %{conn: conn, user: user, bypass: bypass} do
+      stub_discover(bypass)
+      set_home_country(user, "CA")
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "language" => "fr", "country" => "FR"}}"
+        )
+
+      assert_receive {:discover_query,
+                      %{"with_origin_country" => "CA", "with_original_language" => "fr"}}
+
+      assert has_element?(view, "#discover-home-tab.tab-active")
+      assert has_element?(view, "#discover-filter-form")
+      refute has_element?(view, "#discover-filter-form select[name='country']")
+    end
+
+    test "hide-owned auto-advance works on the tab", %{conn: conn, user: user, bypass: bypass} do
+      owned_id = unique_provider_id()
+      visible_id = unique_provider_id()
+      insert(:media_item, tmdb_id: owned_id, type: "movie")
+      set_home_country(user, "CA")
+
+      pref = Accounts.get_user_preference!(user)
+
+      {:ok, _} =
+        Accounts.update_preference(pref, %{"preferences" => %{"discover_hide_owned" => true}})
+
+      stub_discover(bypass, fn
+        1 -> {[%{"id" => owned_id, "title" => "Marooned Aurora"}], 2}
+        _ -> {[%{"id" => visible_id, "title" => "Paper Comet"}], 2}
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
+
+      wait_until(fn -> has_element?(view, "#discover-grid h3", "Paper Comet") end)
+      refute has_element?(view, "#discover-grid h3", "Marooned Aurora")
+    end
+  end
+
+  describe "restricted accounts on the home tab" do
+    test "certification params go out alongside the country", %{bypass: bypass} do
+      stub_discover(bypass)
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          library_status_map: %{},
+          request_status_map: %{},
+          selected_recommendations: [],
+          selected_item: nil,
+          hide_owned: false,
+          visible_items: [],
+          loading_more: false,
+          items: [],
+          page: 1,
+          total_pages: 1,
+          has_more: false,
+          load_error: nil,
+          loading: true,
+          media_type: :movie,
+          search_mode: false,
+          search_query: "",
+          category: :home,
+          home_country: "CA",
+          selected_country: nil,
+          selected_genres: [],
+          selected_language: nil,
+          selected_year: nil,
+          min_rating: nil,
+          sort_by: "popularity.desc",
+          current_scope: %Scope{Scope.unrestricted() | max_content_age: 12}
+        }
+      }
+
+      {:noreply, _updated} = Index.handle_info(:load_data, socket)
+
+      assert_receive {:discover_query,
+                      %{
+                        "with_origin_country" => "CA",
+                        "certification_country" => "US",
+                        "certification.lte" => "PG"
+                      }}
+    end
+  end
+
+  defp wait_until(fun, retries \\ 200)
+
+  defp wait_until(_fun, 0), do: flunk("condition not met in time")
+
+  defp wait_until(fun, retries) do
+    if fun.() do
+      :ok
+    else
+      Process.sleep(10)
+      wait_until(fun, retries - 1)
     end
   end
 end
