@@ -677,7 +677,7 @@ defmodule Mydia.Library.MetadataMatcher do
       Scope.system()
       |> Media.list_media_items(type: "movie")
       |> Enum.filter(fn item ->
-        same_title?(item, parsed.title) && years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item_year(item), parsed.year)
       end)
 
     case pick_local(candidates, parsed.year) do
@@ -708,7 +708,7 @@ defmodule Mydia.Library.MetadataMatcher do
       Scope.system()
       |> Media.list_media_items(type: "tv_show")
       |> Enum.filter(fn item ->
-        same_title?(item, parsed.title) && years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item_year(item), parsed.year)
       end)
 
     case pick_local(candidates, parsed.year) do
@@ -785,13 +785,20 @@ defmodule Mydia.Library.MetadataMatcher do
   defp pick_local([item], _year), do: item
 
   defp pick_local(items, year) when is_integer(year) do
-    case Enum.filter(items, &(&1.year == year)) do
+    case Enum.filter(items, &(item_year(&1) == year)) do
       [item] -> item
       _ -> nil
     end
   end
 
   defp pick_local(_items, _year), do: nil
+
+  # The item's year, falling back to a provider `(YYYY)` suffix on its title.
+  # `same_title?/2` strips that suffix to compare titles, so without this an
+  # item stored as "Quillon (2021)" with no `year` would pass the year check
+  # for a file from any year.
+  defp item_year(%MediaItem{year: year}) when is_integer(year), do: year
+  defp item_year(%MediaItem{title: title}), do: title |> split_title_year() |> elem(1)
 
   # Check if years are compatible (nil means no year constraint)
   defp years_compatible?(nil, _parsed_year), do: true

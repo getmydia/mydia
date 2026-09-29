@@ -98,6 +98,18 @@ defmodule Mydia.Library.MetadataMatcherLocalTest do
       assert match.provider_id == "901"
     end
 
+    test "takes the year from the title suffix when the item has none", %{
+      bypass: bypass,
+      config: config
+    } do
+      media_item_fixture(%{type: "tv_show", title: "Quillon (2021)", year: nil, tvdb_id: 906})
+      stub(bypass, @tvdb_search, %{"data" => [tvdb_show(507, "Quillon", 2004)]})
+
+      assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Quillon", 2004), config)
+      refute match.from_local_db
+      assert match.provider_id == "507"
+    end
+
     test "refuses a title that is only a substring of a library show", %{
       bypass: bypass,
       config: config
