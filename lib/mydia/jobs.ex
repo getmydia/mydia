@@ -9,6 +9,23 @@ defmodule Mydia.Jobs do
   alias Oban.Job
 
   @doc """
+  Inserts an Oban job changeset, falling back to a plain `Repo.insert/1`.
+
+  Oban's engine is disabled in test (`engine: false` in config/test.exs), so
+  `Oban.insert/1` raises a `RuntimeError` there. The fallback stores the job row
+  so `assert_enqueued` still works. It gives no signal on the real Oban insert
+  path or its uniqueness behavior.
+
+  Returns `{:ok, job}` or `{:error, changeset}`.
+  """
+  @spec insert(Ecto.Changeset.t()) :: {:ok, Job.t()} | {:error, term()}
+  def insert(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
+  end
+
+  @doc """
   Lists all configured cron jobs from Oban configuration.
 
   Returns a list of maps with job details including:

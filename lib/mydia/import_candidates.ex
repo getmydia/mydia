@@ -1184,10 +1184,6 @@ defmodule Mydia.ImportCandidates do
   defp maybe_exclude_returned(query, true), do: having(query, [c], count(c.returned_at) == 0)
   defp maybe_exclude_returned(query, false), do: query
 
-  # Oban's engine is disabled in test (config/test.exs sets `engine: false`), so
-  # Oban.insert/1 raises there. See test/README.md and
-  # Mydia.Downloads.Queue.insert_job/1, which uses the same fallback.
-  #
   # `states:` is overridden here rather than declared on `use Oban.Worker` in
   # the worker modules themselves, so it deliberately excludes `:executing`: a
   # click landing while a drain is already running must enqueue a fresh job
@@ -1200,13 +1196,7 @@ defmodule Mydia.ImportCandidates do
   defp enqueue(worker, library_path_id) do
     %{"library_path_id" => library_path_id}
     |> worker.new(unique: [states: [:available, :scheduled, :retryable]])
-    |> insert_job()
-  end
-
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
+    |> Mydia.Jobs.insert()
   end
 
   defp accept_group(%ImportCandidateGroup{provider_id: nil}, _opts), do: {:error, :no_match}

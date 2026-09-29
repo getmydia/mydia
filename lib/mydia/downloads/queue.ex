@@ -681,7 +681,7 @@ defmodule Mydia.Downloads.Queue do
             "move_files" => false
           }
           |> Mydia.Jobs.MediaImport.new()
-          |> insert_job()
+          |> Mydia.Jobs.insert()
 
         case job_result do
           {:ok, _job} -> {:ok, updated}
@@ -752,7 +752,7 @@ defmodule Mydia.Downloads.Queue do
       "move_files" => false
     }
     |> Mydia.Jobs.MediaImport.new()
-    |> insert_job()
+    |> Mydia.Jobs.insert()
   end
 
   def resolve_file_mappings(%Download{} = download, mappings) when is_list(mappings) do
@@ -774,7 +774,7 @@ defmodule Mydia.Downloads.Queue do
            "move_files" => false
          }
          |> Mydia.Jobs.MediaImport.new()
-         |> insert_job() do
+         |> Mydia.Jobs.insert() do
       {:ok, _job} -> {:ok, download}
       {:error, changeset} -> {:error, changeset}
     end
@@ -828,7 +828,7 @@ defmodule Mydia.Downloads.Queue do
         {:ok, updated} ->
           case %{"download_id" => updated.id}
                |> Mydia.Jobs.MediaRematch.new()
-               |> insert_job() do
+               |> Mydia.Jobs.insert() do
             {:ok, _job} -> {:ok, :enqueued}
             {:error, _changeset} = error -> error
           end
@@ -837,14 +837,6 @@ defmodule Mydia.Downloads.Queue do
           error
       end
     end
-  end
-
-  # Insert an Oban job, falling back to a direct Repo insert when Oban's engine
-  # is disabled (test mode). Mirrors the pattern in DownloadMonitor.
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
   end
 
   defp locate_single_imported_file(download) do
@@ -963,7 +955,7 @@ defmodule Mydia.Downloads.Queue do
 
   @doc false
   def enqueue_search(nil), do: :ok
-  def enqueue_search(changeset), do: insert_job(changeset)
+  def enqueue_search(changeset), do: Mydia.Jobs.insert(changeset)
 
   ## Private Functions - Download Initiation
 

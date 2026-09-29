@@ -156,7 +156,7 @@ defmodule Mydia.Downloads.Removal do
 
     with {:ok, updated} <- download |> Download.changeset(attrs) |> Repo.update(),
          {:ok, %Oban.Job{conflict?: false}} <-
-           insert_job(RemoveDownload.new(%{"download_id" => updated.id})) do
+           Mydia.Jobs.insert(RemoveDownload.new(%{"download_id" => updated.id})) do
       updated
     else
       # The previous job for this row gave up moments ago and has not returned
@@ -295,12 +295,4 @@ defmodule Mydia.Downloads.Removal do
   defp describe(%{__exception__: true} = exception), do: Exception.message(exception)
   defp describe(reason) when is_binary(reason), do: reason
   defp describe(reason), do: inspect(reason)
-
-  # Same fallback as Queue's insert_job/1: Oban.insert/1 raises when Oban is not
-  # running, which is the case in some test environments.
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
-  end
 end
