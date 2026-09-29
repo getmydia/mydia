@@ -65,11 +65,28 @@ defmodule Mydia.Library.CandidateSuggestionsTest do
   test "drops implausible candidates unless a query is given" do
     lp = library_path_fixture(%{type: "movies"})
     movie = movie()
-    unrelated = import_candidate_fixture(library_path_id: lp.id, relative_path: "Quillmere/q.mkv")
+
+    unrelated =
+      import_candidate_fixture(
+        library_path_id: lp.id,
+        relative_path: "Quillmere Harbor (2019)/Quillmere.Harbor.2019.1080p.mkv"
+      )
 
     assert CandidateSuggestions.suggest_for(movie) == []
     assert [%{candidate: %{id: id}}] = CandidateSuggestions.suggest_for(movie, query: "quill")
     assert id == unrelated.id
+  end
+
+  test "a same-year candidate with an unrelated title is dropped" do
+    lp = library_path_fixture(%{type: "movies"})
+    movie = movie()
+
+    import_candidate_fixture(
+      library_path_id: lp.id,
+      relative_path: "Emberline (2030)/Emberline.2030.mkv"
+    )
+
+    assert CandidateSuggestions.suggest_for(movie) == []
   end
 
   test "excludes incompatible library types, queued and wrong-type candidates" do
@@ -131,6 +148,32 @@ defmodule Mydia.Library.CandidateSuggestionsTest do
     assert first.candidate.id == right.id
     assert {:episode, 2, 4} in first.reasons
     assert second.candidate.id == wrong.id
+  end
+
+  test "an episode only gets same_provider on the file matching the episode" do
+    lp = library_path_fixture(%{type: "series"})
+    show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast", tvdb_id: 900_302})
+    episode = episode_fixture(media_item_id: show.id, season_number: 2, episode_number: 4)
+
+    mk = fn n ->
+      import_candidate_fixture(
+        library_path_id: lp.id,
+        relative_path: "Lantern Coast/Lantern.Coast.S02E0#{n}.mkv",
+        provider_type: "tvdb",
+        provider_id: "900302",
+        parsed_info: %{"season" => 2, "episodes" => [n]}
+      )
+    end
+
+    right = mk.(4)
+    wrong = mk.(5)
+
+    episode = Repo.preload(episode, :media_item)
+    assert [first, second] = CandidateSuggestions.suggest_for(episode)
+    assert first.candidate.id == right.id
+    assert :same_provider in first.reasons
+    assert second.candidate.id == wrong.id
+    refute :same_provider in second.reasons
   end
 
   test "respects :limit" do

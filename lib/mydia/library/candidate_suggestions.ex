@@ -17,13 +17,20 @@ defmodule Mydia.Library.CandidateSuggestions do
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
 
-  @pool_cap 2_000
+  @pool_cap 500
   @default_limit 25
-  @title_floor 0.3
+  @title_floor 0.8
+  @max_tokens 5
+  @min_token_length 3
 
+  @doc """
+  Ranked suggestions for a movie `MediaItem` or an `Episode` (with its
+  `:media_item` preloaded). Options: `:query` (path substring search) and
+  `:limit`.
+  """
   @spec suggest_for(MediaItem.t() | Episode.t(), keyword()) :: [CandidateSuggestion.t()]
   def suggest_for(target, opts \\ []) do
-    query = Keyword.get(opts, :query)
+    query = normalize_query(Keyword.get(opts, :query))
     limit = Keyword.get(opts, :limit, @default_limit)
     item = item_of(target)
     identity = ImportCandidates.provider_identity(item)
@@ -33,13 +40,23 @@ defmodule Mydia.Library.CandidateSuggestions do
     |> Repo.all()
     |> Enum.map(&score(&1, target, item, identity))
     |> Enum.filter(&(plausible?(&1) or searching?(query)))
-    |> Enum.sort_by(& &1.score, :desc)
+    |> Enum.sort_by(&{-&1.score, &1.candidate.id})
     |> Enum.take(limit)
   end
 
-  @spec compatible_library_types(MediaItem.t() | Episode.t()) :: [atom()]
+  @doc "Library path types that can hold a file for a movie `MediaItem` or an `Episode`."
+  @spec compatible_library_types(Episode.t() | MediaItem.t()) :: [atom()]
   def compatible_library_types(%Episode{}), do: [:series, :mixed]
   def compatible_library_types(%MediaItem{type: "movie"}), do: [:movies, :mixed]
+
+  defp normalize_query(q) when is_binary(q) do
+    case String.trim(q) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_query(_q), do: nil
 
   defp item_of(%Episode{media_item: %MediaItem{} = show}), do: show
   defp item_of(%MediaItem{} = movie), do: movie
@@ -59,7 +76,7 @@ defmodule Mydia.Library.CandidateSuggestions do
         is_nil(c.queued_op) and (is_nil(c.media_type) or c.media_type == ^type)
     )
     |> identity_first(provider_type, provider_id)
-    |> search(query)
+    |> narrow(target, provider_type, provider_id, query)
     |> limit(@pool_cap)
     |> preload([_c, lp], library_path: lp)
   end
@@ -82,24 +99,65 @@ defmodule Mydia.Library.CandidateSuggestions do
   defp identity_first(query, _provider_type, _provider_id),
     do: order_by(query, [c], desc: c.discovered_at)
 
-  defp search(query, q) when is_binary(q) and q != "" do
-    like = "%" <> ImportCandidates.escape_like(String.trim(q)) <> "%"
+  # With a typed query the path LIKE is the filter; otherwise prefilter in SQL
+  # to identity matches or paths containing a significant title token, so we
+  # never load and parse the whole table.
+  defp narrow(query, _target, _type, _id, q) when is_binary(q) do
+    like = "%" <> ImportCandidates.escape_like(q) <> "%"
     where(query, [c], fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", c.relative_path, ^like))
   end
 
-  defp search(query, _q), do: query
+  defp narrow(query, target, provider_type, provider_id, nil) do
+    identity =
+      if is_binary(provider_type) and is_binary(provider_id),
+        do: dynamic([c], c.provider_type == ^provider_type and c.provider_id == ^provider_id),
+        else: dynamic(false)
 
-  defp searching?(q), do: is_binary(q) and String.trim(q) != ""
+    tokens = title_tokens(item_of(target))
+
+    filter =
+      Enum.reduce(tokens, identity, fn token, acc ->
+        like = "%" <> ImportCandidates.escape_like(token) <> "%"
+
+        dynamic(
+          [c],
+          ^acc or fragment("LOWER(?) LIKE LOWER(?) ESCAPE '\\'", c.relative_path, ^like)
+        )
+      end)
+
+    where(query, ^filter)
+  end
+
+  defp title_tokens(%MediaItem{title: title}) when is_binary(title) do
+    title
+    |> Text.match_tokens()
+    |> Enum.filter(&(String.length(&1) >= @min_token_length))
+    |> Enum.uniq()
+    |> Enum.take(@max_tokens)
+  end
+
+  defp title_tokens(_item), do: []
+
+  defp searching?(q), do: is_binary(q)
 
   defp score(candidate, target, item, identity) do
     parsed = ReleaseParser.parse(Path.basename(candidate.relative_path))
 
+    episode = episode_reason(candidate, parsed, target)
+
+    # A show's provider id says nothing about which episode a file is, so for
+    # an episode target identity only counts alongside the episode hit.
+    provider =
+      if match?(%Episode{}, target) and is_nil(episode),
+        do: nil,
+        else: same_provider(candidate, identity)
+
     reasons =
       [
-        same_provider(candidate, identity),
+        provider,
         title_reason(candidate, parsed, item),
         year_reason(candidate, parsed, target, item),
-        episode_reason(candidate, parsed, target)
+        episode
       ]
       |> Enum.reject(&is_nil/1)
 
@@ -151,10 +209,14 @@ defmodule Mydia.Library.CandidateSuggestions do
     end)
   end
 
+  # Only identity, an episode hit or a strong title match make a file plausible;
+  # a year alone merely adds to the score.
   defp plausible?(%CandidateSuggestion{reasons: reasons}) do
     Enum.any?(reasons, fn
+      :same_provider -> true
+      {:episode, _, _} -> true
       {:title, similarity} -> similarity >= @title_floor
-      _other -> true
+      _other -> false
     end)
   end
 end
