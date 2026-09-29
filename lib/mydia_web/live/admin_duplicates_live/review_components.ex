@@ -205,13 +205,21 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
     """
   end
 
+  @doc """
+  One file with a Leave/Review radio pair. Shared with
+  `MydiaWeb.AdminDuplicatesLive.MisfiledComponent`, which passes its own
+  `id_prefix` (a file can appear in both sections at once) and its `target`.
+  """
   attr :file, :map, required: true
   attr :subject_id, :string, required: true
   attr :suspect?, :boolean, required: true
   attr :returning?, :boolean, required: true
   attr :last_left?, :boolean, required: true
+  attr :id_prefix, :string, default: "duplicates"
+  attr :target, :any, default: nil
+  attr :suspect_label, :string, default: "Doesn't match"
 
-  defp review_file_row(assigns) do
+  def review_file_row(assigns) do
     relative_path = assigns.file.relative_path || ""
 
     path_label =
@@ -232,10 +240,10 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
 
       <span
         :if={@suspect?}
-        id={"duplicates-suspect-#{@file.id}"}
+        id={"#{@id_prefix}-suspect-#{@file.id}"}
         class="badge badge-sm badge-warning badge-outline shrink-0"
       >
-        Doesn't match
+        {@suspect_label}
       </span>
 
       <%!-- Same shape as the Keep/Trash radiogroup in Components.file_row/1,
@@ -249,13 +257,14 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
         <input
           type="radio"
           class="join-item btn btn-xs"
-          id={"duplicates-leave-#{@file.id}"}
-          name={"review-#{@file.id}"}
+          id={"#{@id_prefix}-leave-#{@file.id}"}
+          name={"#{@id_prefix}-review-#{@file.id}"}
           aria-label="Leave"
           checked={not @returning?}
           phx-click="leave_file"
           phx-value-subject={@subject_id}
           phx-value-file={@file.id}
+          phx-target={@target}
         />
         <input
           type="radio"
@@ -264,14 +273,15 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
             @returning? &&
               "[--btn-color:var(--color-warning)] [--btn-fg:var(--color-warning-content)]"
           ]}
-          id={"duplicates-review-#{@file.id}"}
-          name={"review-#{@file.id}"}
+          id={"#{@id_prefix}-review-#{@file.id}"}
+          name={"#{@id_prefix}-review-#{@file.id}"}
           aria-label="Review"
           checked={@returning?}
           disabled={@last_left?}
           phx-click="review_file"
           phx-value-subject={@subject_id}
           phx-value-file={@file.id}
+          phx-target={@target}
         />
       </div>
     </div>
