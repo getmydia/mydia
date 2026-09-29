@@ -1,0 +1,81 @@
+name: Publish Extra Plugins
+
+# Builds every crate under plugins-extra/ and publishes the official plugin
+# index (https://plugins.mydia.dev/index.json). Pull requests only build and
+# test; tags and manual runs also deploy.
+on:
+  push:
+    tags: ['plugins-v*']
+  pull_request:
+    paths:
+      - 'plugins-extra/**'
+      - 'native/mydia_plugin_sdk/**'
+      - 'native/mydia_plugin_macros/**'
+      - 'scripts/build_plugin_index.exs'
+      - '.github/workflows/plugins-publish.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: plugins-publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version pins
+        run: |
+          echo "ELIXIR_VERSION=$(cat .elixir-version)" >> "$GITHUB_ENV"
+          echo "OTP_VERSION=$(cat .otp-version)" >> "$GITHUB_ENV"
+
+      - name: Setup Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      # rustup reads rust-toolchain.toml (channel and the wasm32-wasip2 target).
+      # Do not pass a toolchain here: a guest built with a newer Rust emits a
+      # WASI version the host cannot link (see plugins/README.md).
+      - name: Install toolchain
+        run: rustup show
+
+      - name: Build and test guests
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p build/wasm
+          for cargo_toml in plugins-extra/*/Cargo.toml; do
+            dir=$(dirname "$cargo_toml")
+            crate=$(basename "$dir")
+            echo "::group::$crate"
+            cargo test --manifest-path "$cargo_toml"
+            cargo build --release --target wasm32-wasip2 --manifest-path "$cargo_toml"
+            cp "$dir/target/wasm32-wasip2/release/$crate.wasm" build/wasm/
+            echo "::endgroup::"
+          done
+
+      - name: Build index
+        run: elixir scripts/build_plugin_index.exs --wasm-dir build/wasm --out build/site
+
+      - name: Deploy to Cloudflare Pages
+        if: github.event_name != 'pull_request'
+        run: npx wrangler pages deploy build/site --project-name=mydia-plugins --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Attach packages to a GitHub Release
+        if: startsWith(github.ref, 'refs/tags/plugins-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          gh release create "$GITHUB_REF_NAME" build/site/index.json build/wasm/*.wasm \
+            --title "Extra plugins $GITHUB_REF_NAME" \
+            --notes "Packages published to https://plugins.mydia.dev/index.json" \
+            --latest=false
