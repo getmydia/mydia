@@ -232,57 +232,62 @@ defmodule MydiaWeb.AdminDuplicatesLive.ReviewComponents do
       |> assign(:path_label, path_label)
 
     ~H"""
-    <div class="flex items-center gap-3 px-3 py-2">
-      <div class="flex-1 min-w-0">
+    <div class="flex items-center gap-3 px-3 py-2 flex-wrap">
+      <div class="basis-full sm:basis-auto sm:flex-1 min-w-0">
         <div class={["truncate text-sm", @returning? && "opacity-60"]}>{@name}</div>
         <div :if={@folder} class="truncate text-xs opacity-50">{@folder}</div>
       </div>
 
-      <span
-        :if={@suspect?}
-        id={"#{@id_prefix}-suspect-#{@file.id}"}
-        class="badge badge-sm badge-warning badge-outline shrink-0"
-      >
-        {@suspect_label}
-      </span>
+      <%!-- Wrapped so the name above keeps a full line at phone width: the
+            basis-full text block fills the row and pushes this group to a
+            line of its own, where ml-auto right-aligns it. --%>
+      <div class="flex items-center gap-3 ml-auto sm:ml-0">
+        <span
+          :if={@suspect?}
+          id={"#{@id_prefix}-suspect-#{@file.id}"}
+          class="badge badge-sm badge-warning badge-outline shrink-0"
+        >
+          {@suspect_label}
+        </span>
 
-      <%!-- Same shape as the Keep/Trash radiogroup in Components.file_row/1,
-            and the same variable override recolours the checked Review option,
-            for the reason given there. --%>
-      <div
-        class="join shrink-0"
-        role="radiogroup"
-        aria-label={"What to do with #{@path_label}"}
-      >
-        <input
-          type="radio"
-          class="join-item btn btn-xs"
-          id={"#{@id_prefix}-leave-#{@file.id}"}
-          name={"#{@id_prefix}-review-#{@file.id}"}
-          aria-label="Leave"
-          checked={not @returning?}
-          phx-click="leave_file"
-          phx-value-subject={@subject_id}
-          phx-value-file={@file.id}
-          phx-target={@target}
-        />
-        <input
-          type="radio"
-          class={[
-            "join-item btn btn-xs",
-            @returning? &&
-              "[--btn-color:var(--color-warning)] [--btn-fg:var(--color-warning-content)]"
-          ]}
-          id={"#{@id_prefix}-review-#{@file.id}"}
-          name={"#{@id_prefix}-review-#{@file.id}"}
-          aria-label="Review"
-          checked={@returning?}
-          disabled={@last_left?}
-          phx-click="review_file"
-          phx-value-subject={@subject_id}
-          phx-value-file={@file.id}
-          phx-target={@target}
-        />
+        <%!-- Same shape as the Keep/Trash radiogroup in Components.file_row/1,
+              and the same variable override recolours the checked Review option,
+              for the reason given there. --%>
+        <div
+          class="join shrink-0"
+          role="radiogroup"
+          aria-label={"What to do with #{@path_label}"}
+        >
+          <input
+            type="radio"
+            class="join-item btn btn-xs"
+            id={"#{@id_prefix}-leave-#{@file.id}"}
+            name={"#{@id_prefix}-review-#{@file.id}"}
+            aria-label="Leave"
+            checked={not @returning?}
+            phx-click="leave_file"
+            phx-value-subject={@subject_id}
+            phx-value-file={@file.id}
+            phx-target={@target}
+          />
+          <input
+            type="radio"
+            class={[
+              "join-item btn btn-xs",
+              @returning? &&
+                "[--btn-color:var(--color-warning)] [--btn-fg:var(--color-warning-content)]"
+            ]}
+            id={"#{@id_prefix}-review-#{@file.id}"}
+            name={"#{@id_prefix}-review-#{@file.id}"}
+            aria-label="Review"
+            checked={@returning?}
+            disabled={@last_left?}
+            phx-click="review_file"
+            phx-value-subject={@subject_id}
+            phx-value-file={@file.id}
+            phx-target={@target}
+          />
+        </div>
       </div>
     </div>
     """

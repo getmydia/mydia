@@ -230,32 +230,38 @@ defmodule MydiaWeb.AdminDuplicatesLive.MisfiledComponent do
               id={"misfiled-item-#{finding.media_item.id}"}
               class="p-3 sm:p-4"
             >
-              <div class="flex items-center gap-3">
-                <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-3 flex-wrap">
+                <div class="basis-full sm:basis-auto sm:flex-1 min-w-0">
                   <div class="font-medium truncate">{finding.media_item.title}</div>
                   <div class="text-xs opacity-60 truncate">
                     {Components.file_count(length(finding.suspects))} of {finding.file_count} flagged
                   </div>
                 </div>
-                <span
-                  :if={finding.nothing_binds?}
-                  class="badge badge-sm badge-outline badge-warning"
-                >
-                  Nothing matches
-                </span>
-                <button
-                  id={"misfiled-send-item-#{finding.media_item.id}"}
-                  type="button"
-                  class="btn btn-sm"
-                  disabled={item_returning(@returning, finding) == 0}
-                  phx-click="send_item"
-                  phx-value-item={finding.media_item.id}
-                  phx-target={@myself}
-                  phx-disable-with="Sending..."
-                >
-                  <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-                  Send {Components.file_count(item_returning(@returning, finding))} to Review
-                </button>
+                <%!-- Wrapped so the title above keeps a full line at phone
+                      width: the basis-full text block fills the row and pushes
+                      this group to a line of its own, where ml-auto
+                      right-aligns it. --%>
+                <div class="flex items-center gap-3 ml-auto sm:ml-0">
+                  <span
+                    :if={finding.nothing_binds?}
+                    class="badge badge-sm badge-outline badge-warning"
+                  >
+                    Nothing matches
+                  </span>
+                  <button
+                    id={"misfiled-send-item-#{finding.media_item.id}"}
+                    type="button"
+                    class="btn btn-sm"
+                    disabled={item_returning(@returning, finding) == 0}
+                    phx-click="send_item"
+                    phx-value-item={finding.media_item.id}
+                    phx-target={@myself}
+                    phx-disable-with="Sending..."
+                  >
+                    <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
+                    Send {Components.file_count(item_returning(@returning, finding))} to Review
+                  </button>
+                </div>
               </div>
 
               <p :if={finding.nothing_binds?} class="text-sm text-base-content/60 mt-2">
