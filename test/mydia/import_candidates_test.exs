@@ -1187,7 +1187,15 @@ defmodule Mydia.ImportCandidatesTest do
 
     test "stamps dismissed_at when the caller passes one" do
       lp = library_path_fixture(%{type: "movies"})
-      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_102, metadata_source: :tmdb})
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Parked Harbor",
+          year: 2028,
+          tmdb_id: 900_102,
+          metadata_source: :tmdb
+        })
 
       assert {:ok, candidate} =
                ImportCandidates.stage_item_file(movie, lp, %{
@@ -1198,6 +1206,30 @@ defmodule Mydia.ImportCandidatesTest do
                })
 
       assert candidate.dismissed_at == ~U[2026-09-02 12:00:00Z]
+      assert {candidate.title, candidate.year} == {"Parked Harbor", 2028}
+    end
+
+    test "restaging without :dismissed_at leaves a parked candidate dismissed" do
+      lp = library_path_fixture(%{type: "movies"})
+      movie = media_item_fixture(%{type: "movie", tmdb_id: 900_108, metadata_source: :tmdb})
+
+      attrs = %{
+        relative_path: "Parked/again.mkv",
+        size: 42,
+        discovered_at: ~U[2026-09-01 12:00:00Z]
+      }
+
+      assert {:ok, _} =
+               ImportCandidates.stage_item_file(
+                 movie,
+                 lp,
+                 Map.put(attrs, :dismissed_at, ~U[2026-09-02 12:00:00Z])
+               )
+
+      assert {:ok, _} = ImportCandidates.stage_item_file(movie, lp, attrs)
+
+      assert ImportCandidates.get_by_path(lp.id, "Parked/again.mkv").dismissed_at ==
+               ~U[2026-09-02 12:00:00Z]
     end
   end
 

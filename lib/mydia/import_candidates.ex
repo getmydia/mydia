@@ -285,22 +285,24 @@ defmodule Mydia.ImportCandidates do
   """
   @spec demote_episode_files(Episode.t(), keyword()) :: {:ok, :ok} | {:error, term()}
   def demote_episode_files(%Episode{} = episode, opts \\ []) do
-    dismissed_at = if Keyword.get(opts, :dismiss, false), do: now()
+    dismissal = dismissal_attrs(opts)
 
     Repo.transaction(fn ->
       episode = Repo.preload(episode, [:media_item, media_files: :library_path])
 
       Enum.each(episode.media_files, fn file ->
-        case stage_item_file(episode.media_item, file.library_path, %{
-               relative_path: file.relative_path,
-               size: file.size,
-               discovered_at: file.inserted_at,
-               dismissed_at: dismissed_at,
-               parsed_info: %{
-                 "season" => episode.season_number,
-                 "episodes" => [episode.episode_number]
-               }
-             }) do
+        attrs =
+          Map.merge(dismissal, %{
+            relative_path: file.relative_path,
+            size: file.size,
+            discovered_at: file.inserted_at,
+            parsed_info: %{
+              "season" => episode.season_number,
+              "episodes" => [episode.episode_number]
+            }
+          })
+
+        case stage_item_file(episode.media_item, file.library_path, attrs) do
           {:ok, _candidate} -> :ok
           {:error, changeset} -> Repo.rollback(changeset)
         end
@@ -322,7 +324,7 @@ defmodule Mydia.ImportCandidates do
   """
   @spec demote_movie_files(Media.MediaItem.t(), keyword()) :: {:ok, :ok} | {:error, term()}
   def demote_movie_files(%Media.MediaItem{} = movie, opts \\ []) do
-    dismissed_at = if Keyword.get(opts, :dismiss, false), do: now()
+    dismissal = dismissal_attrs(opts)
 
     Repo.transaction(fn ->
       MediaFile
@@ -334,12 +336,14 @@ defmodule Mydia.ImportCandidates do
       |> preload(:library_path)
       |> Repo.all()
       |> Enum.each(fn file ->
-        case stage_item_file(movie, file.library_path, %{
-               relative_path: file.relative_path,
-               size: file.size,
-               discovered_at: file.inserted_at,
-               dismissed_at: dismissed_at
-             }) do
+        attrs =
+          Map.merge(dismissal, %{
+            relative_path: file.relative_path,
+            size: file.size,
+            discovered_at: file.inserted_at
+          })
+
+        case stage_item_file(movie, file.library_path, attrs) do
           {:ok, _candidate} -> Repo.delete!(file)
           {:error, changeset} -> Repo.rollback(changeset)
         end
@@ -378,20 +382,28 @@ defmodule Mydia.ImportCandidates do
       |> Map.get_lazy(:parsed_info, fn -> filename_parsed_info(relative_path) end)
       |> Map.put("type", item.type)
 
-    upsert(%{
+    # dismissed_at is passed only when the caller supplied one. Upsert casts
+    # whatever keys it is given, so a nil here would un-dismiss a parked
+    # candidate already at this path.
+    %{
       library_path_id: library_path.id,
       relative_path: relative_path,
       anchor_key: anchor.cluster_key,
       size: Map.fetch!(attrs, :size),
       discovered_at: Map.fetch!(attrs, :discovered_at),
-      dismissed_at: Map.get(attrs, :dismissed_at),
       provider_type: provider_type,
       provider_id: provider_id,
       title: item.title,
       year: item.year,
       media_type: item.type,
       parsed_info: parsed_info
-    })
+    }
+    |> Map.merge(Map.take(attrs, [:dismissed_at]) |> Map.reject(fn {_k, v} -> is_nil(v) end))
+    |> upsert()
+  end
+
+  defp dismissal_attrs(opts) do
+    if Keyword.get(opts, :dismiss, false), do: %{dismissed_at: now()}, else: %{}
   end
 
   defp filename_parsed_info(relative_path) do
