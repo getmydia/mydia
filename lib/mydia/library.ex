@@ -2662,6 +2662,51 @@ defmodule Mydia.Library do
   end
 
   @doc """
+  Starts a review-mode import run for every enabled library path that could
+  hold `target` (a movie or an episode), or reuses the path's active run.
+
+  Review mode records and matches files but never promotes, so this is safe
+  to offer from an item page: it refreshes the candidates "Find file" ranks
+  and imports nothing on its own.
+  """
+  @spec start_review_scans(Mydia.Media.MediaItem.t() | Mydia.Media.Episode.t(), term()) ::
+          [ImportRun.t()]
+  def start_review_scans(target, user_id) do
+    types = Mydia.Library.CandidateSuggestions.compatible_library_types(target)
+
+    Mydia.Settings.LibraryPath
+    |> where([lp], lp.type in ^types and (lp.disabled == false or is_nil(lp.disabled)))
+    |> Repo.all()
+    |> Enum.flat_map(fn library_path ->
+      case active_import_run(library_path.id) do
+        %ImportRun{} = run -> [run]
+        nil -> start_review_run(library_path, user_id)
+      end
+    end)
+  end
+
+  defp start_review_run(library_path, user_id) do
+    case create_import_run(%{library_path_id: library_path.id, user_id: user_id, mode: :review}) do
+      {:ok, run} ->
+        %{"import_run_id" => run.id} |> Mydia.Jobs.ImportRun.new() |> insert_job()
+        [run]
+
+      # Lost the one-active-run race to another starter; use theirs.
+      {:error, _changeset} ->
+        List.wrap(active_import_run(library_path.id))
+    end
+  end
+
+  # Oban's engine is disabled in test (config/test.exs), so Oban.insert/1
+  # raises there; fall back to a plain insert like
+  # Mydia.Downloads.Queue.insert_job/1 does.
+  defp insert_job(changeset) do
+    Oban.insert(changeset)
+  rescue
+    RuntimeError -> Repo.insert(changeset)
+  end
+
+  @doc """
   Fetches an import run by id, or nil.
   """
   @spec get_import_run(binary()) :: ImportRun.t() | nil
