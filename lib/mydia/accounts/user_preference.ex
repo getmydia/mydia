@@ -10,6 +10,7 @@ defmodule Mydia.Accounts.UserPreference do
   import Ecto.Changeset
 
   alias Mydia.Accounts.PosterFields
+  alias Mydia.Metadata.Countries
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -107,6 +108,18 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def discover_hide_owned(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "discover_hide_owned", @defaults["discover_hide_owned"])
+  end
+
+  @doc """
+  The Discover home country, an ISO 3166-1 alpha-2 code, or nil when unset.
+
+  Returns nil rather than a default on purpose: nil means "no home tab". A
+  stored code that `Mydia.Metadata.Countries` no longer lists also reads as
+  nil, so shrinking that list turns the tab off instead of breaking Discover.
+  """
+  def discover_home_country(%__MODULE__{preferences: prefs}) do
+    code = Map.get(prefs || %{}, "discover_home_country")
+    if Countries.valid_code?(code), do: code, else: nil
   end
 
   @doc """
@@ -215,6 +228,7 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("recommendations_expanded", [true, false])
     |> validate_preference_value("discover_hide_owned", [true, false])
+    |> validate_discover_home_country()
     |> validate_preference_value("add_monitored", [true, false])
     |> validate_preference_value("add_search_on_add", [true, false])
     |> validate_preference_value(
@@ -225,6 +239,25 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("player_banner_dismissed", [true, false])
     |> validate_home_widgets()
     |> validate_poster_fields()
+  end
+
+  # Same stale-value rule as validate_poster_fields/1: a stored code that a
+  # later release drops from Countries must not fail every unrelated save,
+  # because update_preferences_changeset/2 re-validates the merged map. Only a
+  # new or changed value is checked.
+  defp validate_discover_home_country(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "discover_home_country"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "discover_home_country"),
+         false <- Countries.valid_code?(value) do
+      add_error(
+        changeset,
+        :preferences,
+        "invalid value for discover_home_country: #{inspect(value)}"
+      )
+    else
+      _ -> changeset
+    end
   end
 
   # A stored `poster_fields` value that a later release removes from
