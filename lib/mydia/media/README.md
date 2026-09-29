@@ -263,7 +263,7 @@ unattended promotion (`FileIngest`), out of the ready band, and out of
 "Remove from Library" (`delete_files: false`) stages every live file of the
 item, movie or show, as an import candidate carrying the item's provider
 identity, title and year, with `dismissed_at` set
-(`ImportCandidates.demote_movie_files/2` and `demote_episode_files/2` with
+(`ImportCandidates.demote_movie_files/2` and `ImportCandidates.demote_episode_files/2` with
 `dismiss: true`). Scans never re-match or promote a dismissed candidate, so the
 item stays removed. Deleting a single episode and switching provider demote
 without dismissing, because those files are still wanted.
