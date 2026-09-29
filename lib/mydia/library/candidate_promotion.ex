@@ -46,38 +46,49 @@ defmodule Mydia.Library.CandidatePromotion do
   @spec attach(ImportCandidate.t(), Media.MediaItem.t() | Media.Episode.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, term()}
   def attach(%ImportCandidate{} = candidate, target, opts) do
-    candidate = Repo.preload(candidate, :library_path)
-
-    with :ok <- on_disk(candidate),
-         {:ok, parent, extra_episode_ids} <- attach_parent(candidate, target),
-         {:ok, media_file} <- commit_attach(candidate, parent, extra_episode_ids, opts) do
+    with {:ok, parent} <- attach_parent(target),
+         {:ok, media_file} <- commit_attach(candidate, target, parent, opts) do
       MetadataEnricher.finalize(attach_media_item(target))
       Sidecars.reconcile_all(Repo.preload([media_file], :library_path))
       {:ok, media_file}
+    else
+      {:error, :file_missing} ->
+        drop_unqueued(candidate)
+        {:error, :file_missing}
+
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
+
+  # The row may already be gone and a queued operation owns its fate, so this
+  # is a guarded bulk delete rather than Repo.delete on a possibly stale struct.
+  defp drop_unqueued(%ImportCandidate{id: id}) do
+    ImportCandidate
+    |> where([c], c.id == ^id and is_nil(c.queued_op))
+    |> Repo.delete_all()
   end
 
   defp on_disk(%ImportCandidate{library_path: nil} = candidate),
     do: {:error, {:library_path_missing, candidate.library_path_id}}
 
   defp on_disk(candidate) do
-    if File.exists?(ImportCandidate.absolute_path(candidate)) do
-      :ok
-    else
-      Repo.delete(candidate)
-      {:error, :file_missing}
-    end
+    if File.exists?(ImportCandidate.absolute_path(candidate)),
+      do: :ok,
+      else: {:error, :file_missing}
   end
 
-  defp attach_parent(_candidate, %Media.MediaItem{type: "movie"} = movie),
-    do: {:ok, %{media_item_id: movie.id}, []}
+  defp attach_parent(%Media.MediaItem{type: "movie"} = movie),
+    do: {:ok, %{media_item_id: movie.id}}
 
-  defp attach_parent(candidate, %Media.Episode{} = episode),
-    do: {:ok, %{episode_id: episode.id}, sibling_episode_ids(candidate, episode)}
+  defp attach_parent(%Media.Episode{media_item: %Media.MediaItem{}} = episode),
+    do: {:ok, %{episode_id: episode.id}}
 
-  defp attach_parent(_candidate, target), do: {:error, {:incompatible_target, target}}
+  defp attach_parent(target), do: {:error, {:incompatible_target, target}}
 
-  defp sibling_episode_ids(%ImportCandidate{parsed_info: parsed_info}, episode) do
+  defp sibling_episode_ids(_candidate, %Media.MediaItem{}), do: []
+
+  defp sibling_episode_ids(%ImportCandidate{parsed_info: parsed_info}, %Media.Episode{} = episode) do
     parsed_info = parsed_info || %{}
     numbers = Map.get(parsed_info, "episodes") || []
 
@@ -99,7 +110,7 @@ defmodule Mydia.Library.CandidatePromotion do
   defp attach_media_item(%Media.MediaItem{} = movie), do: movie
   defp attach_media_item(%Media.Episode{media_item: %Media.MediaItem{} = show}), do: show
 
-  defp commit_attach(candidate, parent, extra_episode_ids, opts) do
+  defp commit_attach(candidate, target, parent, opts) do
     transaction_opts = if DB.sqlite?(), do: [mode: :immediate], else: []
 
     ownership_attempt(opts)
@@ -109,11 +120,13 @@ defmodule Mydia.Library.CandidatePromotion do
         ownership_boundary(opts)
 
         with :ok <- lock_group([candidate]),
-             {:ok, [locked]} <- reread_candidates([candidate]),
+             {:ok, [reread]} <- reread_candidates([candidate]),
+             locked = Repo.preload(reread, :library_path),
              :ok <- not_queued(locked),
+             :ok <- on_disk(locked),
              :ok <- ensure_path_available(locked),
              {:ok, media_file} <- insert_file(locked, parent),
-             {:ok, _} <- link_extra_episodes(media_file, extra_episode_ids),
+             {:ok, _} <- link_extra_episodes(media_file, sibling_episode_ids(locked, target)),
              :ok <- delete_candidates([locked]) do
           media_file
         else

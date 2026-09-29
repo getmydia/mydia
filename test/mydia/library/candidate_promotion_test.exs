@@ -567,6 +567,63 @@ defmodule Mydia.Library.CandidatePromotionTest do
         |> MapSet.new()
 
       assert linked == MapSet.new([e1.id, e2.id])
+      assert Repo.aggregate(where(Episode, [e], e.media_item_id == ^show.id), :count) == 2
+    end
+
+    test "refuses a tv_show as the target", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+      rel = on_disk(root, "Lantern Coast/show.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+
+      assert {:error, {:incompatible_target, _}} = CandidatePromotion.attach(candidate, show, [])
+      assert Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "refuses an episode without its media_item preloaded", %{root: root} do
+      lp = library_path_fixture(%{type: "series", path: root})
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Coast"})
+      episode = episode_fixture(media_item_id: show.id, season_number: 1, episode_number: 1)
+      rel = on_disk(root, "Lantern Coast/e1.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+
+      assert {:error, {:incompatible_target, _}} =
+               CandidatePromotion.attach(candidate, Repo.reload!(episode), [])
+
+      assert Repo.get(ImportCandidate, candidate.id)
+      refute Repo.exists?(from f in MediaFile, where: f.relative_path == ^rel)
+    end
+
+    test "keeps a queued candidate whose file is missing", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+
+      candidate =
+        import_candidate_fixture(
+          library_path_id: lp.id,
+          relative_path: "gone.mkv",
+          queued_op: "accept"
+        )
+
+      assert {:error, :queued} = CandidatePromotion.attach(candidate, movie, [])
+      assert Repo.get(ImportCandidate, candidate.id)
+    end
+
+    test "Library.attach_candidate/2 attaches a movie by candidate id", %{root: root} do
+      lp = library_path_fixture(%{type: "movies", path: root})
+      movie = media_item_fixture(%{type: "movie"})
+      rel = on_disk(root, "ById/by-id.mkv")
+      candidate = import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+
+      assert {:ok, file} = Mydia.Library.attach_candidate(candidate.id, movie)
+      assert file.media_item_id == movie.id
+    end
+
+    test "Library.attach_candidate/2 reports an unknown candidate" do
+      movie = media_item_fixture(%{type: "movie"})
+      id = Ecto.UUID.generate()
+
+      assert {:error, {:candidate_missing, ^id}} = Mydia.Library.attach_candidate(id, movie)
     end
 
     test "refuses a path another file already owns", %{root: root} do
