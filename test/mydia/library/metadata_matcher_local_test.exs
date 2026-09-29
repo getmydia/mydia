@@ -151,6 +151,41 @@ defmodule Mydia.Library.MetadataMatcherLocalTest do
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Quillon", 2021), config)
       refute match.from_local_db
     end
+
+    test "matches a library show through its original title", %{bypass: bypass, config: config} do
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "The Vardolian",
+        original_title: "Vardoriyan",
+        year: 2022,
+        tvdb_id: 950
+      })
+
+      stub(bypass, @tvdb_search, %{"data" => []})
+
+      assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Vardoriyan", 2022), config)
+      assert match.from_local_db
+      assert match.provider_id == "950"
+    end
+
+    test "a near-miss on an alternate title still falls through to the provider", %{
+      bypass: bypass,
+      config: config
+    } do
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "The Vardolian",
+        original_title: "Vardoriyan",
+        year: 2022,
+        tvdb_id: 951
+      })
+
+      stub(bypass, @tvdb_search, %{"data" => [tvdb_show(952, "Vardoriya", 2022)]})
+
+      assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Vardoriya", 2022), config)
+      refute match.from_local_db
+      assert match.provider_id == "952"
+    end
   end
 
   describe "local TV match episode check" do

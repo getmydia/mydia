@@ -15,8 +15,10 @@ defmodule Mydia.Library.MetadataMatcher do
   alias Mydia.{Media, Metadata}
   alias Mydia.Accounts.Scope
   alias Mydia.Library.ReleaseParser, as: FileParser
+  alias Mydia.Library.ReleaseParser.TargetContext
   alias Mydia.Library.Structs.MatchResult
   alias Mydia.Library.Text
+  alias Mydia.Media.MediaItem
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.MediaMetadata
 
@@ -675,7 +677,7 @@ defmodule Mydia.Library.MetadataMatcher do
       Scope.system()
       |> Media.list_media_items(type: "movie")
       |> Enum.filter(fn item ->
-        same_title?(item.title, parsed.title) && years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item.year, parsed.year)
       end)
 
     case pick_local(candidates, parsed.year) do
@@ -706,7 +708,7 @@ defmodule Mydia.Library.MetadataMatcher do
       Scope.system()
       |> Media.list_media_items(type: "tv_show")
       |> Enum.filter(fn item ->
-        same_title?(item.title, parsed.title) && years_compatible?(item.year, parsed.year)
+        same_title?(item, parsed.title) && years_compatible?(item.year, parsed.year)
       end)
 
     case pick_local(candidates, parsed.year) do
@@ -759,16 +761,23 @@ defmodule Mydia.Library.MetadataMatcher do
   # which filed a show under any other show sharing a substring or most of its
   # letters (#957). Anything short of an exact key goes to the provider search,
   # which scores candidates properly and resolves back to an owned item by
-  # provider id.
-  defp same_title?(item_title, parsed_title)
+  # provider id. Also compared: the item's alternate titles
+  # (`TargetContext.alt_titles/1` -- `original_title` plus any provider
+  # `alternative_titles`, no preloads needed), so a file still named after a
+  # show's original or since-renamed title still clears the local match.
+  defp same_title?(%MediaItem{title: item_title} = item, parsed_title)
        when is_binary(item_title) and is_binary(parsed_title) do
     key = Text.match_key(parsed_title)
     {bare, _year} = split_title_year(item_title)
 
-    key != "" and key in [Text.match_key(item_title), Text.match_key(bare)]
+    candidate_keys =
+      [item_title, bare | TargetContext.alt_titles(item)]
+      |> Enum.map(&Text.match_key/1)
+
+    key != "" and key in candidate_keys
   end
 
-  defp same_title?(_item_title, _parsed_title), do: false
+  defp same_title?(_item, _parsed_title), do: false
 
   # One candidate wins outright. Several sharing a key (a remake, a revival) are
   # settled by an exact year; otherwise the provider search decides.
