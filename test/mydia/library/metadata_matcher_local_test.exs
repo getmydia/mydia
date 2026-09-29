@@ -103,7 +103,7 @@ defmodule Mydia.Library.MetadataMatcherLocalTest do
       config: config
     } do
       assert_old_metric_accepted!("Vardo", "The Vardolian")
-      media_item_fixture(%{type: "tv_show", title: "The Vardolian", year: 2019, tvdb_id: 902})
+      media_item_fixture(%{type: "tv_show", title: "The Vardolian", year: 2022, tvdb_id: 902})
       stub(bypass, @tvdb_search, %{"data" => [tvdb_show(501, "Vardo", 2022)]})
 
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Vardo", 2022), config)
@@ -134,12 +134,22 @@ defmodule Mydia.Library.MetadataMatcherLocalTest do
     end
 
     test "settles two same-key shows by exact year", %{config: config} do
-      media_item_fixture(%{type: "tv_show", title: "Quillon", year: 2004, tvdb_id: 904})
+      media_item_fixture(%{type: "tv_show", title: "Quillon", year: 2020, tvdb_id: 904})
       media_item_fixture(%{type: "tv_show", title: "Quillon", year: 2021, tvdb_id: 905})
 
       assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Quillon", 2021), config)
       assert match.from_local_db
       assert match.provider_id == "905"
+    end
+
+    test "falls through to the provider when two same-key shows are both year-compatible but neither is exact",
+         %{bypass: bypass, config: config} do
+      media_item_fixture(%{type: "tv_show", title: "Quillon", year: 2020, tvdb_id: 904})
+      media_item_fixture(%{type: "tv_show", title: "Quillon", year: 2022, tvdb_id: 906})
+      stub(bypass, @tvdb_search, %{"data" => [tvdb_show(906, "Quillon", 2022)]})
+
+      assert {:ok, match} = MetadataMatcher.match_tv_show(tv("Quillon", 2021), config)
+      refute match.from_local_db
     end
   end
 
