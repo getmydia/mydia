@@ -46,6 +46,19 @@ defmodule Mydia.Library.CandidateSuggestionsTest do
     assert look_alike.id in ids(rest)
   end
 
+  test "never lists a candidate whose path a media file already owns" do
+    lp = library_path_fixture(%{type: "movies"})
+    movie = movie()
+    owner = media_item_fixture(%{type: "movie", title: "Other Thing"})
+    rel = "Zephyr Station (2030)/Zephyr.Station.2030.mkv"
+
+    import_candidate_fixture(library_path_id: lp.id, relative_path: rel)
+    media_file_fixture(media_item_id: owner.id, library_path_id: lp.id, relative_path: rel)
+
+    assert [] = CandidateSuggestions.suggest_for(movie)
+    assert [] = CandidateSuggestions.suggest_for(movie, query: "zephyr")
+  end
+
   test "reports title and year reasons from the filename" do
     lp = library_path_fixture(%{type: "movies"})
     movie = movie()

@@ -56,6 +56,10 @@ defmodule Mydia.Library.CandidatePromotion do
         drop_unqueued(candidate)
         {:error, :file_missing}
 
+      {:error, {:duplicate_path, _, _} = reason} ->
+        drop_unqueued(candidate)
+        {:error, reason}
+
       {:error, reason} ->
         {:error, reason}
     end

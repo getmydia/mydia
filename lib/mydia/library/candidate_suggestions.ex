@@ -13,7 +13,7 @@ defmodule Mydia.Library.CandidateSuggestions do
   import Ecto.Query
 
   alias Mydia.ImportCandidates
-  alias Mydia.Library.{CandidateSuggestion, ImportCandidate, ReleaseParser, Text}
+  alias Mydia.Library.{CandidateSuggestion, ImportCandidate, MediaFile, ReleaseParser, Text}
   alias Mydia.Media.{Episode, MediaItem}
   alias Mydia.Repo
 
@@ -68,13 +68,23 @@ defmodule Mydia.Library.CandidateSuggestions do
     types = compatible_library_types(target)
     type = media_type(target)
 
-    ImportCandidate
+    # A path some media_files row owns (trashed included) can never be
+    # attached, so it is never offered, whatever stale candidate remains.
+    owned =
+      from(f in MediaFile,
+        where:
+          f.library_path_id == parent_as(:candidate).library_path_id and
+            f.relative_path == parent_as(:candidate).relative_path
+      )
+
+    from(c in ImportCandidate, as: :candidate)
     |> join(:inner, [c], lp in assoc(c, :library_path))
     |> where(
       [c, lp],
       lp.type in ^types and (lp.disabled == false or is_nil(lp.disabled)) and
         is_nil(c.queued_op) and (is_nil(c.media_type) or c.media_type == ^type)
     )
+    |> where(not exists(owned))
     |> identity_first(provider_type, provider_id)
     |> narrow(target, provider_type, provider_id, query)
     |> limit(@pool_cap)

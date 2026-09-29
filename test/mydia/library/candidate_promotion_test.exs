@@ -636,6 +636,10 @@ defmodule Mydia.Library.CandidatePromotionTest do
 
       assert {:error, {:duplicate_path, _, ^rel}} =
                CandidatePromotion.attach(candidate, movie, [])
+
+      # The candidate is stale (an owned path), so it is dropped rather than
+      # offered again forever.
+      refute Repo.get(ImportCandidate, candidate.id)
     end
 
     test "refuses a candidate deleted meanwhile", %{root: root} do
