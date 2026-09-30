@@ -1,0 +1,39 @@
+# Page test fixture (1.4). on-http routes POST /call/<fn> to one page host
+# function, with arguments in the JSON body, and answers with JSON:
+#
+#   /echo                    -> {"method","path","query","body","user_id","role","session_id","config"}
+#   /call/search             {"kind":"library"|"catalog","query"}          -> {"titles":[...]}
+#   /call/media-add          {"media_type","tmdb_id"}                      -> outcome
+#   /call/collection-create  {"name"}                                      -> outcome
+#   /call/collection-add     {"id","ids":[...]}                            -> outcome
+#   /call/add-favorite       {"tmdb_id"}                                   -> outcome
+#   /call/data-list          {"namespace"}                                 -> {"count":n}
+#   /call/http               {"url"}                                       -> {"status":n}
+#   /call/sleep              {"ms"}                                        -> {"slept":true}
+#
+# An outcome is {"outcome":"done","result":<string>} or
+# {"outcome":"pending","id":<string>}. Host errors answer 500 {"error":...}.
+# on-event with event "page-write" calls add-favorite and returns its error,
+# proving page writes are refused outside on-http.
+#
+# Built to wasm32-wasip2 and checked in at ../page_fixture.wasm:
+#   devenv shell -- cargo build --release --target wasm32-wasip2 \
+#     --manifest-path test/support/fixtures/plugins/page_fixture/Cargo.toml
+[package]
+name = "page_fixture"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+tinyjson = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

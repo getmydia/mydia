@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.3)
+  ## Component import ABI (1.4)
 
-  Imports live under the `"mydia:plugin/host@1.3.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.4.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -24,7 +24,12 @@ defmodule Mydia.Plugins.HostFunctions do
   are joined in 1.1 by `kv-get/set/delete`, `data-list`, `ensure-watched`,
   `connections-list`, and `connection-request` (each capability-gated), and in
   1.2 by `set-watch-state` plus position fields on `playback-progress`, and in
-  1.3 by `ensure-favorite`.
+  1.3 by `ensure-favorite`. Version 1.4 adds the page functions `search`,
+  `media-add`, `collection-create`, `collection-update`,
+  `collection-add-items`, `collection-remove-items`, `mark-watched-state` and
+  `add-favorite`. They act as the user of the current `on-http` invocation
+  (`Mydia.Plugins.PageReads`, `Mydia.Plugins.PageActions`) and are denied from
+  any other handler. Inside `on-http`, `data-list` reads as that user too.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -55,22 +60,29 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Logs
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
+  alias Mydia.Plugins.PageActions
+  alias Mydia.Plugins.PageReads
   alias Mydia.Plugins.Plugin
 
-  import Mydia.Plugins.PageContext, only: [to_option: 1]
+  import Mydia.Plugins.PageContext, only: [page_user: 1, to_option: 1]
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.3 superset to a 1.2/1.1/1.0 guest (which imports the
+  # wasmtime serves this 1.4 superset to a 1.2/1.1/1.0 guest (which imports the
   # correspondingly older `host@x.y.z`) via component semver matching, so older
   # guests keep working. wasmex still needs exact namespace keys in the imports
   # map (see `Mydia.Plugins.Host`), so every supported version is also published
   # under its own key, each narrowed to the functions that version defined.
-  @namespace "mydia:plugin/host@1.3.0"
+  @namespace "mydia:plugin/host@1.4.0"
+  @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
+
+  # Functions only the 1.4 interface defines; older namespaces are narrowed
+  # without them.
+  @page_funcs ~w(search media-add collection-create collection-update collection-add-items collection-remove-items mark-watched-state add-favorite)
 
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
   # guest could spam it in a loop and flood plugin_logs before retention fires.
@@ -92,22 +104,35 @@ defmodule Mydia.Plugins.HostFunctions do
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
       funcs = %{
-        "http-request" => {:fn, http_import(slug, gate_opts)},
+        "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
         # ── 1.1.0 imports (U2 contract; bodies land in U3/U5/U6/U7) ──
         "kv-get" => {:fn, kv_get_import(slug)},
         "kv-set" => {:fn, kv_set_import(slug)},
         "kv-delete" => {:fn, kv_delete_import(slug)},
-        "data-list" => {:fn, data_list_import(slug)},
+        "data-list" => {:fn, data_list_import(slug, ctx)},
         "ensure-watched" => {:fn, ensure_watched_import(slug)},
         "connections-list" => {:fn, connections_list_import(slug)},
         "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug)},
         # ── 1.3.0 ──
-        "ensure-favorite" => {:fn, ensure_favorite_import(slug)}
+        "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
+        # ── 1.4.0: page functions, acting as the on-http user ──
+        "search" => {:fn, page_import(slug, ctx, &PageReads.search/3)},
+        "media-add" => {:fn, page_import(slug, ctx, &PageActions.media_add/3)},
+        "collection-create" => {:fn, page_import(slug, ctx, &PageActions.collection_create/3)},
+        "collection-update" => {:fn, page_import2(slug, ctx, &PageActions.collection_update/4)},
+        "collection-add-items" =>
+          {:fn, page_import2(slug, ctx, &PageActions.collection_add_items/4)},
+        "collection-remove-items" =>
+          {:fn, page_import2(slug, ctx, &PageActions.collection_remove_items/4)},
+        "mark-watched-state" => {:fn, page_import(slug, ctx, &PageActions.mark_watched_state/3)},
+        "add-favorite" => {:fn, page_import(slug, ctx, &PageActions.add_favorite/3)}
       }
+
+      v13 = Map.drop(funcs, @page_funcs)
 
       # Publish under every supported key: wasmex matches the guest's exact
       # imported package name, so an older guest still links against this host.
@@ -115,8 +140,9 @@ defmodule Mydia.Plugins.HostFunctions do
       # the guest would import a function its own contract never defined.
       %{
         @namespace => funcs,
-        @v12_namespace => Map.delete(funcs, "ensure-favorite"),
-        @v11_namespace => funcs |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
+        @v13_namespace => v13,
+        @v12_namespace => Map.delete(v13, "ensure-favorite"),
+        @v11_namespace => v13 |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
       }
     end
   end
@@ -159,12 +185,28 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp data_list_import(slug) do
+  # Page functions take the invocation context so they act as the on-http user;
+  # PageActions/PageReads refuse any other handler.
+  defp page_import(slug, ctx, fun) do
+    fn arg ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug), do: fun.(plugin, ctx, arg)
+      end)
+    end
+  end
+
+  defp page_import2(slug, ctx, fun) do
+    fn a, b ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug), do: fun.(plugin, ctx, a, b)
+      end)
+    end
+  end
+
+  defp data_list_import(slug, ctx) do
     fn req ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          data_list(plugin, req)
-        end
+        with {:ok, plugin} <- Plugins.get_plugin(slug), do: data_list(plugin, req, ctx)
       end)
     end
   end
@@ -223,11 +265,13 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # ── http-request import ────────────────────────────────────────────────────
 
-  defp http_import(slug, gate_opts) do
+  defp http_import(slug, ctx, gate_opts) do
+    budget = if Map.get(ctx, :handler) == :on_http, do: page_http_opts(), else: []
+
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
-             {:ok, resp} <- http_request(plugin, from_outbound_request(req), gate_opts) do
+             {:ok, resp} <- http_request(plugin, from_outbound_request(req), gate_opts ++ budget) do
           {:ok, to_outbound_response(resp)}
         end
       end)
@@ -613,22 +657,45 @@ defmodule Mydia.Plugins.HostFunctions do
   defp validate_kv_value(_),
     do: {:error, Error.new(:invalid_request, "kv value must be a string")}
 
+  @page_namespaces ~w(media_request download collection)
+
+  # Lists a namespace. Outside `on-http` the plugin sees the whole instance
+  # (`Scope.system()`, and the connected users' progress); inside an `on-http`
+  # call every namespace is read as the acting user instead, so a page never
+  # sees more than the person using it.
   @doc false
-  @spec data_list(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def data_list(%Plugin{} = plugin, req) do
+  @spec data_list(Plugin.t(), map(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def data_list(%Plugin{} = plugin, req, ctx \\ %{}) do
     namespace = Map.get(req, :namespace, "")
 
-    with :ok <- require_data_namespace(plugin, namespace),
-         {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
-         {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
-      limit = clamp_list_limit(from_option(Map.get(req, :limit)))
-      list_namespace(plugin, namespace, cursor, since, limit)
+    if namespace in @page_namespaces do
+      PageReads.list(namespace, plugin, ctx)
+    else
+      with :ok <- require_data_namespace(plugin, namespace),
+           {:ok, viewer} <- list_viewer(ctx),
+           {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
+           {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
+        limit = clamp_list_limit(from_option(Map.get(req, :limit)))
+        list_namespace(plugin, viewer, namespace, cursor, since, limit)
+      end
     end
   end
 
-  defp list_namespace(_plugin, "media_item", cursor, since, limit) do
+  # `:system` for event and schedule handlers; the acting user for on-http,
+  # taken from the host-provided invocation context.
+  defp list_viewer(%{handler: :on_http} = ctx), do: page_user(ctx)
+  defp list_viewer(_ctx), do: {:ok, :system}
+
+  defp list_scope(:system), do: Scope.system()
+  defp list_scope(user), do: Scope.for_user(user)
+
+  defp list_namespace(_plugin, viewer, "media_item", cursor, since, limit) do
     rows =
-      Media.list_items_page(Scope.system(), after: cursor, updated_since: since, limit: limit + 1)
+      Media.list_items_page(list_scope(viewer),
+        after: cursor,
+        updated_since: since,
+        limit: limit + 1
+      )
 
     {page, next} = paginate(rows, limit)
 
@@ -638,9 +705,9 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(_plugin, "library_item", cursor, since, limit) do
+  defp list_namespace(_plugin, viewer, "library_item", cursor, since, limit) do
     rows =
-      Media.list_library_items_page(Scope.system(),
+      Media.list_library_items_page(list_scope(viewer),
         after: cursor,
         updated_since: since,
         limit: limit + 1
@@ -651,10 +718,11 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(plugin, "playback_progress", cursor, since, limit) do
-    # Consent-scoped (R21): only users with an active connection to this plugin
-    # are visible — a non-connected user's rows are absent entirely.
-    case Connections.connected_user_ids(plugin.slug) do
+  defp list_namespace(plugin, viewer, "playback_progress", cursor, since, limit) do
+    # Consent-scoped (R21): outside a page, only users with an active connection
+    # to this plugin are visible, so a non-connected user's rows are absent
+    # entirely. A page reads the acting user's own rows.
+    case progress_user_ids(plugin, viewer) do
       [] ->
         {:ok, %{items: [], "next-cursor": :none}}
 
@@ -672,9 +740,12 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp list_namespace(_plugin, other, _cursor, _since, _limit) do
+  defp list_namespace(_plugin, _viewer, other, _cursor, _since, _limit) do
     {:error, Error.new(:invalid_request, "unknown data-list namespace: #{other}")}
   end
+
+  defp progress_user_ids(plugin, :system), do: Connections.connected_user_ids(plugin.slug)
+  defp progress_user_ids(_plugin, user), do: [user.id]
 
   # Fetch limit+1 to detect a next page; the cursor is the keyset of the last
   # *returned* row.
