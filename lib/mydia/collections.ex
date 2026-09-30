@@ -572,15 +572,20 @@ defmodule Mydia.Collections do
   @doc "The subset of `media_item_ids` already in `collection`."
   @spec item_ids_in(Collection.t(), [binary()]) :: MapSet.t()
   def item_ids_in(%Collection{} = collection, media_item_ids) when is_list(media_item_ids) do
-    CollectionItem
-    |> where([i], i.collection_id == ^collection.id and i.media_item_id in ^media_item_ids)
-    |> select([i], i.media_item_id)
-    |> Repo.all()
-    |> MapSet.new()
-  rescue
-    # PostgreSQL raises while binding a non-UUID-shaped id. It is certainly not
-    # in the collection.
-    Ecto.Query.CastError -> MapSet.new()
+    # PostgreSQL raises while binding a non-UUID id, which would drop every valid
+    # id in the list. An id that is not a UUID is certainly not in the collection,
+    # so leave it out of the query. The ids are kept exactly as given.
+    case Enum.filter(media_item_ids, &match?({:ok, _}, Ecto.UUID.cast(&1))) do
+      [] ->
+        MapSet.new()
+
+      valid ->
+        CollectionItem
+        |> where([i], i.collection_id == ^collection.id and i.media_item_id in ^valid)
+        |> select([i], i.media_item_id)
+        |> Repo.all()
+        |> MapSet.new()
+    end
   end
 
   @doc """
