@@ -124,7 +124,7 @@ defmodule MydiaWeb.IntegrationsLive.Index do
     attrs = %{
       access_token: token.access_token,
       external_user_id: Map.get(token, :external_user_id),
-      status: "active"
+      status: :active
     }
 
     case Connections.connect(slug, user.id, attrs) do

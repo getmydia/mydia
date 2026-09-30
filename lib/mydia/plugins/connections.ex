@@ -1,82 +1,35 @@
 defmodule Mydia.Plugins.Connections do
   @moduledoc """
-  Per-user plugin connections (U7): the OAuth token, external account identity,
-  and a status lifecycle the host stores and manages on a plugin's behalf.
+  Per-user plugin connections: the pre-1.4 API over account links.
 
-  The plugin never receives a token. It reads identity + status through the
-  `connections-list` host function and references a connection by id for
-  host-attached auth (`connection-request`); the host attaches the bearer token
-  itself (R22). The token column is `redact: true`, so struct inspection never
-  surfaces it in logs or crash reports.
+  A connection is a `:user` account link on the plugin's **default instance**,
+  created by the user's own device flow. Simkl, the Integrations page and
+  account deletion use this module; 1.4 plugins and the admin mapping flow use
+  `Mydia.Plugins.AccountLinks` directly.
 
-  Cross-user surfaces are consent-scoped (R21): only a user who has clicked
-  Connect (an *active* connection, `status: "active"`) is visible to the
-  plugin's reads and writable by its write-backs. `connected_user_ids/1` and
-  `active?/2` are that boundary.
+  The plugin never receives a token. It reads identity and status through
+  `connections-list` / `links-list` and references a link by id for
+  host-attached auth; the host attaches the token itself.
+
+  Cross-user surfaces are consent-scoped: only a user holding an *active* user
+  link to the plugin (on any of its instances) is visible to the plugin's reads
+  and writable by its write-backs. `connected_user_ids/1` and `active?/2` are
+  that boundary.
   """
 
-  use Ecto.Schema
-
-  import Ecto.Changeset
   import Ecto.Query
 
-  alias Mydia.Plugins.Connections
+  alias Mydia.Plugins.AccountLink
+  alias Mydia.Plugins.AccountLinks
+  alias Mydia.Plugins.Instances
   alias Mydia.Repo
   alias Mydia.Settings
 
-  @statuses ~w(active error disabled)
-
-  @primary_key {:id, :binary_id, autogenerate: true}
-  @foreign_key_type :binary_id
-
-  @type t :: %__MODULE__{}
-
-  schema "plugin_account_links" do
-    field :instance_id, :binary_id
-    field :role, :string, default: "user"
-    field :source, :string, default: "user_flow"
-    field :plugin_slug, :string
-    field :status, :string, default: "active"
-    field :access_token, :string, redact: true
-    field :external_user_id, :string
-    field :external_username, :string
-    field :meta, Mydia.Settings.JsonMapType, default: %{}
-
-    belongs_to :user, Mydia.Accounts.User
-
-    timestamps(type: :utc_datetime_usec)
-  end
-
-  @doc false
-  def changeset(connection, attrs) do
-    connection
-    |> cast(attrs, [
-      :instance_id,
-      :plugin_slug,
-      :user_id,
-      :status,
-      :access_token,
-      :external_user_id,
-      :external_username,
-      :meta
-    ])
-    |> update_change(:status, fn
-      "connected" -> "active"
-      other -> other
-    end)
-    |> validate_required([:instance_id, :plugin_slug, :user_id, :access_token])
-    |> validate_inclusion(:status, @statuses)
-    |> unique_constraint([:instance_id, :user_id],
-      name: :plugin_account_links_instance_user_index
-    )
-    |> foreign_key_constraint(:instance_id)
-    |> foreign_key_constraint(:user_id)
-  end
+  @type t :: AccountLink.t()
 
   @doc """
-  Creates or refreshes the connection for `{slug, user_id}` (e.g. on connect or
-  reconnect). Resolves the owning config from the slug; fails if the plugin is
-  not installed.
+  Creates or refreshes the connection for `{slug, user_id}` on the plugin's
+  default instance. Fails with `:not_installed` when the plugin is unknown.
   """
   @spec connect(String.t(), binary(), map()) :: {:ok, t()} | {:error, term()}
   def connect(slug, user_id, attrs) when is_binary(slug) do
@@ -84,143 +37,132 @@ defmodule Mydia.Plugins.Connections do
       nil ->
         {:error, :not_installed}
 
-      %{} ->
-        instance = Mydia.Plugins.Instances.default_instance(slug)
+      _config ->
+        instance = Instances.default_instance(slug)
 
-        base =
-          Map.merge(attrs, %{
-            plugin_slug: slug,
-            instance_id: instance.id,
-            user_id: user_id,
-            status: Map.get(attrs, :status, "active")
-          })
+        attrs =
+          attrs
+          |> Map.take([:access_token, :external_user_id, :external_username, :meta])
+          |> Map.put(:status, normalize_status(Map.get(attrs, :status, :active)))
 
-        (get(slug, user_id) || %Connections{})
-        |> changeset(base)
-        |> Repo.insert_or_update()
+        AccountLinks.upsert_user_flow_link(instance.id, user_id, attrs)
     end
   end
 
-  @doc "Fetches the connection for `{slug, user_id}`, or nil."
+  @doc "The connection for `{slug, user_id}` on the default instance, or nil."
   @spec get(String.t(), binary()) :: t() | nil
   def get(slug, user_id) when is_binary(slug) do
-    Repo.one(from c in Connections, where: c.plugin_slug == ^slug and c.user_id == ^user_id)
+    AccountLinks.user_link(Instances.default_instance(slug).id, user_id)
   end
 
-  @doc "Fetches a connection by its id scoped to a plugin (host-attached auth)."
+  @doc "A user link by id scoped to a plugin (any of its instances)."
   @spec get_by_id(String.t(), binary()) :: t() | nil
   def get_by_id(slug, id) when is_binary(slug) and is_binary(id) do
-    Repo.one(from c in Connections, where: c.plugin_slug == ^slug and c.id == ^id)
+    case Ecto.UUID.cast(id) do
+      {:ok, _} ->
+        Repo.one(
+          from l in AccountLink,
+            where: l.plugin_slug == ^slug and l.id == ^id and l.role == :user
+        )
+
+      :error ->
+        nil
+    end
   end
 
-  @doc "Lists every connection a plugin holds (for connections-list)."
+  @doc "Every user link a plugin holds, across its instances."
   @spec list_for_plugin(String.t()) :: [t()]
   def list_for_plugin(slug) when is_binary(slug) do
-    Repo.all(from c in Connections, where: c.plugin_slug == ^slug, order_by: c.inserted_at)
+    Repo.all(
+      from l in AccountLink,
+        where: l.plugin_slug == ^slug and l.role == :user,
+        order_by: l.inserted_at
+    )
   end
 
-  @doc "Lists a user's connections across all plugins (for ProfileLive)."
+  @doc "A user's links across all plugins (ProfileLive, account deletion)."
   @spec list_for_user(binary()) :: [t()]
-  def list_for_user(user_id) do
-    Repo.all(from c in Connections, where: c.user_id == ^user_id, order_by: c.plugin_slug)
-  end
+  def list_for_user(user_id), do: AccountLinks.list_for_user(user_id)
 
-  @doc """
-  The user ids with an *active* (status `active`) connection to the plugin —
-  the consent boundary for cross-user reads/writes (R21).
-  """
+  @doc "User ids with an active link to the plugin: the consent boundary."
   @spec connected_user_ids(String.t()) :: [binary()]
   def connected_user_ids(slug) when is_binary(slug) do
     Repo.all(
-      from c in Connections,
-        where: c.plugin_slug == ^slug and c.status == "active",
-        select: c.user_id
+      from l in AccountLink,
+        where: l.plugin_slug == ^slug and l.role == :user and l.status == :active,
+        select: l.user_id,
+        distinct: true
     )
   end
 
-  @doc "True when `user_id` has an active connection to the plugin (R21)."
+  @doc "True when `user_id` has an active link to the plugin."
   @spec active?(String.t(), binary()) :: boolean()
   def active?(slug, user_id) when is_binary(slug) do
     Repo.exists?(
-      from c in Connections,
-        where: c.plugin_slug == ^slug and c.user_id == ^user_id and c.status == "active"
+      from l in AccountLink,
+        where:
+          l.plugin_slug == ^slug and l.role == :user and l.user_id == ^user_id and
+            l.status == :active
     )
   end
 
-  @doc "Deletes the connection for `{slug, user_id}` (disconnect)."
+  @doc "Deletes the default-instance connection for `{slug, user_id}`."
   @spec delete(String.t(), binary()) :: :ok
   def delete(slug, user_id) when is_binary(slug) do
-    Repo.delete_all(
-      from c in Connections, where: c.plugin_slug == ^slug and c.user_id == ^user_id
-    )
-
-    :ok
-  end
-
-  @doc """
-  Disconnects `{slug, user_id}`: sweeps the connection's `conn/<id>/` KV prefix
-  (so the user's per-connection state goes with them, U3) and deletes the row.
-  """
-  @spec disconnect(String.t(), binary()) :: :ok
-  def disconnect(slug, user_id) when is_binary(slug) do
     case get(slug, user_id) do
       nil ->
         :ok
 
-      conn ->
-        Mydia.Plugins.Kv.delete_connection_prefix(slug, conn.id)
-        delete(slug, user_id)
+      link ->
+        Repo.delete_all(from l in AccountLink, where: l.id == ^link.id)
+        :ok
+    end
+  end
+
+  @doc "Disconnects `{slug, user_id}`: deletes the link and sweeps its store prefix."
+  @spec disconnect(String.t(), binary()) :: :ok
+  def disconnect(slug, user_id) when is_binary(slug) do
+    case get(slug, user_id) do
+      nil -> :ok
+      link -> AccountLinks.delete(link)
     end
   end
 
   @doc """
-  Sweeps the `conn/<id>/` KV prefix of each of `connections`, so per-user plugin
-  state does not outlive the user who owned it.
-
-  Deleting the user cascades the connection rows themselves through the `user_id`
-  FK, but the KV keys are not user-scoped and need this application sweep. Callers
-  therefore collect the connections with `list_for_user/1` *before* the delete
-  (the rows are gone afterwards) and call this only once the delete has actually
-  succeeded -- sweeping first would destroy plugin state that nothing restores if
-  the delete is then rejected.
+  Sweeps the store prefix of each link. Callers collect the links with
+  `list_for_user/1` *before* deleting the user (the FK cascade removes the rows)
+  and call this only once the delete succeeded.
   """
-  @spec sweep_kv([Connections.t()]) :: :ok
-  def sweep_kv(connections) when is_list(connections) do
-    for conn <- connections do
-      Mydia.Plugins.Kv.delete_connection_prefix(conn.plugin_slug, conn.id)
-    end
-
-    :ok
+  @spec sweep_kv([t()]) :: :ok
+  def sweep_kv(links) when is_list(links) do
+    Enum.each(links, &AccountLinks.sweep_store/1)
   end
 
   @doc """
-  Marks the named users' connections to the plugin as `error` — but only those
-  that actually hold an active connection (a guest result can't mass-error state
-  or inject ids). Returns the number flipped.
+  Marks the named users' active links to the plugin (every instance) as
+  `:error`. Returns the number flipped.
   """
   @spec mark_errored(String.t(), [binary()]) :: non_neg_integer()
   def mark_errored(slug, user_ids) when is_binary(slug) and is_list(user_ids) do
-    # Drop ids that aren't well-formed UUIDs before the `in` query. A guest result
-    # can name arbitrary strings; on Postgres a non-UUID value raises a CastError
-    # against the binary_id column (SQLite stores ids as text and would silently
-    # not match). A malformed id could never match a real connection anyway, so
-    # filtering leaves the flipped count identical on both engines.
-    valid_ids = Enum.filter(user_ids, &match?({:ok, _}, Ecto.UUID.cast(&1)))
-
-    {count, _} =
-      Repo.update_all(
-        from(c in Connections,
-          where: c.plugin_slug == ^slug and c.user_id in ^valid_ids and c.status == "active"
-        ),
-        set: [status: "error", updated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)]
-      )
-
-    count
+    slug
+    |> Instances.list()
+    |> Enum.map(&AccountLinks.mark_errored(&1.id, user_ids))
+    |> Enum.sum()
   end
 
-  @doc "Counts the connections a plugin holds (uninstall confirmation copy)."
+  @doc "Counts the user links a plugin holds (uninstall confirmation copy)."
   @spec count_for_plugin(String.t()) :: non_neg_integer()
   def count_for_plugin(slug) when is_binary(slug) do
-    Repo.aggregate(from(c in Connections, where: c.plugin_slug == ^slug), :count, :id)
+    Repo.aggregate(
+      from(l in AccountLink, where: l.plugin_slug == ^slug and l.role == :user),
+      :count,
+      :id
+    )
   end
+
+  defp normalize_status(status) when status in [:active, "active", :connected, "connected"],
+    do: :active
+
+  defp normalize_status(status) when status in [:error, "error"], do: :error
+  defp normalize_status(status) when status in [:disabled, "disabled"], do: :disabled
 end

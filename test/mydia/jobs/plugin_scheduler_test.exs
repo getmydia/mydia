@@ -154,7 +154,7 @@ defmodule Mydia.Jobs.PluginSchedulerTest do
     result = {:ok, %{"connections_invalid" => [user.id, "bogus-not-connected"]}}
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), result))
 
-    assert Connections.get("p", user.id).status == "error"
+    assert Connections.get("p", user.id).status == :error
   end
 
   test "a disabled plugin never ticks" do

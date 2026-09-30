@@ -36,6 +36,40 @@ defmodule Mydia.Plugins.ConnectionsTest do
     %{user: user_fixture(), other: user_fixture()}
   end
 
+  describe "account link backing" do
+    test "connections are user_flow links on the plugin's default instance" do
+      user = user_fixture()
+
+      {:ok, conn} =
+        Connections.connect("connector", user.id, %{access_token: "t", status: "connected"})
+
+      assert conn.instance_id == Mydia.Plugins.Instances.default_instance("connector").id
+      assert conn.role == :user
+      assert conn.source == :user_flow
+      assert conn.status == :active
+    end
+
+    test "owner and endpoint credentials are invisible to connection reads and counts" do
+      user = user_fixture()
+      instance = Mydia.Plugins.Instances.default_instance("connector")
+      {:ok, _} = Mydia.Plugins.AccountLinks.put_credential(instance.id, :owner, "acct")
+      {:ok, _} = Mydia.Plugins.AccountLinks.put_credential(instance.id, :endpoint, "srv")
+
+      assert Connections.list_for_plugin("connector") == []
+      assert Connections.count_for_plugin("connector") == 0
+      assert Connections.connected_user_ids("connector") == []
+
+      {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
+      assert [%{id: id}] = Connections.list_for_plugin("connector")
+      assert id == conn.id
+      assert Connections.count_for_plugin("connector") == 1
+      assert Connections.get_by_id("connector", conn.id).id == conn.id
+
+      owner = Mydia.Plugins.AccountLinks.credential(instance.id, :owner)
+      assert Connections.get_by_id("connector", owner.id) == nil
+    end
+  end
+
   describe "connect/3 and reads" do
     test "creates a connection and round-trips identity", %{user: user} do
       assert {:ok, conn} =
@@ -45,7 +79,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
                  external_username: "alice"
                })
 
-      assert conn.status == "active"
+      assert conn.status == :active
       assert conn.external_username == "alice"
 
       fetched = Connections.get("connector", user.id)
@@ -97,7 +131,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
       # `other` has no connection to this plugin.
 
       assert Connections.mark_errored("connector", [user.id, other.id, "bogus-id"]) == 1
-      assert Connections.get("connector", user.id).status == "error"
+      assert Connections.get("connector", user.id).status == :error
       assert Connections.get("connector", other.id) == nil
     end
   end
