@@ -193,7 +193,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
         settings = build_settings(schema, params)
 
         socket =
-          with :ok <- validate_url_settings(schema, settings),
+          with :ok <- Plugins.validate_url_settings(schema, settings),
                {:ok, _} <- Plugins.update_settings(slug, settings) do
             socket
             |> put_flash(:info, "#{config.name} settings saved.")
@@ -494,39 +494,6 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp stringify_values(map) do
     Map.new(map, fn {k, v} -> {to_string(k), v} end)
   end
-
-  # Rejects a non-blank url-typed setting that does not parse to an absolute
-  # http(s) URL — otherwise a scheme-less value (e.g. "ntfy.example.com/x") would
-  # derive no host, silently dropping the grant and breaking delivery.
-  defp validate_url_settings(schema, settings) do
-    schema
-    |> Enum.filter(&(&1["type"] == "url"))
-    |> Enum.reduce_while(:ok, fn field, :ok ->
-      value = Map.get(settings, field["key"])
-
-      if blank_value?(value) or absolute_url?(value) do
-        {:cont, :ok}
-      else
-        label = field["label"] || field["key"]
-        {:halt, {:error, "#{label} must be a full URL including https://"}}
-      end
-    end)
-  end
-
-  defp blank_value?(value), do: is_nil(value) or value == ""
-
-  defp absolute_url?(value) when is_binary(value) do
-    case URI.parse(value) do
-      %URI{scheme: scheme, host: host}
-      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        true
-
-      _ ->
-        false
-    end
-  end
-
-  defp absolute_url?(_), do: false
 
   # Extracts the schema-declared keys from submitted params. Blank secrets are
   # dropped so update_settings/2's merge preserves the existing value.
