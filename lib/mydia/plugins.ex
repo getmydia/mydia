@@ -348,6 +348,12 @@ defmodule Mydia.Plugins do
     # ensure_bundled/0 explicitly when they need it).
     maybe_ensure_bundled()
 
+    # Persist YAML/env-declared plugin instances before plugins start scheduling
+    # against them. Same boot-side-effect gate as bundled seeding.
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Plugins.RuntimeInstances.sync()
+    end
+
     Settings.get_db_plugin_configs()
     |> Enum.filter(& &1.enabled)
     |> Enum.each(fn config ->

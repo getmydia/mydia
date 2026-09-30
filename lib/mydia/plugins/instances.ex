@@ -17,17 +17,40 @@ defmodule Mydia.Plugins.Instances do
         where: i.plugin_slug == ^slug,
         order_by: [asc: i.name, asc: i.inserted_at]
     )
+    |> Enum.map(&put_source/1)
   end
 
-  @doc "Enabled instances for a slug. DB instances only until runtime instances land (Task 11)."
+  @doc "Enabled instances for a slug, DB-managed and config-declared alike."
   @spec list_enabled(String.t()) :: [Instance.t()]
   def list_enabled(slug), do: slug |> list() |> Enum.filter(& &1.enabled)
 
   @spec get(binary()) :: Instance.t() | nil
-  def get(id) when is_binary(id), do: Repo.get(Instance, id)
+  def get(id) when is_binary(id) do
+    case Repo.get(Instance, id) do
+      nil -> nil
+      instance -> put_source(instance)
+    end
+  end
 
   @spec get!(binary()) :: Instance.t()
-  def get!(id) when is_binary(id), do: Repo.get!(Instance, id)
+  def get!(id) when is_binary(id), do: Instance |> Repo.get!(id) |> put_source()
+
+  @doc "Marks an instance declared in YAML/env (it has a `runtime_key`) as `:runtime`."
+  @spec put_source(Instance.t()) :: Instance.t()
+  def put_source(%Instance{runtime_key: nil} = instance), do: %{instance | source: :db}
+  def put_source(%Instance{} = instance), do: %{instance | source: :runtime}
+
+  @doc "The instance a config declaration `(slug, key)` is persisted as, if any."
+  @spec find_runtime(String.t(), String.t()) :: Instance.t() | nil
+  def find_runtime(slug, key) do
+    Instance
+    |> where([i], i.plugin_slug == ^slug and i.runtime_key == ^key)
+    |> Repo.one()
+    |> case do
+      nil -> nil
+      instance -> put_source(instance)
+    end
+  end
 
   @doc """
   The first instance of a slug, created on first use. Single-instance plugins
@@ -42,7 +65,7 @@ defmodule Mydia.Plugins.Instances do
              limit: 1
          ) do
       %Instance{} = inst ->
-        inst
+        put_source(inst)
 
       nil ->
         config = Settings.get_plugin_config_by_slug(slug)
@@ -63,12 +86,16 @@ defmodule Mydia.Plugins.Instances do
     %Instance{plugin_slug: slug, plugin_config_id: config_id}
     |> Instance.changeset(attrs)
     |> Repo.insert()
+    |> put_source_result()
   end
 
   @spec update(Instance.t(), map()) :: {:ok, Instance.t()} | {:error, Ecto.Changeset.t()}
   def update(%Instance{} = instance, attrs) do
-    instance |> Instance.changeset(attrs) |> Repo.update()
+    instance |> Instance.changeset(attrs) |> Repo.update() |> put_source_result()
   end
+
+  defp put_source_result({:ok, instance}), do: {:ok, put_source(instance)}
+  defp put_source_result(error), do: error
 
   @doc "Deletes the instance; links, kv and log rows cascade in the database."
   @spec delete(Instance.t()) :: :ok
