@@ -8,7 +8,7 @@ mod models;
 mod provider;
 mod tools;
 
-use chat::{Config, Reply};
+use chat::Reply;
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{Event, OutboundRequest, PageRequest, PageResponse};
 use serde_json::{json, Value};
@@ -36,6 +36,14 @@ fn respond_json(status: u16, v: Value) -> Result<PageResponse, String> {
 
 fn body(req: &PageRequest) -> Value {
     req.body.as_deref().and_then(|b| serde_json::from_str(b).ok()).unwrap_or_else(|| json!({}))
+}
+
+fn settings(req: &PageRequest) -> Result<Value, String> {
+    serde_json::from_str(&req.config_json).map_err(|_| "settings are not valid JSON".to_string())
+}
+
+fn user_pick(user_id: &str) -> Option<String> {
+    host::kv_get(&models::key(user_id)).ok().flatten()
 }
 
 fn load(user_id: &str) -> Vec<Value> {
@@ -114,9 +122,16 @@ fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
 }
 
 fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
-    let cfg = match Config::from_json(&req.config_json) {
-        Ok(c) => c,
+    let settings = match settings(req) {
+        Ok(s) => s,
         Err(e) => return respond_json(200, json!({"error": e})),
+    };
+    let endpoint = match provider::resolve(&settings) {
+        Ok(e) => e,
+        Err(e) => return respond_json(200, json!({"error": e})),
+    };
+    let Some(model) = models::effective(&settings, user_pick(&req.user_id).as_deref()) else {
+        return respond_json(200, json!({"error": models::missing_message(&settings)}));
     };
     let text = body(req)["message"].as_str().unwrap_or("").trim().to_string();
     if text.is_empty() {
@@ -132,7 +147,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         let mut convo = vec![json!({"role": "system", "content": SYSTEM_PROMPT})];
         convo.extend(msgs.iter().cloned());
 
-        let resp = host::http_request(&OutboundRequest { url: cfg.url(), method: "POST".into(), headers: cfg.headers(), body: Some(chat::request_body(&cfg, &convo, &defs)) });
+        let resp = host::http_request(&OutboundRequest { url: endpoint.chat_url(), method: "POST".into(), headers: endpoint.chat_headers(), body: Some(chat::request_body(&model, &convo, &defs)) });
         let resp = match resp {
             Ok(r) => r,
             Err(e) => {
@@ -144,7 +159,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         match chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")) {
             Err(e) => {
                 save(&req.user_id, msgs);
-                return respond_json(200, json!({"error": e, "pending": pending}));
+                return respond_json(200, json!({"error": format!("{} ({model}): {e}", endpoint.preset.label), "pending": pending}));
             }
             Ok(Reply::Text { message, text }) => {
                 msgs.push(message);
