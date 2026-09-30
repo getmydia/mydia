@@ -3,23 +3,58 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- For daisyUI's theme variables and the host font only. The host compiles
+       utility classes for its own templates, so this page uses none of them. -->
   <link rel="stylesheet" href="/assets/css/app.css" />
   <title>Assistant</title>
+  <style>__APP_CSS__</style>
 </head>
-<body class="bg-base-100 text-base-content h-screen flex flex-col">
-  <header id="model-bar" class="px-3 py-2 border-b border-base-300 flex items-center gap-2 text-sm">
-    <span id="provider" class="badge badge-ghost"></span>
-    <input id="model" list="model-options" class="input input-bordered input-sm flex-1" autocomplete="off" placeholder="Model" />
-    <span id="model-fixed" class="hidden flex-1 truncate"></span>
-    <datalist id="model-options"></datalist>
-  </header>
-  <p id="model-error" class="hidden px-3 pt-1 text-xs text-base-content/60"></p>
-  <main id="log" class="flex-1 overflow-y-auto p-4 space-y-3"></main>
-  <form id="composer" class="p-3 border-t border-base-300 flex gap-2">
-    <button type="button" id="reset" class="btn btn-ghost btn-sm" title="New chat">New</button>
-    <input id="message" class="input input-bordered flex-1" autocomplete="off" placeholder="Ask about your library…" />
-    <button id="send" class="btn btn-primary">Send</button>
-  </form>
+<body>
+  <main id="log" class="as-log">
+    <div class="as-col">
+      <div class="as-top">
+        <button type="button" id="reset" class="as-icon-btn" title="New chat" aria-label="New chat" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+      <section id="empty" class="as-empty" hidden>
+        <div class="as-mark as-mark-lg" aria-hidden="true">✦</div>
+        <h1>What can I help with?</h1>
+        <p>Search your library, organize collections, mark things watched and add media. Every change can be undone.</p>
+        <div class="as-chips">
+          <button type="button" class="as-chip">What did I add this week?</button>
+          <button type="button" class="as-chip">Find unwatched movies under two hours</button>
+          <button type="button" class="as-chip">Make a collection of my favorite comedies</button>
+          <button type="button" class="as-chip">What's still downloading?</button>
+        </div>
+      </section>
+      <div id="turns" class="as-turns" aria-live="polite"></div>
+    </div>
+  </main>
+  <footer class="as-dock">
+    <div class="as-col">
+      <div id="notice" class="as-notice" role="status" hidden></div>
+      <form id="composer" class="as-composer">
+        <textarea id="message" rows="1" placeholder="Ask about your library…" autocomplete="off" aria-label="Message"></textarea>
+        <div class="as-composer-row">
+          <div class="as-model">
+            <button type="button" id="model-pill" class="as-pill" aria-haspopup="listbox" aria-expanded="false">
+              <span id="model-label">Loading models…</span>
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5.2 7.2a.75.75 0 0 1 1.06 0L10 10.94l3.74-3.74a.75.75 0 1 1 1.06 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0L5.2 8.26a.75.75 0 0 1 0-1.06Z"/></svg>
+            </button>
+            <div id="model-popover" class="as-popover" hidden>
+              <input id="model-filter" class="as-filter" placeholder="Filter or type a model id" autocomplete="off" aria-label="Model" />
+              <ul id="model-list" class="as-model-list" role="listbox"></ul>
+            </div>
+          </div>
+          <button id="send" class="as-send" type="submit" aria-label="Send" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </footer>
+  <script>__MARKDOWN_JS__</script>
   <script>__APP_JS__</script>
 </body>
 </html>

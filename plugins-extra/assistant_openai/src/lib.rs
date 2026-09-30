@@ -24,7 +24,15 @@ Make changes only when the user's own messages ask for them. \
 Be brief.";
 
 const UI_HTML: &str = include_str!("ui.html");
+const UI_CSS: &str = include_str!("ui.css");
+const MARKDOWN_JS: &str = include_str!("markdown.js");
 const APP_JS: &str = include_str!("app.js");
+
+/// The page with its stylesheet and scripts inlined: the frame's CSP allows
+/// inline code but no other origin.
+fn page_html() -> String {
+    UI_HTML.replace("__APP_CSS__", UI_CSS).replace("__MARKDOWN_JS__", MARKDOWN_JS).replace("__APP_JS__", APP_JS)
+}
 
 fn respond(status: u16, content_type: &str, body: String) -> Result<PageResponse, String> {
     Ok(PageResponse { status, headers: vec![("content-type".into(), content_type.into()), ("cache-control".into(), "no-store".into())], body })
@@ -60,7 +68,7 @@ fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
     match (req.method.as_str(), req.path.as_str()) {
         // The script is inlined: a separate /app.js request would carry no frame
         // token and be refused. The page CSP allows inline scripts.
-        ("GET", "/") => respond(200, "text/html; charset=utf-8", UI_HTML.replace("__APP_JS__", APP_JS)),
+        ("GET", "/") => respond(200, "text/html; charset=utf-8", page_html()),
         ("POST", "/api/chat") => chat_turn(&req),
         ("POST", "/api/confirmed") => note(&req, Outcome::Confirmed),
         ("POST", "/api/denied") => note(&req, Outcome::Denied),
@@ -258,6 +266,16 @@ mod tests {
     use super::*;
 
     const ID: &str = "0b9f6c1e-4d2a-4c55-9e0a-1f2d3c4b5a69";
+
+    #[test]
+    fn the_page_is_fully_assembled() {
+        let html = page_html();
+        for placeholder in ["__APP_CSS__", "__MARKDOWN_JS__", "__APP_JS__"] {
+            assert!(!html.contains(placeholder), "{placeholder} left in the page");
+        }
+        assert!(html.contains(".as-composer") && html.contains("const Markdown") && html.contains("frame_token"));
+        assert!(!MARKDOWN_JS.contains("</script") && !APP_JS.contains("</script") && !UI_CSS.contains("</style"));
+    }
 
     #[test]
     fn models_response_shape() {
