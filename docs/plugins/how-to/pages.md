@@ -22,8 +22,7 @@ For every field and function, see the [host API](../reference/host-api.md#14-hos
   "capabilities": {
     "surfaces:page": [],
     "data:read": ["collection"],
-    "surfaces:write": ["collections:write"],
-    "state:kv": []
+    "surfaces:write": ["collections:write"]
   }
 }
 ```
@@ -72,11 +71,18 @@ fn respond_json(status: u16, value: Value) -> Result<PageResponse, String> {
 }
 
 fn host_error(e: HostError) -> Result<PageResponse, String> {
-    respond_json(500, json!({ "error": format!("{e:?}") }))
+    let message = match e {
+        HostError::Denied(_) => "That is not allowed for this plugin.",
+        HostError::NotFound(_) => "Nothing matches that.",
+        HostError::InvalidRequest(_) => "That request was not valid.",
+        HostError::Network(_) | HostError::Internal(_) => "Something went wrong. Try again.",
+    };
+    respond_json(500, json!({ "error": message }))
 }
+```
 
 The request carries `user_id`, `role` and `session_id`, all verified by the
-host. Keep any per-user state under per-user keys such as
+host. If you keep state (declare `state:kv`), use per-user keys such as
 `user/<user_id>/notes`, because page calls can run at the same time as your event
 and schedule handlers. Responses are text only.
 

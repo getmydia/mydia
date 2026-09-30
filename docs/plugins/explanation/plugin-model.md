@@ -207,8 +207,8 @@ traffic. Request and response bodies pass through to and from the guest as
 opaque text; the host does not parse, store or log them, and no host code knows
 what a page is for. The only data the host keeps is what it resolved itself: the
 pending-write rows and the journal, which hold host-resolved arguments (ids,
-titles it looked up) and never the page's own content. What a page is for is the plugin's business,
-and its data stays in the plugin's own per-user `state:kv` keys.
+titles it looked up) and never the page's own content. Whatever the page keeps
+stays in the plugin's own per-user `state:kv` keys.
 
 To build one, see [Serve a page](../how-to/pages.md).
 
