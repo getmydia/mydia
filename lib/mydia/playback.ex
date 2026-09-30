@@ -583,6 +583,37 @@ defmodule Mydia.Playback do
   end
 
   @doc """
+  One user's watch history, newest first by `last_watched_at`.
+
+  Rows that were never watched (`last_watched_at` is nil) are not history and
+  are excluded, which also keeps the ordering identical on SQLite and Postgres
+  (they disagree on where NULLs sort). As with `list_recent_history/1`, a
+  media-server sync may have stamped `last_watched_at` with the sync time;
+  callers that care read `last_write_origin`.
+
+  ## Options
+
+    * `:limit` - maximum rows (default 20)
+    * `:since` - only rows with `last_watched_at >= since`
+  """
+  @spec list_user_history(binary(), keyword()) :: [Progress.t()]
+  def list_user_history(user_id, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 20)
+    since = Keyword.get(opts, :since)
+
+    query =
+      from p in Progress,
+        where: p.user_id == ^user_id and not is_nil(p.last_watched_at),
+        order_by: [desc: p.last_watched_at, desc: p.id],
+        limit: ^limit,
+        preload: [:media_item, episode: :media_item]
+
+    query = if since, do: from(p in query, where: p.last_watched_at >= ^since), else: query
+
+    Repo.all(query)
+  end
+
+  @doc """
   Human-readable title for a progress row.
 
   Progress rows are XOR by `Progress.validate_one_parent/1`: a movie row

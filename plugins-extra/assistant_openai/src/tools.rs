@@ -19,8 +19,8 @@ pub fn definitions() -> Value {
         json!({"query":{"type":"string"},"media_type":media_type}), vec!["query"]),
       f("search_catalog", "Search the movie and TV catalog for things not in the library. Returns tmdb_id or tvdb_id.",
         json!({"query":{"type":"string"},"media_type":media_type}), vec!["query"]),
-      f("list", "List the user's collections, media requests, active downloads or watch progress.",
-        json!({"what":{"type":"string","enum":["collection","media_request","download","playback_progress"]}}), vec!["what"]),
+      f("list", "List the user's collections, media requests or active downloads.",
+        json!({"what":{"type":"string","enum":["collection","media_request","download"]}}), vec!["what"]),
       f("add_media", "Add a movie or show to the library (or request it, depending on the user's role).",
         json!({"media_type":media_type,"tmdb_id":{"type":"integer"},"tvdb_id":{"type":"integer"}}), vec!["media_type"]),
       f("create_collection", "Create a manual collection, or a smart one from rules JSON.",
@@ -34,7 +34,8 @@ pub fn definitions() -> Value {
       f("set_watched", "Mark a movie, or an episode by season and episode number, watched or unwatched.",
         json!({"tmdb_id":{"type":"integer"},"tvdb_id":{"type":"integer"},"imdb_id":{"type":"string"},"season":{"type":"integer"},"episode":{"type":"integer"},"watched":{"type":"boolean"}}), vec!["watched"]),
       f("add_favorite", "Add a library item to the user's Favorites.",
-        json!({"tmdb_id":{"type":"integer"},"tvdb_id":{"type":"integer"},"imdb_id":{"type":"string"}}), vec![])
+        json!({"tmdb_id":{"type":"integer"},"tvdb_id":{"type":"integer"},"imdb_id":{"type":"string"}}), vec![]),
+      crate::watch_history::definition()
     ])
 }
 
@@ -82,7 +83,7 @@ pub fn clip(v: &str, max: usize) -> String {
 
 /// Most ids one call may carry, matching the host's confirmation cap.
 pub const MAX_IDS: usize = 50;
-const LIST_NAMESPACES: [&str; 4] = ["collection", "media_request", "download", "playback_progress"];
+const LIST_NAMESPACES: [&str; 3] = ["collection", "media_request", "download"];
 const MEDIA_TYPES: [&str; 2] = ["movie", "tv_show"];
 
 fn check_media_type(a: &Value, required: bool) -> Result<(), String> {
@@ -132,6 +133,7 @@ pub fn validate(name: &str, a: &Value) -> Result<(), String> {
             check_u32(a, "season")?;
             check_u32(a, "episode")
         }
+        "watch_history" => crate::watch_history::validate(a),
         _ => Ok(()),
     }
 }
@@ -193,6 +195,7 @@ pub fn run(name: &str, a: &Value) -> Outcome {
             watched: a["watched"].as_bool().unwrap_or(false), position_seconds: None, duration_seconds: None, watched_at: None,
         })),
         "add_favorite" => write(host::add_favorite(&FavoriteTarget { user_id: String::new(), imdb_id: s(a, "imdb_id"), tmdb_id: i(a, "tmdb_id"), tvdb_id: i(a, "tvdb_id") })),
+        "watch_history" => text(crate::watch_history::run(a)),
         other => text(json!({"error": format!("unknown tool {other}")})),
     }
 }
@@ -202,9 +205,9 @@ fn list_item(item: &ListItem) -> Value {
         ListItem::Collection(c) => json!({"id": c.id, "name": clip(&c.name, 200), "kind": c.kind, "items": c.item_count}),
         ListItem::MediaRequest(r) => json!({"title": clip(&r.title, 200), "status": r.status, "year": r.year}),
         ListItem::Download(d) => json!({"title": clip(&d.title, 200), "status": d.status, "progress": d.progress, "eta_seconds": d.eta_seconds}),
-        ListItem::PlaybackProgress(p) => json!({"type": p.item_type, "media_item_id": p.media_item_id, "season": p.season_number, "episode": p.episode_number, "watched": p.watched}),
         ListItem::MediaItem(m) => json!({"id": m.id, "title": clip(&m.title, 200), "year": m.year}),
         ListItem::LibraryItem(l) => json!({"id": l.id, "title": clip(&l.title, 200), "year": l.year, "owned": l.owned}),
+        ListItem::PlaybackProgress(_) => json!({}),
     }
 }
 
@@ -216,7 +219,7 @@ mod tests {
     fn every_tool_has_a_name_and_parameters() {
         let defs = definitions();
         let arr = defs.as_array().unwrap();
-        assert_eq!(arr.len(), 10);
+        assert_eq!(arr.len(), 11);
         for d in arr {
             assert!(d["function"]["name"].is_string());
             assert_eq!(d["function"]["parameters"]["type"], "object");
@@ -225,6 +228,17 @@ mod tests {
 
     fn rejected(name: &str, args: Value) -> bool {
         validate(name, &args).is_err()
+    }
+
+    #[test]
+    fn list_no_longer_offers_playback_progress() {
+        assert!(rejected("list", json!({"what": "playback_progress"})));
+    }
+
+    #[test]
+    fn watch_history_arguments_are_validated() {
+        assert!(rejected("watch_history", json!({"limit": 0})));
+        assert!(validate("watch_history", &json!({"days": 7})).is_ok());
     }
 
     #[test]

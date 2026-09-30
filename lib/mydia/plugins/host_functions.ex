@@ -869,16 +869,22 @@ defmodule Mydia.Plugins.HostFunctions do
     {ctx, opts} = split_list_opts(ctx_or_opts)
     namespace = Map.get(req, :namespace, "")
 
-    if namespace in @page_namespaces do
-      PageReads.list(namespace, plugin, ctx)
-    else
-      with :ok <- require_data_namespace(plugin, namespace),
-           {:ok, viewer} <- list_viewer(ctx),
-           {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
-           {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
-        limit = clamp_list_limit(from_option(Map.get(req, :limit)))
-        list_namespace(plugin, viewer, namespace, cursor, since, limit, opts)
-      end
+    cond do
+      namespace == "watch_history" ->
+        PageReads.watch_history(plugin, ctx, req, Keyword.get(opts, :with_origin, false))
+
+      namespace in @page_namespaces ->
+        PageReads.list(namespace, plugin, ctx)
+
+      true ->
+        with :ok <- require_data_namespace(plugin, namespace),
+             {:ok, viewer} <- list_viewer(ctx),
+             {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
+             {:ok, since} <-
+               parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
+          limit = clamp_list_limit(from_option(Map.get(req, :limit)))
+          list_namespace(plugin, viewer, namespace, cursor, since, limit, opts)
+        end
     end
   end
 
@@ -1022,7 +1028,8 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # Progress row -> the WIT playback-progress record. A movie carries the item's
   # own external ids; an episode carries its coordinates plus the show's ids.
-  defp to_playback_progress(p, with_origin?) do
+  @doc false
+  def to_playback_progress(p, with_origin?) do
     {item_type, ext, season, epnum} = progress_dimensions(p)
 
     record = %{
