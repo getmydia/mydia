@@ -3399,7 +3399,7 @@ set on discovery as part of the host release (see the
 </tr>
 <tr>
 <td><code>data:read</code></td>
-<td>Scoped read namespaces (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, and the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>). The host returns a curated, read-only projection: never raw rows or secrets.</td>
+<td>Scoped read namespaces (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, and the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>, <code>watch_history</code>). The host returns a curated, read-only projection: never raw rows or secrets.</td>
 </tr>
 <tr>
 <td><code>data:search</code></td>
@@ -3642,7 +3642,7 @@ are all busy answers 503 with <code>Retry-After</code>.</p>
 <tr>
 <td><code>data-list</code></td>
 <td><code>data:read</code></td>
-<td>Reads as the acting user during a page call. New rows: <code>media-request</code>, <code>download</code>, <code>collection</code>.</td>
+<td>Reads as the acting user during a page call. New rows: <code>media-request</code>, <code>download</code>, <code>collection</code>; <code>watch_history</code> returns <code>playback-progress</code> rows, newest first.</td>
 </tr>
 <tr>
 <td><code>http-request</code></td>

@@ -3449,7 +3449,7 @@ its own grant at runtime.</p>
 </tr>
 <tr>
 <td><code>data:read</code></td>
-<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, plus the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>). Returns a curated, read-only projection.</td>
+<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, plus the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>, <code>watch_history</code>). Returns a curated, read-only projection.</td>
 </tr>
 <tr>
 <td><code>data:search</code></td>
@@ -3512,13 +3512,15 @@ its own grant at runtime.</p>
 <p>Page writes act as the signed-in user, are journaled, and may need the user's
 confirmation first. See <a href="../../explanation/plugin-model/#pages-and-writes-on-a-users-behalf">Pages and writes on a user's behalf</a>.</p>
 <h3 id="page-only-dataread-namespaces">Page-only <code>data:read</code> namespaces</h3>
-<p><code>media_request</code>, <code>download</code> and <code>collection</code> can only be listed from a page
+<p><code>media_request</code>, <code>download</code>, <code>collection</code> and <code>watch_history</code> can only be listed from a page
 (<code>on-http</code>). In a page call every namespace, including <code>media_item</code>,
 <code>library_item</code> and <code>playback_progress</code>, is read as the acting user, so a page
 never sees more than the person using it. <code>media_request</code> and <code>collection</code> are
 the user's own rows, and <code>download</code> lists active downloads for items the acting
 user requested (even administrators see only those). Outside a page these
-three namespaces are not available.</p>
+namespaces are not available. <code>watch_history</code> returns the user's own
+<code>playback-progress</code> rows newest first by <code>last-watched-at</code>, with an episode's
+<code>media-item-id</code> set to its show so a page can resolve titles with <code>data-read</code>.</p>
 <p>The event catalog for <code>events:subscribe</code>:</p>
 <ul>
 <li><code>media_item.added</code></li>
