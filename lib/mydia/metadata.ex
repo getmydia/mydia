@@ -53,7 +53,6 @@ defmodule Mydia.Metadata do
     :page,
     :certification_country,
     :certification_lte,
-    :origin_country,
     :region,
     :with_release_type,
     :release_date_gte,
@@ -739,7 +738,7 @@ defmodule Mydia.Metadata do
 
   ## Parameters
     - `media_type` - :movie or :tv_show
-    - `opts` - Filter options including :genres, :year, :original_language, :origin_country,
+    - `opts` - Filter options including :genres, :year, :original_language,
       :min_rating, :sort_by, :page, :certification_country and :certification_lte
 
   ## Examples

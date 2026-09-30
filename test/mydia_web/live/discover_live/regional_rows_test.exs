@@ -72,9 +72,6 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
               q["with_watch_providers"] ->
                 "Maple Lantern"
 
-              q["with_origin_country"] ->
-                "Homegrown Lantern"
-
               true ->
                 "Other Lantern"
             end
@@ -109,15 +106,13 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     assert ids == [
              "discover-row-in_cinemas",
              "discover-row-coming_soon",
-             "discover-row-service-8001",
-             "discover-row-made_here"
+             "discover-row-service-8001"
            ]
 
     assert has_element?(view, "#discover-row-in_cinemas", "Cinema Lantern")
     assert has_element?(view, "#discover-row-coming_soon", "Soon Lantern")
     assert has_element?(view, "#discover-row-service-8001", "Latest on Maplestream")
     assert has_element?(view, "#discover-row-service-8001", "Maple Lantern")
-    assert has_element?(view, "#discover-row-made_here", "Made in Canada")
     refute has_element?(view, "#discover-filter-form")
     refute has_element?(view, "#discover-grid")
   end
@@ -160,7 +155,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     assert has_element?(view, "#discover-row-in_cinemas", "Cinema Lantern")
   end
 
-  test "no services: the prompt replaces the service rows", %{
+  test "no services: the prompt sits above the cinema rows", %{
     conn: conn,
     user: user,
     bypass: bypass
@@ -175,8 +170,24 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
     render_async(view, 5_000)
 
-    assert has_element?(view, "#discover-services-prompt")
+    assert has_element?(view, "#discover-regional-rows > #discover-services-prompt:first-child")
+    assert has_element?(view, "#discover-row-in_cinemas")
     refute has_element?(view, "[id^='discover-row-service-']")
+  end
+
+  test "tv with no services shows only the prompt", %{conn: conn, user: user, bypass: bypass} do
+    {:ok, _} =
+      Accounts.update_preference(Accounts.get_user_preference!(user), %{
+        "preferences" => %{"discover_streaming_services" => []}
+      })
+
+    stub_discover(bypass)
+
+    {:ok, view, _html} = live(conn, ~p"/discover?type=tv_show&category=home")
+    render_async(view, 5_000)
+
+    assert has_element?(view, "#discover-services-prompt")
+    refute has_element?(view, "[id^='discover-row-']")
   end
 
   test "a row title opens the detail modal", %{conn: conn, bypass: bypass} do
@@ -216,14 +227,14 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
       render_async(view, 5_000)
 
-      view |> element("#discover-row-made_here-see-all") |> render_click()
+      view |> element("#discover-row-service-8001-see-all") |> render_click()
 
       assert_patch(
         view,
-        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+        ~p"/discover?#{%{"category" => "home", "source" => "service-8001", "type" => "movie"}}"
       )
 
-      assert_receive {:discover_query, _, %{"with_origin_country" => "CA"}}
+      assert_receive {:discover_query, _, %{"with_watch_providers" => "8001"}}
     end
 
     test "filters keep the source and the source's sort", %{conn: conn, bypass: bypass} do
@@ -260,7 +271,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     test "an unknown or unsaved source falls back to the rows", %{conn: conn, bypass: bypass} do
       stub_discover(bypass)
 
-      for source <- ["service-9999", "bogus"] do
+      for source <- ["service-9999", "bogus", "made_here"] do
         {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=#{source}")
         assert has_element?(view, "#discover-regional-rows")
       end
@@ -272,7 +283,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     test "the country tab returns from See all to the rows", %{conn: conn, bypass: bypass} do
       stub_discover(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=made_here")
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=service-8001")
 
       view |> element("#discover-home-tab") |> render_click()
 
@@ -283,13 +294,13 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
       stub_discover(bypass)
 
       {:ok, view, _html} =
-        live(conn, ~p"/discover?type=movie&category=home&source=made_here&language=fr")
+        live(conn, ~p"/discover?type=movie&category=home&source=service-8001&language=fr")
 
       render_click(view, "clear_filters", %{})
 
       assert_patch(
         view,
-        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+        ~p"/discover?#{%{"category" => "home", "source" => "service-8001", "type" => "movie"}}"
       )
     end
   end
@@ -323,7 +334,6 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
           source: {:service, 8001, "Maplestream"},
           default_sort: "primary_release_date.desc",
           regional_rows: %{},
-          selected_country: nil,
           selected_genres: [],
           selected_language: nil,
           selected_year: nil,
@@ -344,106 +354,6 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
                         "certification_country" => "US",
                         "certification.lte" => "PG"
                       }}
-    end
-  end
-
-  describe "services picker" do
-    defp stub_providers(bypass, status \\ 200) do
-      for type <- ["movie", "tv"] do
-        Bypass.stub(bypass, "GET", "/tmdb/watch/providers/#{type}", fn conn ->
-          body = %{
-            "results" => [
-              %{"provider_id" => 8001, "provider_name" => "Maplestream", "display_priority" => 1},
-              %{"provider_id" => 8002, "provider_name" => "Northflix", "display_priority" => 2}
-            ]
-          }
-
-          conn
-          |> Plug.Conn.put_resp_content_type("application/json")
-          |> Plug.Conn.resp(status, Jason.encode!(body))
-        end)
-      end
-    end
-
-    test "lists the region's services with saved ones checked", %{conn: conn, bypass: bypass} do
-      stub_discover(bypass)
-      stub_providers(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
-      view |> element("#discover-services-button") |> render_click()
-      render_async(view, 5_000)
-
-      assert has_element?(view, "#discover-services-form input[value='8001'][checked]")
-      assert has_element?(view, "#discover-services-form input[value='8002']:not([checked])")
-    end
-
-    test "saving adds a row per picked service", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      stub_providers(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
-      view |> element("#discover-services-button") |> render_click()
-      render_async(view, 5_000)
-
-      view
-      |> form("#discover-services-form", %{"services" => ["8001", "8002"]})
-      |> render_submit()
-
-      render_async(view, 5_000)
-
-      assert has_element?(view, "#discover-row-service-8002")
-      refute has_element?(view, "#discover-services-picker")
-
-      assert Mydia.Accounts.UserPreference.discover_streaming_services(
-               Accounts.get_user_preference!(user)
-             ) == [
-               %{"id" => 8001, "name" => "Maplestream"},
-               %{"id" => 8002, "name" => "Northflix"}
-             ]
-    end
-
-    test "a forged id is ignored", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      stub_providers(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
-      view |> element("#discover-services-button") |> render_click()
-      render_async(view, 5_000)
-
-      render_submit(view, "save_services", %{"services" => ["8001", "999999"]})
-
-      assert Mydia.Accounts.UserPreference.discover_streaming_services(
-               Accounts.get_user_preference!(user)
-             ) == [%{"id" => 8001, "name" => "Maplestream"}]
-    end
-
-    test "unticking everything clears the services and shows the prompt", %{
-      conn: conn,
-      bypass: bypass
-    } do
-      stub_discover(bypass)
-      stub_providers(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
-      view |> element("#discover-services-button") |> render_click()
-      render_async(view, 5_000)
-
-      render_submit(view, "save_services", %{})
-      render_async(view, 5_000)
-
-      assert has_element?(view, "#discover-services-prompt")
-    end
-
-    test "a failed provider list offers a retry", %{conn: conn, bypass: bypass} do
-      stub_discover(bypass)
-      stub_providers(bypass, 500)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
-      render_async(view, 20_000)
-      view |> element("#discover-services-button") |> render_click()
-      render_async(view, 60_000)
-
-      assert has_element?(view, "#discover-services-retry")
     end
   end
 end

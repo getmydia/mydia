@@ -12,22 +12,24 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
   @services [%{"id" => 8001, "name" => "Maplestream"}, %{"id" => 8002, "name" => "Northflix"}]
 
   describe "sources_for/3" do
-    test "movies: cinemas, services in saved order, then made here" do
+    test "movies: cinemas, then services in saved order" do
       assert RegionalSources.sources_for("CA", @services, :movie) == [
                :in_cinemas,
                :coming_soon,
                {:service, 8001, "Maplestream"},
-               {:service, 8002, "Northflix"},
-               :made_here
+               {:service, 8002, "Northflix"}
              ]
     end
 
     test "tv drops the cinema sources" do
       assert RegionalSources.sources_for("CA", @services, :tv_show) == [
                {:service, 8001, "Maplestream"},
-               {:service, 8002, "Northflix"},
-               :made_here
+               {:service, 8002, "Northflix"}
              ]
+    end
+
+    test "no services and tv: nothing" do
+      assert RegionalSources.sources_for("CA", [], :tv_show) == []
     end
 
     test "no country, no sources" do
@@ -69,13 +71,6 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
       assert Keyword.get(RegionalSources.opts(@maple, :tv_show, "CA", @today), :sort_by) ==
                "first_air_date.desc"
     end
-
-    test "made here: origin country by popularity" do
-      assert RegionalSources.opts(:made_here, :tv_show, "CA", @today) == [
-               origin_country: "CA",
-               sort_by: "popularity.desc"
-             ]
-    end
   end
 
   describe "labels and params" do
@@ -83,7 +78,11 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
       assert RegionalSources.label(:in_cinemas, "CA") == "In cinemas"
       assert RegionalSources.label(:coming_soon, "CA") == "Coming soon"
       assert RegionalSources.label(@maple, "CA") == "Latest on Maplestream"
-      assert RegionalSources.label(:made_here, "CA") == "Made in Canada"
+    end
+
+    test "a stale made_here param resolves to nothing" do
+      sources = RegionalSources.sources_for("CA", @services, :movie)
+      assert RegionalSources.find(sources, "made_here") == nil
     end
 
     test "params round-trip only through the user's own sources" do
@@ -190,52 +189,43 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
 
     defp prefs(user), do: Accounts.get_user_preference!(user)
 
-    test "changing country keeps only services the new region offers", %{user: user} do
-      {:ok, _} = RegionalSources.change_home_country(user, "CA", fn _ -> {:ok, []} end)
-      {:ok, _} = RegionalSources.put_services(user, @services)
+    test "put_country_settings saves country and services together", %{user: user} do
+      assert {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
 
-      available = fn "FR" -> {:ok, [%WatchProvider{id: 8002, name: "Northflix"}]} end
-      {:ok, _} = RegionalSources.change_home_country(user, "FR", available)
-
-      assert UserPreference.discover_home_country(prefs(user)) == "FR"
-
-      assert UserPreference.discover_streaming_services(prefs(user)) == [
-               %{"id" => 8002, "name" => "Northflix"}
-             ]
+      assert UserPreference.discover_home_country(prefs(user)) == "CA"
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
     end
 
-    test "a failed provider lookup clears the services but saves the country", %{user: user} do
-      {:ok, _} = RegionalSources.change_home_country(user, "CA", fn _ -> {:ok, []} end)
-      {:ok, _} = RegionalSources.put_services(user, @services)
+    test "put_country_settings with nil clears both", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
 
-      {:ok, _} = RegionalSources.change_home_country(user, "FR", fn _ -> {:error, :down} end)
+      assert {:ok, _} = RegionalSources.put_country_settings(user, nil, @services)
 
-      assert UserPreference.discover_home_country(prefs(user)) == "FR"
-      assert UserPreference.discover_streaming_services(prefs(user)) == []
-    end
-
-    test "removing the country clears the services", %{user: user} do
-      {:ok, _} = RegionalSources.change_home_country(user, "CA", fn _ -> {:ok, []} end)
-      {:ok, _} = RegionalSources.put_services(user, @services)
-
-      {:ok, _} = RegionalSources.change_home_country(user, nil)
-
+      assert UserPreference.discover_home_country(prefs(user)) == nil
       assert prefs(user).preferences["discover_streaming_services"] == []
     end
 
-    test "a malformed stored value does not crash a country change", %{user: user} do
-      {:ok, _} = RegionalSources.change_home_country(user, "CA", fn _ -> {:ok, []} end)
+    test "put_country_settings rejects an unlisted country and writes nothing", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
 
-      # Written straight to the row, past the changeset, as a hand edit would be.
+      assert {:error, %Ecto.Changeset{}} =
+               RegionalSources.put_country_settings(user, "XX", [])
+
+      assert UserPreference.discover_home_country(prefs(user)) == "CA"
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
+    end
+
+    test "put_country_settings overwrites a malformed stored value", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", [])
+
       prefs(user)
       |> Ecto.Changeset.change(
         preferences: Map.put(prefs(user).preferences, "discover_streaming_services", "junk")
       )
       |> Mydia.Repo.update!()
 
-      available = fn "FR" -> {:ok, [%WatchProvider{id: 8002, name: "Northflix"}]} end
-      assert {:ok, _} = RegionalSources.change_home_country(user, "FR", available)
-      assert UserPreference.discover_streaming_services(prefs(user)) == []
+      assert {:ok, _} = RegionalSources.put_country_settings(user, "FR", @services)
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
     end
   end
 end
