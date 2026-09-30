@@ -152,5 +152,102 @@ defmodule MydiaWeb.Features.DockNavTest do
       |> assert_in_viewport("#sidebar-user-menu")
       |> refute_covered("#sidebar-user-menu")
     end
+
+    @tag :feature
+    test "the drawer stays open when LiveView re-renders the layout",
+         %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> resize_window(390, 844)
+      |> visit_liveview("/")
+
+      session
+      |> click(Query.css(~s(label[for="main-drawer"])))
+
+      drawer_checked = "return document.getElementById('main-drawer').checked;"
+
+      assert eval_js(session, drawer_checked) == true
+
+      # Every authenticated LiveView subscribes to the jobs topic and re-renders
+      # the sidebar's running-jobs card on this message. Before the checkbox
+      # carried phx-update="ignore", that patch reset it to the server's
+      # unchecked markup and the drawer closed by itself.
+      Phoenix.PubSub.broadcast(
+        Mydia.PubSub,
+        Mydia.Jobs.Broadcaster.topic(),
+        {:jobs_status_changed,
+         [%{id: 1, worker: "Fixture.Sweep", worker_name: "Fixture Sweep", attempted_at: nil}]}
+      )
+
+      eventually(
+        fn ->
+          script = """
+          var card = document.getElementById('sidebar-running-jobs');
+          return card ? card.textContent : '';
+          """
+
+          if eval_js(session, script) =~ "Fixture Sweep",
+            do: {:ok, :rerendered},
+            else: :error
+        end,
+        description: "the running-jobs card rendering the broadcast job"
+      )
+
+      assert eval_js(session, drawer_checked) == true,
+             "expected #main-drawer to stay checked after a layout re-render"
+    end
+
+    @tag :feature
+    test "tapping a sidebar link closes the drawer", %{session: session} do
+      login_as_admin(session)
+
+      session
+      |> resize_window(390, 844)
+      |> visit_liveview("/")
+
+      session
+      |> click(Query.css(~s(label[for="main-drawer"])))
+
+      drawer_checked = "return document.getElementById('main-drawer').checked;"
+
+      assert eval_js(session, drawer_checked) == true
+
+      # The sidebar slides in over .3s; wait until it is fully on screen so
+      # the link is clickable.
+      eventually(
+        fn ->
+          script = """
+          var aside = document.querySelector('.drawer-side > :not(.drawer-overlay)');
+          if (!aside) { return '__missing__'; }
+          if (window.getComputedStyle(aside).visibility !== 'visible') { return 'hidden'; }
+          return aside.getBoundingClientRect().left;
+          """
+
+          case eval_js(session, script) do
+            left when is_number(left) and left >= -0.5 -> {:ok, :open}
+            _ -> :error
+          end
+        end,
+        description: "the drawer sidebar finishing its slide-in"
+      )
+
+      session
+      |> click(Query.css(~s(.drawer-side a[href="/movies"])))
+
+      eventually(
+        fn ->
+          if Wallaby.Browser.current_path(session) == "/movies",
+            do: {:ok, :navigated},
+            else: :error
+        end,
+        description: "the sidebar link navigating to /movies"
+      )
+
+      wait_for_liveview(session)
+
+      assert eval_js(session, drawer_checked) == false,
+             "expected #main-drawer to close after navigating from a sidebar link"
+    end
   end
 end
