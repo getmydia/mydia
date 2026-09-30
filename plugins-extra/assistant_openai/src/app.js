@@ -140,6 +140,7 @@
   }
   const syncSend = () => {
     send.disabled = waiting || !input.value.trim()
+    reset.disabled = waiting
   }
 
   const submit = async (raw) => {
@@ -184,10 +185,20 @@
     chip.addEventListener("click", () => submit(chip.textContent))
   }
   reset.addEventListener("click", async () => {
-    await api("reset")
-    turns.replaceChildren()
-    showConversation()
-    input.focus()
+    if (waiting) return
+    try {
+      const res = await api("reset")
+      if (res.error) {
+        showNotice(res.error)
+        return
+      }
+      showNotice("")
+      turns.replaceChildren()
+      showConversation()
+      input.focus()
+    } catch (_) {
+      showNotice("Could not start a new chat.")
+    }
   })
 
   // Host messages
@@ -297,6 +308,9 @@
   document.addEventListener("mousedown", (e) => {
     if (!popover.hidden && !e.target.closest(".as-model")) closePopover()
   })
+  document.querySelector(".as-model").addEventListener("focusout", (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) closePopover()
+  })
   filter.addEventListener("input", () => {
     active = 0
     renderOptions()
@@ -311,6 +325,7 @@
       active = (active + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length
       highlight()
     } else if (e.key === "Enter") {
+      if (e.isComposing) return
       e.preventDefault()
       choose(options[active]?.id || filter.value.trim())
     }
