@@ -212,6 +212,107 @@ defmodule Mydia.Plugins.PageActionsTest do
     assert Repo.aggregate(from(p in PendingWrite, where: p.id == ^id), :count) == 0
   end
 
+  test "a grant above a lowered role ceiling is not honored", %{plugin: plugin, user: user} do
+    :ok = Grants.grant("helper", user.id, "collections:write", "always", "s0")
+    {:ok, _} = Grants.put_ceilings("helper", %{"user" => "once"})
+
+    assert {:ok, {:"needs-confirmation", _id}} =
+             PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Capped"}})
+  end
+
+  describe "confirm re-checks" do
+    test "a revoked surfaces:write grant", %{plugin: plugin, user: user} do
+      {:ok, {:"needs-confirmation", id}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Revoked"}})
+
+      config = Settings.get_plugin_config_by_slug("helper")
+      {:ok, _} = Settings.update_plugin_config(config, %{granted_capabilities: %{}})
+
+      assert {:ok, [%{id: ^id, ok: false, error: msg}]} =
+               PageActions.confirm("helper", user, "s1", [id], "once")
+
+      assert msg =~ "not granted"
+      assert Journal.list("helper", user.id) == []
+    end
+
+    test "a disabled plugin", %{plugin: plugin, user: user} do
+      {:ok, {:"needs-confirmation", id}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Off"}})
+
+      config = Settings.get_plugin_config_by_slug("helper")
+      {:ok, _} = Settings.update_plugin_config(config, %{enabled: false})
+
+      assert {:ok, [%{ok: false}]} = PageActions.confirm("helper", user, "s1", [id], "once")
+    end
+  end
+
+  describe "confirm claims atomically" do
+    test "an unknown id among real ones claims nothing and records no grant", %{
+      plugin: plugin,
+      user: user
+    } do
+      {:ok, {:"needs-confirmation", id}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Kept"}})
+
+      assert {:error, :invalid} =
+               PageActions.confirm("helper", user, "s1", [id, Ecto.UUID.generate()], "session")
+
+      refute Grants.granted?("helper", user.id, "collections:write", "s1")
+      assert {:ok, [_]} = PageActions.pending("helper", user.id, "s1", [id])
+    end
+
+    test "an expired row records no grant", %{plugin: plugin, user: user} do
+      {:ok, {:"needs-confirmation", id}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Stale"}})
+
+      past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
+      Repo.update_all(PendingWrite, set: [expires_at: past])
+
+      assert {:error, :invalid} = PageActions.confirm("helper", user, "s1", [id], "always")
+      refute Grants.granted?("helper", user.id, "collections:write", "s1")
+    end
+  end
+
+  describe "pending writes are bounded" do
+    test "a session cannot park more than the cap", %{plugin: plugin, user: user} do
+      for n <- 1..50 do
+        assert {:ok, {:"needs-confirmation", _}} =
+                 PageActions.collection_create(plugin, ctx(user), %{name: {:some, "C#{n}"}})
+      end
+
+      assert {:error, %{type: :invalid_request}} =
+               PageActions.collection_create(plugin, ctx(user), %{name: {:some, "One more"}})
+
+      assert {:ok, {:"needs-confirmation", _}} =
+               PageActions.collection_create(plugin, ctx(user, "s2"), %{name: {:some, "Other"}})
+    end
+
+    test "expired rows are pruned when a new one is parked", %{plugin: plugin, user: user} do
+      {:ok, {:"needs-confirmation", old}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Old"}})
+
+      past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
+      Repo.update_all(PendingWrite, set: [expires_at: past])
+
+      {:ok, {:"needs-confirmation", _}} =
+        PageActions.collection_create(plugin, ctx(user), %{name: {:some, "New"}})
+
+      assert Repo.get(PendingWrite, old) == nil
+    end
+
+    test "an oversized collection name is refused", %{plugin: plugin, user: user} do
+      long = String.duplicate("a", 201)
+
+      assert {:error, %{type: :invalid_request}} =
+               PageActions.collection_create(plugin, ctx(user), %{name: {:some, long}})
+
+      assert {:error, %{type: :invalid_request}} =
+               PageActions.collection_update(plugin, ctx(user), Ecto.UUID.generate(), %{
+                 name: {:some, long}
+               })
+    end
+  end
+
   describe "media:add" do
     test "a user adds the item to the library through the relay", %{plugin: plugin, user: user} do
       tmdb_id = 900_000_000 + System.unique_integer([:positive])
@@ -255,6 +356,20 @@ defmodule Mydia.Plugins.PageActionsTest do
                PageActions.media_add(plugin, ctx(guest), movie_target(tmdb_id))
 
       assert %{"request_id" => _} = Jason.decode!(json)
+    end
+
+    test "a request stores only the id the relay verified", %{plugin: plugin} do
+      guest = user_fixture(%{role: "guest"})
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      stub_relay_movie(tmdb_id, "The Tin Orchard", 2031)
+      :ok = Grants.grant("helper", guest.id, "media:add", "session", "s1")
+
+      target = %{movie_target(tmdb_id) | "tvdb-id": {:some, 424_242}}
+      assert {:ok, {:done, _json}} = PageActions.media_add(plugin, ctx(guest), target)
+
+      assert [request] = Mydia.MediaRequests.list_requests(requester_id: guest.id)
+      assert request.tmdb_id == tmdb_id
+      assert request.tvdb_id == nil
     end
 
     test "a role that can neither add nor request is refused", %{plugin: plugin} do

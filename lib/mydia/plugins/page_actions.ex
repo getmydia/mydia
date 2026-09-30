@@ -34,6 +34,8 @@ defmodule Mydia.Plugins.PageActions do
   alias Mydia.Settings
 
   @pending_ttl_seconds 3600
+  @max_pending_per_session 50
+  @max_name_length 200
 
   # ── entry points (WIT records in) ──
 
@@ -68,7 +70,8 @@ defmodule Mydia.Plugins.PageActions do
         "smart_rules" => opt(attrs, :"smart-rules-json")
       }
 
-      perform(plugin, ctx, user, "collection_create", args)
+      with :ok <- check_name(args["name"]),
+           do: perform(plugin, ctx, user, "collection_create", args)
     end
   end
 
@@ -83,7 +86,8 @@ defmodule Mydia.Plugins.PageActions do
         |> Enum.reject(fn {_k, v} -> is_nil(v) end)
         |> Map.new()
 
-      perform(plugin, ctx, user, "collection_update", %{"id" => id, "attrs" => changes})
+      with :ok <- check_name(changes["name"]),
+           do: perform(plugin, ctx, user, "collection_update", %{"id" => id, "attrs" => changes})
     end
   end
 
@@ -160,12 +164,8 @@ defmodule Mydia.Plugins.PageActions do
   @spec confirm(String.t(), User.t(), String.t(), [binary()], String.t()) ::
           {:ok, [map()]} | {:error, :invalid | :choice_not_allowed}
   def confirm(slug, %User{} = user, session_id, [_ | _] = ids, choice) do
-    with {:ok, _rows} <- pending(slug, user.id, session_id, ids),
-         :ok <- check_choice(slug, user, choice) do
-      # Claiming deletes the rows, so a second confirmation of the same ids
-      # (a double click) finds nothing left to run.
-      rows = claim(slug, user.id, session_id, ids)
-
+    with :ok <- check_choice(slug, user, choice),
+         {:ok, rows} <- claim(slug, user.id, session_id, ids) do
       rows
       |> Enum.map(& &1.surface)
       |> Enum.uniq()
@@ -232,6 +232,34 @@ defmodule Mydia.Plugins.PageActions do
   end
 
   defp park(slug, user, session_id, op, surface, args, description) do
+    prune_expired(slug, user.id)
+
+    if pending_count(slug, user.id, session_id) >= @max_pending_per_session do
+      {:error, Error.new(:invalid_request, "too many writes are waiting for confirmation")}
+    else
+      insert_pending(slug, user, session_id, op, surface, args, description)
+    end
+  end
+
+  defp prune_expired(slug, user_id) do
+    now = now()
+
+    Repo.delete_all(
+      from p in PendingWrite,
+        where: p.plugin_slug == ^slug and p.user_id == ^user_id and p.expires_at <= ^now
+    )
+  end
+
+  defp pending_count(slug, user_id, session_id) do
+    Repo.aggregate(
+      from(p in PendingWrite,
+        where: p.plugin_slug == ^slug and p.user_id == ^user_id and p.session_id == ^session_id
+      ),
+      :count
+    )
+  end
+
+  defp insert_pending(slug, user, session_id, op, surface, args, description) do
     expires = DateTime.add(now(), @pending_ttl_seconds)
 
     %PendingWrite{}
@@ -252,18 +280,33 @@ defmodule Mydia.Plugins.PageActions do
     end
   end
 
+  # Deleting the rows claims them, so a second confirmation of the same ids (a
+  # double click) finds nothing left to run. Unless every id is claimed nothing
+  # is, and no grant is recorded.
   defp claim(slug, user_id, session_id, ids) do
-    {_count, rows} =
-      Repo.delete_all(
-        from(p in PendingWrite,
-          where:
-            p.plugin_slug == ^slug and p.user_id == ^user_id and p.session_id == ^session_id and
-              p.id in ^ids,
-          select: p
-        )
-      )
+    now = now()
 
-    Enum.sort_by(rows, & &1.inserted_at, DateTime)
+    outcome =
+      Repo.transaction(fn ->
+        {_count, rows} =
+          Repo.delete_all(
+            from(p in PendingWrite,
+              where:
+                p.plugin_slug == ^slug and p.user_id == ^user_id and
+                  p.session_id == ^session_id and p.id in ^ids and p.expires_at > ^now,
+              select: p
+            )
+          )
+
+        if length(rows) == length(Enum.uniq(ids)),
+          do: Enum.sort_by(rows, & &1.inserted_at, DateTime),
+          else: Repo.rollback(:invalid)
+      end)
+
+    case outcome do
+      {:ok, rows} -> {:ok, rows}
+      {:error, :invalid} -> {:error, :invalid}
+    end
   end
 
   # The plugin's grant and the user's role are checked again here: either may
@@ -317,6 +360,13 @@ defmodule Mydia.Plugins.PageActions do
   defp op_allowed?("media_request", user), do: Authorization.can_submit_request?(user)
   defp op_allowed?(_op, _user), do: true
 
+  # The name is shown in the confirmation modal, so it is bounded before it is
+  # parked or described.
+  defp check_name(name) when is_binary(name) and byte_size(name) > @max_name_length,
+    do: {:error, Error.new(:invalid_request, "collection name is too long")}
+
+  defp check_name(_name), do: :ok
+
   defp match_content(target) do
     match = %{
       imdb: opt(target, :"imdb-id"),
@@ -334,13 +384,15 @@ defmodule Mydia.Plugins.PageActions do
   end
 
   defp request_args(target, type) do
-    with {:ok, ref} <- ref_from(target, type),
+    with {:ok, {provider, id} = ref} <- ref_from(target, type),
          {:ok, meta} <- fetch_meta(ref, type) do
+      # Only the id the relay verified is stored; any other id the guest sent
+      # is dropped.
       {:ok,
        %{
          "media_type" => type,
-         "tmdb_id" => opt(target, :"tmdb-id"),
-         "tvdb_id" => opt(target, :"tvdb-id"),
+         "tmdb_id" => if(provider == :tmdb, do: id),
+         "tvdb_id" => if(provider == :tvdb, do: id),
          "title" => meta.title,
          "year" => meta.year
        }}

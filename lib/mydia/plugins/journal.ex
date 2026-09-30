@@ -89,24 +89,55 @@ defmodule Mydia.Plugins.Journal do
 
   defp undo(_user, %JournalEntry{status: "undone"}), do: {:error, :already_undone}
   defp undo(_user, %JournalEntry{status: "irreversible"}), do: {:error, :irreversible}
+  defp undo(_user, %JournalEntry{status: "conflict"}), do: {:error, :conflict}
 
+  # The entry is claimed first with a status-conditional update (applied ->
+  # undone), so a second undo of the same entry finds nothing to claim and the
+  # inverse never runs twice. It is not one transaction with the inverse: the
+  # inverse may run its own transaction and roll it back on a conflict, which
+  # would poison an enclosing one. A claim whose inverse fails is released.
   defp undo(user, %JournalEntry{} = entry) do
     origin = "plugin:#{entry.plugin_slug}"
 
-    case PageWrites.undo(entry.op, entry.args, entry.result, entry.inverse, user, origin) do
-      :ok -> set_status(entry, "undone")
-      {:error, :conflict} -> mark(entry, "conflict", :conflict)
-      {:error, :irreversible} -> mark(entry, "irreversible", :irreversible)
-      {:error, other} -> {:error, other}
+    with :ok <- claim(entry) do
+      result =
+        try do
+          PageWrites.undo(entry.op, entry.args, entry.result, entry.inverse, user, origin)
+        rescue
+          exception ->
+            set_status(entry, "applied")
+            reraise exception, __STACKTRACE__
+        end
+
+      case result do
+        :ok ->
+          {:ok, Repo.get!(JournalEntry, entry.id)}
+
+        {:error, :conflict} ->
+          set_status(entry, "conflict")
+          {:error, :conflict}
+
+        {:error, :irreversible} ->
+          set_status(entry, "irreversible")
+          {:error, :irreversible}
+
+        {:error, other} ->
+          set_status(entry, "applied")
+          {:error, other}
+      end
     end
   end
 
-  defp mark(entry, status, reason) do
-    {:ok, _} = set_status(entry, status)
-    {:error, reason}
+  defp claim(entry) do
+    query = from(e in JournalEntry, where: e.id == ^entry.id and e.status == "applied")
+
+    case Repo.update_all(query, set: [status: "undone"]) do
+      {1, _} -> :ok
+      {0, _} -> {:error, :already_undone}
+    end
   end
 
   defp set_status(entry, status) do
-    entry |> Ecto.Changeset.change(status: status) |> Repo.update()
+    Repo.update_all(from(e in JournalEntry, where: e.id == ^entry.id), set: [status: status])
   end
 end
