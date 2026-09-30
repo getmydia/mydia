@@ -1,7 +1,7 @@
 defmodule Mydia.Metadata.RegionalSources do
   @moduledoc """
   What a user can watch in their home country: in cinemas, coming to cinemas,
-  newest on the streaming services they picked, and titles made there.
+  and newest on the streaming services they picked.
 
   Every source is a TMDB `/discover` query, so Discover's rows, its See all
   grid and the Home widget all go through `Mydia.Metadata.discover/2` and get
@@ -16,9 +16,8 @@ defmodule Mydia.Metadata.RegionalSources do
   alias Mydia.Accounts
   alias Mydia.Accounts.UserPreference
   alias Mydia.Metadata
-  alias Mydia.Metadata.Countries
 
-  @type source :: :in_cinemas | :coming_soon | :made_here | {:service, pos_integer(), String.t()}
+  @type source :: :in_cinemas | :coming_soon | {:service, pos_integer(), String.t()}
 
   @in_cinemas_days 42
   @coming_soon_days 90
@@ -30,7 +29,7 @@ defmodule Mydia.Metadata.RegionalSources do
 
   def sources_for(_country, services, media_type) do
     cinema = if media_type == :movie, do: [:in_cinemas, :coming_soon], else: []
-    cinema ++ service_sources(services) ++ [:made_here]
+    cinema ++ service_sources(services)
   end
 
   @doc "Sources for the Home widget's chip row (movies and TV together)."
@@ -76,10 +75,6 @@ defmodule Mydia.Metadata.RegionalSources do
     ]
   end
 
-  def opts(:made_here, media_type, country, _today) do
-    [origin_country: country, sort_by: default_sort(:made_here, media_type)]
-  end
-
   @doc "The sort a source uses when the user has not picked one."
   def default_sort(:coming_soon, _media_type), do: "primary_release_date.asc"
   def default_sort({:service, _, _}, :tv_show), do: "first_air_date.desc"
@@ -90,12 +85,10 @@ defmodule Mydia.Metadata.RegionalSources do
   def label(:in_cinemas, _country), do: "In cinemas"
   def label(:coming_soon, _country), do: "Coming soon"
   def label({:service, _id, name}, _country), do: "Latest on #{name}"
-  def label(:made_here, country), do: "Made in #{Countries.name(country)}"
 
   @doc "URL-safe name for a source."
   def to_param(:in_cinemas), do: "in_cinemas"
   def to_param(:coming_soon), do: "coming_soon"
-  def to_param(:made_here), do: "made_here"
   def to_param({:service, id, _name}), do: "service-#{id}"
 
   @doc """
@@ -121,9 +114,8 @@ defmodule Mydia.Metadata.RegionalSources do
   end
 
   @doc """
-  Movies and TV for one source, for the Home widget's single rail. Service
-  sources merge newest first; made here alternates, since popularity scores
-  are not comparable across the two lists. Fails only if both fetches fail.
+  Movies and TV for one source, for the Home widget's single rail, merged
+  newest first. Fails only if both fetches fail.
   """
   def fetch_mixed(source, country, extra_opts, today) do
     if movies_only?(source) do
@@ -132,20 +124,17 @@ defmodule Mydia.Metadata.RegionalSources do
       [:movie, :tv_show]
       |> Task.async_stream(&fetch(source, &1, country, extra_opts, today), timeout: :infinity)
       |> Enum.map(fn {:ok, result} -> result end)
-      |> merge_mixed(source)
+      |> merge_mixed()
     end
   end
 
-  defp merge_mixed([{:error, _} = error, {:error, _}], _source), do: error
+  defp merge_mixed([{:error, _} = error, {:error, _}]), do: error
 
-  defp merge_mixed(results, source) do
-    [movies, shows] = Enum.map(results, &ok_or_empty/1)
-
+  defp merge_mixed(results) do
     merged =
-      case source do
-        {:service, _, _} -> Enum.sort_by(movies ++ shows, &date_key/1, :desc)
-        _ -> alternate(movies, shows)
-      end
+      results
+      |> Enum.flat_map(&ok_or_empty/1)
+      |> Enum.sort_by(&date_key/1, :desc)
 
     {:ok, merged}
   end
@@ -155,10 +144,6 @@ defmodule Mydia.Metadata.RegionalSources do
 
   # SearchResult dates are ISO strings or Date structs; both sort as ISO text.
   defp date_key(item), do: to_string(item.release_date || item.first_air_date || "")
-
-  defp alternate([a | as], [b | bs]), do: [a, b | alternate(as, bs)]
-  defp alternate(as, []), do: as
-  defp alternate([], bs), do: bs
 
   @doc "Services TMDB lists for a country, movie and TV lists merged by id."
   def available_services(country) do

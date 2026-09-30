@@ -20,31 +20,27 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
   def regional_rows(assigns) do
     ~H"""
     <div id="discover-regional-rows" class="space-y-2">
+      <div :if={not @has_services} id="discover-services-prompt" class="card bg-base-200 mb-6">
+        <div class="card-body flex-row items-center justify-between gap-4 py-4">
+          <div>
+            <h2 class="font-semibold">Pick your streaming services</h2>
+            <p class="text-sm text-base-content/60">
+              See the latest titles on the services you subscribe to.
+            </p>
+          </div>
+          <button
+            id="discover-services-prompt-open"
+            class="btn btn-primary btn-sm"
+            phx-click="open_services_picker"
+          >
+            Pick services
+          </button>
+        </div>
+      </div>
       <%= for source <- @sources do %>
         <% param = RegionalSources.to_param(source) %>
         <% row = Map.get(@rows, param, %{status: :loading, items: []}) %>
         <% items = if @hide_owned, do: Enum.reject(row.items, & &1.in_library), else: row.items %>
-        <div
-          :if={source == :made_here and not @has_services}
-          id="discover-services-prompt"
-          class="card bg-base-200 mb-6"
-        >
-          <div class="card-body flex-row items-center justify-between gap-4 py-4">
-            <div>
-              <h2 class="font-semibold">Pick your streaming services</h2>
-              <p class="text-sm text-base-content/60">
-                See the latest titles on the services you subscribe to.
-              </p>
-            </div>
-            <button
-              id="discover-services-prompt-open"
-              class="btn btn-primary btn-sm"
-              phx-click="open_services_picker"
-            >
-              Pick services
-            </button>
-          </div>
-        </div>
         <section id={"discover-row-#{param}"} class="mb-6 md:mb-8">
           <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-lg md:text-xl font-semibold truncate">

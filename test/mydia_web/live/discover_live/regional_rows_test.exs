@@ -72,9 +72,6 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
               q["with_watch_providers"] ->
                 "Maple Lantern"
 
-              q["with_origin_country"] ->
-                "Homegrown Lantern"
-
               true ->
                 "Other Lantern"
             end
@@ -109,15 +106,13 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     assert ids == [
              "discover-row-in_cinemas",
              "discover-row-coming_soon",
-             "discover-row-service-8001",
-             "discover-row-made_here"
+             "discover-row-service-8001"
            ]
 
     assert has_element?(view, "#discover-row-in_cinemas", "Cinema Lantern")
     assert has_element?(view, "#discover-row-coming_soon", "Soon Lantern")
     assert has_element?(view, "#discover-row-service-8001", "Latest on Maplestream")
     assert has_element?(view, "#discover-row-service-8001", "Maple Lantern")
-    assert has_element?(view, "#discover-row-made_here", "Made in Canada")
     refute has_element?(view, "#discover-filter-form")
     refute has_element?(view, "#discover-grid")
   end
@@ -160,7 +155,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     assert has_element?(view, "#discover-row-in_cinemas", "Cinema Lantern")
   end
 
-  test "no services: the prompt replaces the service rows", %{
+  test "no services: the prompt sits above the cinema rows", %{
     conn: conn,
     user: user,
     bypass: bypass
@@ -175,8 +170,24 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
     render_async(view, 5_000)
 
-    assert has_element?(view, "#discover-services-prompt")
+    assert has_element?(view, "#discover-regional-rows > #discover-services-prompt:first-child")
+    assert has_element?(view, "#discover-row-in_cinemas")
     refute has_element?(view, "[id^='discover-row-service-']")
+  end
+
+  test "tv with no services shows only the prompt", %{conn: conn, user: user, bypass: bypass} do
+    {:ok, _} =
+      Accounts.update_preference(Accounts.get_user_preference!(user), %{
+        "preferences" => %{"discover_streaming_services" => []}
+      })
+
+    stub_discover(bypass)
+
+    {:ok, view, _html} = live(conn, ~p"/discover?type=tv_show&category=home")
+    render_async(view, 5_000)
+
+    assert has_element?(view, "#discover-services-prompt")
+    refute has_element?(view, "[id^='discover-row-']")
   end
 
   test "a row title opens the detail modal", %{conn: conn, bypass: bypass} do
@@ -216,14 +227,14 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
       {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
       render_async(view, 5_000)
 
-      view |> element("#discover-row-made_here-see-all") |> render_click()
+      view |> element("#discover-row-service-8001-see-all") |> render_click()
 
       assert_patch(
         view,
-        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+        ~p"/discover?#{%{"category" => "home", "source" => "service-8001", "type" => "movie"}}"
       )
 
-      assert_receive {:discover_query, _, %{"with_origin_country" => "CA"}}
+      assert_receive {:discover_query, _, %{"with_watch_providers" => "8001"}}
     end
 
     test "filters keep the source and the source's sort", %{conn: conn, bypass: bypass} do
@@ -260,7 +271,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     test "an unknown or unsaved source falls back to the rows", %{conn: conn, bypass: bypass} do
       stub_discover(bypass)
 
-      for source <- ["service-9999", "bogus"] do
+      for source <- ["service-9999", "bogus", "made_here"] do
         {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=#{source}")
         assert has_element?(view, "#discover-regional-rows")
       end
@@ -272,7 +283,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     test "the country tab returns from See all to the rows", %{conn: conn, bypass: bypass} do
       stub_discover(bypass)
 
-      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=made_here")
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=service-8001")
 
       view |> element("#discover-home-tab") |> render_click()
 
@@ -283,13 +294,13 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
       stub_discover(bypass)
 
       {:ok, view, _html} =
-        live(conn, ~p"/discover?type=movie&category=home&source=made_here&language=fr")
+        live(conn, ~p"/discover?type=movie&category=home&source=service-8001&language=fr")
 
       render_click(view, "clear_filters", %{})
 
       assert_patch(
         view,
-        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+        ~p"/discover?#{%{"category" => "home", "source" => "service-8001", "type" => "movie"}}"
       )
     end
   end

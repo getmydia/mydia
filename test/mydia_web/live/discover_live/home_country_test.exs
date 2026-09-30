@@ -160,7 +160,6 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       refute has_element?(view, "#discover-home-country-picker")
       render_async(view)
       assert has_element?(view, "#discover-regional-rows")
-      assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
     end
 
     test "the saved tab shows on the next mount", %{conn: conn, user: user} do
@@ -195,23 +194,25 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       refute_received {:discover_query, _}
     end
 
-    test "filters apply inside the tab, and the tab's country wins over ?country=",
-         %{conn: conn, user: user, bypass: bypass} do
+    test "filters apply on a See all grid inside the tab", %{
+      conn: conn,
+      user: user,
+      bypass: bypass
+    } do
       stub_discover(bypass)
       set_home_country(user, "CA")
 
       {:ok, view, _html} =
         live(
           conn,
-          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "made_here", "language" => "fr", "country" => "FR"}}"
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "in_cinemas", "language" => "fr"}}"
         )
 
-      assert_receive {:discover_query,
-                      %{"with_origin_country" => "CA", "with_original_language" => "fr"}}
+      assert_receive {:discover_query, %{"region" => "CA", "with_original_language" => "fr"} = q}
+      refute Map.has_key?(q, "with_origin_country")
 
       assert has_element?(view, "#discover-home-tab.tab-active")
       assert has_element?(view, "#discover-filter-form")
-      refute has_element?(view, "#discover-filter-form select[name='country']")
     end
 
     test "hide-owned auto-advance works on the tab", %{conn: conn, user: user, bypass: bypass} do
@@ -233,7 +234,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       {:ok, view, _html} =
         live(
           conn,
-          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "made_here"}}"
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "in_cinemas"}}"
         )
 
       wait_until(fn -> has_element?(view, "#discover-grid h3", "Paper Comet") end)
@@ -273,7 +274,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
           selected_year: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
-          source: :made_here,
+          source: :in_cinemas,
           default_sort: "popularity.desc",
           regional_rows: %{},
           current_scope: %Scope{Scope.unrestricted() | max_content_age: 12}
@@ -284,7 +285,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
 
       assert_receive {:discover_query,
                       %{
-                        "with_origin_country" => "CA",
+                        "region" => "CA",
                         "certification_country" => "US",
                         "certification.lte" => "PG"
                       }}
