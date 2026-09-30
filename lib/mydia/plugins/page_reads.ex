@@ -13,7 +13,8 @@ defmodule Mydia.Plugins.PageReads do
   own media requests. A download is returned when its media item (or its
   episode's media item) is the target of a request the user made. Downloads
   the user did not request, including everything an admin queued by hand, are
-  not returned, even to admins.
+  not returned, even to admins. Any request by the user counts, whatever its
+  status (pending, approved or rejected).
   """
 
   import Ecto.Query, only: [from: 2]
@@ -153,17 +154,26 @@ defmodule Mydia.Plugins.PageReads do
   end
 
   defp catalog_hits(query, types, limit) do
-    config = Metadata.default_relay_config()
+    if String.trim(query) == "" do
+      {:ok, []}
+    else
+      config = Metadata.default_relay_config()
 
-    hits =
-      Enum.flat_map(types, fn type ->
-        case Metadata.search_cached(config, query, media_type: type) do
-          {:ok, results} -> Enum.map(results, &catalog_hit(&1, type))
-          {:error, _} -> []
-        end
-      end)
+      outcomes =
+        Enum.map(types, fn type ->
+          with {:ok, results} <- Metadata.search_cached(config, query, media_type: type) do
+            {:ok, Enum.map(results, &catalog_hit(&1, type))}
+          end
+        end)
 
-    {:ok, Enum.take(hits, limit)}
+      case Enum.split_with(outcomes, &match?({:ok, _}, &1)) do
+        {[], [_ | _]} ->
+          {:error, Error.new(:network_error, "catalog search is unavailable")}
+
+        {ok, _failed} ->
+          {:ok, ok |> Enum.flat_map(fn {:ok, hits} -> hits end) |> Enum.take(limit)}
+      end
+    end
   end
 
   defp catalog_hit(r, type) do

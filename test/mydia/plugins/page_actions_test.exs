@@ -57,17 +57,11 @@ defmodule Mydia.Plugins.PageActionsTest do
   # Serves one movie from a Bypass relay and points the default relay config at
   # it for the rest of the test.
   defp stub_relay_movie(tmdb_id, title, year) do
-    bypass = Bypass.open()
-    previous = Application.get_env(:mydia, :metadata_relay_url)
-    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+    bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
 
     language = Mydia.Metadata.default_relay_config().options.language
 
     on_exit(fn ->
-      if previous,
-        do: Application.put_env(:mydia, :metadata_relay_url, previous),
-        else: Application.delete_env(:mydia, :metadata_relay_url)
-
       Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{language}::official")
     end)
 
@@ -380,15 +374,7 @@ defmodule Mydia.Plugins.PageActionsTest do
     end
 
     test "a title the relay does not know is not found", %{plugin: plugin, user: user} do
-      bypass = Bypass.open()
-      previous = Application.get_env(:mydia, :metadata_relay_url)
-      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
-
-      on_exit(fn ->
-        if previous,
-          do: Application.put_env(:mydia, :metadata_relay_url, previous),
-          else: Application.delete_env(:mydia, :metadata_relay_url)
-      end)
+      bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
 
       Bypass.stub(bypass, "GET", "/tmdb/movies/900000002", fn conn ->
         Plug.Conn.resp(conn, 404, "{}")
