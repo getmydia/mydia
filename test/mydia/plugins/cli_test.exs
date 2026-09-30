@@ -57,4 +57,10 @@ defmodule Mydia.Plugins.CLITest do
       assert {:error, "invalid arguments"} = CLI.run(["frobnicate"])
     end)
   end
+
+  test "run!/1 raises on failure so the rpc client exits non-zero" do
+    capture_io(:stderr, fn ->
+      assert_raise RuntimeError, ~r/invalid arguments/, fn -> CLI.run!(["frobnicate"]) end
+    end)
+  end
 end

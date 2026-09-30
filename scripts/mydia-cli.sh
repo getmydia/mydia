@@ -51,7 +51,7 @@ run_plugin_command() {
         fi
         set -- "$@" "$arg"
     done
-    run_mydia rpc "Mydia.Plugins.CLI.run($(elixir_args "$@"))"
+    run_mydia rpc "Mydia.Plugins.CLI.run!($(elixir_args "$@"))"
 }
 
 # Prints the arguments as an Elixir list of strings

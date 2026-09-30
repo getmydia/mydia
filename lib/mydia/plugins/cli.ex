@@ -28,6 +28,19 @@ defmodule Mydia.Plugins.CLI do
 
   def run(_args), do: usage()
 
+  @doc """
+  Like `run/1`, but raises on failure. `bin/mydia rpc` exits 0 whatever the
+  expression returns, and a raise fails the rpc client without touching the
+  live node, so this is what gives `mydia-cli` a non-zero exit status.
+  """
+  @spec run!([String.t()]) :: :ok
+  def run!(args) do
+    case run(args) do
+      :ok -> :ok
+      {:error, message} -> raise RuntimeError, message: "mydia-cli plugin: " <> message
+    end
+  end
+
   defp install(wasm, manifest, opts) do
     case Plugins.install_file(wasm, manifest, approve: Keyword.get(opts, :approve, false)) do
       {:ok, :inactive} ->
