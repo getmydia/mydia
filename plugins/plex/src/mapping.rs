@@ -337,23 +337,14 @@ mod tests {
     const NOW: i64 = 1_767_225_600;
     const B: &str = "http://plex.test";
 
-    fn meta(
-        rk: &str,
-        kind: &str,
-        guids: &[&str],
-        season: Option<u32>,
-        ep: Option<u32>,
-    ) -> Metadata {
+    fn meta(rk: &str, guids: &[&str], season: Option<u32>, ep: Option<u32>) -> Metadata {
         Metadata {
             rating_key: rk.into(),
-            kind: kind.into(),
-            title: String::new(),
             view_count: 0,
             view_offset: None,
             last_viewed_at: None,
             parent_index: season,
             index: ep,
-            grandparent_rating_key: None,
             guids: guids.iter().map(|g| Guid { id: g.to_string() }).collect(),
         }
     }
@@ -366,7 +357,6 @@ mod tests {
     fn a_movie_maps_and_indexes_every_id_it_has() {
         let e = movie_entries(&meta(
             "100",
-            "movie",
             &["imdb://tt9000001", "tmdb://4001"],
             None,
             None,
@@ -393,7 +383,7 @@ mod tests {
                 id: "tvdb://378000".into(),
             },
         ]);
-        let e = episode_entries(&show, &meta("201", "episode", &[], Some(1), Some(2)));
+        let e = episode_entries(&show, &meta("201", &[], Some(1), Some(2)));
         assert_eq!(
             keys(&e),
             vec![
@@ -418,7 +408,7 @@ mod tests {
             tmdb: None,
             tvdb: Some(1),
         };
-        assert!(episode_entries(&show, &meta("202", "episode", &[], None, Some(2))).is_empty());
+        assert!(episode_entries(&show, &meta("202", &[], None, Some(2))).is_empty());
     }
 
     #[test]

@@ -19,18 +19,12 @@ pub struct Section {
     pub key: String,
     #[serde(rename = "type")]
     pub kind: String,
-    #[serde(default)]
-    pub title: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Metadata {
     #[serde(rename = "ratingKey", deserialize_with = "string_or_number")]
     pub rating_key: String,
-    #[serde(rename = "type", default)]
-    pub kind: String,
-    #[serde(default)]
-    pub title: String,
     #[serde(rename = "viewCount", default)]
     pub view_count: u32,
     #[serde(rename = "viewOffset", default)]
@@ -41,12 +35,6 @@ pub struct Metadata {
     pub parent_index: Option<u32>,
     #[serde(default)]
     pub index: Option<u32>,
-    #[serde(
-        rename = "grandparentRatingKey",
-        default,
-        deserialize_with = "opt_string_or_number"
-    )]
-    pub grandparent_rating_key: Option<String>,
     #[serde(rename = "Guid", default)]
     pub guids: Vec<Guid>,
 }
@@ -54,7 +42,6 @@ pub struct Metadata {
 #[derive(Debug, Clone)]
 pub struct Page {
     pub items: Vec<Metadata>,
-    pub total: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -73,8 +60,6 @@ struct Directories {
 struct Metadatas {
     #[serde(rename = "Metadata", default)]
     metadata: Vec<Metadata>,
-    #[serde(rename = "totalSize", default)]
-    total_size: Option<u64>,
 }
 
 fn string_or_number<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
@@ -82,17 +67,6 @@ fn string_or_number<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error>
         serde_json::Value::String(s) => Ok(s),
         serde_json::Value::Number(n) => Ok(n.to_string()),
         other => Err(serde::de::Error::custom(format!(
-            "expected string or number, got {other}"
-        ))),
-    }
-}
-
-fn opt_string_or_number<'de, D: Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
-    match Option::<serde_json::Value>::deserialize(d)? {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(serde_json::Value::String(s)) => Ok(Some(s)),
-        Some(serde_json::Value::Number(n)) => Ok(Some(n.to_string())),
-        Some(other) => Err(serde::de::Error::custom(format!(
             "expected string or number, got {other}"
         ))),
     }
@@ -130,7 +104,6 @@ pub fn section_items(
     )?;
     Ok(Page {
         items: c.media_container.metadata,
-        total: c.media_container.total_size,
     })
 }
 
@@ -159,7 +132,6 @@ pub fn section_episodes(
     )?;
     Ok(Page {
         items: c.media_container.metadata,
-        total: c.media_container.total_size,
     })
 }
 
@@ -356,7 +328,6 @@ mod tests {
             r#"{"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"77","type":"movie","title":"The Glass Orchard","viewCount":2,"viewOffset":5000,"lastViewedAt":1700000100,"Guid":[{"id":"tmdb://9001"}]}]}}"#,
         );
         let page = section_items(&mut host, BASE, "srv", "1", 400, Some(1_700_000_000)).unwrap();
-        assert_eq!(page.total, Some(1));
         let item = &page.items[0];
         assert_eq!(
             (item.rating_key.as_str(), item.view_count, item.view_offset),
@@ -408,7 +379,6 @@ mod tests {
         );
         let eps = all_leaves(&mut host, BASE, "srv", "10").unwrap();
         assert_eq!((eps[0].parent_index, eps[0].index), (Some(1), Some(2)));
-        assert_eq!(eps[0].grandparent_rating_key.as_deref(), Some("10"));
     }
 
     #[test]

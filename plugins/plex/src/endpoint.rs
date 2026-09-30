@@ -123,10 +123,6 @@ fn refused_as_unreachable(e: PlexError) -> PlexError {
     }
 }
 
-pub fn invalidate(host: &mut dyn Host) -> Result<(), PlexError> {
-    store::delete(host, store::ENDPOINT_CURRENT)
-}
-
 fn remember(host: &mut dyn Host, url: &str) -> Result<(), PlexError> {
     let now = host.now();
     store::put_json(

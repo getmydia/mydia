@@ -9,12 +9,6 @@ pub struct ExternalIds {
     pub tvdb: Option<i64>,
 }
 
-impl ExternalIds {
-    pub fn is_empty(&self) -> bool {
-        self.imdb.is_none() && self.tmdb.is_none() && self.tvdb.is_none()
-    }
-}
-
 pub fn parse_guids(guids: &[Guid]) -> ExternalIds {
     let mut ids = ExternalIds::default();
     for g in guids {

@@ -805,14 +805,11 @@ mod tests {
     fn meta(rk: &str, views: u32, offset_ms: Option<u64>, last: Option<i64>) -> Metadata {
         Metadata {
             rating_key: rk.into(),
-            kind: "movie".into(),
-            title: String::new(),
             view_count: views,
             view_offset: offset_ms,
             last_viewed_at: last,
             parent_index: None,
             index: None,
-            grandparent_rating_key: None,
             guids: vec![],
         }
     }

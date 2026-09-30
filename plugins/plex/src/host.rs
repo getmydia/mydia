@@ -160,7 +160,6 @@ pub mod fake {
     #[derive(Debug, Clone)]
     pub struct Sent {
         pub link: Option<String>,
-        pub method: String,
         pub url: String,
         pub headers: Vec<(String, String)>,
         pub body: Option<String>,
@@ -281,7 +280,6 @@ pub mod fake {
         ) -> Result<OutboundResponse, HostError> {
             self.sent.push(Sent {
                 link: link.map(str::to_string),
-                method: req.method.clone(),
                 url: req.url.clone(),
                 headers: req.headers.clone(),
                 body: req.body.clone(),
