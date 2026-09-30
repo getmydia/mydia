@@ -228,6 +228,13 @@ mod tests {
         assert_eq!(options("provider"), labels);
         assert_eq!(options("model_choice"), vec!["Users can choose", "Admin model only"]);
 
+        for field in schema {
+            for p in field["visible_when"]["provider"].as_array().into_iter().flatten() {
+                let p = p.as_str().unwrap();
+                assert!(p.is_empty() || labels.iter().any(|l| l == p), "visible_when names unknown provider {p:?}");
+            }
+        }
+
         let hosts: Vec<String> = manifest["capabilities"]["net:http"]
             .as_array()
             .unwrap()

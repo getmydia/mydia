@@ -63,7 +63,7 @@ pub fn missing_message(settings: &Value) -> &'static str {
 pub fn parse(status: u16, body: &str) -> Result<Vec<ModelInfo>, String> {
     let v: Value = serde_json::from_str(body).map_err(|_| format!("The model list answered {status} with something that is not JSON."))?;
     if !(200..300).contains(&status) {
-        let detail = clip(v["error"]["message"].as_str().unwrap_or("no detail"), 200);
+        let detail = clip(v["error"]["message"].as_str().or(v["error"].as_str()).unwrap_or("no detail"), 200);
         return Err(format!("The model list answered {status}: {detail}"));
     }
     let data = v["data"].as_array().ok_or("The model list had no data.")?;
@@ -186,6 +186,12 @@ mod tests {
         assert_eq!(decode_pick("{not json", "OpenAI"), None);
         assert_eq!(decode_pick(r#"{"provider":"OpenAI","model":5}"#, "OpenAI"), None);
         assert_eq!(decode_pick(r#"{"provider":"OpenAI"}"#, "OpenAI"), None);
+    }
+
+    #[test]
+    fn error_detail_falls_back_to_a_plain_string_error() {
+        let e = parse(404, r#"{"error":"model list unavailable"}"#).err().unwrap();
+        assert!(e.contains("404") && e.contains("model list unavailable"), "{e}");
     }
 
     #[test]

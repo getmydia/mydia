@@ -176,7 +176,8 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
     } else if host::kv_set(&key, &models::encode_pick(provider::selected(&settings).label, &pick)).is_err() {
         return respond_json(200, json!({"error": "Could not save your model choice."}));
     }
-    respond_json(200, json!({"current": models::effective(&settings, Some(pick.as_str()).filter(|p| !p.is_empty()))}))
+    let picked = (!pick.is_empty()).then_some(pick.as_str());
+    respond_json(200, json!({"current": models::effective(&settings, picked)}))
 }
 
 fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
