@@ -6,12 +6,14 @@ defmodule Mydia.Jobs.PluginSchedulerTest do
   alias Mydia.Jobs.PluginScheduler
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Instance
+  alias Mydia.Plugins.Instances
   alias Mydia.Repo
   alias Mydia.Settings
-  alias Mydia.Settings.PluginConfig
 
-  # Creates a plugin config. opts: :interval (manifest schedule), :granted
-  # (whether schedule:interval is granted), :last (last_scheduled_at), :failures.
+  # Creates a plugin config plus its default instance. opts: :interval (manifest
+  # schedule), :granted (schedule:interval granted), :last (instance
+  # last_scheduled_at), :failures (instance schedule_failures).
   defp install!(slug, opts) do
     interval = Keyword.get(opts, :interval, 5)
     granted? = Keyword.get(opts, :granted, true)
@@ -45,18 +47,20 @@ defmodule Mydia.Jobs.PluginSchedulerTest do
       })
 
     attrs =
-      [last_scheduled_at: opts[:last], consecutive_schedule_failures: opts[:failures] || 0]
+      [last_scheduled_at: opts[:last], schedule_failures: opts[:failures] || 0]
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+      |> Map.new()
 
-    config |> Ecto.Changeset.change(Map.new(attrs)) |> Repo.update!()
+    slug |> Instances.default_instance() |> Ecto.Changeset.change(attrs) |> Repo.update!()
+    config
   end
 
-  defp reload(slug), do: Repo.get_by!(PluginConfig, slug: slug)
+  defp reload_instance(slug), do: Repo.get!(Instance, Instances.default_instance(slug).id)
 
-  # An invoker that records the slugs it was asked to run and returns `result`.
+  # An invoker that records the {slug, instance_id} it was asked to run.
   defp recording_invoker(test_pid, result) do
-    fn slug ->
-      send(test_pid, {:invoked, slug})
+    fn slug, instance_id ->
+      send(test_pid, {:invoked, slug, instance_id})
       result
     end
   end
@@ -65,76 +69,81 @@ defmodule Mydia.Jobs.PluginSchedulerTest do
     assert PluginScheduler.effective_interval(5, 0) == 5
     assert PluginScheduler.effective_interval(5, 1) == 10
     assert PluginScheduler.effective_interval(5, 2) == 20
-    # Capped at 2^4.
     assert PluginScheduler.effective_interval(5, 99) == 5 * 16
   end
 
-  test "a never-run plugin is due and gets invoked" do
+  test "a never-run instance is due and gets invoked with its id" do
     install!("p", last: nil)
+    id = Instances.default_instance("p").id
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    assert_received {:invoked, "p"}
+    assert_received {:invoked, "p", ^id}
   end
 
-  test "a recently-run plugin is not due" do
-    recent = DateTime.utc_now() |> DateTime.add(-1, :minute)
-    install!("p", interval: 30, last: recent)
+  test "each enabled instance of a plugin keeps its own clock" do
+    install!("p", last: DateTime.utc_now())
+    {:ok, due} = Instances.create("p", %{name: "Second"})
+    {:ok, off} = Instances.create("p", %{name: "Off", enabled: false})
 
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    refute_received {:invoked, "p"}
+
+    due_id = due.id
+    off_id = off.id
+    assert_received {:invoked, "p", ^due_id}
+    refute_received {:invoked, "p", ^off_id}
+    refute_received {:invoked, "p", _other}
+  end
+
+  test "a recently-run instance is not due" do
+    install!("p", interval: 30, last: DateTime.add(DateTime.utc_now(), -1, :minute))
+    PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
+    refute_received {:invoked, "p", _}
   end
 
   test "a plugin without the schedule:interval grant never ticks (deny-by-default)" do
     install!("p", granted: false, last: nil)
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    refute_received {:invoked, "p"}
+    refute_received {:invoked, "p", _}
   end
 
   test "success writes last_scheduled_at and resets the failure counter" do
     install!("p", last: nil, failures: 3)
-    now = DateTime.utc_now()
+    PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
 
-    PluginScheduler.tick(now, recording_invoker(self(), {:ok, %{}}))
-
-    config = reload("p")
-    assert config.consecutive_schedule_failures == 0
-    refute is_nil(config.last_scheduled_at)
+    instance = reload_instance("p")
+    assert instance.schedule_failures == 0
+    refute is_nil(instance.last_scheduled_at)
   end
 
   test "failure increments the backoff counter" do
     install!("p", last: nil, failures: 1)
-
-    PluginScheduler.tick(DateTime.utc_now(), fn _ -> {:error, :boom} end)
-
-    assert reload("p").consecutive_schedule_failures == 2
+    PluginScheduler.tick(DateTime.utc_now(), fn _, _ -> {:error, :boom} end)
+    assert reload_instance("p").schedule_failures == 2
   end
 
-  test "a busy plugin is skipped, leaving its bookkeeping untouched" do
+  test "a busy instance is skipped, leaving its bookkeeping untouched" do
     install!("p", last: nil, failures: 2)
 
-    PluginScheduler.tick(DateTime.utc_now(), fn _ ->
+    PluginScheduler.tick(DateTime.utc_now(), fn _, _ ->
       {:error, %Error{type: :busy, message: "in flight"}}
     end)
 
-    config = reload("p")
-    # Untouched: no last_scheduled_at write, no failure bump.
-    assert is_nil(config.last_scheduled_at)
-    assert config.consecutive_schedule_failures == 2
+    instance = reload_instance("p")
+    assert is_nil(instance.last_scheduled_at)
+    assert instance.schedule_failures == 2
   end
 
-  test "backoff delays the next tick for a failing plugin" do
-    # 5-min base, 2 failures -> effective 20 min. Last run 10 min ago: not due.
-    ten_ago = DateTime.utc_now() |> DateTime.add(-10, :minute)
-    install!("p", interval: 5, last: ten_ago, failures: 2)
+  test "backoff delays the next tick for a failing instance" do
+    install!("p", interval: 5, last: DateTime.add(DateTime.utc_now(), -10, :minute), failures: 2)
 
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    refute_received {:invoked, "p"}
+    refute_received {:invoked, "p", _}
 
-    # 25 min ago: past the 20-min backoff window -> due.
-    twentyfive_ago = DateTime.utc_now() |> DateTime.add(-25, :minute)
-    reload("p") |> Ecto.Changeset.change(last_scheduled_at: twentyfive_ago) |> Repo.update!()
+    reload_instance("p")
+    |> Ecto.Changeset.change(last_scheduled_at: DateTime.add(DateTime.utc_now(), -25, :minute))
+    |> Repo.update!()
 
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    assert_received {:invoked, "p"}
+    assert_received {:invoked, "p", _}
   end
 
   test "connections_invalid in a result errors only active connections" do
@@ -153,6 +162,6 @@ defmodule Mydia.Jobs.PluginSchedulerTest do
     config |> Ecto.Changeset.change(enabled: false) |> Repo.update!()
 
     PluginScheduler.tick(DateTime.utc_now(), recording_invoker(self(), {:ok, %{}}))
-    refute_received {:invoked, "p"}
+    refute_received {:invoked, "p", _}
   end
 end

@@ -247,6 +247,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       :ok ->
         {:noreply, put_flash(socket, :info, "Test #{event_type} dispatched to #{slug}.")}
 
+      {:error, :no_instance} ->
+        {:noreply, put_flash(socket, :error, "#{slug} has no enabled instance to test.")}
+
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "#{slug} is not running — enable it first.")}
     end

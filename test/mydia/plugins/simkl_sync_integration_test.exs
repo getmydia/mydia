@@ -15,6 +15,7 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Kv
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
@@ -200,7 +201,9 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
       Plug.Conn.resp(conn, 200, ~s({"added":{"movies":0,"shows":0}}))
     end)
 
-    assert {:ok, result} = Plugins.invoke_plugin_schedule(@slug)
+    assert {:ok, result} =
+             Plugins.invoke_plugin_schedule(@slug, Instances.default_instance(@slug).id)
+
     # Movie + episode both pulled.
     assert result["pulled"] >= 2
     assert result["pushed"] >= 1
@@ -270,7 +273,8 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
       Plug.Conn.resp(conn, 200, ~s({"added":{"movies":0,"shows":0}}))
     end)
 
-    assert {:ok, _result} = Plugins.invoke_plugin_schedule(@slug)
+    assert {:ok, _result} =
+             Plugins.invoke_plugin_schedule(@slug, Instances.default_instance(@slug).id)
 
     refute Collections.is_favorite?(Scope.for_user(user), owned.id),
            "an item we pushed must never be favorited back"
@@ -284,7 +288,9 @@ defmodule Mydia.Plugins.SimklSyncIntegrationTest do
       Plug.Conn.resp(conn, 401, ~s({"error":"unauthorized"}))
     end)
 
-    assert {:ok, result} = Plugins.invoke_plugin_schedule(@slug)
+    assert {:ok, result} =
+             Plugins.invoke_plugin_schedule(@slug, Instances.default_instance(@slug).id)
+
     assert user.id in result["connections_invalid"]
   end
 end
