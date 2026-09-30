@@ -58,9 +58,30 @@ defmodule Mydia.Plugins.PageWrites do
   @spec surface_label(String.t()) :: String.t()
   def surface_label(surface), do: Map.get(@surface_labels, surface, surface)
 
-  @spec execute(String.t(), map(), User.t(), String.t()) ::
+  @doc """
+  Does the network work a write needs, so the caller can keep it out of a
+  database transaction. Pass the result to `execute/5`. Ops that need nothing
+  return `{:ok, nil}`.
+  """
+  @spec prepare(String.t(), map(), User.t()) :: {:ok, map() | nil} | {:error, Error.t()}
+  def prepare("media_add", args, user) do
+    type = media_type_atom(args["media_type"])
+    ref = {provider_atom(args["provider"]), args["provider_id"]}
+    defaults = Media.AddDefaults.resolve(user, type)
+
+    case Media.Add.resolve_attrs(ref, type, nil, Media.AddDefaults.to_add_opts(defaults)) do
+      {:ok, attrs} -> {:ok, %{attrs: attrs, defaults: defaults}}
+      {:error, reason} -> {:error, write_error("media-add", reason)}
+    end
+  end
+
+  def prepare(_op, _args, _user), do: {:ok, nil}
+
+  @spec execute(String.t(), map(), User.t(), String.t(), map() | nil) ::
           {:ok, map(), inverse()} | {:error, Error.t()}
-  def execute("watch_state", args, user, origin) do
+  def execute(op, args, user, origin, prepared \\ nil)
+
+  def execute("watch_state", args, user, origin, _prepared) do
     content = content_kw(args["content"])
     prior = progress_snapshot(user.id, content)
 
@@ -70,7 +91,7 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("favorite_add", %{"media_item_id" => id}, user, _origin) do
+  def execute("favorite_add", %{"media_item_id" => id}, user, _origin, _prepared) do
     if Collections.is_favorite?(Scope.for_user(user), id) do
       {:ok, %{"status" => "already-favorited"}, :noop}
     else
@@ -83,7 +104,7 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("collection_create", args, user, _origin) do
+  def execute("collection_create", args, user, _origin, _prepared) do
     attrs =
       args
       |> Map.take(~w(name description type smart_rules))
@@ -100,7 +121,7 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("collection_update", %{"id" => id, "attrs" => attrs}, user, _origin) do
+  def execute("collection_update", %{"id" => id, "attrs" => attrs}, user, _origin, _prepared) do
     attrs = Map.take(attrs, @collection_fields)
     keys = Map.keys(attrs)
 
@@ -114,7 +135,13 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("collection_add_items", %{"id" => id, "media_item_ids" => ids}, user, _origin) do
+  def execute(
+        "collection_add_items",
+        %{"id" => id, "media_item_ids" => ids},
+        user,
+        _origin,
+        _prepared
+      ) do
     with {:ok, c} <- manual_collection(user, id) do
       present = Collections.item_ids_in(c, ids)
       added = ids |> Enum.uniq() |> Enum.reject(&MapSet.member?(present, &1))
@@ -132,7 +159,13 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("collection_remove_items", %{"id" => id, "media_item_ids" => ids}, user, _origin) do
+  def execute(
+        "collection_remove_items",
+        %{"id" => id, "media_item_ids" => ids},
+        user,
+        _origin,
+        _prepared
+      ) do
     with {:ok, c} <- manual_collection(user, id) do
       result =
         atomically(fn ->
@@ -149,7 +182,7 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("media_request", args, user, _origin) do
+  def execute("media_request", args, user, _origin, _prepared) do
     attrs = %{
       media_type: args["media_type"],
       title: args["title"],
@@ -167,26 +200,26 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("media_add", args, user, _origin) do
-    type = media_type_atom(args["media_type"])
-    ref = {provider_atom(args["provider"]), args["provider_id"]}
+  def execute("media_add", args, user, _origin, prepared) do
     scope = Scope.for_user(user)
-    defaults = Media.AddDefaults.resolve(user, type)
 
-    case Media.Add.from_provider(scope, ref, type, nil, Media.AddDefaults.to_add_opts(defaults)) do
-      {:ok, item} ->
-        Mydia.Search.maybe_queue_search(item, defaults.search_on_add)
-        {:ok, %{"media_item_id" => item.id}, %{"media_item_id" => item.id}}
+    with {:ok, %{attrs: attrs, defaults: defaults}} <-
+           prepared_or_prepare("media_add", args, user, prepared) do
+      case Media.Add.from_attrs(scope, attrs, nil, Media.AddDefaults.to_add_opts(defaults)) do
+        {:ok, item} ->
+          Mydia.Search.maybe_queue_search(item, defaults.search_on_add)
+          {:ok, %{"media_item_id" => item.id}, %{"media_item_id" => item.id}}
 
-      {:error, {:already_in_library, item}} ->
-        with {:ok, _} <- MediaRequests.auto_approve_matching_requests(item, []) do
-          {:ok, %{"media_item_id" => item.id, "status" => "already-in-library"}, :noop}
-        else
-          {:error, reason} -> {:error, write_error("media-add", reason)}
-        end
+        {:error, {:already_in_library, item}} ->
+          with {:ok, _} <- MediaRequests.auto_approve_matching_requests(item, []) do
+            {:ok, %{"media_item_id" => item.id, "status" => "already-in-library"}, :noop}
+          else
+            {:error, reason} -> {:error, write_error("media-add", reason)}
+          end
 
-      {:error, reason} ->
-        {:error, write_error("media-add", reason)}
+        {:error, reason} ->
+          {:error, write_error("media-add", reason)}
+      end
     end
   end
 
@@ -508,6 +541,9 @@ defmodule Mydia.Plugins.PageWrites do
 
   defp provider_atom("tmdb"), do: :tmdb
   defp provider_atom("tvdb"), do: :tvdb
+
+  defp prepared_or_prepare(op, args, user, nil), do: prepare(op, args, user)
+  defp prepared_or_prepare(_op, _args, _user, prepared), do: {:ok, prepared}
 
   defp write_error(op, %Ecto.Changeset{} = cs),
     do: Error.new(:invalid_request, "#{op}: #{inspect(cs.errors)}")

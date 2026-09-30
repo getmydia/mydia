@@ -209,25 +209,30 @@ defmodule Mydia.Plugins.PageActions do
 
   # The write and its journal entry commit together, or neither does.
   defp execute_and_journal(slug, user, op, args, description, batch_id) do
-    outcome =
-      Repo.transaction(fn ->
-        with {:ok, result, inverse} <- PageWrites.execute(op, args, user, "plugin:#{slug}"),
-             {:ok, _entry} <-
-               Journal.record(slug, user.id, op, args, result, inverse, description, batch_id) do
-          result
-        else
-          {:error, %Error{} = error} ->
-            Repo.rollback(error)
+    # Network work (relay lookups) happens before the transaction opens, so the
+    # SQLite write lock is never held across a round trip.
+    with {:ok, prepared} <- PageWrites.prepare(op, args, user) do
+      outcome =
+        Repo.transaction(fn ->
+          with {:ok, result, inverse} <-
+                 PageWrites.execute(op, args, user, "plugin:#{slug}", prepared),
+               {:ok, _entry} <-
+                 Journal.record(slug, user.id, op, args, result, inverse, description, batch_id) do
+            result
+          else
+            {:error, %Error{} = error} ->
+              Repo.rollback(error)
 
-          {:error, _changeset} ->
-            Repo.rollback(Error.new(:unknown, "could not record the write in the journal"))
-        end
-      end)
+            {:error, _changeset} ->
+              Repo.rollback(Error.new(:unknown, "could not record the write in the journal"))
+          end
+        end)
 
-    case outcome do
-      {:ok, result} -> {:ok, {:done, Jason.encode!(result)}}
-      {:error, %Error{} = error} -> {:error, error}
-      {:error, _} -> {:error, Error.new(:unknown, "the write was rolled back")}
+      case outcome do
+        {:ok, result} -> {:ok, {:done, Jason.encode!(result)}}
+        {:error, %Error{} = error} -> {:error, error}
+        {:error, _} -> {:error, Error.new(:unknown, "the write was rolled back")}
+      end
     end
   end
 

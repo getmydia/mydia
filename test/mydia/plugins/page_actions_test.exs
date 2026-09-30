@@ -326,6 +326,34 @@ defmodule Mydia.Plugins.PageActionsTest do
                Journal.list("helper", user.id)
     end
 
+    test "the relay is consulted before the write transaction, not inside it", %{user: user} do
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      stub_relay_movie(tmdb_id, "The Tin Orchard", 2031)
+
+      args = %{
+        "media_type" => "movie",
+        "provider" => "tmdb",
+        "provider_id" => tmdb_id,
+        "title" => "The Tin Orchard",
+        "year" => 2031
+      }
+
+      assert {:ok, prepared} = Mydia.Plugins.PageWrites.prepare("media_add", args, user)
+
+      # With the relay unreachable, executing the prepared write still works:
+      # it does no network work of its own.
+      Application.put_env(:mydia, :metadata_relay_url, "http://127.0.0.1:1")
+
+      assert {:ok, %{"media_item_id" => _}, _inverse} =
+               Mydia.Plugins.PageWrites.execute(
+                 "media_add",
+                 args,
+                 user,
+                 "plugin:helper",
+                 prepared
+               )
+    end
+
     test "without a grant the confirmation text carries the relay title", %{
       plugin: plugin,
       user: user
