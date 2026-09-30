@@ -7,9 +7,12 @@ const FRAME_MESSAGES = ["confirmed", "denied", "expired", "token"]
 
 const PluginFrame = {
   mounted() {
-    this.frame = this.el.querySelector("iframe")
+    // The iframe is rendered after the socket connects, so it is looked up on
+    // each message rather than once here.
+    this.frame = () => this.el.querySelector("iframe")
     this.onMessage = (event) => {
-      if (!this.frame || event.source !== this.frame.contentWindow) return
+      const frame = this.frame()
+      if (!frame || event.source !== frame.contentWindow) return
       const data = event.data
       if (!data || data.mydia !== "confirm" || !Array.isArray(data.ids)) return
       const ids = data.ids.filter((id) => typeof id === "string").slice(0, 50)
@@ -20,7 +23,7 @@ const PluginFrame = {
       if (!message || !FRAME_MESSAGES.includes(message.mydia)) return
       // The frame's origin is "null", so a target origin cannot be named. The
       // message goes to this iframe's own window only.
-      this.frame?.contentWindow?.postMessage(message, "*")
+      this.frame()?.contentWindow?.postMessage(message, "*")
     })
   },
   destroyed() {

@@ -142,4 +142,78 @@ defmodule MydiaWeb.PluginPageLiveTest do
 
     assert user_id == user.id
   end
+
+  test "the static render carries no frame; the connected frame's token matches the session",
+       %{conn: conn} do
+    html = conn |> get(~p"/plugins/#{@slug}") |> html_response(200)
+    refute html =~ "id=\"plugin-frame\""
+
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+
+    src =
+      view
+      |> element("#plugin-frame")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.attribute("src")
+      |> List.first()
+
+    %URI{query: query} = URI.parse(src)
+    token = URI.decode_query(query)[MydiaWeb.PluginFrameToken.param()]
+
+    assert {:ok, %{session_id: sid}} = MydiaWeb.PluginFrameToken.verify(token)
+    assert sid == session_id(view)
+  end
+
+  test "a second confirmation request cannot swap the rows in an open modal", %{
+    conn: conn,
+    user: user,
+    plugin: plugin
+  } do
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+    sid = session_id(view)
+    first = pending_write(plugin, user, sid, "First Shelf")
+    second = pending_write(plugin, user, sid, "Second Shelf")
+
+    render_hook(view, "confirm_writes", %{"ids" => [first]})
+    render_hook(view, "confirm_writes", %{"ids" => [second]})
+
+    html = view |> element("#plugin-confirm-modal") |> render()
+    assert html =~ "First Shelf"
+    refute html =~ "Second Shelf"
+  end
+
+  test "malformed confirm payloads are ignored", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+    render_hook(view, "confirm_writes", %{})
+    render_hook(view, "confirm_writes", %{"ids" => "x"})
+    render_hook(view, "confirm_writes", %{"ids" => [1, nil]})
+    refute has_element?(view, "#plugin-confirm-modal")
+    assert Process.alive?(view.pid)
+  end
+
+  test "another user's pending ids are not shown", %{conn: conn, plugin: plugin} do
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+    other = Mydia.AccountsFixtures.user_fixture()
+    id = pending_write(plugin, other, session_id(view), "Not Yours")
+
+    render_hook(view, "confirm_writes", %{"ids" => [id]})
+    refute has_element?(view, "#plugin-confirm-modal")
+  end
+
+  test "a forged choice above the role ceiling is denied", %{plugin: plugin} do
+    {conn, guest} = register_and_log_in_user(build_conn(), %{role: "guest"})
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+    sid = session_id(view)
+    id = pending_write(plugin, guest, sid, "Too Much")
+
+    render_hook(view, "confirm_writes", %{"ids" => [id]})
+    refute has_element?(view, "#plugin-confirm-always")
+    render_hook(view, "decide", %{"choice" => "always"})
+
+    refute has_element?(view, "#plugin-confirm-modal")
+    assert_push_event(view, "plugin_frame:post", %{message: %{"mydia" => "denied"}})
+    refute Grants.granted?(@slug, guest.id, "collections:write", sid)
+    assert {:ok, []} = PageActions.pending(@slug, guest.id, sid, [])
+  end
 end

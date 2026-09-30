@@ -19,6 +19,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
 
   # Well inside the token's one hour lifetime.
   @token_refresh_ms 45 * 60 * 1000
+  @max_ids 50
 
   @impl true
   def mount(%{"slug" => slug}, _session, socket) do
@@ -27,16 +28,12 @@ defmodule MydiaWeb.PluginPageLive.Show do
     case Plugins.get_plugin(slug) do
       {:ok, %Plugin{enabled: true, page: %{"title" => title}} = plugin} ->
         if Plugin.granted?(plugin, "surfaces:page") do
-          session_id = Ecto.UUID.generate()
-          if connected?(socket), do: schedule_token_refresh()
-
           {:ok,
            socket
            |> assign(:page_title, title)
            |> assign(:slug, slug)
            |> assign(:title, title)
-           |> assign(:session_id, session_id)
-           |> assign(:frame_src, frame_src(slug, user, session_id))
+           |> start_session(slug, user)
            |> assign(:choices, Grants.allowed_choices(slug, user.role))
            |> assign(:pending, nil)}
         else
@@ -48,16 +45,43 @@ defmodule MydiaWeb.PluginPageLive.Show do
     end
   end
 
+  # The mount runs twice on a page load (static render, then connected). The
+  # browser keeps the iframe from whichever render created it, so only the
+  # connected mount mints the page session and renders the frame; otherwise the
+  # frame and this process would hold different session ids.
+  defp start_session(socket, slug, user) do
+    if connected?(socket) do
+      session_id = Ecto.UUID.generate()
+      schedule_token_refresh()
+
+      socket
+      |> assign(:session_id, session_id)
+      |> assign(:frame_src, frame_src(slug, user, session_id))
+    else
+      socket |> assign(:session_id, nil) |> assign(:frame_src, nil)
+    end
+  end
+
+  # A frame can only ask; while a decision is pending, further requests are
+  # ignored so the rows under the user's cursor cannot change.
   @impl true
+  def handle_event("confirm_writes", _params, %{assigns: %{pending: [_ | _]}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("confirm_writes", %{"ids" => ids}, socket) when is_list(ids) do
     %{slug: slug, session_id: sid, current_user: user} = socket.assigns
-    ids = Enum.filter(ids, &is_binary/1)
+    ids = ids |> Enum.filter(&is_binary/1) |> Enum.uniq() |> Enum.take(@max_ids)
 
-    case PageActions.pending(slug, user.id, sid, ids) do
-      {:ok, [_ | _] = rows} -> {:noreply, assign(socket, :pending, rows)}
+    with [_ | _] <- ids,
+         {:ok, [_ | _] = rows} <- PageActions.pending(slug, user.id, sid, ids) do
+      {:noreply, assign(socket, :pending, rows)}
+    else
+      [] -> {:noreply, socket}
       _ -> {:noreply, post(socket, %{"mydia" => "expired", "ids" => ids})}
     end
   end
+
+  def handle_event("confirm_writes", _params, socket), do: {:noreply, socket}
 
   def handle_event("decide", _params, %{assigns: %{pending: nil}} = socket) do
     {:noreply, socket}
@@ -83,12 +107,19 @@ defmodule MydiaWeb.PluginPageLive.Show do
 
         {:noreply, socket |> assign(:pending, nil) |> post(message)}
 
+      {:error, :choice_not_allowed} ->
+        :ok = PageActions.deny(slug, user.id, sid, ids)
+        {:noreply, socket |> assign(:pending, nil) |> post(%{"mydia" => "denied", "ids" => ids})}
+
       {:error, _} ->
         {:noreply, socket |> assign(:pending, nil) |> post(%{"mydia" => "expired", "ids" => ids})}
     end
   end
 
   @impl true
+  def handle_info(:refresh_frame_token, %{assigns: %{session_id: nil}} = socket),
+    do: {:noreply, socket}
+
   def handle_info(:refresh_frame_token, socket) do
     %{slug: slug, current_user: user, session_id: sid} = socket.assigns
     schedule_token_refresh()
@@ -118,11 +149,12 @@ defmodule MydiaWeb.PluginPageLive.Show do
         <div
           id="plugin-frame-host"
           phx-hook="PluginFrame"
-          phx-update="ignore"
           class="flex-1 rounded-box overflow-hidden border border-base-300 bg-base-100"
         >
           <iframe
+            :if={@frame_src}
             id="plugin-frame"
+            phx-update="ignore"
             src={@frame_src}
             sandbox="allow-scripts allow-forms"
             referrerpolicy="no-referrer"
