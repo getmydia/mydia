@@ -22,7 +22,8 @@ defmodule MydiaWeb.PluginPageController do
   alias MydiaWeb.PluginFrameToken
 
   @forwarded_request_headers ~w(content-type accept accept-language)
-  @kept_response_headers ~w(content-type cache-control)
+  @kept_response_headers ~w(content-type)
+  @default_content_type "text/plain; charset=utf-8"
   @max_body_bytes 1_048_576
   @retry_after_seconds "2"
 
@@ -31,6 +32,7 @@ defmodule MydiaWeb.PluginPageController do
            "default-src 'self' 'unsafe-inline'",
            "connect-src 'self'",
            "img-src 'self' data: https://image.tmdb.org https://artworks.thetvdb.com",
+           "sandbox allow-scripts allow-forms",
            "frame-ancestors 'self'",
            "form-action 'self'",
            "base-uri 'none'"
@@ -51,6 +53,7 @@ defmodule MydiaWeb.PluginPageController do
     with {:ok, claims} <- verify(conn),
          :ok <- check(claims.slug == slug, :unauthorized),
          {:ok, user} <- fetch_user(claims.user_id),
+         :ok <- check(PluginFrameToken.current?(claims, user), :unauthorized),
          {:ok, %Plugin{enabled: true} = plugin} <- fetch_plugin(slug),
          :ok <- check(Plugin.granted?(plugin, "surfaces:page"), :not_found),
          {:ok, body, conn} <- read_page_body(conn),
@@ -84,6 +87,7 @@ defmodule MydiaWeb.PluginPageController do
        when status in 200..599 do
     conn
     |> harden()
+    |> put_resp_header("content-type", @default_content_type)
     |> put_guest_headers(headers)
     |> send_resp(status, body)
   end
@@ -108,7 +112,10 @@ defmodule MydiaWeb.PluginPageController do
   defp check(_, reason), do: {:error, reason}
 
   defp verify(conn) do
-    token = conn.query_params["t"] || List.first(get_req_header(conn, "x-mydia-frame-token"))
+    token =
+      conn.query_params[PluginFrameToken.param()] ||
+        List.first(get_req_header(conn, "x-mydia-frame-token"))
+
     PluginFrameToken.verify(token)
   end
 
@@ -135,12 +142,22 @@ defmodule MydiaWeb.PluginPageController do
   end
 
   # Drops the frame token from the query the guest sees, leaving every other
-  # pair byte-for-byte as sent.
+  # pair byte-for-byte as sent. Keys are compared percent-decoded, because the
+  # token is accepted under an encoded key too.
   defp strip_token(query_string) do
     query_string
     |> String.split("&", trim: true)
-    |> Enum.reject(&(&1 == "t" or String.starts_with?(&1, "t=")))
+    |> Enum.reject(fn pair ->
+      [key | _] = String.split(pair, "=", parts: 2)
+      decoded_key(key) == PluginFrameToken.param()
+    end)
     |> Enum.join("&")
+  end
+
+  defp decoded_key(key) do
+    URI.decode_www_form(key)
+  rescue
+    ArgumentError -> key
   end
 
   defp forwarded_headers(conn) do
@@ -160,6 +177,7 @@ defmodule MydiaWeb.PluginPageController do
     |> put_resp_header("content-security-policy", @csp)
     |> put_resp_header("x-content-type-options", "nosniff")
     |> put_resp_header("referrer-policy", "no-referrer")
+    |> put_resp_header("cache-control", "private, no-store")
   end
 
   defp cors(conn), do: put_resp_header(conn, "access-control-allow-origin", "*")

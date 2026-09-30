@@ -136,10 +136,13 @@ defmodule MydiaWeb.Endpoint do
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
   # Plugin page paths skip parsing so the guest gets the raw request body.
-  plug MydiaWeb.Plugs.PageBodyBypass,
-    parsers: [:urlencoded, :multipart, :json],
-    pass: ["*/*"],
-    json_decoder: Phoenix.json_library()
+  plug MydiaWeb.Plugs.UnlessPluginPage,
+    plug: Plug.Parsers,
+    opts: [
+      parsers: [:urlencoded, :multipart, :json],
+      pass: ["*/*"],
+      json_decoder: Phoenix.json_library()
+    ]
 
   plug Plug.MethodOverride
   plug Plug.Head
@@ -147,10 +150,14 @@ defmodule MydiaWeb.Endpoint do
 
   # CORS support for cross-origin API requests (standalone player, native apps)
   # Must be before the router so OPTIONS preflight requests are handled before authentication
-  plug Corsica,
-    origins: "*",
-    allow_headers: ["content-type", "authorization", "x-request-id"],
-    allow_methods: ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"]
+  # Plugin page paths are skipped: the page controller answers their preflight.
+  plug MydiaWeb.Plugs.UnlessPluginPage,
+    plug: Corsica,
+    opts: [
+      origins: "*",
+      allow_headers: ["content-type", "authorization", "x-request-id"],
+      allow_methods: ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"]
+    ]
 
   plug MydiaWeb.Router
 end

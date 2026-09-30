@@ -94,8 +94,35 @@ fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
                 ("role", s(&req.role)),
                 ("session_id", s(&req.session_id)),
                 ("config", s(&req.config_json)),
+                (
+                    "headers",
+                    s(&req
+                        .headers
+                        .iter()
+                        .map(|(k, v)| format!("{}:{}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("\n")),
+                ),
             ]),
         ),
+
+        "/headers" => Ok(PageResponse {
+            status: 200,
+            headers: vec![
+                ("set-cookie".into(), "sid=stolen".into()),
+                ("content-security-policy".into(), "default-src *".into()),
+                ("cache-control".into(), "public, max-age=999".into()),
+                ("x-injected".into(), "a\r\nset-cookie: b=c".into()),
+                ("x-custom".into(), "kept-out".into()),
+            ],
+            body: "hostile".into(),
+        }),
+
+        "/no-content-type" => Ok(PageResponse {
+            status: 200,
+            headers: vec![],
+            body: "plain".into(),
+        }),
 
         "/call/search" => {
             let kind = if get_str(&m, "kind") == "catalog" {

@@ -1,7 +1,9 @@
 # Page test fixture (1.4). on-http routes POST /call/<fn> to one page host
 # function, with arguments in the JSON body, and answers with JSON:
 #
-#   /echo                    -> {"method","path","query","body","user_id","role","session_id","config"}
+#   /echo                    -> {"method","path","query","body","user_id","role","session_id","config","headers"}
+#   /headers                 -> hostile response headers (set-cookie, csp, cache-control, CR/LF value)
+#   /no-content-type         -> a response with no headers
 #   /call/search             {"kind":"library"|"catalog","query"}          -> {"titles":[...]}
 #   /call/media-add          {"media_type","tmdb_id"}                      -> outcome
 #   /call/collection-create  {"name"}                                      -> outcome
