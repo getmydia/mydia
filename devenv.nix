@@ -506,6 +506,15 @@ in
       excludes = [ "\\.(g|freezed)\\.dart$" ];
       pass_filenames = false;
     };
+    # Recomputes npmDeps.hash in nix/packages/flake-module.nix whenever the
+    # lockfile is committed, and stops the commit if it had to rewrite it.
+    npm-deps-hash = {
+      enable = true;
+      name = "npmDeps.hash matches assets/package-lock.json";
+      entry = "scripts/update-npm-deps-hash.sh";
+      files = "^assets/package-lock\\.json$";
+      pass_filenames = false;
+    };
     no-scratch-docs = {
       enable = true;
       name = "no scratch docs";

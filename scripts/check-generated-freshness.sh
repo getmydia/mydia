@@ -210,14 +210,24 @@ fi
 
 # --- Nix npm dependencies: lockfile matches the pinned hash -----------------
 #
-# When nix is available, assert npmDeps.hash in nix/packages/flake-module.nix
-# matches assets/package-lock.json without a full build.
+# Recomputes the hash and compares strings. Building `.#...npmDeps` instead
+# proves nothing: see scripts/lib/npm-deps-hash.sh for why a cache hit passes
+# it with a stale hash, which is how #967 merged green and broke master.
 if command -v nix >/dev/null 2>&1; then
-  if ! err="$(nix build .#packages.x86_64-linux.default.npmDeps --no-link 2>&1)"; then
-    fail "assets/package-lock.json does not match npmDeps.hash in nix/packages/flake-module.nix:
-$(echo "$err" | sed 's/^/    /' | tail -5)
-  Update npmDeps.hash in nix/packages/flake-module.nix with the 'got:' hash above."
+  # shellcheck source=scripts/lib/npm-deps-hash.sh
+  source "$root/scripts/lib/npm-deps-hash.sh"
+  if ! npm_computed="$(npm_deps_hash)"; then
+    fail "could not compute the npmDeps hash of $npm_deps_lockfile (see above)."
+  elif [ "$npm_computed" != "$(npm_deps_hash_pinned)" ]; then
+    fail "npmDeps.hash in $npm_deps_flake_module is stale for $npm_deps_lockfile:
+    pinned:   $(npm_deps_hash_pinned)
+    computed: $npm_computed
+  Run ./scripts/update-npm-deps-hash.sh and commit the result."
+  else
+    echo "npmDeps.hash matches $npm_deps_lockfile ($npm_computed)."
   fi
+else
+  echo "note: nix not on PATH, skipping the npmDeps.hash half of this check" >&2
 fi
 
 if [ "$status" -eq 0 ]; then
