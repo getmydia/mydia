@@ -246,13 +246,13 @@ pub fn crawl_step(
                 }
                 state.offset += 1;
                 entries.push(state_entry(&state));
-                host.kv_set_many(&entries).map_err(host_err)?;
+                store::set_many(host, &entries).map_err(host_err)?;
             }
         } else {
             let mut entries: Vec<KvEntry> = page.items.iter().flat_map(movie_entries).collect();
             state.offset += page.items.len() as u32;
             entries.push(state_entry(&state));
-            host.kv_set_many(&entries).map_err(host_err)?;
+            store::set_many(host, &entries).map_err(host_err)?;
         }
 
         if !full_page {
@@ -575,6 +575,136 @@ mod tests {
         assert_eq!(host.sent.len(), 3, "one page and one allLeaves per show");
         let saved: CrawlState = serde_json::from_str(&host.kv["crawl/state"]).unwrap();
         assert_eq!(saved.last_completed_at, Some(NOW));
+    }
+
+    fn movies_json(count: u32) -> String {
+        let items: Vec<String> = (0..count)
+            .map(|i| {
+                format!(
+                    r#"{{"ratingKey":"m{i}","type":"movie","Guid":[{{"id":"imdb://tt9{i:06}"}},{{"id":"tmdb://{}"}},{{"id":"tvdb://{}"}}]}}"#,
+                    10_000 + i,
+                    20_000 + i
+                )
+            })
+            .collect();
+        format!(
+            r#"{{"MediaContainer":{{"Metadata":[{}]}}}}"#,
+            items.join(",")
+        )
+    }
+
+    fn episodes_json(count: u32) -> String {
+        let items: Vec<String> = (0..count)
+            .map(|i| {
+                format!(
+                    r#"{{"ratingKey":"e{i}","type":"episode","parentIndex":1,"index":{}}}"#,
+                    i + 1
+                )
+            })
+            .collect();
+        format!(
+            r#"{{"MediaContainer":{{"Metadata":[{}]}}}}"#,
+            items.join(",")
+        )
+    }
+
+    fn movie_section_state() -> CrawlState {
+        CrawlState {
+            section_keys: vec!["movie:1".into()],
+            started_at: NOW,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_full_movie_page_is_written_in_batches_the_host_accepts() {
+        let mut host = FakeHost::new();
+        host.now_value = NOW;
+        host.kv.insert(
+            "crawl/state".into(),
+            serde_json::to_string(&movie_section_state()).unwrap(),
+        );
+        let url = format!("{B}/library/sections/1/all?includeGuids=1");
+        host.respond("GET", &url, 200, &movies_json(200));
+        host.respond("GET", &url, 200, &movies_json(0));
+
+        assert_eq!(
+            crawl_step(&mut host, B, "owner", 45_000).unwrap(),
+            CrawlProgress::Complete
+        );
+        // 200 movies x (map + 3 rev) = 800 entries, plus the cursor.
+        assert!(host.batches.iter().all(|b| b.len() <= 500));
+        assert!(host.kv.contains_key("map/m199"));
+        assert!(host.kv.contains_key("rev/movie/tvdb/20199"));
+        let first_page = &host.batches[..2];
+        assert_eq!(
+            first_page[1].last().map(String::as_str),
+            Some("crawl/state")
+        );
+        assert!(!first_page[0].contains(&"crawl/state".to_string()));
+    }
+
+    #[test]
+    fn a_failed_late_batch_leaves_the_cursor_where_it_was() {
+        let mut host = FakeHost::new();
+        host.now_value = NOW;
+        host.kv.insert(
+            "crawl/state".into(),
+            serde_json::to_string(&movie_section_state()).unwrap(),
+        );
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/1/all?includeGuids=1"),
+            200,
+            &movies_json(200),
+        );
+        host.fail_set_many_from = Some(1);
+
+        assert!(crawl_step(&mut host, B, "owner", 45_000).is_err());
+        let state: CrawlState = serde_json::from_str(&host.kv["crawl/state"]).unwrap();
+        assert_eq!(
+            state.offset, 0,
+            "the cursor must not pass unwritten entries"
+        );
+    }
+
+    #[test]
+    fn a_show_with_many_episodes_is_written_in_batches_the_host_accepts() {
+        let mut host = FakeHost::new();
+        host.now_value = NOW;
+        let state = CrawlState {
+            section_keys: vec!["show:2".into()],
+            started_at: NOW,
+            ..Default::default()
+        };
+        host.kv
+            .insert("crawl/state".into(), serde_json::to_string(&state).unwrap());
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/2/all?includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"20","type":"show","Guid":[{"id":"imdb://tt9000002"},{"id":"tmdb://5001"},{"id":"tvdb://378000"}]}]}}"#,
+        );
+        host.respond(
+            "GET",
+            &format!("{B}/library/metadata/20/allLeaves?includeGuids=1"),
+            200,
+            &episodes_json(150),
+        );
+
+        assert_eq!(
+            crawl_step(&mut host, B, "owner", 45_000).unwrap(),
+            CrawlProgress::Complete
+        );
+        // 150 episodes x (map + 3 rev) = 600 entries, plus the cursor.
+        assert!(host.batches.iter().all(|b| b.len() <= 500));
+        assert!(host.kv.contains_key("map/e149"));
+        assert_eq!(
+            host.kv
+                .get("rev/episode/tvdb/378000/1/150")
+                .map(String::as_str),
+            Some("\"e149\"")
+        );
     }
 
     #[test]

@@ -21,6 +21,16 @@ pub enum PlexError {
     /// The host refused the request (unapproved private endpoint, missing grant).
     Denied(String),
     Unexpected(String),
+    /// The host gate refused to hand back a response over its size cap (1 MiB).
+    /// A smaller page can succeed where this one could not.
+    TooLarge(String),
+}
+
+/// The gate's `too_large` error reaches the guest as `network("response
+/// exceeded <cap> bytes")`. Timeouts and refusals read differently, so this
+/// prefix is what tells "ask for less" apart from "the server is down".
+fn is_too_large(message: &str) -> bool {
+    message.starts_with("response exceeded ") && message.ends_with(" bytes")
 }
 
 impl PlexError {
@@ -31,6 +41,7 @@ impl PlexError {
             PlexError::Unreachable(m) => format!("unreachable: {m}"),
             PlexError::Denied(m) => format!("blocked by Mydia: {m}"),
             PlexError::Unexpected(m) => m.clone(),
+            PlexError::TooLarge(m) => format!("response too large: {m}"),
         }
     }
 }
@@ -92,6 +103,7 @@ pub fn send(
         Ok(resp) if resp.status == 401 || resp.status == 403 => Err(PlexError::Unauthorized),
         Ok(resp) if resp.status == 404 => Err(PlexError::NotFound),
         Ok(resp) => Err(PlexError::Unexpected(format!("HTTP {}", resp.status))),
+        Err(HostError::Network(m)) if is_too_large(&m) => Err(PlexError::TooLarge(m)),
         Err(HostError::Network(m)) => Err(PlexError::Unreachable(m)),
         Err(HostError::Denied(m)) => Err(PlexError::Denied(m)),
         Err(HostError::NotFound(m)) => Err(PlexError::Unexpected(format!("host: {m}"))),

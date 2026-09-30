@@ -694,7 +694,7 @@ impl Applier {
     fn flush(&mut self, h: &mut dyn Host) -> Result<(), SyncError> {
         if !self.pending.is_empty() {
             let batch = std::mem::take(&mut self.pending);
-            h.kv_set_many(&batch)?;
+            store::set_many(h, &batch)?;
         }
         Ok(())
     }
@@ -1267,6 +1267,22 @@ mod tests {
         assert!(!out.complete);
         assert!(host.watch_writes.is_empty());
         assert!(host.data_requests.is_empty());
+    }
+
+    #[test]
+    fn a_large_pending_set_is_flushed_in_batches_the_host_accepts() {
+        let mut host = FakeHost::new();
+        let mut ap = Applier::default();
+        ap.pending = (0..1100)
+            .map(|i| KvEntry {
+                key: format!("link/L1/state/{i}"),
+                value: "{}".into(),
+            })
+            .collect();
+        ap.flush(&mut host).unwrap();
+        assert_eq!(host.kv.len(), 1100);
+        assert!(host.batches.iter().all(|b| b.len() <= 500));
+        assert!(ap.pending.is_empty());
     }
 
     #[test]

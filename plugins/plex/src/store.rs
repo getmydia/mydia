@@ -73,6 +73,23 @@ pub fn put_json<T: Serialize>(host: &mut dyn Host, key: &str, value: &T) -> Resu
     host.kv_set(key, &raw).map_err(host_err)
 }
 
+/// The host refuses a `kv-set-many` over this many entries (`Kv.max_batch`).
+pub const KV_MAX_BATCH: usize = 500;
+
+/// Writes `entries` in order, in batches the host accepts. Each batch is atomic
+/// on the host, so an entry that must not land before the others (a resume
+/// cursor) goes last: it then sits in the final batch, and a failure part way
+/// leaves the cursor behind the data it describes.
+pub fn set_many(
+    host: &mut dyn Host,
+    entries: &[mydia_plugin_sdk::types::KvEntry],
+) -> Result<(), mydia_plugin_sdk::types::HostError> {
+    for chunk in entries.chunks(KV_MAX_BATCH) {
+        host.kv_set_many(chunk)?;
+    }
+    Ok(())
+}
+
 pub fn delete(host: &mut dyn Host, key: &str) -> Result<(), PlexError> {
     host.kv_delete(key).map_err(host_err)
 }
@@ -109,6 +126,23 @@ mod tests {
         assert_eq!(back, Some(vec![1, 2]));
         let none: Option<Vec<i32>> = get_json(&mut host, "missing").unwrap();
         assert_eq!(none, None);
+    }
+
+    #[test]
+    fn set_many_chunks_to_the_host_batch_limit_and_keeps_order() {
+        use mydia_plugin_sdk::types::KvEntry;
+        let mut host = FakeHost::new();
+        let entries: Vec<KvEntry> = (0..1201)
+            .map(|i| KvEntry {
+                key: format!("k/{i:05}"),
+                value: "v".into(),
+            })
+            .collect();
+        set_many(&mut host, &entries).unwrap();
+        let sizes: Vec<usize> = host.batches.iter().map(Vec::len).collect();
+        assert_eq!(sizes, vec![500, 500, 201]);
+        assert_eq!(host.batches[2].last().unwrap(), "k/01200");
+        assert_eq!(host.kv.len(), 1201);
     }
 
     #[test]

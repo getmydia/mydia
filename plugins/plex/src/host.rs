@@ -198,6 +198,13 @@ pub mod fake {
         pub logs: Vec<(String, String)>,
         pub now_value: i64,
         pub elapsed: u64,
+        /// When non-empty, each `elapsed_ms` call pops the front; the last
+        /// value repeats. Lets a test spend the budget at a chosen call.
+        pub elapsed_script: VecDeque<u64>,
+        /// Keys of every accepted `kv_set_many`, in call order.
+        pub batches: Vec<Vec<String>>,
+        /// Fail the Nth (0-based) `kv_set_many` call and every later one.
+        pub fail_set_many_from: Option<usize>,
     }
 
     impl FakeHost {
@@ -362,6 +369,20 @@ pub mod fake {
         }
 
         fn kv_set_many(&mut self, entries: &[KvEntry]) -> Result<(), HostError> {
+            // The real host refuses a batch over Kv.max_batch, atomically.
+            if entries.len() > 500 {
+                return Err(HostError::InvalidRequest(
+                    "batch exceeds 500 entries".to_string(),
+                ));
+            }
+            if self
+                .fail_set_many_from
+                .is_some_and(|n| self.batches.len() >= n)
+            {
+                return Err(HostError::Internal("scripted kv-set-many failure".into()));
+            }
+            self.batches
+                .push(entries.iter().map(|e| e.key.clone()).collect());
             for e in entries {
                 self.kv.insert(e.key.clone(), e.value.clone());
             }
@@ -425,7 +446,11 @@ pub mod fake {
         }
 
         fn elapsed_ms(&mut self) -> u64 {
-            self.elapsed
+            match self.elapsed_script.len() {
+                0 => self.elapsed,
+                1 => self.elapsed_script[0],
+                _ => self.elapsed_script.pop_front().unwrap(),
+            }
         }
     }
 }
