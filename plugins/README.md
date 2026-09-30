@@ -1,6 +1,6 @@
 # Bundled plugin guests
 
-Guests are wasip2 **components** (WIT `mydia:plugin@1.0.0`, built on the
+Guests are wasip2 **components** (WIT `mydia:plugin@1.4.0`, built on the
 `mydia-plugin-sdk` crate and the `#[mydia::plugin]` macro), which the host runs
 via `Wasmex.Components.*`. They migrated from `wasm32-unknown-unknown` core
 modules.
@@ -15,6 +15,14 @@ covers watch state, account links, sync runs, health, secrets and instances.
 Protocol logic and the plugin's own working state stay in the guest. A plugin
 never keeps the only copy of a host noun in KV, new nouns are generic rather
 than service-named, and the host renders all UI from declarative steps.
+
+## Bundled guests
+
+| Guest | What it does |
+|---|---|
+| `simkl_sync` | Two-way watched-state and list sync with Simkl, per user. |
+| `webhook_notifier` | Discord, ntfy and custom webhooks on library events. |
+| `plex` | Plex media servers: sign-in, server discovery, library refresh, two-way watched sync, Plex Home profiles. Multi-instance. |
 
 ## Build them via nix, not the Docker dev container
 

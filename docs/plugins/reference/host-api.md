@@ -168,6 +168,59 @@ Key guarantees:
   host. Keys under `conn/<connection-id>/...` are swept when that connection is
   removed.
 
+### 1.4 host functions
+
+| Function | Capability | Behaviour |
+|---|---|---|
+| `links-list()` | `users:connections` | This instance's account links, with `id`, `role` (`owner`, `endpoint` or `user`), `user-id`, `external-user-id`, `external-username` and `status`. Never returns a token. |
+| `link-request(link-id, req)` | `users:connections` + `net:http` | Sends `req` with the link's token attached using the manifest's `connection.auth_header` template (default `Authorization: Bearer {token}`). A guest-supplied header of the same name is removed first. A disabled link is refused. |
+| `propose-accounts(accounts)` | `users:connections` | Records the remote accounts the plugin discovered, for the setup mapping screen and profile pages. Creates no links. |
+| `set-link-token(link-id, token)` | `users:connections` | Stores a token the remote service minted for a link, such as a Plex Home profile token. The guest necessarily saw this token in the response that minted it. Refuses a disabled link and a token containing control characters. |
+| `set-link-status(link-id, status, message)` | `users:connections` | Marks a link `active`, `error` or `disabled`, with an optional message. Refuses a link the host has already disabled, so a guest cannot revive it. |
+| `kv-list(prefix, cursor)` | `state:kv` | Up to 200 entries whose key starts with `prefix`, in key order, with an opaque cursor for the next page. |
+| `kv-set-many(entries)` | `state:kv` | Writes up to 500 entries in one transaction, or none. |
+| `report-sync-run(run)` | none | Records a sync run (`started-at`, `finished-at`, `status` of `ok`, `partial` or `error`, and pulled, pushed, skipped and error counts) shown on the instance card. |
+
+Every 1.4 import acts on the calling instance only: links, store and sync runs
+are scoped to the instance the host is running the guest for.
+
+Store quotas are per instance: `plugins.store_max_keys` (default 200,000) and
+`plugins.store_max_bytes` (default 67,108,864, or 64 MiB). Values stay capped at
+64 KiB and keys at 512 bytes. A write past a quota returns `denied`.
+
+`playback-progress` gains `origin`, the origin tag of the row's last write.
+Plugin writes are tagged `plugin:<slug>:<instance-id>`, so a plugin can skip
+its own writes when pushing.
+
+The host puts the instance's id in the guest's config as `instance_id`, in
+event metadata, in the schedule tick and in setup requests.
+
+### 1.4 exports
+
+- `setup(req) -> setup-screen`: called with `step = "start"` when an operator
+  adds or reconnects an instance, then with each screen's `step` and the
+  operator's answer as `input-json`. While an `external-auth` screen is open,
+  the host calls it with `step = "poll"` every `poll-after-seconds`. Choosing a
+  `choice` option approves that option's `endpoints` for the instance and
+  stores its `credentials` as the `owner` or `endpoint` link. Saving a
+  `mapping` screen creates the `user` links and calls `setup` again with
+  `{"links": [...]}`. Setup calls time out after `plugins.setup_timeout_ms`
+  (default 30,000). A manifest must set `"setup": true` for the host to call it.
+- `check-health() -> health`: returns `status` (`ok`, `degraded`,
+  `unauthorized` or `unreachable`), an optional message, and an optional
+  `action` (`reconnect` or `confirm-endpoints`) that the host shows as a button.
+  The host calls it every 5 minutes for each enabled instance and from the Test
+  button, under the normal event timeout.
+
+An endpoint approved for an instance, whether typed into a `grants_host` URL
+setting, picked in a `choice` screen or declared in config, may resolve to a
+private address, but never to a link-local one. Nothing a guest sends can add an
+approved endpoint.
+
+`min_host_version` is compared with the Mydia release version, not the
+contract version, so a 1.4 guest sets it to the first Mydia release that
+ships contract 1.4, or omits it for a bundled guest.
+
 ### Scheduled handler
 
 Add `on-schedule` for periodic work (declare a `schedule` and the

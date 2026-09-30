@@ -49,3 +49,36 @@ adapter is fixed at build time and cannot change at runtime at all; see
 
 For why the layers exist and what the database layer buys you, see
 [Why Configuration Is Layered](../explanation/configuration-model.md).
+
+## Plugin instances
+
+Plugin instances can be declared in YAML. Keys under `settings` are the
+plugin's own settings. `name` identifies the instance across restarts.
+
+```yaml
+plugin_instances:
+  - plugin: plex
+    name: Living room
+    enabled: true
+    settings:
+      url: http://192.168.1.20:32400
+      token: your-plex-token
+      sync_watched: "on"
+```
+
+Declared instances overlay the ones created in the UI and are shown read-only.
+If one disappears from the config it becomes a disabled instance you manage in
+the UI, so its linked accounts are kept. `media_servers:` entries with
+`type: plex` are translated into `plugin_instances` entries and are deprecated.
+
+The same instances can be declared with `PLUGIN_<SLUG>_<N>_<KEY>` environment
+variables; see [Media Servers](environment-variables.md#media-servers).
+
+Three plugin limits live in the `plugins:` block:
+
+```yaml
+plugins:
+  setup_timeout_ms: 30000       # time allowed for one setup wizard step
+  store_max_keys: 200000        # stored entries per instance
+  store_max_bytes: 67108864     # stored bytes per instance (64 MiB)
+```

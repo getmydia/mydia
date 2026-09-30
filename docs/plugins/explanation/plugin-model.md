@@ -49,20 +49,25 @@ authors never hand-write the generated binding boilerplate.
 ## Exports, imports, and the contract version
 
 A plugin is a Wasm **component** built for `wasm32-wasip2` against the
-canonical WIT contract `mydia:plugin@1.1.0`, living at
+canonical WIT contract `mydia:plugin@1.4.0`, living at
 `native/mydia_plugin_sdk/wit/plugin.wit`.
 
 It **exports** `handler.on-event`, called for each event it subscribed to,
-and optionally `handler.on-schedule`, called on a fixed interval. It
-**imports** the host's capabilities: `http-request`, `data-read`, `log`, plus
-the 1.1 additions `kv-get`/`kv-set`/`kv-delete`, `data-list`, `ensure-watched`,
-`connections-list`, and `connection-request`. Every import is enforced
+`handler.on-schedule`, called on a fixed interval, and, from 1.4,
+`handler.setup`, which drives the setup wizard the host renders, and
+`handler.check-health`, which the host calls to show an instance's health. The
+SDK macro generates all four exports, and one a plugin does not implement
+returns an error. It
+**imports** the host's capabilities: `http-request`, `data-read` and `log`
+from 1.0; the key-value store, `data-list`, watch-state writes and
+per-user connections from 1.1 to 1.3; and account links, store listing and
+batch writes, and sync-run reports from 1.4. Every import is enforced
 server-side on every call; there is no path around it.
 
 The package version in the WIT file **is** the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against `1.0` keep running unmodified against a `1.1` host: the host
+built against `1.0` keep running unmodified against a `1.4` host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.
@@ -105,6 +110,11 @@ Three consequences follow:
   reconciliation or polling logic is welcome, but the contract must never
   require it. A plugin written in another language, or one that needs a
   different loop, still gets every host noun.
+
+A plugin can run as several **instances**, one per configured server or
+account, when its manifest sets `multi_instance`. Each instance has its own
+settings, store, account links, schedule and sync history, and the plugin
+learns which instance it is serving from `instance_id` in its injected config.
 
 The rule sits between two common designs. Typed-slot systems (Terraform
 providers, Kodi PVR add-ons, Grafana data sources) keep the engine in the host

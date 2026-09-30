@@ -42,6 +42,9 @@ This page is a practical reference, using the bundled webhook notifier
 | `entrypoint` | no | Exported handler name. Defaults to the SDK handler; leave unset unless you know you need it. |
 | `delivery` | no | `durable` (enqueues an Oban job, retried, at-least-once) or `inline` (runs synchronously, not retried). Defaults to `inline`. Any other value, including a typo, silently becomes `inline`. |
 | `min_host_version` | no | Lowest Mydia version that can run this plugin. See below. |
+| `multi_instance` | no | `true` lets operators add several instances, each with its own settings, store, links and schedule. Default `false`. |
+| `category` | no | Where the host lists instances. `media_server` puts them on Admin > Media servers. |
+| `setup` | no | `true` when the plugin exports `setup`; the host then creates instances through the setup wizard instead of the plain settings form. Default `false`. |
 | `capabilities` | yes | What the plugin subscribes to and is allowed to do. See below. |
 | `settings_schema` | no | Operator-editable configuration fields. See below. |
 
@@ -212,6 +215,13 @@ never sees the token.
   `client_id` setting.
 - The plugin reaches the connected account with `connection-request`, which
   attaches the bearer token host-side (see the [Reference](host-api.md)).
+
+`auth_header` sets how the host attaches a link's token, as `"Name: value"`
+with `{token}` in the value, for example `"X-Plex-Token: {token}"`. It
+defaults to `"Authorization: Bearer {token}"`. `method` (`GET` or `POST`,
+default `GET`) and `headers` (a string map) apply to the device flow's
+`code_url` and `poll_url`. Set `"type": "none"` to declare only `auth_header`
+without a device flow.
 
 ## Host-version floor
 
