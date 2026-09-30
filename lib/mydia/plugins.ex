@@ -806,7 +806,7 @@ defmodule Mydia.Plugins do
   defp activate(config) do
     with manifest_map when not is_nil(manifest_map) <- config.manifest,
          {:ok, manifest} <- Manifest.parse(manifest_map),
-         :ok <- check_host_version_floor(config.slug, manifest),
+         :ok <- check_host_version_floor(config, manifest),
          {:ok, wasm} <- resolve_artifact(config) do
       descriptor =
         Plugin.from_manifest(manifest,
@@ -870,7 +870,12 @@ defmodule Mydia.Plugins do
   # the running Mydia version, with an actionable message — before instantiation,
   # so the admin gets "requires mydia ≥ X" rather than a cryptic link-time trap
   # (R7). A manifest with no floor (the common case) always passes.
-  defp check_host_version_floor(slug, %Manifest{min_host_version: floor}) do
+  #
+  # Bundled plugins ship with the host that runs them, so a floor is meaningless
+  # for them and is not enforced (simkl_sync declares its WIT contract version).
+  defp check_host_version_floor(%{source_url: "bundled"}, _manifest), do: :ok
+
+  defp check_host_version_floor(%{slug: slug}, %Manifest{min_host_version: floor}) do
     cond do
       is_nil(floor) ->
         :ok
@@ -887,15 +892,33 @@ defmodule Mydia.Plugins do
     end
   end
 
-  defp host_meets_floor?(floor) do
-    case {Version.parse(host_version()), Version.parse(floor)} do
-      {{:ok, host}, {:ok, min}} -> Version.compare(host, min) != :lt
+  # A development build (`-dev` pre-release, built from source) meets any floor.
+  # Otherwise the comparison ignores pre-release tags, so 0.16.0-beta.1 meets a
+  # 0.16.0 floor: betas carry the feature the floor names.
+  @doc false
+  def host_meets_floor?(floor, host \\ host_version()) do
+    case {Version.parse(host), Version.parse(floor)} do
+      {{:ok, %Version{pre: ["dev" | _]}}, {:ok, _}} ->
+        true
+
+      {{:ok, host}, {:ok, min}} ->
+        Version.compare(%{host | pre: []}, %{min | pre: []}) != :lt
+
       # If either side is unparseable, do not block activation on the floor.
-      _ -> true
+      _ ->
+        true
     end
   end
 
+  # `:plugin_host_version` lets tests stand in for a release build.
   defp host_version do
+    case Application.get_env(:mydia, :plugin_host_version) do
+      vsn when is_binary(vsn) -> vsn
+      _ -> app_version()
+    end
+  end
+
+  defp app_version do
     case Application.spec(:mydia, :vsn) do
       vsn when is_list(vsn) -> List.to_string(vsn)
       _ -> "0.0.0"

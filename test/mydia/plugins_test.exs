@@ -684,6 +684,34 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "host version floor" do
+    test "development builds meet any floor" do
+      assert Plugins.host_meets_floor?("9.9.9", "0.0.0-dev")
+    end
+
+    test "a release below the floor fails" do
+      refute Plugins.host_meets_floor?("0.16.0", "0.15.0")
+    end
+
+    test "a beta of the floor's release meets it" do
+      assert Plugins.host_meets_floor?("0.16.0", "0.16.0-beta.1")
+      assert Plugins.host_meets_floor?("0.16.0", "0.17.0")
+    end
+
+    test "a bundled plugin activates on a release host despite its floor" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      Application.put_env(:mydia, :plugin_host_version, "0.15.0")
+
+      on_exit(fn ->
+        Application.put_env(:mydia, :start_health_monitors, false)
+        Application.delete_env(:mydia, :plugin_host_version)
+      end)
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+      assert Host.running?("simkl_sync")
+    end
+  end
+
   describe "detect_updates/2 (R14)" do
     defp config(slug, version), do: %Mydia.Settings.PluginConfig{slug: slug, version: version}
 

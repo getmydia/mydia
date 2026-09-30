@@ -279,11 +279,15 @@ never sees the token.
 
 ## Host-version floor
 
-`min_host_version` (optional, a semantic version) declares the lowest Mydia host
-your plugin supports. If you rely on a capability, event, or contract feature
-added in a specific release, set the floor to that release. Mydia refuses to
-activate a plugin whose floor exceeds the running host, with a clear
-`requires mydia >= X` message. Omit it if you have no floor.
+`min_host_version` (optional, a semantic version) declares the lowest Mydia
+release your plugin supports. It is a Mydia release version, not a contract
+version. If you rely on a capability, event, or contract feature added in a
+specific release, set the floor to that release. Mydia refuses to activate an
+index-installed plugin whose floor exceeds the running host, with a clear
+`requires mydia >= X` message. Pre-release tags are ignored, so a
+`0.16.0-beta.1` host meets a `0.16.0` floor. Development builds (`-dev`) meet any
+floor, and plugins bundled with Mydia are not checked. Omit it if you have no
+floor.
 
 The plugin contract evolves additively: new functions, records, variant cases,
 and optional fields are added without breaking existing plugins. Only a removal

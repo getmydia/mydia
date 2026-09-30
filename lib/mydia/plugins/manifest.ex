@@ -56,11 +56,13 @@ defmodule Mydia.Plugins.Manifest do
   ## Host version floor
 
   An optional top-level `min_host_version` (a semantic version) declares the
-  lowest Mydia version the plugin supports. `Mydia.Plugins` refuses to activate a
-  plugin whose floor exceeds the running host with a clear "requires mydia ≥ X"
-  message, before instantiation — the friendly wrapper over wasmtime's hard
-  component link-time refusal (the WIT package version is the ABI version).
-  Absent means no floor (back-compat).
+  lowest Mydia release the plugin supports. `Mydia.Plugins` refuses to activate an
+  index-installed plugin whose floor exceeds the running host with a clear
+  "requires mydia >= X" message, before instantiation — the friendly wrapper over
+  wasmtime's hard component link-time refusal. The floor is a Mydia release
+  version, not a WIT contract version. Pre-release tags are ignored (0.16.0-beta.1
+  meets a 0.16.0 floor), development builds (`-dev`) meet any floor, and bundled
+  plugins are exempt because they ship with the host. Absent means no floor.
 
   A field may also carry `visible_when`, a map of `controlling_key => value`
   (value a string or list of strings) gating its visibility in the settings UI on
