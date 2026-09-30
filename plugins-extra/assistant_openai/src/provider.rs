@@ -38,7 +38,7 @@ const fn operator(label: &'static str, local: bool) -> Preset {
 static PRESETS: [Preset; 11] = [
     operator(CUSTOM, false),
     hosted("OpenAI", "https://api.openai.com/v1"),
-    Preset { models_auth: ModelsAuth::Anthropic, ..hosted("Anthropic", "https://api.anthropic.com/v1") },
+    Preset { models_auth: ModelsAuth::Anthropic, models_query: "?limit=1000", ..hosted("Anthropic", "https://api.anthropic.com/v1") },
     Preset { models_query: "?supported_parameters=tools", ..hosted("OpenRouter", "https://openrouter.ai/api/v1") },
     hosted("Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai"),
     hosted("Groq", "https://api.groq.com/openai/v1"),
@@ -198,6 +198,7 @@ mod tests {
         assert_eq!(header(&h, "x-api-key"), Some("k"));
         assert_eq!(header(&h, "anthropic-version"), Some("2023-06-01"));
         assert_eq!(header(&h, "authorization"), None);
+        assert_eq!(r.models_url(), "https://api.anthropic.com/v1/models?limit=1000");
         let r = resolve(&json!({"provider": "OpenAI", "api_key": "k"})).unwrap();
         assert_eq!(header(&r.models_headers(), "authorization"), Some("Bearer k"));
     }
