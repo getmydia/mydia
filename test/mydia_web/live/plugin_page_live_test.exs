@@ -55,14 +55,33 @@ defmodule MydiaWeb.PluginPageLiveTest do
     id
   end
 
+  defp frame_selector(view), do: "#plugin-frame-#{session_id(view)}"
+
+  defp frame_token(view) do
+    src =
+      view
+      |> element(frame_selector(view))
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.attribute("src")
+      |> List.first()
+
+    URI.decode_query(URI.parse(src).query)[MydiaWeb.PluginFrameToken.param()]
+  end
+
   defp session_id(view), do: :sys.get_state(view.pid).socket.assigns.session_id
 
   test "renders a sandboxed, referrer-free iframe with a frame token", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
-    assert has_element?(view, "#plugin-frame[sandbox='allow-scripts allow-forms']")
-    assert has_element?(view, "#plugin-frame[referrerpolicy='no-referrer']")
 
-    assert view |> element("#plugin-frame") |> render() =~
+    assert has_element?(
+             view,
+             "#plugin-frame-#{session_id(view)}[sandbox='allow-scripts allow-forms']"
+           )
+
+    assert has_element?(view, "#plugin-frame-#{session_id(view)}[referrerpolicy='no-referrer']")
+
+    assert view |> element(frame_selector(view)) |> render() =~
              "/plugins/#{@slug}/app/?#{MydiaWeb.PluginFrameToken.param()}="
   end
 
@@ -146,20 +165,11 @@ defmodule MydiaWeb.PluginPageLiveTest do
   test "the static render carries no frame; the connected frame's token matches the session",
        %{conn: conn} do
     html = conn |> get(~p"/plugins/#{@slug}") |> html_response(200)
-    refute html =~ "id=\"plugin-frame\""
+    refute html =~ "<iframe"
 
     {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
 
-    src =
-      view
-      |> element("#plugin-frame")
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.attribute("src")
-      |> List.first()
-
-    %URI{query: query} = URI.parse(src)
-    token = URI.decode_query(query)[MydiaWeb.PluginFrameToken.param()]
+    token = frame_token(view)
 
     assert {:ok, %{session_id: sid}} = MydiaWeb.PluginFrameToken.verify(token)
     assert sid == session_id(view)
@@ -215,5 +225,27 @@ defmodule MydiaWeb.PluginPageLiveTest do
     assert_push_event(view, "plugin_frame:post", %{message: %{"mydia" => "denied"}})
     refute Grants.granted?(@slug, guest.id, "collections:write", sid)
     assert {:ok, []} = PageActions.pending(@slug, guest.id, sid, [])
+  end
+
+  test "a remount gets a new session and a frame whose token matches it", %{conn: conn} do
+    {:ok, first, _html} = live(conn, ~p"/plugins/#{@slug}")
+    {:ok, second, _html} = live(conn, ~p"/plugins/#{@slug}")
+
+    refute session_id(first) == session_id(second)
+    assert {:ok, %{session_id: sid}} = MydiaWeb.PluginFrameToken.verify(frame_token(second))
+    assert sid == session_id(second)
+  end
+
+  test "at most 50 ids are considered per request", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+    ids = for _ <- 1..60, do: Ecto.UUID.generate()
+
+    render_hook(view, "confirm_writes", %{"ids" => ids})
+
+    assert_push_event(view, "plugin_frame:post", %{
+      message: %{"mydia" => "expired", "ids" => sent}
+    })
+
+    assert length(sent) == 50
   end
 end

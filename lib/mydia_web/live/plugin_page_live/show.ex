@@ -45,6 +45,8 @@ defmodule MydiaWeb.PluginPageLive.Show do
     end
   end
 
+  # The frame's id carries the session id, so a reconnect (which mints a new
+  # session) replaces the iframe rather than keeping one holding the old token.
   # The mount runs twice on a page load (static render, then connected). The
   # browser keeps the iframe from whichever render created it, so only the
   # connected mount mints the page session and renders the frame; otherwise the
@@ -153,7 +155,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
         >
           <iframe
             :if={@frame_src}
-            id="plugin-frame"
+            id={"plugin-frame-" <> @session_id}
             phx-update="ignore"
             src={@frame_src}
             sandbox="allow-scripts allow-forms"
