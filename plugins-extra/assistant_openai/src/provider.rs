@@ -207,4 +207,35 @@ mod tests {
         assert_eq!(selected(&json!({})).label, CUSTOM);
         assert_eq!(selected(&json!({"provider": "xAI"})).label, "xAI");
     }
+
+    #[test]
+    fn manifest_options_match_presets() {
+        let manifest: Value = serde_json::from_str(include_str!("../manifest.json")).unwrap();
+        let schema = manifest["settings_schema"].as_array().unwrap();
+        let options = |key: &str| -> Vec<String> {
+            schema
+                .iter()
+                .find(|f| f["key"] == key)
+                .unwrap()["options"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|o| o.as_str().unwrap().to_string())
+                .collect()
+        };
+        let labels: Vec<String> = PRESETS.iter().map(|p| p.label.to_string()).collect();
+        assert_eq!(options("provider"), labels);
+        assert_eq!(options("model_choice"), vec!["Users can choose", "Admin model only"]);
+
+        let hosts: Vec<String> = manifest["capabilities"]["net:http"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h.as_str().unwrap().to_string())
+            .collect();
+        for p in PRESETS.iter().filter_map(|p| p.base_url) {
+            let host = p.split("://").nth(1).unwrap().split('/').next().unwrap();
+            assert!(hosts.contains(&host.to_string()), "{host} missing from net:http");
+        }
+    }
 }
