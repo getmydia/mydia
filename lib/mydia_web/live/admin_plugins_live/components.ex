@@ -9,6 +9,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.PluginSetupComponents, only: [settings_field: 1]
+
   alias Mydia.Plugins.Manifest
 
   @doc """
@@ -748,55 +750,6 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       </div>
       <div class="modal-backdrop" phx-click="close_settings"></div>
     </div>
-    """
-  end
-
-  # Renders one settings field from its declared type.
-  attr :field, :map, required: true
-  attr :form, :any, required: true
-
-  defp settings_field(%{field: %{"type" => "enum"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="select"
-      label={@field["label"] || @field["key"]}
-      options={@field["options"] || []}
-    />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "secret"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="password"
-      autocomplete="off"
-      label={@field["label"] || @field["key"]}
-      placeholder="••••••••"
-    />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "url"}} = assigns) do
-    ~H"""
-    <.input field={@form[@field["key"]]} type="url" label={@field["label"] || @field["key"]} />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "text"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="textarea"
-      label={@field["label"] || @field["key"]}
-    />
-    """
-  end
-
-  defp settings_field(assigns) do
-    ~H"""
-    <.input field={@form[@field["key"]]} type="text" label={@field["label"] || @field["key"]} />
     """
   end
 
