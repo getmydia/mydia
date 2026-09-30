@@ -200,6 +200,31 @@ defmodule MydiaWeb.DiscoverLive.CountrySettingsTest do
              )
     end
 
+    test "switching country drops ticks even when none are re-posted", %{
+      conn: conn,
+      user: user,
+      bypass: bypass
+    } do
+      stub_providers(bypass)
+      save_prefs(user, "CA", [@maple])
+
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      open(view)
+
+      view |> element("#discover-country-settings-form") |> render_change(%{"country" => "FR"})
+      render_async(view, 5_000)
+
+      refute has_element?(view, "#discover-country-settings-services input[value='8001']")
+      assert has_element?(view, "#discover-country-settings-services input[value='8002']")
+
+      view
+      |> element("#discover-country-settings-form")
+      |> render_submit(%{"country" => "FR"})
+
+      assert UserPreference.discover_home_country(pref(user)) == "FR"
+      assert UserPreference.discover_streaming_services(pref(user)) == []
+    end
+
     test "save writes both and opens the tab", %{conn: conn, user: user, bypass: bypass} do
       stub_providers(bypass)
       {:ok, view, _html} = live(conn, ~p"/discover")
@@ -247,6 +272,7 @@ defmodule MydiaWeb.DiscoverLive.CountrySettingsTest do
       assert has_element?(view, "#discover-country-settings")
     end
 
+    @tag :capture_log
     test "a failed provider list offers a retry and still saves the country", %{
       conn: conn,
       user: user,
@@ -269,6 +295,7 @@ defmodule MydiaWeb.DiscoverLive.CountrySettingsTest do
       assert UserPreference.discover_streaming_services(pref(user)) == []
     end
 
+    @tag :capture_log
     test "unchanged country with a failed provider list keeps the saved services", %{
       conn: conn,
       user: user,
@@ -298,6 +325,57 @@ defmodule MydiaWeb.DiscoverLive.CountrySettingsTest do
 
       refute has_element?(view, "#discover-country-settings")
       assert UserPreference.discover_home_country(pref(user)) == nil
+    end
+
+    test "backdrop click closes the modal without saving", %{
+      conn: conn,
+      user: user,
+      bypass: bypass
+    } do
+      stub_providers(bypass)
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      open(view)
+
+      view |> element("#discover-country-settings-form") |> render_change(%{"country" => "CA"})
+      view |> element("#discover-country-settings .modal-backdrop") |> render_click()
+
+      refute has_element?(view, "#discover-country-settings")
+      assert UserPreference.discover_home_country(pref(user)) == nil
+    end
+
+    test "Escape closes the modal without saving", %{conn: conn, user: user, bypass: bypass} do
+      stub_providers(bypass)
+      {:ok, view, _html} = live(conn, ~p"/discover")
+      open(view)
+
+      view |> element("#discover-country-settings-form") |> render_change(%{"country" => "CA"})
+
+      view
+      |> element("#discover-country-settings")
+      |> render_keydown(%{"key" => "Escape"})
+
+      refute has_element?(view, "#discover-country-settings")
+      assert UserPreference.discover_home_country(pref(user)) == nil
+    end
+
+    test "remove from another tab clears the country and stays on that tab", %{
+      conn: conn,
+      user: user,
+      bypass: bypass
+    } do
+      stub_providers(bypass)
+      save_prefs(user, "CA", [@maple])
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=trending")
+      open(view)
+
+      view |> element("#discover-country-settings-remove") |> render_click()
+
+      refute has_element?(view, "#discover-country-settings")
+      refute has_element?(view, "#discover-home-tab")
+      assert UserPreference.discover_home_country(pref(user)) == nil
+      assert has_element?(view, "button[phx-value-category=trending].tab-active")
+      refute_patched(view, ~p"/discover?#{%{"type" => "movie"}}")
     end
 
     test "remove clears both and leaves the tab", %{conn: conn, user: user, bypass: bypass} do
