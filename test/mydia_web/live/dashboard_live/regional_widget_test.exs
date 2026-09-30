@@ -145,6 +145,9 @@ defmodule MydiaWeb.DashboardLive.RegionalWidgetTest do
 
     test "a TV request records the show, not the movie", %{view: view} do
       render_click(view, "request_media", %{"ref" => "tmdb:777001", "media_type" => "tv_show"})
+      # The request is written by a self-sent message the click queues; a
+      # render round-trip lets the LiveView process it before we read.
+      render(view)
 
       assert [request] = Mydia.MediaRequests.list_requests(status: "pending")
       assert request.title == "The Tidewatch"
