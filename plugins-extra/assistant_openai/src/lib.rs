@@ -69,6 +69,7 @@ fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
             let _ = host::kv_delete(&history::key(&req.user_id));
             respond_json(200, json!({"ok": true}))
         }
+        ("POST", "/api/history") => respond_json(200, json!({"messages": history::transcript(&load(&req.user_id))})),
         ("POST", "/api/models") => list_models(&req),
         ("POST", "/api/model") => choose_model(&req),
         _ => respond_json(404, json!({"error": "not found"})),
@@ -114,7 +115,7 @@ fn outcome_note(kind: Outcome, body: &Value) -> String {
             }
         }
     }
-    format!("[host outcome] {}", if lines.is_empty() { "no writes".to_string() } else { lines.join("; ") })
+    format!("{}{}", history::OUTCOME_PREFIX, if lines.is_empty() { "no writes".to_string() } else { lines.join("; ") })
 }
 
 fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
