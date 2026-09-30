@@ -5,6 +5,17 @@ Guests are wasip2 **components** (WIT `mydia:plugin@1.0.0`, built on the
 via `Wasmex.Components.*`. They migrated from `wasm32-unknown-unknown` core
 modules.
 
+## Design rule: the host owns shared nouns, the plugin owns behaviour
+
+Before designing a plugin or extending the WIT contract, read
+[What the host owns and what a plugin owns](../docs/plugins/explanation/plugin-model.md#what-the-host-owns-and-what-a-plugin-owns).
+In short, anything the admin UI, a profile page, another feature or another
+plugin must see is stored by the host and written through the contract. That
+covers watch state, account links, sync runs, health, secrets and instances.
+Protocol logic and the plugin's own working state stay in the guest. A plugin
+never keeps the only copy of a host noun in KV, new nouns are generic rather
+than service-named, and the host renders all UI from declarative steps.
+
 ## Build them via nix, not the Docker dev container
 
 The running Docker dev container only has `wasm32-unknown-unknown` installed. The
