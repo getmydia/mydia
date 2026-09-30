@@ -180,7 +180,7 @@ defmodule MydiaWeb.PluginPageControllerTest do
 
   test "an unknown page route surfaces the guest's status", %{conn: conn, token: token} do
     conn = get(conn, "/plugins/#{@slug}/app/definitely-missing?frame_token=#{token}")
-    assert conn.status in [404, 500]
+    assert conn.status == 404
   end
 
   test "preflight answers without a token", %{conn: conn} do

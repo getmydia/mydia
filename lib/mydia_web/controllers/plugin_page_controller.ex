@@ -8,8 +8,8 @@ defmodule MydiaWeb.PluginPageController do
   never re-encodes it. The acting user, role and session come from the verified
   token and the database, never from the request body or the guest. Pages are
   text only, because the guest's response body is a string. The host sets the
-  security headers itself and forwards only `content-type` and `cache-control`
-  from the guest, so a plugin cannot set cookies, relax the CSP or frame itself
+  security headers itself (`cache-control` is always `private, no-store`) and
+  forwards only `content-type` from the guest, so a plugin cannot set cookies, relax the CSP or frame itself
   elsewhere.
   """
   use MydiaWeb, :controller
