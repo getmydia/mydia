@@ -69,4 +69,36 @@ defmodule MydiaWeb.PluginPageLive.Components do
     </.modal>
     """
   end
+
+  attr :entry, :map, required: true
+
+  def journal_row(assigns) do
+    ~H"""
+    <div id={"journal-#{@entry.id}"} class="flex items-center gap-3 text-sm">
+      <span class="flex-1">{@entry.description}</span>
+      <span
+        :if={@entry.status != "applied"}
+        class={["badge badge-sm", status_class(@entry.status)]}
+      >
+        {status_label(@entry.status)}
+      </span>
+      <button
+        :if={@entry.status == "applied"}
+        id={"undo-#{@entry.id}"}
+        class="btn btn-ghost btn-xs"
+        phx-click="undo_entry"
+        phx-value-id={@entry.id}
+      >
+        Undo
+      </button>
+    </div>
+    """
+  end
+
+  defp status_label("undone"), do: "Undone"
+  defp status_label("conflict"), do: "Changed since"
+  defp status_label("irreversible"), do: "Can't undo"
+
+  defp status_class("undone"), do: "badge-ghost"
+  defp status_class(_), do: "badge-warning"
 end

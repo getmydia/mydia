@@ -671,4 +671,76 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert html =~ "118ms"
     end
   end
+
+  describe "page write ceilings and private hosts" do
+    defp seed_page_plugin(slug, schema) do
+      manifest =
+        slug
+        |> manifest_map("Page Helper")
+        |> Map.update!("capabilities", fn caps ->
+          Map.merge(caps, %{
+            "surfaces:page" => [],
+            "surfaces:write" => ["collections:write"]
+          })
+        end)
+        |> Map.put("settings_schema", schema)
+
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: slug,
+          name: "Page Helper",
+          version: "1.0.0",
+          manifest: manifest,
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{"events:subscribe" => ["media_item.added"]},
+          enabled: false
+        })
+
+      config
+    end
+
+    test "admins save role ceilings from the settings modal", %{conn: conn} do
+      seed_page_plugin("page-helper", [])
+      guest_before = Mydia.Plugins.Grants.ceiling("page-helper", "guest")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-page-helper") |> render_click()
+      assert has_element?(view, "#plugin-ceilings-form")
+
+      view
+      |> form("#plugin-ceilings-form", %{
+        "slug" => "page-helper",
+        "ceilings" => %{"user" => "session"}
+      })
+      |> render_submit()
+
+      assert Mydia.Plugins.Grants.ceiling("page-helper", "user") == "session"
+      assert Mydia.Plugins.Grants.ceiling("page-helper", "guest") == guest_before
+    end
+
+    test "a plugin without page writes has no ceilings form", %{conn: conn} do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-webhook-notifier") |> render_click()
+      refute has_element?(view, "#plugin-ceilings-form")
+    end
+
+    test "a url setting that may be private carries a hint", %{conn: conn} do
+      seed_page_plugin("page-helper", [
+        %{
+          "key" => "server_url",
+          "type" => "url",
+          "label" => "Server URL",
+          "grants_host" => true,
+          "allow_private" => true
+        }
+      ])
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-page-helper") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form", "may be on your local network")
+    end
+  end
 end

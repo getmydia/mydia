@@ -15,6 +15,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   alias Mydia.Events
   alias Mydia.Plugins
+  alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
@@ -22,6 +23,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   # Max log rows loaded into the detail timeline on open / filter.
   @log_limit 200
+
+  @ceiling_roles ~w(admin user guest readonly)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -153,6 +156,14 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
         values = Map.drop(params, ["slug", "_target"])
 
         {:noreply, assign(socket, :settings, %{settings | values: values, form: to_form(values)})}
+    end
+  end
+
+  def handle_event("save_ceilings", %{"slug" => slug, "ceilings" => ceilings}, socket)
+      when is_map(ceilings) do
+    case Grants.put_ceilings(slug, ceilings) do
+      {:ok, _} -> {:noreply, put_flash(socket, :info, "Permissions saved.")}
+      {:error, _} -> {:noreply, put_flash(socket, :error, "Could not save permissions.")}
     end
   end
 
@@ -379,7 +390,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # Enabled/disabled is a runtime choice after approval; an empty grant means
       # capabilities are still pending approval.
       pending_approval: capabilities != %{} and granted == %{},
-      has_settings: settings_schema != [],
+      has_settings: settings_schema != [] or page_writes?(config),
       # Once approved, the granted net:http reflects the operator-configured host.
       network_hosts: Map.get(granted, "net:http", Map.get(capabilities, "net:http", []))
     }
@@ -412,8 +423,17 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       schema: schema,
       values: stringify_values(form_data),
-      form: to_form(form_data)
+      form: to_form(form_data),
+      page_writes?: page_writes?(config),
+      ceilings_form:
+        to_form(Map.new(@ceiling_roles, &{&1, Grants.ceiling(config.slug, &1)}), as: :ceilings)
     }
+  end
+
+  # Role ceilings only mean something for a plugin whose page can write.
+  defp page_writes?(config) do
+    caps = capabilities_of(config)
+    Map.has_key?(caps, "surfaces:write") and Map.has_key?(caps, "surfaces:page")
   end
 
   # Current field values keyed by string, used to resolve `visible_when`.

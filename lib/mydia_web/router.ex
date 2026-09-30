@@ -245,6 +245,7 @@ defmodule MydiaWeb.Router do
 
       # Plugin pages (surfaces:page)
       live "/plugins/:slug", PluginPageLive.Show, :show
+      live "/plugins/:slug/activity", PluginPageLive.Activity, :index
     end
   end
 
