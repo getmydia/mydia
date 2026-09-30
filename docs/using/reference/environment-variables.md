@@ -272,6 +272,32 @@ are translated into Plex instances, but they are deprecated: Mydia logs a
 warning at startup and shows a banner on the Media servers page. Rename them to
 `PLUGIN_PLEX_<N>_*`. Jellyfin keeps using `MEDIA_SERVER_<N>_*`.
 
+## Plugins
+
+Settings for an installed plugin can come from the environment. Install and
+approve the plugin in the admin UI (or with `mydia-cli plugin install`) first;
+these variables only fill in its settings.
+
+```bash
+PLUGIN_0_SLUG=assistant-openai
+PLUGIN_0_SETTINGS='{"base_url":"http://ollama.lan:11434/v1","model":"llama3.1"}'
+```
+
+`PLUGIN_<N>_SETTINGS` is a JSON object whose keys are the plugin's setting
+keys. Settings set this way are applied at startup and when the plugin is
+installed, and show as read-only in the plugin's Settings dialog. Keys the
+plugin does not define, and URLs that are not full `http(s)` URLs, are skipped
+with a warning in the log. Removing a variable leaves its last value in place,
+editable in the UI.
+
+A URL setting that the plugin uses to reach a server (such as the Assistant's
+`base_url`) is added to the plugin's allowed hosts, as it is when you type it in
+the Settings dialog.
+
+The older `PLUGIN_<N>_NAME`, `_VERSION`, `_ENABLED`, `_PRIORITY`,
+`_SOURCE_URL`, `_INTEGRITY_HASH` and `_GRANTED_CAPABILITIES` variables are
+ignored.
+
 ## Indexers
 
 Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):
