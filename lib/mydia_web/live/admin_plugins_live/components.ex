@@ -782,11 +782,24 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         >
           <input type="hidden" name="slug" value={@settings.slug} />
           <div class="space-y-3 my-4">
-            <.settings_field
+            <div
               :for={field <- Enum.filter(@settings.schema, &visible_field?(&1, @settings.values))}
-              field={field}
-              form={@settings.form}
-            />
+              class="space-y-1"
+            >
+              <.settings_field
+                field={field}
+                form={@settings.form}
+                disabled={field["key"] in @settings.env_keys}
+              />
+              <p
+                :if={field["key"] in @settings.env_keys}
+                id={"settings-env-#{field["key"]}"}
+                class="flex items-center gap-2 text-xs text-base-content/60"
+              >
+                <.config_source_badge source={:env} size="xs" />
+                Set by PLUGIN_&lt;N&gt;_SETTINGS. Change it there.
+              </p>
+            </div>
           </div>
           <div class="modal-action">
             <.button type="button" class="btn btn-ghost" phx-click="close_settings">

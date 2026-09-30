@@ -17,6 +17,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   alias Mydia.Events
   alias Mydia.Plugins
+  alias Mydia.Plugins.DeclaredSettings
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.BrowseResult
@@ -190,7 +191,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
       config ->
         schema = settings_schema_of(config)
-        settings = build_settings(schema, params)
+        # Env-declared keys are read-only here: DeclaredSettings owns them.
+        settings = schema |> build_settings(params) |> Map.drop(DeclaredSettings.keys(config))
 
         socket =
           with :ok <- Plugins.validate_url_settings(schema, settings),
@@ -476,6 +478,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       schema: schema,
       values: stringify_values(form_data),
       form: to_form(form_data),
+      env_keys: DeclaredSettings.keys(config),
       page_writes?: page_writes?(config),
       ceilings_form: ceilings_form(config)
     }

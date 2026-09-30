@@ -883,4 +883,49 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#plugin-settings-form", "may be on your local network")
     end
   end
+
+  describe "env-declared settings" do
+    defp declare_settings(slug, settings) do
+      base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
+      decl = %Mydia.Config.Schema.PluginSettingsDecl{slug: slug, settings: settings}
+      Application.put_env(:mydia, :runtime_config, %{base | plugin_settings: [decl]})
+    end
+
+    setup do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", [])
+      env = %{"webhook_url" => "https://env.example.com/x"}
+      declare_settings("webhook-notifier", env)
+      Mydia.Plugins.DeclaredSettings.sync("webhook-notifier")
+      # Syncing an enabled plugin re-registers it, which reloads :runtime_config
+      # from the real environment and drops the injected declaration.
+      declare_settings("webhook-notifier", env)
+      :ok
+    end
+
+    test "render disabled with an ENV badge while other fields stay editable", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-webhook-notifier") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form input[name=webhook_url][disabled]")
+      refute has_element?(view, "#plugin-settings-form select[name=target][disabled]")
+      assert has_element?(view, "#settings-env-webhook_url")
+    end
+
+    test "a save cannot overwrite an env-declared key", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-webhook-notifier") |> render_click()
+
+      view
+      |> element("#plugin-settings-form")
+      |> render_submit(%{
+        "slug" => "webhook-notifier",
+        "target" => "ntfy",
+        "webhook_url" => "https://other.example.com/x"
+      })
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.settings["webhook_url"] == "https://env.example.com/x"
+      assert config.settings["target"] == "ntfy"
+    end
+  end
 end
