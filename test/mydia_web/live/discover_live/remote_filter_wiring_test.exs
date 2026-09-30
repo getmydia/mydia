@@ -47,7 +47,6 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
       has_more: false,
       load_error: nil,
       loading: true,
-      selected_country: nil,
       home_country: nil
     }
 

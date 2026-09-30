@@ -334,7 +334,6 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
           source: {:service, 8001, "Maplestream"},
           default_sort: "primary_release_date.desc",
           regional_rows: %{},
-          selected_country: nil,
           selected_genres: [],
           selected_language: nil,
           selected_year: nil,

@@ -67,48 +67,27 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
   defp home_country(user),
     do: user |> Accounts.get_user_preference!() |> UserPreference.discover_home_country()
 
-  describe "the one-off country filter" do
-    test "?country=CA filters by origin and saves nothing", %{
-      conn: conn,
-      user: user,
-      bypass: bypass
-    } do
-      stub_discover(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "CA"}}")
-
-      assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
-      assert has_element?(view, "#discover-grid h3", "Frostbound Ferry")
-
-      assert has_element?(
-               view,
-               "#discover-filter-form select[name='country'] option[value='CA'][selected]"
-             )
-
-      assert home_country(user) == nil
-    end
-
-    test "an unknown ?country= is ignored", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "XX"}}")
-
-      refute has_element?(view, "#discover-filter-form")
-      refute_received {:discover_query, _}
-    end
-
-    test "picking a country in the filter bar patches the URL", %{conn: conn, bypass: bypass} do
+  describe "the removed country filter" do
+    test "a ?country= link is ignored", %{conn: conn, user: user, bypass: bypass} do
       stub_discover(bypass)
 
       {:ok, view, _html} =
-        live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "discover"}}")
+        live(
+          conn,
+          ~p"/discover?#{%{"type" => "movie", "category" => "discover", "country" => "CA"}}"
+        )
 
-      view
-      |> element("#discover-filter-form")
-      |> render_change(%{"country" => "CA"})
+      assert_receive {:discover_query, q}
+      refute Map.has_key?(q, "with_origin_country")
+      refute has_element?(view, "#discover-filter-form select[name='country']")
+      assert home_country(user) == nil
+    end
 
-      assert_patch(
-        view,
-        ~p"/discover?#{%{"category" => "discover", "country" => "CA", "type" => "movie"}}"
-      )
+    test "?country= alone does not switch to Custom", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "CA"}}")
+
+      refute has_element?(view, "#discover-filter-form")
+      assert has_element?(view, "[role='tab'].tab-active", "Trending")
     end
   end
 
@@ -268,7 +247,6 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
           search_query: "",
           category: :home,
           home_country: "CA",
-          selected_country: nil,
           selected_genres: [],
           selected_language: nil,
           selected_year: nil,
