@@ -10,6 +10,7 @@ defmodule Mydia.Accounts.UserPreference do
   import Ecto.Changeset
 
   alias Mydia.Accounts.PosterFields
+  alias Mydia.Metadata.Countries
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
@@ -107,6 +108,32 @@ defmodule Mydia.Accounts.UserPreference do
   """
   def discover_hide_owned(%__MODULE__{preferences: prefs}) do
     Map.get(prefs, "discover_hide_owned", @defaults["discover_hide_owned"])
+  end
+
+  @doc """
+  The Discover home country, an ISO 3166-1 alpha-2 code, or nil when unset.
+
+  Returns nil rather than a default on purpose: nil means "no home tab". A
+  stored code that `Mydia.Metadata.Countries` no longer lists also reads as
+  nil, so shrinking that list turns the tab off instead of breaking Discover.
+  """
+  def discover_home_country(%__MODULE__{preferences: prefs}) do
+    code = Map.get(prefs || %{}, "discover_home_country")
+    if Countries.valid_code?(code), do: code, else: nil
+  end
+
+  @doc """
+  The streaming services picked for the Discover country tab, as
+  `%{"id" => tmdb_provider_id, "name" => display_name}` maps in the user's
+  order. The name is stored so rows stay labelled when the relay is down.
+
+  Empty when no home country is set: services are per region, so they mean
+  nothing without one. A malformed stored value also reads as empty.
+  """
+  def discover_streaming_services(%__MODULE__{preferences: prefs} = pref) do
+    value = Map.get(prefs || %{}, "discover_streaming_services")
+
+    if discover_home_country(pref) && valid_services?(value), do: value, else: []
   end
 
   @doc """
@@ -215,6 +242,8 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("close_manual_search_after_grab", [true, false])
     |> validate_preference_value("recommendations_expanded", [true, false])
     |> validate_preference_value("discover_hide_owned", [true, false])
+    |> validate_discover_home_country()
+    |> validate_discover_streaming_services()
     |> validate_preference_value("add_monitored", [true, false])
     |> validate_preference_value("add_search_on_add", [true, false])
     |> validate_preference_value(
@@ -225,6 +254,56 @@ defmodule Mydia.Accounts.UserPreference do
     |> validate_preference_value("player_banner_dismissed", [true, false])
     |> validate_home_widgets()
     |> validate_poster_fields()
+  end
+
+  # Same stale-value rule as validate_poster_fields/1: a stored code that a
+  # later release drops from Countries must not fail every unrelated save,
+  # because update_preferences_changeset/2 re-validates the merged map. Only a
+  # new or changed value is checked.
+
+  # Same stale-value rule as validate_discover_home_country/1.
+  defp validate_discover_streaming_services(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "discover_streaming_services"),
+         false <-
+           value == Map.get(changeset.data.preferences || %{}, "discover_streaming_services"),
+         false <- valid_services?(value) do
+      add_error(
+        changeset,
+        :preferences,
+        "invalid value for discover_streaming_services: #{inspect(value)}"
+      )
+    else
+      _ -> changeset
+    end
+  end
+
+  defp valid_services?(value) when is_list(value) do
+    Enum.all?(value, &valid_service?/1) and
+      length(value) == length(Enum.uniq_by(value, & &1["id"]))
+  end
+
+  defp valid_services?(_value), do: false
+
+  defp valid_service?(%{"id" => id, "name" => name})
+       when is_integer(id) and id > 0 and is_binary(name),
+       do: String.trim(name) != ""
+
+  defp valid_service?(_), do: false
+
+  defp validate_discover_home_country(changeset) do
+    with prefs when is_map(prefs) <- get_change(changeset, :preferences),
+         value when not is_nil(value) <- Map.get(prefs, "discover_home_country"),
+         false <- value == Map.get(changeset.data.preferences || %{}, "discover_home_country"),
+         false <- Countries.valid_code?(value) do
+      add_error(
+        changeset,
+        :preferences,
+        "invalid value for discover_home_country: #{inspect(value)}"
+      )
+    else
+      _ -> changeset
+    end
   end
 
   # A stored `poster_fields` value that a later release removes from

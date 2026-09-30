@@ -170,6 +170,21 @@ defmodule MetadataRelay.Router do
     handle_tmdb_request(conn, fn -> Handler.genre_tv_list(params) end)
   end
 
+  # TMDB Watch Providers (streaming services per region)
+  get "/tmdb/watch/providers/:type" do
+    case type do
+      t when t in ["movie", "tv"] ->
+        params = extract_query_params(conn)
+        media = if t == "movie", do: :movie, else: :tv
+        handle_tmdb_request(conn, fn -> Handler.watch_providers(media, params) end)
+
+      _ ->
+        conn
+        |> put_resp_content_type("application/json")
+        |> send_resp(404, Jason.encode!(%{error: "Not found"}))
+    end
+  end
+
   # TMDB User List (must come before /tmdb/movies/:id)
   get "/tmdb/list/:id" do
     params = extract_query_params(conn)

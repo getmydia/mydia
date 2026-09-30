@@ -57,7 +57,6 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
   alias Mydia.Jobs.MovieSearch
   alias Mydia.Jobs.TVShowSearch
-  alias Mydia.Repo
   alias Mydia.Upgrades
   alias Mydia.Upgrades.Reasons
 
@@ -80,7 +79,7 @@ defmodule Mydia.Jobs.UpgradeSweep do
   """
   @spec enqueue_for_item(binary()) :: :ok
   def enqueue_for_item(media_item_id) when is_binary(media_item_id) do
-    case %{"media_item_id" => media_item_id} |> new() |> insert_job() do
+    case %{"media_item_id" => media_item_id} |> new() |> Mydia.Jobs.insert() do
       {:ok, _job} ->
         :ok
 
@@ -349,7 +348,7 @@ defmodule Mydia.Jobs.UpgradeSweep do
   # failure. Mirrors enqueue_movie/1's fail-open behaviour — one job that
   # fails to enqueue is logged and skipped, never failing the batch.
   defp enqueue(args) do
-    case args |> TVShowSearch.new() |> insert_job() do
+    case args |> TVShowSearch.new() |> Mydia.Jobs.insert() do
       {:ok, _job} ->
         1
 
@@ -382,7 +381,7 @@ defmodule Mydia.Jobs.UpgradeSweep do
       "reasons" => Reasons.encode(reasons)
     }
 
-    case args |> MovieSearch.new() |> insert_job() do
+    case args |> MovieSearch.new() |> Mydia.Jobs.insert() do
       {:ok, _job} ->
         true
 
@@ -394,12 +393,6 @@ defmodule Mydia.Jobs.UpgradeSweep do
 
         false
     end
-  end
-
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
   end
 
   # Reads through the layered runtime config (env > DB/UI > YAML > schema

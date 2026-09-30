@@ -430,9 +430,19 @@ defmodule MydiaWeb.MediaLive.Show.SeasonComponents do
         </div>
       <% else %>
         <p class="text-xs text-base-content/60">
-          No download has been recorded for this episode. Use search to look for a release.
+          No download has been recorded for this episode. Search for a release, or find a file already on disk.
         </p>
       <% end %>
+
+      <button
+        type="button"
+        id={"find-file-episode-#{@episode.id}"}
+        phx-click="open_find_file"
+        phx-value-episode-id={@episode.id}
+        class="btn btn-xs btn-outline"
+      >
+        <.icon name="hero-document-magnifying-glass" class="w-3.5 h-3.5" /> Find file on disk
+      </button>
     </div>
     """
   end

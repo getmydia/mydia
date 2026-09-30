@@ -80,7 +80,8 @@ defmodule Mydia.Metadata.Provider.Relay do
     SeasonData,
     ImagesResponse,
     Collection,
-    Video
+    Video,
+    WatchProvider
   }
 
   @default_language "en-US"
@@ -1169,7 +1170,8 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   @doc """
-  Discovers media with filters (genre, year, language, rating, sort).
+  Discovers media with filters (genre, year, language, origin country, rating, sort,
+  regional release window, streaming service).
 
   Returns `{:ok, %{results: [SearchResult], page: int, total_pages: int}}`.
   """
@@ -1178,11 +1180,14 @@ defmodule Mydia.Metadata.Provider.Relay do
     page = Keyword.get(opts, :page, 1)
     genres = Keyword.get(opts, :genres)
     original_language = Keyword.get(opts, :original_language)
+    origin_country = Keyword.get(opts, :origin_country)
     year = Keyword.get(opts, :year)
     min_rating = Keyword.get(opts, :min_rating)
     sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
     certification_country = Keyword.get(opts, :certification_country)
     certification_lte = Keyword.get(opts, :certification_lte)
+    region = Keyword.get(opts, :region)
+    {date_gte_key, date_lte_key} = release_date_keys(media_type, region)
 
     endpoint =
       case media_type do
@@ -1198,10 +1203,22 @@ defmodule Mydia.Metadata.Provider.Relay do
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
       |> maybe_add_param(:with_original_language, original_language)
+      |> maybe_add_param(:with_origin_country, origin_country)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)
+      |> maybe_add_param(:"vote_count.gte", Keyword.get(opts, :min_votes))
       |> maybe_add_param(:certification_country, certification_country)
       |> maybe_add_param(:"certification.lte", certification_lte)
+      |> maybe_add_param(:region, region)
+      |> maybe_add_param(:with_release_type, Keyword.get(opts, :with_release_type))
+      |> maybe_add_param(:watch_region, Keyword.get(opts, :watch_region))
+      |> maybe_add_param(:with_watch_providers, Keyword.get(opts, :with_watch_providers))
+      |> maybe_add_param(
+        :with_watch_monetization_types,
+        Keyword.get(opts, :with_watch_monetization_types)
+      )
+      |> maybe_add_param(date_gte_key, Keyword.get(opts, :release_date_gte))
+      |> maybe_add_param(date_lte_key, Keyword.get(opts, :release_date_lte))
 
     req = HTTP.new_request(config)
 
@@ -1340,6 +1357,41 @@ defmodule Mydia.Metadata.Provider.Relay do
     end
   end
 
+  @doc """
+  Streaming services TMDB lists for `region`, sorted by that region's display
+  priority. Not a `Mydia.Metadata.Provider` callback: TVDB has no equivalent.
+  """
+  def fetch_watch_providers(config, media_type, region) do
+    endpoint =
+      case media_type do
+        :tv_show -> "/tmdb/watch/providers/tv"
+        _ -> "/tmdb/watch/providers/movie"
+      end
+
+    req = HTTP.new_request(config)
+
+    case HTTP.get(req, endpoint, params: [watch_region: region]) do
+      {:ok, %{status: 200, body: %{"results" => results}}} when is_list(results) ->
+        providers =
+          results
+          |> Enum.map(&WatchProvider.from_api(&1, region))
+          |> Enum.reject(&is_nil/1)
+          |> Enum.sort_by(& &1.display_priority)
+
+        {:ok, providers}
+
+      {:ok, %{status: 200}} ->
+        {:ok, []}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error,
+         Error.api_error("Fetch watch providers failed with status #{status}", %{body: body})}
+
+      {:error, error} ->
+        {:error, error}
+    end
+  end
+
   ## Private Functions
 
   defp when_valid_query(query, callback) when is_binary(query) and byte_size(query) > 0 do
@@ -1374,6 +1426,16 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp year_param_key(:tv_show), do: :first_air_date_year
   defp year_param_key(_), do: :primary_release_year
+
+  # TMDB's release_date.* on /discover/movie matches any release, and with
+  # `region` set only that region's releases; primary_release_date.* is the
+  # first release anywhere. The cinema sources need the regional one.
+  defp release_date_keys(:tv_show, _region), do: {:"first_air_date.gte", :"first_air_date.lte"}
+
+  defp release_date_keys(_movie, nil),
+    do: {:"primary_release_date.gte", :"primary_release_date.lte"}
+
+  defp release_date_keys(_movie, _region), do: {:"release_date.gte", :"release_date.lte"}
 
   defp maybe_add_year(params, nil, _media_type), do: params
   defp maybe_add_year(params, year, :movie), do: params ++ [year: year]

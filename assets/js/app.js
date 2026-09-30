@@ -30,6 +30,8 @@ import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
 import GridDensity from "./hooks/grid_density.mjs";
 import PluginFrame from "./hooks/plugin_frame";
+import PwaInstallMenuItem from "./hooks/pwa_install_menu_item.mjs";
+import { initPwaInstall } from "./pwa_install.mjs";
 import {
   PasskeyRegister,
   initPasskeyLogin,
@@ -442,6 +444,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     PlexOAuth,
     DockNav,
     PersistedCheckbox,
+    PwaInstallMenuItem,
     GridDensity,
     AddDirectUrl,
     BatchSelect,
@@ -578,6 +581,8 @@ document.addEventListener("click", (e) => {
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
 window.liveSocket = liveSocket;
+
+initPwaInstall();
 
 // Register service worker for PWA support
 if ("serviceWorker" in navigator) {

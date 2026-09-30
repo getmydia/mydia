@@ -17,6 +17,8 @@ defmodule MydiaWeb.MediaLive.Show do
   alias MydiaWeb.MediaLive.Show.CollectionEvents
   alias MydiaWeb.MediaLive.Show.SubtitleEvents
   alias MydiaWeb.MediaLive.Show.FileEvents
+  alias MydiaWeb.MediaLive.Show.FindFileComponents
+  alias MydiaWeb.MediaLive.Show.FindFileEvents
   alias MydiaWeb.MediaLive.Show.RenameEvents
   alias MydiaWeb.MediaLive.Show.RenameModal
   alias MydiaWeb.MediaLive.Show.SearchEvents
@@ -101,6 +103,7 @@ defmodule MydiaWeb.MediaLive.Show do
      |> assign(:reidentify_provider, nil)
      |> assign(:reidentifying, false)
      # Manual search modal state
+     |> FindFileEvents.assign_defaults()
      |> assign(:show_manual_search_modal, false)
      |> assign(:manual_search_query, "")
      |> assign(:manual_search_context, nil)
@@ -339,6 +342,14 @@ defmodule MydiaWeb.MediaLive.Show do
 
   def handle_event("not_this_item", params, socket),
     do: FileEvents.not_this_item(params, socket)
+
+  def handle_event("open_find_file", params, socket), do: FindFileEvents.open(params, socket)
+  def handle_event("close_find_file", params, socket), do: FindFileEvents.close(params, socket)
+  def handle_event("find_file_search", params, socket), do: FindFileEvents.search(params, socket)
+  def handle_event("find_file_scan", params, socket), do: FindFileEvents.scan(params, socket)
+
+  def handle_event("attach_found_file", params, socket),
+    do: FindFileEvents.attach(params, socket)
 
   def handle_event("show_file_delete_confirm", params, socket),
     do: FileEvents.show_file_delete_confirm(params, socket)
@@ -876,6 +887,11 @@ defmodule MydiaWeb.MediaLive.Show do
     ref = Ref.from_search_result(socket.assigns.selected_item)
     {:noreply, DetailModalEvents.fetch_recommendations(socket, ref, media_type)}
   end
+
+  def handle_info({:import_run_progress, run}, socket),
+    do: FindFileEvents.run_progress(run, socket)
+
+  def handle_info(:find_file_refresh, socket), do: FindFileEvents.deferred_refresh(socket)
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 

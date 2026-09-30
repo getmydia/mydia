@@ -18,7 +18,8 @@ defmodule MydiaWeb do
   """
 
   def static_paths,
-    do: ~w(assets fonts images player favicon.ico robots.txt manifest.json service-worker.js)
+    do:
+      ~w(assets fonts images player favicon.ico robots.txt manifest.json service-worker.js offline.html)
 
   def router do
     quote do

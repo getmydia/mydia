@@ -223,6 +223,13 @@ defmodule MetadataRelay.CacheTest do
     end
   end
 
+  describe "ttl_for/1 for watch providers" do
+    test "watch provider lists expire after a day" do
+      assert MetadataRelay.Cache.ttl_for("GET:/tmdb/watch/providers/movie:watch_region=CA") ==
+               :timer.hours(24)
+    end
+  end
+
   describe "integration scenarios" do
     test "handles typical API request caching workflow" do
       # Simulate caching an API request/response

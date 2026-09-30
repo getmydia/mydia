@@ -37,6 +37,7 @@ defmodule MetadataRelay.Cache do
   @search_ttl :timer.hours(24 * 7)
   @details_ttl :timer.hours(24 * 30)
   @season_ttl :timer.hours(24 * 14)
+  @watch_providers_ttl :timer.hours(24)
 
   @doc """
   Builds a cache key from request method, path, and query string.
@@ -128,6 +129,10 @@ defmodule MetadataRelay.Cache do
       # Trending data changes frequently - keep fresh
       String.contains?(key, "/trending") ->
         @trending_ttl
+
+      # Streaming catalogues per region change slowly but do change
+      String.contains?(key, "/watch/providers") ->
+        @watch_providers_ttl
 
       # Search results - moderate caching
       String.contains?(key, "/search") ->

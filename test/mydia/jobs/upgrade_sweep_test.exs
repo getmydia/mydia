@@ -64,7 +64,7 @@ defmodule Mydia.Jobs.UpgradeSweepTest do
   # prove the item is stamped when its enqueue *fails* (the actual
   # anti-starvation guarantee decisions #2/#3 in the task brief describe):
   # every candidate here succeeds, since Repo.insert/1 (the fallback
-  # insert_job/1 uses under config/test.exs's engine: false) never fails for
+  # Mydia.Jobs.insert/1 uses under config/test.exs's engine: false) never fails for
   # a well-formed MovieSearch changeset in this codebase — there is no FK or
   # unique DB constraint tied to the business ids carried in `args`, and this
   # project has no mocking library wired up to stub Repo.insert/1 or

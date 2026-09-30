@@ -368,9 +368,9 @@ defmodule Mydia.Search do
     # A deduped insert returns {:ok, %Oban.Job{conflict?: true}} rather than an
     # error, so it must not bump the "queued" count. This branch cannot be
     # regression-tested here: config/test.exs sets `engine: false`, so
-    # insert_job/1 always falls through to the Repo.insert/1 rescue clause
-    # below, which never sets conflict?: true.
-    case insert_job(changeset) do
+    # Jobs.insert/1 always falls through to its Repo.insert/1 rescue clause,
+    # which never sets conflict?: true.
+    case Mydia.Jobs.insert(changeset) do
       {:ok, %Oban.Job{conflict?: true}} -> insert_jobs(rest, count)
       {:ok, _job} -> insert_jobs(rest, count + 1)
       {:error, _reason} = error -> error
@@ -392,19 +392,6 @@ defmodule Mydia.Search do
     )
 
     nil
-  end
-
-  # Insert an Oban job, falling back to a direct Repo insert when Oban's engine
-  # is disabled (test mode). Mirrors the pattern in Downloads.Queue and
-  # DownloadMonitor.
-  #
-  # This repo's test config sets `engine: false` (see config/test.exs), so
-  # this fallback branch is the only one the test suite exercises. It gives
-  # no signal on the real `Oban.insert/1` path or its uniqueness behavior.
-  defp insert_job(changeset) do
-    Oban.insert(changeset)
-  rescue
-    RuntimeError -> Repo.insert(changeset)
   end
 
   ## Private Functions

@@ -110,7 +110,13 @@ defmodule MydiaWeb.GridDensityComponents do
   end
 
   @doc """
-  The eye-icon dropdown that picks which parts of a library poster card render.
+  The sliders-icon dropdown that picks which parts of a library poster card
+  render.
+
+  One `menu` row per `PosterFields.catalog/0` entry, each a label plus a
+  daisyUI `toggle`, so the choices read as on/off settings rather than a
+  cloud of filter chips. The whole row is the `<label>`, so it is the hit
+  target.
 
   Every change submits the whole checked set, so the handler never tracks
   individual toggles. The hidden empty `fields[]` makes "everything off"
@@ -118,15 +124,9 @@ defmodule MydiaWeb.GridDensityComponents do
   `PosterFields.resolve/1` would otherwise read as "never set" (defaults)
   rather than "none".
 
-  Uses daisyUI's `.filter` component rather than a hand-rolled `flex
-  flex-wrap` row. `lib/mydia_web/components/README.md` measured the
-  stylesheet Tailwind actually builds (not the stale vendored
-  `daisyui.js`) and found 5.7.7 excludes checkboxes from `.filter`'s
-  single-choice collapse trigger
-  (`:has(:checked:not(.filter-reset, [type="checkbox"]))`), so a multi-select
-  checkbox row stays fully visible once one is checked.
-  `MydiaWeb.MediaLive.Show.SubtitleModal`'s language chips already rely on the
-  same behaviour.
+  The tooltip sits on a wrapper around the trigger, never on the trigger
+  itself; `MydiaWeb.SegmentedControl` explains why. It opens to the left
+  because this is the toolbar's right-most control.
   """
   attr :id, :string, default: "poster-fields-menu"
   attr :fields, :list, required: true
@@ -136,42 +136,52 @@ defmodule MydiaWeb.GridDensityComponents do
 
     ~H"""
     <div id={@id} class="dropdown dropdown-end">
-      <div
-        tabindex="0"
-        role="button"
-        class="btn btn-ghost btn-sm btn-square"
-        aria-label="Poster display"
-      >
-        <.icon name="hero-eye" class="w-5 h-5" />
+      <%!-- tooltip-left: the button is the toolbar's right-most control, and
+            a centred tip hangs past the viewport edge even while hidden,
+            giving the whole page a horizontal scrollbar. --%>
+      <div class="tooltip tooltip-left" data-tip="Poster display">
+        <div
+          tabindex="0"
+          role="button"
+          class="btn btn-ghost btn-sm btn-square"
+          aria-label="Poster display"
+        >
+          <.icon name="hero-adjustments-horizontal" class="w-5 h-5" />
+        </div>
       </div>
       <div
         tabindex="0"
-        class="dropdown-content z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-box bg-base-100 p-3 shadow-lg border border-base-300"
+        class="dropdown-content z-30 mt-2 w-64 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto rounded-box bg-base-100 p-2 shadow-lg border border-base-300"
       >
-        <p class="text-xs font-semibold text-base-content/70 mb-2">Show on posters</p>
+        <p class="px-3 pt-1 pb-2 text-xs font-semibold text-base-content/70">Show on posters</p>
         <form id="poster-fields-form" phx-change="set_poster_fields">
           <input type="hidden" name="fields[]" value="" />
-          <div class="filter" role="group" aria-label="Poster fields">
-            <input
-              :for={{key, label} <- @catalog}
-              type="checkbox"
-              class="btn btn-xs"
-              name="fields[]"
-              value={key}
-              aria-label={label}
-              id={"poster-field-#{key}"}
-              checked={key in @fields}
-            />
-          </div>
+          <ul class="menu menu-sm w-full p-0" aria-label="Poster fields">
+            <li :for={{key, label} <- @catalog}>
+              <label for={"poster-field-#{key}"} class="flex items-center justify-between gap-3">
+                <span>{label}</span>
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-primary"
+                  name="fields[]"
+                  value={key}
+                  id={"poster-field-#{key}"}
+                  checked={key in @fields}
+                />
+              </label>
+            </li>
+          </ul>
         </form>
-        <button
-          id="poster-fields-reset"
-          type="button"
-          phx-click="reset_poster_fields"
-          class="btn btn-link btn-xs px-0 mt-2"
-        >
-          Reset to default
-        </button>
+        <div class="border-t border-base-300 mt-2 pt-2 px-1">
+          <button
+            id="poster-fields-reset"
+            type="button"
+            phx-click="reset_poster_fields"
+            class="btn btn-ghost btn-xs"
+          >
+            Reset to default
+          </button>
+        </div>
       </div>
     </div>
     """

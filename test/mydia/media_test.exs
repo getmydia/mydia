@@ -797,6 +797,7 @@ defmodule Mydia.MediaTest do
                relative_path: "Show/Season 02/S02E03.mkv",
                provider_type: "tvdb",
                provider_id: "1234",
+               dismissed_at: nil,
                parsed_info: %{"season" => 2, "episodes" => [3]}
              } = Repo.get_by!(ImportCandidate, library_path_id: file.library_path_id)
     end
@@ -3065,7 +3066,7 @@ defmodule Mydia.MediaTest do
                Media.delete_media_item(Scope.unrestricted(), media_item)
 
       assert File.exists?(abs)
-      assert candidate_for(file)
+      assert %{dismissed_at: %DateTime{}} = candidate_for(file)
     end
 
     test "delete_media_items/2 with delete_files: true creates no import candidates for episode files",
@@ -3086,7 +3087,102 @@ defmodule Mydia.MediaTest do
       assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
                Media.delete_media_items(Scope.unrestricted(), [media_item.id])
 
-      assert candidate_for(file)
+      assert %{dismissed_at: %DateTime{}} = candidate_for(file)
+    end
+
+    test "delete_episode/1 still demotes undismissed", %{library_path: lp} do
+      {media_item, file} = show_with_episode_file(lp, "Show/S01E05.mkv", "data")
+      [episode] = Mydia.Repo.preload(media_item, :episodes).episodes
+
+      assert {:ok, _} = Media.delete_episode(episode)
+      assert %{dismissed_at: nil} = candidate_for(file)
+    end
+  end
+
+  describe "removing a movie while keeping its files" do
+    alias Mydia.Library.ImportCandidate
+    alias Mydia.Media.DiskRemoval
+    alias Mydia.Media.MediaItem
+    alias Mydia.Repo
+
+    import Mydia.MediaFixtures
+    import Mydia.SettingsFixtures
+
+    setup do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "mydia_media_movie_del_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf(tmp) end)
+      %{library_path: library_path_fixture(%{path: tmp, type: "movies"})}
+    end
+
+    defp movie_with_file(lp, rel) do
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Zephyr Station",
+          year: 2030,
+          tmdb_id: 900_201,
+          metadata_source: :tmdb
+        })
+
+      absolute_path = Path.join(lp.path, rel)
+      File.mkdir_p!(Path.dirname(absolute_path))
+      File.write!(absolute_path, "data")
+
+      file =
+        media_file_fixture(media_item_id: movie.id, library_path_id: lp.id, relative_path: rel)
+
+      {movie, file}
+    end
+
+    defp movie_candidate_for(file) do
+      Repo.get_by(ImportCandidate,
+        library_path_id: file.library_path_id,
+        relative_path: file.relative_path
+      )
+    end
+
+    test "delete_media_item/2 parks the file as a dismissed movie candidate", %{
+      library_path: lp
+    } do
+      {movie, file} = movie_with_file(lp, "Zephyr Station (2030)/Zephyr.Station.2030.mkv")
+
+      assert {:ok, %MediaItem{}, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_item(Scope.unrestricted(), movie)
+
+      assert File.exists?(Path.join(lp.path, file.relative_path))
+
+      assert %ImportCandidate{
+               media_type: "movie",
+               provider_type: "tmdb",
+               provider_id: "900201",
+               title: "Zephyr Station",
+               year: 2030,
+               dismissed_at: %DateTime{}
+             } = movie_candidate_for(file)
+    end
+
+    test "delete_media_items/2 parks movie files too", %{library_path: lp} do
+      {movie, file} = movie_with_file(lp, "Zephyr Station (2030)/bulk.mkv")
+
+      assert {:ok, 1, %DiskRemoval{files_failed: 0}} =
+               Media.delete_media_items(Scope.unrestricted(), [movie.id])
+
+      assert %ImportCandidate{dismissed_at: %DateTime{}} = movie_candidate_for(file)
+    end
+
+    test "delete_files: true leaves no candidate", %{library_path: lp} do
+      {movie, file} = movie_with_file(lp, "Zephyr Station (2030)/gone.mkv")
+
+      assert {:ok, %MediaItem{}, %DiskRemoval{}} =
+               Media.delete_media_item(Scope.unrestricted(), movie, delete_files: true)
+
+      refute movie_candidate_for(file)
     end
   end
 
