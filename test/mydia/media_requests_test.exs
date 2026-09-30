@@ -1286,4 +1286,54 @@ defmodule Mydia.MediaRequestsTest do
     |> Media.MediaItem.changeset(Map.merge(default_attrs, attrs))
     |> Repo.insert!()
   end
+
+  describe "cancel_request/2" do
+    setup do
+      guest = Mydia.AccountsFixtures.user_fixture(%{role: "guest"})
+
+      {:ok, request} =
+        MediaRequests.create_request(Scope.for_user(guest), %{
+          media_type: "movie",
+          title: "Harbor of Glass",
+          tmdb_id: 900_001,
+          requester_id: guest.id
+        })
+
+      {:ok, guest: guest, request: request}
+    end
+
+    test "the requester can cancel a pending request", %{guest: guest, request: request} do
+      assert {:ok, _} = MediaRequests.cancel_request(Scope.for_user(guest), request)
+      assert_raise Ecto.NoResultsError, fn -> MediaRequests.get_request!(request.id) end
+    end
+
+    test "another non-admin cannot", %{request: request} do
+      other = Mydia.AccountsFixtures.user_fixture(%{role: "guest"})
+
+      assert {:error, :unauthorized} =
+               MediaRequests.cancel_request(Scope.for_user(other), request)
+    end
+
+    test "an approved request cannot be cancelled", %{guest: guest, request: request} do
+      approved = %{request | status: "approved"}
+
+      assert {:error, :not_pending} =
+               MediaRequests.cancel_request(Scope.for_user(guest), approved)
+    end
+
+    test "a request approved after it was loaded is not deleted", %{
+      guest: guest,
+      request: request
+    } do
+      # `request` is the stale struct, still "pending" in memory.
+      Repo.update_all(from(r in MediaRequest, where: r.id == ^request.id),
+        set: [status: "approved"]
+      )
+
+      assert {:error, :not_pending} =
+               MediaRequests.cancel_request(Scope.for_user(guest), request)
+
+      assert MediaRequests.get_request!(request.id).status == "approved"
+    end
+  end
 end

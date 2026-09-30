@@ -23,25 +23,6 @@ defmodule Mydia.Metadata.DiscoverCacheKeyTest do
     %{bypass: bypass}
   end
 
-  test "two origin countries are cached separately", %{bypass: bypass} do
-    test_pid = self()
-
-    Bypass.expect(bypass, "GET", "/tmdb/movies/discover", fn conn ->
-      conn = Plug.Conn.fetch_query_params(conn)
-      send(test_pid, {:origin, conn.query_params["with_origin_country"]})
-
-      conn
-      |> Plug.Conn.put_resp_content_type("application/json")
-      |> Plug.Conn.resp(200, Jason.encode!(%{"results" => [], "total_pages" => 1}))
-    end)
-
-    assert {:ok, _} = Metadata.discover(:movie, origin_country: "CA")
-    assert {:ok, _} = Metadata.discover(:movie, origin_country: "FR")
-
-    assert_receive {:origin, "CA"}
-    assert_receive {:origin, "FR"}
-  end
-
   test "two streaming services are cached separately", %{bypass: bypass} do
     test_pid = self()
 

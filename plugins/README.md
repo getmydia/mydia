@@ -90,3 +90,9 @@ When adding a guest, mirror the webhook_notifier vendoring block in
 `flake-module.nix`, both the `importCargoLock` and the `.cargo/config.toml` write.
 Verify with `nix build .#checks.x86_64-linux.package -L` before pushing; a green
 local `./dev` will not catch it.
+
+## Plugins that are not bundled
+
+Everything under `plugins/` ships in the Mydia image. Plugins that operators
+install from the official index instead live in `plugins-extra/`; see
+`plugins-extra/README.md` for their layout and how they are published.

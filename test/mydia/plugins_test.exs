@@ -127,6 +127,84 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "page plugins" do
+    defp page_manifest! do
+      manifest!(%{
+        "slug" => "page-fixture",
+        "name" => "Page Fixture",
+        "min_host_version" => "0.0.0-dev",
+        "capabilities" => %{"surfaces:page" => []},
+        "page" => %{"title" => "Fixture", "icon" => "hero-sparkles"},
+        "settings_schema" => [
+          %{
+            "key" => "endpoint",
+            "type" => "url",
+            "grants_host" => true,
+            "allow_private" => true
+          }
+        ]
+      })
+    end
+
+    test "the stored manifest map re-parses to the same manifest" do
+      manifest = page_manifest!()
+
+      assert {:ok, ^manifest} =
+               manifest |> Plugins.manifest_to_map() |> Manifest.parse()
+    end
+
+    test "installing a page plugin activates it and lists its page", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:ok, descriptor} =
+               Plugins.install(entry(bypass, page_manifest!(), wasm), gate_opts())
+
+      assert descriptor.enabled
+      assert Host.running?("page-fixture")
+
+      assert [%{slug: "page-fixture", title: "Fixture", icon: "hero-sparkles"}] =
+               Plugins.list_pages()
+    end
+
+    test "approving a page plugin activates it", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:ok, :inactive} =
+               Plugins.install(
+                 entry(bypass, page_manifest!(), wasm),
+                 [grants: %{}] ++ gate_opts()
+               )
+
+      assert {:ok, _} = Plugins.approve("page-fixture")
+      assert Host.running?("page-fixture")
+      assert [%{slug: "page-fixture"}] = Plugins.list_pages()
+    end
+
+    test "a failed activation leaves the row disabled, not enabled with no live plugin" do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "broken-page",
+          name: "Broken",
+          version: "1.0.0",
+          manifest: %{
+            "slug" => "broken-page",
+            "name" => "Broken",
+            "version" => "1.0.0",
+            "capabilities" => %{"surfaces:page" => []}
+          },
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      assert {:error, %{type: :invalid_manifest}} = Plugins.approve("broken-page")
+      assert Settings.get_plugin_config_by_slug("broken-page").enabled == false
+      refute Registry.registered?("broken-page")
+    end
+  end
+
   describe "revoke/1 and remove/1 (R8, R14)" do
     setup %{bypass: bypass} do
       wasm = guest_wasm()
@@ -152,6 +230,54 @@ defmodule Mydia.PluginsTest do
       refute Registry.registered?("webhook-notifier")
       refute Host.running?("webhook-notifier")
       assert Settings.get_plugin_config_by_slug("webhook-notifier") == nil
+    end
+
+    test "remove purges grants and pending writes but keeps the journal, still undoable" do
+      user = Mydia.AccountsFixtures.user_fixture()
+      slug = "webhook-notifier"
+      :ok = Mydia.Plugins.Grants.grant(slug, user.id, "collections:write", "always", "s")
+
+      {:ok, _} =
+        %Mydia.Plugins.PendingWrite{}
+        |> Mydia.Plugins.PendingWrite.changeset(%{
+          plugin_slug: slug,
+          user_id: user.id,
+          session_id: "s",
+          op: "collection_create",
+          surface: "collections:write",
+          args: %{},
+          description: "d",
+          expires_at: DateTime.add(DateTime.utc_now(), 3600) |> DateTime.truncate(:second)
+        })
+        |> Mydia.Repo.insert()
+
+      args = %{"name" => "Kept", "type" => "manual"}
+
+      {:ok, result, inverse} =
+        Mydia.Plugins.PageWrites.execute("collection_create", args, user, "plugin:#{slug}")
+
+      {:ok, entry} =
+        Mydia.Plugins.Journal.record(
+          slug,
+          user.id,
+          "collection_create",
+          args,
+          result,
+          inverse,
+          "Create the collection \"Kept\"",
+          "b1"
+        )
+
+      assert {:ok, :removed} = Plugins.remove(slug)
+
+      assert Mydia.Plugins.Grants.list_for_user(user.id) == []
+      refute Mydia.Repo.exists?(Ecto.Query.from(p in Mydia.Plugins.PendingWrite))
+      # A plugin installed later under the same slug starts with no approval.
+      refute Mydia.Plugins.Grants.granted?(slug, user.id, "collections:write", "s2")
+
+      assert [%{id: id}] = Mydia.Plugins.Journal.list(slug, user.id)
+      assert id == entry.id
+      assert {:ok, %{status: "undone"}} = Mydia.Plugins.Journal.undo_entry(user, entry.id)
     end
 
     test "set_enabled toggles activation" do
@@ -555,6 +681,34 @@ defmodule Mydia.PluginsTest do
 
       assert Host.running?("webhook-notifier")
       refute Host.running?("simkl_sync")
+    end
+  end
+
+  describe "host version floor" do
+    test "development builds meet any floor" do
+      assert Plugins.host_meets_floor?("9.9.9", "0.0.0-dev")
+    end
+
+    test "a release below the floor fails" do
+      refute Plugins.host_meets_floor?("0.16.0", "0.15.0")
+    end
+
+    test "a beta of the floor's release meets it" do
+      assert Plugins.host_meets_floor?("0.16.0", "0.16.0-beta.1")
+      assert Plugins.host_meets_floor?("0.16.0", "0.17.0")
+    end
+
+    test "a bundled plugin activates on a release host despite its floor" do
+      Application.put_env(:mydia, :start_health_monitors, true)
+      Application.put_env(:mydia, :plugin_host_version, "0.15.0")
+
+      on_exit(fn ->
+        Application.put_env(:mydia, :start_health_monitors, false)
+        Application.delete_env(:mydia, :plugin_host_version)
+      end)
+
+      assert :ok = Plugins.maybe_ensure_bundled()
+      assert Host.running?("simkl_sync")
     end
   end
 

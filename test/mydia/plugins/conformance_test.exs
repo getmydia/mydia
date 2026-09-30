@@ -281,6 +281,10 @@ defmodule Mydia.Plugins.ConformanceTest do
     end
 
     test "refuses a plugin whose floor exceeds the host with an actionable message" do
+      # A development build meets any floor, so stand in for a release host.
+      Application.put_env(:mydia, :plugin_host_version, "0.15.0")
+      on_exit(fn -> Application.delete_env(:mydia, :plugin_host_version) end)
+
       seed!("floor-too-high", "999.0.0")
 
       assert {:error, %Error{type: :host_version, message: msg}} =

@@ -90,6 +90,5 @@ defmodule MydiaWeb.DashboardLive.RegionalComponents do
 
   # Chips are short: the service name alone, not "Latest on ...".
   defp chip_label({:service, _id, name}), do: name
-  defp chip_label(:made_here), do: "Made here"
   defp chip_label(source), do: RegionalSources.label(source, nil)
 end

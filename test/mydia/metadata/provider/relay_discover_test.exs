@@ -29,19 +29,11 @@ defmodule Mydia.Metadata.Provider.RelayDiscoverTest do
   end
 
   for {media_type, path} <- [movie: "/tmdb/movies/discover", tv_show: "/tmdb/tv/discover"] do
-    test "#{media_type}: sends with_origin_country when origin_country is given",
+    test "#{media_type}: never sends with_origin_country",
          %{bypass: bypass, config: config} do
       capture_query(bypass, unquote(path))
 
       assert {:ok, _} = Relay.fetch_discover(config, unquote(media_type), origin_country: "CA")
-      assert_receive {:query, %{"with_origin_country" => "CA"}}
-    end
-
-    test "#{media_type}: omits with_origin_country otherwise",
-         %{bypass: bypass, config: config} do
-      capture_query(bypass, unquote(path))
-
-      assert {:ok, _} = Relay.fetch_discover(config, unquote(media_type), [])
       assert_receive {:query, params}
       refute Map.has_key?(params, "with_origin_country")
     end

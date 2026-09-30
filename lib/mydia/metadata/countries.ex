@@ -1,12 +1,13 @@
 defmodule Mydia.Metadata.Countries do
   @moduledoc """
-  ISO 3166-1 alpha-2 codes for the countries Discover can filter by origin.
+  ISO 3166-1 alpha-2 codes for the countries a user can set as their home
+  country on Discover.
 
-  Curated rather than exhaustive, like `MydiaWeb.Languages`: TMDB's
-  `with_origin_country` accepts any code, but a 249-entry menu buries the few
-  dozen countries with a meaningful film and TV catalogue. Removing an entry is
-  safe: `Mydia.Accounts.UserPreference.discover_home_country/1` reads a stored
-  code that is no longer listed as unset.
+  Curated rather than exhaustive, like `MydiaWeb.Languages`: TMDB's regional
+  release dates and watch providers accept any code, but a 249-entry menu
+  buries the few dozen countries with meaningful cinema and streaming data.
+  Removing an entry is safe: `Mydia.Accounts.UserPreference.discover_home_country/1`
+  reads a stored code that is no longer listed as unset.
 
   Lives under `Mydia.Metadata` rather than `MydiaWeb` because
   `UserPreference` validates against it.
