@@ -93,32 +93,63 @@
     modelError.classList.toggle("hidden", !text)
   }
 
+  let currentModel = ""
+
   const loadModels = async () => {
-    const res = await api("models")
-    document.getElementById("provider").textContent = res.provider || ""
-    modelInput.value = res.current || ""
-    if (res.locked) {
-      modelInput.classList.add("hidden")
-      modelFixed.classList.remove("hidden")
-      modelFixed.textContent = res.current || "No model set"
+    try {
+      const res = await api("models")
+      document.getElementById("provider").textContent = res.provider || ""
+      currentModel = res.current || ""
+      modelInput.value = currentModel
+      if (res.locked) {
+        modelInput.classList.add("hidden")
+        modelFixed.classList.remove("hidden")
+        modelFixed.textContent = res.current || "No model set"
+      }
+      modelOptions.replaceChildren(
+        ...(res.models || []).map((m) => {
+          const o = document.createElement("option")
+          o.value = m.id
+          if (m.name && m.name !== m.id) o.label = m.name
+          return o
+        }),
+      )
+      showModelError(res.error ? `${res.error} You can still type a model id.` : "")
+    } catch (_) {
+      showModelError("Could not reach the assistant. You can still type a model id.")
     }
-    modelOptions.replaceChildren(
-      ...(res.models || []).map((m) => {
-        const o = document.createElement("option")
-        o.value = m.id
-        if (m.name && m.name !== m.id) o.label = m.name
-        return o
-      }),
-    )
-    showModelError(res.error ? `${res.error} You can still type a model id.` : "")
   }
 
+  // Browsers filter datalist suggestions by the input's text, so empty the
+  // field while it has focus to show the whole list.
+  modelInput.addEventListener("focus", () => {
+    modelInput.placeholder = currentModel || "Model"
+    modelInput.value = ""
+  })
+
+  modelInput.addEventListener("blur", () => {
+    if (!modelInput.value.trim()) {
+      modelInput.value = currentModel
+      modelInput.placeholder = "Model"
+    }
+  })
+
   modelInput.addEventListener("change", async () => {
-    const res = await api("model", { model: modelInput.value.trim() })
-    if (res.error) showModelError(res.error)
-    else {
-      showModelError("")
-      modelInput.value = res.current || ""
+    const value = modelInput.value.trim()
+    if (!value) return
+    try {
+      const res = await api("model", { model: value })
+      if (res.error) {
+        modelInput.value = currentModel
+        showModelError(res.error)
+      } else {
+        showModelError("")
+        currentModel = res.current || ""
+        modelInput.value = currentModel
+      }
+    } catch (_) {
+      modelInput.value = currentModel
+      showModelError("Could not save your model choice.")
     }
   })
 
