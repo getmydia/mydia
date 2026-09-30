@@ -105,9 +105,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   available store entries with an Install action.
   """
   attr :installed, :list, required: true
-  attr :catalog, :list, required: true
   attr :updates, :any, required: true
-  attr :browse_error, :string, default: nil
+  attr :browse, :any, default: nil, doc: "a Mydia.Plugins.Index.BrowseResult, nil before browsing"
 
   def plugins_tab(assigns) do
     ~H"""
@@ -129,22 +128,41 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       </div>
 
       <%!-- Store catalog --%>
-      <div :if={@browse_error} id="browse-error" class="alert alert-error">
+      <div :if={@browse && @browse.error} id="browse-error" class="alert alert-error">
         <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <span>Could not reach a plugin source: {@browse_error}</span>
+        <span>Could not reach a plugin source: {@browse.error}</span>
       </div>
 
-      <div :if={@catalog != []} id="plugin-catalog" class="space-y-2">
+      <div
+        :if={@browse && is_nil(@browse.error) && @browse.status in [:empty, :all_installed]}
+        id="catalog-empty"
+        class="alert alert-info"
+      >
+        <.icon name="hero-information-circle" class="w-5 h-5" />
+        <span>{empty_catalog_message(@browse)}</span>
+      </div>
+
+      <div :if={@browse && @browse.status == :available} id="plugin-catalog" class="space-y-2">
         <h3 class="text-base font-semibold">Available</h3>
         <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.catalog_row :for={entry <- @catalog} entry={entry} />
+          <.catalog_row :for={entry <- @browse.catalog} entry={entry} />
         </div>
       </div>
     </div>
     """
   end
 
-  @doc "The page header's Browse store button."
+  defp empty_catalog_message(%{status: :all_installed}),
+    do: "Every plugin in the store is already installed."
+
+  defp empty_catalog_message(%{source_count: count}) when count > 1,
+    do: "The plugin store has no plugins yet (checked #{count} sources)."
+
+  defp empty_catalog_message(_), do: "The plugin store has no plugins yet."
+
+  @doc "The page header's Browse store button; disabled with a spinner while browsing."
+  attr :browsing?, :boolean, default: false
+
   def header_actions(assigns) do
     ~H"""
     <.button
@@ -152,8 +170,10 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       variant="primary"
       class="btn btn-sm btn-primary"
       phx-click="browse_store"
+      disabled={@browsing?}
     >
-      <.icon name="hero-squares-plus" class="w-4 h-4" /> Browse store
+      <span :if={@browsing?} class="loading loading-spinner loading-xs"></span>
+      <.icon :if={!@browsing?} name="hero-squares-plus" class="w-4 h-4" /> Browse store
     </.button>
     """
   end

@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
+  alias MydiaWeb.AdminPluginsLive.Components
 
   # A prebuilt wasm32-wasip2 component (the host only accepts components, not
   # core-wasm modules) — see test/support/fixtures/plugins/host_test_fixture/.
@@ -49,6 +50,14 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       })
 
     config
+  end
+
+  # Points the store at `index_url` only. The file's setup restores
+  # :runtime_config on exit.
+  defp put_plugin_sources(index_url) do
+    base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
+    plugins = %{base.plugins | index_url: index_url, extra_source_urls: []}
+    Application.put_env(:mydia, :runtime_config, %{base | plugins: plugins})
   end
 
   defp schema_manifest_map(slug, name) do
@@ -192,6 +201,41 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/admin/plugins")
     assert has_element?(view, "#plugins-installed")
     assert render(view) =~ "No plugins installed"
+  end
+
+  describe "store browsing" do
+    test "an empty store says so instead of rendering nothing", %{conn: conn} do
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#catalog-empty")
+      refute has_element?(view, "#plugin-catalog")
+      refute has_element?(view, "#browse-error")
+    end
+
+    test "a failing source shows the error", %{conn: conn} do
+      # Non-https fails in require_https/2 before any network I/O.
+      put_plugin_sources("http://insecure.test/index.json")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#browse-error")
+      refute has_element?(view, "#catalog-empty")
+    end
+
+    test "the button is disabled while a browse is in flight" do
+      doc =
+        render_component(&Components.header_actions/1, browsing?: true)
+        |> LazyHTML.from_fragment()
+
+      refute doc |> LazyHTML.query("#browse-store[disabled]") |> Enum.empty?()
+      refute doc |> LazyHTML.query("#browse-store .loading") |> Enum.empty?()
+    end
   end
 
   describe "capability approval (AE1, R7)" do

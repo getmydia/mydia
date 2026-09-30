@@ -43,6 +43,7 @@ defmodule Mydia.Plugins.Index do
   require Logger
 
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Index.BrowseResult
   alias Mydia.Plugins.Index.Entry
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Net.Gate
@@ -79,6 +80,36 @@ defmodule Mydia.Plugins.Index do
          {:ok, json} <- decode_json(body, "catalog") do
       {:ok, parse_entries(json, source_url)}
     end
+  end
+
+  @doc """
+  Fetches every source and returns the plugins not in `installed_slugs`.
+
+  A failing source records the first error message but does not discard the
+  entries of sources that answered. `opts` accepts `:sources` (overrides
+  `sources/0`); the rest is passed to `fetch_catalog/2`.
+  """
+  @spec browse(Enumerable.t(), keyword()) :: BrowseResult.t()
+  def browse(installed_slugs, opts \\ []) do
+    {sources, fetch_opts} = Keyword.pop_lazy(opts, :sources, &sources/0)
+    installed = MapSet.new(installed_slugs)
+
+    {entries, error} =
+      Enum.reduce(sources, {[], nil}, fn source, {acc, err} ->
+        case fetch_catalog(source, fetch_opts) do
+          {:ok, found} -> {acc ++ found, err}
+          {:error, reason} -> {acc, err || describe_error(reason)}
+        end
+      end)
+
+    catalog = Enum.reject(entries, &MapSet.member?(installed, &1.slug))
+
+    %BrowseResult{
+      catalog: catalog,
+      status: browse_status(entries, catalog),
+      error: error,
+      source_count: length(sources)
+    }
   end
 
   @doc """
@@ -195,6 +226,13 @@ defmodule Mydia.Plugins.Index do
   end
 
   # ── Helpers ───────────────────────────────────────────────────────────────
+
+  defp browse_status([], _catalog), do: :empty
+  defp browse_status(_entries, []), do: :all_installed
+  defp browse_status(_entries, _catalog), do: :available
+
+  defp describe_error(%{__exception__: true} = error), do: Exception.message(error)
+  defp describe_error(other), do: inspect(other)
 
   # HTTPS is the v1 trust anchor; the `:allow_private` test seam (loopback Bypass)
   # also relaxes the scheme check, matching the gate's seam.

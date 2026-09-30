@@ -13,10 +13,13 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   """
   use MydiaWeb, :live_view
 
+  require Logger
+
   alias Mydia.Events
   alias Mydia.Plugins
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
+  alias Mydia.Plugins.Index.BrowseResult
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
   alias Mydia.Settings
@@ -37,9 +40,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Plugins")
-     |> assign(:catalog, [])
+     |> assign(:browse, nil)
      |> assign(:browsing?, false)
-     |> assign(:browse_error, nil)
      |> assign(:approval, nil)
      |> assign(:detail, nil)
      |> assign(:logs, nil)
@@ -55,22 +57,23 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   ## Store browsing (R13)
 
   @impl true
+  def handle_event("browse_store", _params, %{assigns: %{browsing?: true}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("browse_store", _params, socket) do
-    {entries, error} = browse()
-    installed_slugs = MapSet.new(socket.assigns.installed, & &1.slug)
-    available = Enum.reject(entries, &MapSet.member?(installed_slugs, &1.slug))
+    # Computed outside the closure so the task does not copy the socket.
+    slugs = Enum.map(socket.assigns.installed, & &1.slug)
 
     {:noreply,
      socket
-     |> assign(:catalog, available)
-     |> assign(:browse_error, error)
-     |> assign(:browsing?, false)}
+     |> assign(browsing?: true, browse: nil)
+     |> start_async(:browse, fn -> Index.browse(slugs) end)}
   end
 
   ## Capability approval (KTD6, AE1)
 
   def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(socket.assigns.catalog, &(&1.slug == slug)) do
+    case Enum.find(catalog_of(socket.assigns.browse), &(&1.slug == slug)) do
       nil -> {:noreply, socket}
       entry -> {:noreply, assign(socket, :approval, approval_from_entry(entry))}
     end
@@ -106,7 +109,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           socket
           |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
-          |> assign(:catalog, [])
+          |> assign(:browse, nil)
           |> load_installed()
 
         {:error, error} ->
@@ -276,6 +279,23 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   end
 
   ## Live tail (U6) — activity log + network activity
+
+  @impl true
+  def handle_async(:browse, {:ok, %BrowseResult{} = result}, socket) do
+    {:noreply, assign(socket, browse: result, browsing?: false)}
+  end
+
+  def handle_async(:browse, {:exit, reason}, socket) do
+    Logger.warning("plugin store lookup failed: #{inspect(reason)}")
+
+    result = %BrowseResult{
+      status: :empty,
+      error: "store lookup failed",
+      source_count: length(Index.sources())
+    }
+
+    {:noreply, assign(socket, browse: result, browsing?: false)}
+  end
 
   @impl true
   def handle_info({:plugin_log, %Log{} = log}, socket) do
@@ -512,14 +532,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     assign(socket, :updates, slugs)
   end
 
-  defp browse do
-    Enum.reduce(Index.sources(), {[], nil}, fn source, {acc, err} ->
-      case Index.fetch_catalog(source) do
-        {:ok, entries} -> {acc ++ entries, err}
-        {:error, error} -> {acc, err || error_message(error)}
-      end
-    end)
-  end
+  defp catalog_of(nil), do: []
+  defp catalog_of(%BrowseResult{catalog: catalog}), do: catalog
 
   defp approval_from_entry(entry) do
     %{
