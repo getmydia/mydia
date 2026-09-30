@@ -31,6 +31,10 @@ defmodule Mydia.PlaybackUserHistoryTest do
     assert second.media_item.title == "Pale Orchard"
   end
 
+  # The column is NOT NULL on Postgres. The SQLite table rebuild in
+  # 20260322000000_fix_episode_cascade_deletes dropped that constraint, so a
+  # null can only exist there.
+  @tag skip: Mydia.DB.postgres?() && "last_watched_at is NOT NULL on Postgres"
   test "rows with no last_watched_at are excluded" do
     user = user_fixture()
     movie = media_item_fixture(%{type: "movie", title: "Quiet Meridian"})
