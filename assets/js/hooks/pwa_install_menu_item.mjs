@@ -11,6 +11,7 @@ export function shouldShowInstall(installer) {
 }
 
 const AVAILABLE_EVENT = "pwa-install-available-event";
+const SUCCESS_EVENT = "pwa-install-success-event";
 
 const PwaInstallMenuItem = {
   findInstaller() {
@@ -23,13 +24,17 @@ const PwaInstallMenuItem = {
 
     this.button = this.el.querySelector("button");
     this.refresh = () => {
-      if (shouldShowInstall(this.installer)) this.el.classList.remove("hidden");
+      this.el.classList.toggle("hidden", !shouldShowInstall(this.installer));
     };
+    // The tab that ran the install is not in standalone mode, so the
+    // predicate alone would keep offering an install that already happened.
+    this.hide = () => this.el.classList.add("hidden");
     // `forced` bypasses the dismissal the component remembers from its
     // first-visit sheet: the user is asking for it explicitly here.
     this.open = () => this.installer.showDialog(true);
 
     this.installer.addEventListener(AVAILABLE_EVENT, this.refresh);
+    this.installer.addEventListener(SUCCESS_EVENT, this.hide);
     this.button.addEventListener("click", this.open);
     this.refresh();
   },
@@ -37,6 +42,7 @@ const PwaInstallMenuItem = {
   destroyed() {
     if (!this.installer) return;
     this.installer.removeEventListener(AVAILABLE_EVENT, this.refresh);
+    this.installer.removeEventListener(SUCCESS_EVENT, this.hide);
     this.button.removeEventListener("click", this.open);
   },
 };

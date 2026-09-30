@@ -31,6 +31,7 @@ function menuItem() {
       contains: (c) => classes.has(c),
       remove: (c) => classes.delete(c),
       add: (c) => classes.add(c),
+      toggle: (c, force) => (force ? classes.add(c) : classes.delete(c)),
     },
     querySelector: () => button,
     button,
@@ -83,6 +84,26 @@ test("stays hidden until the browser announces a native install", () => {
   assert.equal(el.classList.contains("hidden"), false);
 });
 
+test("hides again once the app is installed from this tab", () => {
+  const el = menuItem();
+  const pwa = installer({ isInstallAvailable: true });
+  mount(el, pwa);
+  assert.equal(el.classList.contains("hidden"), false);
+
+  pwa.fire("pwa-install-success-event");
+  assert.equal(el.classList.contains("hidden"), true);
+});
+
+test("hides again when the browser withdraws the install offer", () => {
+  const el = menuItem();
+  const pwa = installer({ isInstallAvailable: true });
+  mount(el, pwa);
+
+  pwa.isInstallAvailable = false;
+  pwa.fire("pwa-install-available-event");
+  assert.equal(el.classList.contains("hidden"), true);
+});
+
 test("stays hidden and does not throw when the installer is missing", () => {
   const el = menuItem();
   mount(el, null);
@@ -97,4 +118,5 @@ test("destroyed removes listeners", () => {
 
   assert.equal(el.button.handlers.click, undefined);
   assert.equal(pwa.listeners["pwa-install-available-event"], undefined);
+  assert.equal(pwa.listeners["pwa-install-success-event"], undefined);
 });

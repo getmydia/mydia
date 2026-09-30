@@ -26,9 +26,15 @@ function route(request, origin) {
   return request.mode === "navigate" ? "navigate" : "passthrough";
 }
 
+// A failed cache lookup counts as a miss, so it never replaces the network
+// response (or Response.error()) the caller would otherwise return.
 async function cachedOfflinePage() {
-  const cache = await caches.open(CACHE_NAME);
-  return cache.match(OFFLINE_URL);
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    return await cache.match(OFFLINE_URL);
+  } catch (_error) {
+    return undefined;
+  }
 }
 
 async function networkWithOfflineFallback(request) {
