@@ -15,6 +15,7 @@ defmodule Mydia.Playback.Progress do
           completion_percentage: float() | nil,
           watched: boolean(),
           last_watched_at: DateTime.t() | nil,
+          last_write_origin: String.t() | nil,
           user: Mydia.Accounts.User.t() | Ecto.Association.NotLoaded.t(),
           media_item: Mydia.Media.MediaItem.t() | Ecto.Association.NotLoaded.t(),
           episode: Mydia.Media.Episode.t() | Ecto.Association.NotLoaded.t(),
@@ -28,6 +29,7 @@ defmodule Mydia.Playback.Progress do
     field :completion_percentage, :float
     field :watched, :boolean, default: false
     field :last_watched_at, :utc_datetime
+    field :last_write_origin, :string
 
     belongs_to :user, Mydia.Accounts.User
     belongs_to :media_item, Mydia.Media.MediaItem
@@ -54,7 +56,8 @@ defmodule Mydia.Playback.Progress do
       :duration_seconds,
       :completion_percentage,
       :watched,
-      :last_watched_at
+      :last_watched_at,
+      :last_write_origin
     ])
     |> validate_required([:user_id, :position_seconds, :duration_seconds])
     |> validate_one_parent()

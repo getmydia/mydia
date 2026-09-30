@@ -214,6 +214,7 @@ defmodule Mydia.Application do
       client_health_children() ++
       indexer_health_children() ++
       media_server_health_children() ++
+      plugin_instance_health_children() ++
       oban_children(oban_config) ++
       oidc_children() ++
       [
@@ -263,6 +264,16 @@ defmodule Mydia.Application do
     # Don't start MediaServerHealth in test environment to avoid SQL Sandbox conflicts
     if Application.get_env(:mydia, :start_health_monitors, true) do
       [Mydia.MediaServer.Health]
+    else
+      []
+    end
+  end
+
+  defp plugin_instance_health_children do
+    # Gated in test like the other health monitors: its checks touch the DB
+    # from unsupervised tasks, which the SQL sandbox rejects.
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      [Mydia.Plugins.InstanceHealth]
     else
       []
     end

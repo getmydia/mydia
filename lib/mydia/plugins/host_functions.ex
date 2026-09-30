@@ -64,6 +64,7 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
   alias Mydia.Plugins.Plugin
+  alias Mydia.Sync
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
@@ -109,12 +110,12 @@ defmodule Mydia.Plugins.HostFunctions do
         "kv-get" => {:fn, kv_get_import(slug, ctx)},
         "kv-set" => {:fn, kv_set_import(slug, ctx, quota_flag)},
         "kv-delete" => {:fn, kv_delete_import(slug, ctx)},
-        "data-list" => {:fn, data_list_import(slug, false)},
-        "ensure-watched" => {:fn, ensure_watched_import(slug)},
+        "data-list" => {:fn, data_list_import(slug, ctx, false)},
+        "ensure-watched" => {:fn, ensure_watched_import(slug, ctx)},
         "connections-list" => {:fn, connections_list_import(slug, ctx)},
         "connection-request" => {:fn, connection_request_import(slug, ctx, gate_opts)},
         # ── 1.2.0 ──
-        "set-watch-state" => {:fn, set_watch_state_import(slug)},
+        "set-watch-state" => {:fn, set_watch_state_import(slug, ctx)},
         # ── 1.3.0 ──
         "ensure-favorite" => {:fn, ensure_favorite_import(slug)}
       }
@@ -123,7 +124,7 @@ defmodule Mydia.Plugins.HostFunctions do
         Map.merge(v13, %{
           # 1.4 playback-progress records carry `origin`; older guests' records
           # must not, or the record shape no longer matches their contract.
-          "data-list" => {:fn, data_list_import(slug, true)},
+          "data-list" => {:fn, data_list_import(slug, ctx, true)},
           "links-list" => {:fn, links_list_import(slug, ctx)},
           "link-request" => {:fn, link_request_import(slug, ctx, gate_opts)},
           "propose-accounts" => {:fn, propose_accounts_import(slug, ctx)},
@@ -131,7 +132,7 @@ defmodule Mydia.Plugins.HostFunctions do
           "set-link-status" => {:fn, set_link_status_import(slug, ctx)},
           "kv-list" => {:fn, kv_list_import(slug, ctx)},
           "kv-set-many" => {:fn, kv_set_many_import(slug, ctx, quota_flag)},
-          "report-sync-run" => {:fn, not_implemented(1)}
+          "report-sync-run" => {:fn, report_sync_run_import(slug, ctx)}
         })
 
       # Publish under every supported key: wasmex matches the guest's exact
@@ -146,14 +147,6 @@ defmodule Mydia.Plugins.HostFunctions do
       }
     end
   end
-
-  # 1.4 imports are linked from Task 1 so a 1.4 guest instantiates; each body is
-  # replaced by the task that owns it (links: Task 5, store: Task 7, sync runs:
-  # Task 8). Until then a call returns an internal error.
-  defp not_implemented(0), do: fn -> {:error, {:internal, "not implemented"}} end
-  defp not_implemented(1), do: fn _ -> {:error, {:internal, "not implemented"}} end
-  defp not_implemented(2), do: fn _, _ -> {:error, {:internal, "not implemented"}} end
-  defp not_implemented(3), do: fn _, _, _ -> {:error, {:internal, "not implemented"}} end
 
   # ── 1.1.0 import closures ───────────────────────────────────────────────────
   #
@@ -245,21 +238,21 @@ defmodule Mydia.Plugins.HostFunctions do
 
   defp note_quota_denial(result, _slug, _ctx, _flag), do: result
 
-  defp data_list_import(slug, with_origin?) do
+  defp data_list_import(slug, ctx, with_origin?) do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          data_list(plugin, req, with_origin: with_origin?)
+          data_list(plugin, req, with_origin: with_origin?, instance: ctx_instance(ctx))
         end
       end)
     end
   end
 
-  defp ensure_watched_import(slug) do
+  defp ensure_watched_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          ensure_watched(plugin, target)
+          ensure_watched(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
@@ -275,11 +268,11 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp set_watch_state_import(slug) do
+  defp set_watch_state_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          set_watch_state(plugin, target)
+          set_watch_state(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
@@ -923,8 +916,9 @@ defmodule Mydia.Plugins.HostFunctions do
       "updated-at": DateTime.to_iso8601(p.updated_at)
     }
 
-    # Task 8 replaces :none with the row's real origin.
-    if with_origin?, do: Map.put(record, :origin, :none), else: record
+    # The 1.4 record appends `origin`; a 1.1 to 1.3 guest's record has no such
+    # field, and wasmex rejects unknown record fields, so only 1.4 gets it.
+    if with_origin?, do: Map.put(record, :origin, to_option(p.last_write_origin)), else: record
   end
 
   defp progress_dimensions(%{episode_id: eid} = p) when not is_nil(eid) do
@@ -944,13 +938,15 @@ defmodule Mydia.Plugins.HostFunctions do
   defp iso_or_nil(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
 
   @doc false
-  @spec ensure_watched(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def ensure_watched(%Plugin{} = plugin, target) do
+  @spec ensure_watched(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def ensure_watched(%Plugin{} = plugin, target, opts \\ []) do
+    origin = origin_tag(plugin, Keyword.get(opts, :instance))
+
     with :ok <- require_surface(plugin, "playback:watched"),
          {:ok, user_id} <- fetch_target_user(target),
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
-      resolve_and_write(plugin, user_id, target, watched_at)
+      resolve_and_write(origin, user_id, target, watched_at)
     end
   end
 
@@ -1014,17 +1010,79 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   @doc false
-  @spec set_watch_state(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def set_watch_state(%Plugin{} = plugin, target) do
+  @spec set_watch_state(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def set_watch_state(%Plugin{} = plugin, target, opts \\ []) do
+    origin = origin_tag(plugin, Keyword.get(opts, :instance))
+
     with :ok <- require_surface(plugin, "playback:watched"),
          {:ok, user_id} <- fetch_target_user(target),
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
-      resolve_and_set_state(plugin, user_id, target, watched_at)
+      resolve_and_set_state(origin, user_id, target, watched_at)
     end
   end
 
-  defp resolve_and_write(plugin, user_id, target, watched_at) do
+  @doc false
+  @spec origin_tag(Plugin.t(), Instance.t() | nil) :: String.t()
+  def origin_tag(%Plugin{slug: slug}, %Instance{id: id}), do: "plugin:#{slug}:#{id}"
+  def origin_tag(%Plugin{slug: slug}, _instance), do: "plugin:#{slug}"
+
+  @doc false
+  @spec report_sync_run(Plugin.t(), Instance.t(), map()) :: :ok | {:error, Error.t()}
+  def report_sync_run(%Plugin{} = plugin, %Instance{} = instance, report) do
+    with {:ok, started} <- parse_run_time(Map.get(report, :"started-at"), "started-at"),
+         {:ok, finished} <- parse_run_time(Map.get(report, :"finished-at"), "finished-at"),
+         {:ok, _run} <-
+           Sync.record_run(%{
+             provider: "plugin:#{plugin.slug}",
+             provider_instance_id: instance.id,
+             direction: :bidirectional,
+             status: run_status(Map.get(report, :status)),
+             started_at: started,
+             finished_at: finished,
+             counts: %{
+               pulled: Map.get(report, :pulled, 0),
+               pushed: Map.get(report, :pushed, 0),
+               skipped: Map.get(report, :skipped, 0),
+               errors: Map.get(report, :errors, 0)
+             },
+             error: from_option(Map.get(report, :message))
+           }) do
+      :ok
+    else
+      {:error, %Ecto.Changeset{}} ->
+        {:error, Error.new(:invalid_request, "invalid sync-run report")}
+
+      {:error, %Error{}} = err ->
+        err
+    end
+  end
+
+  defp parse_run_time(iso, field) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, ts, _} -> {:ok, DateTime.truncate(ts, :second)}
+      _ -> {:error, Error.new(:invalid_request, "#{field} must be an RFC3339 timestamp")}
+    end
+  end
+
+  defp parse_run_time(_iso, field),
+    do: {:error, Error.new(:invalid_request, "#{field} must be an RFC3339 timestamp")}
+
+  defp run_status(:ok), do: :ok
+  defp run_status(:partial), do: :partial
+  defp run_status(_), do: :error
+
+  # Ungated like `log`: reporting what a sync did grants nothing.
+  defp report_sync_run_import(slug, ctx) do
+    fn report ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             do: report_sync_run(plugin, instance, report)
+      end)
+    end
+  end
+
+  defp resolve_and_write(origin, user_id, target, watched_at) do
     matcher_target = matcher_target(target)
 
     case Matcher.match(matcher_target) do
@@ -1032,14 +1090,14 @@ defmodule Mydia.Plugins.HostFunctions do
         {:ok, %{status: :"not-found"}}
 
       {:movie, id} ->
-        apply_watch(plugin, user_id, [media_item_id: id], watched_at)
+        apply_watch(origin, user_id, [media_item_id: id], watched_at)
 
       {:episode, id} ->
-        apply_watch(plugin, user_id, [episode_id: id], watched_at)
+        apply_watch(origin, user_id, [episode_id: id], watched_at)
     end
   end
 
-  defp resolve_and_set_state(plugin, user_id, target, watched_at) do
+  defp resolve_and_set_state(origin, user_id, target, watched_at) do
     matcher_target = matcher_target(target)
 
     case Matcher.match(matcher_target) do
@@ -1047,10 +1105,10 @@ defmodule Mydia.Plugins.HostFunctions do
         {:ok, %{status: :"not-found"}}
 
       {:movie, id} ->
-        apply_watch_state(plugin, user_id, [media_item_id: id], target, watched_at)
+        apply_watch_state(origin, user_id, [media_item_id: id], target, watched_at)
 
       {:episode, id} ->
-        apply_watch_state(plugin, user_id, [episode_id: id], target, watched_at)
+        apply_watch_state(origin, user_id, [episode_id: id], target, watched_at)
     end
   end
 
@@ -1064,20 +1122,17 @@ defmodule Mydia.Plugins.HostFunctions do
     }
   end
 
-  defp apply_watch(plugin, user_id, content_id, watched_at) do
-    # Tagged plugin:<slug> so the dispatcher suppresses the echo to this plugin
-    # (R14) while existing ripple (e.g. media-server watched sync) still fires.
+  defp apply_watch(origin, user_id, content_id, watched_at) do
+    # Tagged plugin:<slug>[:<instance_id>] so the dispatcher suppresses the echo
+    # to this plugin (R14) while existing ripple (e.g. media-server watched sync)
+    # still fires.
     status =
-      Playback.ensure_watched(user_id, content_id,
-        origin: "plugin:#{plugin.slug}",
-        watched_at: watched_at
-      )
+      Playback.ensure_watched(user_id, content_id, origin: origin, watched_at: watched_at)
 
     {:ok, %{status: ensure_status(status)}}
   end
 
-  defp apply_watch_state(plugin, user_id, content_id, target, watched_at) do
-    origin = "plugin:#{plugin.slug}"
+  defp apply_watch_state(origin, user_id, content_id, target, watched_at) do
     position = from_option(Map.get(target, :"position-seconds"))
     duration = from_option(Map.get(target, :"duration-seconds"))
     watched = Map.get(target, :watched) == true
@@ -1104,7 +1159,7 @@ defmodule Mydia.Plugins.HostFunctions do
         end
 
       watched ->
-        apply_watch(plugin, user_id, content_id, watched_at)
+        apply_watch(origin, user_id, content_id, watched_at)
 
       true ->
         case Playback.delete_progress(user_id, content_id, origin: origin) do

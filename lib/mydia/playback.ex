@@ -66,6 +66,7 @@ defmodule Mydia.Playback do
     attrs =
       attrs
       |> Map.put(:user_id, user_id)
+      |> Map.put(:last_write_origin, origin)
       |> Map.merge(Map.new(content_id))
 
     previous = get_progress(user_id, content_id)
@@ -203,7 +204,7 @@ defmodule Mydia.Playback do
 
         existing_progress ->
           existing_progress
-          |> Progress.changeset(%{watched: true})
+          |> Progress.changeset(%{watched: true, last_write_origin: origin})
           |> Repo.update()
       end
 
