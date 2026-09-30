@@ -96,6 +96,8 @@ defmodule Mydia.Plugins.Kv do
   a quota breach writes nothing. A key repeated in the batch keeps its last value.
   """
   @spec set_many(binary(), [{String.t(), String.t()}]) :: :ok | {:error, Error.t()}
+  def set_many(instance_id, []) when is_binary(instance_id), do: :ok
+
   def set_many(instance_id, entries) when is_binary(instance_id) and is_list(entries) do
     entries = dedupe_last_wins(entries)
 
@@ -263,6 +265,8 @@ defmodule Mydia.Plugins.Kv do
 
   defp entry_size({key, value}), do: byte_size(key) + byte_size(value)
 
+  defp upsert_all(_instance, _config_id, []), do: :ok
+
   defp upsert_all(instance, config_id, entries) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
@@ -299,7 +303,8 @@ defmodule Mydia.Plugins.Kv do
   defp where_prefix(query, ""), do: query
 
   defp where_prefix(query, prefix) do
-    len = String.length(prefix)
+    # substr() counts codepoints, not graphemes.
+    len = prefix |> String.to_charlist() |> length()
     from k in query, where: fragment("substr(?, 1, ?)", k.key, ^len) == ^prefix
   end
 
@@ -312,8 +317,13 @@ defmodule Mydia.Plugins.Kv do
 
   defp decode_cursor(cursor) when is_binary(cursor) do
     case Base.url_decode64(cursor, padding: false) do
-      {:ok, key} -> {:ok, key}
-      :error -> {:error, Error.new(:invalid_request, "malformed kv-list cursor")}
+      {:ok, key} ->
+        if String.valid?(key),
+          do: {:ok, key},
+          else: {:error, Error.new(:invalid_request, "malformed kv-list cursor")}
+
+      :error ->
+        {:error, Error.new(:invalid_request, "malformed kv-list cursor")}
     end
   end
 

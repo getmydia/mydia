@@ -69,6 +69,10 @@ defmodule Mydia.Plugins.HostFunctionsKvTest do
     assert {:ok, :none} = HostFunctions.kv_get(p, i, "k")
   end
 
+  test "kv_set_many with no entries succeeds", %{instance: i, granted: p} do
+    assert :ok = HostFunctions.kv_set_many(p, i, [])
+  end
+
   test "without state:kv every store call is denied", %{instance: i, ungranted: p} do
     assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_list(p, i, "", :none)
 

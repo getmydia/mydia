@@ -107,6 +107,11 @@ defmodule Mydia.Plugins.KvTest do
       assert {:error, %Error{type: :invalid_request}} = Kv.set_many(i.id, [{"", "v"}])
     end
 
+    test "an empty batch is a no-op success", %{instance: i} do
+      assert :ok = Kv.set_many(i.id, [])
+      assert %{keys: 0} = Kv.usage(i.id)
+    end
+
     test "a batch larger than max_batch is rejected", %{instance: i} do
       entries = for n <- 1..(Kv.max_batch() + 1), do: {"k#{n}", "v"}
       assert {:error, %Error{type: :invalid_request}} = Kv.set_many(i.id, entries)
@@ -173,6 +178,18 @@ defmodule Mydia.Plugins.KvTest do
 
     test "a malformed cursor is invalid_request", %{instance: i} do
       assert {:error, %Error{type: :invalid_request}} = Kv.list(i.id, "", "!!")
+    end
+
+    test "a cursor that decodes to invalid UTF-8 is invalid_request", %{instance: i} do
+      bad = Base.url_encode64(<<0xFF, 0xFE>>, padding: false)
+      assert {:error, %Error{type: :invalid_request}} = Kv.list(i.id, "", bad)
+    end
+
+    test "a prefix with a combining sequence matches by codepoint", %{instance: i} do
+      prefix = "é/"
+      :ok = Kv.set_many(i.id, [{prefix <> "1", "x"}, {"other", "y"}])
+      assert {:ok, %{entries: [{key, "x"}]}} = Kv.list(i.id, prefix, nil)
+      assert key == prefix <> "1"
     end
   end
 
