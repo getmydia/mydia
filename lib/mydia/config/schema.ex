@@ -278,8 +278,8 @@ defmodule Mydia.Config.Schema do
       field :pool_size, :integer, default: 4
       # Per-instance plugin store quotas (contract 1.4). Operator-raisable for a
       # plugin that keeps a large mapping cache (a 10k-item media server).
-      field :store_max_keys, :integer, default: 200_000
-      field :store_max_bytes, :integer, default: 67_108_864
+      field :store_max_keys, :integer, default: 1_000_000
+      field :store_max_bytes, :integer, default: 268_435_456
       # Official plugin index (R13). HTTPS is the v1 trust anchor (KTD10), so all
       # index/source URLs are validated to be https at config time.
       field :index_url, :string, default: "https://plugins.mydia.dev/index.json"

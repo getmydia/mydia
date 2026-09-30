@@ -144,8 +144,8 @@ defmodule Mydia.Plugins.KvTest do
     end
 
     test "defaults come from the plugins config" do
-      assert Kv.max_keys() == 200_000
-      assert Kv.max_bytes() == 67_108_864
+      assert Kv.max_keys() == 1_000_000
+      assert Kv.max_bytes() == 268_435_456
     end
   end
 

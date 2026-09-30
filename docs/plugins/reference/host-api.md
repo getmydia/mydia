@@ -184,8 +184,8 @@ Key guarantees:
 Every 1.4 import acts on the calling instance only: links, store and sync runs
 are scoped to the instance the host is running the guest for.
 
-Store quotas are per instance: `plugins.store_max_keys` (default 200,000) and
-`plugins.store_max_bytes` (default 67,108,864, or 64 MiB). Values stay capped at
+Store quotas are per instance: `plugins.store_max_keys` (default 1,000,000) and
+`plugins.store_max_bytes` (default 268,435,456, or 256 MiB). Values stay capped at
 64 KiB and keys at 512 bytes. A write past a quota returns `denied`.
 
 `playback-progress` gains `origin`, the origin tag of the row's last write.

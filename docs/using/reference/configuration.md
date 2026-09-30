@@ -79,6 +79,6 @@ Three plugin limits live in the `plugins:` block:
 ```yaml
 plugins:
   setup_timeout_ms: 30000       # time allowed for one setup wizard step
-  store_max_keys: 200000        # stored entries per instance
-  store_max_bytes: 67108864     # stored bytes per instance (64 MiB)
+  store_max_keys: 1000000       # stored entries per instance
+  store_max_bytes: 268435456    # stored bytes per instance (256 MiB)
 ```
