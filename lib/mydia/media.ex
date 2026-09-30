@@ -742,6 +742,43 @@ defmodule Mydia.Media do
   defp count_list(_), do: 0
 
   @doc """
+  True when something other than `user_id`'s own bookkeeping depends on the item:
+  a media file (movie files carry `media_item_id`, episode files only
+  `episode_id`), a download, or another user's progress, collection item or
+  request. Used to decide whether an item added moments ago can be withdrawn
+  without taking someone else's data or files with it.
+  """
+  @spec in_use?(MediaItem.t(), binary()) :: boolean()
+  def in_use?(%MediaItem{id: id}, user_id) do
+    episode_ids = from(e in Episode, where: e.media_item_id == ^id, select: e.id)
+
+    queries = [
+      from(f in MediaFile,
+        where: f.media_item_id == ^id or f.episode_id in subquery(episode_ids)
+      ),
+      from(l in MediaFileEpisode, where: l.episode_id in subquery(episode_ids)),
+      from(d in Mydia.Downloads.Download,
+        where: d.media_item_id == ^id or d.episode_id in subquery(episode_ids)
+      ),
+      from(p in Mydia.Playback.Progress,
+        where:
+          p.user_id != ^user_id and
+            (p.media_item_id == ^id or p.episode_id in subquery(episode_ids))
+      ),
+      from(ci in Mydia.Collections.CollectionItem,
+        join: c in Mydia.Collections.Collection,
+        on: c.id == ci.collection_id,
+        where: ci.media_item_id == ^id and c.user_id != ^user_id
+      ),
+      from(r in Mydia.Media.MediaRequest,
+        where: r.media_item_id == ^id and r.requester_id != ^user_id
+      )
+    ]
+
+    Enum.any?(queries, &Repo.exists?/1)
+  end
+
+  @doc """
   Deletes a media item.
 
   ## Options

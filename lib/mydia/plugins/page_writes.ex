@@ -17,14 +17,15 @@ defmodule Mydia.Plugins.PageWrites do
   suppression; grant checks happen in `Mydia.Plugins.PageActions`.
   """
 
+  alias Mydia.Accounts.Authorization
   alias Mydia.Accounts.Scope
   alias Mydia.Accounts.User
   alias Mydia.Collections
-  alias Mydia.Library
   alias Mydia.Media
   alias Mydia.MediaRequests
   alias Mydia.Playback
   alias Mydia.Plugins.Error
+  alias Mydia.Repo
 
   @surfaces %{
     "watch_state" => "playback:watched",
@@ -66,7 +67,7 @@ defmodule Mydia.Plugins.PageWrites do
            {:ok, _} <- Collections.add_item(favorites, id) do
         {:ok, %{"status" => "changed"}, %{"media_item_id" => id}}
       else
-        _ -> {:error, Error.new(:internal, "could not add favorite")}
+        _ -> {:error, Error.new(:unknown, "could not add favorite")}
       end
     end
   end
@@ -122,12 +123,18 @@ defmodule Mydia.Plugins.PageWrites do
 
   def execute("collection_remove_items", %{"id" => id, "media_item_ids" => ids}, user, _origin) do
     with {:ok, c} <- manual_collection(user, id) do
-      removed = c |> Collections.item_ids_in(ids) |> MapSet.to_list()
-      Enum.each(removed, &Collections.remove_item(c, &1))
+      result =
+        atomically(fn ->
+          removed = c |> Collections.item_ids_in(ids) |> MapSet.to_list()
 
-      if removed == [],
-        do: {:ok, %{"removed" => 0}, :noop},
-        else: {:ok, %{"removed" => length(removed)}, %{"media_item_ids" => removed}}
+          with :ok <- remove_all(c, removed), do: {:ok, removed}
+        end)
+
+      case result do
+        {:ok, []} -> {:ok, %{"removed" => 0}, :noop}
+        {:ok, removed} -> {:ok, %{"removed" => length(removed)}, %{"media_item_ids" => removed}}
+        {:error, _} -> {:error, Error.new(:unknown, "could not remove collection items")}
+      end
     end
   end
 
@@ -191,7 +198,7 @@ defmodule Mydia.Plugins.PageWrites do
       case Collections.remove_item(favorites, id) do
         {:ok, _} -> :ok
         {:error, :not_found} -> {:error, :conflict}
-        {:error, _} -> {:error, Error.new(:internal, "could not remove favorite")}
+        {:error, _} -> {:error, Error.new(:unknown, "could not remove favorite")}
       end
     end
   end
@@ -207,14 +214,19 @@ defmodule Mydia.Plugins.PageWrites do
         user,
         _origin
       ) do
-    with {:ok, c} <- owned_conflict(user, id),
-         :ok <- unchanged(c, after_state),
-         :ok <- empty_if_manual(user, c),
-         {:ok, _} <- Collections.delete_collection(user, c) do
-      :ok
-    else
+    result =
+      atomically(fn ->
+        with {:ok, c} <- owned_conflict(user, id),
+             :ok <- unchanged(c, after_state),
+             :ok <- empty_if_manual(user, c) do
+          Collections.delete_collection(user, c)
+        end
+      end)
+
+    case result do
+      {:ok, _} -> :ok
       {:error, :conflict} -> {:error, :conflict}
-      {:error, _} -> {:error, Error.new(:internal, "could not delete collection")}
+      {:error, _} -> {:error, Error.new(:unknown, "could not delete collection")}
     end
   end
 
@@ -232,7 +244,7 @@ defmodule Mydia.Plugins.PageWrites do
       :ok
     else
       {:error, :conflict} -> {:error, :conflict}
-      {:error, _} -> {:error, Error.new(:internal, "could not restore collection")}
+      {:error, _} -> {:error, Error.new(:unknown, "could not restore collection")}
     end
   end
 
@@ -245,11 +257,17 @@ defmodule Mydia.Plugins.PageWrites do
         _origin
       ) do
     with {:ok, c} <- manual_collection(user, id) do
-      if MapSet.size(Collections.item_ids_in(c, added)) != length(added) do
-        {:error, :conflict}
-      else
-        Enum.each(added, &Collections.remove_item(c, &1))
-        :ok
+      result =
+        atomically(fn ->
+          if MapSet.size(Collections.item_ids_in(c, added)) == length(added),
+            do: remove_all(c, added),
+            else: {:error, :conflict}
+        end)
+
+      case result do
+        {:ok, _} -> :ok
+        {:error, :conflict} -> {:error, :conflict}
+        {:error, _} -> {:error, Error.new(:unknown, "could not remove collection items")}
       end
     end
   end
@@ -285,22 +303,31 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
+  # The item is global, so it is only withdrawn while nothing but the adder's
+  # own bookkeeping refers to it.
   def undo("media_add", _args, _result, %{"media_item_id" => id}, user, _origin) do
     scope = Scope.for_user(user)
 
-    with {:ok, item} <- fetch_media_item(scope, id) do
-      if Library.list_media_files(media_item_id: id) != [] do
-        {:error, :irreversible}
-      else
-        case Media.delete_media_item(scope, item) do
-          {:ok, _item, _disk} -> :ok
-          {:error, _} -> {:error, Error.new(:internal, "could not remove media item")}
-        end
-      end
+    with :ok <- can_delete(user),
+         {:ok, item} <- fetch_media_item(scope, id),
+         false <- Media.in_use?(item, user.id),
+         {:ok, _item, _disk} <- Media.delete_media_item(scope, item) do
+      :ok
+    else
+      true -> {:error, :conflict}
+      {:error, :conflict} -> {:error, :conflict}
+      {:error, %Error{} = e} -> {:error, e}
+      {:error, _} -> {:error, Error.new(:unknown, "could not remove media item")}
     end
   end
 
   # ── helpers ──
+
+  defp can_delete(user) do
+    if Authorization.can_delete_media?(user),
+      do: :ok,
+      else: {:error, Error.new(:capability_denied, "this user may not remove media")}
+  end
 
   defp fetch_media_item(scope, id) do
     {:ok, Media.get_media_item!(scope, id)}
@@ -348,23 +375,15 @@ defmodule Mydia.Plugins.PageWrites do
         end
 
       watched ->
-        Playback.ensure_watched(user_id, content, origin: origin)
-        :ok
+        ensure_watched(user_id, content, origin)
 
       true ->
-        case Playback.delete_progress(user_id, content, origin: origin) do
-          {:ok, _} -> :ok
-          {:error, :not_found} -> :ok
-        end
+        delete_progress(user_id, content, origin)
     end
   end
 
-  defp restore_progress(user_id, content, nil, origin) do
-    case Playback.delete_progress(user_id, content, origin: origin) do
-      {:ok, _} -> :ok
-      {:error, :not_found} -> :ok
-    end
-  end
+  defp restore_progress(user_id, content, nil, origin),
+    do: delete_progress(user_id, content, origin)
 
   defp restore_progress(user_id, content, prior, origin) do
     attrs = %{
@@ -378,16 +397,36 @@ defmodule Mydia.Plugins.PageWrites do
            authoritative_watched: true
          ) do
       {:ok, _} -> :ok
-      {:error, _} -> {:error, Error.new(:internal, "could not restore progress")}
+      {:error, _} -> {:error, Error.new(:unknown, "could not restore progress")}
     end
+  end
+
+  defp delete_progress(user_id, content, origin) do
+    case Playback.delete_progress(user_id, content, origin: origin) do
+      {:ok, _} -> :ok
+      {:error, :not_found} -> :ok
+      {:error, _} -> {:error, Error.new(:unknown, "could not clear progress")}
+    end
+  end
+
+  # Playback.ensure_watched/3 matches on `{:ok, _}` and raises when the save
+  # fails, so a failure surfaces as a MatchError rather than an error tuple.
+  defp ensure_watched(user_id, content, origin) do
+    Playback.ensure_watched(user_id, content, origin: origin)
+    :ok
+  rescue
+    MatchError -> {:error, Error.new(:unknown, "could not mark watched")}
   end
 
   defp owned_collection(user, id) do
     case Collections.get_collection(user, id) do
-      %{user_id: uid} = c when uid == user.id -> {:ok, c}
+      %{user_id: uid, is_system: false} = c when uid == user.id -> {:ok, c}
       _ -> {:error, Error.new(:not_found, "collection #{id} not found")}
     end
   end
+
+  # System collections (Favorites) are reached only through the favorite surface,
+  # so owned_collection/2 reports them as not found.
 
   # For undo, a collection that is gone or no longer ours is a conflict, not a
   # not-found: the state the write left behind no longer exists.
@@ -417,6 +456,26 @@ defmodule Mydia.Plugins.PageWrites do
     keys
     |> Map.new(&{&1, Map.get(collection, String.to_existing_atom(&1))})
     |> json_normalize()
+  end
+
+  defp remove_all(collection, ids) do
+    Enum.reduce_while(ids, :ok, fn id, :ok ->
+      case Collections.remove_item(collection, id) do
+        {:ok, _} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  # Runs `fun` in a transaction; an `{:error, _}` rolls everything back.
+  defp atomically(fun) do
+    Repo.transaction(fn ->
+      case fun.() do
+        :ok -> :ok
+        {:ok, value} -> value
+        {:error, reason} -> Repo.rollback(reason)
+      end
+    end)
   end
 
   defp json_normalize(term), do: term |> Jason.encode!() |> Jason.decode!()

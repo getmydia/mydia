@@ -215,11 +215,124 @@ defmodule Mydia.Plugins.PageWritesTest do
   end
 
   describe "media_add undo" do
-    test "removes a fileless item and refuses once it is gone", %{user: user, movie: movie} do
-      inverse = %{"media_item_id" => movie.id}
+    setup %{user: user} do
+      {:ok, item} =
+        Mydia.Media.create_media_item(Scope.for_user(user), %{
+          type: "movie",
+          title: "The Tin Orchard",
+          year: 2031,
+          tmdb_id: 900_003,
+          monitored: true
+        })
 
+      {:ok, inverse: %{"media_item_id" => item.id}, item: item}
+    end
+
+    test "removes an item the write created and refuses once it is gone", %{
+      user: user,
+      inverse: inverse
+    } do
       assert :ok = PageWrites.undo("media_add", %{}, %{}, inverse, user, @origin)
       assert {:error, :conflict} = PageWrites.undo("media_add", %{}, %{}, inverse, user, @origin)
+    end
+
+    test "refuses when a movie file exists", %{user: user, item: item, inverse: inverse} do
+      media_file_fixture(%{media_item_id: item.id})
+
+      assert {:error, :conflict} = PageWrites.undo("media_add", %{}, %{}, inverse, user, @origin)
+      assert Mydia.Media.get_media_item!(Scope.for_user(user), item.id)
+    end
+
+    test "refuses when a show has an imported episode file", %{user: user} do
+      show = media_item_fixture(%{type: "tv_show", title: "Lantern Row"})
+      episode = episode_fixture(%{media_item_id: show.id})
+      media_file_fixture(%{episode_id: episode.id})
+
+      assert {:error, :conflict} =
+               PageWrites.undo(
+                 "media_add",
+                 %{},
+                 %{},
+                 %{"media_item_id" => show.id},
+                 user,
+                 @origin
+               )
+
+      assert Mydia.Media.get_media_item!(Scope.for_user(user), show.id)
+    end
+
+    test "refuses when another user favorited it", %{user: user, item: item, inverse: inverse} do
+      {:ok, :added} = Collections.toggle_favorite(user_fixture(), item.id)
+
+      assert {:error, :conflict} = PageWrites.undo("media_add", %{}, %{}, inverse, user, @origin)
+    end
+
+    test "refuses when another user has progress on it", %{
+      user: user,
+      item: item,
+      inverse: inverse
+    } do
+      {:ok, _} =
+        Playback.save_progress(user_fixture().id, [media_item_id: item.id], %{
+          position_seconds: 5,
+          duration_seconds: 100
+        })
+
+      assert {:error, :conflict} = PageWrites.undo("media_add", %{}, %{}, inverse, user, @origin)
+    end
+
+    test "refuses a user who may not delete media", %{item: item, inverse: inverse} do
+      guest = user_fixture(%{role: "guest"})
+
+      assert {:error, %{type: :capability_denied}} =
+               PageWrites.undo("media_add", %{}, %{}, inverse, guest, @origin)
+
+      assert Mydia.Media.get_media_item!(Scope.system(), item.id)
+    end
+  end
+
+  describe "system collections" do
+    test "collections:write ops cannot touch Favorites", %{user: user, movie: movie} do
+      {:ok, favorites} = Collections.get_or_create_favorites(user)
+
+      assert {:error, %{type: :not_found}} =
+               PageWrites.execute(
+                 "collection_add_items",
+                 %{"id" => favorites.id, "media_item_ids" => [movie.id]},
+                 user,
+                 @origin
+               )
+
+      assert {:error, %{type: :not_found}} =
+               PageWrites.execute(
+                 "collection_update",
+                 %{"id" => favorites.id, "attrs" => %{"name" => "Mine"}},
+                 user,
+                 @origin
+               )
+
+      assert {:error, %{type: :not_found}} =
+               PageWrites.execute(
+                 "collection_remove_items",
+                 %{"id" => favorites.id, "media_item_ids" => [movie.id]},
+                 user,
+                 @origin
+               )
+    end
+  end
+
+  describe "add_items undo atomicity" do
+    test "a conflict removes nothing", %{user: user, movie: movie} do
+      other = media_item_fixture(%{title: "Salt Meridian"})
+      {:ok, c} = Collections.create_collection(user, %{name: "Shelf", type: "manual"})
+      args = %{"id" => c.id, "media_item_ids" => [movie.id, other.id]}
+      {:ok, _, inverse} = PageWrites.execute("collection_add_items", args, user, @origin)
+      {:ok, _} = Collections.remove_item(c, other.id)
+
+      assert {:error, :conflict} =
+               PageWrites.undo("collection_add_items", args, %{}, inverse, user, @origin)
+
+      assert Collections.item_ids_in(c, [movie.id]) == MapSet.new([movie.id])
     end
   end
 
