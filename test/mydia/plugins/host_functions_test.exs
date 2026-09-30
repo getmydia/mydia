@@ -285,7 +285,9 @@ defmodule Mydia.Plugins.HostFunctionsTest do
     end
   end
 
-  describe "connections_list/1 (users:connections grant)" do
+  defp default_instance, do: Mydia.Plugins.Instances.default_instance("tester")
+
+  describe "connections_list/2 (users:connections grant)" do
     setup do
       {:ok, _} =
         Mydia.Settings.create_plugin_config(%{
@@ -318,7 +320,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
         })
 
       p = plugin(%{"users:connections" => []})
-      assert {:ok, [record]} = HostFunctions.connections_list(p)
+      assert {:ok, [record]} = HostFunctions.connections_list(p, default_instance())
 
       assert record[:"user-id"] == user.id
       assert record.status == :connected
@@ -334,12 +336,14 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t", status: "disabled"})
 
       p = plugin(%{"users:connections" => []})
-      assert {:ok, []} = HostFunctions.connections_list(p)
+      assert {:ok, []} = HostFunctions.connections_list(p, default_instance())
     end
 
     test "AE4: a plugin without users:connections is denied" do
       p = plugin(%{"events:subscribe" => ["media_item.added"]})
-      assert {:error, %Error{type: :capability_denied}} = HostFunctions.connections_list(p)
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.connections_list(p, default_instance())
     end
   end
 

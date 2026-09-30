@@ -51,10 +51,15 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
+  alias Mydia.Plugins.AccountLink
+  alias Mydia.Plugins.AccountLinks
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Instance
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Kv
   alias Mydia.Plugins.Logs
+  alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
   alias Mydia.Plugins.Plugin
@@ -103,8 +108,8 @@ defmodule Mydia.Plugins.HostFunctions do
         "kv-delete" => {:fn, kv_delete_import(slug)},
         "data-list" => {:fn, data_list_import(slug, false)},
         "ensure-watched" => {:fn, ensure_watched_import(slug)},
-        "connections-list" => {:fn, connections_list_import(slug)},
-        "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
+        "connections-list" => {:fn, connections_list_import(slug, ctx)},
+        "connection-request" => {:fn, connection_request_import(slug, ctx, gate_opts)},
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug)},
         # ── 1.3.0 ──
@@ -116,11 +121,11 @@ defmodule Mydia.Plugins.HostFunctions do
           # 1.4 playback-progress records carry `origin`; older guests' records
           # must not, or the record shape no longer matches their contract.
           "data-list" => {:fn, data_list_import(slug, true)},
-          "links-list" => {:fn, not_implemented(0)},
-          "link-request" => {:fn, not_implemented(2)},
-          "propose-accounts" => {:fn, not_implemented(1)},
-          "set-link-token" => {:fn, not_implemented(2)},
-          "set-link-status" => {:fn, not_implemented(3)},
+          "links-list" => {:fn, links_list_import(slug, ctx)},
+          "link-request" => {:fn, link_request_import(slug, ctx, gate_opts)},
+          "propose-accounts" => {:fn, propose_accounts_import(slug, ctx)},
+          "set-link-token" => {:fn, set_link_token_import(slug, ctx)},
+          "set-link-status" => {:fn, set_link_status_import(slug, ctx)},
           "kv-list" => {:fn, not_implemented(2)},
           "kv-set-many" => {:fn, not_implemented(1)},
           "report-sync-run" => {:fn, not_implemented(1)}
@@ -225,25 +230,98 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp connections_list_import(slug) do
+  defp connections_list_import(slug, ctx) do
     fn ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          connections_list(plugin)
+          connections_list(plugin, ctx_instance(ctx) || Instances.default_instance(slug))
         end
       end)
     end
   end
 
-  defp connection_request_import(slug, gate_opts) do
+  defp connection_request_import(slug, ctx, gate_opts) do
     fn connection_id, req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
              {:ok, resp} <-
-               connection_request(plugin, connection_id, from_outbound_request(req), gate_opts) do
+               connection_request(
+                 plugin,
+                 connection_id,
+                 from_outbound_request(req),
+                 [instance: ctx_instance(ctx)] ++ gate_opts
+               ) do
           {:ok, to_outbound_response(resp)}
         end
       end)
+    end
+  end
+
+  defp links_list_import(slug, ctx) do
+    fn ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          links_list(plugin, instance)
+        end
+      end)
+    end
+  end
+
+  defp link_request_import(slug, ctx, gate_opts) do
+    fn link_id, req ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             {:ok, resp} <-
+               link_request(plugin, instance, link_id, from_outbound_request(req), gate_opts) do
+          {:ok, to_outbound_response(resp)}
+        end
+      end)
+    end
+  end
+
+  defp propose_accounts_import(slug, ctx) do
+    fn accounts ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          propose_accounts(plugin, instance, accounts)
+        end
+      end)
+    end
+  end
+
+  defp set_link_token_import(slug, ctx) do
+    fn link_id, token ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          set_link_token(plugin, instance, link_id, token)
+        end
+      end)
+    end
+  end
+
+  defp set_link_status_import(slug, ctx) do
+    fn link_id, status, message ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          set_link_status(plugin, instance, link_id, status, message)
+        end
+      end)
+    end
+  end
+
+  # The instance this invocation runs for (Task 4 puts its id in ctx). Tests and
+  # the admin Test button may run without one.
+  defp ctx_instance(%{instance_id: id}) when is_binary(id), do: Instances.get(id)
+  defp ctx_instance(_ctx), do: nil
+
+  # 1.4 imports are instance-scoped by definition: without an instance there is
+  # nothing to act on.
+  defp plugin_and_instance(slug, ctx) do
+    with {:ok, plugin} <- Plugins.get_plugin(slug) do
+      case ctx_instance(ctx) do
+        nil -> {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+        instance -> {:ok, plugin, instance}
+      end
     end
   end
 
@@ -397,6 +475,7 @@ defmodule Mydia.Plugins.HostFunctions do
   # never reaches the boundary (which can NIF-panic).
   defp typed_result(fun) do
     case fun.() do
+      :ok -> :ok
       {:ok, record} -> {:ok, record}
       {:error, %Error{} = err} -> {:error, host_error(err)}
     end
@@ -986,51 +1065,77 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   @doc false
-  @spec connections_list(Plugin.t()) :: {:ok, [map()]} | {:error, Error.t()}
-  def connections_list(%Plugin{} = plugin) do
+  # 1.1-1.3 connections-list: the instance's *user* links in the old record shape.
+  @spec connections_list(Plugin.t(), Instance.t()) :: {:ok, [map()]} | {:error, Error.t()}
+  def connections_list(%Plugin{} = plugin, %Instance{} = instance) do
     with :ok <- require_capability(plugin, "users:connections") do
       records =
-        plugin.slug
-        |> Connections.list_for_plugin()
-        # The WIT connection-status enum is connected|error; a disabled link is
-        # not a connection the guest may use, so it is not listed at all.
-        |> Enum.reject(&(&1.status == "disabled"))
+        instance.id
+        |> AccountLinks.list()
+        # Only user links are connections, and the guest enum has just
+        # connected|error, so a disabled link is not listed at all.
+        |> Enum.filter(&(&1.role == :user and &1.status != :disabled))
         |> Enum.map(&to_connection_record/1)
 
       {:ok, records}
     end
   end
 
-  # Identity + status ONLY — the WIT `connection` record has no token field, so
-  # the token cannot cross the boundary by construction (R22).
-  defp to_connection_record(conn) do
+  # Identity + status ONLY: the WIT `connection` record has no token field, so
+  # the token cannot cross the boundary by construction.
+  defp to_connection_record(%AccountLink{} = link) do
     %{
-      id: conn.id,
-      "user-id": conn.user_id,
-      "external-user-id": to_option(conn.external_user_id),
-      "external-username": to_option(conn.external_username),
-      status: connection_status_atom(conn.status)
+      id: link.id,
+      "user-id": link.user_id,
+      "external-user-id": to_option(link.external_user_id),
+      "external-username": to_option(link.external_username),
+      status: if(link.status == :active, do: :connected, else: :error)
     }
   end
 
-  defp connection_status_atom("error"), do: :error
-  defp connection_status_atom(_), do: :connected
+  @doc false
+  @spec links_list(Plugin.t(), Instance.t()) :: {:ok, [map()]} | {:error, Error.t()}
+  def links_list(%Plugin{} = plugin, %Instance{} = instance) do
+    with :ok <- require_capability(plugin, "users:connections") do
+      {:ok, instance.id |> AccountLinks.list() |> Enum.map(&to_link_record/1)}
+    end
+  end
+
+  # Identity + status ONLY, never the token (same rule as the 1.1 record).
+  defp to_link_record(%AccountLink{} = link) do
+    %{
+      id: link.id,
+      role: link.role,
+      "user-id": to_option(link.user_id),
+      "external-user-id": to_option(link.external_user_id),
+      "external-username": to_option(link.external_username),
+      status: link.status
+    }
+  end
 
   @doc false
-  @spec connection_request(Plugin.t(), String.t(), map(), keyword()) ::
+  # Serves 1.4 link-request and, through connection_request/4, 1.1-1.3
+  # connection-request. Any role may be used; the link must belong to the
+  # calling instance, not be disabled, and hold a token. The manifest's
+  # auth_header template names the header; any guest header with that name
+  # (case-insensitive) is stripped before the host's is added.
+  @spec link_request(Plugin.t(), Instance.t(), term(), map(), keyword()) ::
           {:ok, map()} | {:error, Error.t()}
-  def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
+  def link_request(%Plugin{} = plugin, %Instance{} = instance, link_id, request, opts \\ []) do
     with :ok <- require_capability(plugin, "net:http"),
          :ok <- require_capability(plugin, "users:connections"),
-         {:ok, conn} <- fetch_connection(plugin, connection_id),
+         {:ok, link} <- fetch_link(plugin, instance, link_id, Keyword.get(opts, :roles)),
+         :ok <- require_usable(link),
          {:ok, url} <- fetch_string(request, "url") do
-      # Strip any guest-supplied Authorization and inject the bearer token the
-      # host holds (R22) — the guest never sees the token.
+      {header, template} = Manifest.auth_header(plugin.connection)
+      name = String.downcase(header)
+
       headers =
         request
         |> Map.get("headers", %{})
-        |> strip_authorization()
-        |> Map.put("authorization", "Bearer #{conn.access_token}")
+        |> Enum.reject(fn {k, _v} -> String.downcase(to_string(k)) == name end)
+        |> Map.new()
+        |> Map.put(name, String.replace(template, "{token}", link.access_token))
 
       gate_opts =
         [
@@ -1048,24 +1153,116 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp fetch_connection(plugin, connection_id) when is_binary(connection_id) do
-    case Connections.get_by_id(plugin.slug, connection_id) do
-      %{} = conn ->
-        {:ok, conn}
+  @doc false
+  # The 1.1 entry point: a connection is a user link. `opts[:instance]` is the
+  # invocation's instance; without one, the plugin's default instance. Owner and
+  # endpoint credentials are not connections: a 1.1-1.3 guest can never use them.
+  @spec connection_request(Plugin.t(), term(), map(), keyword()) ::
+          {:ok, map()} | {:error, Error.t()}
+  def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
+    instance = Keyword.get(opts, :instance) || Instances.default_instance(plugin.slug)
+    link_request(plugin, instance, connection_id, request, Keyword.put(opts, :roles, [:user]))
+  end
 
-      nil ->
-        {:error,
-         Error.new(:not_found, "connection #{connection_id} not found for #{plugin.slug}")}
+  @max_proposed_accounts 500
+
+  @doc false
+  @spec propose_accounts(Plugin.t(), Instance.t(), term()) :: :ok | {:error, Error.t()}
+  def propose_accounts(%Plugin{} = plugin, %Instance{} = instance, accounts) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, rows} <- validate_accounts(accounts),
+         {:ok, _} <- Instances.set_remote_accounts(instance, rows) do
+      :ok
     end
   end
 
-  defp fetch_connection(_plugin, _),
-    do: {:error, Error.new(:invalid_request, "connection-id must be a string")}
+  defp validate_accounts(accounts)
+       when is_list(accounts) and length(accounts) <= @max_proposed_accounts do
+    accounts
+    |> Enum.reduce_while({:ok, []}, fn account, {:ok, acc} ->
+      id = Map.get(account, :id)
+      name = Map.get(account, :name)
 
-  defp strip_authorization(headers) when is_map(headers) do
-    Enum.reject(headers, fn {k, _v} -> String.downcase(to_string(k)) == "authorization" end)
-    |> Map.new()
+      if is_binary(id) and id != "" and is_binary(name) do
+        row = %{id: id, name: String.slice(name, 0, 200), admin: Map.get(account, :admin) == true}
+        {:cont, {:ok, [row | acc]}}
+      else
+        {:halt,
+         {:error, Error.new(:invalid_request, "remote-account needs a non-empty id and a name")}}
+      end
+    end)
+    |> case do
+      {:ok, rows} -> {:ok, Enum.reverse(rows)}
+      err -> err
+    end
   end
+
+  defp validate_accounts(_) do
+    {:error,
+     Error.new(
+       :invalid_request,
+       "propose-accounts takes at most #{@max_proposed_accounts} accounts"
+     )}
+  end
+
+  @doc false
+  @spec set_link_token(Plugin.t(), Instance.t(), term(), term()) :: :ok | {:error, Error.t()}
+  def set_link_token(%Plugin{} = plugin, %Instance{} = instance, link_id, token) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, link} <- fetch_link(plugin, instance, link_id),
+         {:ok, token} <- validate_token(token) do
+      AccountLinks.set_token(link.id, token)
+    end
+  end
+
+  defp validate_token(token) when is_binary(token) and token != "" and byte_size(token) <= 4096,
+    do: {:ok, token}
+
+  defp validate_token(_) do
+    {:error,
+     Error.new(:invalid_request, "token must be a non-empty string of at most 4096 bytes")}
+  end
+
+  @doc false
+  @spec set_link_status(Plugin.t(), Instance.t(), term(), term(), term()) ::
+          :ok | {:error, Error.t()}
+  def set_link_status(%Plugin{} = plugin, %Instance{} = instance, link_id, status, message) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, link} <- fetch_link(plugin, instance, link_id),
+         {:ok, status} <- link_status(status) do
+      AccountLinks.set_status(link.id, status, from_option(message))
+    end
+  end
+
+  @link_statuses %{"active" => :active, "error" => :error, "disabled" => :disabled}
+
+  defp link_status(status) when is_atom(status) or is_binary(status) do
+    case Map.fetch(@link_statuses, to_string(status)) do
+      {:ok, atom} -> {:ok, atom}
+      :error -> {:error, Error.new(:invalid_request, "unknown link-status #{inspect(status)}")}
+    end
+  end
+
+  defp link_status(other),
+    do: {:error, Error.new(:invalid_request, "unknown link-status #{inspect(other)}")}
+
+  defp fetch_link(plugin, %Instance{} = instance, link_id, roles \\ nil) do
+    link = AccountLinks.get_in_instance(instance.id, link_id)
+
+    if match?(%AccountLink{}, link) and (is_nil(roles) or link.role in roles) do
+      {:ok, link}
+    else
+      {:error, Error.new(:not_found, "link #{inspect(link_id)} not found for #{plugin.slug}")}
+    end
+  end
+
+  defp require_usable(%AccountLink{status: :disabled}),
+    do: {:error, Error.new(:capability_denied, "link is disabled")}
+
+  defp require_usable(%AccountLink{access_token: token}) when token in [nil, ""],
+    do: {:error, Error.new(:capability_denied, "link has no token yet")}
+
+  defp require_usable(%AccountLink{}), do: :ok
 
   # ── Capability checks (deny-by-default) ───────────────────────────────────
 

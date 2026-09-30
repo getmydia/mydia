@@ -37,7 +37,7 @@ defmodule Mydia.Jobs.PluginScheduler do
   require Logger
 
   alias Mydia.Plugins
-  alias Mydia.Plugins.Connections
+  alias Mydia.Plugins.AccountLinks
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Instance
   alias Mydia.Plugins.Instances
@@ -106,7 +106,7 @@ defmodule Mydia.Jobs.PluginScheduler do
         :skip
 
       {:ok, result} ->
-        apply_connections_invalid(slug, result)
+        apply_connections_invalid(instance, result)
         mark_complete(instance, now, :ok)
 
       {:error, reason} ->
@@ -118,21 +118,21 @@ defmodule Mydia.Jobs.PluginScheduler do
     end
   end
 
-  # A guest may name users whose connection is invalid (e.g. a 401). Only users
-  # holding an active connection to this plugin are flipped to `error`
-  # (Connections.mark_errored enforces it), so a guest can't mass-error state.
-  defp apply_connections_invalid(slug, result) when is_map(result) do
+  # A guest may name users whose link is invalid (e.g. a 401). Only this
+  # instance's *active* user links are flipped to `:error`
+  # (AccountLinks.mark_errored enforces it), so a guest can't mass-error state.
+  defp apply_connections_invalid(%Instance{} = instance, result) when is_map(result) do
     case Map.get(result, "connections_invalid") do
       ids when is_list(ids) ->
         user_ids = Enum.filter(ids, &is_binary/1)
-        if user_ids != [], do: Connections.mark_errored(slug, user_ids)
+        if user_ids != [], do: AccountLinks.mark_errored(instance.id, user_ids)
 
       _ ->
         :ok
     end
   end
 
-  defp apply_connections_invalid(_slug, _result), do: :ok
+  defp apply_connections_invalid(_instance, _result), do: :ok
 
   defp mark_complete(%Instance{} = instance, now, outcome) do
     failures =
