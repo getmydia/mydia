@@ -180,6 +180,10 @@ pub mod fake {
         /// Scripted responses keyed by (METHOD, full URL). Each call pops the
         /// front; the last entry repeats so a stub can answer many times.
         pub responses: HashMap<(String, String), VecDeque<Result<OutboundResponse, HostError>>>,
+        /// Responses that apply only to `link_request` with this link id,
+        /// consulted before `responses`.
+        pub link_responses:
+            HashMap<(String, String, String), VecDeque<Result<OutboundResponse, HostError>>>,
         pub sent: Vec<Sent>,
         pub kv: BTreeMap<String, String>,
         pub links: Vec<AccountLink>,
@@ -212,6 +216,27 @@ pub mod fake {
             };
             self.responses
                 .entry((method.to_string(), url.to_string()))
+                .or_default()
+                .push_back(Ok(resp));
+            self
+        }
+
+        pub fn respond_link(
+            &mut self,
+            link: &str,
+            method: &str,
+            url: &str,
+            status: u16,
+            body: &str,
+        ) -> &mut Self {
+            let resp = OutboundResponse {
+                status,
+                ok: (200..300).contains(&status),
+                body: Some(body.to_string()),
+                body_encoding: None,
+            };
+            self.link_responses
+                .entry((link.to_string(), method.to_string(), url.to_string()))
                 .or_default()
                 .push_back(Ok(resp));
             self
@@ -259,6 +284,16 @@ pub mod fake {
                 headers: req.headers.clone(),
                 body: req.body.clone(),
             });
+            if let Some(link) = link {
+                let lkey = (link.to_string(), req.method.clone(), req.url.clone());
+                if let Some(queue) = self.link_responses.get_mut(&lkey) {
+                    return if queue.len() > 1 {
+                        queue.pop_front().unwrap()
+                    } else {
+                        queue.front().cloned().unwrap()
+                    };
+                }
+            }
             let key = (req.method.clone(), req.url.clone());
             match self.responses.get_mut(&key) {
                 Some(queue) if queue.len() > 1 => queue.pop_front().unwrap(),

@@ -15,7 +15,6 @@ pub const SERVER_OWNER_ACCOUNT: &str = "server/owner_account_id";
 /// `"1"` when the account has Plex Home, `"0"` when not.
 pub const SERVER_HOME: &str = "server/home";
 pub const CRAWL_STATE: &str = "crawl/state";
-pub const CURSOR_PUSH: &str = "cursor/push";
 
 pub fn map_key(rating_key: &str) -> String {
     format!("map/{rating_key}")
@@ -35,6 +34,16 @@ pub fn link_state_key(link_id: &str, item_key: &str) -> String {
 
 pub fn link_pull_cursor_key(link_id: &str) -> String {
     format!("link/{link_id}/cursor/pull")
+}
+
+/// RFC3339 `updated-at` of the last local row the push pass processed for a link.
+pub fn link_push_cursor_key(link_id: &str) -> String {
+    format!("link/{link_id}/cursor/push")
+}
+
+/// An unfinished pull pass for a link, so a large first pull spans ticks.
+pub fn link_pull_page_key(link_id: &str) -> String {
+    format!("link/{link_id}/cursor/pull_page")
 }
 
 /// Present (`"1"`) on a user link that syncs through the owner link because the
@@ -72,6 +81,12 @@ pub fn delete(host: &mut dyn Host, key: &str) -> Result<(), PlexError> {
 mod tests {
     use super::*;
     use crate::host::fake::FakeHost;
+
+    #[test]
+    fn per_link_cursor_keys() {
+        assert_eq!(link_push_cursor_key("l1"), "link/l1/cursor/push");
+        assert_eq!(link_pull_page_key("l1"), "link/l1/cursor/pull_page");
+    }
 
     #[test]
     fn key_shapes_match_the_shared_table() {

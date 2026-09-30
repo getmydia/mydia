@@ -14,8 +14,10 @@ mod guid;
 mod host;
 mod http;
 mod plextv;
+mod reconcile;
 mod setup;
 mod store;
+mod time;
 
 use mydia_plugin_sdk::types::{Event, Health, ScheduleTick, SetupRequest, SetupScreen};
 
