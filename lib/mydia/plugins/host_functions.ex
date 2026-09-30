@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.4)
+  ## Component import ABI (1.5)
 
-  Imports live under the `"mydia:plugin/host@1.4.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.5.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -30,6 +30,9 @@ defmodule Mydia.Plugins.HostFunctions do
   `add-favorite`. They act as the user of the current `on-http` invocation
   (`Mydia.Plugins.PageReads`, `Mydia.Plugins.PageActions`) and are denied from
   any other handler. Inside `on-http`, `data-list` reads as that user too.
+  Version 1.5 adds `links-list`, `link-request`, `propose-accounts`,
+  `set-link-token`, `set-link-status`, `kv-list`, `kv-set-many` and
+  `report-sync-run`, plus `origin` on `playback-progress`.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -54,15 +57,22 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Media
   alias Mydia.Playback
   alias Mydia.Plugins
+  alias Mydia.Plugins.AccountLink
+  alias Mydia.Plugins.AccountLinks
+  alias Mydia.Plugins.Endpoints
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Instance
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Kv
   alias Mydia.Plugins.Logs
+  alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
   alias Mydia.Plugins.PageActions
   alias Mydia.Plugins.PageReads
   alias Mydia.Plugins.Plugin
+  alias Mydia.Sync
 
   import Mydia.Plugins.PageContext, only: [page_user: 1, to_option: 1]
 
@@ -70,20 +80,21 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.4 superset to a 1.2/1.1/1.0 guest (which imports the
-  # correspondingly older `host@x.y.z`) via component semver matching, so older
-  # guests keep working. wasmex still needs exact namespace keys in the imports
-  # map (see `Mydia.Plugins.Host`), so every supported version is also published
-  # under its own key, each narrowed to the functions that version defined.
-  @namespace "mydia:plugin/host@1.4.0"
+  # wasmtime serves this 1.5 superset to a 1.4/1.3/1.2/1.1/1.0 guest (which
+  # imports the correspondingly older `host@x.y.z`) via component semver
+  # matching, so older guests keep working. wasmex still needs exact namespace
+  # keys in the imports map (see `Mydia.Plugins.Host`), so every supported
+  # version is also published under its own key, each narrowed to the functions
+  # that version defined.
+  @namespace "mydia:plugin/host@1.5.0"
+  @v14_namespace "mydia:plugin/host@1.4.0"
   @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
 
-  # Functions only the 1.4 interface defines; older namespaces are narrowed
-  # without them.
+  # Functions only the 1.4 interface defines (pages); older namespaces are
+  # narrowed without them.
   @page_funcs ~w(search media-add collection-create collection-update collection-add-items collection-remove-items mark-watched-state add-favorite)
-
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
   # guest could spam it in a loop and flood plugin_logs before retention fires.
   # Past the cap we drop further lines and emit one sentinel.
@@ -103,20 +114,22 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec imports_for(String.t(), keyword()) :: (map() -> map())
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
-      funcs = %{
+      quota_flag = :atomics.new(1, [])
+
+      v14 = %{
         "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
-        # ── 1.1.0 imports (U2 contract; bodies land in U3/U5/U6/U7) ──
-        "kv-get" => {:fn, kv_get_import(slug)},
-        "kv-set" => {:fn, kv_set_import(slug)},
-        "kv-delete" => {:fn, kv_delete_import(slug)},
-        "data-list" => {:fn, data_list_import(slug, ctx)},
-        "ensure-watched" => {:fn, ensure_watched_import(slug)},
-        "connections-list" => {:fn, connections_list_import(slug)},
-        "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
+        # ── 1.1.0 ──
+        "kv-get" => {:fn, kv_get_import(slug, ctx)},
+        "kv-set" => {:fn, kv_set_import(slug, ctx, quota_flag)},
+        "kv-delete" => {:fn, kv_delete_import(slug, ctx)},
+        "data-list" => {:fn, data_list_import(slug, ctx, false)},
+        "ensure-watched" => {:fn, ensure_watched_import(slug, ctx)},
+        "connections-list" => {:fn, connections_list_import(slug, ctx)},
+        "connection-request" => {:fn, connection_request_import(slug, ctx, gate_opts)},
         # ── 1.2.0 ──
-        "set-watch-state" => {:fn, set_watch_state_import(slug)},
+        "set-watch-state" => {:fn, set_watch_state_import(slug, ctx)},
         # ── 1.3.0 ──
         "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
         # ── 1.4.0: page functions, acting as the on-http user ──
@@ -132,14 +145,30 @@ defmodule Mydia.Plugins.HostFunctions do
         "add-favorite" => {:fn, page_import(slug, ctx, &PageActions.add_favorite/3)}
       }
 
-      v13 = Map.drop(funcs, @page_funcs)
+      v13 = Map.drop(v14, @page_funcs)
+
+      v15 =
+        Map.merge(v14, %{
+          # 1.5 playback-progress records carry `origin`; older guests' records
+          # must not, or the record shape no longer matches their contract.
+          "data-list" => {:fn, data_list_import(slug, ctx, true)},
+          "links-list" => {:fn, links_list_import(slug, ctx)},
+          "link-request" => {:fn, link_request_import(slug, ctx, gate_opts)},
+          "propose-accounts" => {:fn, propose_accounts_import(slug, ctx)},
+          "set-link-token" => {:fn, set_link_token_import(slug, ctx)},
+          "set-link-status" => {:fn, set_link_status_import(slug, ctx)},
+          "kv-list" => {:fn, kv_list_import(slug, ctx)},
+          "kv-set-many" => {:fn, kv_set_many_import(slug, ctx, quota_flag)},
+          "report-sync-run" => {:fn, report_sync_run_import(slug, ctx)}
+        })
 
       # Publish under every supported key: wasmex matches the guest's exact
       # imported package name, so an older guest still links against this host.
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
       %{
-        @namespace => funcs,
+        @namespace => v15,
+        @v14_namespace => v14,
         @v13_namespace => v13,
         @v12_namespace => Map.delete(v13, "ensure-favorite"),
         @v11_namespace => v13 |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
@@ -155,35 +184,90 @@ defmodule Mydia.Plugins.HostFunctions do
   # then a granted call returns an `internal` "not implemented" error — no plugin
   # is granted these classes before U9, which lands after U3–U7.
 
-  defp kv_get_import(slug) do
+  # kv-get/kv-set/kv-delete predate instances (1.1). An invocation without an
+  # instance (the conformance suite's 1.1 fixture, `Host.call/4` without
+  # `:instance_id`) uses the plugin's default instance, as connections-list
+  # does. kv-list/kv-set-many are 1.5-only and require the instance.
+  defp legacy_plugin_and_instance(slug, ctx) do
+    with {:ok, plugin} <- Plugins.get_plugin(slug) do
+      case ctx_instance(ctx) || Instances.default_instance(slug) do
+        nil -> {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+        instance -> {:ok, plugin, instance}
+      end
+    end
+  end
+
+  defp kv_get_import(slug, ctx) do
     fn key ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_get(plugin, key)
-        end
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx),
+             do: kv_get(plugin, instance, key)
       end)
     end
   end
 
-  defp kv_set_import(slug) do
+  defp kv_set_import(slug, ctx, quota_flag) do
     fn key, value ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_set(plugin, key, value)
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx) do
+          plugin |> kv_set(instance, key, value) |> note_quota_denial(slug, ctx, quota_flag)
         end
       end)
     end
   end
 
-  defp kv_delete_import(slug) do
+  defp kv_delete_import(slug, ctx) do
     fn key ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_delete(plugin, key)
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx),
+             do: kv_delete(plugin, instance, key)
+      end)
+    end
+  end
+
+  defp kv_list_import(slug, ctx) do
+    fn prefix, cursor ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             do: kv_list(plugin, instance, prefix, cursor)
+      end)
+    end
+  end
+
+  defp kv_set_many_import(slug, ctx, quota_flag) do
+    fn entries ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          plugin |> kv_set_many(instance, entries) |> note_quota_denial(slug, ctx, quota_flag)
         end
       end)
     end
   end
+
+  # Log a store quota denial once per invocation: a guest retrying in a loop
+  # would otherwise flood plugin_logs.
+  defp note_quota_denial(
+         {:error, %Error{type: :capability_denied, message: "store quota exceeded" <> _ = msg}} =
+           err,
+         slug,
+         ctx,
+         flag
+       ) do
+    if :atomics.compare_exchange(flag, 1, 0, 1) == :ok do
+      Logs.create_async(%{
+        slug: slug,
+        invocation_id: ctx[:invocation_id],
+        source: :host,
+        level: :warn,
+        message: msg,
+        test_run: ctx[:test_run] || false
+      })
+    end
+
+    err
+  end
+
+  defp note_quota_denial(result, _slug, _ctx, _flag), do: result
 
   # Page functions take the invocation context so they act as the on-http user;
   # PageActions/PageReads refuse any other handler.
@@ -203,19 +287,25 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp data_list_import(slug, ctx) do
+  defp data_list_import(slug, ctx, with_origin?) do
     fn req ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug), do: data_list(plugin, req, ctx)
+        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+          data_list(plugin, req,
+            with_origin: with_origin?,
+            instance: ctx_instance(ctx),
+            ctx: ctx
+          )
+        end
       end)
     end
   end
 
-  defp ensure_watched_import(slug) do
+  defp ensure_watched_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          ensure_watched(plugin, target)
+          ensure_watched(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
@@ -231,35 +321,111 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp set_watch_state_import(slug) do
+  defp set_watch_state_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          set_watch_state(plugin, target)
+          set_watch_state(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
   end
 
-  defp connections_list_import(slug) do
+  defp connections_list_import(slug, ctx) do
     fn ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          connections_list(plugin)
+          case ctx_instance(ctx) || Instances.default_instance(slug) do
+            nil -> {:ok, []}
+            instance -> connections_list(plugin, instance)
+          end
         end
       end)
     end
   end
 
-  defp connection_request_import(slug, gate_opts) do
+  defp connection_request_import(slug, ctx, gate_opts) do
     fn connection_id, req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
              {:ok, resp} <-
-               connection_request(plugin, connection_id, from_outbound_request(req), gate_opts) do
+               connection_request(
+                 plugin,
+                 connection_id,
+                 from_outbound_request(req),
+                 [instance: ctx_instance(ctx)] ++ gate_opts
+               ) do
           {:ok, to_outbound_response(resp)}
         end
       end)
+    end
+  end
+
+  defp links_list_import(slug, ctx) do
+    fn ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          links_list(plugin, instance)
+        end
+      end)
+    end
+  end
+
+  defp link_request_import(slug, ctx, gate_opts) do
+    fn link_id, req ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             {:ok, resp} <-
+               link_request(plugin, instance, link_id, from_outbound_request(req), gate_opts) do
+          {:ok, to_outbound_response(resp)}
+        end
+      end)
+    end
+  end
+
+  defp propose_accounts_import(slug, ctx) do
+    fn accounts ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          propose_accounts(plugin, instance, accounts)
+        end
+      end)
+    end
+  end
+
+  defp set_link_token_import(slug, ctx) do
+    fn link_id, token ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          set_link_token(plugin, instance, link_id, token)
+        end
+      end)
+    end
+  end
+
+  defp set_link_status_import(slug, ctx) do
+    fn link_id, status, message ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          set_link_status(plugin, instance, link_id, status, message)
+        end
+      end)
+    end
+  end
+
+  # The instance this invocation runs for (its id is in ctx). Tests and
+  # the admin Test button may run without one.
+  defp ctx_instance(%{instance_id: id}) when is_binary(id), do: Instances.get(id)
+  defp ctx_instance(_ctx), do: nil
+
+  # 1.5 imports are instance-scoped by definition: without an instance there is
+  # nothing to act on.
+  defp plugin_and_instance(slug, ctx) do
+    with {:ok, plugin} <- Plugins.get_plugin(slug) do
+      case ctx_instance(ctx) do
+        nil -> {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+        instance -> {:ok, plugin, instance}
+      end
     end
   end
 
@@ -271,7 +437,12 @@ defmodule Mydia.Plugins.HostFunctions do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
-             {:ok, resp} <- http_request(plugin, from_outbound_request(req), gate_opts ++ budget) do
+             {:ok, resp} <-
+               http_request(
+                 plugin,
+                 from_outbound_request(req),
+                 [instance: ctx_instance(ctx)] ++ gate_opts ++ budget
+               ) do
           {:ok, to_outbound_response(resp)}
         end
       end)
@@ -415,6 +586,7 @@ defmodule Mydia.Plugins.HostFunctions do
   # never reaches the boundary (which can NIF-panic).
   defp typed_result(fun) do
     case fun.() do
+      :ok -> :ok
       {:ok, record} -> {:ok, record}
       {:error, %Error{} = err} -> {:error, host_error(err)}
     end
@@ -462,21 +634,24 @@ defmodule Mydia.Plugins.HostFunctions do
   "body" => "..."}`.
 
   `opts` are host-side only (e.g. the `:allow_private` test seam) — never derived
-  from the guest request.
+  from the guest request. `:instance` is the invoking `%Instance{}`; its approved
+  endpoints join the gate options.
   """
   @spec http_request(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
   def http_request(%Plugin{} = plugin, request, opts \\ []) do
     with :ok <- require_capability(plugin, "net:http"),
          {:ok, url} <- fetch_string(request, "url"),
          :ok <- require_granted_host(plugin, url) do
-      hosts = Plugin.granted_http_hosts(plugin)
-
       # Gate.request/2 reads options with Keyword.get/3 (first match wins), so
-      # the host-side options go first and override the derived defaults.
+      # the host-side options go first and override the derived defaults. A
+      # private address is admitted when EITHER the host is one the operator
+      # marked private (`allow_private` setting, `private_host?/2`) OR the
+      # request matches an approved endpoint of the calling instance (the gate
+      # applies the stricter approved-endpoint rules for that path).
       gate_opts =
         Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout]) ++
+          Endpoints.gate_opts(plugin, Keyword.get(opts, :instance)) ++
           [
-            allowed_hosts: hosts,
             slug: plugin.slug,
             method: Map.get(request, "method", "GET"),
             headers: Map.get(request, "headers", %{}),
@@ -617,45 +792,66 @@ defmodule Mydia.Plugins.HostFunctions do
   # U7 connections). Returning `:internal` keeps a premature granted call loud.
 
   @doc false
-  @spec kv_get(Plugin.t(), String.t()) :: {:ok, term()} | {:error, Error.t()}
-  def kv_get(%Plugin{} = plugin, key) do
+  @spec kv_get(Plugin.t(), Instance.t(), String.t()) :: {:ok, term()} | {:error, Error.t()}
+  def kv_get(%Plugin{} = plugin, %Instance{} = instance, key) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key),
-         {:ok, value} <- Kv.get(plugin.slug, key) do
+         {:ok, value} <- Kv.get(instance.id, key) do
       {:ok, to_option(value)}
     end
   end
 
   @doc false
-  @spec kv_set(Plugin.t(), String.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
-  def kv_set(%Plugin{} = plugin, key, value) do
+  @spec kv_set(Plugin.t(), Instance.t(), String.t(), String.t()) ::
+          {:ok, boolean()} | {:error, Error.t()}
+  def kv_set(%Plugin{} = plugin, %Instance{} = instance, key, value) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key),
-         {:ok, value} <- validate_kv_value(value),
-         {:ok, _} <- Kv.set(plugin.slug, key, value) do
+         {:ok, _} <- Kv.set(instance.id, key, value) do
       {:ok, true}
     end
   end
 
   @doc false
-  @spec kv_delete(Plugin.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
-  def kv_delete(%Plugin{} = plugin, key) do
+  @spec kv_delete(Plugin.t(), Instance.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
+  def kv_delete(%Plugin{} = plugin, %Instance{} = instance, key) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key) do
-      Kv.delete(plugin.slug, key)
+      Kv.delete(instance.id, key)
       {:ok, true}
     end
   end
+
+  @doc false
+  @spec kv_list(Plugin.t(), Instance.t(), String.t(), term()) ::
+          {:ok, map()} | {:error, Error.t()}
+  def kv_list(%Plugin{} = plugin, %Instance{} = instance, prefix, cursor) do
+    with :ok <- require_capability(plugin, "state:kv"),
+         {:ok, %{entries: entries, next_cursor: next}} <-
+           Kv.list(instance.id, prefix, from_option(cursor)) do
+      {:ok,
+       %{
+         entries: Enum.map(entries, fn {k, v} -> %{key: k, value: v} end),
+         "next-cursor": to_option(next)
+       }}
+    end
+  end
+
+  @doc false
+  @spec kv_set_many(Plugin.t(), Instance.t(), [map()]) :: :ok | {:error, Error.t()}
+  def kv_set_many(%Plugin{} = plugin, %Instance{} = instance, entries) when is_list(entries) do
+    with :ok <- require_capability(plugin, "state:kv") do
+      Kv.set_many(instance.id, Enum.map(entries, &kv_pair/1))
+    end
+  end
+
+  defp kv_pair(%{key: k, value: v}), do: {k, v}
+  defp kv_pair(other), do: other
 
   defp validate_kv_key(key) when is_binary(key) and key != "", do: {:ok, key}
 
   defp validate_kv_key(_),
     do: {:error, Error.new(:invalid_request, "kv key must be a non-empty string")}
-
-  defp validate_kv_value(value) when is_binary(value), do: {:ok, value}
-
-  defp validate_kv_value(_),
-    do: {:error, Error.new(:invalid_request, "kv value must be a string")}
 
   @page_namespaces ~w(media_request download collection)
 
@@ -663,9 +859,14 @@ defmodule Mydia.Plugins.HostFunctions do
   # (`Scope.system()`, and the connected users' progress); inside an `on-http`
   # call every namespace is read as the acting user instead, so a page never
   # sees more than the person using it.
+  #
+  # The third argument is either the invocation context map (`%{handler: ...}`)
+  # or a keyword list of host-side options: `:with_origin` (1.5 records carry
+  # `origin`), `:instance`, and `:ctx`.
   @doc false
-  @spec data_list(Plugin.t(), map(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def data_list(%Plugin{} = plugin, req, ctx \\ %{}) do
+  @spec data_list(Plugin.t(), map(), map() | keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def data_list(%Plugin{} = plugin, req, ctx_or_opts \\ []) do
+    {ctx, opts} = split_list_opts(ctx_or_opts)
     namespace = Map.get(req, :namespace, "")
 
     if namespace in @page_namespaces do
@@ -676,10 +877,13 @@ defmodule Mydia.Plugins.HostFunctions do
            {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
            {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
         limit = clamp_list_limit(from_option(Map.get(req, :limit)))
-        list_namespace(plugin, viewer, namespace, cursor, since, limit)
+        list_namespace(plugin, viewer, namespace, cursor, since, limit, opts)
       end
     end
   end
+
+  defp split_list_opts(ctx) when is_map(ctx), do: {ctx, []}
+  defp split_list_opts(opts) when is_list(opts), do: {Keyword.get(opts, :ctx, %{}), opts}
 
   # `:system` for event and schedule handlers; the acting user for on-http,
   # taken from the host-provided invocation context.
@@ -689,7 +893,7 @@ defmodule Mydia.Plugins.HostFunctions do
   defp list_scope(:system), do: Scope.system()
   defp list_scope(user), do: Scope.for_user(user)
 
-  defp list_namespace(_plugin, viewer, "media_item", cursor, since, limit) do
+  defp list_namespace(_plugin, viewer, "media_item", cursor, since, limit, _opts) do
     rows =
       Media.list_items_page(list_scope(viewer),
         after: cursor,
@@ -705,7 +909,7 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(_plugin, viewer, "library_item", cursor, since, limit) do
+  defp list_namespace(_plugin, viewer, "library_item", cursor, since, limit, _opts) do
     rows =
       Media.list_library_items_page(list_scope(viewer),
         after: cursor,
@@ -718,7 +922,7 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(plugin, viewer, "playback_progress", cursor, since, limit) do
+  defp list_namespace(plugin, viewer, "playback_progress", cursor, since, limit, opts) do
     # Consent-scoped (R21): outside a page, only users with an active connection
     # to this plugin are visible, so a non-connected user's rows are absent
     # entirely. A page reads the acting user's own rows.
@@ -735,12 +939,18 @@ defmodule Mydia.Plugins.HostFunctions do
           )
 
         {page, next} = paginate(rows, limit)
-        items = Enum.map(page, fn p -> {:"playback-progress", to_playback_progress(p)} end)
+        with_origin? = Keyword.get(opts, :with_origin, false)
+
+        items =
+          Enum.map(page, fn p ->
+            {:"playback-progress", to_playback_progress(p, with_origin?)}
+          end)
+
         {:ok, %{items: items, "next-cursor": next_cursor(next)}}
     end
   end
 
-  defp list_namespace(_plugin, _viewer, other, _cursor, _since, _limit) do
+  defp list_namespace(_plugin, _viewer, other, _cursor, _since, _limit, _opts) do
     {:error, Error.new(:invalid_request, "unknown data-list namespace: #{other}")}
   end
 
@@ -812,10 +1022,10 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # Progress row -> the WIT playback-progress record. A movie carries the item's
   # own external ids; an episode carries its coordinates plus the show's ids.
-  defp to_playback_progress(p) do
+  defp to_playback_progress(p, with_origin?) do
     {item_type, ext, season, epnum} = progress_dimensions(p)
 
-    %{
+    record = %{
       "user-id": p.user_id,
       "item-type": item_type,
       "media-item-id": to_option(p.media_item_id),
@@ -831,6 +1041,10 @@ defmodule Mydia.Plugins.HostFunctions do
       "last-watched-at": to_option(iso_or_nil(p.last_watched_at)),
       "updated-at": DateTime.to_iso8601(p.updated_at)
     }
+
+    # The 1.5 record appends `origin`; a 1.1 to 1.4 guest's record has no such
+    # field, and wasmex rejects unknown record fields, so only 1.5 gets it.
+    if with_origin?, do: Map.put(record, :origin, to_option(p.last_write_origin)), else: record
   end
 
   defp progress_dimensions(%{episode_id: eid} = p) when not is_nil(eid) do
@@ -850,13 +1064,15 @@ defmodule Mydia.Plugins.HostFunctions do
   defp iso_or_nil(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
 
   @doc false
-  @spec ensure_watched(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def ensure_watched(%Plugin{} = plugin, target) do
+  @spec ensure_watched(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def ensure_watched(%Plugin{} = plugin, target, opts \\ []) do
+    origin = origin_tag(plugin, Keyword.get(opts, :instance))
+
     with :ok <- require_surface(plugin, "playback:watched"),
          {:ok, user_id} <- fetch_target_user(target),
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
-      resolve_and_write(plugin, user_id, target, watched_at)
+      resolve_and_write(origin, user_id, target, watched_at)
     end
   end
 
@@ -920,17 +1136,86 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   @doc false
-  @spec set_watch_state(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def set_watch_state(%Plugin{} = plugin, target) do
+  @spec set_watch_state(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def set_watch_state(%Plugin{} = plugin, target, opts \\ []) do
+    origin = origin_tag(plugin, Keyword.get(opts, :instance))
+
     with :ok <- require_surface(plugin, "playback:watched"),
          {:ok, user_id} <- fetch_target_user(target),
          :ok <- require_active_connection(plugin, user_id),
          {:ok, watched_at} <- parse_watched_at(from_option(Map.get(target, :"watched-at"))) do
-      resolve_and_set_state(plugin, user_id, target, watched_at)
+      resolve_and_set_state(origin, user_id, target, watched_at)
     end
   end
 
-  defp resolve_and_write(plugin, user_id, target, watched_at) do
+  @doc false
+  @spec origin_tag(Plugin.t(), Instance.t() | nil) :: String.t()
+  def origin_tag(%Plugin{slug: slug}, %Instance{id: id}), do: "plugin:#{slug}:#{id}"
+  def origin_tag(%Plugin{slug: slug}, _instance), do: "plugin:#{slug}"
+
+  @doc false
+  @spec report_sync_run(Plugin.t(), Instance.t(), map()) :: :ok | {:error, Error.t()}
+  def report_sync_run(%Plugin{} = plugin, %Instance{} = instance, report) do
+    with {:ok, started} <- parse_run_time(Map.get(report, :"started-at"), "started-at"),
+         {:ok, finished} <- parse_run_time(Map.get(report, :"finished-at"), "finished-at"),
+         {:ok, _run} <-
+           Sync.record_run(%{
+             provider: "plugin:#{plugin.slug}",
+             provider_instance_id: instance.id,
+             direction: :bidirectional,
+             status: run_status(Map.get(report, :status)),
+             started_at: started,
+             finished_at: finished,
+             counts: %{
+               pulled: Map.get(report, :pulled, 0),
+               pushed: Map.get(report, :pushed, 0),
+               skipped: Map.get(report, :skipped, 0),
+               errors: Map.get(report, :errors, 0)
+             },
+             error: cap_message(from_option(Map.get(report, :message)))
+           }) do
+      :ok
+    else
+      {:error, %Ecto.Changeset{}} ->
+        {:error, Error.new(:invalid_request, "invalid sync-run report")}
+
+      {:error, %Error{}} = err ->
+        err
+    end
+  end
+
+  @max_run_message 500
+
+  defp cap_message(message) when is_binary(message),
+    do: String.slice(message, 0, @max_run_message)
+
+  defp cap_message(other), do: other
+
+  defp parse_run_time(iso, field) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, ts, _} -> {:ok, DateTime.truncate(ts, :second)}
+      _ -> {:error, Error.new(:invalid_request, "#{field} must be an RFC3339 timestamp")}
+    end
+  end
+
+  defp parse_run_time(_iso, field),
+    do: {:error, Error.new(:invalid_request, "#{field} must be an RFC3339 timestamp")}
+
+  defp run_status(:ok), do: :ok
+  defp run_status(:partial), do: :partial
+  defp run_status(_), do: :error
+
+  # Ungated like `log`: reporting what a sync did grants nothing.
+  defp report_sync_run_import(slug, ctx) do
+    fn report ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             do: report_sync_run(plugin, instance, report)
+      end)
+    end
+  end
+
+  defp resolve_and_write(origin, user_id, target, watched_at) do
     matcher_target = matcher_target(target)
 
     case Matcher.match(matcher_target) do
@@ -938,14 +1223,14 @@ defmodule Mydia.Plugins.HostFunctions do
         {:ok, %{status: :"not-found"}}
 
       {:movie, id} ->
-        apply_watch(plugin, user_id, [media_item_id: id], watched_at)
+        apply_watch(origin, user_id, [media_item_id: id], watched_at)
 
       {:episode, id} ->
-        apply_watch(plugin, user_id, [episode_id: id], watched_at)
+        apply_watch(origin, user_id, [episode_id: id], watched_at)
     end
   end
 
-  defp resolve_and_set_state(plugin, user_id, target, watched_at) do
+  defp resolve_and_set_state(origin, user_id, target, watched_at) do
     matcher_target = matcher_target(target)
 
     case Matcher.match(matcher_target) do
@@ -953,10 +1238,10 @@ defmodule Mydia.Plugins.HostFunctions do
         {:ok, %{status: :"not-found"}}
 
       {:movie, id} ->
-        apply_watch_state(plugin, user_id, [media_item_id: id], target, watched_at)
+        apply_watch_state(origin, user_id, [media_item_id: id], target, watched_at)
 
       {:episode, id} ->
-        apply_watch_state(plugin, user_id, [episode_id: id], target, watched_at)
+        apply_watch_state(origin, user_id, [episode_id: id], target, watched_at)
     end
   end
 
@@ -970,20 +1255,17 @@ defmodule Mydia.Plugins.HostFunctions do
     }
   end
 
-  defp apply_watch(plugin, user_id, content_id, watched_at) do
-    # Tagged plugin:<slug> so the dispatcher suppresses the echo to this plugin
-    # (R14) while existing ripple (e.g. media-server watched sync) still fires.
+  defp apply_watch(origin, user_id, content_id, watched_at) do
+    # Tagged plugin:<slug>[:<instance_id>] so the dispatcher suppresses the echo
+    # to this plugin (R14) while existing ripple (e.g. media-server watched sync)
+    # still fires.
     status =
-      Playback.ensure_watched(user_id, content_id,
-        origin: "plugin:#{plugin.slug}",
-        watched_at: watched_at
-      )
+      Playback.ensure_watched(user_id, content_id, origin: origin, watched_at: watched_at)
 
     {:ok, %{status: ensure_status(status)}}
   end
 
-  defp apply_watch_state(plugin, user_id, content_id, target, watched_at) do
-    origin = "plugin:#{plugin.slug}"
+  defp apply_watch_state(origin, user_id, content_id, target, watched_at) do
     position = from_option(Map.get(target, :"position-seconds"))
     duration = from_option(Map.get(target, :"duration-seconds"))
     watched = Map.get(target, :watched) == true
@@ -1010,7 +1292,7 @@ defmodule Mydia.Plugins.HostFunctions do
         end
 
       watched ->
-        apply_watch(plugin, user_id, content_id, watched_at)
+        apply_watch(origin, user_id, content_id, watched_at)
 
       true ->
         case Playback.delete_progress(user_id, content_id, origin: origin) do
@@ -1051,57 +1333,91 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   @doc false
-  @spec connections_list(Plugin.t()) :: {:ok, [map()]} | {:error, Error.t()}
-  def connections_list(%Plugin{} = plugin) do
+  # 1.1-1.3 connections-list: the instance's *user* links in the old record shape.
+  @spec connections_list(Plugin.t(), Instance.t()) :: {:ok, [map()]} | {:error, Error.t()}
+  def connections_list(%Plugin{} = plugin, %Instance{} = instance) do
     with :ok <- require_capability(plugin, "users:connections") do
       records =
-        plugin.slug
-        |> Connections.list_for_plugin()
+        instance.id
+        |> AccountLinks.list()
+        # Only user links are connections, and the guest enum has just
+        # connected|error, so a disabled link is not listed at all.
+        |> Enum.filter(&(&1.role == :user and &1.status != :disabled))
         |> Enum.map(&to_connection_record/1)
 
       {:ok, records}
     end
   end
 
-  # Identity + status ONLY — the WIT `connection` record has no token field, so
-  # the token cannot cross the boundary by construction (R22).
-  defp to_connection_record(conn) do
+  # Identity + status ONLY: the WIT `connection` record has no token field, so
+  # the token cannot cross the boundary by construction.
+  defp to_connection_record(%AccountLink{} = link) do
     %{
-      id: conn.id,
-      "user-id": conn.user_id,
-      "external-user-id": to_option(conn.external_user_id),
-      "external-username": to_option(conn.external_username),
-      status: connection_status_atom(conn.status)
+      id: link.id,
+      "user-id": link.user_id,
+      "external-user-id": to_option(link.external_user_id),
+      "external-username": to_option(link.external_username),
+      status: if(link.status == :active, do: :connected, else: :error)
     }
   end
 
-  defp connection_status_atom("error"), do: :error
-  defp connection_status_atom(_), do: :connected
+  @doc false
+  @spec links_list(Plugin.t(), Instance.t()) :: {:ok, [map()]} | {:error, Error.t()}
+  def links_list(%Plugin{} = plugin, %Instance{} = instance) do
+    with :ok <- require_capability(plugin, "users:connections") do
+      {:ok, instance.id |> AccountLinks.list() |> Enum.map(&to_link_record/1)}
+    end
+  end
+
+  # Identity + status ONLY, never the token (same rule as the 1.1 record).
+  defp to_link_record(%AccountLink{} = link) do
+    %{
+      id: link.id,
+      role: link.role,
+      "user-id": to_option(link.user_id),
+      "external-user-id": to_option(link.external_user_id),
+      "external-username": to_option(link.external_username),
+      status: link.status
+    }
+  end
 
   @doc false
-  @spec connection_request(Plugin.t(), String.t(), map(), keyword()) ::
+  # Serves 1.5 link-request and, through connection_request/4, 1.1-1.4
+  # connection-request. Any role may be used; the link must belong to the
+  # calling instance, not be disabled, and hold a token. The manifest's
+  # auth_header template names the header; any guest header with that name
+  # (case-insensitive) is stripped before the host's is added.
+  @spec link_request(Plugin.t(), Instance.t(), term(), map(), keyword()) ::
           {:ok, map()} | {:error, Error.t()}
-  def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
+  def link_request(%Plugin{} = plugin, %Instance{} = instance, link_id, request, opts \\ []) do
     with :ok <- require_capability(plugin, "net:http"),
          :ok <- require_capability(plugin, "users:connections"),
-         {:ok, conn} <- fetch_connection(plugin, connection_id),
+         {:ok, link} <- fetch_link(plugin, instance, link_id, Keyword.get(opts, :roles)),
+         :ok <- require_usable(link),
          {:ok, url} <- fetch_string(request, "url") do
-      # Strip any guest-supplied Authorization and inject the bearer token the
-      # host holds (R22) — the guest never sees the token.
+      {header, template} = Manifest.auth_header(plugin.connection)
+      name = String.downcase(header)
+
       headers =
         request
         |> Map.get("headers", %{})
-        |> strip_authorization()
-        |> Map.put("authorization", "Bearer #{conn.access_token}")
+        |> Enum.reject(fn {k, _v} -> String.downcase(to_string(k)) == name end)
+        |> Map.new()
+        |> Map.put(name, String.replace(template, "{token}", link.access_token))
 
+      # Same combined egress rule as http-request: host-side options first
+      # (first match wins), then the instance's approved endpoints, and a
+      # private address is also admitted for an operator-marked private host.
       gate_opts =
-        [
-          allowed_hosts: Plugin.granted_http_hosts(plugin),
-          slug: plugin.slug,
-          method: Map.get(request, "method", "GET"),
-          headers: headers,
-          body: Map.get(request, "body")
-        ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+        Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout]) ++
+          Endpoints.gate_opts(plugin, instance) ++
+          [
+            slug: plugin.slug,
+            method: Map.get(request, "method", "GET"),
+            headers: headers,
+            body: Map.get(request, "body"),
+            allow_private: private_host?(plugin, url)
+          ]
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}
@@ -1110,24 +1426,144 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp fetch_connection(plugin, connection_id) when is_binary(connection_id) do
-    case Connections.get_by_id(plugin.slug, connection_id) do
-      %{} = conn ->
-        {:ok, conn}
-
+  @doc false
+  # The 1.1 entry point: a connection is a user link. `opts[:instance]` is the
+  # invocation's instance; without one, the plugin's default instance. Owner and
+  # endpoint credentials are not connections: a 1.1-1.3 guest can never use them.
+  @spec connection_request(Plugin.t(), term(), map(), keyword()) ::
+          {:ok, map()} | {:error, Error.t()}
+  def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
+    case Keyword.get(opts, :instance) || Instances.default_instance(plugin.slug) do
       nil ->
-        {:error,
-         Error.new(:not_found, "connection #{connection_id} not found for #{plugin.slug}")}
+        {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+
+      instance ->
+        link_request(plugin, instance, connection_id, request, Keyword.put(opts, :roles, [:user]))
     end
   end
 
-  defp fetch_connection(_plugin, _),
-    do: {:error, Error.new(:invalid_request, "connection-id must be a string")}
+  @max_proposed_accounts 500
 
-  defp strip_authorization(headers) when is_map(headers) do
-    Enum.reject(headers, fn {k, _v} -> String.downcase(to_string(k)) == "authorization" end)
-    |> Map.new()
+  @doc false
+  @spec propose_accounts(Plugin.t(), Instance.t(), term()) :: :ok | {:error, Error.t()}
+  def propose_accounts(%Plugin{} = plugin, %Instance{} = instance, accounts) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, rows} <- validate_accounts(accounts),
+         {:ok, _} <- Instances.set_remote_accounts(instance, rows) do
+      :ok
+    end
   end
+
+  defp validate_accounts(accounts)
+       when is_list(accounts) and length(accounts) <= @max_proposed_accounts do
+    accounts
+    |> Enum.reduce_while({:ok, []}, fn account, {:ok, acc} ->
+      id = Map.get(account, :id)
+      name = Map.get(account, :name)
+
+      if is_binary(id) and id != "" and is_binary(name) do
+        row = %{id: id, name: String.slice(name, 0, 200), admin: Map.get(account, :admin) == true}
+        {:cont, {:ok, [row | acc]}}
+      else
+        {:halt,
+         {:error, Error.new(:invalid_request, "remote-account needs a non-empty id and a name")}}
+      end
+    end)
+    |> case do
+      {:ok, rows} -> {:ok, Enum.reverse(rows)}
+      err -> err
+    end
+  end
+
+  defp validate_accounts(_) do
+    {:error,
+     Error.new(
+       :invalid_request,
+       "propose-accounts takes at most #{@max_proposed_accounts} accounts"
+     )}
+  end
+
+  @doc false
+  @spec set_link_token(Plugin.t(), Instance.t(), term(), term()) :: :ok | {:error, Error.t()}
+  def set_link_token(%Plugin{} = plugin, %Instance{} = instance, link_id, token) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, link} <- fetch_link(plugin, instance, link_id),
+         :ok <- reject_disabled(link),
+         {:ok, token} <- validate_token(token) do
+      AccountLinks.set_token(link.id, token)
+    end
+  end
+
+  # :disabled is the host's kill switch; a guest can neither revive nor edit it.
+  defp reject_disabled(%AccountLink{status: :disabled}),
+    do: {:error, Error.new(:capability_denied, "link is disabled")}
+
+  defp reject_disabled(%AccountLink{}), do: :ok
+
+  # The token is later interpolated into a header value, so control characters
+  # (CR, LF, NUL and the rest of C0/DEL) are refused.
+  defp validate_token(token)
+       when is_binary(token) and token != "" and byte_size(token) <= 4096 do
+    if String.match?(token, ~r/[\x00-\x1f\x7f]/) do
+      {:error, Error.new(:invalid_request, "token must not contain control characters")}
+    else
+      {:ok, token}
+    end
+  end
+
+  defp validate_token(_) do
+    {:error,
+     Error.new(:invalid_request, "token must be a non-empty string of at most 4096 bytes")}
+  end
+
+  @doc false
+  @spec set_link_status(Plugin.t(), Instance.t(), term(), term(), term()) ::
+          :ok | {:error, Error.t()}
+  def set_link_status(%Plugin{} = plugin, %Instance{} = instance, link_id, status, message) do
+    with :ok <- require_capability(plugin, "users:connections"),
+         {:ok, link} <- fetch_link(plugin, instance, link_id),
+         :ok <- reject_disabled(link),
+         {:ok, status} <- link_status(status),
+         :ok <- reject_guest_disable(status) do
+      AccountLinks.set_status(link.id, status, from_option(message))
+    end
+  end
+
+  # :disabled is the host's kill switch; a guest cannot set it either.
+  defp reject_guest_disable(:disabled),
+    do: {:error, Error.new(:capability_denied, "a plugin cannot disable a link")}
+
+  defp reject_guest_disable(_status), do: :ok
+
+  @link_statuses %{"active" => :active, "error" => :error, "disabled" => :disabled}
+
+  defp link_status(status) when is_atom(status) or is_binary(status) do
+    case Map.fetch(@link_statuses, to_string(status)) do
+      {:ok, atom} -> {:ok, atom}
+      :error -> {:error, Error.new(:invalid_request, "unknown link-status #{inspect(status)}")}
+    end
+  end
+
+  defp link_status(other),
+    do: {:error, Error.new(:invalid_request, "unknown link-status #{inspect(other)}")}
+
+  defp fetch_link(plugin, %Instance{} = instance, link_id, roles \\ nil) do
+    link = AccountLinks.get_in_instance(instance.id, link_id)
+
+    if match?(%AccountLink{}, link) and (is_nil(roles) or link.role in roles) do
+      {:ok, link}
+    else
+      {:error, Error.new(:not_found, "link #{inspect(link_id)} not found for #{plugin.slug}")}
+    end
+  end
+
+  defp require_usable(%AccountLink{status: :disabled}),
+    do: {:error, Error.new(:capability_denied, "link is disabled")}
+
+  defp require_usable(%AccountLink{access_token: token}) when token in [nil, ""],
+    do: {:error, Error.new(:capability_denied, "link has no token yet")}
+
+  defp require_usable(%AccountLink{}), do: :ok
 
   # ── Capability checks (deny-by-default) ───────────────────────────────────
 

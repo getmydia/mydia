@@ -446,6 +446,64 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "update_settings/2 and instances" do
+    test "saved settings reach a single-instance plugin's injected config", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, manifest!(), wasm), gate_opts())
+
+      {:ok, _} =
+        Plugins.update_settings("webhook-notifier", %{"webhook_url" => "https://x.test/h"})
+
+      instance = Mydia.Plugins.Instances.default_instance("webhook-notifier")
+      assert Mydia.Plugins.Instances.config_for(instance)["webhook_url"] == "https://x.test/h"
+    end
+
+    test "activation heals settings saved before they reached the default instance", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      {:ok, _} = Plugins.install(entry(bypass, manifest!(), wasm), gate_opts())
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+
+      {:ok, _} =
+        Settings.update_plugin_config(config, %{settings: %{"stale" => "no", "k" => "v"}})
+
+      {:ok, descriptor} = Registry.lookup("webhook-notifier")
+      Plugins.ensure_default_instance(descriptor)
+
+      instance = Mydia.Plugins.Instances.default_instance("webhook-notifier")
+      assert Mydia.Plugins.Instances.config_for(instance)["k"] == "v"
+    end
+
+    test "a multi_instance plugin's plugin-level settings never widen net:http", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      manifest =
+        manifest!(%{
+          "multi_instance" => true,
+          "settings_schema" => [%{"key" => "server_url", "type" => "url", "grants_host" => true}]
+        })
+
+      {:ok, _} = Plugins.install(entry(bypass, manifest, wasm), gate_opts())
+
+      {:ok, _} =
+        Plugins.update_settings("webhook-notifier", %{
+          "server_url" => "https://evil.example.com/x"
+        })
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").granted_capabilities[
+               "net:http"
+             ] == ["discord.com"]
+
+      assert Mydia.Plugins.Instances.list("webhook-notifier") == []
+    end
+  end
+
   describe "update_settings/2 deny-by-default (R2, R3)" do
     test "does not grant net:http for an unapproved plugin", %{bypass: bypass} do
       wasm = guest_wasm()
@@ -668,7 +726,8 @@ defmodule Mydia.PluginsTest do
         |> Map.put("net:http", ["discord.com", "ntfy.example.com"])
 
       assert refreshed.enabled
-      assert refreshed.settings == settings
+      # The shipped delivery mode is merged in; the operator's keys survive.
+      assert refreshed.settings == Map.put(settings, "delivery", "durable")
       assert refreshed.granted_capabilities == expected
       refute Plugins.needs_reapproval?(refreshed)
     end

@@ -33,6 +33,10 @@ defmodule Mydia.Plugins.Plugin do
           enabled: boolean(),
           source: atom() | nil,
           delivery: delivery(),
+          multi_instance: boolean(),
+          category: String.t() | nil,
+          setup: boolean(),
+          connection: map() | nil,
           page: map() | nil
         }
 
@@ -48,6 +52,10 @@ defmodule Mydia.Plugins.Plugin do
             enabled: false,
             source: nil,
             delivery: :inline,
+            multi_instance: false,
+            category: nil,
+            setup: false,
+            connection: nil,
             page: nil
 
   alias Mydia.Plugins.Manifest
@@ -74,6 +82,10 @@ defmodule Mydia.Plugins.Plugin do
       enabled: Keyword.get(opts, :enabled, false),
       source: Keyword.get(opts, :source),
       delivery: Keyword.get(opts, :delivery, :inline),
+      multi_instance: manifest.multi_instance,
+      category: manifest.category,
+      setup: manifest.setup,
+      connection: manifest.connection,
       page: manifest.page
     }
   end

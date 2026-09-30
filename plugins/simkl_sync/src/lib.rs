@@ -1386,6 +1386,7 @@ mod tests {
             duration_seconds: None,
             last_watched_at: None,
             updated_at: "t".into(),
+            origin: None,
         })
         .unwrap();
 
@@ -1622,6 +1623,7 @@ mod tests {
             position_seconds: None,
             duration_seconds: None,
             updated_at: "2026-08-11T00:00:00Z".to_string(),
+            origin: None,
         }
     }
 }

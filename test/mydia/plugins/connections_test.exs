@@ -31,9 +31,73 @@ defmodule Mydia.Plugins.ConnectionsTest do
     :ok
   end
 
+  # Connections live on the plugin's default instance, and so does their store.
+  defp kv_id, do: Mydia.Plugins.Instances.default_instance("connector").id
+
   setup do
     install!("connector")
     %{user: user_fixture(), other: user_fixture()}
+  end
+
+  describe "account link backing" do
+    test "connections are user_flow links on the plugin's default instance" do
+      user = user_fixture()
+
+      {:ok, conn} =
+        Connections.connect("connector", user.id, %{access_token: "t", status: "connected"})
+
+      assert conn.instance_id == Mydia.Plugins.Instances.default_instance("connector").id
+      assert conn.role == :user
+      assert conn.source == :user_flow
+      assert conn.status == :active
+    end
+
+    test "owner and endpoint credentials are invisible to connection reads and counts" do
+      user = user_fixture()
+      instance = Mydia.Plugins.Instances.default_instance("connector")
+      {:ok, _} = Mydia.Plugins.AccountLinks.put_credential(instance.id, :owner, "acct")
+      {:ok, _} = Mydia.Plugins.AccountLinks.put_credential(instance.id, :endpoint, "srv")
+
+      assert Connections.list_for_plugin("connector") == []
+      assert Connections.count_for_plugin("connector") == 0
+      assert Connections.connected_user_ids("connector") == []
+
+      {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
+      assert [%{id: id}] = Connections.list_for_plugin("connector")
+      assert id == conn.id
+      assert Connections.count_for_plugin("connector") == 1
+      assert Connections.get_by_id("connector", conn.id).id == conn.id
+
+      owner = Mydia.Plugins.AccountLinks.credential(instance.id, :owner)
+      assert Connections.get_by_id("connector", owner.id) == nil
+    end
+  end
+
+  test "connect/3 returns an error for an unknown status instead of raising", %{user: user} do
+    assert {:error, {:invalid_status, "bogus"}} =
+             Connections.connect("connector", user.id, %{access_token: "t", status: "bogus"})
+  end
+
+  describe "multi_instance plugins" do
+    setup do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "multi-conn",
+          name: "Multi",
+          version: "1.0.0",
+          enabled: true,
+          manifest: %{"slug" => "multi-conn", "multi_instance" => true}
+        })
+
+      :ok
+    end
+
+    test "have no default-instance connection and none is created", %{user: user} do
+      assert Connections.get("multi-conn", user.id) == nil
+      assert {:error, :not_connectable} = Connections.connect("multi-conn", user.id, %{})
+      assert Connections.delete("multi-conn", user.id) == :ok
+      assert Mydia.Plugins.Instances.list("multi-conn") == []
+    end
   end
 
   describe "connect/3 and reads" do
@@ -45,7 +109,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
                  external_username: "alice"
                })
 
-      assert conn.status == "connected"
+      assert conn.status == :active
       assert conn.external_username == "alice"
 
       fetched = Connections.get("connector", user.id)
@@ -97,7 +161,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
       # `other` has no connection to this plugin.
 
       assert Connections.mark_errored("connector", [user.id, other.id, "bogus-id"]) == 1
-      assert Connections.get("connector", user.id).status == "error"
+      assert Connections.get("connector", user.id).status == :error
       assert Connections.get("connector", other.id) == nil
     end
   end
@@ -106,35 +170,35 @@ defmodule Mydia.Plugins.ConnectionsTest do
     test "disconnect sweeps the connection's KV prefix and removes the row", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
 
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/watermark", "1")
-      {:ok, _} = Kv.set("connector", "global", "keep")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/watermark", "1")
+      {:ok, _} = Kv.set(kv_id(), "global", "keep")
 
       assert :ok = Connections.disconnect("connector", user.id)
 
       assert Connections.get("connector", user.id) == nil
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/watermark")
-      assert {:ok, "keep"} = Kv.get("connector", "global")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/watermark")
+      assert {:ok, "keep"} = Kv.get(kv_id(), "global")
     end
 
     test "sweep_kv drops each connection's prefix and leaves unscoped keys", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
-      {:ok, _} = Kv.set("connector", "global", "keep")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "global", "keep")
 
       assert :ok = Connections.sweep_kv(Connections.list_for_user(user.id))
 
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
-      assert {:ok, "keep"} = Kv.get("connector", "global")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
+      assert {:ok, "keep"} = Kv.get(kv_id(), "global")
     end
 
     test "deleting the user cascades the rows and sweep_kv clears their state", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
 
       assert {:ok, _} = Mydia.Accounts.delete_user(user)
 
       assert Connections.get("connector", user.id) == nil
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
     end
 
     # `media_requests.requester_id` is `on_delete: :restrict`, so a user who has
@@ -144,7 +208,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
     # state had been destroyed out from under them.
     test "a rejected delete leaves the user's plugin state intact", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
 
       {:ok, _request} =
         Mydia.MediaRequests.create_request(Scope.unrestricted(), %{
@@ -158,7 +222,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
 
       assert Mydia.Accounts.get_user!(user.id)
       assert Connections.get("connector", user.id)
-      assert {:ok, "x"} = Kv.get("connector", "conn/#{conn.id}/cursor")
+      assert {:ok, "x"} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
     end
   end
 end

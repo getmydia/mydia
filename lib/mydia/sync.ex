@@ -30,6 +30,17 @@ defmodule Mydia.Sync do
   end
 
   @doc """
+  Records a run that already finished, in one insert. Plugins report their runs
+  this way through the `report-sync-run` host import, after the work is done.
+  """
+  @spec record_run(map()) :: {:ok, Run.t()} | {:error, Ecto.Changeset.t()}
+  def record_run(attrs) do
+    %Run{}
+    |> Run.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  @doc """
   Records that a sync did not run, and why.
 
   `reason` is an atom from a closed set defined by callers, never external

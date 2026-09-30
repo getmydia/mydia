@@ -15,6 +15,8 @@ defmodule Mydia.Config.Loader do
   alias Mydia.Config.Schema
   alias Mydia.Settings
 
+  require Logger
+
   @default_sources [:yaml, :database, :env]
 
   @doc """
@@ -39,8 +41,9 @@ defmodule Mydia.Config.Loader do
          {:ok, db_config} <- maybe_load_database_config(sources),
          env_config <- maybe_load_env(sources),
          merged <- merge_all_configs(yaml_config, db_config, env_config),
-         normalized <- normalize_legacy_indexer_types(merged) do
-      validate(normalized)
+         normalized <- normalize_legacy_indexer_types(merged),
+         translated <- translate_legacy_plex_media_servers(normalized) do
+      validate(translated)
     end
   end
 
@@ -238,6 +241,7 @@ defmodule Mydia.Config.Loader do
       media_servers: load_media_servers_env(),
       library_paths: load_library_paths_env(),
       plugin_installs: load_plugins_env(),
+      plugin_instances: load_plugin_instances_env(),
       plugins: load_plugins_runtime_env(),
       path_mappings: load_path_mappings_env()
     }
@@ -524,6 +528,84 @@ defmodule Mydia.Config.Loader do
     |> Enum.reject(&(&1 == %{}))
   end
 
+  # PLUGIN_<SLUG>_<N>_<KEY> declares plugin instances. The slug starts with a
+  # letter, which keeps it apart from the numeric PLUGIN_<N>_* install form.
+  # NAME and ENABLED are instance fields; every other key is a settings key,
+  # lower-cased (PLUGIN_PLEX_0_URL -> "url").
+  @plugin_instance_env ~r/^PLUGIN_([A-Z][A-Z0-9_]*?)_(\d+)_([A-Z][A-Z0-9_]*)$/
+
+  defp load_plugin_instances_env do
+    System.get_env()
+    |> Enum.flat_map(fn {key, value} ->
+      case Regex.run(@plugin_instance_env, key) do
+        [_, slug, index, field] -> [{{String.downcase(slug), index}, field, value}]
+        nil -> []
+      end
+    end)
+    |> Enum.group_by(
+      fn {id, _field, _value} -> id end,
+      fn {_id, field, value} -> {field, value} end
+    )
+    |> Enum.sort_by(fn {{slug, index}, _} -> {slug, String.to_integer(index)} end)
+    |> Enum.map(fn {{slug, index}, fields} ->
+      Enum.reduce(fields, %{plugin: slug, name: "#{slug}-#{index}", settings: %{}}, fn
+        {"NAME", value}, acc -> if value == "", do: acc, else: %{acc | name: value}
+        {"ENABLED", value}, acc -> put_if_present(acc, :enabled, value, &parse_boolean/1)
+        {field, value}, acc -> put_in(acc, [:settings, String.downcase(field)], value)
+      end)
+    end)
+  end
+
+  # MEDIA_SERVER_<N>_* / `media_servers:` entries of type plex predate the Plex
+  # plugin. They become plex plugin instances until the translation is removed.
+  defp translate_legacy_plex_media_servers(%{media_servers: servers} = config)
+       when is_list(servers) do
+    {plex, others} = Enum.split_with(servers, &(to_string(Map.get(&1, :type)) == "plex"))
+
+    if plex == [] do
+      config
+    else
+      warn_legacy_plex_once(plex)
+
+      translated =
+        Enum.map(plex, fn server ->
+          %{
+            plugin: "plex",
+            name: Map.get(server, :name),
+            enabled: Map.get(server, :enabled) != false,
+            legacy_source: "media_servers",
+            settings:
+              %{}
+              |> put_if_present("url", Map.get(server, :url))
+              |> put_if_present("token", Map.get(server, :token))
+          }
+        end)
+
+      config
+      |> Map.put(:media_servers, others)
+      |> Map.update(:plugin_instances, translated, &(&1 ++ translated))
+    end
+  end
+
+  defp translate_legacy_plex_media_servers(config), do: config
+
+  # The config is reloaded at runtime, so the deprecation is logged on the first
+  # load of a boot only.
+  defp warn_legacy_plex_once(plex) do
+    key = {__MODULE__, :legacy_plex_warned}
+
+    if not :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "Plex media servers configured through MEDIA_SERVER_<N>_* or `media_servers:` " <>
+          "(#{Enum.map_join(plex, ", ", &Map.get(&1, :name))}) now run as the Plex plugin. " <>
+          "Rename them to PLUGIN_PLEX_<N>_NAME, PLUGIN_PLEX_<N>_URL and PLUGIN_PLEX_<N>_TOKEN, " <>
+          "or a `plugin_instances:` entry with `plugin: plex`. The old form will be removed in a later release."
+      )
+    end
+  end
+
   defp load_plugins_env do
     # Support environment variables for installed plugins in the format:
     # PLUGIN_<N>_SLUG, PLUGIN_<N>_NAME, PLUGIN_<N>_SOURCE_URL, etc.
@@ -542,6 +624,7 @@ defmodule Mydia.Config.Loader do
         |> String.replace_suffix("_SLUG", "")
       end)
       |> Enum.uniq()
+      |> Enum.filter(&String.match?(&1, ~r/^\d+$/))
 
     Enum.map(indices, fn index ->
       prefix = "PLUGIN_#{index}_"
@@ -843,6 +926,7 @@ defmodule Mydia.Config.Loader do
           :media_servers,
           :library_paths,
           :plugin_installs,
+          :plugin_instances,
           :path_mappings
         ] and
           is_list(left_val) and

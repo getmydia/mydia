@@ -427,6 +427,17 @@ defmodule Mydia.Settings.RuntimeConfig do
     end
   end
 
+  @doc "Plugin instances declared in YAML/env (`Mydia.Config.Schema.PluginInstanceDecl`)."
+  def get_runtime_plugin_instances do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_instances) do
+      runtime_config.plugin_instances
+    else
+      []
+    end
+  end
+
   ## Runtime ID Helpers (public, used by other sub-modules)
 
   def runtime_config?(%{id: id}) when is_binary(id) do

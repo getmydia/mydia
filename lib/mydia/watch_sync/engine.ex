@@ -2,7 +2,7 @@ defmodule Mydia.WatchSync.Engine do
   @moduledoc """
   Drives one provider through one sync for one user.
 
-  Provider-agnostic: everything Plex-specific lives behind the
+  Provider-agnostic: everything provider-specific lives behind the
   `Mydia.WatchSync.Provider` behaviour. Every merge decision comes from
   `Mydia.WatchSync.Reconciler`, which is pure. This module owns all the I/O.
   """

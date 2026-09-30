@@ -1,6 +1,6 @@
 defmodule Mydia.Settings.MediaServerConfig do
   @moduledoc """
-  Schema for media server configurations (Plex, Jellyfin).
+  Schema for native media server configurations (Jellyfin). Plex is a plugin.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -28,7 +28,7 @@ defmodule Mydia.Settings.MediaServerConfig do
           updated_at: DateTime.t()
         }
 
-  @server_types [:plex, :jellyfin]
+  @server_types [:jellyfin]
 
   schema "media_server_configs" do
     field :name, :string
@@ -75,40 +75,12 @@ defmodule Mydia.Settings.MediaServerConfig do
     |> unique_constraint(:name)
   end
 
-  # `url` stopped being unconditionally required when Plex gained discovery: a
-  # Plex config addresses itself through `connections` and resolves an endpoint
-  # at call time. Every other server type still has only `url` to go on, and
   # `Client.Jellyfin` calls `String.trim_trailing(config.url, "/")` directly,
-  # which raises on nil. So the requirement is per-type rather than dropped.
+  # which raises on nil, so a native server always needs a url.
   defp validate_addressable(changeset) do
-    url = get_field(changeset, :url)
-
-    cond do
-      present?(url) ->
-        changeset
-
-      get_field(changeset, :type) == :plex and addressable_by_discovery?(changeset) ->
-        changeset
-
-      get_field(changeset, :type) == :plex ->
-        add_error(changeset, :url, "is required until a Plex server is discovered")
-
-      true ->
-        add_error(changeset, :url, "can't be blank")
-    end
-  end
-
-  @doc """
-  Returns true when a Plex config can address itself through discovery.
-
-  Public because the media server modal needs exactly this rule to decide
-  whether the Server URL field is a requirement or an optional manual override.
-  Two copies of the rule would drift.
-  """
-  @spec addressable_by_discovery?(Ecto.Changeset.t()) :: boolean()
-  def addressable_by_discovery?(changeset) do
-    present?(get_field(changeset, :machine_identifier)) or
-      get_field(changeset, :connections) not in [nil, []]
+    if present?(get_field(changeset, :url)),
+      do: changeset,
+      else: add_error(changeset, :url, "can't be blank")
   end
 
   defp present?(value), do: is_binary(value) and String.trim(value) != ""

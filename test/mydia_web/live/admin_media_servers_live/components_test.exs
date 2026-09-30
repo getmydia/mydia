@@ -8,18 +8,16 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
 
   alias Mydia.Accounts.User
   alias Mydia.Settings.MediaServerConfig
+  alias MydiaWeb.AdminMediaServersLive.AccountMappingComponents
   alias MydiaWeb.AdminMediaServersLive.Components
+  alias MydiaWeb.AdminMediaServersLive.MediaServerModalComponents
 
   defp render_modal(opts) do
-    config = Keyword.get(opts, :config, %MediaServerConfig{type: :plex})
+    config = Keyword.get(opts, :config, %MediaServerConfig{type: :jellyfin})
 
-    render_component(&Components.media_server_modal/1, %{
+    render_component(&MediaServerModalComponents.media_server_modal/1, %{
       media_server_form: to_form(MediaServerConfig.changeset(config, %{})),
-      media_server_mode: Keyword.get(opts, :mode, :new),
-      plex_oauth_state: Keyword.get(opts, :oauth_state, :idle),
-      plex_manual_entry: Keyword.get(opts, :manual_entry, false),
-      plex_reachability: Keyword.get(opts, :reachability, :checking),
-      plex_discovery: Keyword.get(opts, :discovery)
+      media_server_mode: Keyword.get(opts, :mode, :new)
     })
   end
 
@@ -33,27 +31,14 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     required != []
   end
 
-  defp discovered_plex_config do
-    %MediaServerConfig{
-      id: "22222222-2222-2222-2222-222222222222",
-      name: "Storage",
-      type: :plex,
-      enabled: true,
-      url: nil,
-      token: "acct-token",
-      machine_identifier: "machine-abc",
-      connections: [%{"uri" => "http://127.0.0.1:32400", "local" => true}]
-    }
-  end
-
   defp server(attrs \\ %{}) do
     struct!(
       %MediaServerConfig{
         id: "11111111-1111-1111-1111-111111111111",
         name: "Storage",
-        type: :plex,
+        type: :jellyfin,
         enabled: true,
-        url: "http://localhost:32400",
+        url: "http://localhost:8096",
         token: "tok",
         connection_settings: %{}
       },
@@ -130,91 +115,50 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
-  describe "media server modal, Server URL requirement" do
-    # Editing a server that was added through the wizard is what regressed:
-    # its url is nil by design, so a hard `required` made the modal unsavable
-    # and there was no way to rename it or change its sync settings.
-    test "a discovered Plex config offers the URL as an optional override" do
-      html = render_modal(config: discovered_plex_config(), mode: :edit, manual_entry: true)
-
-      assert html =~ ~s(id="media_server_config_url")
-      refute url_input_required?(html)
-      assert html =~ "Optional manual override"
-    end
-
-    test "a Plex config with no discovery data still requires the URL" do
-      html = render_modal(manual_entry: true)
-
-      assert url_input_required?(html)
-      assert html =~ "default: 32400"
-    end
-
-    test "a Jellyfin config still requires the URL" do
+  describe "media server modal, Jellyfin-only form" do
+    test "the URL is required" do
       html = render_modal(config: %MediaServerConfig{type: :jellyfin})
 
       assert url_input_required?(html)
       assert html =~ "default: 8096"
     end
 
-    test "the discovery path renders no URL or token inputs at all" do
-      html =
-        render_modal(
-          config: discovered_plex_config(),
-          oauth_state: :complete,
-          discovery: %{name: "Storage", machine_identifier: "machine-abc", connections: []}
-        )
+    test "the type is fixed to Jellyfin by a hidden input, with no type select" do
+      html = render_modal([])
 
-      refute html =~ ~s(id="media_server_config_url")
-      refute html =~ ~s(id="media_server_config_token")
+      document = LazyHTML.from_fragment(html)
+
+      assert LazyHTML.attribute(
+               LazyHTML.query(
+                 document,
+                 ~s(input[type="hidden"][name="media_server_config[type]"])
+               ),
+               "value"
+             ) == ["jellyfin"]
+
+      assert Enum.empty?(LazyHTML.query(document, ~s(select[name="media_server_config[type]"])))
     end
-  end
 
-  describe "media server modal, submit button availability" do
-    defp submit_disabled?(html) do
+    test "no Plex wizard is rendered" do
+      html = render_modal([])
+
+      refute html =~ "phx-hook"
+      refute html =~ "Sign in with Plex"
+      refute html =~ "plex-discovery-summary"
+    end
+
+    test "Add Server and Test Connection are both offered" do
+      html = render_modal(mode: :new)
+
+      assert html =~ "test_media_server_connection"
+
       disabled =
         html
         |> LazyHTML.from_fragment()
         |> LazyHTML.query("#media-server-submit")
         |> LazyHTML.attribute("disabled")
 
-      disabled != []
-    end
-
-    # New + Plex + no manual entry + not yet complete means there is no url
-    # input on screen at all: submitting would fail on a changeset error
-    # pinned to :url, which nothing on the page shows. Disable Add Server
-    # rather than let that happen silently.
-    test "Add Server is disabled for a new Plex server before the wizard completes" do
-      html = render_modal(mode: :new, oauth_state: :idle, manual_entry: false)
-
-      assert submit_disabled?(html)
-    end
-
-    test "Add Server is enabled once the Plex wizard reaches the review step" do
-      html =
-        render_modal(
-          mode: :new,
-          oauth_state: :complete,
-          manual_entry: false,
-          discovery: %{name: "Storage", machine_identifier: "machine-abc", connections: []}
-        )
-
-      refute submit_disabled?(html)
-    end
-
-    test "Save Changes stays enabled in edit mode even before the wizard completes" do
-      # In edit/reconnect mode the base struct already carries the discovery
-      # data, so the same visual state that blocks a new save can save
-      # successfully here.
-      html =
-        render_modal(
-          config: discovered_plex_config(),
-          mode: :edit,
-          oauth_state: :idle,
-          manual_entry: false
-        )
-
-      refute submit_disabled?(html)
+      assert disabled == []
     end
   end
 
@@ -242,68 +186,10 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
     end
   end
 
-  describe "media server modal, discovery review panel" do
-    defp discovery_map do
-      %{
-        name: "Storage",
-        machine_identifier: "machine-abc",
-        connections: [
-          %{uri: "https://10-0-0-4.abc.plex.direct:32400", local: true, relay: false},
-          %{uri: "https://relay.plex.direct:443", local: false, relay: true}
-        ]
-      }
-    end
-
-    test "the review panel names the server and its machine identifier" do
-      html = render_modal(oauth_state: :complete, discovery: discovery_map())
-
-      assert html =~ ~s(data-test="plex-discovery-summary")
-      assert html =~ "Storage"
-      assert html =~ "machine-abc"
-    end
-
-    test "the review panel lists the discovered addresses with their badges" do
-      html = render_modal(oauth_state: :complete, discovery: discovery_map())
-
-      # `simplify_plex_url("https://relay.plex.direct:443")` renders as
-      # "relay:443" in the connection line itself, so a loose `html =~
-      # "relay"` passes even with the relay badge deleted. Assert on the
-      # DaisyUI badge classes the markup actually uses instead.
-      document = LazyHTML.from_fragment(html)
-
-      refute Enum.empty?(LazyHTML.query(document, ".badge-info"))
-      refute Enum.empty?(LazyHTML.query(document, ".badge-warning"))
-    end
-
-    test "the review panel offers a way back but collects no input" do
-      html = render_modal(oauth_state: :complete, discovery: discovery_map())
-
-      assert html =~ "cancel_plex_oauth"
-      refute html =~ ~s(id="media_server_config_url")
-    end
-
-    # The review step already reports reachability on its own, so a second
-    # button asking the same question is noise. (It used to be worse than noise:
-    # the probe config was built from url and token alone, so on the discovery
-    # path it answered "URL is required" every time. It now carries the
-    # discovered connections, but the panel still says it better.)
-    test "Test Connection is hidden on the review step" do
-      html = render_modal(oauth_state: :complete, discovery: discovery_map())
-
-      refute html =~ "test_media_server_connection"
-    end
-
-    test "Test Connection is still offered everywhere else" do
-      html = render_modal(manual_entry: true)
-
-      assert html =~ "test_media_server_connection"
-    end
-  end
-
   describe "Account mapping modal" do
     defp render_mapping(opts) do
-      render_component(&Components.account_mapping_modal/1, %{
-        config: Keyword.get(opts, :config, %MediaServerConfig{name: "Galactica", type: :plex}),
+      render_component(&AccountMappingComponents.account_mapping_modal/1, %{
+        config: Keyword.get(opts, :config, jellyfin()),
         state: Keyword.get(opts, :state, :ready),
         accounts: Keyword.get(opts, :accounts, []),
         users: Keyword.get(opts, :users, []),
@@ -370,23 +256,23 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       assert selected_option(html, "2") in [nil, ""]
     end
 
-    test "marks the Plex account owner" do
+    test "marks the account owner" do
       html = render_mapping(accounts: [account("1", "arsfeld", true)], users: users())
 
       assert html =~ "owner"
     end
 
-    test "reports that plex.tv is still being asked" do
+    test "reports that the server is still being asked" do
       html = render_mapping(state: :loading)
 
       assert html =~ ~s(id="account-mapping-loading")
-      assert html =~ "plex.tv"
+      assert html =~ "this server for its accounts"
       refute html =~ ~s(id="account-mapping-form")
     end
 
     test "surfaces a load failure instead of an empty list" do
       # An empty list and a failed request look identical on screen otherwise,
-      # and "this account has no profiles" is the wrong thing to tell someone
+      # and "this server has no accounts" is the wrong thing to tell someone
       # whose token just expired.
       html = render_mapping(state: {:error, "Could not read accounts from Galactica: HTTP 401"})
 
@@ -395,7 +281,7 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
       refute html =~ ~s(id="account-mapping-form")
     end
 
-    test "explains an account with no Home profiles" do
+    test "explains a server with no accounts" do
       html = render_mapping(state: :ready, accounts: [])
 
       assert html =~ ~s(id="account-mapping-empty")
@@ -413,11 +299,7 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
              |> LazyHTML.attribute("disabled") != []
     end
 
-    test "a Jellyfin server is never described as having Plex profiles" do
-      # The same modal renders for both providers. Plex Home copy over a list of
-      # Jellyfin accounts sends the operator looking for a screen their server
-      # does not have, and tells them each account has its own token when
-      # Jellyfin issues none.
+    test "a Jellyfin server is described as having accounts, never Plex profiles" do
       html =
         render_mapping(config: jellyfin(), accounts: [account("guid-1", "Tonix")], users: users())
 

@@ -25,8 +25,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   use Oban.Worker, queue: :integrations, max_attempts: 3
 
   # Provider refusals that no retry can fix: the link is missing the identity
-  # that provider's auth model needs. `Plex` wants a per-user token, `Jellyfin`
-  # wants an account GUID.
+  # that provider's auth model needs. `Jellyfin` wants an account GUID.
   @misconfigured [:missing_user_token, :missing_remote_user_id]
 
   # A mapping crawl is the expensive call, so it does not run on every tick. But
@@ -42,7 +41,6 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
   alias Mydia.Settings.MediaServerUserLink
   alias Mydia.WatchSync
   alias Mydia.WatchSync.Providers.Jellyfin
-  alias Mydia.WatchSync.Providers.Plex
 
   require Logger
 
@@ -253,11 +251,10 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
     end
   end
 
-  defp provider_for(%{type: :plex}), do: {:ok, Plex}
   defp provider_for(%{type: :jellyfin}), do: {:ok, Jellyfin}
   defp provider_for(_), do: {:error, :unsupported_provider}
 
-  # token isn't validate_required on MediaServerConfig. Without this, a Plex
+  # token isn't validate_required on MediaServerConfig. Without this, a
   # config saved with sync on but a blank token would pass skip_reason/1,
   # record :seeding_links on every tick, and enqueue a seed job that can never
   # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token), which is a
@@ -324,15 +321,14 @@ defmodule Mydia.Jobs.MediaServerWatchedSync do
 
   # A link must say *which* remote account a user is, or the sync would run
   # against the admin account and merge two people's watch history. That
-  # identity is a per-user token on Plex and a user GUID on Jellyfin, so the
-  # scope carries whichever the link holds and each provider reads the field
-  # its auth model uses. Only a link holding neither is refused.
+  # identity is a user GUID on Jellyfin, so the scope carries whichever the link
+  # holds and each provider reads the field its auth model uses. Only a link
+  # holding neither is refused.
   #
   # A link's access_token is carried as-is, nil included: it must never fall
-  # back to the server's own config.token, because that IS the admin account
-  # for token-based providers. A link with a GUID but no token is a valid
-  # Jellyfin-shaped scope and a refused Plex-shaped one; each provider decides
-  # which fields it needs, not this function.
+  # back to the server's own config.token, because that IS the admin account.
+  # A link with a GUID but no token is a valid Jellyfin scope; each provider
+  # decides which fields it needs, not this function.
   #
   # The link must also belong to the user being synced, so a stale or malformed
   # job cannot pair user A with user B's identity.

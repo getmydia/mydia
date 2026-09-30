@@ -42,6 +42,9 @@ defmodule Mydia.Plugins.SingleFlight do
   instance under `Mydia.Streaming.SubtitleLock` to serialize subtitle
   extraction. Keep it generic; anything plugin-specific belongs in
   `Mydia.Plugins.Host`.
+
+  Keys are arbitrary terms. The plugin host locks on `{slug, instance_id}`, so
+  two instances of one plugin never block each other.
   """
 
   use GenServer
@@ -57,26 +60,26 @@ defmodule Mydia.Plugins.SingleFlight do
   end
 
   @doc """
-  Acquires the lock for `slug` on behalf of the calling process.
+  Acquires the lock for `key` on behalf of the calling process.
 
   `:wait` blocks until granted and returns `:ok`. `:skip` returns `:ok` if the
   lock was free (now held) or `:busy` if another process holds it.
   `{:wait_up_to, ms}` retries `:skip` until granted or `ms` elapse.
   """
-  @spec acquire(String.t(), mode(), GenServer.server()) :: :ok | :busy
-  def acquire(slug, mode \\ :wait, server \\ __MODULE__)
+  @spec acquire(term(), mode(), GenServer.server()) :: :ok | :busy
+  def acquire(key, mode \\ :wait, server \\ __MODULE__)
 
-  def acquire(slug, {:wait_up_to, ms}, server) when is_integer(ms) and ms >= 0 do
+  def acquire(key, {:wait_up_to, ms}, server) when is_integer(ms) and ms >= 0 do
     deadline = System.monotonic_time(:millisecond) + ms
-    poll(slug, deadline, server)
+    poll(key, deadline, server)
   end
 
-  def acquire(slug, mode, server) when mode in [:wait, :skip] do
-    GenServer.call(server, {:acquire, slug, mode, self()}, :infinity)
+  def acquire(key, mode, server) when mode in [:wait, :skip] do
+    GenServer.call(server, {:acquire, key, mode, self()}, :infinity)
   end
 
-  defp poll(slug, deadline, server) do
-    case acquire(slug, :skip, server) do
+  defp poll(key, deadline, server) do
+    case acquire(key, :skip, server) do
       :ok ->
         :ok
 
@@ -85,30 +88,30 @@ defmodule Mydia.Plugins.SingleFlight do
           :busy
         else
           Process.sleep(@poll_ms)
-          poll(slug, deadline, server)
+          poll(key, deadline, server)
         end
     end
   end
 
-  @doc "Releases the lock for `slug` held by the calling process."
-  @spec release(String.t(), GenServer.server()) :: :ok
-  def release(slug, server \\ __MODULE__) do
-    GenServer.cast(server, {:release, slug, self()})
+  @doc "Releases the lock for `key` held by the calling process."
+  @spec release(term(), GenServer.server()) :: :ok
+  def release(key, server \\ __MODULE__) do
+    GenServer.cast(server, {:release, key, self()})
   end
 
   @doc """
   Runs `fun` while holding the lock, releasing it afterward. Returns `{:busy}`
   without running `fun` when `mode` is `:skip` and the lock is held.
   """
-  @spec run(String.t(), mode(), (-> result), GenServer.server()) :: result | {:busy}
+  @spec run(term(), mode(), (-> result), GenServer.server()) :: result | {:busy}
         when result: term()
-  def run(slug, mode, fun, server \\ __MODULE__) do
-    case acquire(slug, mode, server) do
+  def run(key, mode, fun, server \\ __MODULE__) do
+    case acquire(key, mode, server) do
       :ok ->
         try do
           fun.()
         after
-          release(slug, server)
+          release(key, server)
         end
 
       :busy ->

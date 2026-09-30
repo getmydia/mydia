@@ -25,6 +25,7 @@ defmodule Mydia.Plugins.Error do
     * `:invalid_request` - A host-function request payload was missing or malformed
     * `:integrity_mismatch` - Package hash did not match the declared value
     * `:invalid_config` - Invalid configuration provided
+    * `:unsupported` - The guest's contract predates the export being called (setup/check-health on a < 1.5 guest)
     * `:busy` - The plugin has no free invocation slot or lock within the wait
     * `:unknown` - Unknown or unexpected error
   """
@@ -46,6 +47,7 @@ defmodule Mydia.Plugins.Error do
           | :invalid_request
           | :integrity_mismatch
           | :invalid_config
+          | :unsupported
           | :busy
           | :unknown
 

@@ -13,10 +13,9 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
   who has no link yet but never touch one who has. Rows here are the operator's;
   this worker only fills in the blanks.
 
-  Seeding a Plex server makes 1 + N plex.tv round trips (list Home profiles,
-  then one profile switch per matched user), which is why it is a job rather
-  than an inline call on the save path. Jellyfin needs only the account list,
-  since it has no per-user token to mint.
+  Seeding is a job rather than an inline call on the save path because it talks
+  to the server. Jellyfin needs only the account list, since it has no per-user
+  token to mint.
   """
 
   use Oban.Worker,
@@ -42,11 +41,11 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
 
   @spec perform(Oban.Job.t()) :: :ok | {:error, term()}
   @impl Oban.Worker
-  def perform(%Oban.Job{args: %{"config_id" => config_id} = args}) do
+  def perform(%Oban.Job{args: %{"config_id" => config_id}}) do
     config = Settings.get_media_server_config!(config_id)
 
     if seedable?(config) do
-      seed(config, seed_opts(args))
+      seed(config, [])
     else
       :ok
     end
@@ -62,13 +61,12 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
   # Also requires watched sync itself to be on. `maybe_seed_user_links/1` fires
   # on every config save, including one that only wants library refresh and
   # never opted into watched-status sync. Without this check, seeding would
-  # enumerate Plex Home and mint a long-lived per-profile token for every
-  # household member for a feature the operator never asked for. Nothing is
-  # lost: the scheduler path only enqueues a seed once sync is on, and turning
+  # enumerate the server's accounts for a feature the operator never asked for.
+  # Nothing is lost: the scheduler path only enqueues a seed once sync is on, and turning
   # sync on later is itself a config save that re-triggers
   # `maybe_seed_user_links/1`.
   defp seedable?(%{type: type, enabled: true, token: token} = config)
-       when type in [:plex, :jellyfin] and is_binary(token) and token != "" do
+       when type == :jellyfin and is_binary(token) and token != "" do
     watched_sync_enabled?(config)
   end
 
@@ -95,35 +93,12 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
     end
   end
 
-  # A pass that could not mint a token for an account it matched is unfinished,
-  # even though it returned `{:ok, _}`. Stamping it would tell the scheduler this
-  # server has been dealt with and stop it seeding again, so one plex.tv outage
-  # would wedge the server for good while the badge claimed there was nothing to
-  # link. Only a pass that reached a conclusion about every matched account
-  # counts, which still covers the genuine no-match case the stamp exists for.
-  # Jellyfin mints nothing, so its passes are always conclusive.
-  defp maybe_mark_seeded(_config, %SeedResult{mint_failures: [_ | _]}), do: :ok
+  # Jellyfin mints nothing, so every pass that returns `{:ok, _}` is conclusive.
   defp maybe_mark_seeded(config, %SeedResult{}), do: mark_seeded(config)
 
   defp record_outcome(config, %SeedResult{linked: [_ | _] = links}) do
     Logger.info("Seeded #{length(links)} user link(s) for #{config.name}")
     enqueue_sync(config)
-    :ok
-  end
-
-  # Every matched Plex profile failed to mint. Distinct from :no_matching_users
-  # because it is worth retrying and the operator has nothing to fix, which the
-  # "nothing new to link" copy would have told them the opposite of.
-  defp record_outcome(config, %SeedResult{mint_failures: [_ | _]}) do
-    record_skip(config, :token_mint_failed)
-    :ok
-  end
-
-  # Plex's no-Home fallback refused to guess which admin owns config.token.
-  # Nothing was written, and no amount of retrying will change that, so it is
-  # recorded and the operator is pointed at the mapping modal.
-  defp record_outcome(config, %SeedResult{owner_fallback: :ambiguous}) do
-    record_skip(config, :owner_link_ambiguous)
     :ok
   end
 
@@ -214,14 +189,6 @@ defmodule Mydia.Jobs.MediaServerLinkSeed do
   # `only_new: true` is not passed here on purpose: `UserLinks.discover/2` forces
   # it and no argument can turn it off, so there is one place that decides it
   # rather than two that have to agree.
-  #
-  # `plex_tv_base` is a test seam so Bypass can stand in for plex.tv. Production
-  # jobs never carry it, and it is deliberately not read from application env,
-  # which would leak across concurrent tests.
-  defp seed_opts(%{"plex_tv_base" => base}) when is_binary(base), do: [plex_tv_base: base]
-
-  defp seed_opts(_), do: []
-
   defp describe(%Error{} = error), do: Error.message(error)
   defp describe(reason), do: inspect(reason)
 end

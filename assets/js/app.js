@@ -25,7 +25,7 @@ import { LiveSocket } from "phoenix_live_view";
 import { hooks as colocatedHooks } from "phoenix-colocated/mydia";
 import topbar from "../vendor/topbar";
 import VideoPlayer from "./hooks/video_player";
-import PlexOAuth from "./hooks/plex_oauth";
+import ExternalAuthPopup from "./hooks/external_auth_popup";
 import DockNav from "./hooks/dock_nav";
 import PersistedCheckbox from "./hooks/persisted_checkbox.mjs";
 import GridDensity from "./hooks/grid_density.mjs";
@@ -441,7 +441,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     StickyToolbar,
     SpritePreview,
     VideoPreview,
-    PlexOAuth,
+    ExternalAuthPopup,
     DockNav,
     PersistedCheckbox,
     PwaInstallMenuItem,

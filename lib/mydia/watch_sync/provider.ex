@@ -2,8 +2,8 @@ defmodule Mydia.WatchSync.Provider do
   @moduledoc """
   Behaviour every watch-state sync provider implements.
 
-  Deliberately provider-agnostic. Plex is the first implementation; Jellyfin,
-  Trakt, and plugins are expected to follow without changing the engine.
+  Deliberately provider-agnostic. Jellyfin is the implementation today; Trakt
+  and others are expected to follow without changing the engine.
   """
 
   @type instance :: map()

@@ -77,7 +77,11 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       p = declared_plugin(%{"state:kv" => []}, %{"events:subscribe" => ["media_item.added"]})
 
       assert {:error, %Error{type: :capability_denied, message: msg}} =
-               HostFunctions.kv_get(p, "k")
+               HostFunctions.kv_get(
+                 p,
+                 %Mydia.Plugins.Instance{id: Ecto.UUID.generate(), plugin_slug: "tester"},
+                 "k"
+               )
 
       assert msg =~ "re-approve"
     end
@@ -175,12 +179,11 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.3.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.5.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
 
-      # 1.1 additions are all wired so a 1.1 guest instantiates.
       assert %{
                "kv-get" => {:fn, _},
                "kv-set" => {:fn, _},
@@ -189,7 +192,15 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                "ensure-watched" => {:fn, _},
                "ensure-favorite" => {:fn, _},
                "connections-list" => {:fn, _},
-               "connection-request" => {:fn, _}
+               "connection-request" => {:fn, _},
+               "links-list" => {:fn, _},
+               "link-request" => {:fn, _},
+               "propose-accounts" => {:fn, _},
+               "set-link-token" => {:fn, _},
+               "set-link-status" => {:fn, _},
+               "kv-list" => {:fn, _},
+               "kv-set-many" => {:fn, _},
+               "report-sync-run" => {:fn, _}
              } = fns
     end
 
@@ -197,6 +208,8 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       builder = HostFunctions.imports_for("tester")
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
+      v15 = Map.fetch!(imports, "mydia:plugin/host@1.5.0")
+      v14 = Map.fetch!(imports, "mydia:plugin/host@1.4.0")
       v13 = Map.fetch!(imports, "mydia:plugin/host@1.3.0")
       v12 = Map.fetch!(imports, "mydia:plugin/host@1.2.0")
       v11 = Map.fetch!(imports, "mydia:plugin/host@1.1.0")
@@ -204,6 +217,21 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       # Offering a newer function under an older key is not harmless: wasmtime
       # links against the guest's exact imported interface, so an older guest
       # must be handed exactly what its own contract declared.
+      for name <-
+            ~w(links-list link-request propose-accounts set-link-token set-link-status kv-list kv-set-many report-sync-run) do
+        assert Map.has_key?(v15, name)
+        refute Map.has_key?(v14, name)
+        refute Map.has_key?(v13, name)
+      end
+
+      # The 1.4 key keeps exactly the page surface upstream shipped.
+      for name <-
+            ~w(search media-add collection-create collection-update collection-add-items collection-remove-items mark-watched-state add-favorite) do
+        assert Map.has_key?(v15, name)
+        assert Map.has_key?(v14, name)
+        refute Map.has_key?(v13, name)
+      end
+
       assert Map.has_key?(v13, "ensure-favorite")
       assert Map.has_key?(v13, "set-watch-state")
 
@@ -242,36 +270,43 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
     test "set then get round-trips, returning an option" do
       p = plugin(%{"state:kv" => []})
-      assert {:ok, true} = HostFunctions.kv_set(p, "k", "v")
-      assert {:ok, {:some, "v"}} = HostFunctions.kv_get(p, "k")
+      i = default_instance()
+      assert {:ok, true} = HostFunctions.kv_set(p, i, "k", "v")
+      assert {:ok, {:some, "v"}} = HostFunctions.kv_get(p, i, "k")
     end
 
     test "kv-get on a missing key returns none" do
       p = plugin(%{"state:kv" => []})
-      assert {:ok, :none} = HostFunctions.kv_get(p, "absent")
+      assert {:ok, :none} = HostFunctions.kv_get(p, default_instance(), "absent")
     end
 
     test "kv-delete removes the key" do
       p = plugin(%{"state:kv" => []})
-      {:ok, true} = HostFunctions.kv_set(p, "k", "v")
-      assert {:ok, true} = HostFunctions.kv_delete(p, "k")
-      assert {:ok, :none} = HostFunctions.kv_get(p, "k")
+      i = default_instance()
+      {:ok, true} = HostFunctions.kv_set(p, i, "k", "v")
+      assert {:ok, true} = HostFunctions.kv_delete(p, i, "k")
+      assert {:ok, :none} = HostFunctions.kv_get(p, i, "k")
     end
 
     test "AE4: a plugin without state:kv is denied across all three" do
       p = plugin(%{"events:subscribe" => ["media_item.added"]})
-      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_get(p, "k")
-      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_set(p, "k", "v")
-      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_delete(p, "k")
+      i = default_instance()
+      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_get(p, i, "k")
+      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_set(p, i, "k", "v")
+      assert {:error, %Error{type: :capability_denied}} = HostFunctions.kv_delete(p, i, "k")
     end
 
     test "an empty key is rejected as invalid-request" do
       p = plugin(%{"state:kv" => []})
-      assert {:error, %Error{type: :invalid_request}} = HostFunctions.kv_get(p, "")
+
+      assert {:error, %Error{type: :invalid_request}} =
+               HostFunctions.kv_get(p, default_instance(), "")
     end
   end
 
-  describe "connections_list/1 (users:connections grant)" do
+  defp default_instance, do: Mydia.Plugins.Instances.default_instance("tester")
+
+  describe "connections_list/2 (users:connections grant)" do
     setup do
       {:ok, _} =
         Mydia.Settings.create_plugin_config(%{
@@ -304,7 +339,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
         })
 
       p = plugin(%{"users:connections" => []})
-      assert {:ok, [record]} = HostFunctions.connections_list(p)
+      assert {:ok, [record]} = HostFunctions.connections_list(p, default_instance())
 
       assert record[:"user-id"] == user.id
       assert record.status == :connected
@@ -316,9 +351,18 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       refute Map.has_key?(record, :"access-token")
     end
 
+    test "omits disabled links, since the guest enum only has connected|error", %{user: user} do
+      {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t", status: "disabled"})
+
+      p = plugin(%{"users:connections" => []})
+      assert {:ok, []} = HostFunctions.connections_list(p, default_instance())
+    end
+
     test "AE4: a plugin without users:connections is denied" do
       p = plugin(%{"events:subscribe" => ["media_item.added"]})
-      assert {:error, %Error{type: :capability_denied}} = HostFunctions.connections_list(p)
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.connections_list(p, default_instance())
     end
   end
 

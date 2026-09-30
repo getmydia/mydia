@@ -105,4 +105,13 @@ defmodule Mydia.Plugins.SingleFlightTest do
     assert_receive :acquired
     assert {:busy} = SingleFlight.run("p", :skip, fn -> flunk("should not run") end, sf)
   end
+
+  test "tuple keys lock independently", %{sf: sf} do
+    assert :ok = SingleFlight.acquire({"p", "a"}, :skip, sf)
+    assert :ok = SingleFlight.acquire({"p", "b"}, :skip, sf)
+
+    parent = self()
+    spawn(fn -> send(parent, SingleFlight.acquire({"p", "a"}, :skip, sf)) end)
+    assert_receive :busy
+  end
 end

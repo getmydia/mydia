@@ -3,13 +3,14 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.4.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.5.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
-  `handler.on-event` / `handler.on-schedule` exports, plus `page.on-http` for a
-  plugin's own pages. A guest built against an older minor (1.0 to 1.3) is
-  served the matching namespace + export, detected from the component bytes at
-  `start_plugin` (`detect_contract/1`), so old guests keep working against the
-  1.4 host.
+  `handler.on-event` / `handler.on-schedule` exports, plus (1.5) the typed
+  `handler.setup` / `handler.check-health` exports and `page.on-http` for a
+  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.4)
+  is served the matching namespace + export, detected from the component bytes
+  at `start_plugin` (`detect_contract/1`), so old guests keep working against
+  the 1.5 host.
 
   Each installed plugin gets its own `NimblePool`, which bounds how many guests
   run concurrently on the dirty NIF schedulers. Each *invocation* checks out a
@@ -80,11 +81,19 @@ defmodule Mydia.Plugins.Host do
   # The typed handler exports, addressed by their interface path. The interface
   # version is part of the path because the WIT package version IS the ABI
   # version; wasmtime semver-matches so a 1.1 guest's `handler@1.1.0/on-event`
-  # still resolves against this 1.4 lookup. `on-schedule` is 1.1+: a 1.0
-  # guest has no such export and the schedule call fails soft.
-  @handler_export ["mydia:plugin/handler@1.4.0", "on-event"]
-  @schedule_export ["mydia:plugin/handler@1.4.0", "on-schedule"]
-  @page_export ["mydia:plugin/page@1.4.0", "on-http"]
+  # still resolves against this 1.5 lookup. `on-schedule` is 1.1+: a 1.0
+  # guest has no such export and the schedule call fails soft. `setup` and
+  # `check-health` are 1.5-only; `call/4` refuses them on an older guest. The
+  # `page` interface (1.4+) is versioned with the package, so a 1.4 page guest
+  # exports `page@1.4.0` and a 1.5 one `page@1.5.0`.
+  @handler_export ["mydia:plugin/handler@1.5.0", "on-event"]
+  @schedule_export ["mydia:plugin/handler@1.5.0", "on-schedule"]
+  @setup_export ["mydia:plugin/handler@1.5.0", "setup"]
+  @check_health_export ["mydia:plugin/handler@1.5.0", "check-health"]
+  @page_export ["mydia:plugin/page@1.5.0", "on-http"]
+  @v14_handler_export ["mydia:plugin/handler@1.4.0", "on-event"]
+  @v14_schedule_export ["mydia:plugin/handler@1.4.0", "on-schedule"]
+  @v14_page_export ["mydia:plugin/page@1.4.0", "on-http"]
   @v13_handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
   @v13_schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
   @v12_handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
@@ -99,12 +108,25 @@ defmodule Mydia.Plugins.Host do
   # map re-keyed and narrowed. Older guests are served via parallel keys that
   # `HostFunctions.imports_for/2` publishes alongside the current one. We detect
   # the contract once per plugin from the bytes and memoize it.
-  @host_namespace "mydia:plugin/host@1.4.0"
+  @host_namespace "mydia:plugin/host@1.5.0"
+  @v14_host_namespace "mydia:plugin/host@1.4.0"
   @v13_host_namespace "mydia:plugin/host@1.3.0"
   @v12_host_namespace "mydia:plugin/host@1.2.0"
   @v11_host_namespace "mydia:plugin/host@1.1.0"
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
+
+  # Every field, variant-case and enum atom a 1.5 typed result can carry. Kept
+  # as a literal so `String.to_existing_atom/1` in normalize_wit/1 never mints
+  # atoms from guest-controlled strings.
+  @wit_atoms ~w(step body next_state_json credentials error role token title fields
+                options key label field_type required default_value id detail badge
+                endpoints scheme host port url poll_after_seconds message accounts
+                suggestions name admin remote_account_id user_id form choice
+                external_auth mapping done status action owner endpoint user ok
+                degraded unauthorized unreachable reconnect confirm_endpoints)a
+  @doc false
+  def __wit_atoms__, do: @wit_atoms
 
   # How long a page call waits for its user lock and a page slot before it
   # answers `:busy`.
@@ -118,6 +140,7 @@ defmodule Mydia.Plugins.Host do
   # come from the caller's options, never from the guest or the payload.
   @type invocation_ctx :: %{
           slug: slug(),
+          instance_id: binary() | nil,
           invocation_id: String.t(),
           test_run: boolean(),
           handler: atom(),
@@ -208,14 +231,22 @@ defmodule Mydia.Plugins.Host do
     * `:test_run` - badge the markers/guest logs for this run as a test
     * `:memory_limit_bytes` - override the linear-memory cap for this call
       (defaults to config; a test seam for exercising `StoreLimits`)
-    * `:handler` - `:on_event` (default), `:on_schedule` or `:on_http`
+    * `:handler` - `:on_event` (default), `:on_schedule`, `:on_http`, `:setup` or
+      `:check_health`. `:setup` and `:check_health` are typed 1.5 exports: they
+      return decoded maps with snake_case atom keys instead of the guest's JSON,
+      and an `:unsupported` error without instantiating when the guest predates
+      1.5.
+    * `:instance_id` - the plugin instance this call belongs to. It scopes the
+      single-flight lock (`{slug, instance_id}`) and reaches host functions
+      through the invocation context. `nil` for callers without an instance
+      (fixture tests).
     * `:acting_user_id`, `:role`, `:session_id` - the signed-in user of an
       `:on_http` call. Host-verified by the caller; the page payload's own
       values for these are overwritten. `:on_http` invocations lock per user
-      rather than per plugin.
+      rather than per plugin instance.
     * `:page_wait_ms` - how long an `:on_http` call waits for its user lock and a
       page slot before returning a `:busy` error (default 2000)
-    * `:single_flight` - `:wait` (default; block until the plugin's lock is free)
+    * `:single_flight` - `:wait` (default; block until the instance's lock is free)
       or `:skip` (return a `:busy` error if a sibling invocation is in flight —
       the scheduler's non-reentrancy)
   """
@@ -225,39 +256,46 @@ defmodule Mydia.Plugins.Host do
       when is_binary(slug) and is_binary(function) and is_map(payload) do
     cfg = config()
     handler = Keyword.get(opts, :handler, :on_event)
-    timeout = Keyword.get(opts, :timeout, default_timeout(cfg, handler))
-    mode = Keyword.get(opts, :single_flight, :wait)
 
-    invocation = %{
-      slug: slug,
-      invocation_id: Ecto.UUID.generate(),
-      test_run: Keyword.get(opts, :test_run, false),
-      function: function,
-      handler: handler,
-      payload: payload,
-      memory_limit_bytes: Keyword.get(opts, :memory_limit_bytes, cfg.memory_limit_bytes),
-      timeout: timeout,
-      acting_user_id: Keyword.get(opts, :acting_user_id),
-      role: Keyword.get(opts, :role),
-      session_id: Keyword.get(opts, :session_id)
-    }
+    if handler in [:setup, :check_health] and contract_version(slug) != :v15 do
+      {:error,
+       Error.new(:unsupported, "plugin #{slug} does not implement #{function} (contract < 1.5)")}
+    else
+      timeout = Keyword.get(opts, :timeout, default_timeout(cfg, handler))
+      mode = Keyword.get(opts, :single_flight, :wait)
 
-    invocation = bind_page_identity(invocation)
+      invocation = %{
+        slug: slug,
+        instance_id: Keyword.get(opts, :instance_id),
+        invocation_id: Ecto.UUID.generate(),
+        test_run: Keyword.get(opts, :test_run, false),
+        function: function,
+        handler: handler,
+        payload: payload,
+        memory_limit_bytes: Keyword.get(opts, :memory_limit_bytes, cfg.memory_limit_bytes),
+        timeout: timeout,
+        acting_user_id: Keyword.get(opts, :acting_user_id),
+        role: Keyword.get(opts, :role),
+        session_id: Keyword.get(opts, :session_id)
+      }
 
-    # Serialize invocations per plugin so shared KV state is consistent (U4). A
-    # `:skip` acquirer (the scheduler) bails out without running when busy; a
-    # `:wait` acquirer queues behind the in-flight invocation.
-    #
-    # Page invocations do not take the plugin-wide lock. They lock per user
-    # (bounded wait) and occupy one of a capped number of page slots, so a slow
-    # page call neither stalls other users' pages nor starves event and schedule
-    # handlers of pool workers. The consequence: page calls run concurrently
-    # with event and schedule calls, so shared plugin KV keys are not serialized
-    # between them. Page state must live in per-user KV keys; a shared key
-    # written from both paths can race.
-    case run_locked(invocation, mode, opts) do
-      {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
-      result -> result
+      invocation = bind_page_identity(invocation)
+
+      # Serialize invocations per plugin instance so its store state is
+      # consistent. A `:skip` acquirer (the scheduler) bails out without running
+      # when busy; a `:wait` acquirer queues behind the in-flight invocation.
+      #
+      # Page invocations do not take the instance lock. They lock per user
+      # (bounded wait) and occupy one of a capped number of page slots, so a slow
+      # page call neither stalls other users' pages nor starves event and
+      # schedule handlers of pool workers. The consequence: page calls run
+      # concurrently with event and schedule calls, so shared plugin KV keys are
+      # not serialized between them. Page state must live in per-user KV keys; a
+      # shared key written from both paths can race.
+      case run_locked(invocation, mode, opts) do
+        {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
+        result -> result
+      end
     end
   end
 
@@ -277,7 +315,7 @@ defmodule Mydia.Plugins.Host do
   end
 
   defp run_locked(inv, mode, _opts),
-    do: SingleFlight.run(inv.slug, mode, fn -> invoke_with_markers(inv) end)
+    do: SingleFlight.run({inv.slug, inv.instance_id}, mode, fn -> invoke_with_markers(inv) end)
 
   # At most `max(pool_size - 1, 1)` page calls run per plugin, so one pool worker
   # is always free for event and schedule handlers. Slots are named locks tried
@@ -410,7 +448,9 @@ defmodule Mydia.Plugins.Host do
   # legacy guests (detected from the bytes at start_plugin).
   defp instantiate(slug, bytes, wasi, limits, full_imports, inv) do
     imports =
-      if contract(slug) == :v10, do: to_legacy_imports(full_imports), else: full_imports
+      if contract_version(slug) == :v10,
+        do: to_legacy_imports(full_imports),
+        else: full_imports
 
     case Components.start_link(%{
            bytes: bytes,
@@ -441,6 +481,7 @@ defmodule Mydia.Plugins.Host do
   defp to_legacy_imports(full_imports) do
     funcs =
       Map.get(full_imports, @host_namespace) ||
+        Map.get(full_imports, @v14_host_namespace) ||
         Map.get(full_imports, @v13_host_namespace) ||
         Map.get(full_imports, @v12_host_namespace) ||
         Map.get(full_imports, @v11_host_namespace, %{})
@@ -449,12 +490,13 @@ defmodule Mydia.Plugins.Host do
   end
 
   # A guest's contract version is read from the UTF-8 interface names embedded
-  # in the component bytes. 1.4, 1.3, 1.2 and 1.1 all get the full imports map
-  # (published under every namespace key); only 1.0 needs the narrowed legacy
-  # map. Order matters: the newest match wins.
+  # in the component bytes. 1.1 to 1.5 all get the full imports map (published
+  # under every namespace key, each narrowed); only 1.0 needs the legacy map.
+  # Order matters: the newest match wins.
   defp detect_contract(bytes) do
     cond do
-      String.contains?(bytes, @host_namespace) -> :v14
+      String.contains?(bytes, @host_namespace) -> :v15
+      String.contains?(bytes, @v14_host_namespace) -> :v14
       String.contains?(bytes, @v13_host_namespace) -> :v13
       String.contains?(bytes, @v12_host_namespace) -> :v12
       String.contains?(bytes, @v11_host_namespace) -> :v11
@@ -462,7 +504,9 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  defp contract(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v14)
+  @doc "The contract version detected for `slug` when its pool started."
+  @spec contract_version(slug()) :: :v10 | :v11 | :v12 | :v13 | :v14 | :v15
+  def contract_version(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v15)
 
   # A static map is used as-is; a builder is called per invocation so closures
   # can capture this run's context (slug + invocation id, for log correlation).
@@ -472,6 +516,7 @@ defmodule Mydia.Plugins.Host do
   defp invocation_ctx(inv) do
     %{
       slug: inv.slug,
+      instance_id: inv.instance_id,
       invocation_id: inv.invocation_id,
       test_run: inv.test_run,
       handler: inv.handler,
@@ -482,8 +527,8 @@ defmodule Mydia.Plugins.Host do
   end
 
   defp invoke(pid, inv) do
-    {export, record} = handler_call(inv)
-    args = Components.FieldConverter.maybe_convert_args([record], true)
+    {export, records} = handler_call(inv)
+    args = Components.FieldConverter.maybe_convert_args(records, true)
 
     case Components.call_function(pid, export, args, inv.timeout) do
       {:ok, {:ok, value}} -> decode_ok(inv.handler, value)
@@ -495,36 +540,65 @@ defmodule Mydia.Plugins.Host do
       {:error, Error.new(:timeout, "invocation timed out after #{inv.timeout}ms")}
   end
 
-  # Pick the export + marshalled record for the requested handler. on-schedule
-  # is 1.1+; a 1.0 guest lacks the export and call_function returns an error
-  # the caller surfaces (fail-soft, no crash). on-event resolves at the guest's
-  # own interface version (detected during start_plugin).
-  defp handler_call(%{handler: :on_http, payload: payload}),
-    do: {@page_export, to_page_record(payload)}
+  # on-event and on-schedule return the guest's JSON string; the typed 1.5
+  # exports return WIT records that are normalised instead of JSON-decoded.
+  defp decode_ok(:setup, value), do: {:ok, decode_screen(normalize_wit(value))}
+  defp decode_ok(:check_health, value), do: {:ok, decode_health(normalize_wit(value))}
+  defp decode_ok(:on_http, response), do: decode_page_response(response)
+  defp decode_ok(_handler, json), do: decode_result(json)
+
+  # Pick the export + marshalled argument list for the requested handler.
+  # on-schedule is 1.1+; a 1.0 guest lacks the export and call_function returns
+  # an error the caller surfaces (fail-soft, no crash). on-event resolves at the
+  # guest's own interface version (detected during start_plugin). setup and
+  # check-health only reach here for a 1.5 guest (call/4 gates them). The page
+  # export follows the guest's own package version (1.4 or 1.5).
+  defp handler_call(%{handler: :on_http, slug: slug, payload: payload}) do
+    export = if contract_version(slug) == :v14, do: @v14_page_export, else: @page_export
+    {export, [to_page_record(payload)]}
+  end
 
   defp handler_call(%{handler: :on_schedule, slug: slug, payload: payload}) do
     export =
-      case contract(slug) do
+      case contract_version(slug) do
         :v11 -> @v11_schedule_export
         :v12 -> @v12_schedule_export
         :v13 -> @v13_schedule_export
+        :v14 -> @v14_schedule_export
         _ -> @schedule_export
       end
 
-    {export, to_schedule_record(payload)}
+    {export, [to_schedule_record(payload)]}
   end
+
+  defp handler_call(%{handler: :setup, payload: payload}),
+    do: {@setup_export, [to_setup_record(payload)]}
+
+  defp handler_call(%{handler: :check_health}), do: {@check_health_export, []}
 
   defp handler_call(%{slug: slug, payload: payload}) do
     export =
-      case contract(slug) do
+      case contract_version(slug) do
         :v10 -> @legacy_handler_export
         :v11 -> @v11_handler_export
         :v12 -> @v12_handler_export
         :v13 -> @v13_handler_export
-        :v14 -> @handler_export
+        :v14 -> @v14_handler_export
+        :v15 -> @handler_export
       end
 
-    {export, to_event_record(payload)}
+    {export, [to_event_record(payload)]}
+  end
+
+  # Marshal a setup payload into the WIT `setup-request` record. The instance
+  # settings ride along as `config-json`, like `schedule-tick`.
+  defp to_setup_record(payload) do
+    %{
+      step: to_string(Map.get(payload, "step") || "start"),
+      input_json: Map.get(payload, "input_json") || "{}",
+      state_json: Map.get(payload, "state_json") || "{}",
+      config_json: Jason.encode!(Map.get(payload, "config") || %{})
+    }
   end
 
   # Known envelope keys that map to typed `event` record fields; everything else
@@ -596,9 +670,6 @@ defmodule Mydia.Plugins.Host do
   defp opt_string(nil), do: :none
   defp opt_string(value), do: {:some, to_string(value)}
 
-  defp decode_ok(:on_http, response), do: decode_page_response(response)
-  defp decode_ok(_handler, json), do: decode_result(json)
-
   # Wasmex hands records back as maps; accept atom or string keys and tuple or
   # two-element-list headers so the decode does not depend on its converter.
   defp decode_page_response(resp) when is_map(resp) do
@@ -646,6 +717,68 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
+  # ── Typed 1.5 results (setup, check-health) ───────────────────────────────
+
+  # Wasmex hands records back as maps keyed by WIT field names (atoms or
+  # strings, kebab-case), variants as {case, payload} tuples, options as
+  # {:some, v} | :none, enums as atoms or strings. Normalise all of it to
+  # snake_case atom keys, bare values and snake_case atoms, recursively.
+  @doc false
+  def normalize_wit(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {wit_atom(k), normalize_wit(v)} end)
+  end
+
+  def normalize_wit(list) when is_list(list), do: Enum.map(list, &normalize_wit/1)
+  def normalize_wit({:some, v}), do: normalize_wit(v)
+  def normalize_wit(:none), do: nil
+
+  def normalize_wit({tag, payload}) when is_atom(tag) or is_binary(tag),
+    do: {wit_atom(tag), normalize_wit(payload)}
+
+  def normalize_wit(other), do: other
+
+  defp wit_atom(key) when is_atom(key), do: key |> Atom.to_string() |> wit_atom()
+
+  defp wit_atom(key) when is_binary(key),
+    do: key |> String.replace("-", "_") |> String.to_existing_atom()
+
+  # Enum values arrive as atoms or strings depending on wasmex's encoding.
+  defp enum_atom(nil), do: nil
+  defp enum_atom(v) when is_atom(v), do: v |> Atom.to_string() |> enum_atom()
+
+  defp enum_atom(v) when is_binary(v),
+    do: v |> String.replace("-", "_") |> String.to_existing_atom()
+
+  defp decode_screen(screen) do
+    %{
+      step: screen.step,
+      body: decode_body(screen.body),
+      next_state_json: screen.next_state_json,
+      credentials: Enum.map(screen.credentials, &decode_credential/1),
+      error: screen.error
+    }
+  end
+
+  defp decode_body({:choice, c}) do
+    {:choice,
+     %{
+       title: c.title,
+       options:
+         Enum.map(c.options, fn o ->
+           %{o | credentials: Enum.map(o.credentials, &decode_credential/1)}
+         end)
+     }}
+  end
+
+  defp decode_body({:done, summary}), do: {:done, summary}
+  defp decode_body({tag, body}) when tag in [:form, :external_auth, :mapping], do: {tag, body}
+
+  defp decode_credential(%{role: role, token: token}), do: %{role: enum_atom(role), token: token}
+
+  defp decode_health(h) do
+    %{status: enum_atom(h.status), message: h.message, action: enum_atom(h.action)}
+  end
+
   # ── Debug log markers (U2) ────────────────────────────────────────────────
 
   defp emit_start_marker(inv) do
@@ -675,7 +808,7 @@ defmodule Mydia.Plugins.Host do
   defp event_type(_), do: nil
 
   defp emit_end_marker(inv, result, duration_ms) do
-    {level, outcome, detail} = classify_outcome(result)
+    {level, outcome, detail} = classify_outcome(inv.handler, result)
 
     metadata =
       %{
@@ -698,17 +831,25 @@ defmodule Mydia.Plugins.Host do
   end
 
   # A page response body is never summarized or logged.
-  defp classify_outcome({:ok, %{status: status, body: body}}) when is_binary(body),
+  defp classify_outcome(:on_http, {:ok, %{status: status, body: body}}) when is_binary(body),
     do: {:info, "ok", "status=#{status}"}
 
-  defp classify_outcome({:ok, result}), do: {:info, "ok", result_summary(result)}
+  defp classify_outcome(handler, {:ok, result}),
+    do: {:info, "ok", typed_summary(handler, result)}
 
-  defp classify_outcome({:error, %Error{type: type, message: message}}),
+  defp classify_outcome(_handler, {:error, %Error{type: type, message: message}}),
     do: {:error, to_string(type), sanitize_detail(message)}
 
   # Defensive: every run_invocation path is {:ok,_}|{:error,%Error{}}, but a
   # catch-all keeps an unexpected shape from raising in the marker path.
-  defp classify_outcome(_other), do: {:error, "unknown", nil}
+  defp classify_outcome(_handler, _other), do: {:error, "unknown", nil}
+
+  # Typed 1.5 results get a fixed, allow-listed summary. Setup state can carry
+  # PINs, ids or tokens (`next_state_json`, `credentials`) and `error`/`message`
+  # are guest free text, so none of them may reach the activity log.
+  defp typed_summary(:setup, %{step: step, body: {tag, _}}), do: "step=#{step} body=#{tag}"
+  defp typed_summary(:check_health, %{status: status}), do: "status=#{status}"
+  defp typed_summary(_handler, result), do: result_summary(result)
 
   # A compact "key=value" summary of the guest's returned result map, surfaced in
   # the end-marker so a successful run shows what it did (e.g. `pulled=2 pushed=1`)
@@ -791,8 +932,10 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  # on-schedule gets the larger schedule budget; everything else the event budget.
+  # on-schedule gets the schedule budget, setup the setup budget, everything
+  # else (on-event, check-health) the event budget.
   defp default_timeout(cfg, :on_schedule), do: Map.get(cfg, :schedule_timeout_ms) || 60_000
+  defp default_timeout(cfg, :setup), do: Map.get(cfg, :setup_timeout_ms) || 30_000
   defp default_timeout(cfg, :on_http), do: Map.get(cfg, :page_timeout_ms) || 120_000
   defp default_timeout(cfg, _handler), do: cfg.invocation_timeout_ms
 

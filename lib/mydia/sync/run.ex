@@ -12,7 +12,7 @@ defmodule Mydia.Sync.Run do
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
-  @statuses [:ok, :error, :skipped]
+  @statuses [:ok, :partial, :error, :skipped]
   @directions [:import, :export, :bidirectional]
 
   @type t :: %__MODULE__{

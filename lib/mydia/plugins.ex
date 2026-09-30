@@ -42,6 +42,8 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
   alias Mydia.Plugins.Index
+  alias Mydia.Plugins.Instance
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
@@ -85,7 +87,8 @@ defmodule Mydia.Plugins do
         config.enabled,
         is_map(config.manifest),
         descriptor = config.manifest["connection"],
-        is_map(descriptor) do
+        is_map(descriptor),
+        Manifest.device_flow?(%Manifest{connection: descriptor}) do
       %{
         slug: config.slug,
         name: config.name,
@@ -120,50 +123,143 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
-  Invokes a plugin for an event, routing by the plugin's delivery mode.
+  Invokes a plugin for an event on every enabled instance.
 
-  This is the dispatcher's default invoker. `:inline` plugins run their guest
-  handler synchronously through `Mydia.Plugins.Host`. `:durable` plugins (the
-  bundled notifier — U10) enqueue a durable Oban delivery job; that branch is
-  wired in U10, so until then every plugin is dispatched inline.
+  This is the dispatcher's default invoker. Each instance gets its own call (or
+  durable job) with that instance's settings injected under `config`. Instances
+  run one after another inside the dispatcher's per-plugin task; one instance
+  failing does not skip the others. Returns `{:ok, results}` with one entry per
+  instance, or the first `{:error, _}` so the dispatcher logs it.
   """
-  @spec invoke_plugin(Plugin.t(), map()) :: {:ok, term()} | {:error, term()}
-  def invoke_plugin(%Plugin{delivery: :durable} = plugin, event) do
-    Mydia.Plugins.Notifier.Delivery.enqueue(plugin.slug, build_payload(event))
-  end
-
+  @spec invoke_plugin(Plugin.t(), map()) :: {:ok, [term()]} | {:error, term()}
   def invoke_plugin(%Plugin{} = plugin, event) do
-    payload = build_payload(event) |> inject_config(plugin.slug)
-    Host.call(plugin.slug, plugin.entrypoint, payload)
+    results =
+      for %Instance{} = instance <- Instances.list_enabled(plugin.slug) do
+        invoke_plugin(plugin, instance, event)
+      end
+
+    case Enum.find(results, &match?({:error, _}, &1)) do
+      nil -> {:ok, results}
+      error -> error
+    end
   end
 
   @doc """
-  Invokes a plugin's `on-schedule` handler for a scheduled tick (U4).
+  Invokes a plugin for an event on one instance, routing by delivery mode.
 
-  Single-flight `:skip`: if a sibling invocation (reactive, inline, or a prior
-  schedule) is already running, the tick is a no-op (`{:error, :busy}`), so ticks
-  never pile up. The operator settings are injected under `config`, exactly as
-  the reactive and durable paths do, so a plugin behaves identically regardless
-  of how it was invoked.
+  `:inline` plugins run synchronously through `Mydia.Plugins.Host`. `:durable`
+  plugins (the bundled notifier) enqueue a durable Oban delivery job carrying
+  the instance id.
   """
-  @spec invoke_plugin_schedule(String.t(), keyword()) :: {:ok, term()} | {:error, term()}
-  def invoke_plugin_schedule(slug, opts \\ []) when is_binary(slug) do
-    now = Keyword.get(opts, :now, System.system_time(:second))
-    payload = inject_config(%{"slug" => slug, "now" => now}, slug)
-
-    Host.call(slug, "on-schedule", payload, handler: :on_schedule, single_flight: :skip)
+  @spec invoke_plugin(Plugin.t(), Instance.t(), map()) :: {:ok, term()} | {:error, term()}
+  def invoke_plugin(%Plugin{delivery: :durable} = plugin, %Instance{} = instance, event) do
+    Mydia.Plugins.Notifier.Delivery.enqueue(plugin.slug, instance.id, build_payload(event))
   end
 
-  # Inject the plugin's operator settings under "config" so the guest sees them
-  # on every invocation path (previously only the durable notifier path did).
-  defp inject_config(payload, slug) do
-    settings =
-      case Mydia.Settings.get_plugin_config_by_slug(slug) do
-        %{settings: %{} = s} -> s
-        _ -> %{}
-      end
+  def invoke_plugin(%Plugin{} = plugin, %Instance{} = instance, event) do
+    payload = event |> build_payload() |> Map.put("config", Instances.config_for(instance))
+    Host.call(plugin.slug, plugin.entrypoint, payload, instance_id: instance.id)
+  end
 
-    Map.put(payload, "config", settings)
+  @doc """
+  Invokes a plugin instance's `on-schedule` handler for a scheduled tick.
+
+  Single-flight `:skip`: if a sibling invocation of the same instance is already
+  running, the tick is a no-op (`{:error, %Error{type: :busy}}`), so ticks never
+  pile up. The instance settings are injected under `config`, exactly as the
+  event paths do.
+  """
+  @spec invoke_plugin_schedule(String.t(), binary(), keyword()) ::
+          {:ok, term()} | {:error, term()}
+  def invoke_plugin_schedule(slug, instance_id, opts \\ []) when is_binary(slug) do
+    with {:ok, instance} <- fetch_instance(slug, instance_id) do
+      now = Keyword.get(opts, :now, System.system_time(:second))
+      payload = %{"slug" => slug, "now" => now, "config" => Instances.config_for(instance)}
+
+      Host.call(slug, "on-schedule", payload,
+        handler: :on_schedule,
+        single_flight: :skip,
+        instance_id: instance.id
+      )
+    end
+  end
+
+  @doc """
+  Calls a plugin instance's 1.5 `setup` export with the operator's answers.
+
+  `request` carries `step`, `input_json` and `state_json` (the setup protocol in
+  the plugin host reference). Runs under `plugins.setup_timeout_ms` and waits
+  for the instance lock. Errors: `:unsupported` when the manifest does not
+  declare `setup: true` (or the guest predates 1.5), `:not_found` for an
+  unknown instance or a plugin that is not running, `:guest_error` carrying the
+  guest's own message when it returns `Err`.
+  """
+  @spec invoke_setup(String.t(), binary(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def invoke_setup(slug, instance_id, %{step: step} = request) when is_binary(slug) do
+    with {:ok, _plugin} <- setup_capable(slug),
+         {:ok, instance} <- fetch_instance(slug, instance_id) do
+      payload = %{
+        "step" => step,
+        "input_json" => Map.get(request, :input_json, "{}"),
+        "state_json" => Map.get(request, :state_json, "{}"),
+        "config" => Instances.config_for(instance)
+      }
+
+      Host.call(slug, "setup", payload, handler: :setup, instance_id: instance.id)
+    end
+  end
+
+  @doc """
+  Calls a plugin instance's 1.5 `check-health` export under the event timeout.
+  Same errors as `invoke_setup/3`.
+  """
+  @spec invoke_check_health(String.t(), binary()) :: {:ok, map()} | {:error, Error.t()}
+  def invoke_check_health(slug, instance_id) when is_binary(slug) do
+    with {:ok, _plugin} <- setup_capable(slug),
+         {:ok, instance} <- fetch_instance(slug, instance_id) do
+      Host.call(slug, "check-health", %{}, handler: :check_health, instance_id: instance.id)
+    end
+  end
+
+  # setup and check-health are the plugin-driven admin surfaces; a manifest
+  # opts in with `setup: true`.
+  defp setup_capable(slug) do
+    case get_plugin(slug) do
+      {:ok, %Plugin{setup: true} = plugin} ->
+        {:ok, plugin}
+
+      {:ok, %Plugin{}} ->
+        {:error, Error.new(:unsupported, "plugin #{slug} does not declare setup in its manifest")}
+
+      _ ->
+        {:error, Error.new(:not_found, "plugin #{slug} is not running")}
+    end
+  end
+
+  defp fetch_instance(slug, instance_id) do
+    with {:ok, id} <- Ecto.UUID.cast(instance_id || ""),
+         %Instance{plugin_slug: ^slug} = instance <- Instances.get(id) do
+      {:ok, instance}
+    else
+      _ ->
+        {:error, Error.new(:not_found, "instance #{inspect(instance_id)} not found for #{slug}")}
+    end
+  end
+
+  @doc """
+  Ensures a single-instance plugin has its default instance. Multi-instance
+  plugins get instances only through setup, so this is a no-op for them.
+  """
+  @spec ensure_default_instance(Plugin.t()) :: :ok
+  def ensure_default_instance(%Plugin{multi_instance: true}), do: :ok
+
+  def ensure_default_instance(%Plugin{} = plugin) do
+    # Also heals installs that saved plugin settings before those reached the
+    # default instance: the plugin config's settings win over the instance's.
+    config = Settings.get_plugin_config_by_slug(plugin.slug)
+    Instances.default_instance(plugin.slug)
+    Instances.merge_default_settings(plugin.slug, (config && config.settings) || %{})
+    :ok
   end
 
   @doc """
@@ -197,24 +293,47 @@ defmodule Mydia.Plugins do
   immediately rather than via an Oban job) with `test_run: true`, so the markers
   and guest logs for the run are badged as a test. Runs in a supervised Task so
   the caller (LiveView) does not block. Returns `:ok` when the plugin is running,
-  `{:error, :not_running}` otherwise.
+  `{:error, :not_running}` otherwise, and `{:error, :no_instance}` for a
+  multi-instance plugin with no enabled instance.
   """
-  @spec test_invoke(String.t(), String.t()) :: :ok | {:error, :not_running}
+  @spec test_invoke(String.t(), String.t()) :: :ok | {:error, :not_running | :no_instance}
   def test_invoke(slug, event_type) when is_binary(slug) and is_binary(event_type) do
-    case get_plugin(slug) do
-      {:ok, %Plugin{} = plugin} ->
-        payload = build_payload(synthetic_event(event_type))
+    with {:ok, %Plugin{} = plugin} <- running_plugin(slug),
+         %Instance{} = instance <- test_instance(plugin) do
+      payload =
+        event_type
+        |> synthetic_event()
+        |> build_payload()
+        |> Map.put("config", Instances.config_for(instance))
 
-        Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
-          Host.call(plugin.slug, plugin.entrypoint, payload, test_run: true)
-        end)
+      Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+        Host.call(plugin.slug, plugin.entrypoint, payload,
+          test_run: true,
+          instance_id: instance.id
+        )
+      end)
 
-        :ok
-
-      _ ->
-        {:error, :not_running}
+      :ok
+    else
+      nil -> {:error, :no_instance}
+      {:error, _} = err -> err
     end
   end
+
+  defp running_plugin(slug) do
+    case get_plugin(slug) do
+      {:ok, %Plugin{} = plugin} -> {:ok, plugin}
+      _ -> {:error, :not_running}
+    end
+  end
+
+  # The Test button exercises a single-instance plugin's default instance and a
+  # multi-instance plugin's first enabled instance (per-instance checks are the
+  # instance card's Test button, which calls check-health).
+  defp test_instance(%Plugin{multi_instance: true} = plugin),
+    do: List.first(Instances.list_enabled(plugin.slug))
+
+  defp test_instance(%Plugin{} = plugin), do: Instances.default_instance(plugin.slug)
 
   defp synthetic_event(event_type) do
     %{
@@ -250,6 +369,12 @@ defmodule Mydia.Plugins do
     # the test suite's app boot doesn't write to the shared DB (tests call
     # ensure_bundled/0 explicitly when they need it).
     maybe_ensure_bundled()
+
+    # Persist YAML/env-declared plugin instances before plugins start scheduling
+    # against them. Same boot-side-effect gate as bundled seeding.
+    if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Plugins.RuntimeInstances.sync()
+    end
 
     Settings.get_db_plugin_configs()
     |> Enum.filter(& &1.enabled)
@@ -369,7 +494,7 @@ defmodule Mydia.Plugins do
   defp seed_or_reconcile({manifest, raw}) do
     case Settings.get_plugin_config_by_slug(manifest.slug) do
       nil -> seed_bundled(manifest, raw)
-      %Settings.PluginConfig{} = config -> reconcile_bundled(config, manifest)
+      %Settings.PluginConfig{} = config -> reconcile_bundled(config, manifest, raw)
     end
   end
 
@@ -413,14 +538,14 @@ defmodule Mydia.Plugins do
   # (built-in upgrade): replace the stored manifest/metadata and grant in one
   # update, then null any stale DB bytes. Non-bundled rows (e.g. an index plugin)
   # are left entirely alone — they keep explicit approval and re-approval.
-  defp reconcile_bundled(%Settings.PluginConfig{source_url: "bundled"} = config, manifest) do
-    case refresh_bundled_state(config, manifest) do
+  defp reconcile_bundled(%Settings.PluginConfig{source_url: "bundled"} = config, manifest, raw) do
+    case refresh_bundled_state(config, manifest, raw) do
       {:ok, updated} -> reconcile_bundled_artifact(updated)
       {:error, _reason} -> :ok
     end
   end
 
-  defp reconcile_bundled(_config, _manifest), do: :ok
+  defp reconcile_bundled(_config, _manifest, _raw), do: :ok
 
   # Replace the manifest metadata *and* the grant together, so a revised manifest
   # never leaves the row holding a stale one. The grant is the manifest's exact
@@ -428,17 +553,20 @@ defmodule Mydia.Plugins do
   # hosts — which both widens to the shipped set and drops capabilities the
   # manifest no longer declares. `enabled` is deliberately absent from attrs: the
   # administrator's choice survives every host upgrade.
-  defp refresh_bundled_state(config, manifest) do
+  defp refresh_bundled_state(config, manifest, raw) do
     manifest_map = manifest_to_map(manifest)
+    # The delivery mode lives in settings; a shipped change must reach existing rows.
+    settings = Map.merge(config.settings || %{}, bundled_settings(raw))
 
     attrs =
       %{}
       |> put_changed(:manifest, manifest_map, config.manifest)
+      |> put_changed(:settings, settings, config.settings)
       |> put_changed(:name, manifest.name, config.name)
       |> put_changed(:version, manifest.version, config.version)
       |> put_changed(
         :granted_capabilities,
-        effective_grants(manifest_map, config.settings),
+        effective_grants(manifest_map, settings),
         config.granted_capabilities
       )
 
@@ -686,6 +814,9 @@ defmodule Mydia.Plugins do
              settings: merged,
              granted_capabilities: granted
            }) do
+      # Guests read the default instance's settings (`Instances.config_for/1`),
+      # not the plugin config, so a single-instance plugin needs them there too.
+      Instances.merge_default_settings(slug, settings)
       if updated.enabled, do: reregister_descriptor(updated)
       {:ok, updated}
     end
@@ -891,7 +1022,9 @@ defmodule Mydia.Plugins do
 
       case Host.start_plugin(config.slug, wasm, imports: HostFunctions.imports_for(config.slug)) do
         {:ok, _pid} ->
-          Registry.register(config.slug, descriptor)
+          result = Registry.register(config.slug, descriptor)
+          ensure_default_instance(descriptor)
+          result
 
         # wasmtime refuses a component built against a contract the host does not
         # provide at instantiation. Translate that link-time failure into an
@@ -1205,6 +1338,10 @@ defmodule Mydia.Plugins do
 
   defp static_hosts(_manifest_map), do: []
 
+  # A multi_instance plugin's endpoints are approved per instance; plugin-level
+  # settings never widen the plugin-wide grant.
+  defp derived_hosts(%{"multi_instance" => true}, _settings), do: []
+
   defp derived_hosts(manifest_map, settings) when is_map(manifest_map) do
     manifest_map
     |> Map.get("settings_schema")
@@ -1267,7 +1404,10 @@ defmodule Mydia.Plugins do
       "connection" => m.connection,
       "schedule" => m.schedule,
       "page" => m.page,
-      "min_host_version" => m.min_host_version
+      "min_host_version" => m.min_host_version,
+      "multi_instance" => m.multi_instance,
+      "category" => m.category,
+      "setup" => m.setup
     }
   end
 

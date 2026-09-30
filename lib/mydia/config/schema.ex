@@ -58,6 +58,7 @@ defmodule Mydia.Config.Schema do
           media_servers: [__MODULE__.MediaServer.t()],
           library_paths: [__MODULE__.LibraryPath.t()],
           plugin_installs: [__MODULE__.PluginInstall.t()],
+          plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
           path_mappings: [__MODULE__.PathMapping.t()]
         }
 
@@ -271,7 +272,14 @@ defmodule Mydia.Config.Schema do
       # checkpoints across this window, with wall-clock kill as the only guard
       # (no fuel metering on component stores).
       field :schedule_timeout_ms, :integer, default: 60_000
+      # setup-step calls may probe several candidate endpoints sequentially, so
+      # they get their own budget between the event and schedule timeouts.
+      field :setup_timeout_ms, :integer, default: 30_000
       field :pool_size, :integer, default: 4
+      # Per-instance plugin store quotas (contract 1.5). Operator-raisable for a
+      # plugin that keeps a large mapping cache (a 10k-item media server).
+      field :store_max_keys, :integer, default: 1_000_000
+      field :store_max_bytes, :integer, default: 268_435_456
       # Page (`on-http`) invocations wait on a user-facing upstream, so they get
       # their own budgets: the whole invocation, and each outbound request in it.
       field :page_timeout_ms, :integer, default: 120_000
@@ -364,7 +372,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :media_servers, MediaServer, on_replace: :delete, primary_key: false do
       field :name, :string
-      field :type, Ecto.Enum, values: [:plex, :jellyfin]
+      field :type, Ecto.Enum, values: [:jellyfin]
       field :enabled, :boolean, default: true
       field :url, :string
       field :token, :string
@@ -396,6 +404,18 @@ defmodule Mydia.Config.Schema do
       field :integrity_hash, :string
       field :settings, :map, default: %{}
       field :granted_capabilities, :map, default: %{}
+    end
+
+    # Env/YAML-declared plugin instances (PLUGIN_<SLUG>_<N>_*, `plugin_instances:`).
+    # Mydia.Plugins.RuntimeInstances persists them as read-only DB rows at boot.
+    # `legacy_source` marks entries translated from the deprecated Plex form of
+    # MEDIA_SERVER_<N>_* / `media_servers:`.
+    embeds_many :plugin_instances, PluginInstanceDecl, on_replace: :delete, primary_key: false do
+      field :plugin, :string
+      field :name, :string
+      field :enabled, :boolean, default: true
+      field :settings, :map, default: %{}
+      field :legacy_source, :string
     end
 
     embeds_many :path_mappings, PathMapping, on_replace: :delete, primary_key: false do
@@ -430,6 +450,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_installs, with: &plugin_install_changeset/2)
+    |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:path_mappings, with: &path_mapping_changeset/2)
     |> validate_configuration()
   end
@@ -652,7 +673,10 @@ defmodule Mydia.Config.Schema do
       :memory_limit_bytes,
       :invocation_timeout_ms,
       :schedule_timeout_ms,
+      :setup_timeout_ms,
       :pool_size,
+      :store_max_keys,
+      :store_max_bytes,
       :page_timeout_ms,
       :page_http_timeout_ms,
       :index_url,
@@ -664,7 +688,10 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:memory_limit_bytes, greater_than: 0)
     |> validate_number(:invocation_timeout_ms, greater_than: 0)
     |> validate_number(:schedule_timeout_ms, greater_than: 0)
+    |> validate_number(:setup_timeout_ms, greater_than: 0)
     |> validate_number(:pool_size, greater_than: 0)
+    |> validate_number(:store_max_keys, greater_than: 0)
+    |> validate_number(:store_max_bytes, greater_than: 0)
     |> validate_number(:page_timeout_ms, greater_than: 0)
     |> validate_number(:page_http_timeout_ms, greater_than: 0)
     |> validate_https_source(:index_url)
@@ -876,7 +903,7 @@ defmodule Mydia.Config.Schema do
       :token
     ])
     |> validate_required([:name, :type, :url])
-    |> validate_inclusion(:type, [:plex, :jellyfin])
+    |> validate_inclusion(:type, [:jellyfin])
   end
 
   defp library_path_changeset(schema, attrs) do
@@ -936,6 +963,19 @@ defmodule Mydia.Config.Schema do
       _ ->
         changeset
     end
+  end
+
+  defp plugin_instance_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:plugin, :name, :enabled, :settings, :legacy_source])
+    # The YAML loader atomizes keys; instance settings are string-keyed everywhere else.
+    |> update_change(:settings, fn settings ->
+      Map.new(settings, fn {key, value} -> {to_string(key), value} end)
+    end)
+    |> validate_required([:plugin, :name])
+    |> validate_format(:plugin, ~r/^[a-z][a-z0-9_]*$/,
+      message: "must be a plugin slug (lowercase letters, digits, underscores)"
+    )
   end
 
   defp plugin_install_changeset(schema, attrs) do
@@ -1100,6 +1140,7 @@ defmodule Mydia.Config.Schema do
       media_servers: [],
       library_paths: [],
       plugin_installs: [],
+      plugin_instances: [],
       path_mappings: []
     }
 

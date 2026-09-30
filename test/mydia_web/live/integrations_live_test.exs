@@ -73,6 +73,31 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     assert has_element?(view, "#plugin-conn-#{@slug}")
   end
 
+  test "a multi_instance plugin with no device flow is not offered and gains no instance", %{
+    conn: conn
+  } do
+    {:ok, _} =
+      Settings.create_plugin_config(%{
+        slug: "media-server-x",
+        name: "Media Server X",
+        version: "1.0.0",
+        enabled: true,
+        manifest: %{
+          "slug" => "media-server-x",
+          "name" => "Media Server X",
+          "version" => "1.0.0",
+          "multi_instance" => true,
+          "capabilities" => %{"users:connections" => []},
+          "connection" => %{"type" => "none", "auth_header" => "X-Token: {token}"}
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/integrations")
+
+    refute has_element?(view, "#plugin-conn-media-server-x")
+    assert Mydia.Plugins.Instances.list("media-server-x") == []
+  end
+
   test "exposes an Integrations link in the sidebar", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/integrations")
 
@@ -112,6 +137,22 @@ defmodule MydiaWeb.IntegrationsLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/integrations")
     assert has_element?(view, "#plugin-conn-errored-#{@slug}")
+  end
+
+  test "lists account links an admin made for this user", %{conn: conn, user: user} do
+    {:ok, instance} = Mydia.Plugins.Instances.create("plex", %{name: "Glass Orchard Server"})
+
+    {:ok, [link]} =
+      Mydia.Plugins.AccountLinks.replace_user_links(
+        instance.id,
+        [%{remote_account_id: "42", remote_username: "harbor_kid", user_id: user.id}],
+        :admin_mapped
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/integrations")
+
+    assert has_element?(view, "#account-links #account-link-#{link.id}", "harbor_kid")
+    assert has_element?(view, "#account-link-#{link.id}", "Glass Orchard Server")
   end
 
   describe "plugin permissions" do

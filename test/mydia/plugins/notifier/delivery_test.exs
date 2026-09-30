@@ -8,6 +8,7 @@ defmodule Mydia.Plugins.Notifier.DeliveryTest do
 
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Notifier.Delivery
   alias Mydia.Plugins.Plugin
@@ -255,5 +256,27 @@ defmodule Mydia.Plugins.Notifier.DeliveryTest do
       item = media_item_fixture()
       assert {:error, _} = Delivery.perform(job(added_payload(item)))
     end
+  end
+
+  test "a job for a deleted instance is cancelled without delivering or creating an instance",
+       %{bypass: bypass} do
+    start_notifier!(bypass)
+    item = media_item_fixture()
+
+    {:ok, gone} = Instances.create(@slug, %{name: "Removed"})
+    :ok = Instances.delete(gone)
+    before_ids = @slug |> Instances.list() |> Enum.map(& &1.id) |> Enum.sort()
+
+    # Bypass fails the test on any unexpected request, so a delivery would show.
+    job = %Oban.Job{
+      args: %{
+        "slug" => @slug,
+        "instance_id" => gone.id,
+        "payload" => added_payload(item)
+      }
+    }
+
+    assert {:cancel, _} = Delivery.perform(job)
+    assert @slug |> Instances.list() |> Enum.map(& &1.id) |> Enum.sort() == before_ids
   end
 end

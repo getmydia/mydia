@@ -1,0 +1,21 @@
+# Bundled Plex media-server plugin. Built to wasm32-wasip2 by the :plugins mix
+# compiler into priv/plugins/plex.wasm (nix toolchain).
+[package]
+name = "plex"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../native/mydia_plugin_sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+panic = "abort"

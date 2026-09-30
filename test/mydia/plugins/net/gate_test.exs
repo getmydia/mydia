@@ -194,4 +194,166 @@ defmodule Mydia.Plugins.Net.GateTest do
       assert is_integer(event.metadata["duration_ms"])
     end
   end
+
+  describe "approved endpoints (operator-confirmed private egress)" do
+    setup do
+      {:ok, bypass: Bypass.open()}
+    end
+
+    defp endpoint(host, port, scheme \\ "http"),
+      do: %{"scheme" => scheme, "host" => host, "port" => port}
+
+    test "a private address is refused without an approved endpoint" do
+      assert {:error, %Error{type: :blocked}} =
+               Gate.request("http://plex.lan:32400/identity",
+                 allowed_hosts: ["plex.lan"],
+                 resolver: resolver({192, 168, 1, 20})
+               )
+    end
+
+    test "an approved endpoint reaches a private address with no allow_private seam",
+         %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/library/sections", fn conn ->
+        Plug.Conn.resp(conn, 200, ~s({"MediaContainer":{}}))
+      end)
+
+      # plex.lan is NOT in allowed_hosts: the approved endpoint alone admits it,
+      # and the loopback resolution is allowed only because it is approved.
+      assert {:ok, %{status: 200}} =
+               Gate.request("http://plex.lan:#{bypass.port}/library/sections",
+                 allowed_hosts: [],
+                 approved_endpoints: [endpoint("plex.lan", bypass.port)],
+                 resolver: resolver({127, 0, 0, 1})
+               )
+    end
+
+    test "host matching is case-insensitive", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/", fn conn -> Plug.Conn.resp(conn, 204, "") end)
+
+      assert {:ok, %{status: 204}} =
+               Gate.request("http://PLEX.lan:#{bypass.port}/",
+                 approved_endpoints: [endpoint("plex.LAN", bypass.port)],
+                 resolver: resolver({127, 0, 0, 1})
+               )
+    end
+
+    test "a port mismatch is not approved (and the host is not on the allowlist)" do
+      assert {:error, %Error{type: :capability_denied}} =
+               Gate.request("http://plex.lan:8080/",
+                 approved_endpoints: [endpoint("plex.lan", 32400)],
+                 resolver: resolver({192, 168, 1, 20})
+               )
+    end
+
+    test "a port mismatch on a granted host still hits the private-address check" do
+      assert {:error, %Error{type: :blocked}} =
+               Gate.request("http://plex.lan:8080/",
+                 allowed_hosts: ["plex.lan"],
+                 approved_endpoints: [endpoint("plex.lan", 32400)],
+                 resolver: resolver({192, 168, 1, 20})
+               )
+    end
+
+    test "a scheme mismatch is not approved" do
+      assert {:error, %Error{type: :capability_denied}} =
+               Gate.request("https://plex.lan:32400/",
+                 approved_endpoints: [endpoint("plex.lan", 32400, "http")],
+                 resolver: resolver({192, 168, 1, 20})
+               )
+    end
+
+    test "another host is never admitted by someone else's approval" do
+      assert {:error, %Error{type: :capability_denied}} =
+               Gate.request("http://router.lan:32400/",
+                 approved_endpoints: [endpoint("plex.lan", 32400)],
+                 resolver: resolver({192, 168, 1, 1})
+               )
+    end
+
+    test "an approved endpoint resolving to link-local (metadata) is still refused" do
+      for ip <- [
+            {169, 254, 169, 254},
+            {0, 0, 0, 0, 0, 0xFFFF, 0xA9FE, 0xA9FE},
+            {0xFE80, 0, 0, 0, 0, 0, 0, 1}
+          ] do
+        assert {:error, %Error{type: :blocked}} =
+                 Gate.request("http://meta.lan:80/latest",
+                   approved_endpoints: [endpoint("meta.lan", 80)],
+                   resolver: resolver(ip)
+                 )
+      end
+    end
+
+    test "an approved endpoint on RFC1918, CGNAT, ULA or loopback passes the address check" do
+      for ip <- [{10, 1, 2, 3}, {100, 64, 0, 1}, {0xFD00, 0, 0, 0, 0, 0, 0, 5}, {127, 0, 0, 1}] do
+        assert {:ok, ^ip} =
+                 Gate.validate_resolved([ip], allow_private_except_link_local: true)
+      end
+    end
+
+    test "an approved endpoint never reaches this-network, multicast or reserved addresses" do
+      for ip <- [
+            {0, 0, 0, 0},
+            {0, 1, 2, 3},
+            {224, 0, 0, 1},
+            {239, 255, 255, 250},
+            {240, 0, 0, 1},
+            {255, 255, 255, 255},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0xFF02, 0, 0, 0, 0, 0, 0, 1},
+            {0xFF05, 0, 0, 0, 0, 0, 0, 0xC},
+            {0, 0, 0, 0, 0, 0xFFFF, 0xE000, 1},
+            {169, 254, 169, 254},
+            {0xFE80, 0, 0, 0, 0, 0, 0, 1}
+          ] do
+        assert {:error, %Error{type: :blocked}} =
+                 Gate.validate_resolved([ip], allow_private_except_link_local: true)
+      end
+    end
+
+    test "one refused address among several refuses the whole answer" do
+      assert {:error, %Error{type: :blocked}} =
+               Gate.validate_resolved([{10, 0, 0, 5}, {224, 0, 0, 1}],
+                 allow_private_except_link_local: true
+               )
+    end
+
+    test "pin_url brackets an IPv6 literal exactly once" do
+      assert Gate.pin_url(URI.parse("http://plex.lan:9/x?a=1"), {0xFD00, 0, 0, 0, 0, 0, 0, 5}) ==
+               "http://[fd00::5]:9/x?a=1"
+
+      assert Gate.pin_url(URI.parse("https://plex.lan/x"), {10, 1, 2, 3}) ==
+               "https://10.1.2.3/x"
+    end
+
+    test "a 3xx from an approved endpoint is returned, not followed", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://169.254.169.254/")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:ok, %{status: 302, headers: headers}} =
+               Gate.request("http://plex.lan:#{bypass.port}/",
+                 approved_endpoints: [endpoint("plex.lan", bypass.port)],
+                 resolver: resolver({127, 0, 0, 1})
+               )
+
+      assert inspect(headers) =~ "169.254.169.254"
+    end
+
+    test "the default port is matched when the URL omits it" do
+      # http://plex.lan/ means port 80; an endpoint on 80 approves it. The
+      # request fails later at connect (nothing listens), which proves both the
+      # allowlist and the private check passed.
+      assert {:error, %Error{type: type}} =
+               Gate.request("http://plex.lan/",
+                 approved_endpoints: [endpoint("plex.lan", 80)],
+                 resolver: resolver({127, 0, 0, 1}),
+                 timeout: 200
+               )
+
+      assert type in [:network_error, :timeout]
+    end
+  end
 end

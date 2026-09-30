@@ -17,7 +17,10 @@
         </h2>
 
         <div class="space-y-4">
-          <p :if={@plugin_connections == []} class="text-sm text-base-content/60">
+          <p
+            :if={@plugin_connections == [] and @account_links == []}
+            class="text-sm text-base-content/60"
+          >
             No integrations are available. Install a plugin that supports connections, such as
             Simkl Sync, to sync your watch history.
           </p>
@@ -77,7 +80,7 @@
                     Cancel
                   </button>
                 </div>
-              <% pc.connection && pc.connection.status == "connected" -> %>
+              <% pc.connection && pc.connection.status == :active -> %>
                 <div
                   class="flex items-center justify-between"
                   id={"plugin-conn-connected-#{pc.slug}"}
@@ -95,7 +98,7 @@
                     Disconnect
                   </button>
                 </div>
-              <% pc.connection && pc.connection.status == "error" -> %>
+              <% pc.connection && pc.connection.status == :error -> %>
                 <div
                   class="flex items-center justify-between"
                   id={"plugin-conn-errored-#{pc.slug}"}
@@ -124,6 +127,12 @@
                 </button>
             <% end %>
           </div>
+
+          <div :if={@account_links != []} class="divider my-2"></div>
+          <MydiaWeb.PluginInstanceComponents.account_links_list
+            links={@account_links}
+            plugin_names={@plugin_names}
+          />
         </div>
       </div>
     </div>

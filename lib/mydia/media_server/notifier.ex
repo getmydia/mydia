@@ -1,6 +1,7 @@
 defmodule Mydia.MediaServer.Notifier do
   @moduledoc """
-  Handles notifications to media servers (Plex, Jellyfin) after successful imports.
+  Handles notifications to native media servers (Jellyfin) after successful imports.
+  Plugin media servers react to the media_file.imported event instead.
 
   This module is responsible for notifying all enabled media servers to scan
   their libraries when new content has been imported into the library.

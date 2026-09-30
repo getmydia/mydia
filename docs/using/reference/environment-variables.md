@@ -244,6 +244,34 @@ DOWNLOAD_CLIENT_8_WATCH_FOLDER=/downloads/watch
 DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ```
 
+## Media Servers
+
+Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
+The easiest setup is Admin > Media servers > Add server > Plex, which signs in
+with your Plex account and finds your servers. To declare a server in the
+environment instead:
+
+```bash
+PLUGIN_PLEX_0_NAME="Living room"
+PLUGIN_PLEX_0_URL=http://192.168.1.20:32400
+PLUGIN_PLEX_0_TOKEN=your-plex-token
+# Optional
+PLUGIN_PLEX_0_ENABLED=true
+PLUGIN_PLEX_0_SYNC_WATCHED=on                        # on or off (default off)
+PLUGIN_PLEX_0_SYNC_WATCHED_DIRECTION=bidirectional   # bidirectional, import or export
+```
+
+`PLUGIN_PLEX_<N>_URL` is required for a declared server. Servers declared this
+way show as read-only in the UI. The URL you declare is the only private address
+the plugin may reach for that server. `NAME` identifies the server across
+restarts (it defaults to `plex-<N>`): renaming it creates a new server, and the
+old one stays behind as a disabled server you can delete in the UI.
+
+`MEDIA_SERVER_<N>_*` variables with `MEDIA_SERVER_<N>_TYPE=plex` still work and
+are translated into Plex instances, but they are deprecated: Mydia logs a
+warning at startup and shows a banner on the Media servers page. Rename them to
+`PLUGIN_PLEX_<N>_*`. Jellyfin keeps using `MEDIA_SERVER_<N>_*`.
+
 ## Indexers
 
 Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):

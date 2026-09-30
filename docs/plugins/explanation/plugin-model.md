@@ -49,23 +49,84 @@ authors never hand-write the generated binding boilerplate.
 ## Exports, imports, and the contract version
 
 A plugin is a Wasm **component** built for `wasm32-wasip2` against the
-canonical WIT contract `mydia:plugin@1.1.0`, living at
+canonical WIT contract `mydia:plugin@1.5.0`, living at
 `native/mydia_plugin_sdk/wit/plugin.wit`.
 
 It **exports** `handler.on-event`, called for each event it subscribed to,
-and optionally `handler.on-schedule`, called on a fixed interval. It
-**imports** the host's capabilities: `http-request`, `data-read`, `log`, plus
-the 1.1 additions `kv-get`/`kv-set`/`kv-delete`, `data-list`, `ensure-watched`,
-`connections-list`, and `connection-request`. Every import is enforced
+`handler.on-schedule`, called on a fixed interval, and, from 1.5,
+`handler.setup`, which drives the setup wizard the host renders, and
+`handler.check-health`, which the host calls to show an instance's health. A
+plugin that serves its own pages also exports `page.on-http` (from 1.4). The
+SDK macro generates all of these exports, and one a plugin does not implement
+returns an error. It
+**imports** the host's capabilities: `http-request`, `data-read` and `log`
+from 1.0; the key-value store, `data-list`, watch-state writes and
+per-user connections from 1.1 to 1.3; the page functions from 1.4; and account
+links, store listing and batch writes, and sync-run reports from 1.5. Every import is enforced
 server-side on every call; there is no path around it.
 
 The package version in the WIT file **is** the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against `1.0` keep running unmodified against a `1.1` host: the host
+built against `1.0` keep running unmodified against a `1.5` host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.
+
+## What the host owns and what a plugin owns
+
+Every plugin, bundled or third-party, follows one rule: **the host owns the
+nouns other features need to see, and the plugin owns the behaviour specific to
+the remote system.**
+
+Two questions place any piece of a design:
+
+- *Would the admin UI, a user's profile page, another feature, or a different
+  plugin ever need to read or show this?* If so, it is a host noun. The plugin
+  reads and writes it through contract functions, and the host stores it.
+- *Does it change when the remote service changes its API?* If so, it belongs
+  to the plugin.
+
+**Host nouns** are watch state, favorites, which Mydia user is linked to which
+remote account, per-user connections and their tokens, operator settings and
+secrets, plugin instances, sync-run history, health status, schedules, and
+egress policy. The host also renders every screen. A plugin describes setup
+steps declaratively and ships no UI code of its own.
+
+**Plugin behaviour** is the protocol: auth handshakes, server discovery and
+endpoint probing, pagination, parsing remote IDs, crawling the remote library
+to build mappings, and the reconcile loop that decides what to pull and push.
+The plugin's working state (checkpoints, cursors, mapping caches) lives in its
+own store and is opaque to the host.
+
+Three consequences follow:
+
+- **A plugin never keeps the only copy of a host noun.** Storing account links
+  or sync history in KV because the contract lacks a function for it is a
+  violation. Add the noun to the host instead.
+- **New host nouns are generic.** A noun is named for the concept ("account
+  link", "sync run"), never for the service ("Plex profile"), and needs a
+  plausible second consumer before it enters the contract.
+- **Shared engines are optional helpers.** A Rust crate that packages
+  reconciliation or polling logic is welcome, but the contract must never
+  require it. A plugin written in another language, or one that needs a
+  different loop, still gets every host noun.
+
+A plugin can run as several **instances**, one per configured server or
+account, when its manifest sets `multi_instance`. Each instance has its own
+settings, store, account links, schedule and sync history, and the plugin
+learns which instance it is serving from `instance_id` in its injected config.
+
+The rule sits between two common designs. Typed-slot systems (Terraform
+providers, Kodi PVR add-ons, Grafana data sources) keep the engine in the host
+and leave the plugin a thin adapter. That duplicates nothing, but the engine
+can never leave core and plugins cannot do what the slot did not anticipate.
+Fully self-contained systems (Jellyfin's Trakt plugin, Obsidian, WordPress)
+hand the plugin everything, including UI and storage. That gives authors full
+freedom, but the host cannot explain what a plugin did and every plugin invents
+its own UX. Home Assistant's integrations are the closest model to Mydia's:
+self-contained code that plugs into host-owned entities and host-rendered
+config flows.
 
 ## The capability-based sandbox
 

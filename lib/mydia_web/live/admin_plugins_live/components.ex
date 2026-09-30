@@ -9,6 +9,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   """
   use MydiaWeb, :html
 
+  import MydiaWeb.PluginSetupComponents, only: [settings_field: 1]
+
   alias Mydia.Plugins.Manifest
 
   @doc """
@@ -227,6 +229,20 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           This version asks for more than you approved: {ungranted_summary(@plugin.ungranted)}. Those
           calls are denied until you re-approve it.
         </p>
+        <ul
+          :if={@plugin.multi_instance}
+          id={"plugin-instances-#{@plugin.slug}"}
+          class="text-xs text-base-content/70 mt-1 space-y-0.5"
+        >
+          <li :if={@plugin.instances == []}>No instances configured yet.</li>
+          <li :for={instance <- @plugin.instances} class="flex items-center gap-1">
+            <span class={[
+              "inline-block w-1.5 h-1.5 rounded-full",
+              if(instance.enabled, do: "bg-success", else: "bg-base-content/30")
+            ]}></span>
+            {instance.name}
+          </li>
+        </ul>
       </div>
 
       <div class="flex flex-wrap items-center gap-2 shrink-0">
@@ -330,6 +346,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
   defp settings_disabled_reason(%{pending_approval: true}),
     do: "Approve this plugin before editing its settings"
+
+  defp settings_disabled_reason(%{multi_instance: true, has_settings: false}),
+    do: "Configured per server on Media servers"
 
   defp settings_disabled_reason(%{has_settings: false}),
     do: "This plugin has no configurable settings"
@@ -825,64 +844,6 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <.button type="submit" id="save-ceilings" class="btn btn-sm">Save permissions</.button>
       </div>
     </.form>
-    """
-  end
-
-  # Renders one settings field from its declared type.
-  attr :field, :map, required: true
-  attr :form, :any, required: true
-
-  defp settings_field(%{field: %{"type" => "enum"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="select"
-      label={@field["label"] || @field["key"]}
-      options={@field["options"] || []}
-    />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "secret"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="password"
-      autocomplete="off"
-      label={@field["label"] || @field["key"]}
-      placeholder="••••••••"
-    />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "url"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="url"
-      label={@field["label"] || @field["key"]}
-      hint={
-        if @field["allow_private"],
-          do:
-            "This address may be on your local network. Saving it lets the plugin reach that one host."
-      }
-    />
-    """
-  end
-
-  defp settings_field(%{field: %{"type" => "text"}} = assigns) do
-    ~H"""
-    <.input
-      field={@form[@field["key"]]}
-      type="textarea"
-      label={@field["label"] || @field["key"]}
-    />
-    """
-  end
-
-  defp settings_field(assigns) do
-    ~H"""
-    <.input field={@form[@field["key"]]} type="text" label={@field["label"] || @field["key"]} />
     """
   end
 

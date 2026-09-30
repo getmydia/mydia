@@ -31,7 +31,16 @@
 // because the user may have to confirm them first. `list-item` gains
 // `media-request`, `download` and `collection` cases. Every 1.3 type, function
 // and export is byte-stable.
-package mydia:plugin@1.4.0;
+//
+// 1.5.0 (additive over 1.4.0): plugin instances and account links
+// (`links-list`, `link-request`, `propose-accounts`, `set-link-token`,
+// `set-link-status`), an instance store with prefix scans (`kv-list`,
+// `kv-set-many`), sync-run reporting (`report-sync-run`), `origin` on
+// `playback-progress`, and two new handler exports: `setup` (host-rendered
+// declarative setup screens) and `check-health`. Every 1.4 type, function and
+// export, including the separate `page` interface, is byte-stable; 1.0 to 1.4
+// guests are served their own namespaces by the host.
+package mydia:plugin@1.5.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -135,6 +144,9 @@ interface types {
     last-watched-at: option<string>,
     /// RFC3339; the row's update time, used as the keyset cursor anchor.
     updated-at: string,
+    /// 1.5.0: origin tag of the last write (e.g. "player",
+    /// "plugin:<slug>:<instance-id>"); absent when unknown.
+    origin: option<string>,
   }
 
   /// One row of a `list-result`, keyed by the requested namespace.
@@ -384,6 +396,94 @@ interface types {
     is-system: bool,
     updated-at: string,
   }
+
+  // ── 1.5.0 additions ──────────────────────────────────────────────────────
+
+  enum link-role { owner, endpoint, user }
+  enum link-status { active, error, disabled }
+
+  record account-link {
+    id: string,
+    role: link-role,
+    user-id: option<string>,
+    external-user-id: option<string>,
+    external-username: option<string>,
+    status: link-status,
+  }
+
+  record remote-account { id: string, name: string, admin: bool }
+
+  record kv-entry { key: string, value: string }
+  record kv-page { entries: list<kv-entry>, next-cursor: option<string> }
+
+  enum sync-run-status { ok, partial, error }
+  record sync-run-report {
+    started-at: string,          // RFC3339
+    finished-at: string,         // RFC3339
+    status: sync-run-status,
+    pulled: u32,
+    pushed: u32,
+    skipped: u32,
+    errors: u32,
+    message: option<string>,
+  }
+
+  enum health-status { ok, degraded, unauthorized, unreachable }
+  enum health-action { reconnect, confirm-endpoints }
+  record health {
+    status: health-status,
+    message: option<string>,
+    action: option<health-action>,
+  }
+
+  record endpoint { scheme: string, host: string, port: u16 }
+  record credential { role: link-role, token: string }
+
+  record setup-field {
+    key: string,
+    label: string,
+    field-type: string,           // "string" | "url" | "secret" | "enum" | "text"
+    required: bool,
+    options: list<string>,
+    default-value: option<string>,
+  }
+  record form-screen { title: string, fields: list<setup-field> }
+  record choice-option {
+    id: string,
+    label: string,
+    detail: option<string>,
+    badge: option<string>,
+    endpoints: list<endpoint>,
+    credentials: list<credential>,
+  }
+  record choice-screen { title: string, options: list<choice-option> }
+  record external-auth-screen { url: string, poll-after-seconds: u32, message: option<string> }
+  record mapping-suggestion { remote-account-id: string, user-id: string }
+  record mapping-screen {
+    title: string,
+    accounts: list<remote-account>,
+    suggestions: list<mapping-suggestion>,
+  }
+  variant screen-body {
+    form(form-screen),
+    choice(choice-screen),
+    external-auth(external-auth-screen),
+    mapping(mapping-screen),
+    done(string),
+  }
+  record setup-screen {
+    step: string,                 // the step id the host sends back with the operator's answer
+    body: screen-body,
+    next-state-json: string,
+    credentials: list<credential>,
+    error: option<string>,        // shown above the screen; the screen is re-rendered
+  }
+  record setup-request {
+    step: string,                 // "start" first; "poll" while an external-auth screen is open
+    input-json: string,           // operator answers for the previous screen, "{}" for start/poll
+    state-json: string,           // previous screen's next-state-json, "{}" for start
+    config-json: string,          // instance settings, same shape as the injected config
+  }
 }
 
 /// Host-implemented capabilities the guest may import. Each call is
@@ -395,7 +495,9 @@ interface host {
              watch-state-target, connection, host-error,
              library-item, favorite-target, ensure-favorite-result,
              write-outcome, search-request, search-hit, media-add-target,
-             collection-attrs};
+             collection-attrs,
+             account-link, link-status, remote-account, kv-entry, kv-page,
+             sync-run-report};
 
   /// Outbound HTTP request, subject to the plugin's net:http grant and the SSRF
   /// egress gate. Requires net:http.
@@ -463,6 +565,7 @@ interface host {
   ensure-favorite: func(target: favorite-target) -> result<ensure-favorite-result, host-error>;
 
   // ── 1.4.0 additions ──────────────────────────────────────────────────────
+
   // Page functions act as the user of the current `on-http` call and return
   // `denied` from any other handler. Writes need `surfaces:write` for their
   // surface; the user may have to confirm them (`needs-confirmation`).
@@ -484,12 +587,41 @@ interface host {
 
   /// Surface collections:favorite, for the acting user (`user-id` is ignored).
   add-favorite: func(target: favorite-target) -> result<write-outcome, host-error>;
+
+  // ── 1.5.0 additions ──────────────────────────────────────────────────────
+
+  /// Account links of the calling instance (users:connections). Identity and
+  /// status only, never a token.
+  links-list: func() -> result<list<account-link>, host-error>;
+
+  /// Outbound request with the link's token injected by the host using the
+  /// manifest's connection.auth_header template (users:connections + net:http).
+  link-request: func(link-id: string, req: outbound-request) -> result<outbound-response, host-error>;
+
+  /// Records the remote accounts the plugin discovered, for mapping screens
+  /// and profile pages (users:connections). Does not create links.
+  propose-accounts: func(accounts: list<remote-account>) -> result<_, host-error>;
+
+  /// Stores a token the remote service minted for a link (users:connections).
+  set-link-token: func(link-id: string, token: string) -> result<_, host-error>;
+
+  /// Marks a link active/error/disabled with an optional message (users:connections).
+  set-link-status: func(link-id: string, status: link-status, message: option<string>) -> result<_, host-error>;
+
+  /// Up to 200 entries whose key starts with `prefix`, in key order (state:kv).
+  kv-list: func(prefix: string, cursor: option<string>) -> result<kv-page, host-error>;
+
+  /// Writes several entries in one transaction (state:kv).
+  kv-set-many: func(entries: list<kv-entry>) -> result<_, host-error>;
+
+  /// Records one sync run for the calling instance (ungated).
+  report-sync-run: func(run: sync-run-report) -> result<_, host-error>;
 }
 
 /// The guest's handlers. The SDK's #[mydia_plugin_sdk::plugin] macro implements this from a
 /// plain author-written function (plus an optional schedule handler).
 interface handler {
-  use types.{event, schedule-tick};
+  use types.{event, schedule-tick, setup-request, setup-screen, health};
 
   /// Handle one lifecycle event. Returns a small JSON result string the host
   /// reads (e.g. {"delivered":true,"status":204}); an Err string is surfaced as
@@ -501,6 +633,14 @@ interface handler {
   /// and the host's schedule call fails soft. Returns a small JSON result
   /// string; an Err string is surfaced as a plugin error.
   on-schedule: func(tick: schedule-tick) -> result<string, string>;
+
+  /// 1.5.0: one step of a host-rendered setup wizard. The host calls "start"
+  /// first, then the returned screen's `step` with the operator's answers, or
+  /// "poll" while an external-auth screen is open.
+  setup: func(req: setup-request) -> result<setup-screen, string>;
+
+  /// 1.5.0: the instance's current health, for the admin card.
+  check-health: func() -> result<health, string>;
 }
 
 /// A plugin page (`surfaces:page`). The host serves /plugins/<slug>/app/* by

@@ -69,4 +69,27 @@ defmodule Mydia.SyncTest do
     assert {1, nil} = Sync.prune(30)
     assert Sync.last_run("plex", @instance) == nil
   end
+
+  describe "record_run/1" do
+    test "stores a finished run in one insert, including :partial" do
+      started = ~U[2026-09-29 10:00:00Z]
+      finished = ~U[2026-09-29 10:00:42Z]
+
+      assert {:ok, run} =
+               Mydia.Sync.record_run(%{
+                 provider: "plugin:plex",
+                 provider_instance_id: "inst-1",
+                 direction: :bidirectional,
+                 status: :partial,
+                 started_at: started,
+                 finished_at: finished,
+                 counts: %{pulled: 3, pushed: 1, skipped: 0, errors: 1},
+                 error: "one profile token expired"
+               })
+
+      assert run.status == :partial
+      assert run.counts == %{"pulled" => 3, "pushed" => 1, "skipped" => 0, "errors" => 1}
+      assert Mydia.Sync.last_run("plugin:plex", "inst-1").id == run.id
+    end
+  end
 end

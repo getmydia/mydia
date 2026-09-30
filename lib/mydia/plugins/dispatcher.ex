@@ -54,7 +54,7 @@ defmodule Mydia.Plugins.Dispatcher do
     if type in Manifest.event_catalog() do
       origin = event_origin(event)
 
-      for plugin <- Plugins.subscribers(type), not suppressed?(origin, plugin) do
+      for plugin <- Plugins.subscribers(type), not suppressed?(origin, plugin.slug) do
         run_isolated(invoker, plugin, event)
       end
     end
@@ -70,11 +70,22 @@ defmodule Mydia.Plugins.Dispatcher do
   defp event_origin(%{metadata: %{} = meta}), do: meta["origin"] || meta[:origin]
   defp event_origin(_), do: nil
 
-  # Never deliver an event back to the plugin that originated it (R14): a
-  # plugin-tagged write-back would otherwise echo straight back into the same
-  # plugin. Events from players, other plugins, or sync providers pass through.
-  defp suppressed?(nil, _plugin), do: false
-  defp suppressed?(origin, plugin), do: origin == "plugin:" <> plugin.slug
+  @doc false
+  # Never deliver an event back to the plugin that originated it (R14). A 1.5
+  # write is tagged "plugin:<slug>:<instance_id>"; every instance of the same
+  # plugin is suppressed, since each instance's scheduled push already skips
+  # rows whose `origin` is its own and pushes a sibling's writes (spec 1.7).
+  # Events from players, other plugins, or sync providers pass through.
+  @spec suppressed?(String.t() | nil, String.t()) :: boolean()
+  def suppressed?(nil, _slug), do: false
+
+  def suppressed?(origin, slug) when is_binary(origin) do
+    own = "plugin:" <> slug
+    origin == own or String.starts_with?(origin, own <> ":")
+  end
+
+  # An origin is free-form metadata; anything that is not a string cannot name a plugin.
+  def suppressed?(_origin, _slug), do: false
 
   # Run one plugin invocation in an isolated, supervised task. Crashes are
   # caught and logged so one misbehaving plugin never affects the others or the

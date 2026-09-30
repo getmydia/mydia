@@ -20,6 +20,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
   alias Mydia.Settings
@@ -140,7 +141,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   def handle_event("edit_settings", %{"slug" => slug}, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
       nil -> {:noreply, socket}
-      config -> {:noreply, assign(socket, :settings, settings_state(config))}
+      config -> {:noreply, open_settings(socket, config)}
     end
   end
 
@@ -273,6 +274,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       :ok ->
         {:noreply, put_flash(socket, :info, "Test #{event_type} dispatched to #{slug}.")}
 
+      {:error, :no_instance} ->
+        {:noreply, put_flash(socket, :error, "#{slug} has no enabled instance to test.")}
+
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "#{slug} is not running — enable it first.")}
     end
@@ -394,6 +398,18 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     {:noreply, socket}
   end
 
+  defp open_settings(socket, config) do
+    if Instances.multi_instance?(config),
+      do: socket,
+      else: assign(socket, :settings, settings_state(config))
+  end
+
+  # The schema whose host-granting fields widen the plugin-wide net:http grant.
+  # A multi_instance plugin's endpoints are approved per instance instead.
+  defp host_grant_schema_of(config) do
+    if Instances.multi_instance?(config), do: [], else: settings_schema_of(config)
+  end
+
   defp load_installed(socket) do
     rows = Settings.list_plugin_configs() |> Enum.map(&row/1)
     assign(socket, :installed, rows)
@@ -405,8 +421,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     capabilities = capabilities_of(config)
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
+    multi_instance = Map.get(config.manifest || %{}, "multi_instance", false) == true
 
     %{
+      multi_instance: multi_instance,
+      instances: if(multi_instance, do: Mydia.Plugins.Instances.list(config.slug), else: []),
       slug: config.slug,
       name: config.name,
       version: config.version,
@@ -422,7 +441,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # Enabled/disabled is a runtime choice after approval; an empty grant means
       # capabilities are still pending approval.
       pending_approval: capabilities != %{} and granted == %{},
-      has_settings: settings_schema != [] or page_writes?(config),
+      # A multi_instance plugin is configured per instance on Media servers; a
+      # plugin-level form would write settings no instance reads. The role
+      # ceilings of a page plugin still live in this modal.
+      has_settings: (settings_schema != [] and not multi_instance) or page_writes?(config),
       # Once approved, the granted net:http reflects the operator-configured host.
       network_hosts: Map.get(granted, "net:http", Map.get(capabilities, "net:http", []))
     }
@@ -544,7 +566,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       version: entry.version,
       capabilities: entry.manifest.capabilities,
       ungranted: %{},
-      settings_schema: entry.manifest.settings_schema
+      settings_schema:
+        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema)
     }
   end
 
@@ -561,7 +584,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asks for on top of what was already approved.
       ungranted:
         (Plugins.needs_reapproval?(config) && Plugins.ungranted_capabilities(config)) || %{},
-      settings_schema: settings_schema_of(config)
+      settings_schema: host_grant_schema_of(config)
     }
   end
 
@@ -572,7 +595,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       enabled: config.enabled,
       granted: config.granted_capabilities || %{},
       ungranted: Plugins.ungranted_capabilities(config),
-      settings_schema: settings_schema_of(config)
+      settings_schema: host_grant_schema_of(config)
     }
   end
 

@@ -592,7 +592,7 @@ defmodule Mydia.Jobs.MediaImport do
           NfoWriter.maybe_write_nfos(download.media_item_id)
         end
 
-        # Notify media servers (Plex, Jellyfin) to scan for new content
+        # Notify native media servers (Jellyfin) to scan for new content
         # This is fire-and-forget (async) - errors won't affect import success
         MediaServerNotifier.notify_all()
 

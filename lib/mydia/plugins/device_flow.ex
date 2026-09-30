@@ -14,6 +14,10 @@ defmodule Mydia.Plugins.DeviceFlow do
   executes during connect and never sees the token — on success the caller stores
   it via `Mydia.Plugins.Connections`.
 
+  A descriptor may set `method` (`"GET"` default, or `"POST"`) for the code
+  request and a static `headers` map sent with the code request and every poll.
+  Polls are always GET.
+
   ## Options (both functions)
 
     * `:allowed_hosts` (required) - the plugin's granted `net:http` hosts
@@ -57,7 +61,8 @@ defmodule Mydia.Plugins.DeviceFlow do
   def request_code(descriptor, client_id, opts) when is_map(descriptor) do
     url = render(descriptor["code_url"], client_id, %{})
 
-    with {:ok, %{status: 200, body: body}} <- get(url, opts),
+    with {:ok, %{status: 200, body: body}} <-
+           send_request(descriptor, request_method(descriptor), url, opts),
          {:ok, data} when is_map(data) <- Jason.decode(body),
          user_code when is_binary(user_code) <- data["user_code"] do
       {:ok,
@@ -88,7 +93,7 @@ defmodule Mydia.Plugins.DeviceFlow do
   def poll(descriptor, codes, client_id, opts) when is_map(descriptor) and is_map(codes) do
     url = render(descriptor["poll_url"], client_id, codes)
 
-    case get(url, opts) do
+    case send_request(descriptor, "GET", url, opts) do
       {:ok, %{status: 200, body: body}} -> classify_200(body)
       {:ok, %{status: 429}} -> :slow_down
       {:ok, %{status: status, body: body}} when status in 400..499 -> classify_4xx(body)
@@ -129,16 +134,40 @@ defmodule Mydia.Plugins.DeviceFlow do
   defp to_id(nil), do: nil
   defp to_id(id), do: to_string(id)
 
-  defp get(url, opts) do
+  defp send_request(descriptor, method, url, opts) do
+    headers =
+      descriptor
+      |> static_headers()
+      |> Map.merge(%{"user-agent" => @user_agent, "accept" => "application/json"})
+
     gate_opts =
       [
         allowed_hosts: Keyword.fetch!(opts, :allowed_hosts),
         slug: Keyword.get(opts, :slug),
-        method: "GET",
-        headers: %{"user-agent" => @user_agent, "accept" => "application/json"}
+        method: method,
+        headers: headers
       ] ++ Keyword.take(opts, [:allow_private, :resolver, :timeout])
 
     Gate.request(url, gate_opts)
+  end
+
+  defp request_method(descriptor) do
+    case descriptor["method"] do
+      method when method in ["GET", "POST"] -> method
+      _ -> "GET"
+    end
+  end
+
+  # Lowercased so a manifest cannot shadow the host's user-agent / accept by
+  # case games.
+  defp static_headers(descriptor) do
+    case descriptor["headers"] do
+      %{} = headers ->
+        Map.new(headers, fn {k, v} -> {String.downcase(to_string(k)), to_string(v)} end)
+
+      _ ->
+        %{}
+    end
   end
 
   defp render(nil, _client_id, _codes), do: ""

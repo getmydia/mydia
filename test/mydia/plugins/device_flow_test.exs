@@ -64,6 +64,24 @@ defmodule Mydia.Plugins.DeviceFlowTest do
       assert result.device_code == "DEVICE_CODE"
     end
 
+    test "honors the descriptor's method and static headers", %{
+      bypass: bypass,
+      descriptor: descriptor
+    } do
+      descriptor =
+        Map.merge(descriptor, %{
+          "method" => "POST",
+          "headers" => %{"X-Client-Identifier" => "mydia-test"}
+        })
+
+      Bypass.expect_once(bypass, "POST", "/oauth/pin", fn conn ->
+        assert Plug.Conn.get_req_header(conn, "x-client-identifier") == ["mydia-test"]
+        Plug.Conn.resp(conn, 200, ~s({"user_code":"ZZ99"}))
+      end)
+
+      assert {:ok, %{user_code: "ZZ99"}} = DeviceFlow.request_code(descriptor, "client-1", opts())
+    end
+
     test "a response without a user code is an error", %{bypass: bypass, descriptor: descriptor} do
       Bypass.expect_once(bypass, "GET", "/oauth/pin", fn conn ->
         Plug.Conn.resp(conn, 200, ~s({"result":"KO"}))
@@ -86,6 +104,25 @@ defmodule Mydia.Plugins.DeviceFlowTest do
 
       assert {:ok, %{access_token: "the-token"}} =
                DeviceFlow.poll(descriptor, %{user_code: "CODE"}, "c", opts())
+    end
+
+    test "polls with GET and the static headers even when the code request is POST", %{
+      bypass: bypass,
+      descriptor: descriptor
+    } do
+      descriptor =
+        Map.merge(descriptor, %{
+          "method" => "POST",
+          "headers" => %{"X-Client-Identifier" => "mydia-test"}
+        })
+
+      Bypass.expect_once(bypass, "GET", "/oauth/pin/AB12CD", fn conn ->
+        assert Plug.Conn.get_req_header(conn, "x-client-identifier") == ["mydia-test"]
+        Plug.Conn.resp(conn, 200, ~s({"access_token":"tok"}))
+      end)
+
+      assert {:ok, %{access_token: "tok"}} =
+               DeviceFlow.poll(descriptor, %{user_code: "AB12CD"}, "client-1", opts())
     end
 
     test "a 200 KO body is pending", %{bypass: bypass, descriptor: descriptor} do

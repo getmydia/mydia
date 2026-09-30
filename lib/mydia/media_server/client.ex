@@ -1,6 +1,6 @@
 defmodule Mydia.MediaServer.Client do
   @moduledoc """
-  Behaviour for media server adapters (Plex, Jellyfin).
+  Behaviour for native media server adapters (Jellyfin).
   """
 
   alias Mydia.MediaServer.Error
@@ -23,6 +23,5 @@ defmodule Mydia.MediaServer.Client do
   @doc """
   Returns the adapter module for the given configuration.
   """
-  def adapter_for(%MediaServerConfig{type: :plex}), do: Mydia.MediaServer.Client.Plex
   def adapter_for(%MediaServerConfig{type: :jellyfin}), do: Mydia.MediaServer.Client.Jellyfin
 end
