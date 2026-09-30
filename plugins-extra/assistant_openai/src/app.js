@@ -11,6 +11,11 @@
 
   const BUSY = "The assistant is busy right now. Try again in a few seconds."
 
+  const modelInput = document.getElementById("model")
+  const modelFixed = document.getElementById("model-fixed")
+  const modelOptions = document.getElementById("model-options")
+  const modelError = document.getElementById("model-error")
+
   const api = async (path, body) => {
     const r = await fetch(`${base}/api/${path}`, {
       method: "POST",
@@ -67,6 +72,7 @@
       const res = await api("chat", { message: text })
       thinking.textContent = res.error || res.reply || ""
       if (res.error) thinking.classList.add("chat-bubble-error")
+      if (res.error && !modelInput.value) modelInput.focus()
       if (res.pending && res.pending.length) window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
     } catch (_) {
       thinking.textContent = "The assistant did not respond."
@@ -81,4 +87,40 @@
     await api("reset")
     log.innerHTML = ""
   })
+
+  const showModelError = (text) => {
+    modelError.textContent = text || ""
+    modelError.classList.toggle("hidden", !text)
+  }
+
+  const loadModels = async () => {
+    const res = await api("models")
+    document.getElementById("provider").textContent = res.provider || ""
+    modelInput.value = res.current || ""
+    if (res.locked) {
+      modelInput.classList.add("hidden")
+      modelFixed.classList.remove("hidden")
+      modelFixed.textContent = res.current || "No model set"
+    }
+    modelOptions.replaceChildren(
+      ...(res.models || []).map((m) => {
+        const o = document.createElement("option")
+        o.value = m.id
+        if (m.name && m.name !== m.id) o.label = m.name
+        return o
+      }),
+    )
+    showModelError(res.error ? `${res.error} You can still type a model id.` : "")
+  }
+
+  modelInput.addEventListener("change", async () => {
+    const res = await api("model", { model: modelInput.value.trim() })
+    if (res.error) showModelError(res.error)
+    else {
+      showModelError("")
+      modelInput.value = res.current || ""
+    }
+  })
+
+  loadModels()
 })()
