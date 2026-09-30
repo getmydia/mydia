@@ -638,10 +638,10 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_info({:request_media, ref, media_type}, socket) do
-    trending = Enum.concat(rail_lists(socket.assigns))
-    id_string = to_string(Ref.id(ref))
-
-    case Enum.find(trending, &(to_string(&1.provider_id) == id_string)) do
+    # Matched on media_type too: the regional rail mixes movies and shows,
+    # and TMDB numbers the two catalogs independently, so an id alone can
+    # resolve a TV request to a movie that happens to share it.
+    case DetailModal.find_selectable_item(rail_lists(socket.assigns), Ref.id(ref), media_type) do
       nil ->
         {:noreply, assign(socket, :requesting_item_id, nil)}
 

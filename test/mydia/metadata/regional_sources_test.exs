@@ -222,5 +222,20 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
 
       assert prefs(user).preferences["discover_streaming_services"] == []
     end
+
+    test "a malformed stored value does not crash a country change", %{user: user} do
+      {:ok, _} = RegionalSources.change_home_country(user, "CA", fn _ -> {:ok, []} end)
+
+      # Written straight to the row, past the changeset, as a hand edit would be.
+      prefs(user)
+      |> Ecto.Changeset.change(
+        preferences: Map.put(prefs(user).preferences, "discover_streaming_services", "junk")
+      )
+      |> Mydia.Repo.update!()
+
+      available = fn "FR" -> {:ok, [%WatchProvider{id: 8002, name: "Northflix"}]} end
+      assert {:ok, _} = RegionalSources.change_home_country(user, "FR", available)
+      assert UserPreference.discover_streaming_services(prefs(user)) == []
+    end
   end
 end

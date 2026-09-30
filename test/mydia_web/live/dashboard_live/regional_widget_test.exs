@@ -36,7 +36,9 @@ defmodule MydiaWeb.DashboardLive.RegionalWidgetTest do
   defp enable_widget(user),
     do: {:ok, _} = Accounts.put_home_widgets(user, Accounts.home_widgets(user) ++ [:regional])
 
-  defp stub_discover(bypass) do
+  # `id_for` maps a title to its TMDB id; pass a constant to give the movie
+  # and the show the same id, as TMDB's separate catalogs can.
+  defp stub_discover(bypass, id_for \\ &:erlang.phash2/1) do
     test_pid = self()
 
     for {path, key, title, date_key, date} <- [
@@ -50,7 +52,7 @@ defmodule MydiaWeb.DashboardLive.RegionalWidgetTest do
         body = %{
           "page" => 1,
           "total_pages" => 1,
-          "results" => [%{"id" => :erlang.phash2(title), key => title, date_key => date}]
+          "results" => [%{"id" => id_for.(title), key => title, date_key => date}]
         }
 
         conn
@@ -114,5 +116,39 @@ defmodule MydiaWeb.DashboardLive.RegionalWidgetTest do
     render_click(view, "select_regional_source", %{"source" => "service-424242"})
 
     assert has_element?(view, "#regional-chip-in_cinemas.btn-primary")
+  end
+
+  describe "a movie and a show sharing a TMDB id" do
+    setup %{conn: conn, bypass: bypass} do
+      guest = Mydia.AccountsFixtures.user_fixture(%{role: "guest"})
+
+      set_prefs(guest, %{
+        "discover_home_country" => "CA",
+        "discover_streaming_services" => [%{"id" => 8001, "name" => "Maplestream"}]
+      })
+
+      enable_widget(guest)
+      stub_discover(bypass, fn _title -> 777_001 end)
+
+      {:ok, view, _html} = live(log_in_user(conn, guest), ~p"/")
+      render_async(view)
+      view |> element("#regional-chip-service-8001") |> render_click()
+      render_async(view)
+
+      %{view: view}
+    end
+
+    test "get distinct card ids", %{view: view} do
+      assert has_element?(view, "#regional-rail-item-777001", "Quiet Lanterns")
+      assert has_element?(view, "#regional-rail-item-777001-tv_show", "The Tidewatch")
+    end
+
+    test "a TV request records the show, not the movie", %{view: view} do
+      render_click(view, "request_media", %{"ref" => "tmdb:777001", "media_type" => "tv_show"})
+
+      assert [request] = Mydia.MediaRequests.list_requests(status: "pending")
+      assert request.title == "The Tidewatch"
+      assert request.media_type == "tv_show"
+    end
   end
 end

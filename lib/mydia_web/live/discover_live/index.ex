@@ -495,6 +495,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
           {:noreply,
            socket
            |> assign(:home_country, code)
+           |> assign(:services_picker, nil)
            |> assign_streaming_services()
            |> assign_regional_sources()
            |> assign(:home_country_picker_open, false)
@@ -514,6 +515,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         socket =
           socket
           |> assign(:home_country, nil)
+          |> assign(:services_picker, nil)
           |> assign_streaming_services()
           |> assign_regional_sources()
           |> assign(:home_country_picker_open, false)

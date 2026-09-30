@@ -268,7 +268,7 @@ defmodule MydiaWeb.DiscoverComponents do
       >
         <div
           :for={item <- @items}
-          id={"#{@id}-item-#{item.provider_id}"}
+          id={rail_item_id(@id, item, @media_type)}
           class="snap-start flex-shrink-0 w-36"
         >
           <.trending_card
@@ -367,6 +367,17 @@ defmodule MydiaWeb.DiscoverComponents do
 
   # A guest requests rather than adds, so the guest branch is gated on the
   # request permission, not on `can_add`.
+  # TMDB numbers movies and shows independently, so a rail that mixes them
+  # (the Home "In your country" rail) can hold a movie and a show with the
+  # same provider_id. The type suffix keeps their DOM ids apart; a card whose
+  # type matches the rail keeps the plain id existing selectors rely on.
+  defp rail_item_id(rail_id, item, rail_media_type) do
+    case Map.get(item, :media_type) do
+      type when type in [nil, rail_media_type] -> "#{rail_id}-item-#{item.provider_id}"
+      type -> "#{rail_id}-item-#{item.provider_id}-#{type}"
+    end
+  end
+
   defp guest?(%{role: "guest"}), do: true
   defp guest?(_), do: false
 

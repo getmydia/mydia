@@ -187,7 +187,7 @@ defmodule Mydia.Metadata.RegionalSources do
   """
   def change_home_country(user, code, available_fun \\ &available_services/1) do
     pref = Accounts.get_user_preference!(user)
-    current = Map.get(pref.preferences || %{}, "discover_streaming_services") || []
+    current = UserPreference.discover_streaming_services(pref)
 
     services =
       cond do
