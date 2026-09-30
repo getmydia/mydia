@@ -144,4 +144,14 @@ defmodule MydiaWeb.MediaLive.PosterFieldsTest do
 
     refute has_element?(view, "#poster-badges-#{movie.id}")
   end
+
+  test "each poster field renders as a labelled toggle", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/tv")
+
+    for {key, _label} <- PosterFields.catalog() do
+      assert has_element?(view, "#poster-field-#{key}.toggle[type=checkbox]")
+    end
+
+    assert has_element?(view, "#poster-fields-menu .menu label[for=poster-field-year]", "Year")
+  end
 end
