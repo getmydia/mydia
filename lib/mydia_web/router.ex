@@ -242,6 +242,9 @@ defmodule MydiaWeb.Router do
       # Paired players and player downloads. Deliberately user-scoped: pairing a
       # device is a user's own action, not an administrator's.
       live "/devices", DevicesLive.Index, :index
+
+      # Plugin pages (surfaces:page)
+      live "/plugins/:slug", PluginPageLive.Show, :show
     end
   end
 

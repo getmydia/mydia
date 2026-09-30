@@ -47,6 +47,17 @@ defmodule Mydia.Plugins.PageWrites do
   @spec surface(String.t()) :: String.t()
   def surface(op), do: Map.fetch!(@surfaces, op)
 
+  @surface_labels %{
+    "playback:watched" => "Watch history",
+    "collections:favorite" => "Favorites",
+    "collections:write" => "Collections",
+    "media:add" => "Adding media"
+  }
+
+  @doc "A human label for a write surface, shown in confirmations and activity."
+  @spec surface_label(String.t()) :: String.t()
+  def surface_label(surface), do: Map.get(@surface_labels, surface, surface)
+
   @spec execute(String.t(), map(), User.t(), String.t()) ::
           {:ok, map(), inverse()} | {:error, Error.t()}
   def execute("watch_state", args, user, origin) do
