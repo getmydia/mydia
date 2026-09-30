@@ -7,7 +7,7 @@ defmodule Mydia.Plugins.Host do
   The host instantiates them through `Wasmex.Components.*` and calls the typed
   `handler.on-event` / `handler.on-schedule` exports, plus (1.5) the typed
   `handler.setup` / `handler.check-health` exports and `page.on-http` for a
-  plugin's own pages (1.4+). A guest built against an older minor (1.0 to 1.4)
+  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.4)
   is served the matching namespace + export, detected from the component bytes
   at `start_plugin` (`detect_contract/1`), so old guests keep working against
   the 1.5 host.
@@ -717,7 +717,7 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  # ── Typed 1.4 results (setup, check-health) ───────────────────────────────
+  # ── Typed 1.5 results (setup, check-health) ───────────────────────────────
 
   # Wasmex hands records back as maps keyed by WIT field names (atoms or
   # strings, kebab-case), variants as {case, payload} tuples, options as
@@ -844,7 +844,7 @@ defmodule Mydia.Plugins.Host do
   # catch-all keeps an unexpected shape from raising in the marker path.
   defp classify_outcome(_handler, _other), do: {:error, "unknown", nil}
 
-  # Typed 1.4 results get a fixed, allow-listed summary. Setup state can carry
+  # Typed 1.5 results get a fixed, allow-listed summary. Setup state can carry
   # PINs, ids or tokens (`next_state_json`, `credentials`) and `error`/`message`
   # are guest free text, so none of them may reach the activity log.
   defp typed_summary(:setup, %{step: step, body: {tag, _}}), do: "step=#{step} body=#{tag}"

@@ -777,6 +777,38 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       refute has_element?(view, "#detail-host-grant")
     end
+
+    test "a multi_instance plugin with page writes keeps Settings button enabled", %{conn: conn} do
+      config =
+        seed_plugin("plex", "Plex",
+          granted: %{
+            "events:subscribe" => [],
+            "surfaces:page" => [],
+            "surfaces:write" => ["collections:write"]
+          },
+          enabled: true
+        )
+
+      manifest =
+        "plex"
+        |> manifest_map("Plex")
+        |> Map.put("multi_instance", true)
+        |> Map.update!("capabilities", fn caps ->
+          Map.merge(caps, %{
+            "surfaces:page" => [],
+            "surfaces:write" => ["collections:write"]
+          })
+        end)
+
+      {:ok, _} = Settings.update_plugin_config(config, %{manifest: manifest})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/plugins")
+
+      # Settings button should be enabled (not disabled) because there are page_writes
+      # (even though the modal won't open for multi_instance, the button should not be disabled)
+      refute has_element?(view, "#settings-plex[disabled]")
+      refute render(view) =~ "Configured per server on Media servers"
+    end
   end
 
   describe "page write ceilings and private hosts" do

@@ -1,15 +1,15 @@
 defmodule Mydia.Plugins.InstanceHealth do
   @moduledoc """
   Cached health for plugin instances, from the guest's `check-health` export
-  (contract 1.4).
+  (contract 1.5).
 
   Same shape as `Mydia.MediaServer.Health`: a GenServer over an ETS cache and a
-  5-minute background loop over every enabled instance of every enabled 1.4
+  5-minute background loop over every enabled instance of every enabled 1.5
   plugin. `status_map/1` never performs I/O, so a LiveView mount cannot block
   on an unreachable server. "Test" in the admin UI calls `check/2` with
   `force: true`.
 
-  A pre-1.4 guest has no `check-health` export, so its instances report
+  A pre-1.5 guest has no `check-health` export, so its instances report
   `:unsupported` and the guest is never called.
   """
 
@@ -125,7 +125,7 @@ defmodule Mydia.Plugins.InstanceHealth do
           checked_at: DateTime.utc_now()
         }
 
-      # A guest that predates the 1.4 exports (or a manifest without `setup`)
+      # A guest that predates the 1.5 exports (or a manifest without `setup`)
       # is reported as :unsupported; that is not an outage.
       {:error, %Error{type: :unsupported}} ->
         unsupported()
