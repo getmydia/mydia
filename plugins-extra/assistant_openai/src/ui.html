@@ -7,6 +7,13 @@
   <title>Assistant</title>
 </head>
 <body class="bg-base-100 text-base-content h-screen flex flex-col">
+  <header id="model-bar" class="px-3 py-2 border-b border-base-300 flex items-center gap-2 text-sm">
+    <span id="provider" class="badge badge-ghost"></span>
+    <input id="model" list="model-options" class="input input-bordered input-sm flex-1" autocomplete="off" placeholder="Model" />
+    <span id="model-fixed" class="hidden flex-1 truncate"></span>
+    <datalist id="model-options"></datalist>
+  </header>
+  <p id="model-error" class="hidden px-3 pt-1 text-xs text-base-content/60"></p>
   <main id="log" class="flex-1 overflow-y-auto p-4 space-y-3"></main>
   <form id="composer" class="p-3 border-t border-base-300 flex gap-2">
     <button type="button" id="reset" class="btn btn-ghost btn-sm" title="New chat">New</button>

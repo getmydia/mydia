@@ -4,9 +4,11 @@
 
 mod chat;
 mod history;
+mod models;
+mod provider;
 mod tools;
 
-use chat::{Config, Reply};
+use chat::Reply;
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{Event, OutboundRequest, PageRequest, PageResponse};
 use serde_json::{json, Value};
@@ -36,6 +38,16 @@ fn body(req: &PageRequest) -> Value {
     req.body.as_deref().and_then(|b| serde_json::from_str(b).ok()).unwrap_or_else(|| json!({}))
 }
 
+fn settings(req: &PageRequest) -> Result<Value, String> {
+    serde_json::from_str(&req.config_json).map_err(|_| "settings are not valid JSON".to_string())
+}
+
+/// The user's stored pick, only when it was made for the provider selected now.
+fn user_pick(user_id: &str, settings: &Value) -> Option<String> {
+    let raw = host::kv_get(&models::key(user_id)).ok().flatten()?;
+    models::decode_pick(&raw, provider::selected(settings).label)
+}
+
 fn load(user_id: &str) -> Vec<Value> {
     history::decode(host::kv_get(&history::key(user_id)).ok().flatten())
 }
@@ -57,6 +69,8 @@ fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
             let _ = host::kv_delete(&history::key(&req.user_id));
             respond_json(200, json!({"ok": true}))
         }
+        ("POST", "/api/models") => list_models(&req),
+        ("POST", "/api/model") => choose_model(&req),
         _ => respond_json(404, json!({"error": "not found"})),
     }
 }
@@ -111,10 +125,74 @@ fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
     respond_json(200, json!({"ok": true}))
 }
 
-fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
-    let cfg = match Config::from_json(&req.config_json) {
-        Ok(c) => c,
+fn models_response(settings: &Value, pick: Option<&str>, listed: Result<Vec<models::ModelInfo>, String>) -> Value {
+    let mut out = json!({
+        "provider": provider::selected(settings).label,
+        "current": models::effective(settings, pick),
+        "locked": models::locked(settings),
+        "models": [],
+    });
+    match listed {
+        Ok(list) => out["models"] = json!(list),
+        Err(e) => out["error"] = json!(e),
+    }
+    out
+}
+
+/// The provider's models for the picker. A failure still answers 200 so the
+/// page falls back to typing a model id.
+fn list_models(req: &PageRequest) -> Result<PageResponse, String> {
+    let settings = match settings(req) {
+        Ok(s) => s,
+        Err(e) => return respond_json(200, json!({"error": e, "models": []})),
+    };
+    let pick = user_pick(&req.user_id, &settings);
+    let listed = if models::locked(&settings) {
+        Ok(vec![])
+    } else {
+        provider::resolve(&settings).and_then(|endpoint| {
+            let resp = host::http_request(&OutboundRequest { url: endpoint.models_url(), method: "GET".into(), headers: endpoint.models_headers(), body: None })
+                .map_err(|e| format!("Could not list models. {}", tools::host_error_text(&e)))?;
+            models::parse(resp.status, resp.body.as_deref().unwrap_or(""))
+        })
+    };
+    respond_json(200, models_response(&settings, pick.as_deref(), listed))
+}
+
+fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
+    let settings = match settings(req) {
+        Ok(s) => s,
         Err(e) => return respond_json(200, json!({"error": e})),
+    };
+    if models::locked(&settings) {
+        return respond_json(403, json!({"error": "An admin has chosen the model for everyone."}));
+    }
+    let pick = body(req)["model"].as_str().unwrap_or("").trim().to_string();
+    let key = models::key(&req.user_id);
+    if pick.is_empty() {
+        if host::kv_delete(&key).is_err() {
+            return respond_json(200, json!({"error": "Could not clear your model choice."}));
+        }
+    } else if !models::valid_id(&pick) {
+        return respond_json(400, json!({"error": "That is not a valid model id."}));
+    } else if host::kv_set(&key, &models::encode_pick(provider::selected(&settings).label, &pick)).is_err() {
+        return respond_json(200, json!({"error": "Could not save your model choice."}));
+    }
+    let picked = (!pick.is_empty()).then_some(pick.as_str());
+    respond_json(200, json!({"current": models::effective(&settings, picked)}))
+}
+
+fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
+    let settings = match settings(req) {
+        Ok(s) => s,
+        Err(e) => return respond_json(200, json!({"error": e})),
+    };
+    let endpoint = match provider::resolve(&settings) {
+        Ok(e) => e,
+        Err(e) => return respond_json(200, json!({"error": e})),
+    };
+    let Some(model) = models::effective(&settings, user_pick(&req.user_id, &settings).as_deref()) else {
+        return respond_json(200, json!({"error": models::missing_message(&settings)}));
     };
     let text = body(req)["message"].as_str().unwrap_or("").trim().to_string();
     if text.is_empty() {
@@ -130,7 +208,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         let mut convo = vec![json!({"role": "system", "content": SYSTEM_PROMPT})];
         convo.extend(msgs.iter().cloned());
 
-        let resp = host::http_request(&OutboundRequest { url: cfg.url(), method: "POST".into(), headers: cfg.headers(), body: Some(chat::request_body(&cfg, &convo, &defs)) });
+        let resp = host::http_request(&OutboundRequest { url: endpoint.chat_url(), method: "POST".into(), headers: endpoint.chat_headers(), body: Some(chat::request_body(&model, &convo, &defs)) });
         let resp = match resp {
             Ok(r) => r,
             Err(e) => {
@@ -142,7 +220,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         match chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")) {
             Err(e) => {
                 save(&req.user_id, msgs);
-                return respond_json(200, json!({"error": e, "pending": pending}));
+                return respond_json(200, json!({"error": format!("{} ({model}): {e}", endpoint.preset.label), "pending": pending}));
             }
             Ok(Reply::Text { message, text }) => {
                 msgs.push(message);
@@ -179,6 +257,24 @@ mod tests {
     use super::*;
 
     const ID: &str = "0b9f6c1e-4d2a-4c55-9e0a-1f2d3c4b5a69";
+
+    #[test]
+    fn models_response_shape() {
+        let s = json!({"provider": "OpenAI", "model": "admin-m"});
+        let ok = models_response(&s, Some("user-m"), Ok(vec![models::ModelInfo { id: "a".into(), name: "A".into() }]));
+        assert_eq!(ok, json!({"provider": "OpenAI", "current": "user-m", "locked": false, "models": [{"id": "a", "name": "A"}]}));
+
+        let err = models_response(&s, None, Err("boom".into()));
+        assert_eq!(err["models"], json!([]));
+        assert_eq!(err["error"], "boom");
+        assert_eq!(err["current"], "admin-m");
+
+        let locked = json!({"model": "admin-m", "model_choice": "Admin model only"});
+        let l = models_response(&locked, Some("user-m"), Ok(vec![]));
+        assert_eq!(l["locked"], true);
+        assert_eq!(l["current"], "admin-m");
+        assert_eq!(l["provider"], provider::CUSTOM);
+    }
 
     #[test]
     fn confirmed_lists_validated_ids_and_flags() {

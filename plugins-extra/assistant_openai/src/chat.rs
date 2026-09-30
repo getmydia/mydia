@@ -2,38 +2,8 @@
 
 use serde_json::{json, Value};
 
-pub struct Config {
-    pub base_url: String,
-    pub api_key: String,
-    pub model: String,
-}
-
-impl Config {
-    pub fn from_json(raw: &str) -> Result<Config, String> {
-        let v: Value = serde_json::from_str(raw).map_err(|_| "settings are not valid JSON".to_string())?;
-        let base_url = v["base_url"].as_str().unwrap_or("").trim().trim_end_matches('/').to_string();
-        let model = v["model"].as_str().unwrap_or("").trim().to_string();
-        if base_url.is_empty() || model.is_empty() {
-            return Err("An admin needs to set the API base URL and model in the plugin settings.".into());
-        }
-        Ok(Config { base_url, api_key: v["api_key"].as_str().unwrap_or("").trim().to_string(), model })
-    }
-
-    pub fn url(&self) -> String {
-        format!("{}/chat/completions", self.base_url)
-    }
-
-    pub fn headers(&self) -> Vec<(String, String)> {
-        let mut h = vec![("content-type".to_string(), "application/json".to_string())];
-        if !self.api_key.is_empty() {
-            h.push(("authorization".to_string(), format!("Bearer {}", self.api_key)));
-        }
-        h
-    }
-}
-
-pub fn request_body(cfg: &Config, messages: &[Value], tools: &Value) -> String {
-    json!({ "model": cfg.model, "messages": messages, "tools": tools, "tool_choice": "auto" }).to_string()
+pub fn request_body(model: &str, messages: &[Value], tools: &Value) -> String {
+    json!({ "model": model, "messages": messages, "tools": tools, "tool_choice": "auto" }).to_string()
 }
 
 pub struct ToolCall {
@@ -111,17 +81,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_requires_url_and_model() {
-        assert!(Config::from_json("{}").is_err());
-        let c = Config::from_json(r#"{"base_url":"http://x/v1/","model":"m"}"#).unwrap();
-        assert_eq!(c.url(), "http://x/v1/chat/completions");
-        assert_eq!(c.headers().len(), 1);
-    }
-
-    #[test]
-    fn api_key_adds_bearer() {
-        let c = Config::from_json(r#"{"base_url":"https://a/v1","model":"m","api_key":"k"}"#).unwrap();
-        assert!(c.headers().contains(&("authorization".into(), "Bearer k".into())));
+    fn request_body_carries_the_model() {
+        let body: Value = serde_json::from_str(&request_body("m-1", &[json!({"role":"user","content":"hi"})], &json!([]))).unwrap();
+        assert_eq!(body["model"], "m-1");
+        assert_eq!(body["tool_choice"], "auto");
+        assert_eq!(body["messages"][0]["content"], "hi");
     }
 
     #[test]
