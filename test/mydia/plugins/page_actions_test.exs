@@ -354,6 +354,15 @@ defmodule Mydia.Plugins.PageActionsTest do
                )
     end
 
+    test "executing media_add without preparing it is an error, not I/O", %{user: user} do
+      args = %{"media_type" => "movie", "provider" => "tmdb", "provider_id" => 1}
+
+      assert {:error, %{message: msg}} =
+               Mydia.Plugins.PageWrites.execute("media_add", args, user, "plugin:helper")
+
+      assert msg =~ "prepared"
+    end
+
     test "without a grant the confirmation text carries the relay title", %{
       plugin: plugin,
       user: user

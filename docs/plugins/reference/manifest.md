@@ -201,8 +201,8 @@ navigation entry:
 ```
 
 - `title` is 1 to 40 characters.
-- `icon` is one of a fixed set of Heroicons names (the host only ships the CSS
-  for icons it uses itself, so an arbitrary name would render blank):
+- `icon` is one of a fixed set of Heroicons names (the host builds the CSS for
+  a fixed set of icons ahead of time, so an arbitrary name would render blank):
   `hero-sparkles`, `hero-bookmark`, `hero-book-open`,
   `hero-chat-bubble-left-right`, `hero-film`, `hero-tv`, `hero-star`,
   `hero-heart`, `hero-bolt`, `hero-fire`, `hero-globe-alt`, `hero-beaker`,

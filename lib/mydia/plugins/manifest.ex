@@ -138,11 +138,11 @@ defmodule Mydia.Plugins.Manifest do
   # the page functions; `media:add` and `collections:write` are page-only.
   @write_surfaces ~w(playback:watched collections:favorite media:add collections:write)
 
-  # Icons a plugin page descriptor may use in the navbar.
-  # Tailwind emits an icon's CSS only when the class name appears literally in
-  # source, so an arbitrary name would render as an empty box in the navbar.
-  # Every name below is written out here for that reason: keep the list literal
-  # (no generated names), and add a name only to this list.
+  # Icons a plugin page descriptor may use in the navbar. The name is chosen at
+  # runtime, so Tailwind cannot find the class in markup, and this file is
+  # outside its @source globs. The names are therefore also safelisted in
+  # assets/css/app.css; test/mydia/plugins/page_icon_safelist_test.exs keeps the
+  # two lists identical. Add a name to both.
   @page_icons ~w(
     hero-sparkles hero-bookmark hero-book-open hero-chat-bubble-left-right
     hero-film hero-tv hero-star hero-heart hero-bolt hero-fire hero-globe-alt

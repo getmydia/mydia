@@ -200,11 +200,10 @@ defmodule Mydia.Plugins.PageWrites do
     end
   end
 
-  def execute("media_add", args, user, _origin, prepared) do
+  def execute("media_add", _args, user, _origin, prepared) do
     scope = Scope.for_user(user)
 
-    with {:ok, %{attrs: attrs, defaults: defaults}} <-
-           prepared_or_prepare("media_add", args, user, prepared) do
+    with {:ok, %{attrs: attrs, defaults: defaults}} <- require_prepared(prepared) do
       case Media.Add.from_attrs(scope, attrs, nil, Media.AddDefaults.to_add_opts(defaults)) do
         {:ok, item} ->
           Mydia.Search.maybe_queue_search(item, defaults.search_on_add)
@@ -542,8 +541,12 @@ defmodule Mydia.Plugins.PageWrites do
   defp provider_atom("tmdb"), do: :tmdb
   defp provider_atom("tvdb"), do: :tvdb
 
-  defp prepared_or_prepare(op, args, user, nil), do: prepare(op, args, user)
-  defp prepared_or_prepare(_op, _args, _user, prepared), do: {:ok, prepared}
+  # Preparing does network work, so execute never does it itself: a caller that
+  # forgets to prepare gets an error instead of I/O inside its transaction.
+  defp require_prepared(%{attrs: _, defaults: _} = prepared), do: {:ok, prepared}
+
+  defp require_prepared(_),
+    do: {:error, Error.new(:unknown, "media_add must be prepared before it is executed")}
 
   defp write_error(op, %Ecto.Changeset{} = cs),
     do: Error.new(:invalid_request, "#{op}: #{inspect(cs.errors)}")
