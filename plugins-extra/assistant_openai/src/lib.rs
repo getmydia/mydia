@@ -170,7 +170,9 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
     let pick = body(req)["model"].as_str().unwrap_or("").trim().to_string();
     let key = models::key(&req.user_id);
     if pick.is_empty() {
-        let _ = host::kv_delete(&key);
+        if host::kv_delete(&key).is_err() {
+            return respond_json(200, json!({"error": "Could not clear your model choice."}));
+        }
     } else if !models::valid_id(&pick) {
         return respond_json(400, json!({"error": "That is not a valid model id."}));
     } else if host::kv_set(&key, &models::encode_pick(provider::selected(&settings).label, &pick)).is_err() {
