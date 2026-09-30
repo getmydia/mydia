@@ -53,6 +53,7 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins
   alias Mydia.Plugins.AccountLink
   alias Mydia.Plugins.AccountLinks
+  alias Mydia.Plugins.Endpoints
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Instance
@@ -99,7 +100,7 @@ defmodule Mydia.Plugins.HostFunctions do
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
       v13 = %{
-        "http-request" => {:fn, http_import(slug, gate_opts)},
+        "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
         # ── 1.1.0 ──
@@ -327,11 +328,16 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # ── http-request import ────────────────────────────────────────────────────
 
-  defp http_import(slug, gate_opts) do
+  defp http_import(slug, ctx, gate_opts) do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
-             {:ok, resp} <- http_request(plugin, from_outbound_request(req), gate_opts) do
+             {:ok, resp} <-
+               http_request(
+                 plugin,
+                 from_outbound_request(req),
+                 [instance: ctx_instance(ctx)] ++ gate_opts
+               ) do
           {:ok, to_outbound_response(resp)}
         end
       end)
@@ -526,23 +532,22 @@ defmodule Mydia.Plugins.HostFunctions do
   "body" => "..."}`.
 
   `opts` are host-side only (e.g. the `:allow_private` test seam) — never derived
-  from the guest request.
+  from the guest request. `:instance` is the invoking `%Instance{}`; its approved
+  endpoints join the gate options.
   """
   @spec http_request(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
   def http_request(%Plugin{} = plugin, request, opts \\ []) do
     with :ok <- require_capability(plugin, "net:http"),
          {:ok, url} <- fetch_string(request, "url"),
          :ok <- require_granted_host(plugin, url) do
-      hosts = Plugin.granted_http_hosts(plugin)
-
       gate_opts =
-        [
-          allowed_hosts: hosts,
-          slug: plugin.slug,
-          method: Map.get(request, "method", "GET"),
-          headers: Map.get(request, "headers", %{}),
-          body: Map.get(request, "body")
-        ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+        Endpoints.gate_opts(plugin, Keyword.get(opts, :instance)) ++
+          [
+            slug: plugin.slug,
+            method: Map.get(request, "method", "GET"),
+            headers: Map.get(request, "headers", %{}),
+            body: Map.get(request, "body")
+          ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}
@@ -1138,13 +1143,13 @@ defmodule Mydia.Plugins.HostFunctions do
         |> Map.put(name, String.replace(template, "{token}", link.access_token))
 
       gate_opts =
-        [
-          allowed_hosts: Plugin.granted_http_hosts(plugin),
-          slug: plugin.slug,
-          method: Map.get(request, "method", "GET"),
-          headers: headers,
-          body: Map.get(request, "body")
-        ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+        Endpoints.gate_opts(plugin, instance) ++
+          [
+            slug: plugin.slug,
+            method: Map.get(request, "method", "GET"),
+            headers: headers,
+            body: Map.get(request, "body")
+          ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}

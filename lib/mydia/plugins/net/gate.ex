@@ -28,6 +28,11 @@ defmodule Mydia.Plugins.Net.Gate do
        returned verbatim (never followed), so a `Location` pointing at a private
        IP cannot escape the gate. Responses past `max_bytes` are rejected.
 
+  **Approved endpoints** are the one production exception: a request whose
+  scheme, host and port exactly match an entry in `:approved_endpoints` (the
+  plugin instance's operator-confirmed endpoints) skips the allowlist and may
+  resolve to a private address. Nothing a guest sends can add one.
+
   Every call emits a `plugin` audit event (slug, URL, status, byte size) so
   egress is queryable and surfaceable in the admin UI (U9).
 
@@ -68,16 +73,19 @@ defmodule Mydia.Plugins.Net.Gate do
     * `:timeout` — connect/receive timeout in ms (default 5000)
     * `:resolver` — `(host -> {:ok, [ip_tuple]} | {:error, term})`, injected in tests
     * `:allow_private` — test seam (see moduledoc)
+    * `:approved_endpoints` - exact `%{"scheme", "host", "port"}` entries the operator approved
   """
   @spec request(String.t(), keyword()) :: {:ok, result()} | {:error, Error.t()}
   def request(url, opts) when is_binary(url) do
     allowed = Keyword.get(opts, :allowed_hosts, [])
+    approved_endpoints = Keyword.get(opts, :approved_endpoints, [])
     started = System.monotonic_time()
 
     outcome =
       with {:ok, uri} <- parse_url(url),
-           :ok <- check_allowlist(uri.host, allowed),
-           {:ok, ip} <- resolve_and_validate(uri.host, opts) do
+           approved? = approved_endpoint?(uri, approved_endpoints),
+           :ok <- check_allowlist(uri.host, allowed, approved?),
+           {:ok, ip} <- resolve_and_validate(uri.host, private_opts(opts, approved?)) do
         perform(uri, ip, opts)
       end
 
@@ -87,6 +95,12 @@ defmodule Mydia.Plugins.Net.Gate do
     audit(url, outcome, duration_ms, opts)
     outcome
   end
+
+  # An approved endpoint is operator-confirmed (typed into a host-granting
+  # setting or picked in a setup `choice` step), so it may resolve to a private
+  # address. Nothing else may: the test seam stays the only other way in.
+  defp private_opts(opts, true), do: Keyword.put(opts, :allow_private, true)
+  defp private_opts(opts, false), do: opts
 
   # ── 1. Parse & normalize ──────────────────────────────────────────────────
 
@@ -124,7 +138,9 @@ defmodule Mydia.Plugins.Net.Gate do
 
   # ── 2. Exact-hostname allowlist ───────────────────────────────────────────
 
-  defp check_allowlist(host, allowed) do
+  defp check_allowlist(_host, _allowed, true), do: :ok
+
+  defp check_allowlist(host, allowed, false) do
     host_down = String.downcase(host)
     allowed_down = Enum.map(allowed, &String.downcase/1)
 
@@ -135,6 +151,30 @@ defmodule Mydia.Plugins.Net.Gate do
        Error.new(:capability_denied, "host #{host} is not on the plugin's net:http allowlist")}
     end
   end
+
+  # Exact scheme + host + port match against the instance's approved endpoints.
+  # `URI.parse/1` already fills the scheme's default port, so an endpoint on 80
+  # approves `http://host/`.
+  defp approved_endpoint?(%URI{scheme: scheme, host: host, port: port}, endpoints) do
+    host = String.downcase(host)
+
+    Enum.any?(endpoints, fn ep ->
+      String.downcase(to_string(ep["scheme"])) == scheme and
+        String.downcase(to_string(ep["host"])) == host and
+        endpoint_port(ep["port"]) == port
+    end)
+  end
+
+  defp endpoint_port(port) when is_integer(port), do: port
+
+  defp endpoint_port(port) when is_binary(port) do
+    case Integer.parse(port) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp endpoint_port(_), do: nil
 
   # ── 3. Resolve & validate ─────────────────────────────────────────────────
 
