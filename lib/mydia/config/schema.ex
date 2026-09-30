@@ -58,6 +58,7 @@ defmodule Mydia.Config.Schema do
           media_servers: [__MODULE__.MediaServer.t()],
           library_paths: [__MODULE__.LibraryPath.t()],
           plugin_installs: [__MODULE__.PluginInstall.t()],
+          plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
           path_mappings: [__MODULE__.PathMapping.t()]
         }
 
@@ -401,6 +402,18 @@ defmodule Mydia.Config.Schema do
       field :granted_capabilities, :map, default: %{}
     end
 
+    # Env/YAML-declared plugin instances (PLUGIN_<SLUG>_<N>_*, `plugin_instances:`).
+    # Mydia.Plugins.RuntimeInstances persists them as read-only DB rows at boot.
+    # `legacy_source` marks entries translated from the deprecated Plex form of
+    # MEDIA_SERVER_<N>_* / `media_servers:`.
+    embeds_many :plugin_instances, PluginInstanceDecl, on_replace: :delete, primary_key: false do
+      field :plugin, :string
+      field :name, :string
+      field :enabled, :boolean, default: true
+      field :settings, :map, default: %{}
+      field :legacy_source, :string
+    end
+
     embeds_many :path_mappings, PathMapping, on_replace: :delete, primary_key: false do
       field :remote_prefix, :string
       field :local_prefix, :string
@@ -433,6 +446,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_installs, with: &plugin_install_changeset/2)
+    |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:path_mappings, with: &path_mapping_changeset/2)
     |> validate_configuration()
   end
@@ -943,6 +957,19 @@ defmodule Mydia.Config.Schema do
     end
   end
 
+  defp plugin_instance_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:plugin, :name, :enabled, :settings, :legacy_source])
+    # The YAML loader atomizes keys; instance settings are string-keyed everywhere else.
+    |> update_change(:settings, fn settings ->
+      Map.new(settings, fn {key, value} -> {to_string(key), value} end)
+    end)
+    |> validate_required([:plugin, :name])
+    |> validate_format(:plugin, ~r/^[a-z][a-z0-9_]*$/,
+      message: "must be a plugin slug (lowercase letters, digits, underscores)"
+    )
+  end
+
   defp plugin_install_changeset(schema, attrs) do
     schema
     |> cast(attrs, [
@@ -1105,6 +1132,7 @@ defmodule Mydia.Config.Schema do
       media_servers: [],
       library_paths: [],
       plugin_installs: [],
+      plugin_instances: [],
       path_mappings: []
     }
 
