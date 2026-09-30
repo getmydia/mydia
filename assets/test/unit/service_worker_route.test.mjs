@@ -21,27 +21,32 @@ test("cache name is bumped so old caches are purged", () => {
   assert.equal(CACHE_NAME, "mydia-v2");
 });
 
-test("digested assets are static", () => {
-  assert.equal(route(req("/assets/js/app-0123456789abcdef0123456789abcdef.js?vsn=d"), ORIGIN), "static");
-  assert.equal(route(req("/assets/css/app-0123456789abcdef0123456789abcdef.css"), ORIGIN), "static");
+test("digested assets pass through to HTTP caching", () => {
+  assert.equal(route(req("/assets/js/app-0123456789abcdef0123456789abcdef.js"), ORIGIN), "passthrough");
 });
 
-test("undigested assets pass through so dev never serves stale code", () => {
-  assert.equal(route(req("/assets/js/app.js"), ORIGIN), "passthrough");
+test("icons pass through", () => {
+  assert.equal(route(req("/images/icons/apple-touch-icon.png"), ORIGIN), "passthrough");
 });
 
-test("precached shell files are static", () => {
-  for (const path of ["/offline.html", "/images/logo.svg", "/images/icons/apple-touch-icon.png", "/favicon.ico"]) {
-    assert.equal(route(req(path), ORIGIN), "static", path);
-  }
+test("the offline page itself passes through unless navigated to", () => {
+  assert.equal(route(req("/offline.html"), ORIGIN), "passthrough");
 });
 
 test("navigations are navigate", () => {
   assert.equal(route(req("/movies", { mode: "navigate" }), ORIGIN), "navigate");
 });
 
-test("api, live, player, streams and downloads pass through", () => {
-  for (const path of ["/api/v1/media/1", "/api/graphql", "/live/websocket", "/phoenix/live_reload", "/player/main.dart.js"]) {
+test("reserved prefixes pass through", () => {
+  for (const path of [
+    "/api/v1/media/1",
+    "/api/v1/stream/1/index.m3u8",
+    "/api/v1/downloads/1/file",
+    "/api/graphql",
+    "/live/websocket",
+    "/phoenix/live_reload",
+    "/player/main.dart.js",
+  ]) {
     assert.equal(route(req(path), ORIGIN), "passthrough", path);
   }
 });

@@ -1,19 +1,17 @@
 // Mydia service worker.
 //
-// An allowlist: it only ever touches fingerprinted static files, a handful of
-// shell files, and page navigations (for the offline page). Everything else,
-// including the API, LiveView, media streams, downloads, range requests and the
-// Flutter player under /player, is left to the browser untouched. Caching those
-// filled the origin's storage quota with video and replayed authenticated API
-// responses offline.
+// It caches exactly one thing: the offline page, shown when a page navigation
+// cannot reach the server. Static assets are not cached here because
+// fingerprinted files already carry long-lived HTTP cache headers. Everything
+// else, including the API, LiveView, media streams, downloads, range requests
+// and the Flutter player under /player, is left to the browser untouched.
+// Caching those filled the origin's storage quota with video and replayed
+// authenticated API responses offline.
 const CACHE_NAME = "mydia-v2";
 const OFFLINE_URL = "/offline.html";
 
-const PRECACHE = [OFFLINE_URL, "/images/logo.svg", "/favicon.ico"];
-
-// Phoenix digests file names as `name-<32 hex>.ext`.
-const DIGESTED = /-[0-9a-f]{32}\.[a-z0-9]+$/;
 const PASSTHROUGH_PREFIXES = ["/api", "/live", "/phoenix", "/player"];
+const GATEWAY_ERRORS = [502, 503, 504];
 
 function route(request, origin) {
   if (request.method !== "GET") return "passthrough";
@@ -25,37 +23,37 @@ function route(request, origin) {
     return "passthrough";
   }
 
-  if (request.mode === "navigate") return "navigate";
-
-  if (DIGESTED.test(url.pathname) || PRECACHE.includes(url.pathname) || url.pathname.startsWith("/images/icons/")) {
-    return "static";
-  }
-
-  return "passthrough";
+  return request.mode === "navigate" ? "navigate" : "passthrough";
 }
 
-async function cacheFirst(request) {
+async function cachedOfflinePage() {
   const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(request);
-  if (cached) return cached;
-
-  const response = await fetch(request);
-  if (response.status === 200) await cache.put(request, response.clone());
-  return response;
+  return cache.match(OFFLINE_URL);
 }
 
 async function networkWithOfflineFallback(request) {
+  let response;
   try {
-    return await fetch(request);
+    response = await fetch(request);
   } catch (_error) {
-    const cache = await caches.open(CACHE_NAME);
-    return (await cache.match(OFFLINE_URL)) || Response.error();
+    return (await cachedOfflinePage()) || Response.error();
   }
+
+  if (GATEWAY_ERRORS.includes(response.status)) {
+    return (await cachedOfflinePage()) || response;
+  }
+  return response;
 }
 
 if (typeof self !== "undefined" && typeof self.addEventListener === "function") {
   self.addEventListener("install", (event) => {
-    event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE)));
+    // Swallow failures so the worker still installs when offline.html cannot be fetched (e.g. an auth proxy redirects it).
+    event.waitUntil(
+      caches
+        .open(CACHE_NAME)
+        .then((cache) => cache.add(OFFLINE_URL))
+        .catch(() => {})
+    );
     self.skipWaiting();
   });
 
@@ -69,17 +67,10 @@ if (typeof self !== "undefined" && typeof self.addEventListener === "function") 
   });
 
   self.addEventListener("fetch", (event) => {
-    switch (route(event.request, self.location.origin)) {
-      case "static":
-        event.respondWith(cacheFirst(event.request));
-        break;
-      case "navigate":
-        event.respondWith(networkWithOfflineFallback(event.request));
-        break;
-      default:
-        // passthrough: no respondWith, the browser handles it.
-        break;
+    if (route(event.request, self.location.origin) === "navigate") {
+      event.respondWith(networkWithOfflineFallback(event.request));
     }
+    // passthrough: no respondWith, the browser handles it.
   });
 }
 
