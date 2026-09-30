@@ -106,6 +106,10 @@ defmodule Mydia.Plugins.Host do
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
 
+  # How long a page call waits for its user lock and a page slot before it
+  # answers `:busy`.
+  @page_wait_ms 2_000
+
   @type slug :: String.t()
 
   # A per-invocation context handed to an imports builder so host-function
@@ -147,6 +151,9 @@ defmodule Mydia.Plugins.Host do
       # or 1.1 host interface is served the 1.0 namespace + export.
       :persistent_term.put({__MODULE__, :contract, slug}, detect_contract(wasm_bytes))
 
+      pool_size = Keyword.get(opts, :pool_size, config().pool_size)
+      :persistent_term.put({__MODULE__, :pool_size, slug}, pool_size)
+
       worker_arg = %{
         slug: slug,
         bytes: wasm_bytes,
@@ -155,7 +162,7 @@ defmodule Mydia.Plugins.Host do
 
       pool_opts = [
         worker: {__MODULE__, worker_arg},
-        pool_size: Keyword.get(opts, :pool_size, config().pool_size),
+        pool_size: pool_size,
         lazy: true,
         name: via(slug)
       ]
@@ -179,6 +186,7 @@ defmodule Mydia.Plugins.Host do
     # Drop the memoized contract-version verdict so a re-installed (possibly
     # rebuilt) artifact is re-detected on next start.
     :persistent_term.erase({__MODULE__, :contract, slug})
+    :persistent_term.erase({__MODULE__, :pool_size, slug})
     :ok
   end
 
@@ -205,6 +213,8 @@ defmodule Mydia.Plugins.Host do
       `:on_http` call. Host-verified by the caller; the page payload's own
       values for these are overwritten. `:on_http` invocations lock per user
       rather than per plugin.
+    * `:page_wait_ms` - how long an `:on_http` call waits for its user lock and a
+      page slot before returning a `:busy` error (default 2000)
     * `:single_flight` - `:wait` (default; block until the plugin's lock is free)
       or `:skip` (return a `:busy` error if a sibling invocation is in flight —
       the scheduler's non-reentrancy)
@@ -236,20 +246,78 @@ defmodule Mydia.Plugins.Host do
 
     # Serialize invocations per plugin so shared KV state is consistent (U4). A
     # `:skip` acquirer (the scheduler) bails out without running when busy; a
-    # `:wait` acquirer queues behind the in-flight invocation. Page invocations
-    # lock per user instead: a slow page call must not stall every other user's
-    # page or the plugin's events, and page state lives in per-user keys, so
-    # per-user serialization keeps it consistent.
-    case SingleFlight.run(lock_key(invocation), mode, fn -> invoke_with_markers(invocation) end) do
+    # `:wait` acquirer queues behind the in-flight invocation.
+    #
+    # Page invocations do not take the plugin-wide lock. They lock per user
+    # (bounded wait) and occupy one of a capped number of page slots, so a slow
+    # page call neither stalls other users' pages nor starves event and schedule
+    # handlers of pool workers. The consequence: page calls run concurrently
+    # with event and schedule calls, so shared plugin KV keys are not serialized
+    # between them. Page state must live in per-user KV keys; a shared key
+    # written from both paths can race.
+    case run_locked(invocation, mode, opts) do
       {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
       result -> result
     end
   end
 
-  defp lock_key(%{handler: :on_http, slug: slug, acting_user_id: user_id}),
-    do: "#{slug}:user:#{user_id}"
+  defp run_locked(%{handler: :on_http, acting_user_id: user_id}, _mode, _opts)
+       when not is_binary(user_id) or user_id == "" do
+    {:error, Error.new(:invalid_request, "page invocations need an acting user")}
+  end
 
-  defp lock_key(%{slug: slug}), do: slug
+  defp run_locked(%{handler: :on_http} = inv, _mode, opts) do
+    wait_ms = Keyword.get(opts, :page_wait_ms, @page_wait_ms)
+    wait = {:wait_up_to, wait_ms}
+    user_key = "#{inv.slug}:user:#{inv.acting_user_id}"
+
+    SingleFlight.run(user_key, wait, fn ->
+      with_page_slot(inv, wait_ms, fn -> invoke_with_markers(inv) end)
+    end)
+  end
+
+  defp run_locked(inv, mode, _opts),
+    do: SingleFlight.run(inv.slug, mode, fn -> invoke_with_markers(inv) end)
+
+  # At most `max(pool_size - 1, 1)` page calls run per plugin, so one pool worker
+  # is always free for event and schedule handlers. Slots are named locks tried
+  # in turn; a call that finds them all held retries until the wait elapses.
+  defp with_page_slot(inv, ms, fun) do
+    deadline = System.monotonic_time(:millisecond) + ms
+    slots = for n <- 0..(page_slot_cap(inv.slug) - 1), do: "#{inv.slug}:page-slot:#{n}"
+
+    case acquire_slot(slots, deadline) do
+      {:ok, slot} ->
+        try do
+          fun.()
+        after
+          SingleFlight.release(slot)
+        end
+
+      :busy ->
+        {:busy}
+    end
+  end
+
+  defp acquire_slot(slots, deadline) do
+    case Enum.find(slots, &(SingleFlight.acquire(&1, :skip) == :ok)) do
+      nil ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          :busy
+        else
+          Process.sleep(20)
+          acquire_slot(slots, deadline)
+        end
+
+      slot ->
+        {:ok, slot}
+    end
+  end
+
+  defp page_slot_cap(slug), do: max(pool_size(slug) - 1, 1)
+
+  defp pool_size(slug),
+    do: :persistent_term.get({__MODULE__, :pool_size, slug}, config().pool_size)
 
   # The page request record carries the user, role and session, so they are
   # written from the invocation (host-verified options) over whatever the
