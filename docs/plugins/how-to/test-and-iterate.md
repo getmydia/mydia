@@ -86,6 +86,25 @@ So the cycle is `edit -> build -> copy -> re-activate -> test`. The plugin must
 already be installed (its manifest seeded) so the host knows its capabilities;
 the copy only refreshes the Wasm bytes.
 
+## Install a plugin that is not in the index
+
+**Goal:** try an unpublished plugin on a real server, manifest and all.
+
+Copy the component and its `manifest.json` somewhere the container can read,
+such as the `/config` volume, then install them with `mydia-cli`:
+
+```bash
+docker exec mydia mydia-cli plugin install \
+  /config/my_plugin.wasm /config/manifest.json
+```
+
+The plugin installs inactive. Open **Admin > System > Plugins** to review and
+approve its capabilities, exactly as for an index install, or pass `--approve`
+to grant the declared set immediately. Running the command again with a new
+build replaces the bytes and manifest and clears the grant, so approve it again
+afterwards. A bundled plugin cannot be replaced this way; use the override
+directory above.
+
 !!! tip "Shortcut for repo contributors"
     If you have the Mydia repo checked out, `native/mydia_plugin_sdk/sideload.sh`
     wraps steps 1 and 2 into one command:

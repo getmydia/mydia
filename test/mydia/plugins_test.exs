@@ -127,6 +127,88 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "install_file/3 (sideloading an unpublished plugin)" do
+    @describetag :tmp_dir
+
+    defp write_plugin!(dir, manifest) do
+      wasm_path = Path.join(dir, "plugin.wasm")
+      manifest_path = Path.join(dir, "manifest.json")
+      File.write!(wasm_path, guest_wasm())
+      File.write!(manifest_path, manifest |> Plugins.manifest_to_map() |> Jason.encode!())
+      {wasm_path, manifest_path}
+    end
+
+    test "installs inactive, recording the file and its hash", %{tmp_dir: dir} do
+      {wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+
+      assert {:ok, :inactive} = Plugins.install_file(wasm_path, manifest_path)
+
+      config = Settings.get_plugin_config_by_slug("page-fixture")
+      refute config.enabled
+      assert config.granted_capabilities == %{}
+      assert config.source_url == "file://" <> wasm_path
+
+      assert config.integrity_hash ==
+               :crypto.hash(:sha256, guest_wasm()) |> Base.encode16(case: :lower)
+
+      refute Host.running?("page-fixture")
+    end
+
+    test "approve: true activates it and lists its page", %{tmp_dir: dir} do
+      {wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+
+      assert {:ok, descriptor} = Plugins.install_file(wasm_path, manifest_path, approve: true)
+      assert descriptor.enabled
+      assert Host.running?("page-fixture")
+      assert [%{slug: "page-fixture"}] = Plugins.list_pages()
+    end
+
+    test "reinstalling a running plugin stops it until re-approved", %{tmp_dir: dir} do
+      {wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+      assert {:ok, _} = Plugins.install_file(wasm_path, manifest_path, approve: true)
+      assert Host.running?("page-fixture")
+
+      assert {:ok, :inactive} = Plugins.install_file(wasm_path, manifest_path)
+      refute Host.running?("page-fixture")
+      refute Registry.registered?("page-fixture")
+    end
+
+    test "rejects an invalid manifest before persisting anything", %{tmp_dir: dir} do
+      {wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+      File.write!(manifest_path, ~s({"slug": "page-fixture"}))
+
+      assert {:error, %{type: :invalid_manifest}} = Plugins.install_file(wasm_path, manifest_path)
+      assert Settings.get_plugin_config_by_slug("page-fixture") == nil
+    end
+
+    test "reports a missing file", %{tmp_dir: dir} do
+      {_wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+
+      assert {:error, %{type: :invalid_config, message: message}} =
+               Plugins.install_file(Path.join(dir, "missing.wasm"), manifest_path)
+
+      assert message =~ "cannot read package"
+    end
+
+    test "refuses to replace a bundled plugin", %{tmp_dir: dir} do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "page-fixture",
+          name: "Page Fixture",
+          version: "1.0.0",
+          source_url: "bundled",
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      {wasm_path, manifest_path} = write_plugin!(dir, page_manifest!())
+
+      assert {:error, %{message: message}} = Plugins.install_file(wasm_path, manifest_path)
+      assert message =~ "PLUGINS_OVERRIDE_DIR"
+      assert Settings.get_plugin_config_by_slug("page-fixture").source_url == "bundled"
+    end
+  end
+
   describe "page plugins" do
     defp page_manifest! do
       manifest!(%{
