@@ -24,6 +24,17 @@ pub fn key(user_id: &str) -> String {
     format!("model:{user_id}")
 }
 
+/// The stored value of a user's pick: the model plus the provider it was picked for.
+pub fn encode_pick(provider: &str, model: &str) -> String {
+    serde_json::json!({"provider": provider, "model": model}).to_string()
+}
+
+/// The stored model, only when it was picked for this provider. Bare legacy strings and other shapes count as no pick.
+pub fn decode_pick(raw: &str, provider: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(raw).ok()?;
+    (v["provider"].as_str() == Some(provider)).then(|| v["model"].as_str().map(str::to_string)).flatten()
+}
+
 pub fn locked(settings: &Value) -> bool {
     settings["model_choice"].as_str().map(str::trim) == Some(LOCKED)
 }
@@ -156,6 +167,25 @@ mod tests {
     fn the_missing_message_depends_on_the_lock() {
         assert!(missing_message(&json!({})).contains("Pick a model"));
         assert!(missing_message(&json!({"model_choice": "Admin model only"})).contains("admin"));
+    }
+
+    #[test]
+    fn a_pick_round_trips_for_its_provider() {
+        let raw = encode_pick("OpenAI", "m-1");
+        assert_eq!(decode_pick(&raw, "OpenAI").as_deref(), Some("m-1"));
+    }
+
+    #[test]
+    fn a_pick_from_another_provider_counts_as_none() {
+        assert_eq!(decode_pick(&encode_pick("OpenAI", "m-1"), "Ollama"), None);
+    }
+
+    #[test]
+    fn legacy_and_malformed_picks_count_as_none() {
+        assert_eq!(decode_pick("gpt-legacy", "OpenAI"), None);
+        assert_eq!(decode_pick("{not json", "OpenAI"), None);
+        assert_eq!(decode_pick(r#"{"provider":"OpenAI","model":5}"#, "OpenAI"), None);
+        assert_eq!(decode_pick(r#"{"provider":"OpenAI"}"#, "OpenAI"), None);
     }
 
     #[test]

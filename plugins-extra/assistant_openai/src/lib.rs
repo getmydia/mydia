@@ -42,8 +42,10 @@ fn settings(req: &PageRequest) -> Result<Value, String> {
     serde_json::from_str(&req.config_json).map_err(|_| "settings are not valid JSON".to_string())
 }
 
-fn user_pick(user_id: &str) -> Option<String> {
-    host::kv_get(&models::key(user_id)).ok().flatten()
+/// The user's stored pick, only when it was made for the provider selected now.
+fn user_pick(user_id: &str, settings: &Value) -> Option<String> {
+    let raw = host::kv_get(&models::key(user_id)).ok().flatten()?;
+    models::decode_pick(&raw, provider::selected(settings).label)
 }
 
 fn load(user_id: &str) -> Vec<Value> {
@@ -144,7 +146,7 @@ fn list_models(req: &PageRequest) -> Result<PageResponse, String> {
         Ok(s) => s,
         Err(e) => return respond_json(200, json!({"error": e, "models": []})),
     };
-    let pick = user_pick(&req.user_id);
+    let pick = user_pick(&req.user_id, &settings);
     let listed = if models::locked(&settings) {
         Ok(vec![])
     } else {
@@ -171,7 +173,7 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
         let _ = host::kv_delete(&key);
     } else if !models::valid_id(&pick) {
         return respond_json(400, json!({"error": "That is not a valid model id."}));
-    } else if host::kv_set(&key, &pick).is_err() {
+    } else if host::kv_set(&key, &models::encode_pick(provider::selected(&settings).label, &pick)).is_err() {
         return respond_json(200, json!({"error": "Could not save your model choice."}));
     }
     respond_json(200, json!({"current": models::effective(&settings, Some(pick.as_str()).filter(|p| !p.is_empty()))}))
@@ -186,7 +188,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         Ok(e) => e,
         Err(e) => return respond_json(200, json!({"error": e})),
     };
-    let Some(model) = models::effective(&settings, user_pick(&req.user_id).as_deref()) else {
+    let Some(model) = models::effective(&settings, user_pick(&req.user_id, &settings).as_deref()) else {
         return respond_json(200, json!({"error": models::missing_message(&settings)}));
     };
     let text = body(req)["message"].as_str().unwrap_or("").trim().to_string();
