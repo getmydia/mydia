@@ -27,10 +27,14 @@ defmodule Mydia.Plugins.PageReads do
   alias Mydia.LibrarySearch
   alias Mydia.MediaRequests
   alias Mydia.Metadata
+  alias Mydia.Playback
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.HostFunctions
   alias Mydia.Repo
 
   @search_cap 25
+  @history_cap 50
+  @history_default 20
   @default_limit 10
 
   @doc """
@@ -62,6 +66,56 @@ defmodule Mydia.Plugins.PageReads do
       {:ok, %{items: rows(namespace, user), "next-cursor": :none}}
     end
   end
+
+  @doc """
+  The acting user's watch history for the `watch_history` namespace: progress
+  rows newest first by `last_watched_at`, as `playback-progress` records.
+  Requires `data:read` for `watch_history`.
+
+  `updated-since`, for this namespace, bounds `last_watched_at` rather than the
+  row's update time. `limit` is clamped to 1..#{@history_cap}. There is no
+  cursor. An episode row's `media-item-id` is its show's id, so the guest can
+  resolve a title with `data-read`. `with_origin?` follows the guest's
+  contract: only a 1.5 record carries `origin`.
+  """
+  def watch_history(plugin, ctx, req, with_origin?) do
+    with :ok <- require_namespace(plugin, "watch_history"),
+         {:ok, user} <- page_user(ctx),
+         {:ok, since} <- history_since(opt(req, :"updated-since")) do
+      limit = history_limit(opt(req, :limit))
+
+      items =
+        for p <- Playback.list_user_history(user.id, limit: limit, since: since) do
+          {:"playback-progress", history_record(p, with_origin?)}
+        end
+
+      {:ok, %{items: items, "next-cursor": :none}}
+    end
+  end
+
+  defp history_record(p, with_origin?) do
+    record = HostFunctions.to_playback_progress(p, with_origin?)
+
+    case p.episode do
+      %{media_item_id: show_id} when is_binary(show_id) ->
+        Map.put(record, :"media-item-id", {:some, show_id})
+
+      _ ->
+        record
+    end
+  end
+
+  defp history_since(nil), do: {:ok, nil}
+
+  defp history_since(iso) when is_binary(iso) do
+    case DateTime.from_iso8601(iso) do
+      {:ok, ts, _} -> {:ok, ts}
+      _ -> {:error, Error.new(:invalid_request, "updated-since must be an RFC3339 timestamp")}
+    end
+  end
+
+  defp history_limit(n) when is_integer(n) and n > 0, do: min(n, @history_cap)
+  defp history_limit(_), do: @history_default
 
   defp rows("media_request", user) do
     for r <- MediaRequests.list_requests(requester_id: user.id) do

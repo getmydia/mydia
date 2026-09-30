@@ -59,7 +59,7 @@ its own grant at runtime.
 |------------|---------|
 | `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page`, so a page-only plugin can omit it. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
-| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`, plus the page-only `media_request`, `download`, `collection`). Returns a curated, read-only projection. |
+| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`, plus the page-only `media_request`, `download`, `collection`, `watch_history`). Returns a curated, read-only projection. |
 | `data:search` | Lets a page call the `search` host function against the acting user's library or the metadata catalog. Takes an empty list. |
 | `surfaces:page` | The plugin serves its own page at `/plugins/<slug>/app/`, shown in the navigation. Takes an empty list and requires a [`page` descriptor](#page-descriptor). See [Serve a page](../how-to/pages.md). |
 | `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched`, `collections:favorite`, `media:add`, `collections:write`. See [write surfaces](#write-surfaces). |
@@ -81,13 +81,15 @@ confirmation first. See [Pages and writes on a user's behalf](../explanation/plu
 
 ### Page-only `data:read` namespaces
 
-`media_request`, `download` and `collection` can only be listed from a page
+`media_request`, `download`, `collection` and `watch_history` can only be listed from a page
 (`on-http`). In a page call every namespace, including `media_item`,
 `library_item` and `playback_progress`, is read as the acting user, so a page
 never sees more than the person using it. `media_request` and `collection` are
 the user's own rows, and `download` lists active downloads for items the acting
 user requested (even administrators see only those). Outside a page these
-three namespaces are not available.
+namespaces are not available. `watch_history` returns the user's own
+`playback-progress` rows newest first by `last-watched-at`, with an episode's
+`media-item-id` set to its show so a page can resolve titles with `data-read`.
 
 The event catalog for `events:subscribe`:
 

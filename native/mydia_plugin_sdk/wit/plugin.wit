@@ -113,7 +113,12 @@ interface types {
   /// A cursor-paginated list request over a cataloged namespace (`data-list`,
   /// U5). `cursor` is an opaque, request-local token from a previous page;
   /// `updated-since` (RFC3339) filters to rows changed at or after the bound;
-  /// `limit` is a page-size hint the host clamps to its maximum.
+  /// `limit` is a page-size hint the host clamps to its maximum. The page-only
+  /// `watch_history` namespace is the exception: it returns the acting user's
+  /// `playback-progress` rows newest first by `last-watched-at`, reads
+  /// `updated-since` as a bound on `last-watched-at`, clamps `limit` to 50
+  /// (default 20), never returns a cursor, and sets an episode row's
+  /// `media-item-id` to its show's id.
   record list-request {
     namespace: string,
     cursor: option<string>,

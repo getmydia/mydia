@@ -53,7 +53,7 @@ set on discovery as part of the host release (see the
 |-------|---------|
 | `events:subscribe` | The event types the plugin reacts to (from the catalog above). Required unless the plugin declares `surfaces:page`. |
 | `net:http` | The exact hostnames the plugin may contact. **No wildcards** (a wildcard subdomain is an exfiltration channel). |
-| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`, `library_item`, and the page-only `media_request`, `download`, `collection`). The host returns a curated, read-only projection: never raw rows or secrets. |
+| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`, `library_item`, and the page-only `media_request`, `download`, `collection`, `watch_history`). The host returns a curated, read-only projection: never raw rows or secrets. |
 | `data:search` | The `search` host function (pages only). |
 | `surfaces:page` | Serve a page through the `page.on-http` export. |
 | `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (`ensure-watched`, `mark-watched-state`), `collections:favorite` (`ensure-favorite`, `add-favorite`), `media:add` (`media-add`), `collections:write` (the `collection-*` functions). The last two are page-only. |
@@ -224,7 +224,7 @@ Page host functions act as the user of the current `on-http` call and return
 | `collection-remove-items(id, media-item-ids)` | `collections:write` | |
 | `mark-watched-state(watch-state-target)` | `playback:watched` | |
 | `add-favorite(favorite-target)` | `collections:favorite` | |
-| `data-list` | `data:read` | Reads as the acting user during a page call. New rows: `media-request`, `download`, `collection`. |
+| `data-list` | `data:read` | Reads as the acting user during a page call. New rows: `media-request`, `download`, `collection`; `watch_history` returns `playback-progress` rows, newest first. |
 | `http-request` | `net:http` | Page calls get a longer budget (90s and 4 MiB by default). |
 
 Every write returns `write-outcome`:
