@@ -185,6 +185,19 @@ defmodule MydiaWeb.SidebarComponents do
                 <.icon name="hero-device-phone-mobile" class="w-4 h-4" /> Devices
               </.link>
             </li>
+            <%!-- phx-update="ignore": the hook removes `hidden` client-side, and
+                 without it any re-render of the account menu (e.g. the
+                 changelog badge) would patch `hidden` back on. --%>
+            <li
+              id="user-menu-install"
+              class="hidden"
+              phx-hook="PwaInstallMenuItem"
+              phx-update="ignore"
+            >
+              <button type="button" id="user-menu-install-button">
+                <.icon name="hero-arrow-down-tray" class="w-4 h-4" /> Install app
+              </button>
+            </li>
           </ul>
 
           <div class="my-1 border-t border-base-content/10"></div>
