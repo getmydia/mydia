@@ -76,7 +76,10 @@ defmodule MydiaWeb.Layouts do
 
     ~H"""
     <div class="drawer lg:drawer-open">
-      <input id="main-drawer" type="checkbox" class="drawer-toggle" />
+      <%!-- The drawer's open state lives only in the browser. Without ignore,
+           every layout re-render (jobs status, page timers) resets it to the
+           server's unchecked markup and the drawer closes by itself. --%>
+      <input id="main-drawer" type="checkbox" class="drawer-toggle" phx-update="ignore" />
 
       <div class="drawer-content flex flex-col">
         <!-- Mobile header with menu button -->
