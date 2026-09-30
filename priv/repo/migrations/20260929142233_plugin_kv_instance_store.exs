@@ -14,7 +14,7 @@ defmodule Mydia.Repo.Migrations.PluginKvInstanceStore do
   #     SQLite already stores them as TEXT, so this is PostgreSQL-only.
   def up do
     alter table(:plugin_kv) do
-      add :size_bytes, :integer, null: false, default: 0
+      add :size_bytes, :bigint, null: false, default: 0
     end
 
     flush()
