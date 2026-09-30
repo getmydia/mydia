@@ -54,13 +54,36 @@ its own grant at runtime.
 
 | Capability | Meaning |
 |------------|---------|
-| `events:subscribe` | The event types the plugin reacts to. Required. Each must be in the catalog. |
+| `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page`, so a page-only plugin can omit it. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
-| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`). Returns a curated, read-only projection. |
-| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched` (the `ensure-watched` host function), `collections:favorite` (the `ensure-favorite` host function). |
+| `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`, plus the page-only `media_request`, `download`, `collection`). Returns a curated, read-only projection. |
+| `data:search` | Lets a page call the `search` host function against the acting user's library or the metadata catalog. Takes an empty list. |
+| `surfaces:page` | The plugin serves its own page at `/plugins/<slug>/app/`, shown in the navigation. Takes an empty list and requires a [`page` descriptor](#page-descriptor). See [Serve a page](../how-to/pages.md). |
+| `surfaces:write` | Curated write surfaces. Value vocabulary: `playback:watched`, `collections:favorite`, `media:add`, `collections:write`. See [write surfaces](#write-surfaces). |
 | `state:kv` | A small per-plugin key/value store that survives across invocations (watermarks, cursors, dedupe sets). |
 | `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user**: see below. |
 | `schedule:interval` | Lets the plugin run on a fixed interval via `on-schedule`. Paired with the `schedule` descriptor. |
+
+### Write surfaces
+
+| Value | Host functions | Available to |
+|-------|----------------|--------------|
+| `playback:watched` | `ensure-watched` (connected users), `mark-watched-state` (page) | events and pages |
+| `collections:favorite` | `ensure-favorite` (connected users), `add-favorite` (page) | events and pages |
+| `media:add` | `media-add` | pages only |
+| `collections:write` | `collection-create`, `collection-update`, `collection-add-items`, `collection-remove-items` | pages only |
+
+Page writes act as the signed-in user, are journaled, and may need the user's
+confirmation first. See [Pages and writes on a user's behalf](../explanation/plugin-model.md#pages-and-writes-on-a-users-behalf).
+
+### Page-only `data:read` namespaces
+
+`media_request`, `download` and `collection` can only be listed from a page
+(`on-http`). In a page call every namespace, including `media_item`,
+`library_item` and `playback_progress`, is read as the acting user, so a page
+never sees more than the person using it. `media_request` and `collection` are
+the user's own rows, and `download` lists active downloads. Outside a page these
+three namespaces are not available.
 
 The event catalog for `events:subscribe`:
 
@@ -164,6 +187,38 @@ what is relevant to the current selection:
 ```
 
 Here `ntfy_priority` only appears when the operator has set `target` to `ntfy`.
+
+## Page descriptor
+
+A plugin that declares `surfaces:page` must also declare a `page` descriptor,
+and a `page` descriptor without `surfaces:page` is rejected. It names the
+navigation entry:
+
+```json
+"page": { "title": "Assistant", "icon": "hero-sparkles" },
+"capabilities": { "surfaces:page": [] }
+```
+
+- `title` is 1 to 40 characters.
+- `icon` is a Heroicons name of the form `hero-*` (lowercase letters, digits and
+  hyphens).
+
+## Private network hosts
+
+A `url` field with `grants_host: true` may also set `"allow_private": true`.
+The operator's value is then allowed to resolve to a private address (a
+LAN service such as `http://ollama.lan:11434`), which the outbound gate refuses
+by default. `allow_private` is only accepted on `url` fields that also set
+`grants_host`.
+
+```json
+{ "key": "base_url", "type": "url", "label": "API base URL",
+  "grants_host": true, "allow_private": true }
+```
+
+When such a field has a value, the host derives a `net:private` grant for that
+one host next to its `net:http` grant. You never declare `net:private` in the
+manifest, and while the field is empty no `net:private` grant exists.
 
 ## Scheduled plugins
 

@@ -51,10 +51,12 @@ set on discovery as part of the host release (see the
 
 | Class | Meaning |
 |-------|---------|
-| `events:subscribe` | The event types the plugin reacts to (from the catalog above). Required. |
+| `events:subscribe` | The event types the plugin reacts to (from the catalog above). Required unless the plugin declares `surfaces:page`. |
 | `net:http` | The exact hostnames the plugin may contact. **No wildcards** (a wildcard subdomain is an exfiltration channel). |
-| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`, `library_item`). The host returns a curated, read-only projection: never raw rows or secrets. |
-| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (mark items watched via `ensure-watched`), `collections:favorite` (add items to Favorites via `ensure-favorite`). |
+| `data:read` | Scoped read namespaces (`media_item`, `playback_progress`, `library_item`, and the page-only `media_request`, `download`, `collection`). The host returns a curated, read-only projection: never raw rows or secrets. |
+| `data:search` | The `search` host function (pages only). |
+| `surfaces:page` | Serve a page through the `page.on-http` export. |
+| `surfaces:write` | Curated write surfaces. Vocabulary: `playback:watched` (`ensure-watched`, `mark-watched-state`), `collections:favorite` (`ensure-favorite`, `add-favorite`), `media:add` (`media-add`), `collections:write` (the `collection-*` functions). The last two are page-only. |
 | `state:kv` | A per-plugin key/value store (`@max_keys` 256 keys, 64 KB per value) for watermarks, cursors, and dedupe sets. |
 | `users:connections` | Per-user third-party connections: the host holds the token; the plugin gets identity + status only. **Cross-user, consent-scoped.** |
 | `schedule:interval` | Run `on-schedule` on a fixed interval (manifest `schedule`, 5-minute floor). |
@@ -168,6 +170,80 @@ Key guarantees:
   host. Keys under `conn/<connection-id>/...` are swept when that connection is
   removed.
 
+### 1.4 host functions and the page export
+
+WIT 1.4.0 adds plugin pages. A guest exports `page.on-http`, and the host calls
+it for every request to `/plugins/<slug>/app/*` as the signed-in user. Build the
+guest with `#[mydia_plugin_sdk::plugin(on_http = handle_http)]`; without it the
+generated `on-http` returns an error.
+
+```rust
+use mydia_plugin_sdk::types::{Event, PageRequest, PageResponse};
+
+#[mydia_plugin_sdk::plugin(on_http = handle_http)]
+fn on_event(_evt: Event) -> Result<String, String> { Ok("{}".into()) }
+
+fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
+    Ok(PageResponse {
+        status: 200,
+        headers: vec![("content-type".into(), "text/html; charset=utf-8".into())],
+        body: "<h1>Hello</h1>".into(),
+    })
+}
+```
+
+`page-request`:
+
+| Field | Notes |
+|-------|-------|
+| `method` | `GET`, `POST` and so on. |
+| `path` | Path below `/plugins/<slug>/app`, always starting with `/`. |
+| `query` | Query string without the leading `?`, with the frame token removed. |
+| `headers` | Only `content-type`, `accept` and `accept-language`. |
+| `body` | `Some(text)` when the request has a body. Delivered byte for byte; the host never parses it. Bodies must be valid UTF-8 text (else 415) and at most 1 MiB (else 413). |
+| `user-id`, `role`, `session-id` | Verified by the host, never taken from the browser. `role` is `admin`, `user`, `readonly` or `guest`. |
+| `config-json` | The operator's plugin settings as a JSON object string. |
+
+`page-response` carries `status` (200 to 599), `headers` and a text `body`. The
+host keeps only `content-type` from the guest's headers and sets the security
+headers itself (see [Serve a page](../how-to/pages.md#what-the-host-sets)). A
+malformed response becomes a 502, a timeout a 504, and a plugin whose page slots
+are all busy answers 503 with `Retry-After`.
+
+Page host functions act as the user of the current `on-http` call and return
+`denied` when called from any other handler (`on-event`, `on-schedule`). Their
+`user-id` arguments, where they exist, are ignored.
+
+| Function | Needs | Notes |
+|----------|-------|-------|
+| `search(search-request)` | `data:search` | `kind` is `library` or `catalog`. Returns `list<search-hit>`. |
+| `media-add(media-add-target)` | `surfaces:write` `media:add` | Guests file a request; users and admins add to the library. |
+| `collection-create(attrs)` | `collections:write` | `kind` is `manual` (default) or `smart`. |
+| `collection-update(id, attrs)` | `collections:write` | |
+| `collection-add-items(id, media-item-ids)` | `collections:write` | |
+| `collection-remove-items(id, media-item-ids)` | `collections:write` | |
+| `mark-watched-state(watch-state-target)` | `playback:watched` | |
+| `add-favorite(favorite-target)` | `collections:favorite` | |
+| `data-list` | `data:read` | Reads as the acting user during a page call. New rows: `media-request`, `download`, `collection`. |
+| `http-request` | `net:http` | Page calls get a longer budget (90s and 4 MiB by default). |
+
+Every write returns `write-outcome`:
+
+- `done(json)`: the host performed the write; the string is the host's JSON result.
+- `needs-confirmation(id)`: the user has not yet granted this surface. The write
+  is parked. Hand the id to the host with
+  `parent.postMessage({mydia: "confirm", ids: [id]}, "*")` and the host asks the
+  user.
+
+Writes are checked against the user's role and the plugin's grant, are recorded
+in the user's journal, and can be undone from the plugin's Activity page.
+
+Concurrency: page calls lock per user and run alongside the plugin's event and
+schedule calls. At most `pool_size - 1` (minimum one) page calls per plugin run
+at once, with a bounded wait before the 503. Because a page call and an event
+call can overlap, keep page state in per-user `state:kv` keys (for example
+`user/<user-id>/history`); a shared key written from both paths can lose an update.
+
 ### Scheduled handler
 
 Add `on-schedule` for periodic work (declare a `schedule` and the
@@ -214,7 +290,7 @@ against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
 so a `1.0` guest's `on-event` still resolves against a `1.1` host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via `min_host_version`; a `1.3` guest sets `"min_host_version": "1.3.0"` so an
+via `min_host_version`; a `1.4` guest sets `"min_host_version": "0.16.0"` (the first host that serves it) so an
 older host refuses it cleanly rather than failing to link.
 
 ## Reference
