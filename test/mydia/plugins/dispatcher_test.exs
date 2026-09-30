@@ -39,11 +39,9 @@ defmodule Mydia.Plugins.DispatcherTest do
       end
     end
 
-    {:ok, pid} =
-      Dispatcher.start_link(name: :"disp_#{System.unique_integer([:positive])}", invoker: invoker)
-
-    on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
-    pid
+    start_supervised!(
+      {Dispatcher, name: :"disp_#{System.unique_integer([:positive])}", invoker: invoker}
+    )
   end
 
   defp broadcast(type) do
@@ -174,13 +172,9 @@ defmodule Mydia.Plugins.DispatcherTest do
       {:ok, %{}}
     end
 
-    {:ok, pid} =
-      Dispatcher.start_link(
-        name: :"disp_origin_#{System.unique_integer([:positive])}",
-        invoker: invoker
-      )
-
-    on_exit(fn -> if Process.alive?(pid), do: GenServer.stop(pid) end)
+    start_supervised!(
+      {Dispatcher, name: :"disp_origin_#{System.unique_integer([:positive])}", invoker: invoker}
+    )
 
     register!("plex_watch", ["playback.finished"])
 
