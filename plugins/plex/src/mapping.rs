@@ -205,6 +205,9 @@ pub fn crawl_step(
         }
     };
 
+    // Shrinks when the host refuses a response as too large, and stays shrunk
+    // for the rest of this call: a section that overflowed once will again.
+    let mut page_size = api::PAGE_SIZE;
     while state.section_index < state.section_keys.len() {
         if host.elapsed_ms() >= deadline_ms {
             store::put_json(host, store::CRAWL_STATE, &state)?;
@@ -214,13 +217,24 @@ pub fn crawl_step(
             Some((k, v)) => (k.to_string(), v.to_string()),
             None => (String::new(), String::new()),
         };
-        let page = api::section_items(host, base, link, &key, state.offset, None)?;
-        let full_page = page.items.len() as u32 == api::PAGE_SIZE;
+        let start = state.offset;
+        let fetched = api::page_shrinking(
+            host,
+            page_size,
+            &format!("library section {key} at item {start}"),
+            |h, size| api::section_items(h, base, link, &key, start, None, size),
+        )?;
+        page_size = fetched.size;
+        let full_page = fetched.has_more();
 
-        if kind == "show" {
+        if fetched.skipped {
+            // Too large even at the minimum page: move on rather than wedge.
+            state.offset += fetched.size;
+            store::put_json(host, store::CRAWL_STATE, &state)?;
+        } else if kind == "show" {
             // One allLeaves per show, so the budget is checked per show and the
             // offset advances per show: a big page never overruns the tick.
-            for show in &page.items {
+            for show in &fetched.items {
                 if host.elapsed_ms() >= deadline_ms {
                     store::put_json(host, store::CRAWL_STATE, &state)?;
                     return Ok(CrawlProgress::Partial);
@@ -249,8 +263,8 @@ pub fn crawl_step(
                 store::set_many(host, &entries).map_err(host_err)?;
             }
         } else {
-            let mut entries: Vec<KvEntry> = page.items.iter().flat_map(movie_entries).collect();
-            state.offset += page.items.len() as u32;
+            let mut entries: Vec<KvEntry> = fetched.items.iter().flat_map(movie_entries).collect();
+            state.offset += fetched.items.len() as u32;
             entries.push(state_entry(&state));
             store::set_many(host, &entries).map_err(host_err)?;
         }
@@ -705,6 +719,60 @@ mod tests {
                 .map(String::as_str),
             Some("\"e149\"")
         );
+    }
+
+    fn too_large() -> mydia_plugin_sdk::types::HostError {
+        mydia_plugin_sdk::types::HostError::Network("response exceeded 1048576 bytes".into())
+    }
+
+    #[test]
+    fn a_too_large_section_page_is_retried_smaller_and_the_crawl_completes() {
+        let mut host = FakeHost::new();
+        host.now_value = NOW;
+        host.kv.insert(
+            "crawl/state".into(),
+            serde_json::to_string(&movie_section_state()).unwrap(),
+        );
+        let url = format!("{B}/library/sections/1/all?includeGuids=1");
+        host.fail("GET", &url, too_large());
+        host.respond("GET", &url, 200, &movies_json(3));
+
+        assert_eq!(
+            crawl_step(&mut host, B, "owner", 45_000).unwrap(),
+            CrawlProgress::Complete
+        );
+        let sent = host.requests_to(&url);
+        assert_eq!(sent[0].header("X-Plex-Container-Size"), Some("200"));
+        assert_eq!(sent[1].header("X-Plex-Container-Size"), Some("100"));
+        assert_eq!(sent[1].header("X-Plex-Container-Start"), Some("0"));
+        assert!(host.kv.contains_key("map/m2"));
+    }
+
+    #[test]
+    fn a_page_too_large_at_the_minimum_is_skipped_and_the_crawl_moves_on() {
+        let mut host = FakeHost::new();
+        host.now_value = NOW;
+        host.kv.insert(
+            "crawl/state".into(),
+            serde_json::to_string(&movie_section_state()).unwrap(),
+        );
+        let url = format!("{B}/library/sections/1/all?includeGuids=1");
+        // 200, 100, 50, 25 all refused; the page after the skipped 25 answers.
+        for _ in 0..4 {
+            host.fail("GET", &url, too_large());
+        }
+        host.respond("GET", &url, 200, &movies_json(2));
+
+        assert_eq!(
+            crawl_step(&mut host, B, "owner", 45_000).unwrap(),
+            CrawlProgress::Complete
+        );
+        let sent = host.requests_to(&url);
+        assert_eq!(sent.len(), 5);
+        assert_eq!(sent[4].header("X-Plex-Container-Start"), Some("25"));
+        assert_eq!(sent[4].header("X-Plex-Container-Size"), Some("25"));
+        assert!(host.kv.contains_key("map/m1"));
+        assert!(host.logs.iter().any(|(l, _)| l == "warn"));
     }
 
     #[test]

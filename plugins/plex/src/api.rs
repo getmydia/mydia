@@ -6,6 +6,8 @@ use crate::http::{plex_headers, query, request, send, send_json, Auth, PlexError
 use serde::{Deserialize, Deserializer};
 
 pub const PAGE_SIZE: u32 = 200;
+/// The smallest page a too-large response shrinks to before that page is skipped.
+pub const MIN_PAGE_SIZE: u32 = 25;
 const LIBRARY_IDENTIFIER: &str = "com.plexapp.plugins.library";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -82,6 +84,86 @@ pub fn sections(host: &mut dyn Host, base: &str, link_id: &str) -> Result<Vec<Se
     Ok(c.media_container.directory)
 }
 
+/// One page of a paged listing. `path` carries the query; paging goes in the
+/// `X-Plex-Container-*` headers.
+fn list_page(
+    host: &mut dyn Host,
+    base: &str,
+    link_id: &str,
+    path: &str,
+    start: u32,
+    size: u32,
+) -> Result<Page, PlexError> {
+    let mut headers = plex_headers();
+    headers.push(("X-Plex-Container-Start".to_string(), start.to_string()));
+    headers.push(("X-Plex-Container-Size".to_string(), size.to_string()));
+    let c: Container<Metadatas> = send_json(
+        host,
+        &Auth::Link(link_id),
+        request("GET", &url(base, path), headers, None),
+    )?;
+    Ok(Page {
+        items: c.media_container.metadata,
+    })
+}
+
+/// A page fetched with [`page_shrinking`]. `size` is the size that finally
+/// worked (or the minimum, when `skipped`), so the caller advances by it and
+/// keeps using it for the following pages.
+#[derive(Debug)]
+pub struct Fetched {
+    pub items: Vec<Metadata>,
+    pub size: u32,
+    /// The page was too large even at [`MIN_PAGE_SIZE`] and was not read. The
+    /// caller still advances past `size` items so the crawl never wedges.
+    pub skipped: bool,
+}
+
+impl Fetched {
+    /// True when the listing may continue past this page.
+    pub fn has_more(&self) -> bool {
+        self.skipped || self.items.len() as u32 >= self.size
+    }
+}
+
+/// Runs `fetch` at `size`, halving the size (down to [`MIN_PAGE_SIZE`]) each
+/// time the host gate refuses the response as too large, and retrying the same
+/// offset. At the minimum the page is skipped with a warning.
+pub fn page_shrinking(
+    host: &mut dyn Host,
+    size: u32,
+    what: &str,
+    mut fetch: impl FnMut(&mut dyn Host, u32) -> Result<Page, PlexError>,
+) -> Result<Fetched, PlexError> {
+    let mut size = size.max(MIN_PAGE_SIZE);
+    loop {
+        match fetch(host, size) {
+            Ok(page) => {
+                return Ok(Fetched {
+                    items: page.items,
+                    size,
+                    skipped: false,
+                })
+            }
+            Err(PlexError::TooLarge(_)) if size > MIN_PAGE_SIZE => {
+                size = (size / 2).max(MIN_PAGE_SIZE);
+            }
+            Err(PlexError::TooLarge(m)) => {
+                host.log(
+                    "warn",
+                    &format!("plex: skipping {what}: {size} items exceed the response cap ({m})"),
+                );
+                return Ok(Fetched {
+                    items: Vec::new(),
+                    size,
+                    skipped: true,
+                });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 pub fn section_items(
     host: &mut dyn Host,
     base: &str,
@@ -89,22 +171,13 @@ pub fn section_items(
     section_key: &str,
     start: u32,
     since: Option<i64>,
+    size: u32,
 ) -> Result<Page, PlexError> {
     let mut path = format!("/library/sections/{section_key}/all?includeGuids=1");
     if let Some(since) = since {
         path.push_str(&format!("&lastViewedAt%3E={since}"));
     }
-    let mut headers = plex_headers();
-    headers.push(("X-Plex-Container-Start".to_string(), start.to_string()));
-    headers.push(("X-Plex-Container-Size".to_string(), PAGE_SIZE.to_string()));
-    let c: Container<Metadatas> = send_json(
-        host,
-        &Auth::Link(link_id),
-        request("GET", &url(base, &path), headers, None),
-    )?;
-    Ok(Page {
-        items: c.media_container.metadata,
-    })
+    list_page(host, base, link_id, &path, start, size)
 }
 
 /// Episodes of a show section as a flat list (`type=4`), viewed at or after
@@ -117,22 +190,13 @@ pub fn section_episodes(
     section_key: &str,
     start: u32,
     since: Option<i64>,
+    size: u32,
 ) -> Result<Page, PlexError> {
     let mut path = format!("/library/sections/{section_key}/all?type=4&includeGuids=1");
     if let Some(since) = since {
         path.push_str(&format!("&lastViewedAt%3E={since}"));
     }
-    let mut headers = plex_headers();
-    headers.push(("X-Plex-Container-Start".to_string(), start.to_string()));
-    headers.push(("X-Plex-Container-Size".to_string(), PAGE_SIZE.to_string()));
-    let c: Container<Metadatas> = send_json(
-        host,
-        &Auth::Link(link_id),
-        request("GET", &url(base, &path), headers, None),
-    )?;
-    Ok(Page {
-        items: c.media_container.metadata,
-    })
+    list_page(host, base, link_id, &path, start, size)
 }
 
 /// One item's current state as the link's own profile sees it. `None` once the
@@ -155,6 +219,8 @@ pub fn metadata(
     }
 }
 
+/// Every episode of a show, read a page at a time: a long-running show's
+/// allLeaves alone can exceed the host's response cap.
 pub fn all_leaves(
     host: &mut dyn Host,
     base: &str,
@@ -162,12 +228,26 @@ pub fn all_leaves(
     show_rating_key: &str,
 ) -> Result<Vec<Metadata>, PlexError> {
     let path = format!("/library/metadata/{show_rating_key}/allLeaves?includeGuids=1");
-    let c: Container<Metadatas> = send_json(
-        host,
-        &Auth::Link(link_id),
-        request("GET", &url(base, &path), plex_headers(), None),
-    )?;
-    Ok(c.media_container.metadata)
+    let what = format!("episodes of show {show_rating_key}");
+    let mut out = Vec::new();
+    let mut start = 0u32;
+    let mut size = PAGE_SIZE;
+    loop {
+        let fetched = page_shrinking(host, size, &what, |h, s| {
+            list_page(h, base, link_id, &path, start, s)
+        })?;
+        size = fetched.size;
+        start += if fetched.skipped {
+            fetched.size
+        } else {
+            fetched.items.len() as u32
+        };
+        let more = fetched.has_more();
+        out.extend(fetched.items);
+        if !more {
+            return Ok(out);
+        }
+    }
 }
 
 fn library_call(
@@ -264,6 +344,7 @@ pub fn refresh(
 mod tests {
     use super::*;
     use crate::host::fake::FakeHost;
+    use mydia_plugin_sdk::types::HostError;
 
     const BASE: &str = "http://192.168.1.20:32400";
 
@@ -279,6 +360,7 @@ mod tests {
             "2",
             200,
             Some(1_767_000_000),
+            PAGE_SIZE,
         )
         .unwrap();
         assert_eq!(page.items[0].rating_key, "501");
@@ -327,7 +409,16 @@ mod tests {
             200,
             r#"{"MediaContainer":{"totalSize":1,"Metadata":[{"ratingKey":"77","type":"movie","title":"The Glass Orchard","viewCount":2,"viewOffset":5000,"lastViewedAt":1700000100,"Guid":[{"id":"tmdb://9001"}]}]}}"#,
         );
-        let page = section_items(&mut host, BASE, "srv", "1", 400, Some(1_700_000_000)).unwrap();
+        let page = section_items(
+            &mut host,
+            BASE,
+            "srv",
+            "1",
+            400,
+            Some(1_700_000_000),
+            PAGE_SIZE,
+        )
+        .unwrap();
         let item = &page.items[0];
         assert_eq!(
             (item.rating_key.as_str(), item.view_count, item.view_offset),
@@ -348,7 +439,7 @@ mod tests {
             200,
             r#"{"MediaContainer":{"Metadata":[{"ratingKey":77,"type":"movie","title":"X"}]}}"#,
         );
-        let page = section_items(&mut host, BASE, "srv", "1", 0, None).unwrap();
+        let page = section_items(&mut host, BASE, "srv", "1", 0, None, PAGE_SIZE).unwrap();
         assert_eq!(page.items[0].rating_key, "77");
         assert_eq!(page.items[0].view_count, 0);
     }
@@ -362,10 +453,12 @@ mod tests {
             200,
             r#"{"MediaContainer":{"size":0}}"#,
         );
-        assert!(section_items(&mut host, BASE, "srv", "3", 0, None)
-            .unwrap()
-            .items
-            .is_empty());
+        assert!(
+            section_items(&mut host, BASE, "srv", "3", 0, None, PAGE_SIZE)
+                .unwrap()
+                .items
+                .is_empty()
+        );
     }
 
     #[test]
@@ -379,6 +472,109 @@ mod tests {
         );
         let eps = all_leaves(&mut host, BASE, "srv", "10").unwrap();
         assert_eq!((eps[0].parent_index, eps[0].index), (Some(1), Some(2)));
+    }
+
+    const TOO_BIG: &str = "response exceeded 1048576 bytes";
+
+    fn too_large() -> HostError {
+        HostError::Network(TOO_BIG.into())
+    }
+
+    #[test]
+    fn a_too_large_page_is_retried_at_half_the_size_from_the_same_offset() {
+        let mut host = FakeHost::new();
+        let url = format!("{BASE}/library/sections/1/all?includeGuids=1");
+        host.fail("GET", &url, too_large())
+            .fail("GET", &url, too_large())
+            .respond(
+                "GET",
+                &url,
+                200,
+                r#"{"MediaContainer":{"Metadata":[{"ratingKey":"1","type":"movie"}]}}"#,
+            );
+        let fetched = page_shrinking(&mut host, PAGE_SIZE, "test", |h, size| {
+            section_items(h, BASE, "srv", "1", 400, None, size)
+        })
+        .unwrap();
+        assert!(!fetched.skipped);
+        assert_eq!((fetched.size, fetched.items.len()), (50, 1));
+        let sizes: Vec<_> = host
+            .sent
+            .iter()
+            .map(|s| s.header("X-Plex-Container-Size").unwrap())
+            .collect();
+        assert_eq!(sizes, vec!["200", "100", "50"]);
+        assert!(host
+            .sent
+            .iter()
+            .all(|s| s.header("X-Plex-Container-Start") == Some("400")));
+    }
+
+    #[test]
+    fn a_page_too_large_at_the_minimum_is_skipped_with_a_warning() {
+        let mut host = FakeHost::new();
+        let url = format!("{BASE}/library/sections/1/all?includeGuids=1");
+        host.fail("GET", &url, too_large());
+        let fetched = page_shrinking(&mut host, PAGE_SIZE, "test page", |h, size| {
+            section_items(h, BASE, "srv", "1", 0, None, size)
+        })
+        .unwrap();
+        assert!(fetched.skipped && fetched.has_more());
+        assert_eq!(fetched.size, MIN_PAGE_SIZE);
+        // 200, 100, 50, 25: then it gives up.
+        assert_eq!(host.sent.len(), 4);
+        assert!(host
+            .logs
+            .iter()
+            .any(|(level, m)| level == "warn" && m.contains("test page")));
+    }
+
+    #[test]
+    fn other_errors_do_not_shrink_the_page() {
+        let mut host = FakeHost::new();
+        let url = format!("{BASE}/library/sections/1/all?includeGuids=1");
+        host.fail("GET", &url, HostError::Network("connection refused".into()));
+        let r = page_shrinking(&mut host, PAGE_SIZE, "test", |h, size| {
+            section_items(h, BASE, "srv", "1", 0, None, size)
+        });
+        assert!(matches!(r, Err(PlexError::Unreachable(_))));
+        assert_eq!(host.sent.len(), 1);
+    }
+
+    #[test]
+    fn all_leaves_is_paged_and_shrinks_on_a_too_large_response() {
+        let mut host = FakeHost::new();
+        let url = format!("{BASE}/library/metadata/10/allLeaves?includeGuids=1");
+        let full: Vec<String> = (0..100)
+            .map(|i| {
+                format!(r#"{{"ratingKey":"e{i}","type":"episode","parentIndex":1,"index":{i}}}"#)
+            })
+            .collect();
+        let full = format!(
+            r#"{{"MediaContainer":{{"Metadata":[{}]}}}}"#,
+            full.join(",")
+        );
+        host.fail("GET", &url, too_large())
+            .respond("GET", &url, 200, &full)
+            .respond(
+                "GET",
+                &url,
+                200,
+                r#"{"MediaContainer":{"Metadata":[{"ratingKey":"last","type":"episode","parentIndex":2,"index":1}]}}"#,
+            );
+        let eps = all_leaves(&mut host, BASE, "srv", "10").unwrap();
+        assert_eq!(eps.len(), 101);
+        let seen: Vec<_> = host
+            .sent
+            .iter()
+            .map(|s| {
+                (
+                    s.header("X-Plex-Container-Start").unwrap(),
+                    s.header("X-Plex-Container-Size").unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(seen, vec![("0", "200"), ("0", "100"), ("100", "100")]);
     }
 
     #[test]

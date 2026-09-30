@@ -225,6 +225,30 @@ mod tests {
     }
 
     #[test]
+    fn only_the_gates_size_cap_message_reads_as_too_large() {
+        let mut host = FakeHost::new();
+        host.fail(
+            "GET",
+            "https://srv/big",
+            HostError::Network("response exceeded 1048576 bytes".into()),
+        )
+        .fail(
+            "GET",
+            "https://srv/slow",
+            HostError::Network("request timed out after 5000ms".into()),
+        );
+        let mut get = |url: &str| send(&mut host, &Auth::None, request("GET", url, vec![], None));
+        assert!(matches!(
+            get("https://srv/big"),
+            Err(PlexError::TooLarge(_))
+        ));
+        assert!(matches!(
+            get("https://srv/slow"),
+            Err(PlexError::Unreachable(_))
+        ));
+    }
+
+    #[test]
     fn host_errors_map_to_plex_errors() {
         let mut host = FakeHost::new();
         host.fail("GET", "https://srv/a", HostError::Network("timeout".into()))

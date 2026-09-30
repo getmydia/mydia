@@ -453,6 +453,8 @@ fn sync_link(
         }
     }
     let mut seen: HashSet<String> = HashSet::new();
+    // Shrinks when the host refuses a response as too large; see mapping.rs.
+    let mut page_size = api::PAGE_SIZE;
 
     while page.section_index < sections.len() {
         page.section_key = Some(sections[page.section_index].key.clone());
@@ -462,26 +464,29 @@ fn sync_link(
             return Ok(LinkOutcome::Partial(ap.counts));
         }
         let section = &sections[page.section_index];
-        let items = if section.kind == "movie" {
-            api::section_items(
-                h,
-                ctx.base,
-                &ctx.req_link,
-                &section.key,
-                page.offset,
-                page.since,
-            )?
-        } else {
-            api::section_episodes(
-                h,
-                ctx.base,
-                &ctx.req_link,
-                &section.key,
-                page.offset,
-                page.since,
-            )?
-        }
-        .items;
+        let (start, since, is_movie) = (page.offset, page.since, section.kind == "movie");
+        let fetched = api::page_shrinking(
+            h,
+            page_size,
+            &format!("library section {} at item {start}", section.key),
+            |h, size| {
+                if is_movie {
+                    api::section_items(h, ctx.base, &ctx.req_link, &section.key, start, since, size)
+                } else {
+                    api::section_episodes(
+                        h,
+                        ctx.base,
+                        &ctx.req_link,
+                        &section.key,
+                        start,
+                        since,
+                        size,
+                    )
+                }
+            },
+        )?;
+        page_size = fetched.size;
+        let items = &fetched.items;
         for item in items.iter().filter(|i| changed_since(i, page.since)) {
             let rk = item.rating_key.as_str();
             seen.insert(rk.to_string());
@@ -506,12 +511,14 @@ fn sync_link(
                 snapshot.as_ref(),
             )?;
         }
-        if (items.len() as u32) < api::PAGE_SIZE {
+        if fetched.has_more() {
+            // A skipped page (too large even at the minimum) advances by its
+            // size so the pass never wedges on it.
+            page.offset += fetched.size;
+        } else {
             page.section_index += 1;
             page.offset = 0;
             page.section_key = sections.get(page.section_index).map(|s| s.key.clone());
-        } else {
-            page.offset += api::PAGE_SIZE;
         }
         ap.flush(h)?;
         store::put_json(h, &page_key, &page)?;
@@ -1282,6 +1289,27 @@ mod tests {
         assert!(!out.complete);
         assert!(host.watch_writes.is_empty());
         assert!(host.data_requests.is_empty());
+    }
+
+    #[test]
+    fn a_too_large_pull_page_is_retried_smaller_at_the_same_offset() {
+        let mut host = crawled();
+        let url = format!("{B}/library/sections/1/all?includeGuids=1");
+        host.fail(
+            "GET",
+            &url,
+            HostError::Network("response exceeded 1048576 bytes".into()),
+        );
+        host.respond("GET", &url, 200, r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":1,"lastViewedAt":1767225000}]}}"#);
+
+        let out = tick(&mut host);
+        assert!(out.complete);
+        assert_eq!(out.counts.pulled, 1);
+        assert_eq!(out.counts.errors, 0);
+        let sent = host.requests_to(&url);
+        assert_eq!(sent[0].header("X-Plex-Container-Size"), Some("200"));
+        assert_eq!(sent[1].header("X-Plex-Container-Size"), Some("100"));
+        assert_eq!(sent[1].header("X-Plex-Container-Start"), Some("0"));
     }
 
     #[test]
