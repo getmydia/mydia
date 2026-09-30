@@ -414,7 +414,15 @@ defmodule Mydia.Plugins.ManifestTest do
         "client_id" => "abc"
       }
 
-      assert {:ok, %Manifest{connection: ^conn}} = Manifest.parse(with_connection(conn))
+      normalised =
+        Map.merge(conn, %{
+          "auth_header" => "Authorization: Bearer {token}",
+          "method" => "GET",
+          "headers" => %{}
+        })
+
+      assert {:ok, %Manifest{connection: ^normalised}} =
+               Manifest.parse(with_connection(conn))
     end
 
     test "a URL whose host is not in net:http is rejected" do
@@ -490,6 +498,120 @@ defmodule Mydia.Plugins.ManifestTest do
     test "no schedule means no interval" do
       assert {:ok, %Manifest{schedule: nil}} = Manifest.parse(valid_map())
       assert Manifest.schedule_interval_minutes(%Manifest{}) == nil
+    end
+  end
+
+  describe "1.4 instance fields" do
+    test "defaults multi_instance, category and setup" do
+      assert {:ok, %Manifest{multi_instance: false, category: nil, setup: false}} =
+               Manifest.parse(valid_map(%{}))
+    end
+
+    test "accepts multi_instance, a known category and setup" do
+      assert {:ok, %Manifest{multi_instance: true, category: "media_server", setup: true}} =
+               Manifest.parse(
+                 valid_map(%{
+                   "multi_instance" => true,
+                   "category" => "media_server",
+                   "setup" => true
+                 })
+               )
+    end
+
+    test "rejects non-boolean flags and unknown categories" do
+      assert {:error, %{type: :invalid_manifest}} =
+               Manifest.parse(valid_map(%{"multi_instance" => "yes"}))
+
+      assert {:error, %{type: :invalid_manifest}} = Manifest.parse(valid_map(%{"setup" => 1}))
+
+      assert {:error, %{type: :invalid_manifest, message: msg}} =
+               Manifest.parse(valid_map(%{"category" => "toaster"}))
+
+      assert msg =~ "category"
+    end
+  end
+
+  describe "connection auth header, method and headers" do
+    defp with_conn(conn, hosts \\ ["plex.tv"]) do
+      valid_map(%{
+        "capabilities" => %{
+          "events:subscribe" => ["media_item.added"],
+          "net:http" => hosts,
+          "users:connections" => []
+        },
+        "connection" => conn
+      })
+    end
+
+    test "type none needs no URLs and keeps an auth header" do
+      assert {:ok, %Manifest{connection: conn} = m} =
+               Manifest.parse(
+                 with_conn(%{"type" => "none", "auth_header" => "X-Plex-Token: {token}"})
+               )
+
+      assert conn["type"] == "none"
+      assert conn["method"] == "GET"
+      assert conn["headers"] == %{}
+      assert Manifest.auth_header(m) == {"X-Plex-Token", "{token}"}
+      refute Manifest.device_flow?(m)
+    end
+
+    test "defaults the auth header to Bearer" do
+      assert {:ok, m} = Manifest.parse(with_conn(%{"type" => "none"}))
+      assert Manifest.auth_header(m) == {"Authorization", "Bearer {token}"}
+      assert Manifest.auth_header(%Manifest{}) == {"Authorization", "Bearer {token}"}
+    end
+
+    test "accepts a POST device flow with static headers" do
+      conn = %{
+        "type" => "oauth_device",
+        "code_url" => "https://plex.tv/api/v2/pins",
+        "poll_url" => "https://plex.tv/api/v2/pins/{code}",
+        "method" => "POST",
+        "headers" => %{"X-Plex-Product" => "Mydia"}
+      }
+
+      assert {:ok, %Manifest{connection: parsed} = m} = Manifest.parse(with_conn(conn))
+      assert parsed["method"] == "POST"
+      assert parsed["headers"] == %{"X-Plex-Product" => "Mydia"}
+      assert Manifest.device_flow?(m)
+    end
+
+    test "rejects malformed auth headers" do
+      for bad <- [
+            "X-Plex-Token {token}",
+            "X-Plex-Token: token",
+            ": {token}",
+            "Bad Name: {token}",
+            42
+          ] do
+        assert {:error, %{type: :invalid_manifest}} =
+                 Manifest.parse(with_conn(%{"type" => "none", "auth_header" => bad})),
+               "expected #{inspect(bad)} to be rejected"
+      end
+    end
+
+    test "rejects unknown methods, non-string headers and unknown types" do
+      assert {:error, _} = Manifest.parse(with_conn(%{"type" => "none", "method" => "PUT"}))
+
+      assert {:error, _} =
+               Manifest.parse(with_conn(%{"type" => "none", "headers" => %{"X-A" => 1}}))
+
+      assert {:error, _} = Manifest.parse(with_conn(%{"type" => "none", "headers" => ["X-A"]}))
+      assert {:error, _} = Manifest.parse(with_conn(%{"type" => "saml"}))
+    end
+
+    test "existing oauth_device manifests keep parsing unchanged" do
+      conn = %{
+        "type" => "oauth_device",
+        "code_url" => "https://api.simkl.com/oauth/pin?client_id=x",
+        "poll_url" => "https://api.simkl.com/oauth/pin/{user_code}",
+        "verification_url" => "https://simkl.com/pin"
+      }
+
+      assert {:ok, m} = Manifest.parse(with_conn(conn, ["api.simkl.com", "simkl.com"]))
+      assert m.connection["code_url"] == conn["code_url"]
+      assert Manifest.auth_header(m) == {"Authorization", "Bearer {token}"}
     end
   end
 end

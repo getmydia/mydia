@@ -32,7 +32,11 @@ defmodule Mydia.Plugins.Plugin do
           granted_capabilities: capabilities(),
           enabled: boolean(),
           source: atom() | nil,
-          delivery: delivery()
+          delivery: delivery(),
+          multi_instance: boolean(),
+          category: String.t() | nil,
+          setup: boolean(),
+          connection: map() | nil
         }
 
   defstruct slug: nil,
@@ -46,7 +50,11 @@ defmodule Mydia.Plugins.Plugin do
             granted_capabilities: %{},
             enabled: false,
             source: nil,
-            delivery: :inline
+            delivery: :inline,
+            multi_instance: false,
+            category: nil,
+            setup: false,
+            connection: nil
 
   alias Mydia.Plugins.Manifest
 
@@ -71,7 +79,11 @@ defmodule Mydia.Plugins.Plugin do
       granted_capabilities: Keyword.get(opts, :granted_capabilities, %{}),
       enabled: Keyword.get(opts, :enabled, false),
       source: Keyword.get(opts, :source),
-      delivery: Keyword.get(opts, :delivery, :inline)
+      delivery: Keyword.get(opts, :delivery, :inline),
+      multi_instance: manifest.multi_instance,
+      category: manifest.category,
+      setup: manifest.setup,
+      connection: manifest.connection
     }
   end
 

@@ -67,6 +67,20 @@ defmodule Mydia.Plugins.Manifest do
   another field's current value — e.g. `"visible_when": {"target": "ntfy"}` shows
   the field only when the `target` setting is `ntfy`. Each referenced key must
   name a sibling field. This is presentation only; the host does not enforce it.
+
+  ## Instances and setup (1.4)
+
+  `multi_instance: true` lets an operator configure several instances of the
+  plugin, each with its own settings, links and store. `category` places the
+  plugin's instances on a host page (`media_server` puts them on Admin > Media
+  servers). `setup: true` declares that the guest exports `setup` and the host
+  should create instances through the setup wizard instead of the settings form.
+
+  `connection.auth_header` (default `"Authorization: Bearer {token}"`) is how the
+  host attaches a link's token to `link-request`. `connection.type` may be
+  `"none"` when a plugin needs only that header and no device flow.
+  `connection.method` (`GET` or `POST`) and `connection.headers` apply to the
+  device flow's code and poll requests.
   """
 
   alias Mydia.Plugins.Error
@@ -83,7 +97,10 @@ defmodule Mydia.Plugins.Manifest do
           settings_schema: [map()],
           connection: map() | nil,
           schedule: map() | nil,
-          min_host_version: String.t() | nil
+          min_host_version: String.t() | nil,
+          multi_instance: boolean(),
+          category: String.t() | nil,
+          setup: boolean()
         }
 
   defstruct slug: nil,
@@ -97,7 +114,20 @@ defmodule Mydia.Plugins.Manifest do
             settings_schema: [],
             connection: nil,
             schedule: nil,
-            min_host_version: nil
+            min_host_version: nil,
+            multi_instance: false,
+            category: nil,
+            setup: false
+
+  # Where a plugin's instances appear in the admin UI (Task 12). Closed so a
+  # typo fails at parse time instead of silently hiding the plugin.
+  @categories ~w(media_server)
+
+  @default_auth_header "Authorization: Bearer {token}"
+  @connection_types ~w(oauth_device none)
+  @connection_methods ~w(GET POST)
+  # RFC 7230 token characters, which is what a header name may contain.
+  @header_name ~r/\A[!#$%&'*+\-.^_`|~0-9A-Za-z]+\z/
 
   # v1 event catalog (KTD3): a curated subset of existing event `type` strings
   # dispatched off the "events:all" bus. This is a deliberate, narrower public
@@ -198,9 +228,12 @@ defmodule Mydia.Plugins.Manifest do
     with :ok <- validate_required(map),
          {:ok, capabilities} <- validate_capabilities(capabilities),
          {:ok, settings_schema} <- validate_settings_schema(settings_schema),
-         :ok <- validate_connection(connection, capabilities),
+         {:ok, connection} <- validate_connection(connection, capabilities),
          :ok <- validate_schedule(schedule, capabilities),
-         :ok <- validate_min_host_version(Map.get(map, "min_host_version")) do
+         :ok <- validate_min_host_version(Map.get(map, "min_host_version")),
+         {:ok, multi_instance} <- validate_flag(map, "multi_instance"),
+         {:ok, setup} <- validate_flag(map, "setup"),
+         {:ok, category} <- validate_category(Map.get(map, "category")) do
       {:ok,
        %__MODULE__{
          slug: map["slug"],
@@ -214,9 +247,31 @@ defmodule Mydia.Plugins.Manifest do
          settings_schema: settings_schema,
          connection: connection,
          schedule: schedule,
-         min_host_version: Map.get(map, "min_host_version")
+         min_host_version: Map.get(map, "min_host_version"),
+         multi_instance: multi_instance,
+         setup: setup,
+         category: category
        }}
     end
+  end
+
+  @doc """
+  The header a host-attached token is sent in, as `{name, value_template}`.
+  The template contains `{token}`. Defaults to `Authorization: Bearer {token}`.
+  """
+  @spec auth_header(t() | map() | nil) :: {String.t(), String.t()}
+  def auth_header(%__MODULE__{connection: conn}), do: auth_header(conn)
+  def auth_header(%{"auth_header" => header}) when is_binary(header), do: split_header(header)
+  def auth_header(_), do: split_header(@default_auth_header)
+
+  @doc "True when the manifest declares a host-run OAuth device flow."
+  @spec device_flow?(t()) :: boolean()
+  def device_flow?(%__MODULE__{connection: %{"type" => "oauth_device"}}), do: true
+  def device_flow?(_), do: false
+
+  defp split_header(header) do
+    [name, value] = String.split(header, ":", parts: 2)
+    {String.trim(name), String.trim(value)}
   end
 
   @doc """
@@ -414,29 +469,119 @@ defmodule Mydia.Plugins.Manifest do
   # plugin's declared net:http hosts, so the verification URL rendered in trusted
   # host UI can never become a phishing surface, and the host never fetches an
   # un-allowlisted endpoint.
-  defp validate_connection(nil, _capabilities), do: :ok
+  defp validate_connection(nil, _capabilities), do: {:ok, nil}
 
   defp validate_connection(conn, _capabilities) when not is_map(conn),
     do: {:error, Error.new(:invalid_manifest, "connection must be an object")}
 
   defp validate_connection(conn, capabilities) do
     hosts = Map.get(capabilities, "net:http", [])
+    type = Map.get(conn, "type")
 
-    with :ok <- validate_connection_type(Map.get(conn, "type")),
-         :ok <- validate_connection_url(conn, "code_url", hosts, true),
-         :ok <- validate_connection_url(conn, "poll_url", hosts, true) do
-      validate_connection_url(conn, "verification_url", hosts, false)
+    with :ok <- validate_connection_type(type),
+         :ok <- validate_device_flow_urls(type, conn, hosts),
+         {:ok, auth_header} <-
+           validate_auth_header(Map.get(conn, "auth_header", @default_auth_header)),
+         {:ok, method} <- validate_connection_method(Map.get(conn, "method", "GET")),
+         {:ok, headers} <- validate_connection_headers(Map.get(conn, "headers", %{})) do
+      {:ok,
+       Map.merge(conn, %{
+         "auth_header" => auth_header,
+         "method" => method,
+         "headers" => headers
+       })}
     end
   end
 
-  defp validate_connection_type("oauth_device"), do: :ok
+  defp validate_connection_type(type) when type in @connection_types, do: :ok
 
   defp validate_connection_type(other),
     do:
       {:error,
        Error.new(
          :invalid_manifest,
-         "connection.type must be \"oauth_device\", got: #{inspect(other)}"
+         "connection.type must be one of #{Enum.join(@connection_types, ", ")}, got: #{inspect(other)}"
+       )}
+
+  # Only a device flow has URLs to drive; `none` exists to carry auth_header.
+  defp validate_device_flow_urls("oauth_device", conn, hosts) do
+    with :ok <- validate_connection_url(conn, "code_url", hosts, true),
+         :ok <- validate_connection_url(conn, "poll_url", hosts, true) do
+      validate_connection_url(conn, "verification_url", hosts, false)
+    end
+  end
+
+  defp validate_device_flow_urls(_type, _conn, _hosts), do: :ok
+
+  defp validate_auth_header(header) when is_binary(header) do
+    with [name, value] <- String.split(header, ":", parts: 2),
+         name = String.trim(name),
+         value = String.trim(value),
+         true <- Regex.match?(@header_name, name),
+         true <- String.contains?(value, "{token}") do
+      {:ok, "#{name}: #{value}"}
+    else
+      _ ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "connection.auth_header must look like \"Header-Name: ... {token} ...\", got: #{inspect(header)}"
+         )}
+    end
+  end
+
+  defp validate_auth_header(other),
+    do:
+      {:error,
+       Error.new(
+         :invalid_manifest,
+         "connection.auth_header must be a string, got: #{inspect(other)}"
+       )}
+
+  defp validate_connection_method(method) when method in @connection_methods, do: {:ok, method}
+
+  defp validate_connection_method(other),
+    do:
+      {:error,
+       Error.new(
+         :invalid_manifest,
+         "connection.method must be GET or POST, got: #{inspect(other)}"
+       )}
+
+  defp validate_connection_headers(headers) when is_map(headers) do
+    if Enum.all?(headers, fn {k, v} ->
+         is_binary(k) and is_binary(v) and Regex.match?(@header_name, k)
+       end) do
+      {:ok, headers}
+    else
+      {:error,
+       Error.new(:invalid_manifest, "connection.headers must map header names to strings")}
+    end
+  end
+
+  defp validate_connection_headers(_),
+    do: {:error, Error.new(:invalid_manifest, "connection.headers must be an object")}
+
+  defp validate_flag(map, key) do
+    case Map.get(map, key, false) do
+      value when is_boolean(value) ->
+        {:ok, value}
+
+      other ->
+        {:error,
+         Error.new(:invalid_manifest, "#{key} must be true or false, got: #{inspect(other)}")}
+    end
+  end
+
+  defp validate_category(nil), do: {:ok, nil}
+  defp validate_category(category) when category in @categories, do: {:ok, category}
+
+  defp validate_category(other),
+    do:
+      {:error,
+       Error.new(
+         :invalid_manifest,
+         "category must be one of #{Enum.join(@categories, ", ")}, got: #{inspect(other)}"
        )}
 
   defp validate_connection_url(conn, key, hosts, required?) do
