@@ -105,11 +105,13 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
       id="discover-country-settings"
       class="modal modal-open"
       role="dialog"
+      aria-modal="true"
+      aria-labelledby="discover-country-settings-title"
       phx-window-keydown="close_country_settings"
       phx-key="Escape"
     >
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg">Your country</h3>
+        <h3 id="discover-country-settings-title" class="font-bold text-lg">Your country</h3>
         <p class="text-sm text-base-content/60 mt-1">
           See what is in cinemas and on your streaming services where you live.
         </p>
