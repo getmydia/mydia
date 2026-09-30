@@ -42,8 +42,9 @@ defmodule Mydia.Config.Loader do
          env_config <- maybe_load_env(sources),
          merged <- merge_all_configs(yaml_config, db_config, env_config),
          normalized <- normalize_legacy_indexer_types(merged),
-         translated <- translate_legacy_plex_media_servers(normalized) do
-      validate(translated)
+         translated <- translate_legacy_plex_media_servers(normalized),
+         cleaned <- drop_removed_plugin_installs(translated) do
+      validate(cleaned)
     end
   end
 
@@ -152,6 +153,11 @@ defmodule Mydia.Config.Loader do
           normalized_key == :connection_settings and is_map(value) ->
             stringify_keys(value)
 
+          # Each entry's `settings` is a free-form map keyed by the plugin's own
+          # setting names, so its keys stay exactly as written, as strings.
+          normalized_key == :plugin_settings and is_list(value) ->
+            Enum.map(value, &normalize_plugin_settings_entry/1)
+
           is_map(value) ->
             normalize_yaml_keys(value)
 
@@ -166,6 +172,25 @@ defmodule Mydia.Config.Loader do
     end)
     |> Enum.into(%{})
   end
+
+  defp normalize_plugin_settings_entry(entry) when is_map(entry) do
+    {settings, rest} =
+      Enum.split_with(entry, fn {key, _} ->
+        key |> to_string() |> String.downcase() == "settings"
+      end)
+
+    normalized = normalize_yaml_keys(Map.new(rest))
+
+    case settings do
+      [{_, %{} = map} | _] ->
+        Map.put(normalized, :settings, Map.new(map, fn {k, v} -> {to_string(k), v} end))
+
+      _ ->
+        normalized
+    end
+  end
+
+  defp normalize_plugin_settings_entry(entry), do: entry
 
   defp normalize_yaml_value(value) when is_map(value), do: normalize_yaml_keys(value)
   defp normalize_yaml_value(value), do: value
@@ -240,7 +265,7 @@ defmodule Mydia.Config.Loader do
       indexers: load_indexers_env(),
       media_servers: load_media_servers_env(),
       library_paths: load_library_paths_env(),
-      plugin_installs: load_plugins_env(),
+      plugin_settings: load_plugin_settings_env(),
       plugin_instances: load_plugin_instances_env(),
       plugins: load_plugins_runtime_env(),
       path_mappings: load_path_mappings_env()
@@ -249,7 +274,7 @@ defmodule Mydia.Config.Loader do
   end
 
   # Runtime keys for the plugin platform (the singular :plugins embed), distinct
-  # from PLUGIN_<N>_* installs handled by load_plugins_env/0. Only the filesystem
+  # from the PLUGIN_<N>_* settings handled by load_plugin_settings_env/0. Only the filesystem
   # override directory is env-configurable today.
   defp load_plugins_runtime_env do
     %{}
@@ -589,64 +614,102 @@ defmodule Mydia.Config.Loader do
 
   defp translate_legacy_plex_media_servers(config), do: config
 
-  # The config is reloaded at runtime, so the deprecation is logged on the first
-  # load of a boot only.
-  defp warn_legacy_plex_once(plex) do
-    key = {__MODULE__, :legacy_plex_warned}
+  # `plugin_installs:` declared YAML installs that never ran. `plugin_settings:`
+  # replaced it and only carries settings for an installed plugin.
+  defp drop_removed_plugin_installs(%{plugin_installs: _} = config) do
+    warn_once(
+      :removed_plugin_installs,
+      "Ignoring `plugin_installs:` in the config file: it was replaced by `plugin_settings:`, " <>
+        "a list of slug and settings for an installed plugin."
+    )
+
+    Map.delete(config, :plugin_installs)
+  end
+
+  defp drop_removed_plugin_installs(config), do: config
+
+  # The config is reloaded after every DB save, so a boot-level warning is
+  # logged on the first load of a boot only.
+  defp warn_once(tag, message) do
+    key = {__MODULE__, :warned, tag}
 
     if not :persistent_term.get(key, false) do
       :persistent_term.put(key, true)
-
-      Logger.warning(
-        "Plex media servers configured through MEDIA_SERVER_<N>_* or `media_servers:` " <>
-          "(#{Enum.map_join(plex, ", ", &Map.get(&1, :name))}) now run as the Plex plugin. " <>
-          "Rename them to PLUGIN_PLEX_<N>_NAME, PLUGIN_PLEX_<N>_URL and PLUGIN_PLEX_<N>_TOKEN, " <>
-          "or a `plugin_instances:` entry with `plugin: plex`. The old form will be removed in a later release."
-      )
+      Logger.warning(message)
     end
   end
 
-  defp load_plugins_env do
-    # Support environment variables for installed plugins in the format:
-    # PLUGIN_<N>_SLUG, PLUGIN_<N>_NAME, PLUGIN_<N>_SOURCE_URL, etc.
-    # Capabilities/settings are JSON strings:
-    # PLUGIN_<N>_GRANTED_CAPABILITIES='{"net:http":["discord.com"]}'
-    env_vars = System.get_env()
+  defp warn_legacy_plex_once(plex) do
+    warn_once(
+      :legacy_plex,
+      "Plex media servers configured through MEDIA_SERVER_<N>_* or `media_servers:` " <>
+        "(#{Enum.map_join(plex, ", ", &Map.get(&1, :name))}) now run as the Plex plugin. " <>
+        "Rename them to PLUGIN_PLEX_<N>_NAME, PLUGIN_PLEX_<N>_URL and PLUGIN_PLEX_<N>_TOKEN, " <>
+        "or a `plugin_instances:` entry with `plugin: plex`. The old form will be removed in a later release."
+    )
+  end
 
-    indices =
-      env_vars
-      |> Enum.filter(fn {key, _value} ->
-        String.starts_with?(key, "PLUGIN_") and String.ends_with?(key, "_SLUG")
-      end)
-      |> Enum.map(fn {key, _value} ->
-        key
-        |> String.replace_prefix("PLUGIN_", "")
-        |> String.replace_suffix("_SLUG", "")
-      end)
-      |> Enum.uniq()
-      |> Enum.filter(&String.match?(&1, ~r/^\d+$/))
+  # PLUGIN_<N>_SLUG + PLUGIN_<N>_SETTINGS (a JSON object) set an installed
+  # plugin's settings. The slug is a value, so dashed slugs work. The install
+  # fields this form used to carry never ran and are ignored with a warning.
+  @plugin_settings_slug_env ~r/^PLUGIN_(\d+)_SLUG$/
+  @removed_plugin_install_env ~r/^PLUGIN_\d+_(NAME|VERSION|ENABLED|PRIORITY|SOURCE_URL|INTEGRITY_HASH|GRANTED_CAPABILITIES)$/
 
-    Enum.map(indices, fn index ->
-      prefix = "PLUGIN_#{index}_"
+  defp load_plugin_settings_env do
+    env = System.get_env()
+    warn_removed_plugin_install_env(env)
 
-      %{}
-      |> put_if_present(:slug, System.get_env("#{prefix}SLUG"))
-      |> put_if_present(:name, System.get_env("#{prefix}NAME"))
-      |> put_if_present(:version, System.get_env("#{prefix}VERSION"))
-      |> put_if_present(:enabled, System.get_env("#{prefix}ENABLED"), &parse_boolean/1)
-      |> put_if_present(:priority, System.get_env("#{prefix}PRIORITY"), &parse_integer/1)
-      |> put_if_present(:source_url, System.get_env("#{prefix}SOURCE_URL"))
-      |> put_if_present(:integrity_hash, System.get_env("#{prefix}INTEGRITY_HASH"))
-      |> put_if_present(:settings, System.get_env("#{prefix}SETTINGS"), &parse_json/1)
-      |> put_if_present(
-        :granted_capabilities,
-        System.get_env("#{prefix}GRANTED_CAPABILITIES"),
-        &parse_json/1
-      )
-      # A plugin install with no name falls back to its slug.
-      |> then(fn map -> Map.put_new(map, :name, map[:slug]) end)
+    env
+    |> Map.keys()
+    |> Enum.flat_map(fn key ->
+      case Regex.run(@plugin_settings_slug_env, key) do
+        [_, index] -> [index]
+        nil -> []
+      end
     end)
-    |> Enum.reject(&(&1 == %{} or is_nil(&1[:slug])))
+    |> Enum.sort_by(&String.to_integer/1)
+    |> Enum.flat_map(&plugin_settings_entry(env, &1))
+  end
+
+  defp plugin_settings_entry(env, index) do
+    slug = env["PLUGIN_#{index}_SLUG"]
+    raw = env["PLUGIN_#{index}_SETTINGS"]
+
+    cond do
+      slug in [nil, ""] or raw in [nil, ""] ->
+        []
+
+      true ->
+        case parse_json(raw) do
+          {:ok, settings} ->
+            [%{slug: slug, settings: settings}]
+
+          :error ->
+            warn_once(
+              {:plugin_settings_json, index},
+              "PLUGIN_#{index}_SETTINGS is not a JSON object; ignoring the settings declared for #{slug}"
+            )
+
+            []
+        end
+    end
+  end
+
+  defp warn_removed_plugin_install_env(env) do
+    removed =
+      env
+      |> Map.keys()
+      |> Enum.filter(&Regex.match?(@removed_plugin_install_env, &1))
+      |> Enum.sort()
+
+    if removed != [] do
+      warn_once(
+        :removed_plugin_install_env,
+        "Ignoring #{Enum.join(removed, ", ")}: PLUGIN_<N>_* now only sets an installed plugin's " <>
+          "settings (PLUGIN_<N>_SLUG and PLUGIN_<N>_SETTINGS). Install and approve plugins in the " <>
+          "admin UI or with mydia-cli."
+      )
+    end
   end
 
   defp load_media_servers_env do
@@ -925,7 +988,7 @@ defmodule Mydia.Config.Loader do
           :indexers,
           :media_servers,
           :library_paths,
-          :plugin_installs,
+          :plugin_settings,
           :plugin_instances,
           :path_mappings
         ] and

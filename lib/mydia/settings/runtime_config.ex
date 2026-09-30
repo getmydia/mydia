@@ -426,6 +426,17 @@ defmodule Mydia.Settings.RuntimeConfig do
     end
   end
 
+  @doc "Plugin settings declared in YAML/env (`Mydia.Config.Schema.PluginSettingsDecl`)."
+  def get_runtime_plugin_settings do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_settings) do
+      runtime_config.plugin_settings
+    else
+      []
+    end
+  end
+
   ## Runtime ID Helpers (public, used by other sub-modules)
 
   def runtime_config?(%{id: id}) when is_binary(id) do

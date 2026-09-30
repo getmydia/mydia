@@ -74,30 +74,4 @@ defmodule Mydia.Settings.PluginConfigTest do
       assert String.match?(reloaded.integrity_hash, ~r/^[0-9a-f]+$/)
     end
   end
-
-  describe "list_plugin_configs/1" do
-    test "returns DB rows only, even when the runtime config lists plugin_installs" do
-      base = Mydia.Config.Schema.defaults()
-      previous = Application.get_env(:mydia, :runtime_config)
-
-      Application.put_env(:mydia, :runtime_config, %{
-        base
-        | plugin_installs: [%Mydia.Config.Schema.PluginInstall{slug: "shared", name: "From Env"}]
-      })
-
-      on_exit(fn ->
-        case previous do
-          nil -> Application.delete_env(:mydia, :runtime_config)
-          value -> Application.put_env(:mydia, :runtime_config, value)
-        end
-      end)
-
-      {:ok, db} = Settings.create_plugin_config(%{slug: "shared", name: "From DB"})
-
-      assert [%PluginConfig{id: id, name: "From DB"}] =
-               Enum.filter(Settings.list_plugin_configs(), &(&1.slug == "shared"))
-
-      assert id == db.id
-    end
-  end
 end
