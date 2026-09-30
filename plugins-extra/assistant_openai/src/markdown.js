@@ -27,7 +27,13 @@ const Markdown = (() => {
     return out
   }
 
-  const FENCE = /^```/
+  // A fence opens with 3+ backticks or tildes and closes only on a line of the
+  // same character, at least as long, with nothing after it.
+  const FENCE = /^(`{3,}|~{3,})/
+  const closesFence = (line, marker) => {
+    const t = line.trim()
+    return t.length >= marker.length && [...t].every((c) => c === marker[0])
+  }
   const HEADING = /^(#{1,3})\s+(.*)$/
   const BULLET = /^\s*[-*]\s+(.*)$/
   const ORDERED = /^\s*\d+[.)]\s+(.*)$/
@@ -51,11 +57,12 @@ const Markdown = (() => {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
 
-      if (FENCE.test(line.trim())) {
+      const fence = FENCE.exec(line.trim())
+      if (fence) {
         flush()
         const body = []
         i++
-        while (i < lines.length && !FENCE.test(lines[i].trim())) body.push(lines[i++])
+        while (i < lines.length && !closesFence(lines[i], fence[1])) body.push(lines[i++])
         blocks.push({ t: "pre", text: body.join("\n") })
         continue
       }

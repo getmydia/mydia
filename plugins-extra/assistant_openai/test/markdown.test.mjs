@@ -33,6 +33,14 @@ test("fenced code is literal", () => {
   ])
 })
 
+test("a fence closes only on a matching run of the same marker", () => {
+  assert.deepEqual(parse("````md\n```js\nx\n```\n````\nafter"), [
+    { t: "pre", text: "```js\nx\n```" },
+    { t: "p", children: [t("after")] },
+  ])
+  assert.deepEqual(parse("~~~\n```\n~~~"), [{ t: "pre", text: "```" }])
+})
+
 test("inline code, strong and emphasis", () => {
   assert.deepEqual(parse("a `x` **b** *c* _d_"), [
     {
