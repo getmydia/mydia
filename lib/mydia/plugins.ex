@@ -472,7 +472,7 @@ defmodule Mydia.Plugins do
   defp seed_or_reconcile({manifest, raw}) do
     case Settings.get_plugin_config_by_slug(manifest.slug) do
       nil -> seed_bundled(manifest, raw)
-      %Settings.PluginConfig{} = config -> reconcile_bundled(config, manifest)
+      %Settings.PluginConfig{} = config -> reconcile_bundled(config, manifest, raw)
     end
   end
 
@@ -516,14 +516,14 @@ defmodule Mydia.Plugins do
   # (built-in upgrade): replace the stored manifest/metadata and grant in one
   # update, then null any stale DB bytes. Non-bundled rows (e.g. an index plugin)
   # are left entirely alone — they keep explicit approval and re-approval.
-  defp reconcile_bundled(%Settings.PluginConfig{source_url: "bundled"} = config, manifest) do
-    case refresh_bundled_state(config, manifest) do
+  defp reconcile_bundled(%Settings.PluginConfig{source_url: "bundled"} = config, manifest, raw) do
+    case refresh_bundled_state(config, manifest, raw) do
       {:ok, updated} -> reconcile_bundled_artifact(updated)
       {:error, _reason} -> :ok
     end
   end
 
-  defp reconcile_bundled(_config, _manifest), do: :ok
+  defp reconcile_bundled(_config, _manifest, _raw), do: :ok
 
   # Replace the manifest metadata *and* the grant together, so a revised manifest
   # never leaves the row holding a stale one. The grant is the manifest's exact
@@ -531,17 +531,20 @@ defmodule Mydia.Plugins do
   # hosts — which both widens to the shipped set and drops capabilities the
   # manifest no longer declares. `enabled` is deliberately absent from attrs: the
   # administrator's choice survives every host upgrade.
-  defp refresh_bundled_state(config, manifest) do
+  defp refresh_bundled_state(config, manifest, raw) do
     manifest_map = manifest_to_map(manifest)
+    # The delivery mode lives in settings; a shipped change must reach existing rows.
+    settings = Map.merge(config.settings || %{}, bundled_settings(raw))
 
     attrs =
       %{}
       |> put_changed(:manifest, manifest_map, config.manifest)
+      |> put_changed(:settings, settings, config.settings)
       |> put_changed(:name, manifest.name, config.name)
       |> put_changed(:version, manifest.version, config.version)
       |> put_changed(
         :granted_capabilities,
-        effective_grants(manifest_map, config.settings),
+        effective_grants(manifest_map, settings),
         config.granted_capabilities
       )
 
@@ -1239,7 +1242,11 @@ defmodule Mydia.Plugins do
       "capabilities" => m.capabilities,
       "settings_schema" => m.settings_schema,
       "connection" => m.connection,
-      "schedule" => m.schedule
+      "schedule" => m.schedule,
+      "min_host_version" => m.min_host_version,
+      "multi_instance" => m.multi_instance,
+      "category" => m.category,
+      "setup" => m.setup
     }
   end
 
