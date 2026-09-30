@@ -83,6 +83,7 @@ defmodule Mydia.Plugins.Manifest do
           settings_schema: [map()],
           connection: map() | nil,
           schedule: map() | nil,
+          page: map() | nil,
           min_host_version: String.t() | nil
         }
 
@@ -97,6 +98,7 @@ defmodule Mydia.Plugins.Manifest do
             settings_schema: [],
             connection: nil,
             schedule: nil,
+            page: nil,
             min_host_version: nil
 
   # v1 event catalog (KTD3): a curated subset of existing event `type` strings
@@ -123,18 +125,18 @@ defmodule Mydia.Plugins.Manifest do
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
   # all four so they need no breaking change when the reserved ones land.
-  @known_classes ~w(events:subscribe net:http data:read surfaces:write state:kv users:connections schedule:interval)
+  @known_classes ~w(events:subscribe net:http data:read data:search surfaces:write surfaces:page state:kv users:connections schedule:interval)
 
   # Implemented capability classes. `data:read` is honored by data-read/data-list;
   # `state:kv` by the kv-* host functions (U3); `users:connections` by
   # connections-list + the connect flow (U7); `schedule:interval` by the
   # PluginScheduler tick (U4); `surfaces:write` by ensure-watched (U6).
-  @available_classes ~w(events:subscribe net:http data:read state:kv users:connections schedule:interval surfaces:write)
+  @available_classes ~w(events:subscribe net:http data:read data:search state:kv users:connections schedule:interval surfaces:write surfaces:page)
 
-  # The value vocabulary for `surfaces:write` — the curated write surfaces a
-  # plugin may target. Only `playback:watched` (the ensure-watched host function)
-  # is honored in this version.
-  @write_surfaces ~w(playback:watched collections:favorite)
+  # The value vocabulary for `surfaces:write`. `playback:watched` and
+  # `collections:favorite` serve both the connection-scoped sync functions and
+  # the page functions; `media:add` and `collections:write` are page-only.
+  @write_surfaces ~w(playback:watched collections:favorite media:add collections:write)
 
   # The lowest interval (minutes) a scheduled plugin may request — a floor so a
   # misconfigured manifest can't tick the host to death.
@@ -144,7 +146,10 @@ defmodule Mydia.Plugins.Manifest do
   # is served by both `data-read` (single) and `data-list` (enumerate);
   # `playback_progress` (U5) is a `data-list`-only per-user watch projection,
   # consent-scoped to users with an active connection to the calling plugin.
-  @data_namespaces ~w(media_item playback_progress library_item)
+  @data_namespaces ~w(media_item playback_progress library_item media_request download collection)
+
+  # `media_request`, `download` and `collection` are page-only namespaces that
+  # list the acting user's own rows.
 
   # Field types a `settings_schema` entry may declare. `text` renders as a
   # multiline textarea (used for template fields); otherwise like `string`.
@@ -194,9 +199,11 @@ defmodule Mydia.Plugins.Manifest do
 
     connection = Map.get(map, "connection")
     schedule = Map.get(map, "schedule")
+    page = Map.get(map, "page")
 
     with :ok <- validate_required(map),
          {:ok, capabilities} <- validate_capabilities(capabilities),
+         :ok <- validate_page(page, capabilities),
          {:ok, settings_schema} <- validate_settings_schema(settings_schema),
          :ok <- validate_connection(connection, capabilities),
          :ok <- validate_schedule(schedule, capabilities),
@@ -214,6 +221,7 @@ defmodule Mydia.Plugins.Manifest do
          settings_schema: settings_schema,
          connection: connection,
          schedule: schedule,
+         page: page,
          min_host_version: Map.get(map, "min_host_version")
        }}
     end
@@ -260,6 +268,19 @@ defmodule Mydia.Plugins.Manifest do
   @spec host_granting_keys(t() | [map()] | nil) :: [String.t()]
   def host_granting_keys(schema_or_manifest) do
     schema_or_manifest |> host_granting_fields() |> Enum.map(&Map.get(&1, "key"))
+  end
+
+  @doc """
+  Returns the setting keys whose host may resolve to a private address
+  (`allow_private: true` on a host-granting url field). The host of each value
+  is granted under `net:private` alongside `net:http`.
+  """
+  @spec private_host_keys(t() | [map()] | nil) :: [String.t()]
+  def private_host_keys(schema_or_manifest) do
+    schema_or_manifest
+    |> host_granting_fields()
+    |> Enum.filter(&(Map.get(&1, "allow_private") == true))
+    |> Enum.map(&Map.get(&1, "key"))
   end
 
   # ── Validation ──────────────────────────────────────────────────────────
@@ -322,8 +343,9 @@ defmodule Mydia.Plugins.Manifest do
            "capability not available in this version: #{reserved}"
          )}
 
-      "events:subscribe" not in classes ->
-        {:error, Error.new(:invalid_manifest, "a plugin must declare events:subscribe")}
+      "events:subscribe" not in classes and "surfaces:page" not in classes ->
+        {:error,
+         Error.new(:invalid_manifest, "a plugin must declare events:subscribe or surfaces:page")}
 
       true ->
         :ok
@@ -504,6 +526,41 @@ defmodule Mydia.Plugins.Manifest do
   defp validate_schedule_interval(_),
     do: {:error, Error.new(:invalid_manifest, "schedule.interval_minutes must be an integer")}
 
+  # A `page` descriptor names the navbar entry for a plugin page. It is required
+  # with `surfaces:page` and meaningless without it. The icon is a heroicon name
+  # the host renders through `<.icon>`, never markup from the plugin.
+  @page_icon ~r/^hero-[a-z0-9-]+$/
+  @page_title_max 40
+
+  defp validate_page(nil, capabilities) do
+    if Map.has_key?(capabilities, "surfaces:page"),
+      do: {:error, Error.new(:invalid_manifest, "surfaces:page requires a page descriptor")},
+      else: :ok
+  end
+
+  defp validate_page(page, capabilities) when is_map(page) do
+    title = Map.get(page, "title")
+    icon = Map.get(page, "icon")
+
+    cond do
+      not Map.has_key?(capabilities, "surfaces:page") ->
+        {:error, Error.new(:invalid_manifest, "a page descriptor requires surfaces:page")}
+
+      not is_binary(title) or blank?(title) or String.length(title) > @page_title_max ->
+        {:error,
+         Error.new(:invalid_manifest, "page.title must be 1 to #{@page_title_max} characters")}
+
+      not (is_binary(icon) and Regex.match?(@page_icon, icon)) ->
+        {:error, Error.new(:invalid_manifest, "page.icon must be a hero-* icon name")}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_page(_page, _capabilities),
+    do: {:error, Error.new(:invalid_manifest, "page must be an object")}
+
   # An optional `min_host_version` declares the lowest Mydia version the plugin
   # supports — the floor `Mydia.Plugins` enforces at activation (R7). It must be a
   # valid semantic version when present; absent means "no floor" (back-compat).
@@ -563,6 +620,14 @@ defmodule Mydia.Plugins.Manifest do
       Map.get(field, "grants_host") == true and type != "url" ->
         {:error,
          Error.new(:invalid_manifest, "grants_host is only allowed on url fields: #{key}")}
+
+      Map.get(field, "allow_private") == true and
+          not (type == "url" and Map.get(field, "grants_host") == true) ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "allow_private is only allowed on url fields with grants_host: #{key}"
+         )}
 
       type == "enum" and not valid_options?(Map.get(field, "options")) ->
         {:error,

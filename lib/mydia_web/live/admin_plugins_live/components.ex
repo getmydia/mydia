@@ -30,6 +30,15 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_label("surfaces:write", surfaces),
     do: "Write to these surfaces: #{join(surfaces)}"
 
+  def capability_label("data:search", _),
+    do: "Search your library on behalf of the person using it"
+
+  def capability_label("surfaces:page", _),
+    do: "Serve its own page inside Mydia"
+
+  def capability_label("net:private", hosts),
+    do: "Reach servers on your private network: #{join(hosts)}"
+
   def capability_label("state:kv", _),
     do: "Store its own state across runs"
 
@@ -50,6 +59,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_icon("events:subscribe"), do: "hero-bell-alert"
   def capability_icon("data:read"), do: "hero-book-open"
   def capability_icon("surfaces:write"), do: "hero-pencil-square"
+  def capability_icon("data:search"), do: "hero-magnifying-glass"
+  def capability_icon("surfaces:page"), do: "hero-window"
+  def capability_icon("net:private"), do: "hero-server-stack"
   def capability_icon("state:kv"), do: "hero-circle-stack"
   def capability_icon("users:connections"), do: "hero-users"
   def capability_icon("schedule:interval"), do: "hero-clock"
@@ -58,7 +70,15 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   @doc "True when a capability class carries privacy/security weight worth emphasizing."
   @spec sensitive_capability?(String.t()) :: boolean()
   def sensitive_capability?(class),
-    do: class in ["net:http", "data:read", "surfaces:write", "users:connections"]
+    do:
+      class in [
+        "net:http",
+        "net:private",
+        "data:read",
+        "data:search",
+        "surfaces:write",
+        "users:connections"
+      ]
 
   defp join([]), do: "(none)"
   defp join(values), do: Enum.join(values, ", ")

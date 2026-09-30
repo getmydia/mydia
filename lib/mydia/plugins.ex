@@ -95,6 +95,22 @@ defmodule Mydia.Plugins do
     end
   end
 
+  @doc """
+  Enabled plugins holding `surfaces:page`, as navbar entries. The title and icon
+  come from the manifest's `page` descriptor, validated at parse time.
+  """
+  @spec list_pages() :: [%{slug: String.t(), title: String.t(), icon: String.t()}]
+  def list_pages do
+    pages =
+      for %Plugin{enabled: true, page: %{"title" => title, "icon" => icon}} = plugin <-
+            list_plugins(),
+          Plugin.granted?(plugin, "surfaces:page") do
+        %{slug: plugin.slug, title: title, icon: icon}
+      end
+
+    Enum.sort_by(pages, & &1.title)
+  end
+
   defp connectable_hosts(slug) do
     case get_plugin(slug) do
       {:ok, %Plugin{} = plugin} -> Plugin.granted_http_hosts(plugin)
@@ -1017,11 +1033,9 @@ defmodule Mydia.Plugins do
         stale = derived_hosts(config.manifest, config.settings) -- static_hosts(config.manifest)
         kept = hosts -- stale
 
-        Map.put(
-          granted,
-          "net:http",
-          Enum.uniq(kept ++ derived_hosts(config.manifest, new_settings))
-        )
+        granted
+        |> Map.put("net:http", Enum.uniq(kept ++ derived_hosts(config.manifest, new_settings)))
+        |> put_private_hosts(derived_private_hosts(config.manifest, new_settings))
     end
   end
 
@@ -1033,7 +1047,36 @@ defmodule Mydia.Plugins do
     manifest_map
     |> Map.get("capabilities", %{})
     |> put_effective_http(manifest_map, settings)
+    |> put_effective_private(manifest_map, settings)
   end
+
+  # `net:private` is never declared in a manifest: it is derived from
+  # `allow_private` settings, and only alongside a granted `net:http`, so a
+  # plugin cannot reach a private address it was not also allowed to reach.
+  defp put_effective_private(map, manifest_map, settings) do
+    if Map.has_key?(map, "net:http") do
+      put_private_hosts(map, derived_private_hosts(manifest_map, settings))
+    else
+      map
+    end
+  end
+
+  # An empty list is left out entirely, so a plugin with no private host carries
+  # no `net:private` class at all.
+  defp put_private_hosts(map, []), do: Map.delete(map, "net:private")
+  defp put_private_hosts(map, hosts), do: Map.put(map, "net:private", hosts)
+
+  defp derived_private_hosts(manifest_map, settings) when is_map(manifest_map) do
+    manifest_map
+    |> Map.get("settings_schema")
+    |> Manifest.private_host_keys()
+    |> Enum.map(&Map.get(settings || %{}, &1))
+    |> Enum.map(&url_host/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp derived_private_hosts(_manifest_map, _settings), do: []
 
   # Replaces a capability map's `net:http` with the effective host set, but only
   # when `net:http` is already present — so this never grants a capability that
