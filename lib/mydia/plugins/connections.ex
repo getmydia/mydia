@@ -10,7 +10,7 @@ defmodule Mydia.Plugins.Connections do
   surfaces it in logs or crash reports.
 
   Cross-user surfaces are consent-scoped (R21): only a user who has clicked
-  Connect (an *active* connection, `status: "connected"`) is visible to the
+  Connect (an *active* connection, `status: "active"`) is visible to the
   plugin's reads and writable by its write-backs. `connected_user_ids/1` and
   `active?/2` are that boundary.
   """
@@ -24,17 +24,19 @@ defmodule Mydia.Plugins.Connections do
   alias Mydia.Repo
   alias Mydia.Settings
 
-  @statuses ~w(connected error)
+  @statuses ~w(active error disabled)
 
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
   @type t :: %__MODULE__{}
 
-  schema "plugin_user_connections" do
-    field :plugin_config_id, :binary_id
+  schema "plugin_account_links" do
+    field :instance_id, :binary_id
+    field :role, :string, default: "user"
+    field :source, :string, default: "user_flow"
     field :plugin_slug, :string
-    field :status, :string, default: "connected"
+    field :status, :string, default: "active"
     field :access_token, :string, redact: true
     field :external_user_id, :string
     field :external_username, :string
@@ -49,7 +51,7 @@ defmodule Mydia.Plugins.Connections do
   def changeset(connection, attrs) do
     connection
     |> cast(attrs, [
-      :plugin_config_id,
+      :instance_id,
       :plugin_slug,
       :user_id,
       :status,
@@ -58,10 +60,16 @@ defmodule Mydia.Plugins.Connections do
       :external_username,
       :meta
     ])
-    |> validate_required([:plugin_config_id, :plugin_slug, :user_id, :access_token])
+    |> update_change(:status, fn
+      "connected" -> "active"
+      other -> other
+    end)
+    |> validate_required([:instance_id, :plugin_slug, :user_id, :access_token])
     |> validate_inclusion(:status, @statuses)
-    |> unique_constraint([:plugin_slug, :user_id])
-    |> foreign_key_constraint(:plugin_config_id)
+    |> unique_constraint([:instance_id, :user_id],
+      name: :plugin_account_links_instance_user_index
+    )
+    |> foreign_key_constraint(:instance_id)
     |> foreign_key_constraint(:user_id)
   end
 
@@ -76,13 +84,15 @@ defmodule Mydia.Plugins.Connections do
       nil ->
         {:error, :not_installed}
 
-      %{id: config_id} ->
+      %{} ->
+        instance = Mydia.Plugins.Instances.default_instance(slug)
+
         base =
           Map.merge(attrs, %{
             plugin_slug: slug,
-            plugin_config_id: config_id,
+            instance_id: instance.id,
             user_id: user_id,
-            status: Map.get(attrs, :status, "connected")
+            status: Map.get(attrs, :status, "active")
           })
 
         (get(slug, user_id) || %Connections{})
@@ -116,14 +126,14 @@ defmodule Mydia.Plugins.Connections do
   end
 
   @doc """
-  The user ids with an *active* (status `connected`) connection to the plugin —
+  The user ids with an *active* (status `active`) connection to the plugin —
   the consent boundary for cross-user reads/writes (R21).
   """
   @spec connected_user_ids(String.t()) :: [binary()]
   def connected_user_ids(slug) when is_binary(slug) do
     Repo.all(
       from c in Connections,
-        where: c.plugin_slug == ^slug and c.status == "connected",
+        where: c.plugin_slug == ^slug and c.status == "active",
         select: c.user_id
     )
   end
@@ -133,7 +143,7 @@ defmodule Mydia.Plugins.Connections do
   def active?(slug, user_id) when is_binary(slug) do
     Repo.exists?(
       from c in Connections,
-        where: c.plugin_slug == ^slug and c.user_id == ^user_id and c.status == "connected"
+        where: c.plugin_slug == ^slug and c.user_id == ^user_id and c.status == "active"
     )
   end
 
@@ -200,7 +210,7 @@ defmodule Mydia.Plugins.Connections do
     {count, _} =
       Repo.update_all(
         from(c in Connections,
-          where: c.plugin_slug == ^slug and c.user_id in ^valid_ids and c.status == "connected"
+          where: c.plugin_slug == ^slug and c.user_id in ^valid_ids and c.status == "active"
         ),
         set: [status: "error", updated_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)]
       )

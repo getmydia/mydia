@@ -38,6 +38,7 @@ defmodule Mydia.Plugins.Kv do
 
   schema "plugin_kv" do
     field :plugin_config_id, :binary_id
+    field :instance_id, :binary_id
     field :plugin_slug, :string
     field :key, :string
     field :value, :string
@@ -75,7 +76,8 @@ defmodule Mydia.Plugins.Kv do
     with :ok <- check_value_size(value),
          {:ok, config_id} <- resolve_config_id(slug),
          :ok <- check_key_quota(slug, key) do
-      upsert(slug, config_id, key, value)
+      instance_id = Mydia.Plugins.Instances.default_instance(slug).id
+      upsert(slug, config_id, instance_id, key, value)
     end
   end
 
@@ -147,12 +149,13 @@ defmodule Mydia.Plugins.Kv do
     end
   end
 
-  defp upsert(slug, config_id, key, value) do
+  defp upsert(slug, config_id, instance_id, key, value) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     entry = %{
       id: Ecto.UUID.generate(),
       plugin_config_id: config_id,
+      instance_id: instance_id,
       plugin_slug: slug,
       key: key,
       value: value,
@@ -162,7 +165,7 @@ defmodule Mydia.Plugins.Kv do
 
     case Repo.insert_all(Kv, [entry],
            on_conflict: [set: [value: value, updated_at: now]],
-           conflict_target: [:plugin_slug, :key]
+           conflict_target: [:instance_id, :key]
          ) do
       {n, _} when n >= 1 -> {:ok, value}
       _ -> {:error, Error.new(:internal, "kv write failed")}

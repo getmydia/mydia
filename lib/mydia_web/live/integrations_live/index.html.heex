@@ -77,7 +77,7 @@
                     Cancel
                   </button>
                 </div>
-              <% pc.connection && pc.connection.status == "connected" -> %>
+              <% pc.connection && pc.connection.status == "active" -> %>
                 <div
                   class="flex items-center justify-between"
                   id={"plugin-conn-connected-#{pc.slug}"}

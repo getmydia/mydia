@@ -45,7 +45,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
                  external_username: "alice"
                })
 
-      assert conn.status == "connected"
+      assert conn.status == "active"
       assert conn.external_username == "alice"
 
       fetched = Connections.get("connector", user.id)
