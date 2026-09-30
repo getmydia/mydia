@@ -569,6 +569,16 @@ defmodule Mydia.Collections do
     |> Repo.insert()
   end
 
+  @doc "The subset of `media_item_ids` already in `collection`."
+  @spec item_ids_in(Collection.t(), [binary()]) :: MapSet.t()
+  def item_ids_in(%Collection{} = collection, media_item_ids) when is_list(media_item_ids) do
+    CollectionItem
+    |> where([i], i.collection_id == ^collection.id and i.media_item_id in ^media_item_ids)
+    |> select([i], i.media_item_id)
+    |> Repo.all()
+    |> MapSet.new()
+  end
+
   @doc """
   Adds multiple items to a manual collection.
 

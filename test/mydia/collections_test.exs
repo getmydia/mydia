@@ -481,4 +481,16 @@ defmodule Mydia.CollectionsTest do
       assert decorated.poster_paths == ["/a.jpg"]
     end
   end
+
+  describe "item_ids_in/2" do
+    test "returns the subset of ids already in the collection" do
+      user = user_fixture()
+      {:ok, c} = Collections.create_collection(user, %{name: "Shelf", type: "manual"})
+      a = media_item_fixture(%{title: "Harbor of Glass"})
+      b = media_item_fixture(%{title: "The Tin Orchard"})
+      {:ok, _} = Collections.add_item(c, a.id)
+
+      assert Collections.item_ids_in(c, [a.id, b.id]) == MapSet.new([a.id])
+    end
+  end
 end

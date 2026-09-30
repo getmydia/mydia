@@ -14,6 +14,7 @@ defmodule Mydia.MediaRequests do
   import Mydia.QueryHelpers
   require Logger
 
+  alias Mydia.Accounts.Authorization
   alias Mydia.Accounts.Scope
   alias Mydia.Repo
   alias Mydia.Media
@@ -113,6 +114,26 @@ defmodule Mydia.MediaRequests do
     media_type_atom = if media_type == "movie", do: :movie, else: :tv_show
 
     Add.resolve_attrs(ref, media_type_atom, opts[:config])
+  end
+
+  @doc """
+  Withdraws a pending request. Only its requester or a request manager may, and
+  only while it is still pending: once approved, the media item exists and is
+  managed like any other.
+  """
+  @spec cancel_request(Scope.t(), MediaRequest.t()) ::
+          {:ok, MediaRequest.t()} | {:error, :not_pending | :unauthorized}
+  def cancel_request(%Scope{user: user}, %MediaRequest{} = request) do
+    cond do
+      request.status != "pending" ->
+        {:error, :not_pending}
+
+      request.requester_id != user.id and not Authorization.can_manage_requests?(user) ->
+        {:error, :unauthorized}
+
+      true ->
+        Repo.delete(request)
+    end
   end
 
   @doc """
