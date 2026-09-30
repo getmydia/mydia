@@ -2207,6 +2207,8 @@
       
         
       
+        
+      
     
     
     
@@ -2326,6 +2328,34 @@
     
   
     Build a Two-Way Sync Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/pages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serve a page
   
 
     
@@ -2599,6 +2629,17 @@
     <span class="md-ellipsis">
       
         1.2 host functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#14-host-functions-and-the-page-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 host functions and the page export
       
     </span>
   </a>
@@ -3131,6 +3172,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#14-host-functions-and-the-page-export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.4 host functions and the page export
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#scheduled-handler" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3295,7 +3347,7 @@ set on discovery as part of the host release (see the
 <tbody>
 <tr>
 <td><code>events:subscribe</code></td>
-<td>The event types the plugin reacts to (from the catalog above). Required.</td>
+<td>The event types the plugin reacts to (from the catalog above). Required unless the plugin declares <code>surfaces:page</code>.</td>
 </tr>
 <tr>
 <td><code>net:http</code></td>
@@ -3303,11 +3355,19 @@ set on discovery as part of the host release (see the
 </tr>
 <tr>
 <td><code>data:read</code></td>
-<td>Scoped read namespaces (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>). The host returns a curated, read-only projection: never raw rows or secrets.</td>
+<td>Scoped read namespaces (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, and the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>). The host returns a curated, read-only projection: never raw rows or secrets.</td>
+</tr>
+<tr>
+<td><code>data:search</code></td>
+<td>The <code>search</code> host function (pages only).</td>
+</tr>
+<tr>
+<td><code>surfaces:page</code></td>
+<td>Serve a page through the <code>page.on-http</code> export.</td>
 </tr>
 <tr>
 <td><code>surfaces:write</code></td>
-<td>Curated write surfaces. Vocabulary: <code>playback:watched</code> (mark items watched via <code>ensure-watched</code>), <code>collections:favorite</code> (add items to Favorites via <code>ensure-favorite</code>).</td>
+<td>Curated write surfaces. Vocabulary: <code>playback:watched</code> (<code>ensure-watched</code>, <code>mark-watched-state</code>), <code>collections:favorite</code> (<code>ensure-favorite</code>, <code>add-favorite</code>), <code>media:add</code> (<code>media-add</code>), <code>collections:write</code> (the <code>collection-*</code> functions). The last two are page-only.</td>
 </tr>
 <tr>
 <td><code>state:kv</code></td>
@@ -3421,20 +3481,161 @@ the gate.</p>
   host. Keys under <code>conn/&lt;connection-id&gt;/...</code> are swept when that connection is
   removed.</li>
 </ul>
+<h3 id="14-host-functions-and-the-page-export">1.4 host functions and the page export</h3>
+<p>WIT 1.4.0 adds plugin pages. A guest exports <code>page.on-http</code>, and the host calls
+it for every request to <code>/plugins/&lt;slug&gt;/app/*</code> as the signed-in user. Build the
+guest with <code>#[mydia_plugin_sdk::plugin(on_http = handle_http)]</code>; without it the
+generated <code>on-http</code> returns an error.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::{</span><span class="n">Event</span><span class="p">,</span><span class="w"> </span><span class="n">PageRequest</span><span class="p">,</span><span class="w"> </span><span class="n">PageResponse</span><span class="p">};</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="cp">#[mydia_plugin_sdk::plugin(on_http = handle_http)]</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">_evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">fn</span><span class="w"> </span><span class="nf">handle_http</span><span class="p">(</span><span class="n">req</span><span class="p">:</span><span class="w"> </span><span class="nc">PageRequest</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">PageResponse</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">PageResponse</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">        </span><span class="n">status</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">        </span><span class="n">headers</span><span class="p">:</span><span class="w"> </span><span class="nc">vec</span><span class="o">!</span><span class="p">[(</span><span class="s">"content-type"</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="s">"text/html; charset=utf-8"</span><span class="p">.</span><span class="n">into</span><span class="p">())],</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">        </span><span class="n">body</span><span class="p">:</span><span class="w"> </span><span class="s">"&lt;h1&gt;Hello&lt;/h1&gt;"</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">    </span><span class="p">})</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="p">}</span>
+</code></pre></div>
+<p><code>page-request</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>method</code></td>
+<td><code>GET</code>, <code>POST</code> and so on.</td>
+</tr>
+<tr>
+<td><code>path</code></td>
+<td>Path below <code>/plugins/&lt;slug&gt;/app</code>, always starting with <code>/</code>.</td>
+</tr>
+<tr>
+<td><code>query</code></td>
+<td>Query string without the leading <code>?</code>, with the frame token removed.</td>
+</tr>
+<tr>
+<td><code>headers</code></td>
+<td>Only <code>content-type</code>, <code>accept</code> and <code>accept-language</code>.</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td><code>Some(text)</code> when the request has a body. Delivered byte for byte; the host never parses it. Bodies must be valid UTF-8 text (else 415) and at most 1 MiB (else 413).</td>
+</tr>
+<tr>
+<td><code>user-id</code>, <code>role</code>, <code>session-id</code></td>
+<td>Verified by the host, never taken from the browser. <code>role</code> is <code>admin</code>, <code>user</code>, <code>readonly</code> or <code>guest</code>.</td>
+</tr>
+<tr>
+<td><code>config-json</code></td>
+<td>The operator's plugin settings as a JSON object string.</td>
+</tr>
+</tbody>
+</table>
+<p><code>page-response</code> carries <code>status</code> (200 to 599), <code>headers</code> and a text <code>body</code>. The
+host keeps only <code>content-type</code> from the guest's headers and sets the security
+headers itself (see <a href="../../how-to/pages/#what-the-host-sets">Serve a page</a>). A
+malformed response becomes a 502, a timeout a 504, and a plugin whose page slots
+are all busy answers 503 with <code>Retry-After</code>.</p>
+<p>Page host functions act as the user of the current <code>on-http</code> call and return
+<code>denied</code> when called from any other handler (<code>on-event</code>, <code>on-schedule</code>). Their
+<code>user-id</code> arguments, where they exist, are ignored.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Needs</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>search(search-request)</code></td>
+<td><code>data:search</code></td>
+<td><code>kind</code> is <code>library</code> or <code>catalog</code>. Returns <code>list&lt;search-hit&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>media-add(media-add-target)</code></td>
+<td><code>surfaces:write</code> <code>media:add</code></td>
+<td>Guests file a request; users and admins add to the library.</td>
+</tr>
+<tr>
+<td><code>collection-create(attrs)</code></td>
+<td><code>collections:write</code></td>
+<td><code>kind</code> is <code>manual</code> (default) or <code>smart</code>.</td>
+</tr>
+<tr>
+<td><code>collection-update(id, attrs)</code></td>
+<td><code>collections:write</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>collection-add-items(id, media-item-ids)</code></td>
+<td><code>collections:write</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>collection-remove-items(id, media-item-ids)</code></td>
+<td><code>collections:write</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>mark-watched-state(watch-state-target)</code></td>
+<td><code>playback:watched</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>add-favorite(favorite-target)</code></td>
+<td><code>collections:favorite</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>data-list</code></td>
+<td><code>data:read</code></td>
+<td>Reads as the acting user during a page call. New rows: <code>media-request</code>, <code>download</code>, <code>collection</code>.</td>
+</tr>
+<tr>
+<td><code>http-request</code></td>
+<td><code>net:http</code></td>
+<td>Page calls get a longer budget (90s and 4 MiB by default).</td>
+</tr>
+</tbody>
+</table>
+<p>Every write returns <code>write-outcome</code>:</p>
+<ul>
+<li><code>done(json)</code>: the host performed the write; the string is the host's JSON result.</li>
+<li><code>needs-confirmation(id)</code>: the user has not yet granted this surface. The write
+  is parked. Hand the id to the host with
+  <code>parent.postMessage({mydia: "confirm", ids: [id]}, "*")</code> and the host asks the
+  user.</li>
+</ul>
+<p>Writes are checked against the user's role and the plugin's grant, are recorded
+in the user's journal, and can be undone from the plugin's Activity page.</p>
+<p>Concurrency: page calls lock per user and run alongside the plugin's event and
+schedule calls. At most <code>pool_size - 1</code> (minimum one) page calls per plugin run
+at once, with a bounded wait before the 503. Because a page call and an event
+call can overlap, keep page state in per-user <code>state:kv</code> keys (for example
+<code>user/&lt;user-id&gt;/history</code>); a shared key written from both paths can lose an update.</p>
 <h3 id="scheduled-handler">Scheduled handler</h3>
 <p>Add <code>on-schedule</code> for periodic work (declare a <code>schedule</code> and the
 <code>schedule:interval</code> capability in the manifest):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::{</span><span class="n">Event</span><span class="p">,</span><span class="w"> </span><span class="n">ScheduleTick</span><span class="p">};</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="cp">#[mydia_plugin_sdk::plugin(on_schedule = on_schedule)]</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_schedule</span><span class="p">(</span><span class="n">tick</span><span class="p">:</span><span class="w"> </span><span class="nc">ScheduleTick</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span><span class="c1">// tick.config_json carries the operator settings. Return a small JSON result;</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span><span class="c1">// include "connections_invalid": ["&lt;user-id&gt;"] to flag users whose token</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">    </span><span class="c1">// the provider rejected (a 401). The host marks those connections errored.</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{</span><span class="se">\"</span><span class="s">connections_invalid</span><span class="se">\"</span><span class="s">:[]}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::{</span><span class="n">Event</span><span class="p">,</span><span class="w"> </span><span class="n">ScheduleTick</span><span class="p">};</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="cp">#[mydia_plugin_sdk::plugin(on_schedule = on_schedule)]</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_schedule</span><span class="p">(</span><span class="n">tick</span><span class="p">:</span><span class="w"> </span><span class="nc">ScheduleTick</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="c1">// tick.config_json carries the operator settings. Return a small JSON result;</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="c1">// include "connections_invalid": ["&lt;user-id&gt;"] to flag users whose token</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="c1">// the provider rejected (a 401). The host marks those connections errored.</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{</span><span class="se">\"</span><span class="s">connections_invalid</span><span class="se">\"</span><span class="s">:[]}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">}</span>
 </code></pre></div>
 <p>A run that takes longer than one interval is fine: the next tick is skipped
 while it runs (non-reentrant), and your state must survive a wall-clock kill, so
@@ -3457,7 +3658,7 @@ against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
 so a <code>1.0</code> guest's <code>on-event</code> still resolves against a <code>1.1</code> host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via <code>min_host_version</code>; a <code>1.3</code> guest sets <code>"min_host_version": "1.3.0"</code> so an
+via <code>min_host_version</code>; a <code>1.4</code> guest sets <code>"min_host_version": "0.16.0"</code> (the first host that serves it) so an
 older host refuses it cleanly rather than failing to link.</p>
 <h2 id="reference">Reference</h2>
 <ul>

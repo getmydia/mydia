@@ -2207,6 +2207,8 @@
       
         
       
+        
+      
     
     
     
@@ -2326,6 +2328,34 @@
     
   
     Build a Two-Way Sync Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/pages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serve a page
   
 
     
@@ -2535,6 +2565,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Capabilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#write-surfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Write surfaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#page-only-dataread-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Page-only data:read namespaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2595,6 +2653,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#page-descriptor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Page descriptor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#private-network-hosts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private network hosts
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3076,6 +3156,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Capabilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#write-surfaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Write surfaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#page-only-dataread-namespaces" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Page-only data:read namespaces
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3136,6 +3244,28 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#page-descriptor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Page descriptor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#private-network-hosts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Private network hosts
+      
+    </span>
+  </a>
   
 </li>
       
@@ -3296,7 +3426,7 @@ its own grant at runtime.</p>
 <tbody>
 <tr>
 <td><code>events:subscribe</code></td>
-<td>The event types the plugin reacts to. Required. Each must be in the catalog.</td>
+<td>The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares <code>surfaces:page</code>, so a page-only plugin can omit it.</td>
 </tr>
 <tr>
 <td><code>net:http</code></td>
@@ -3304,11 +3434,19 @@ its own grant at runtime.</p>
 </tr>
 <tr>
 <td><code>data:read</code></td>
-<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>). Returns a curated, read-only projection.</td>
+<td>Read namespaces the plugin may query (<code>media_item</code>, <code>playback_progress</code>, <code>library_item</code>, plus the page-only <code>media_request</code>, <code>download</code>, <code>collection</code>). Returns a curated, read-only projection.</td>
+</tr>
+<tr>
+<td><code>data:search</code></td>
+<td>Lets a page call the <code>search</code> host function against the acting user's library or the metadata catalog. Takes an empty list.</td>
+</tr>
+<tr>
+<td><code>surfaces:page</code></td>
+<td>The plugin serves its own page at <code>/plugins/&lt;slug&gt;/app/</code>, shown in the navigation. Takes an empty list and requires a <a href="#page-descriptor"><code>page</code> descriptor</a>. See <a href="../../how-to/pages/">Serve a page</a>.</td>
 </tr>
 <tr>
 <td><code>surfaces:write</code></td>
-<td>Curated write surfaces. Value vocabulary: <code>playback:watched</code> (the <code>ensure-watched</code> host function), <code>collections:favorite</code> (the <code>ensure-favorite</code> host function).</td>
+<td>Curated write surfaces. Value vocabulary: <code>playback:watched</code>, <code>collections:favorite</code>, <code>media:add</code>, <code>collections:write</code>. See <a href="#write-surfaces">write surfaces</a>.</td>
 </tr>
 <tr>
 <td><code>state:kv</code></td>
@@ -3324,6 +3462,48 @@ its own grant at runtime.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="write-surfaces">Write surfaces</h3>
+<table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Host functions</th>
+<th>Available to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>playback:watched</code></td>
+<td><code>ensure-watched</code> (connected users), <code>mark-watched-state</code> (page)</td>
+<td>events and pages</td>
+</tr>
+<tr>
+<td><code>collections:favorite</code></td>
+<td><code>ensure-favorite</code> (connected users), <code>add-favorite</code> (page)</td>
+<td>events and pages</td>
+</tr>
+<tr>
+<td><code>media:add</code></td>
+<td><code>media-add</code></td>
+<td>pages only</td>
+</tr>
+<tr>
+<td><code>collections:write</code></td>
+<td><code>collection-create</code>, <code>collection-update</code>, <code>collection-add-items</code>, <code>collection-remove-items</code></td>
+<td>pages only</td>
+</tr>
+</tbody>
+</table>
+<p>Page writes act as the signed-in user, are journaled, and may need the user's
+confirmation first. See <a href="../../explanation/plugin-model/#pages-and-writes-on-a-users-behalf">Pages and writes on a user's behalf</a>.</p>
+<h3 id="page-only-dataread-namespaces">Page-only <code>data:read</code> namespaces</h3>
+<p><code>media_request</code>, <code>download</code> and <code>collection</code> can only be listed from a page
+(<code>on-http</code>). In a page call every namespace, including <code>media_item</code>,
+<code>library_item</code> and <code>playback_progress</code>, is read as the acting user, so a page
+never sees more than the person using it. <code>media_request</code> and <code>collection</code> are
+the user's own rows, and <code>download</code> lists active downloads for items the acting
+user requested (even administrators see only those). Outside a page these
+three namespaces are not available.</p>
 <p>The event catalog for <code>events:subscribe</code>:</p>
 <ul>
 <li><code>media_item.added</code></li>
@@ -3475,11 +3655,43 @@ what is relevant to the current selection:</p>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"visible_when"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"target"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ntfy"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <p>Here <code>ntfy_priority</code> only appears when the operator has set <code>target</code> to <code>ntfy</code>.</p>
+<h2 id="page-descriptor">Page descriptor</h2>
+<p>A plugin that declares <code>surfaces:page</code> must also declare a <code>page</code> descriptor,
+and a <code>page</code> descriptor without <code>surfaces:page</code> is rejected. It names the
+navigation entry:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">"page"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Assistant"</span><span class="p">,</span><span class="w"> </span><span class="nt">"icon"</span><span class="p">:</span><span class="w"> </span><span class="s2">"hero-sparkles"</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"surfaces:page"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><code>title</code> is 1 to 40 characters.</li>
+<li><code>icon</code> is one of a fixed set of Heroicons names (the host builds the CSS for
+  a fixed set of icons ahead of time, so an arbitrary name would render blank):
+  <code>hero-sparkles</code>, <code>hero-bookmark</code>, <code>hero-book-open</code>,
+  <code>hero-chat-bubble-left-right</code>, <code>hero-film</code>, <code>hero-tv</code>, <code>hero-star</code>,
+  <code>hero-heart</code>, <code>hero-bolt</code>, <code>hero-fire</code>, <code>hero-globe-alt</code>, <code>hero-beaker</code>,
+  <code>hero-puzzle-piece</code>, <code>hero-rectangle-stack</code>, <code>hero-queue-list</code>,
+  <code>hero-list-bullet</code>, <code>hero-clipboard-document-list</code>, <code>hero-chart-bar</code>,
+  <code>hero-magnifying-glass</code>, <code>hero-light-bulb</code>, <code>hero-cpu-chip</code>,
+  <code>hero-wrench-screwdriver</code>, <code>hero-cog-6-tooth</code>, <code>hero-folder</code>, <code>hero-tag</code>.
+  Any other name is rejected when the manifest is parsed.</li>
+</ul>
+<h2 id="private-network-hosts">Private network hosts</h2>
+<p>A <code>url</code> field with <code>grants_host: true</code> may also set <code>"allow_private": true</code>.
+The operator's value is then allowed to resolve to a private address (a
+LAN service such as <code>http://ollama.lan:11434</code>), which the outbound gate refuses
+by default. <code>allow_private</code> is only accepted on <code>url</code> fields that also set
+<code>grants_host</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"base_url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"API base URL"</span><span class="p">,</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">"grants_host"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"allow_private"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>When such a field has a value, the host derives a <code>net:private</code> grant for that
+one host next to its <code>net:http</code> grant. You never declare <code>net:private</code> in the
+manifest, and while the field is empty no <code>net:private</code> grant exists.</p>
 <h2 id="scheduled-plugins">Scheduled plugins</h2>
 <p>A plugin that needs a clock declares a <code>schedule</code> and the <code>schedule:interval</code>
 capability. The host invokes its <code>on-schedule</code> export on a fixed interval:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">"schedule"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"interval_minutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"schedule:interval"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">"schedule"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"interval_minutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"schedule:interval"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>interval_minutes</code> is floored at <strong>5 minutes</strong>; a smaller value is rejected at
@@ -3499,13 +3711,13 @@ capability. The host invokes its <code>on-schedule</code> export on a fixed inte
 descriptor. The <strong>host</strong> runs the OAuth device (PIN) flow end to end from a
 generic card on the user's profile; the guest never executes during connect and
 never sees the token.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">"connection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"oauth_device"</span><span class="p">,</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">"code_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin?client_id={client_id}"</span><span class="p">,</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">"poll_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin/{user_code}?client_id={client_id}"</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span><span class="nt">"verification_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://example.com/pin"</span><span class="p">,</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-public-embeddable-client-id"</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">"connection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"oauth_device"</span><span class="p">,</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">"code_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin?client_id={client_id}"</span><span class="p">,</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">"poll_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin/{user_code}?client_id={client_id}"</span><span class="p">,</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">"verification_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://example.com/pin"</span><span class="p">,</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-public-embeddable-client-id"</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>code_url</code>, <code>poll_url</code>, and <code>verification_url</code> must all sit on a host declared
@@ -3518,11 +3730,15 @@ never sees the token.</p>
   attaches the bearer token host-side (see the <a href="../host-api/">Reference</a>).</li>
 </ul>
 <h2 id="host-version-floor">Host-version floor</h2>
-<p><code>min_host_version</code> (optional, a semantic version) declares the lowest Mydia host
-your plugin supports. If you rely on a capability, event, or contract feature
-added in a specific release, set the floor to that release. Mydia refuses to
-activate a plugin whose floor exceeds the running host, with a clear
-<code>requires mydia &gt;= X</code> message. Omit it if you have no floor.</p>
+<p><code>min_host_version</code> (optional, a semantic version) declares the lowest Mydia
+release your plugin supports. It is a Mydia release version, not a contract
+version. If you rely on a capability, event, or contract feature added in a
+specific release, set the floor to that release. Mydia refuses to activate an
+index-installed plugin whose floor exceeds the running host, with a clear
+<code>requires mydia &gt;= X</code> message. Pre-release tags are ignored, so a
+<code>0.16.0-beta.1</code> host meets a <code>0.16.0</code> floor. Development builds (<code>-dev</code>) meet any
+floor, and plugins bundled with Mydia are not checked. Omit it if you have no
+floor.</p>
 <p>The plugin contract evolves additively: new functions, records, variant cases,
 and optional fields are added without breaking existing plugins. Only a removal
 or a signature change bumps the major ABI version. For the full contract and
