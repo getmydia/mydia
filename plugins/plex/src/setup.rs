@@ -220,11 +220,9 @@ fn servers_screen(host: &mut dyn Host, base: &str, account_token: &str) -> Setup
     for s in &servers {
         let candidates = endpoint::order_candidates(&s.connections);
         let mut credentials = Vec::new();
-        if let Some(tok) = s
-            .access_token
-            .as_deref()
-            .filter(|t| !t.is_empty() && *t != account_token)
-        {
+        if let Some(tok) = s.access_token.as_deref().filter(|t| !t.is_empty()) {
+            // Emitted even when it equals the account token: choosing the server
+            // overwrites any stale endpoint link from an earlier setup.
             credentials.push(Credential {
                 role: LinkRole::Endpoint,
                 token: tok.to_string(),
@@ -685,6 +683,29 @@ mod tests {
         // No token ever rides in state_json.
         assert!(!screen.next_state_json.contains("acct-token"));
         assert!(!screen.next_state_json.contains("den-tok"));
+    }
+
+    #[test]
+    fn an_owned_server_whose_token_equals_the_account_token_still_carries_an_endpoint_credential() {
+        let mut host = FakeHost::new();
+        host.respond(
+            "GET",
+            &format!("{TV}/pins/42"),
+            200,
+            r#"{"id":42,"code":"c","authToken":"same-tok"}"#,
+        )
+        .respond(
+            "GET",
+            RES,
+            200,
+            r#"[{"name":"Den","clientIdentifier":"m1","provides":"server","owned":true,"presence":true,"accessToken":"same-tok",
+                 "connections":[{"uri":"http://192.168.1.20:32400","local":true}]}]"#,
+        );
+        let screen = run(&mut host, &req("poll", "{}", r#"{"pin_id":42}"#)).unwrap();
+        let creds = &choice(&screen).options[0].credentials;
+        assert_eq!(creds.len(), 1);
+        assert_eq!(creds[0].role, LinkRole::Endpoint);
+        assert_eq!(creds[0].token, "same-tok");
     }
 
     #[test]

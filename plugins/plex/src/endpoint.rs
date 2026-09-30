@@ -101,18 +101,26 @@ pub fn probe_all(
     link_id: &str,
 ) -> Result<String, PlexError> {
     let mut last = PlexError::Unreachable("no connection candidates configured".into());
+    let mut denied: Option<PlexError> = None;
     for uri in candidates.iter().take(MAX_PROBES) {
         match probe(host, uri, link_id) {
             Ok(()) => return Ok(uri.trim_end_matches('/').to_string()),
             // Reached a Plex server and it refused us: another address will not help.
             Err(PlexError::Unauthorized) => return Err(PlexError::Unauthorized),
+            // Kept distinct: the host refused the address, it did not fail to answer.
+            Err(e @ PlexError::Denied(_)) => denied = Some(e),
             Err(e) => last = e,
         }
     }
-    Err(match last {
+    Err(denied.unwrap_or(last))
+}
+
+/// A refused address reads as unreachable to callers that only report health.
+fn refused_as_unreachable(e: PlexError) -> PlexError {
+    match e {
         PlexError::Denied(m) => PlexError::Unreachable(format!("address not approved: {m}")),
         other => other,
-    })
+    }
 }
 
 pub fn invalidate(host: &mut dyn Host) -> Result<(), PlexError> {
@@ -163,7 +171,7 @@ pub fn resolve(host: &mut dyn Host, config: &PluginConfig) -> Result<String, Ple
         Err(PlexError::Unauthorized) => Err(PlexError::Unauthorized),
         Err(first_error) => match rediscover(host, config, &info, &link)? {
             Some(url) => Ok(url),
-            None => Err(first_error),
+            None => Err(refused_as_unreachable(first_error)),
         },
     }
 }
@@ -216,15 +224,19 @@ fn rediscover(
             remember(host, &url)?;
             Ok(Some(url))
         }
-        Err(_) => {
+        // Only addresses the host refused wait for the operator; addresses that
+        // simply did not answer are reported as unreachable without parking.
+        Err(PlexError::Denied(_)) => {
             store::put_json(host, store::SERVER_PENDING, &updated)?;
             Err(PlexError::Unreachable(format!(
                 "{} moved to new addresses that need approval",
                 updated.name
             )))
         }
+        Err(_) => Ok(None),
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -421,6 +433,43 @@ mod tests {
         let rediscovery =
             host.requests_to("https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1");
         assert_eq!(rediscovery[0].link.as_deref(), Some("owner"));
+    }
+
+    #[test]
+    fn probe_all_keeps_a_refused_address_distinct_from_an_unreachable_one() {
+        let mut host = seeded();
+        host.fail(
+            "GET",
+            "http://a:1/library/sections",
+            HostError::Denied("not approved".into()),
+        );
+        let r = probe_all(&mut host, &["http://a:1".into()], "srv");
+        assert!(matches!(r, Err(PlexError::Denied(_))));
+    }
+
+    #[test]
+    fn unreachable_rediscovered_addresses_are_not_parked() {
+        let mut host = seeded();
+        store::put_json(&mut host, store::SERVER_INFO, &info(&["http://old:1"])).unwrap();
+        host.fail(
+            "GET",
+            "http://old:1/library/sections",
+            HostError::Network("refused".into()),
+        )
+        .respond(
+            "GET",
+            "https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1",
+            200,
+            r#"[{"name":"Den","clientIdentifier":"m1","provides":"server","connections":[{"uri":"http://new:2","local":true}]}]"#,
+        )
+        .fail(
+            "GET",
+            "http://new:2/library/sections",
+            HostError::Network("timeout".into()),
+        );
+        let r = resolve(&mut host, &PluginConfig::default());
+        assert!(matches!(r, Err(PlexError::Unreachable(_))));
+        assert!(!host.kv.contains_key(store::SERVER_PENDING));
     }
 
     #[test]
