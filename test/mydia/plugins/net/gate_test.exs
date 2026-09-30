@@ -284,20 +284,46 @@ defmodule Mydia.Plugins.Net.GateTest do
       end
     end
 
-    test "an approved endpoint on RFC1918, CGNAT or ULA passes the address check" do
-      for ip <- [{10, 1, 2, 3}, {100, 64, 0, 1}, {0xFD00, 0, 0, 0, 0, 0, 0, 5}] do
-        result =
-          Gate.request("http://plex.lan:9/",
-            approved_endpoints: [endpoint("plex.lan", 9)],
-            resolver: resolver(ip),
-            timeout: 100
-          )
-
-        refute match?(
-                 {:error, %Error{type: type}} when type in [:blocked, :capability_denied],
-                 result
-               )
+    test "an approved endpoint on RFC1918, CGNAT, ULA or loopback passes the address check" do
+      for ip <- [{10, 1, 2, 3}, {100, 64, 0, 1}, {0xFD00, 0, 0, 0, 0, 0, 0, 5}, {127, 0, 0, 1}] do
+        assert {:ok, ^ip} =
+                 Gate.validate_resolved([ip], allow_private_except_link_local: true)
       end
+    end
+
+    test "an approved endpoint never reaches this-network, multicast or reserved addresses" do
+      for ip <- [
+            {0, 0, 0, 0},
+            {0, 1, 2, 3},
+            {224, 0, 0, 1},
+            {239, 255, 255, 250},
+            {240, 0, 0, 1},
+            {255, 255, 255, 255},
+            {0, 0, 0, 0, 0, 0, 0, 0},
+            {0xFF02, 0, 0, 0, 0, 0, 0, 1},
+            {0xFF05, 0, 0, 0, 0, 0, 0, 0xC},
+            {0, 0, 0, 0, 0, 0xFFFF, 0xE000, 1},
+            {169, 254, 169, 254},
+            {0xFE80, 0, 0, 0, 0, 0, 0, 1}
+          ] do
+        assert {:error, %Error{type: :blocked}} =
+                 Gate.validate_resolved([ip], allow_private_except_link_local: true)
+      end
+    end
+
+    test "one refused address among several refuses the whole answer" do
+      assert {:error, %Error{type: :blocked}} =
+               Gate.validate_resolved([{10, 0, 0, 5}, {224, 0, 0, 1}],
+                 allow_private_except_link_local: true
+               )
+    end
+
+    test "pin_url brackets an IPv6 literal exactly once" do
+      assert Gate.pin_url(URI.parse("http://plex.lan:9/x?a=1"), {0xFD00, 0, 0, 0, 0, 0, 0, 5}) ==
+               "http://[fd00::5]:9/x?a=1"
+
+      assert Gate.pin_url(URI.parse("https://plex.lan/x"), {10, 1, 2, 3}) ==
+               "https://10.1.2.3/x"
     end
 
     test "a 3xx from an approved endpoint is returned, not followed", %{bypass: bypass} do
