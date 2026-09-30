@@ -4,6 +4,7 @@
 
 mod chat;
 mod history;
+mod models;
 mod provider;
 mod tools;
 
