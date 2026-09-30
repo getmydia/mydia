@@ -134,6 +134,55 @@ pub fn section_items(
     })
 }
 
+/// Episodes of a show section as a flat list (`type=4`), viewed at or after
+/// `since` when given. The pull pass uses this in place of one allLeaves call
+/// per show per tick.
+pub fn section_episodes(
+    host: &mut dyn Host,
+    base: &str,
+    link_id: &str,
+    section_key: &str,
+    start: u32,
+    since: Option<i64>,
+) -> Result<Page, PlexError> {
+    let mut path = format!("/library/sections/{section_key}/all?type=4&includeGuids=1");
+    if let Some(since) = since {
+        path.push_str(&format!("&lastViewedAt%3E={since}"));
+    }
+    let mut headers = plex_headers();
+    headers.push(("X-Plex-Container-Start".to_string(), start.to_string()));
+    headers.push(("X-Plex-Container-Size".to_string(), PAGE_SIZE.to_string()));
+    let c: Container<Metadatas> = send_json(
+        host,
+        &Auth::Link(link_id),
+        request("GET", &url(base, &path), headers, None),
+    )?;
+    Ok(Page {
+        items: c.media_container.metadata,
+        total: c.media_container.total_size,
+    })
+}
+
+/// One item's current state as the link's own profile sees it. `None` once the
+/// server no longer has it.
+pub fn metadata(
+    host: &mut dyn Host,
+    base: &str,
+    link_id: &str,
+    rating_key: &str,
+) -> Result<Option<Metadata>, PlexError> {
+    let path = format!("/library/metadata/{rating_key}?includeGuids=1");
+    match send_json::<Container<Metadatas>>(
+        host,
+        &Auth::Link(link_id),
+        request("GET", &url(base, &path), plex_headers(), None),
+    ) {
+        Ok(c) => Ok(c.media_container.metadata.into_iter().next()),
+        Err(PlexError::NotFound) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn all_leaves(
     host: &mut dyn Host,
     base: &str,
@@ -245,6 +294,40 @@ mod tests {
     use crate::host::fake::FakeHost;
 
     const BASE: &str = "http://192.168.1.20:32400";
+
+    #[test]
+    fn section_episodes_is_type_4_with_since_and_paging_headers() {
+        let mut host = FakeHost::new();
+        let u = "http://pms:32400/library/sections/2/all?type=4&includeGuids=1&lastViewedAt%3E=1767000000";
+        host.respond("GET", u, 200, r#"{"MediaContainer":{"Metadata":[{"ratingKey":501,"type":"episode","parentIndex":1,"index":2,"viewCount":1}]}}"#);
+        let page = section_episodes(
+            &mut host,
+            "http://pms:32400",
+            "l1",
+            "2",
+            200,
+            Some(1_767_000_000),
+        )
+        .unwrap();
+        assert_eq!(page.items[0].rating_key, "501");
+        let sent = host.requests_to(u)[0];
+        assert_eq!(sent.link.as_deref(), Some("l1"));
+        assert_eq!(sent.header("X-Plex-Container-Start"), Some("200"));
+    }
+
+    #[test]
+    fn metadata_of_a_deleted_item_is_none() {
+        let mut host = FakeHost::new();
+        host.respond(
+            "GET",
+            "http://pms:32400/library/metadata/9?includeGuids=1",
+            404,
+            "",
+        );
+        assert!(metadata(&mut host, "http://pms:32400", "l1", "9")
+            .unwrap()
+            .is_none());
+    }
 
     #[test]
     fn sections_parse_the_directory_list() {

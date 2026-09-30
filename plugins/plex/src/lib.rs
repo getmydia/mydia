@@ -13,6 +13,7 @@ mod endpoint;
 mod guid;
 mod host;
 mod http;
+mod mapping;
 mod plextv;
 mod reconcile;
 mod setup;
