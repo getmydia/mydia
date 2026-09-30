@@ -175,12 +175,11 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.3.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.4.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
 
-      # 1.1 additions are all wired so a 1.1 guest instantiates.
       assert %{
                "kv-get" => {:fn, _},
                "kv-set" => {:fn, _},
@@ -189,7 +188,15 @@ defmodule Mydia.Plugins.HostFunctionsTest do
                "ensure-watched" => {:fn, _},
                "ensure-favorite" => {:fn, _},
                "connections-list" => {:fn, _},
-               "connection-request" => {:fn, _}
+               "connection-request" => {:fn, _},
+               "links-list" => {:fn, _},
+               "link-request" => {:fn, _},
+               "propose-accounts" => {:fn, _},
+               "set-link-token" => {:fn, _},
+               "set-link-status" => {:fn, _},
+               "kv-list" => {:fn, _},
+               "kv-set-many" => {:fn, _},
+               "report-sync-run" => {:fn, _}
              } = fns
     end
 
@@ -197,6 +204,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       builder = HostFunctions.imports_for("tester")
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
+      v14 = Map.fetch!(imports, "mydia:plugin/host@1.4.0")
       v13 = Map.fetch!(imports, "mydia:plugin/host@1.3.0")
       v12 = Map.fetch!(imports, "mydia:plugin/host@1.2.0")
       v11 = Map.fetch!(imports, "mydia:plugin/host@1.1.0")
@@ -204,6 +212,12 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       # Offering a newer function under an older key is not harmless: wasmtime
       # links against the guest's exact imported interface, so an older guest
       # must be handed exactly what its own contract declared.
+      for name <-
+            ~w(links-list link-request propose-accounts set-link-token set-link-status kv-list kv-set-many report-sync-run) do
+        assert Map.has_key?(v14, name)
+        refute Map.has_key?(v13, name)
+      end
+
       assert Map.has_key?(v13, "ensure-favorite")
       assert Map.has_key?(v13, "set-watch-state")
 

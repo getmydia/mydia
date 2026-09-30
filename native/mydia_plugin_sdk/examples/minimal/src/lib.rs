@@ -32,4 +32,22 @@ mod tests {
 
         assert_eq!(on_event(evt), Ok("{\"handled\":\"media_item.added\"}".into()));
     }
+
+    #[test]
+    fn setup_defaults_to_an_error() {
+        use mydia_plugin_sdk::types::SetupRequest;
+        use mydia_plugin_sdk::Guest;
+
+        let req = SetupRequest {
+            step: "start".into(),
+            input_json: "{}".into(),
+            state_json: "{}".into(),
+            config_json: "{}".into(),
+        };
+
+        assert_eq!(
+            super::__MydiaPluginImpl::setup(req).err(),
+            Some("setup not implemented by this plugin".to_string())
+        );
+    }
 }

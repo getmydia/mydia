@@ -3,12 +3,13 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.3.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.4.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
-  `handler.on-event` / `handler.on-schedule` exports. A guest built against an
-  older minor (1.0, 1.1 or 1.2) is served the matching namespace + export, detected
-  from the component bytes at `start_plugin` (`detect_contract/1`), so old guests
-  keep working against the 1.3 host.
+  `handler.on-event` / `handler.on-schedule` exports, plus (1.4) the typed
+  `handler.setup` / `handler.check-health` exports. A guest built against an
+  older minor (1.0, 1.1, 1.2 or 1.3) is served the matching namespace + export,
+  detected from the component bytes at `start_plugin` (`detect_contract/1`), so
+  old guests keep working against the 1.4 host.
 
   Each installed plugin gets its own `NimblePool`, which bounds how many guests
   run concurrently on the dirty NIF schedulers. Each *invocation* checks out a
@@ -79,10 +80,15 @@ defmodule Mydia.Plugins.Host do
   # The typed handler exports, addressed by their interface path. The interface
   # version is part of the path because the WIT package version IS the ABI
   # version; wasmtime semver-matches so a 1.1 guest's `handler@1.1.0/on-event`
-  # still resolves against this 1.3 lookup. `on-schedule` is 1.1+ — a 1.0
-  # guest has no such export and the schedule call fails soft.
-  @handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
-  @schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
+  # still resolves against this 1.4 lookup. `on-schedule` is 1.1+ — a 1.0
+  # guest has no such export and the schedule call fails soft. `setup` and
+  # `check-health` are 1.4-only; `call/4` refuses them on an older guest.
+  @handler_export ["mydia:plugin/handler@1.4.0", "on-event"]
+  @schedule_export ["mydia:plugin/handler@1.4.0", "on-schedule"]
+  @setup_export ["mydia:plugin/handler@1.4.0", "setup"]
+  @check_health_export ["mydia:plugin/handler@1.4.0", "check-health"]
+  @v13_handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
+  @v13_schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
   @v12_handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
   @v12_schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
   @v11_handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
@@ -95,11 +101,24 @@ defmodule Mydia.Plugins.Host do
   # map re-keyed and narrowed. Older guests are served via parallel keys that
   # `HostFunctions.imports_for/2` publishes alongside the current one. We detect
   # the contract once per plugin from the bytes and memoize it.
-  @host_namespace "mydia:plugin/host@1.3.0"
+  @host_namespace "mydia:plugin/host@1.4.0"
+  @v13_host_namespace "mydia:plugin/host@1.3.0"
   @v12_host_namespace "mydia:plugin/host@1.2.0"
   @v11_host_namespace "mydia:plugin/host@1.1.0"
   @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
+
+  # Every field, variant-case and enum atom a 1.4 typed result can carry. Kept
+  # as a literal so `String.to_existing_atom/1` in normalize_wit/1 never mints
+  # atoms from guest-controlled strings.
+  @wit_atoms ~w(step body next_state_json credentials error role token title fields
+                options key label field_type required default_value id detail badge
+                endpoints scheme host port url poll_after_seconds message accounts
+                suggestions name admin remote_account_id user_id form choice
+                external_auth mapping done status action owner endpoint user ok
+                degraded unauthorized unreachable reconnect confirm_endpoints)a
+  @doc false
+  def __wit_atoms__, do: @wit_atoms
 
   @type slug :: String.t()
 
@@ -185,7 +204,10 @@ defmodule Mydia.Plugins.Host do
     * `:test_run` - badge the markers/guest logs for this run as a test
     * `:memory_limit_bytes` - override the linear-memory cap for this call
       (defaults to config; a test seam for exercising `StoreLimits`)
-    * `:handler` - `:on_event` (default) or `:on_schedule`
+    * `:handler` - `:on_event` (default), `:on_schedule`, `:setup` or
+      `:check_health`. The last two are typed 1.4 exports: they return decoded
+      maps with snake_case atom keys instead of the guest's JSON, and an
+      `:unsupported` error without instantiating when the guest predates 1.4.
     * `:single_flight` - `:wait` (default; block until the plugin's lock is free)
       or `:skip` (return a `:busy` error if a sibling invocation is in flight —
       the scheduler's non-reentrancy)
@@ -196,26 +218,32 @@ defmodule Mydia.Plugins.Host do
       when is_binary(slug) and is_binary(function) and is_map(payload) do
     cfg = config()
     handler = Keyword.get(opts, :handler, :on_event)
-    timeout = Keyword.get(opts, :timeout, default_timeout(cfg, handler))
-    mode = Keyword.get(opts, :single_flight, :wait)
 
-    invocation = %{
-      slug: slug,
-      invocation_id: Ecto.UUID.generate(),
-      test_run: Keyword.get(opts, :test_run, false),
-      function: function,
-      handler: handler,
-      payload: payload,
-      memory_limit_bytes: Keyword.get(opts, :memory_limit_bytes, cfg.memory_limit_bytes),
-      timeout: timeout
-    }
+    if handler in [:setup, :check_health] and contract_version(slug) != :v14 do
+      {:error,
+       Error.new(:unsupported, "plugin #{slug} does not implement #{function} (contract < 1.4)")}
+    else
+      timeout = Keyword.get(opts, :timeout, default_timeout(cfg, handler))
+      mode = Keyword.get(opts, :single_flight, :wait)
 
-    # Serialize invocations per plugin so shared KV state is consistent (U4). A
-    # `:skip` acquirer (the scheduler) bails out without running when busy; a
-    # `:wait` acquirer queues behind the in-flight invocation.
-    case SingleFlight.run(slug, mode, fn -> invoke_with_markers(invocation) end) do
-      {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
-      result -> result
+      invocation = %{
+        slug: slug,
+        invocation_id: Ecto.UUID.generate(),
+        test_run: Keyword.get(opts, :test_run, false),
+        function: function,
+        handler: handler,
+        payload: payload,
+        memory_limit_bytes: Keyword.get(opts, :memory_limit_bytes, cfg.memory_limit_bytes),
+        timeout: timeout
+      }
+
+      # Serialize invocations per plugin so shared KV state is consistent (U4). A
+      # `:skip` acquirer (the scheduler) bails out without running when busy; a
+      # `:wait` acquirer queues behind the in-flight invocation.
+      case SingleFlight.run(slug, mode, fn -> invoke_with_markers(invocation) end) do
+        {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
+        result -> result
+      end
     end
   end
 
@@ -295,7 +323,9 @@ defmodule Mydia.Plugins.Host do
   # legacy guests (detected from the bytes at start_plugin).
   defp instantiate(slug, bytes, wasi, limits, full_imports, inv) do
     imports =
-      if contract(slug) == :v10, do: to_legacy_imports(full_imports), else: full_imports
+      if contract_version(slug) == :v10,
+        do: to_legacy_imports(full_imports),
+        else: full_imports
 
     case Components.start_link(%{
            bytes: bytes,
@@ -326,6 +356,7 @@ defmodule Mydia.Plugins.Host do
   defp to_legacy_imports(full_imports) do
     funcs =
       Map.get(full_imports, @host_namespace) ||
+        Map.get(full_imports, @v13_host_namespace) ||
         Map.get(full_imports, @v12_host_namespace) ||
         Map.get(full_imports, @v11_host_namespace, %{})
 
@@ -333,19 +364,22 @@ defmodule Mydia.Plugins.Host do
   end
 
   # A guest's contract version is read from the UTF-8 interface names embedded
-  # in the component bytes. 1.3, 1.2 and 1.1 all get the full imports map
-  # (published under every namespace key); only 1.0 needs the narrowed legacy
-  # map. Order matters: the newest match wins.
+  # in the component bytes. 1.1 to 1.4 all get the full imports map (published
+  # under every namespace key, each narrowed); only 1.0 needs the legacy map.
+  # Order matters: the newest match wins.
   defp detect_contract(bytes) do
     cond do
-      String.contains?(bytes, @host_namespace) -> :v13
+      String.contains?(bytes, @host_namespace) -> :v14
+      String.contains?(bytes, @v13_host_namespace) -> :v13
       String.contains?(bytes, @v12_host_namespace) -> :v12
       String.contains?(bytes, @v11_host_namespace) -> :v11
       true -> :v10
     end
   end
 
-  defp contract(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v13)
+  @doc "The contract version detected for `slug` when its pool started."
+  @spec contract_version(slug()) :: :v10 | :v11 | :v12 | :v13 | :v14
+  def contract_version(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v14)
 
   # A static map is used as-is; a builder is called per invocation so closures
   # can capture this run's context (slug + invocation id, for log correlation).
@@ -357,11 +391,11 @@ defmodule Mydia.Plugins.Host do
   end
 
   defp invoke(pid, inv) do
-    {export, record} = handler_call(inv)
-    args = Components.FieldConverter.maybe_convert_args([record], true)
+    {export, records} = handler_call(inv)
+    args = Components.FieldConverter.maybe_convert_args(records, true)
 
     case Components.call_function(pid, export, args, inv.timeout) do
-      {:ok, {:ok, json}} -> decode_result(json)
+      {:ok, {:ok, value}} -> decode_ok(inv.handler, value)
       {:ok, {:error, message}} -> {:error, Error.new(:guest_error, sanitize_message(message))}
       {:error, reason} -> {:error, Error.new(:trap, to_string_reason(reason))}
     end
@@ -370,31 +404,56 @@ defmodule Mydia.Plugins.Host do
       {:error, Error.new(:timeout, "invocation timed out after #{inv.timeout}ms")}
   end
 
-  # Pick the export + marshalled record for the requested handler. on-schedule
-  # is 1.1+; a 1.0 guest lacks the export and call_function returns an error
-  # the caller surfaces (fail-soft, no crash). on-event resolves at the guest's
-  # own interface version (detected during start_plugin).
+  # on-event and on-schedule return the guest's JSON string; the typed 1.4
+  # exports return WIT records that are normalised instead of JSON-decoded.
+  defp decode_ok(:setup, value), do: {:ok, decode_screen(normalize_wit(value))}
+  defp decode_ok(:check_health, value), do: {:ok, decode_health(normalize_wit(value))}
+  defp decode_ok(_handler, json), do: decode_result(json)
+
+  # Pick the export + marshalled argument list for the requested handler.
+  # on-schedule is 1.1+; a 1.0 guest lacks the export and call_function returns
+  # an error the caller surfaces (fail-soft, no crash). on-event resolves at the
+  # guest's own interface version (detected during start_plugin). setup and
+  # check-health only reach here for a 1.4 guest (call/4 gates them).
   defp handler_call(%{handler: :on_schedule, slug: slug, payload: payload}) do
     export =
-      case contract(slug) do
+      case contract_version(slug) do
         :v11 -> @v11_schedule_export
         :v12 -> @v12_schedule_export
+        :v13 -> @v13_schedule_export
         _ -> @schedule_export
       end
 
-    {export, to_schedule_record(payload)}
+    {export, [to_schedule_record(payload)]}
   end
+
+  defp handler_call(%{handler: :setup, payload: payload}),
+    do: {@setup_export, [to_setup_record(payload)]}
+
+  defp handler_call(%{handler: :check_health}), do: {@check_health_export, []}
 
   defp handler_call(%{slug: slug, payload: payload}) do
     export =
-      case contract(slug) do
+      case contract_version(slug) do
         :v10 -> @legacy_handler_export
         :v11 -> @v11_handler_export
         :v12 -> @v12_handler_export
-        :v13 -> @handler_export
+        :v13 -> @v13_handler_export
+        :v14 -> @handler_export
       end
 
-    {export, to_event_record(payload)}
+    {export, [to_event_record(payload)]}
+  end
+
+  # Marshal a setup payload into the WIT `setup-request` record. The instance
+  # settings ride along as `config-json`, like `schedule-tick`.
+  defp to_setup_record(payload) do
+    %{
+      step: to_string(Map.get(payload, "step") || "start"),
+      input_json: Map.get(payload, "input_json") || "{}",
+      state_json: Map.get(payload, "state_json") || "{}",
+      config_json: Jason.encode!(Map.get(payload, "config") || %{})
+    }
   end
 
   # Known envelope keys that map to typed `event` record fields; everything else
@@ -457,6 +516,68 @@ defmodule Mydia.Plugins.Host do
           {:error, Error.new(:invalid_output, "guest result is not valid JSON")}
       end
     end
+  end
+
+  # ── Typed 1.4 results (setup, check-health) ───────────────────────────────
+
+  # Wasmex hands records back as maps keyed by WIT field names (atoms or
+  # strings, kebab-case), variants as {case, payload} tuples, options as
+  # {:some, v} | :none, enums as atoms or strings. Normalise all of it to
+  # snake_case atom keys, bare values and snake_case atoms, recursively.
+  @doc false
+  def normalize_wit(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {wit_atom(k), normalize_wit(v)} end)
+  end
+
+  def normalize_wit(list) when is_list(list), do: Enum.map(list, &normalize_wit/1)
+  def normalize_wit({:some, v}), do: normalize_wit(v)
+  def normalize_wit(:none), do: nil
+
+  def normalize_wit({tag, payload}) when is_atom(tag) or is_binary(tag),
+    do: {wit_atom(tag), normalize_wit(payload)}
+
+  def normalize_wit(other), do: other
+
+  defp wit_atom(key) when is_atom(key), do: key |> Atom.to_string() |> wit_atom()
+
+  defp wit_atom(key) when is_binary(key),
+    do: key |> String.replace("-", "_") |> String.to_existing_atom()
+
+  # Enum values arrive as atoms or strings depending on wasmex's encoding.
+  defp enum_atom(nil), do: nil
+  defp enum_atom(v) when is_atom(v), do: v |> Atom.to_string() |> enum_atom()
+
+  defp enum_atom(v) when is_binary(v),
+    do: v |> String.replace("-", "_") |> String.to_existing_atom()
+
+  defp decode_screen(screen) do
+    %{
+      step: screen.step,
+      body: decode_body(screen.body),
+      next_state_json: screen.next_state_json,
+      credentials: Enum.map(screen.credentials, &decode_credential/1),
+      error: screen.error
+    }
+  end
+
+  defp decode_body({:choice, c}) do
+    {:choice,
+     %{
+       title: c.title,
+       options:
+         Enum.map(c.options, fn o ->
+           %{o | credentials: Enum.map(o.credentials, &decode_credential/1)}
+         end)
+     }}
+  end
+
+  defp decode_body({:done, summary}), do: {:done, summary}
+  defp decode_body({tag, body}) when tag in [:form, :external_auth, :mapping], do: {tag, body}
+
+  defp decode_credential(%{role: role, token: token}), do: %{role: enum_atom(role), token: token}
+
+  defp decode_health(h) do
+    %{status: enum_atom(h.status), message: h.message, action: enum_atom(h.action)}
   end
 
   # ── Debug log markers (U2) ────────────────────────────────────────────────

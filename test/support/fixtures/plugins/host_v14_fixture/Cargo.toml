@@ -1,0 +1,26 @@
+# 1.4 host-contract test fixture. A component built from mydia:plugin@1.4.0 that
+# exercises each 1.4 import keyed by event name, plus canned setup and
+# check-health exports. Params ride in the event's metadata-json. The behavior
+# table lives in the Task 1 section of the plex-plugin plan and in
+# test/mydia/plugins/contract_v14_test.exs.
+#
+# Built once to wasm32-wasip2 and checked in at ../host_v14_fixture.wasm.
+# Rebuild via nix: cargo build --release --target wasm32-wasip2
+[package]
+name = "mydia-host-v14-fixture"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+tinyjson = "2"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

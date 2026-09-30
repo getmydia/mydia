@@ -8,34 +8,51 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 
-/// Optional macro arguments. `#[mydia_plugin_sdk::plugin]` takes no args (event-only); a
-/// scheduled plugin passes `#[mydia::plugin(on_schedule = handle_tick)]` naming
-/// a second handler `fn(ScheduleTick) -> Result<String, String>`.
+/// Optional macro arguments, comma-separated, any order:
+/// `on_schedule = f`, `setup = g`, `check_health = h`.
 struct PluginArgs {
     on_schedule: Option<Path>,
+    setup: Option<Path>,
+    check_health: Option<Path>,
 }
 
 impl Parse for PluginArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.is_empty() {
-            return Ok(PluginArgs { on_schedule: None });
+        let mut args = PluginArgs {
+            on_schedule: None,
+            setup: None,
+            check_health: None,
+        };
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let path: Path = input.parse()?;
+
+            let slot = match key.to_string().as_str() {
+                "on_schedule" => &mut args.on_schedule,
+                "setup" => &mut args.setup,
+                "check_health" => &mut args.check_health,
+                _ => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        "expected `on_schedule`, `setup` or `check_health`",
+                    ))
+                }
+            };
+
+            if slot.is_some() {
+                return Err(syn::Error::new(key.span(), "argument given twice"));
+            }
+
+            *slot = Some(path);
+
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
         }
 
-        let key: Ident = input.parse()?;
-
-        if key != "on_schedule" {
-            return Err(syn::Error::new(
-                key.span(),
-                "expected `on_schedule = <handler fn>`",
-            ));
-        }
-
-        input.parse::<Token![=]>()?;
-        let path: Path = input.parse()?;
-
-        Ok(PluginArgs {
-            on_schedule: Some(path),
-        })
+        Ok(args)
     }
 }
 
@@ -47,10 +64,10 @@ impl Parse for PluginArgs {
 /// component export, so the author never writes the trait impl or the export
 /// wiring.
 ///
-/// A scheduled plugin additionally names a second handler:
+/// Further handlers are named as optional, order-free arguments:
 ///
 /// ```ignore
-/// #[mydia_plugin_sdk::plugin(on_schedule = handle_tick)]
+/// #[mydia_plugin_sdk::plugin(on_schedule = handle_tick, setup = handle_setup, check_health = handle_health)]
 /// fn on_event(evt: mydia_plugin_sdk::types::Event) -> Result<String, String> {
 ///     Ok("{}".into())
 /// }
@@ -58,11 +75,23 @@ impl Parse for PluginArgs {
 /// fn handle_tick(tick: mydia_plugin_sdk::types::ScheduleTick) -> Result<String, String> {
 ///     Ok("{}".into())
 /// }
+///
+/// fn handle_setup(
+///     req: mydia_plugin_sdk::types::SetupRequest,
+/// ) -> Result<mydia_plugin_sdk::types::SetupScreen, String> {
+///     Err(format!("unknown step {}", req.step))
+/// }
+///
+/// fn handle_health() -> Result<mydia_plugin_sdk::types::Health, String> {
+///     Err("unreachable".into())
+/// }
 /// ```
 ///
 /// Without `on_schedule`, the generated `on-schedule` export returns an error,
 /// so a plugin that declares a manifest schedule but forgets the handler fails
-/// loudly rather than silently doing nothing.
+/// loudly rather than silently doing nothing. `setup` and `check_health`
+/// (1.4.0) default to returning an error, so a plugin that declares
+/// `setup: true` in its manifest but forgets the handler fails loudly.
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as PluginArgs);
@@ -74,6 +103,24 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         None => quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("on-schedule not implemented by this plugin"),
+            )
+        },
+    };
+
+    let setup_body = match args.setup {
+        Some(path) => quote! { #path(req) },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("setup not implemented by this plugin"),
+            )
+        },
+    };
+
+    let check_health_body = match args.check_health {
+        Some(path) => quote! { #path() },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("check-health not implemented by this plugin"),
             )
         },
     };
@@ -96,6 +143,23 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             ) -> ::core::result::Result<::std::string::String, ::std::string::String> {
                 let _ = &tick;
                 #on_schedule_body
+            }
+
+            fn setup(
+                req: ::mydia_plugin_sdk::types::SetupRequest,
+            ) -> ::core::result::Result<
+                ::mydia_plugin_sdk::types::SetupScreen,
+                ::std::string::String,
+            > {
+                let _ = &req;
+                #setup_body
+            }
+
+            fn check_health() -> ::core::result::Result<
+                ::mydia_plugin_sdk::types::Health,
+                ::std::string::String,
+            > {
+                #check_health_body
             }
         }
 

@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.3)
+  ## Component import ABI (1.4)
 
-  Imports live under the `"mydia:plugin/host@1.3.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.4.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -23,8 +23,10 @@ defmodule Mydia.Plugins.HostFunctions do
 
   are joined in 1.1 by `kv-get/set/delete`, `data-list`, `ensure-watched`,
   `connections-list`, and `connection-request` (each capability-gated), and in
-  1.2 by `set-watch-state` plus position fields on `playback-progress`, and in
-  1.3 by `ensure-favorite`.
+  1.2 by `set-watch-state` plus position fields on `playback-progress`, in
+  1.3 by `ensure-favorite`, and in 1.4 by `links-list`, `link-request`,
+  `propose-accounts`, `set-link-token`, `set-link-status`, `kv-list`,
+  `kv-set-many` and `report-sync-run`, plus `origin` on `playback-progress`.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -61,12 +63,14 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.3 superset to a 1.2/1.1/1.0 guest (which imports the
-  # correspondingly older `host@x.y.z`) via component semver matching, so older
-  # guests keep working. wasmex still needs exact namespace keys in the imports
-  # map (see `Mydia.Plugins.Host`), so every supported version is also published
-  # under its own key, each narrowed to the functions that version defined.
-  @namespace "mydia:plugin/host@1.3.0"
+  # wasmtime serves this 1.4 superset to a 1.3/1.2/1.1/1.0 guest (which imports
+  # the correspondingly older `host@x.y.z`) via component semver matching, so
+  # older guests keep working. wasmex still needs exact namespace keys in the
+  # imports map (see `Mydia.Plugins.Host`), so every supported version is also
+  # published under its own key, each narrowed to the functions that version
+  # defined.
+  @namespace "mydia:plugin/host@1.4.0"
+  @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
 
@@ -89,15 +93,15 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec imports_for(String.t(), keyword()) :: (map() -> map())
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
-      funcs = %{
+      v13 = %{
         "http-request" => {:fn, http_import(slug, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
-        # ── 1.1.0 imports (U2 contract; bodies land in U3/U5/U6/U7) ──
+        # ── 1.1.0 ──
         "kv-get" => {:fn, kv_get_import(slug)},
         "kv-set" => {:fn, kv_set_import(slug)},
         "kv-delete" => {:fn, kv_delete_import(slug)},
-        "data-list" => {:fn, data_list_import(slug)},
+        "data-list" => {:fn, data_list_import(slug, false)},
         "ensure-watched" => {:fn, ensure_watched_import(slug)},
         "connections-list" => {:fn, connections_list_import(slug)},
         "connection-request" => {:fn, connection_request_import(slug, gate_opts)},
@@ -107,17 +111,41 @@ defmodule Mydia.Plugins.HostFunctions do
         "ensure-favorite" => {:fn, ensure_favorite_import(slug)}
       }
 
+      v14 =
+        Map.merge(v13, %{
+          # 1.4 playback-progress records carry `origin`; older guests' records
+          # must not, or the record shape no longer matches their contract.
+          "data-list" => {:fn, data_list_import(slug, true)},
+          "links-list" => {:fn, not_implemented(0)},
+          "link-request" => {:fn, not_implemented(2)},
+          "propose-accounts" => {:fn, not_implemented(1)},
+          "set-link-token" => {:fn, not_implemented(2)},
+          "set-link-status" => {:fn, not_implemented(3)},
+          "kv-list" => {:fn, not_implemented(2)},
+          "kv-set-many" => {:fn, not_implemented(1)},
+          "report-sync-run" => {:fn, not_implemented(1)}
+        })
+
       # Publish under every supported key: wasmex matches the guest's exact
       # imported package name, so an older guest still links against this host.
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
       %{
-        @namespace => funcs,
-        @v12_namespace => Map.delete(funcs, "ensure-favorite"),
-        @v11_namespace => funcs |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
+        @namespace => v14,
+        @v13_namespace => v13,
+        @v12_namespace => Map.delete(v13, "ensure-favorite"),
+        @v11_namespace => v13 |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
       }
     end
   end
+
+  # 1.4 imports are linked from Task 1 so a 1.4 guest instantiates; each body is
+  # replaced by the task that owns it (links: Task 5, store: Task 7, sync runs:
+  # Task 8). Until then a call returns an internal error.
+  defp not_implemented(0), do: fn -> {:error, {:internal, "not implemented"}} end
+  defp not_implemented(1), do: fn _ -> {:error, {:internal, "not implemented"}} end
+  defp not_implemented(2), do: fn _, _ -> {:error, {:internal, "not implemented"}} end
+  defp not_implemented(3), do: fn _, _, _ -> {:error, {:internal, "not implemented"}} end
 
   # ── 1.1.0 import closures ───────────────────────────────────────────────────
   #
@@ -157,11 +185,11 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp data_list_import(slug) do
+  defp data_list_import(slug, with_origin?) do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          data_list(plugin, req)
+          data_list(plugin, req, with_origin: with_origin?)
         end
       end)
     end
@@ -583,19 +611,19 @@ defmodule Mydia.Plugins.HostFunctions do
     do: {:error, Error.new(:invalid_request, "kv value must be a string")}
 
   @doc false
-  @spec data_list(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def data_list(%Plugin{} = plugin, req) do
+  @spec data_list(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def data_list(%Plugin{} = plugin, req, opts \\ []) do
     namespace = Map.get(req, :namespace, "")
 
     with :ok <- require_data_namespace(plugin, namespace),
          {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
          {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
       limit = clamp_list_limit(from_option(Map.get(req, :limit)))
-      list_namespace(plugin, namespace, cursor, since, limit)
+      list_namespace(plugin, namespace, cursor, since, limit, opts)
     end
   end
 
-  defp list_namespace(_plugin, "media_item", cursor, since, limit) do
+  defp list_namespace(_plugin, "media_item", cursor, since, limit, _opts) do
     rows =
       Media.list_items_page(Scope.system(), after: cursor, updated_since: since, limit: limit + 1)
 
@@ -607,7 +635,7 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(_plugin, "library_item", cursor, since, limit) do
+  defp list_namespace(_plugin, "library_item", cursor, since, limit, _opts) do
     rows =
       Media.list_library_items_page(Scope.system(),
         after: cursor,
@@ -620,7 +648,7 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(plugin, "playback_progress", cursor, since, limit) do
+  defp list_namespace(plugin, "playback_progress", cursor, since, limit, opts) do
     # Consent-scoped (R21): only users with an active connection to this plugin
     # are visible — a non-connected user's rows are absent entirely.
     case Connections.connected_user_ids(plugin.slug) do
@@ -636,12 +664,18 @@ defmodule Mydia.Plugins.HostFunctions do
           )
 
         {page, next} = paginate(rows, limit)
-        items = Enum.map(page, fn p -> {:"playback-progress", to_playback_progress(p)} end)
+        with_origin? = Keyword.get(opts, :with_origin, false)
+
+        items =
+          Enum.map(page, fn p ->
+            {:"playback-progress", to_playback_progress(p, with_origin?)}
+          end)
+
         {:ok, %{items: items, "next-cursor": next_cursor(next)}}
     end
   end
 
-  defp list_namespace(_plugin, other, _cursor, _since, _limit) do
+  defp list_namespace(_plugin, other, _cursor, _since, _limit, _opts) do
     {:error, Error.new(:invalid_request, "unknown data-list namespace: #{other}")}
   end
 
@@ -710,10 +744,10 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # Progress row -> the WIT playback-progress record. A movie carries the item's
   # own external ids; an episode carries its coordinates plus the show's ids.
-  defp to_playback_progress(p) do
+  defp to_playback_progress(p, with_origin?) do
     {item_type, ext, season, epnum} = progress_dimensions(p)
 
-    %{
+    record = %{
       "user-id": p.user_id,
       "item-type": item_type,
       "media-item-id": to_option(p.media_item_id),
@@ -729,6 +763,9 @@ defmodule Mydia.Plugins.HostFunctions do
       "last-watched-at": to_option(iso_or_nil(p.last_watched_at)),
       "updated-at": DateTime.to_iso8601(p.updated_at)
     }
+
+    # Task 8 replaces :none with the row's real origin.
+    if with_origin?, do: Map.put(record, :origin, :none), else: record
   end
 
   defp progress_dimensions(%{episode_id: eid} = p) when not is_nil(eid) do
