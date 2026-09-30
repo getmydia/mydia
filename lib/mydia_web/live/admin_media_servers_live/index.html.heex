@@ -48,7 +48,7 @@
 
     <%!-- Media Server Modal --%>
     <%= if assigns[:show_media_server_modal] do %>
-      <MydiaWeb.AdminMediaServersLive.Components.media_server_modal
+      <MydiaWeb.AdminMediaServersLive.MediaServerModalComponents.media_server_modal
         media_server_form={@media_server_form}
         media_server_mode={@media_server_mode}
         testing_media_server_connection={assigns[:testing_media_server_connection] || false}

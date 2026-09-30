@@ -10,11 +10,12 @@ defmodule MydiaWeb.AdminMediaServersLive.ComponentsTest do
   alias Mydia.Settings.MediaServerConfig
   alias MydiaWeb.AdminMediaServersLive.AccountMappingComponents
   alias MydiaWeb.AdminMediaServersLive.Components
+  alias MydiaWeb.AdminMediaServersLive.MediaServerModalComponents
 
   defp render_modal(opts) do
     config = Keyword.get(opts, :config, %MediaServerConfig{type: :jellyfin})
 
-    render_component(&Components.media_server_modal/1, %{
+    render_component(&MediaServerModalComponents.media_server_modal/1, %{
       media_server_form: to_form(MediaServerConfig.changeset(config, %{})),
       media_server_mode: Keyword.get(opts, :mode, :new)
     })
