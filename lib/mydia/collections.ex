@@ -577,6 +577,10 @@ defmodule Mydia.Collections do
     |> select([i], i.media_item_id)
     |> Repo.all()
     |> MapSet.new()
+  rescue
+    # PostgreSQL raises while binding a non-UUID-shaped id. It is certainly not
+    # in the collection.
+    Ecto.Query.CastError -> MapSet.new()
   end
 
   @doc """

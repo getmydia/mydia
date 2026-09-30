@@ -492,5 +492,15 @@ defmodule Mydia.CollectionsTest do
 
       assert Collections.item_ids_in(c, [a.id, b.id]) == MapSet.new([a.id])
     end
+
+    test "an id that is not a uuid is simply absent" do
+      user = user_fixture()
+      {:ok, c} = Collections.create_collection(user, %{name: "Shelf", type: "manual"})
+      a = media_item_fixture(%{title: "Harbor of Glass"})
+      {:ok, _} = Collections.add_item(c, a.id)
+
+      assert Collections.item_ids_in(c, ["x", a.id]) == MapSet.new([a.id])
+      assert Collections.item_ids_in(c, ["x"]) == MapSet.new()
+    end
   end
 end
