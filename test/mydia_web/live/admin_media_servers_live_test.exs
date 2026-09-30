@@ -67,7 +67,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       {:ok, _config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           # The form posts checkbox values as strings, so this is what is
@@ -86,14 +86,14 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok"
         })
 
       {:ok, _} =
         Mydia.Sync.record_skip(
-          %{provider: "plex", provider_instance_id: config.id},
+          %{provider: "jellyfin", provider_instance_id: config.id},
           :sync_disabled
         )
 
@@ -200,22 +200,6 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
 
       assert has_element?(view, "#sync-skip-#{config.id}")
       assert render(view) =~ "some_future_reason"
-    end
-
-    test "an auth error surfaces a reconnect action", %{conn: conn} do
-      {:ok, _config} =
-        Mydia.Settings.create_media_server_config(%{
-          name: "Storage",
-          type: :plex,
-          url: "http://localhost:32400",
-          token: "stale",
-          last_auth_error: "HTTP 401",
-          last_auth_error_at: DateTime.utc_now() |> DateTime.truncate(:second)
-        })
-
-      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
-
-      assert has_element?(view, "[data-test=reconnect-plex]")
     end
   end
 
@@ -575,85 +559,6 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
-  describe "Plex wizard auto-connect" do
-    setup %{conn: conn, token: token} do
-      start_supervised!(Mydia.Indexers.Health)
-
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
-      %{view: view}
-    end
-
-    test "the modal no longer offers a Connection step", %{view: view} do
-      view |> element("#new-media-server") |> render_click()
-
-      refute has_element?(view, "li.step", "Connection")
-      assert has_element?(view, "li.step", "Server")
-    end
-  end
-
-  # Characterization test, not a regression test: pre-branch, edit-mode save
-  # already used `editing_media_server` as the changeset base, so
-  # `machine_identifier` and `connections` already survived a form-params-only
-  # save. What actually blocked editing a wizard-created server was the
-  # browser-level `required` attribute on the URL input, which `render_submit/1`
-  # does not enforce; that blockage is pinned separately in
-  # `components_test.exs` ("media server modal, Server URL requirement").
-  describe "discovery data on a Plex wizard config survives a form-params-only save" do
-    setup %{conn: conn, token: token} do
-      start_supervised!(Mydia.Indexers.Health)
-
-      conn =
-        conn
-        |> init_test_session(%{})
-        |> put_session(:guardian_default_token, token)
-        |> put_req_header("authorization", "Bearer #{token}")
-
-      # A wizard-created config: no url, addressable only through discovery.
-      {:ok, config} =
-        Mydia.Settings.create_media_server_config(%{
-          name: "Storage",
-          type: :plex,
-          url: nil,
-          token: "acct-token",
-          machine_identifier: "machine-abc",
-          connections: [%{"uri" => "http://127.0.0.1:32400", "local" => true}]
-        })
-
-      %{conn: conn, config: config}
-    end
-
-    test "renaming via form params alone preserves machine_identifier and connections",
-         %{conn: conn, config: config} do
-      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
-
-      view |> element("[phx-click='edit_media_server']") |> render_click()
-
-      view
-      |> form("#media-server-form", %{
-        "media_server_config" => %{
-          "name" => "Renamed",
-          "type" => "plex",
-          "url" => "",
-          "token" => "acct-token"
-        }
-      })
-      |> render_submit()
-
-      updated = Mydia.Settings.get_media_server_config!(config.id)
-
-      assert updated.name == "Renamed"
-      # Discovery data must survive a save driven purely by form params.
-      assert updated.machine_identifier == "machine-abc"
-      assert [%{"uri" => "http://127.0.0.1:32400"}] = updated.connections
-    end
-  end
-
   # A LiveView integration test for the Enabled toggle fix (form="media-server-form"
   # on the Enabled toggle inputs) was attempted here and deleted. Phoenix.LiveViewTest's
   # form/3 collects inputs by walking descendants of the located <form> node; it does
@@ -690,8 +595,8 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     test "renders a humanized skip reason rather than a raw atom", %{conn: conn} do
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
-          name: "Skipped Plex",
-          type: :plex,
+          name: "Skipped Jellyfin",
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -699,7 +604,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
         })
 
       Mydia.Sync.record_skip(
-        %{provider: "plex", provider_instance_id: config.id},
+        %{provider: "jellyfin", provider_instance_id: config.id},
         :seeding_links
       )
 
@@ -710,7 +615,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
   end
 
-  describe "Plex link seeding and Sync Now" do
+  describe "Link seeding and Sync Now" do
     setup %{conn: conn, token: token} do
       start_supervised!(Mydia.Indexers.Health)
 
@@ -723,46 +628,16 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       %{conn: conn}
     end
 
-    test "saving a Plex config enqueues a link seed", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/admin/media-servers")
-
-      view
-      |> element("#media-servers-empty-cta")
-      |> render_click()
-
-      # The Plex wizard defaults to the OAuth flow, which renders no url/token
-      # inputs. Switch to manual entry (a real, existing escape hatch in the
-      # wizard) so the form actually has fields to submit.
-      view
-      |> element("button[phx-click='toggle_plex_manual_entry']")
-      |> render_click()
-
-      view
-      |> form("#media-server-form", %{
-        "media_server_config" => %{
-          "name" => "Seeded Plex",
-          "type" => "plex",
-          "url" => "http://localhost:32400",
-          "token" => "tok"
-        }
-      })
-      |> render_submit()
-
-      config = Mydia.Settings.list_media_server_configs() |> List.first()
-
-      assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
-    end
-
     test "saving a server whose mappings were all deleted does not seed them back",
          %{conn: conn} do
       # Deleting a mapping promises watched sync will skip that user until it is
-      # mapped again. Every Plex save enqueues a seed, and flipping a sync
+      # mapped again. Every save enqueues a seed, and flipping a sync
       # direction is a save, so an ungated seed-on-save put the mappings back by
       # a different route than the scheduler tick already guarded.
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Seeded Already",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -782,7 +657,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       |> form("#media-server-form", %{
         "media_server_config" => %{
           "name" => "Seeded Already",
-          "type" => "plex",
+          "type" => "jellyfin",
           "url" => "http://localhost:32400",
           "token" => "tok"
         }
@@ -794,12 +669,12 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     end
 
     test "saving a server that has never been seeded still enqueues a seed", %{conn: conn} do
-      # The other side of the gate: a Plex server with no stamp and no mappings
+      # The other side of the gate: a server with no stamp and no mappings
       # is a first run, and must still be filled in automatically.
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Never Seeded",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -814,7 +689,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       |> form("#media-server-form", %{
         "media_server_config" => %{
           "name" => "Never Seeded",
-          "type" => "plex",
+          "type" => "jellyfin",
           "url" => "http://localhost:32400",
           "token" => "tok"
         }
@@ -831,13 +706,6 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       |> element("#media-servers-empty-cta")
       |> render_click()
 
-      # The modal defaults to type "plex", which renders the OAuth wizard
-      # instead of url/token inputs. Switch the type to jellyfin first so the
-      # form re-renders with the plain url/token fields jellyfin uses.
-      view
-      |> form("#media-server-form", %{"media_server_config" => %{"type" => "jellyfin"}})
-      |> render_change()
-
       view
       |> form("#media-server-form", %{
         "media_server_config" => %{
@@ -849,8 +717,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       })
       |> render_submit()
 
-      # Jellyfin seeds by username match the same way Plex does. The worker
-      # itself is the gate on watched sync being on, so the save enqueues it
+      # Jellyfin seeds by username match. The worker itself is the gate on watched sync being on, so the save enqueues it
       # either way and a server that never opted in is a cheap no-op.
       assert [_seed] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
       assert Mydia.Settings.list_media_server_configs() |> List.first()
@@ -860,7 +727,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Sync Me",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -879,14 +746,14 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       )
     end
 
-    test "a Plex server syncing watched status offers profile mapping", %{conn: conn} do
+    test "a server syncing watched status offers account mapping", %{conn: conn} do
       # Auto-matching links a profile only when its name equals a Mydia
       # username, which on most installs is never, and until this button there
       # was no way for the operator to make the mapping themselves.
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "Map Me",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -901,7 +768,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
              )
     end
 
-    test "a Plex server not syncing watched status does not offer profile mapping",
+    test "a server not syncing watched status does not offer account mapping",
          %{conn: conn} do
       # Links exist only to keep per-user watch history apart. With sync off
       # there is nothing to keep apart, and offering the mapping would imply a
@@ -909,7 +776,7 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
       {:ok, config} =
         Mydia.Settings.create_media_server_config(%{
           name: "No Sync",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true
@@ -950,23 +817,6 @@ defmodule MydiaWeb.AdminMediaServersLiveTest do
     all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
   end
 
-  defp jellyfin_server(bypass) do
-    {:ok, server} =
-      Mydia.Settings.create_media_server_config(%{
-        name: "Jellyfin",
-        type: :jellyfin,
-        url: "http://127.0.0.1:#{bypass.port}",
-        token: "api-key",
-        enabled: true,
-        connection_settings: %{}
-      })
-
-    server
-  end
-
-  # Jellyfin rather than Plex on purpose: the Sync Now button used to be gated
-  # on `type == :plex` while the settings toggle offered watched sync to both,
-  # so a Jellyfin operator could enable it and had no way to run it.
   defp sync_enabled_server(bypass) do
     {:ok, server} =
       Mydia.Settings.create_media_server_config(%{

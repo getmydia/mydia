@@ -422,8 +422,8 @@ conn
 
 Req decodes from a resolved content-type header or a URL extension, and a Bypass
 stub has neither by default. Real services send the header. Precedent lives in
-`test/mydia/watch_sync/providers/plex_position_test.exs` and
-`test/mydia/media_server/plex/home_test.exs`. This bit two separate tasks on the
+`test/mydia/watch_sync/providers/jellyfin_test.exs` and
+`test/mydia/media_server/client/jellyfin_test.exs`. This bit two separate tasks on the
 Jellyfin watched-sync branch on 2026-08-12, each time looking like a production
 defect first.
 
@@ -504,27 +504,14 @@ parses to `[""]` rather than `["open"]`. Asserting `== []` on a boolean attribut
 is vacuously true when the selector matched nothing, so pair it with a count
 assertion. Confirmed a second time on 2026-08-22 against lazy_html 0.1.12.
 
-## plex.tv has no LiveView test seam
+## plex.tv is reached only by the Plex plugin
 
-`Mydia.MediaServer.Plex.Home` and `PlexOAuth` take the plex.tv base as a
-`:plex_tv_base` option and deliberately not from application env. The comment in
-`PlexLinkSeed` says env "would leak across concurrent tests".  `PlexLinkSeed`
-threads it through job args. A LiveView has no equivalent channel, so any
-LiveView event calling plex.tv cannot be stubbed and would make a real network
-request.
-
-For `AdminMediaServersLive`, never `render_click` a button whose handler reaches
-plex.tv (`open_plex_profiles`, `start_plex_oauth`, `save_plex_profiles`). The
-existing "Plex wizard auto-connect" block only asserts on modal structure.
-
-Cover those paths in two pieces. UI states go through `render_component/2` in
-`test/mydia_web/live/admin_media_servers_live/components_test.exs`, passing
-loading, `{:error, msg}` and ready states as assigns. Behaviour goes through
-Bypass against the context function directly, for example
-`Home.apply_mapping(config, mapping, plex_tv_base: base)` in
-`test/mydia/media_server/plex/home_test.exs`. LiveView tests can still assert a
-button exists with the right `phx-click` and `phx-value-id`, which pins the
-wiring without firing it.
+plex.tv is called only by the Plex plugin guest, and that guest reads its base
+URL from the `plex_tv_base` instance setting, so a test points it at a Bypass
+server. `test/support/plex_plugin_case.ex` and
+`test/mydia/plugins/plex_setup_integration_test.exs` show the pattern. No
+LiveView event calls plex.tv directly any more, so there is nothing in a
+LiveView test to stub or to avoid clicking.
 
 ## The parser gates cannot test target-bound behaviour
 

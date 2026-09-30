@@ -59,9 +59,6 @@ defmodule Mydia.Application do
       Mydia.Indexers.register_adapters()
       # Register metadata provider adapters
       Mydia.Metadata.register_providers()
-      # Own the Plex endpoint cache here so its ETS table outlives the request
-      # or job process that happens to resolve an endpoint first
-      Mydia.MediaServer.Plex.Endpoint.init_cache()
       # Rehydrate installed WASM plugins into the runtime registry
       Mydia.Plugins.register_plugins()
       # Ensure default quality profiles exist (skip in test environment)

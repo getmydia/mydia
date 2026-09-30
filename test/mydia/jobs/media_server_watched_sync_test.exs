@@ -14,7 +14,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, _server} =
         Settings.create_media_server_config(%{
           name: "Test Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: true,
@@ -30,7 +30,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, server} =
         Settings.create_media_server_config(%{
           name: "Sync Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: true,
@@ -67,7 +67,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, server} =
         Settings.create_media_server_config(%{
           name: "Server Mode Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: true,
@@ -109,7 +109,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, server} =
         Settings.create_media_server_config(%{
           name: "Disabled Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: false,
@@ -130,7 +130,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "config_id" => server.id
                })
 
-      assert Sync.last_run("plex", server.id).skip_reason == "server_disabled"
+      assert Sync.last_run("jellyfin", server.id).skip_reason == "server_disabled"
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
   end
@@ -142,7 +142,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, server} =
         Settings.create_media_server_config(%{
           name: "Disabled Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: false,
@@ -165,7 +165,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, server} =
         Settings.create_media_server_config(%{
           name: "No Sync Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "test-token",
           enabled: true,
@@ -238,7 +238,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: false,
@@ -254,7 +254,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "link_id" => link.id
                })
 
-      run = Sync.last_run("plex", config.id)
+      run = Sync.last_run("jellyfin", config.id)
       assert run.status == :skipped
       assert run.skip_reason == "server_disabled"
       assert run.user_id == user.id
@@ -264,7 +264,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true
@@ -274,7 +274,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      run = Sync.last_run("plex", config.id)
+      run = Sync.last_run("jellyfin", config.id)
 
       assert run.status == :skipped
       assert run.skip_reason == "sync_disabled"
@@ -284,7 +284,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Off",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: false,
@@ -293,7 +293,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "server_disabled"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "server_disabled"
     end
 
     test "a job whose link has no usable identity is skipped, never run on the admin token" do
@@ -306,7 +306,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "admin-token",
           enabled: true,
@@ -329,7 +329,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "link_id" => link.id
                })
 
-      run = Sync.last_run("plex", config.id)
+      run = Sync.last_run("jellyfin", config.id)
       assert run.status == :skipped
       assert run.skip_reason == "link_identity_missing"
     end
@@ -344,7 +344,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "owner-token",
           enabled: true,
@@ -357,79 +357,9 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "user_id" => user.id
                })
 
-      run = Sync.last_run("plex", config.id)
+      run = Sync.last_run("jellyfin", config.id)
       assert run.status == :skipped
       assert run.skip_reason == "link_not_found"
-    end
-
-    test "a job whose link has a remote user id but no Plex token never runs under the admin token" do
-      # A GUID-only link is a valid Jellyfin-shaped identity, but Plex identity
-      # IS the per-user token: this scope must be refused by the provider
-      # rather than silently proceeding on config.token, the admin's own
-      # credential. That silent fallback is exactly the merge bug per-user
-      # links exist to prevent.
-      #
-      # A mapping row is seeded, and the config carries a fresh
-      # last_mapping_refresh_at, so the sync skips its (legitimately
-      # admin-token-scoped) refresh crawl and calls straight into
-      # `list_changes/3`, which is the call this test is guarding. Without
-      # both, the assertion below could not tell a correct refusal apart from
-      # an unrelated connection failure against a URL with no real server.
-      user = user_fixture()
-      media_item = insert(:media_item)
-
-      {:ok, config} =
-        Settings.create_media_server_config(%{
-          name: "Storage",
-          type: :plex,
-          url: "http://localhost:32400",
-          token: "admin-token",
-          enabled: true,
-          connection_settings: %{
-            "sync_watched" => "true",
-            "last_mapping_refresh_at" => DateTime.utc_now() |> DateTime.to_iso8601()
-          }
-        })
-
-      {:ok, link} =
-        Settings.upsert_media_server_user_link(%{
-          media_server_config_id: config.id,
-          user_id: user.id,
-          remote_user_id: "2",
-          access_token: nil,
-          enabled: true
-        })
-
-      {:ok, _mapping} =
-        %Mapping{}
-        |> Mapping.changeset(%{
-          provider: "plex",
-          provider_instance_id: config.id,
-          media_item_id: media_item.id,
-          remote_id: "rk1"
-        })
-        |> Repo.insert()
-
-      # Recorded as a skip, not returned as an error. A missing credential is a
-      # misconfiguration no retry can fix: as an error it burned all three Oban
-      # attempts and landed in `discarded`, which is the exact disappearance the
-      # user reported.
-      assert {:ok, :skipped} =
-               perform_job(MediaServerWatchedSync, %{
-                 "config_id" => config.id,
-                 "user_id" => user.id,
-                 "link_id" => link.id
-               })
-
-      run = Sync.last_run("plex", config.id)
-      assert run.status == :skipped
-      assert run.skip_reason == "missing_user_token"
-      assert run.finished_at
-
-      # The run already open for this attempt became the skip. A second row
-      # would leave an unfinished `:ok` run behind saying the opposite, and the
-      # admin page reads whichever landed last.
-      assert Repo.aggregate(Mydia.Sync.Run, :count) == 1
     end
 
     test "a Jellyfin link naming no account is recorded as a skip, not a retryable error" do
@@ -493,7 +423,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "admin-token",
           enabled: true,
@@ -507,7 +437,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "link_id" => Ecto.UUID.generate()
                })
 
-      assert Sync.last_run("plex", config.id).skip_reason == "link_not_found"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "link_not_found"
     end
 
     test "a job whose link belongs to another user is refused" do
@@ -519,7 +449,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "admin-token",
           enabled: true,
@@ -542,7 +472,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                  "link_id" => link.id
                })
 
-      assert Sync.last_run("plex", config.id).skip_reason == "link_user_mismatch"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "link_user_mismatch"
     end
 
     test "skips a link that carries neither a token nor a remote user id" do
@@ -576,34 +506,11 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
                Sync.last_run("jellyfin", server.id)
     end
 
-    test "a Plex config with watched sync on and a blank token records no_token and enqueues nothing" do
-      # token isn't validate_required on MediaServerConfig, so a Plex config
-      # saved with sync on but no token would otherwise reach enqueue_linked_users,
-      # record :seeding_links every tick, and enqueue a seed job that can never
-      # produce a link (MediaServerLinkSeed.seedable?/1 also requires a token). That is
-      # a job reporting healthy while doing nothing forever.
-      {:ok, config} =
-        Settings.create_media_server_config(%{
-          name: "Tokenless Plex",
-          type: :plex,
-          url: "http://localhost:32400",
-          token: "",
-          enabled: true,
-          connection_settings: %{"sync_watched" => true}
-        })
-
-      assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
-
-      assert Sync.last_run("plex", config.id).skip_reason == "no_token"
-      assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
-      assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
-    end
-
     test "a config with no links seeds them instead of skipping forever" do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -619,7 +526,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "seeding_links"
       assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
 
       # Still no per-user job: defaulting to the admin token is the bug this
@@ -634,7 +541,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Seeded Plex",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -648,7 +555,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "no_user_mapping"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "no_user_mapping"
       assert [] = all_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed)
       assert [] = all_enqueued(worker: MediaServerWatchedSync) |> Enum.reject(& &1.args["mode"])
     end
@@ -660,7 +567,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Storage",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,
@@ -674,7 +581,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
 
       assert :ok = perform_job(MediaServerWatchedSync, %{"mode" => "all_enabled"})
 
-      assert Sync.last_run("plex", config.id).skip_reason == "seeding_links"
+      assert Sync.last_run("jellyfin", config.id).skip_reason == "seeding_links"
       assert_enqueued(worker: Mydia.Jobs.MediaServerLinkSeed, args: %{"config_id" => config.id})
     end
 
@@ -735,7 +642,7 @@ defmodule Mydia.Jobs.MediaServerWatchedSyncTest do
       {:ok, config} =
         Settings.create_media_server_config(%{
           name: "Doomed",
-          type: :plex,
+          type: :jellyfin,
           url: "http://localhost:32400",
           token: "tok",
           enabled: true,

@@ -18,10 +18,8 @@ defmodule Mydia.MediaServer.UserLinks do
       the account being written or carried over from a row that named that same
       account and the same user.
 
-    * Which of the two fields carries the identity is the provider's decision.
-      Jellyfin has no per-user tokens, so the GUID is the identity and the token
-      is explicitly nil. On Plex the token *is* the identity, so it is minted for
-      the chosen account and a failed mint means no write at all.
+    * Jellyfin has no per-user tokens, so the GUID is the identity and the token
+      is explicitly nil.
 
   A third rule, that one remote account belongs to at most one Mydia user, is
   enforced by `Mydia.Settings.ServiceConfigs` at the write itself rather than
@@ -31,7 +29,6 @@ defmodule Mydia.MediaServer.UserLinks do
   alias Mydia.MediaServer.Client.Jellyfin, as: JellyfinClient
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.Jellyfin.Users, as: JellyfinUsers
-  alias Mydia.MediaServer.Plex.Home, as: PlexHome
   alias Mydia.MediaServer.RemoteAccount
   alias Mydia.MediaServer.SeedResult
   alias Mydia.Settings
@@ -50,20 +47,6 @@ defmodule Mydia.MediaServer.UserLinks do
   def list_remote_accounts(%{type: :jellyfin} = config, _opts) do
     with {:ok, users} <- JellyfinClient.list_users(config) do
       {:ok, Enum.map(users, &%RemoteAccount{id: to_string(&1.id), name: &1.name})}
-    end
-  end
-
-  def list_remote_accounts(%{type: :plex} = config, opts) do
-    with {:ok, users} <- PlexHome.list_users(config, opts) do
-      {:ok,
-       Enum.map(
-         users,
-         &%RemoteAccount{
-           id: to_string(&1.plex_account_id),
-           name: &1.username,
-           admin?: &1.admin?
-         }
-       )}
     end
   end
 
@@ -92,7 +75,6 @@ defmodule Mydia.MediaServer.UserLinks do
   def discover(%{type: :jellyfin} = config, opts),
     do: JellyfinUsers.seed_links(config, only_new(opts))
 
-  def discover(%{type: :plex} = config, opts), do: PlexHome.seed_links(config, only_new(opts))
   def discover(%{type: type}, _opts), do: {:error, {:unsupported_provider, type}}
 
   defp only_new(opts), do: Keyword.put(opts, :only_new, true)
@@ -110,15 +92,8 @@ defmodule Mydia.MediaServer.UserLinks do
   from submitted params, so no request can set or clear a link's credential, and
   an account id the server does not list is dropped rather than written.
 
-  Every network round trip happens before the database is touched, and the
-  writes then land in one transaction. On SQLite a write transaction locks the
-  whole database, so a plex.tv call inside one would stall every other writer
-  for its duration; doing the network first also means a mint that fails leaves
-  the existing mapping exactly as it was.
-
-  ## Options
-
-    * any option `Plex.Home.token_for/3` accepts.
+  `apply_mapping/3` talks to the media server before it opens a transaction,
+  because a SQLite write transaction locks the whole database.
   """
   @spec apply_mapping(config(), %{optional(String.t()) => binary() | nil}, keyword()) ::
           {:ok, [MediaServerUserLink.t()]} | {:error, reason()}
@@ -174,8 +149,8 @@ defmodule Mydia.MediaServer.UserLinks do
   end
 
   # Reuses the token already stored against this exact (account, user) pair.
-  # Re-minting would cost a plex.tv profile switch per profile on every save of
-  # a form the operator may not have changed at all. Matching on both halves is
+  # Re-minting would cost a round trip per account on every save of a form the
+  # operator may not have changed at all. Matching on both halves is
   # what keeps the reuse safe: a token is only carried over when the row it came
   # from named the same account, so it can never end up beside a different one.
   defp token_for(config, account, user_id, by_account, opts) do
@@ -193,17 +168,6 @@ defmodule Mydia.MediaServer.UserLinks do
   # deliberate rather than omitted, because the upsert replaces the token column
   # either way and a token left behind here could only be another account's.
   defp mint_token(%{type: :jellyfin}, _account, _opts), do: {:ok, nil}
-
-  # On Plex the identity IS the token, so it is minted for the account being
-  # written. Reusing whatever the row already held would leave the link claiming
-  # account B while holding account A's credential, and the sync would then file
-  # A's history under B.
-  #
-  # A mint that fails writes nothing. A Plex link with an account id and no token
-  # cannot sync at all, so half-written is strictly worse than untouched.
-  defp mint_token(%{type: :plex} = config, account, opts) do
-    PlexHome.token_for(config, account.id, opts)
-  end
 
   defp mint_token(%{type: type}, _account, _opts), do: {:error, {:unsupported_provider, type}}
 

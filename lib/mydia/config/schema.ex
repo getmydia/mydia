@@ -368,7 +368,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :media_servers, MediaServer, on_replace: :delete, primary_key: false do
       field :name, :string
-      field :type, Ecto.Enum, values: [:plex, :jellyfin]
+      field :type, Ecto.Enum, values: [:jellyfin]
       field :enabled, :boolean, default: true
       field :url, :string
       field :token, :string
@@ -895,7 +895,7 @@ defmodule Mydia.Config.Schema do
       :token
     ])
     |> validate_required([:name, :type, :url])
-    |> validate_inclusion(:type, [:plex, :jellyfin])
+    |> validate_inclusion(:type, [:jellyfin])
   end
 
   defp library_path_changeset(schema, attrs) do

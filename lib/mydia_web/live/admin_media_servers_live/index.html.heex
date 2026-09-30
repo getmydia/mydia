@@ -52,17 +52,12 @@
         media_server_form={@media_server_form}
         media_server_mode={@media_server_mode}
         testing_media_server_connection={assigns[:testing_media_server_connection] || false}
-        plex_oauth_state={assigns[:plex_oauth_state] || :idle}
-        plex_oauth_servers={assigns[:plex_oauth_servers] || []}
-        plex_manual_entry={assigns[:plex_manual_entry] || false}
-        plex_reachability={assigns[:plex_reachability] || :checking}
-        plex_discovery={assigns[:plex_discovery_summary]}
       />
     <% end %>
 
     <%!-- Account Mapping Modal --%>
     <%= if assigns[:account_mapping_config] do %>
-      <MydiaWeb.AdminMediaServersLive.Components.account_mapping_modal
+      <MydiaWeb.AdminMediaServersLive.AccountMappingComponents.account_mapping_modal
         config={@account_mapping_config}
         state={@account_mapping_state}
         accounts={assigns[:account_mapping_accounts] || []}

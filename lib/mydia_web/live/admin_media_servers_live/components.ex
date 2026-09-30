@@ -2,10 +2,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
-  alias Mydia.Accounts.User
-  alias Mydia.MediaServer.RemoteAccount
   alias Mydia.Settings
-  alias Mydia.Settings.MediaServerConfig
 
   @doc """
   Renders the Media Servers tab content.
@@ -30,9 +27,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             </div>
             <h3 class="font-semibold text-lg">No media servers connected</h3>
             <p class="text-sm text-base-content/70 max-w-md">
-              Connect Plex or Jellyfin and Mydia refreshes its library as soon as an import
-              finishes, so new episodes show up without waiting for the server's next
-              scheduled scan.
+              Connect a Jellyfin server, or add Plex from the Add server menu, and Mydia
+              refreshes its library as soon as an import finishes, so new episodes show up
+              without waiting for the server's next scheduled scan.
             </p>
             <p class="text-sm text-base-content/70 max-w-md">
               Both also sync watched status in both directions, mapped separately for each
@@ -198,16 +195,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
                 <%!-- Bottom Row: Actions --%>
                 <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-base-200 sm:justify-end sm:gap-1 sm:pt-2">
-                  <button
-                    :if={server.last_auth_error_at}
-                    data-test="reconnect-plex"
-                    class={["btn btn-warning gap-1", card_action_btn()]}
-                    phx-click="reconnect_plex"
-                    phx-value-id={server.id}
-                  >
-                    <.icon name="hero-arrow-path" class="w-4 h-4" /> Reconnect Plex
-                  </button>
-                  <%= if sync_enabled and server.type in [:plex, :jellyfin] do %>
+                  <%= if sync_enabled and server.type == :jellyfin do %>
                     <button
                       data-test="map-accounts"
                       class={["btn btn-ghost gap-1", card_action_btn()]}
@@ -314,11 +302,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :media_server_form, :any, required: true
   attr :media_server_mode, :atom, required: true
   attr :testing_media_server_connection, :boolean, default: false
-  attr :plex_oauth_state, :atom, default: :idle
-  attr :plex_oauth_servers, :list, default: []
-  attr :plex_manual_entry, :boolean, default: false
-  attr :plex_reachability, :any, default: :checking
-  attr :plex_discovery, :map, default: nil
 
   def media_server_modal(assigns) do
     # Get the current type from the form
@@ -330,20 +313,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
         type when is_binary(type) -> String.to_existing_atom(type)
       end
 
-    assigns =
-      assigns
-      |> assign(:current_type, current_type)
-      |> assign(
-        :plex_addressable,
-        MediaServerConfig.addressable_by_discovery?(assigns.media_server_form.source)
-      )
+    assigns = assign(assigns, :current_type, current_type)
 
     ~H"""
-    <div
-      class="modal modal-bottom sm:modal-middle modal-open"
-      id="media-server-modal"
-      phx-hook="PlexOAuth"
-    >
+    <div class="modal modal-bottom sm:modal-middle modal-open" id="media-server-modal">
       <div class="modal-box max-w-xl">
         <%!-- Modal Header --%>
         <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -367,7 +340,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
               </h3>
               <p class="text-sm text-base-content/60">
                 {if @media_server_mode == :new,
-                  do: "Connect to Plex or Jellyfin",
+                  do: "Connect a Jellyfin server",
                   else: "Update server configuration"}
               </p>
             </div>
@@ -400,320 +373,51 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <div class="space-y-5">
             <%!-- Basic Info Section --%>
             <div class="grid grid-cols-6 gap-3">
-              <div class="col-span-6 md:col-span-4">
+              <div class="col-span-6">
                 <.input field={@media_server_form[:name]} type="text" label="Name" required />
-              </div>
-              <div class="col-span-6 md:col-span-2">
-                <.input
-                  field={@media_server_form[:type]}
-                  type="select"
-                  label="Type"
-                  options={[
-                    {"Plex", "plex"},
-                    {"Jellyfin", "jellyfin"}
-                  ]}
-                  required
-                />
+                <input type="hidden" name={@media_server_form[:type].name} value="jellyfin" />
               </div>
             </div>
 
             <div class="divider my-1"></div>
 
-            <%!-- Plex OAuth Section - only shown when Plex is selected and not in manual mode --%>
-            <%= if @current_type == :plex and not @plex_manual_entry do %>
-              <div class="card bg-gradient-to-br from-warning/5 to-warning/10 border border-warning/20">
-                <div class="card-body p-4">
-                  <%!-- OAuth Progress Steps --%>
-                  <ul class="steps steps-horizontal w-full text-xs mb-4">
-                    <li class={[
-                      "step",
-                      @plex_oauth_state in [:idle, :authorizing, :selecting_server, :complete, :error] &&
-                        "step-warning"
-                    ]}>
-                      Sign In
-                    </li>
-                    <li class={[
-                      "step",
-                      @plex_oauth_state in [:selecting_server, :complete] && "step-warning"
-                    ]}>
-                      Server
-                    </li>
-                    <li class={["step", @plex_oauth_state == :complete && "step-warning"]}>Done</li>
-                  </ul>
-
-                  <%= case @plex_oauth_state do %>
-                    <% :idle -> %>
-                      <div class="text-center space-y-4 py-2">
-                        <div class="bg-warning/10 inline-flex p-3 rounded-full">
-                          <.icon name="hero-play-circle" class="w-8 h-8 text-warning" />
-                        </div>
-                        <div>
-                          <p class="font-medium">Sign in with Plex</p>
-                          <p class="text-sm text-base-content/60">
-                            Automatically discover and configure your server
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-warning gap-2"
-                          phx-click="start_plex_oauth"
-                        >
-                          <.icon name="hero-arrow-right-end-on-rectangle" class="w-5 h-5" />
-                          Connect Plex Account
-                        </button>
-                        <div class="divider text-xs text-base-content/40 my-2">or enter manually</div>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm gap-1"
-                          phx-click="toggle_plex_manual_entry"
-                        >
-                          <.icon name="hero-pencil-square" class="w-4 h-4" /> Enter token manually
-                        </button>
-                      </div>
-                    <% :authorizing -> %>
-                      <div class="text-center space-y-4 py-4">
-                        <span class="loading loading-ring loading-lg text-warning"></span>
-                        <div>
-                          <p class="font-medium">Waiting for authorization...</p>
-                          <p class="text-sm text-base-content/60">
-                            Complete the sign-in in the popup window
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm"
-                          phx-click="cancel_plex_oauth"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    <% :selecting_server -> %>
-                      <div class="space-y-3">
-                        <div class="flex items-center gap-2 text-success">
-                          <.icon name="hero-check-circle" class="w-5 h-5" />
-                          <span class="font-medium text-sm">Authenticated successfully</span>
-                        </div>
-                        <p class="text-sm text-base-content/70">Select your Plex server:</p>
-                        <div class="space-y-2 sm:max-h-48 sm:overflow-y-auto">
-                          <%= for server <- @plex_oauth_servers do %>
-                            <button
-                              type="button"
-                              class="card card-compact bg-base-100 border border-base-300 hover:border-warning/50 hover:shadow-md transition-all w-full cursor-pointer"
-                              phx-click="select_plex_server"
-                              phx-value-server_id={server.client_identifier}
-                            >
-                              <div class="card-body flex-row items-center gap-3 p-3">
-                                <div class={[
-                                  "p-2 rounded-lg",
-                                  if(server.presence, do: "bg-success/10", else: "bg-base-200")
-                                ]}>
-                                  <.icon
-                                    name="hero-server"
-                                    class={"w-5 h-5 #{if server.presence, do: "text-success", else: "text-base-content/40"}"}
-                                  />
-                                </div>
-                                <div class="flex-1 text-left">
-                                  <p class="font-medium">{server.name}</p>
-                                  <div class="flex gap-1 mt-0.5">
-                                    <%= if server.owned do %>
-                                      <span class="badge badge-xs badge-primary">owner</span>
-                                    <% end %>
-                                    <%= unless server.presence do %>
-                                      <span class="badge badge-xs badge-ghost">offline</span>
-                                    <% end %>
-                                  </div>
-                                </div>
-                                <.icon name="hero-chevron-right" class="w-5 h-5 text-base-content/40" />
-                              </div>
-                            </button>
-                          <% end %>
-                          <%= if @plex_oauth_servers == [] do %>
-                            <div class="alert alert-warning">
-                              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                              <span>No Plex servers found for this account.</span>
-                            </div>
-                          <% end %>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm gap-1"
-                          phx-click="cancel_plex_oauth"
-                        >
-                          <.icon name="hero-arrow-left" class="w-4 h-4" /> Start over
-                        </button>
-                      </div>
-                    <% :complete -> %>
-                      <div class="space-y-3">
-                        <div class="text-center py-2">
-                          <div class="bg-success/10 inline-flex p-3 rounded-full mb-3">
-                            <.icon name="hero-check-circle" class="w-8 h-8 text-success" />
-                          </div>
-                          <p class="font-medium text-success">Configuration complete!</p>
-                          <p class="text-sm text-base-content/60">
-                            Review the details below and save.
-                          </p>
-                          <div class="mt-3 text-xs">
-                            <%= case @plex_reachability do %>
-                              <% :checking -> %>
-                                <span class="inline-flex items-center gap-2 text-base-content/60">
-                                  <span class="loading loading-spinner loading-xs"></span>
-                                  Checking connectivity...
-                                </span>
-                              <% {:ok, uri} -> %>
-                                <span class="inline-flex items-center gap-1 text-success">
-                                  <.icon name="hero-check-circle" class="w-3 h-3" /> Reachable at
-                                  <span class="font-mono">{simplify_plex_url(uri)}</span>
-                                </span>
-                              <% {:error, _error} -> %>
-                                <span class="inline-flex items-center gap-1 text-warning">
-                                  <.icon name="hero-exclamation-triangle" class="w-3 h-3" />
-                                  No address responded yet. You can still save; Mydia will keep looking.
-                                </span>
-                            <% end %>
-                          </div>
-                        </div>
-
-                        <%= if @plex_discovery do %>
-                          <div
-                            class="bg-base-100 rounded-lg p-3 space-y-2"
-                            data-test="plex-discovery-summary"
-                          >
-                            <div class="flex items-center gap-2">
-                              <div class="bg-primary/10 p-2 rounded-lg">
-                                <.icon name="hero-server" class="w-5 h-5 text-primary" />
-                              </div>
-                              <div class="min-w-0">
-                                <p class="font-medium truncate">{@plex_discovery[:name]}</p>
-                                <p class="font-mono text-xs text-base-content/50 truncate">
-                                  {@plex_discovery[:machine_identifier]}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div class="space-y-1">
-                              <%!-- These connections come straight from PlexOAuth.parse_connections/1
-                                    and are always atom-keyed. A future change that feeds this panel
-                                    from a persisted MediaServerConfig (string-keyed after a DB round
-                                    trip through JsonListType) would need to normalize first. --%>
-                              <%= for conn <- @plex_discovery[:connections] || [] do %>
-                                <div class="flex items-center gap-2 text-xs">
-                                  <span class="font-mono truncate flex-1">
-                                    {simplify_plex_url(conn[:uri])}
-                                  </span>
-                                  <%= if conn[:local] do %>
-                                    <span class="badge badge-xs badge-info gap-1">
-                                      <.icon name="hero-home" class="w-3 h-3" /> local
-                                    </span>
-                                  <% end %>
-                                  <%= if conn[:relay] do %>
-                                    <span class="badge badge-xs badge-warning gap-1">
-                                      <.icon name="hero-cloud" class="w-3 h-3" /> relay
-                                    </span>
-                                  <% end %>
-                                </div>
-                              <% end %>
-                            </div>
-                          </div>
-                        <% end %>
-
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-sm gap-1"
-                          phx-click="cancel_plex_oauth"
-                        >
-                          <.icon name="hero-arrow-left" class="w-4 h-4" /> Start over
-                        </button>
-                      </div>
-                    <% :error -> %>
-                      <div class="text-center space-y-4 py-2">
-                        <div class="bg-error/10 inline-flex p-3 rounded-full">
-                          <.icon name="hero-x-circle" class="w-8 h-8 text-error" />
-                        </div>
-                        <div>
-                          <p class="font-medium text-error">Authentication failed</p>
-                          <p class="text-sm text-base-content/60">Please try again</p>
-                        </div>
-                        <button
-                          type="button"
-                          class="btn btn-warning gap-2"
-                          phx-click="start_plex_oauth"
-                        >
-                          <.icon name="hero-arrow-path" class="w-4 h-4" /> Try Again
-                        </button>
-                      </div>
-                    <% _ -> %>
-                  <% end %>
+            <div class="card bg-base-200/50 border border-base-300">
+              <div class="card-body p-4 gap-4">
+                <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
+                  <.icon name="hero-link" class="w-4 h-4" /> Connection Details
                 </div>
-              </div>
-            <% end %>
 
-            <%!-- Manual entry fields - shown for Jellyfin, or Plex in manual mode.
-                  The discovery path renders its own read-only review panel instead,
-                  because it has no url to collect and its token is not operator-editable. --%>
-            <%= if @current_type != :plex or @plex_manual_entry do %>
-              <div class="card bg-base-200/50 border border-base-300">
-                <div class="card-body p-4 gap-4">
-                  <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
-                    <.icon name="hero-link" class="w-4 h-4" /> Connection Details
+                <div class="space-y-4">
+                  <div>
+                    <.input
+                      field={@media_server_form[:url]}
+                      type="text"
+                      label="Server URL"
+                      placeholder="http://192.168.1.100:8096"
+                      required
+                    />
+                    <p class="text-xs text-base-content/50 mt-1 ml-1">
+                      Full URL including port (default: 8096)
+                    </p>
                   </div>
 
-                  <div class="space-y-4">
-                    <div>
-                      <.input
-                        field={@media_server_form[:url]}
-                        type="text"
-                        label="Server URL"
-                        placeholder={
-                          if @current_type == :plex,
-                            do: "http://192.168.1.100:32400",
-                            else: "http://192.168.1.100:8096"
-                        }
-                        required={@current_type != :plex or not @plex_addressable}
-                      />
-                      <p class="text-xs text-base-content/50 mt-1 ml-1">
-                        <%= cond do %>
-                          <% @current_type == :plex and @plex_addressable -> %>
-                            Optional manual override. Leave blank to use the addresses discovered from your Plex account.
-                          <% @current_type == :plex -> %>
-                            Full URL including port (default: 32400)
-                          <% true -> %>
-                            Full URL including port (default: 8096)
-                        <% end %>
-                      </p>
-                    </div>
-
-                    <div>
-                      <.input
-                        field={@media_server_form[:token]}
-                        type="password"
-                        label="API Token"
-                        required
-                      />
-                      <p class="text-xs text-base-content/50 mt-1 ml-1">
-                        <%= if @current_type == :plex do %>
-                          X-Plex-Token from your Plex account settings
-                        <% else %>
-                          API Key from Dashboard → Advanced → API Keys
-                        <% end %>
-                      </p>
-                    </div>
+                  <div>
+                    <.input
+                      field={@media_server_form[:token]}
+                      type="password"
+                      label="API Token"
+                      required
+                    />
+                    <p class="text-xs text-base-content/50 mt-1 ml-1">
+                      API Key from Dashboard → Advanced → API Keys
+                    </p>
                   </div>
-
-                  <%= if @current_type == :plex and @plex_manual_entry do %>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-sm gap-1 self-start"
-                      phx-click="toggle_plex_manual_entry"
-                    >
-                      <.icon name="hero-arrow-left" class="w-4 h-4" /> Use Sign in with Plex instead
-                    </button>
-                  <% end %>
                 </div>
               </div>
-            <% end %>
+            </div>
 
-            <%!-- Watched Sync Section (Plex and Jellyfin) --%>
-            <%= if @current_type in [:plex, :jellyfin] do %>
+            <%!-- Watched Sync Section --%>
+            <%= if @current_type == :jellyfin do %>
               <div class="card bg-base-200/50 border border-base-300">
                 <div class="card-body p-4 gap-4">
                   <div class="flex items-center gap-2 text-sm font-medium text-base-content/70">
@@ -785,17 +489,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
           <div class="modal-action mt-6 grid grid-cols-2 gap-2 sticky bottom-0 bg-base-100 -mx-6 px-6 -mb-6 pb-6 pt-4 border-t border-base-300 sm:flex sm:gap-2">
             <button
               type="button"
-              class={[
-                "btn btn-ghost",
-                @plex_oauth_state == :complete && "col-span-2 sm:col-span-1",
-                modal_action_btn()
-              ]}
+              class={["btn btn-ghost", modal_action_btn()]}
               phx-click="close_media_server_modal"
             >
               Cancel
             </button>
             <button
-              :if={@plex_oauth_state != :complete}
               type="button"
               class={["btn btn-outline btn-secondary gap-2", modal_action_btn()]}
               phx-click="test_media_server_connection"
@@ -814,10 +513,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
                 "btn btn-primary gap-2 col-span-2 order-first sm:order-none",
                 modal_action_btn()
               ]}
-              disabled={
-                @media_server_mode == :new and @current_type == :plex and
-                  not @plex_manual_entry and @plex_oauth_state != :complete
-              }
             >
               <.icon name="hero-check" class="w-4 h-4" />
               {if @media_server_mode == :new, do: "Add Server", else: "Save Changes"}
@@ -830,200 +525,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     """
   end
 
-  @doc """
-  Renders the account mapping modal.
-
-  Auto-matching links an account only when its name equals a Mydia username.
-  People name Plex profiles and Jellyfin accounts after people and their Mydia
-  account `admin`, so on most installs nothing matches and watched sync sits
-  skipped with no way out. This is the way out.
-  """
-  attr :config, :map, required: true
-  attr :state, :any, required: true
-  attr :accounts, :list, default: []
-  attr :users, :list, default: []
-  attr :mapping, :map, default: %{}
-  attr :saving, :boolean, default: false
-
-  def account_mapping_modal(assigns) do
-    ~H"""
-    <div class="modal modal-open" id="account-mapping-modal">
-      <div class="modal-box max-w-2xl">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 class="font-bold text-lg">{account_heading(@config)}</h3>
-            <p class="text-sm text-base-content/60 mt-1">
-              {account_intro(@config)}
-            </p>
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-circle btn-ghost"
-            phx-click="close_account_mapping"
-            aria-label="Close"
-          >
-            <.icon name="hero-x-mark" class="w-4 h-4" />
-          </button>
-        </div>
-
-        <div class="mt-5">
-          <%= case @state do %>
-            <% :loading -> %>
-              <div
-                id="account-mapping-loading"
-                class="flex items-center justify-center gap-3 py-10 text-sm text-base-content/70"
-              >
-                <span class="loading loading-spinner loading-sm"></span>
-                {account_loading_message(@config)}
-              </div>
-            <% {:error, message} -> %>
-              <div id="account-mapping-error" class="alert alert-error">
-                <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-                <span>{message}</span>
-              </div>
-            <% :ready -> %>
-              <%= if @accounts == [] do %>
-                <div id="account-mapping-empty" class="text-center py-10">
-                  <p class="text-sm text-base-content/70">
-                    {account_empty_message(@config)}
-                  </p>
-                </div>
-              <% else %>
-                <form id="account-mapping-form" phx-submit="save_account_mapping">
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-medium">
-                      {length(@accounts)} {found_label(@config, @accounts)}
-                    </span>
-                    <span class="text-xs text-base-content/50">Mydia user</span>
-                  </div>
-
-                  <div class="flex flex-col gap-2">
-                    <div
-                      :for={account <- @accounts}
-                      id={"account-#{account.id}"}
-                      class="flex flex-col gap-2 rounded-lg bg-base-200 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <.icon name="hero-user-circle" class="w-4 h-4 text-base-content/50" />
-                        <%!-- Falls back to the account id: both servers allow a
-                        nameless account, and an unlabelled row is worse than a
-                        raw id when the operator has to pick one. --%>
-                        <span class="truncate text-sm font-medium">
-                          {RemoteAccount.label(account)}
-                        </span>
-                        <span :if={account.admin?} class="badge badge-xs badge-warning">owner</span>
-                      </div>
-                      <div class="sm:w-56">
-                        <.input
-                          type="select"
-                          id={"account-select-#{account.id}"}
-                          name={"mapping[#{account.id}]"}
-                          value={Map.get(@mapping, account.id)}
-                          options={user_options(@users)}
-                          class="select select-sm select-bordered w-full"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="modal-action mt-6">
-                    <button
-                      type="button"
-                      class={["btn btn-ghost", modal_action_btn()]}
-                      phx-click="close_account_mapping"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      id="account-mapping-save"
-                      class={["btn btn-primary gap-2", modal_action_btn()]}
-                      disabled={@saving}
-                    >
-                      <%= if @saving do %>
-                        <span class="loading loading-spinner loading-sm"></span> Saving...
-                      <% else %>
-                        <.icon name="hero-check" class="w-4 h-4" /> Save links
-                      <% end %>
-                    </button>
-                  </div>
-                </form>
-              <% end %>
-          <% end %>
-        </div>
-      </div>
-      <div class="modal-backdrop bg-black/50" phx-click="close_account_mapping"></div>
-    </div>
-    """
-  end
-
-  # "Don't sync" carries the empty string so an unmapped account round-trips as
-  # a present-but-blank param rather than vanishing from the form payload, which
-  # is what lets the save path tell "unlink this" apart from "never asked".
-  defp user_options(users) do
-    # `User.label/1` rather than the raw username: an OIDC-provisioned account
-    # has none, and rendered as a blank option the operator could not tell
-    # which account they were selecting. SSO accounts cannot be name-matched,
-    # so hand-mapping here is the only way they are ever linked at all.
-    [{"Don't sync", ""} | Enum.map(users, &{User.label(&1), &1.id})]
-  end
-
-  # Each server calls these something different, and a modal that says "Plex
-  # profiles" over a list of Jellyfin accounts sends the operator looking for a
-  # screen their server does not have. The copy also has to explain a real
-  # difference: Plex gives every profile its own token, while Jellyfin has no
-  # per-user tokens and the server API key reads each account's state.
-  defp account_heading(%{type: :jellyfin}), do: "Jellyfin accounts"
-  defp account_heading(_config), do: "Plex profiles"
-
-  defp account_intro(%{type: :jellyfin}) do
-    "Choose which Mydia user each Jellyfin account syncs watched status with. " <>
-      "Jellyfin issues no per-user tokens, so the server API key reads each account " <>
-      "and the mapping is what keeps histories apart."
-  end
-
-  defp account_intro(_config) do
-    "Choose which Mydia user each Plex Home profile syncs watched status with. " <>
-      "Each profile syncs through its own Plex token, so histories stay separate."
-  end
-
-  defp account_loading_message(%{type: :jellyfin}), do: "Asking this server for its accounts..."
-
-  defp account_loading_message(_config),
-    do: "Asking plex.tv for this account's Home profiles..."
-
-  defp account_empty_message(%{type: :jellyfin}) do
-    "This Jellyfin server reported no accounts, so there is nothing to map yet."
-  end
-
-  defp account_empty_message(_config) do
-    "This Plex account has no Home profiles, so there is nothing to map. " <>
-      "Watched sync uses the account owner directly."
-  end
-
-  defp found_label(%{type: :jellyfin}, [_]), do: "account found"
-  defp found_label(%{type: :jellyfin}, _accounts), do: "accounts found"
-  defp found_label(_config, [_]), do: "profile found"
-  defp found_label(_config, _accounts), do: "profiles found"
-
   # Media server type helpers
-  defp media_server_type_icon(:plex), do: "hero-play-circle"
   defp media_server_type_icon(:jellyfin), do: "hero-tv"
   defp media_server_type_icon(_), do: "hero-server"
 
-  defp media_server_type_badge_class(:plex), do: "badge-warning"
   defp media_server_type_badge_class(:jellyfin), do: "badge-info"
   defp media_server_type_badge_class(_), do: "badge-ghost"
 
-  defp media_server_type_bg_class(:plex), do: "bg-warning/10"
   defp media_server_type_bg_class(:jellyfin), do: "bg-info/10"
   defp media_server_type_bg_class(_), do: "bg-base-300"
 
-  defp media_server_type_icon_class(:plex), do: "text-warning"
   defp media_server_type_icon_class(:jellyfin), do: "text-primary"
   defp media_server_type_icon_class(_), do: "text-base-content/60"
 
-  defp media_server_type_label(:plex), do: "Plex"
   defp media_server_type_label(:jellyfin), do: "Jellyfin"
 
   defp media_server_type_label(type) when is_atom(type),
@@ -1063,7 +577,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
 
   # Modal footer buttons: full-width stacked rows on phones, today's inline
   # row from `sm` up. Same 44px reasoning as card_action_btn/0.
-  defp modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
+  @doc false
+  def modal_action_btn, do: "w-full min-h-11 sm:w-auto sm:min-h-8"
 
   defp run_label(%{status: :skipped, skip_reason: reason}) when is_binary(reason) do
     skip_reason_label(reason)
@@ -1086,18 +601,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   # The short badge label. sync_runs rows outlive the code that wrote them, so
   # every reason ever recorded needs a label here.
   #
-  # Kept deliberately provider-neutral where the reason is: watched sync now
-  # covers Jellyfin as well as Plex, so "Plex only" copy would be wrong on half
-  # the servers this renders for. Only genuinely Plex-specific reasons, the ones
-  # only Plex link seeding can record, still name Plex.
+  # Kept deliberately provider-neutral.
   defp skip_reason_label("server_disabled"), do: "Server is disabled"
   defp skip_reason_label("sync_disabled"), do: "Watched sync is off"
   defp skip_reason_label("unsupported_provider"), do: "Watched sync not supported"
   defp skip_reason_label("no_user_mapping"), do: "No users linked yet"
   defp skip_reason_label("seeding_links"), do: "Linking accounts to Mydia users"
   defp skip_reason_label("no_matching_users"), do: "Nothing new to link"
-  defp skip_reason_label("token_mint_failed"), do: "plex.tv would not issue a token"
-  defp skip_reason_label("owner_link_ambiguous"), do: "Could not tell which admin to map"
   defp skip_reason_label("link_seeding_failed"), do: "Could not reach the server to link users"
   # Recorded by an earlier release that could pause a single mapping. Kept
   # because sync_runs rows outlive the code that wrote them.
@@ -1140,17 +650,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     do:
       "Nothing new was linked. Either no account matched a Mydia username, or the ones that did are already mapped. Press Accounts to check."
 
-  # Deliberately not folded into "nothing new to link". A profile matched and
-  # should have been linked, so there is nothing for the operator to fix and
-  # nothing to do but wait for the retry. Plex only: Jellyfin mints no tokens.
-  defp humanize_skip("token_mint_failed"),
-    do:
-      "A Plex Home profile matched a Mydia user, but plex.tv would not issue a token for it, so the mapping was not created. This retries on the next run."
-
-  defp humanize_skip("owner_link_ambiguous"),
-    do:
-      "This Plex account has no Home profiles, and Mydia has more than one admin, so it could not tell whose account this is. Press Accounts to map it by hand."
-
   defp humanize_skip("link_seeding_failed"),
     do: "Could not reach the server to link users. This retries on the next run."
 
@@ -1174,37 +673,4 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     do: "A user mapping does not name an account on this server. Press Accounts to fix it."
 
   defp humanize_skip(other), do: other
-
-  # Simplify plex.direct URLs to show just the IP/host and port
-  # e.g., "https://10-1-1-5.abc123.plex.direct:32400" -> "(ssl) 10.1.1.5:32400"
-  defp simplify_plex_url(url) when is_binary(url) do
-    uri = URI.parse(url)
-
-    host =
-      case uri.host do
-        nil ->
-          url
-
-        host ->
-          if String.ends_with?(host, ".plex.direct") do
-            # Extract IP from plex.direct subdomain (e.g., "10-1-1-5.abc123.plex.direct")
-            case String.split(host, ".") do
-              [ip_part | _] ->
-                # Convert dashes to dots for IP addresses
-                String.replace(ip_part, "-", ".")
-
-              _ ->
-                host
-            end
-          else
-            host
-          end
-      end
-
-    port = uri.port || if uri.scheme == "https", do: 443, else: 80
-
-    "#{host}:#{port}"
-  end
-
-  defp simplify_plex_url(url), do: inspect(url)
 end

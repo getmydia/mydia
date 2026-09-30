@@ -14,13 +14,9 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.MediaServer.Client, as: MediaServerClient
   alias Mydia.MediaServer.Error
   alias Mydia.MediaServer.Health, as: MediaServerHealth
-  alias Mydia.MediaServer.PlexOAuth
-  alias Mydia.MediaServer.Plex.Endpoint, as: PlexEndpoint
-  alias Mydia.MediaServer.Plex.Selection
   alias Mydia.MediaServer.UserLinks
   alias Mydia.Sync
 
-  require Logger
   alias Mydia.Logger, as: MydiaLogger
 
   @impl true
@@ -36,17 +32,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   @impl true
   def handle_params(_params, _url, socket) do
     {:noreply, socket}
-  end
-
-  ## Plex reachability probe result
-
-  @impl true
-  def handle_info({:plex_reachability, result}, socket) do
-    if socket.assigns[:plex_oauth_state] == :complete do
-      {:noreply, assign(socket, :plex_reachability, result)}
-    else
-      {:noreply, socket}
-    end
   end
 
   ## Account mapping
@@ -87,7 +72,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   @impl true
   def handle_info({:plugin_instance_tested, _id}, socket) do
-    # Only plugin state: load_data/1 would also close an open Jellyfin/Plex modal.
+    # Only plugin state: load_data/1 would also close an open Jellyfin modal.
     {:noreply, load_plugin_instances(socket)}
   end
 
@@ -218,9 +203,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     mapping = normalize_mapping(params["mapping"] || %{})
     parent = self()
 
-    # Off the LiveView process: applying a Plex mapping is one plex.tv profile
-    # switch per newly linked profile, and blocking here would freeze every
-    # other event on the page while they run.
+    # Off the LiveView process: applying a mapping talks to the media server,
+    # and blocking here would freeze every other event on the page.
     Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
       send(parent, {:account_mapping_saved, config.id, UserLinks.apply_mapping(config, mapping)})
     end)
@@ -230,22 +214,14 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   @impl true
   def handle_event("new_media_server", _params, socket) do
-    changeset = Settings.change_media_server_config(%MediaServerConfig{}, %{type: :plex})
+    changeset = Settings.change_media_server_config(%MediaServerConfig{}, %{type: :jellyfin})
 
     {:noreply,
      socket
      |> assign(:show_media_server_modal, true)
      |> assign(:media_server_form, to_form(changeset))
      |> assign(:media_server_mode, :new)
-     |> assign(:testing_media_server_connection, false)
-     |> assign(:plex_oauth_state, :idle)
-     |> assign(:plex_oauth_pin_id, nil)
-     |> assign(:plex_oauth_servers, [])
-     |> assign(:plex_oauth_token, nil)
-     |> assign(:plex_reachability, :checking)
-     |> assign(:plex_manual_entry, false)
-     |> assign(:plex_discovery, nil)
-     |> assign(:plex_discovery_summary, nil)}
+     |> assign(:testing_media_server_connection, false)}
   end
 
   @impl true
@@ -268,65 +244,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
        |> assign(:media_server_form, to_form(changeset))
        |> assign(:media_server_mode, :edit)
        |> assign(:editing_media_server, server)
-       |> assign(:testing_media_server_connection, false)
-       |> assign(:plex_oauth_state, :idle)
-       |> assign(:plex_oauth_pin_id, nil)
-       |> assign(:plex_oauth_servers, [])
-       |> assign(:plex_oauth_token, nil)
-       |> assign(:plex_reachability, :checking)
-       |> assign(:plex_manual_entry, true)
-       |> assign(:plex_discovery, nil)
-       |> assign(:plex_discovery_summary, nil)}
-    end
-  end
-
-  @impl true
-  def handle_event("reconnect_plex", %{"id" => id}, socket) do
-    server = Settings.get_media_server_config!(id)
-
-    # The PIN modal writes Plex discovery attrs, `type` included, straight onto
-    # the row it was opened for. Reached with a Jellyfin server it would rewrite
-    # that server as a Plex one and strand its user links on a config whose type
-    # no longer matches the accounts they name. The button only renders for
-    # Plex, so this refuses a request that could only be forged.
-    cond do
-      server.type != :plex ->
-        {:noreply, put_flash(socket, :error, "Only Plex servers can be reconnected this way.")}
-
-      Settings.runtime_config?(server) ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           "Cannot reconnect a runtime-configured media server. This server is configured via environment variables and is read-only in the UI."
-         )}
-
-      true ->
-        changeset = Settings.change_media_server_config(server)
-
-        # Reuse the existing PIN modal bound to this config so reconnect
-        # updates the row in place and never creates a second config.
-        {:noreply,
-         socket
-         |> assign(:show_media_server_modal, true)
-         |> assign(:media_server_form, to_form(changeset))
-         |> assign(:media_server_mode, :edit)
-         |> assign(:editing_media_server, server)
-         |> assign(:testing_media_server_connection, false)
-         |> assign(:plex_oauth_state, :idle)
-         |> assign(:plex_oauth_pin_id, nil)
-         |> assign(:plex_oauth_servers, [])
-         |> assign(:plex_oauth_token, nil)
-         |> assign(:plex_manual_entry, false)
-         |> assign(:plex_discovery, nil)
-         |> assign(:plex_discovery_summary, nil)}
+       |> assign(:testing_media_server_connection, false)}
     end
   end
 
   @impl true
   def handle_event("validate_media_server", %{"media_server_config" => params}, socket) do
-    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
-
     server =
       case socket.assigns.media_server_mode do
         :new -> %MediaServerConfig{}
@@ -338,16 +261,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       |> Settings.change_media_server_config(params)
       |> Map.put(:action, :validate)
 
-    {:noreply,
-     socket
-     |> assign(:media_server_form, to_form(changeset))
-     |> reset_wizard_if_type_changed(params)}
+    {:noreply, assign(socket, :media_server_form, to_form(changeset))}
   end
 
   @impl true
   def handle_event("save_media_server", %{"media_server_config" => params}, socket) do
-    params = Selection.merge_discovery(params, socket.assigns[:plex_discovery])
-
     params =
       case socket.assigns.media_server_mode do
         :edit ->
@@ -421,112 +339,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     {:noreply, assign(socket, :show_media_server_modal, false)}
   end
 
-  ## Plex OAuth Events
-
-  @impl true
-  def handle_event("start_plex_oauth", _params, socket) do
-    case PlexOAuth.create_pin() do
-      {:ok, %{id: pin_id, code: code}} ->
-        auth_url = PlexOAuth.get_auth_url(code)
-
-        {:noreply,
-         socket
-         |> assign(:plex_oauth_state, :authorizing)
-         |> assign(:plex_oauth_pin_id, pin_id)
-         |> push_event("open_plex_auth", %{url: auth_url, pin_id: pin_id})}
-
-      {:error, reason} ->
-        Logger.error("Failed to start Plex OAuth: #{inspect(reason)}")
-
-        {:noreply, put_flash(socket, :error, "Failed to start Plex authentication: #{reason}")}
-    end
-  end
-
-  @impl true
-  def handle_event("check_plex_pin", %{"pin_id" => pin_id}, socket) do
-    case PlexOAuth.check_pin(pin_id) do
-      {:ok, %{auth_token: token}} ->
-        socket = assign(socket, :plex_oauth_token, token)
-
-        case PlexOAuth.list_servers(token) do
-          {:ok, servers} ->
-            {:noreply,
-             socket
-             |> push_event("plex_auth_complete", %{})
-             |> apply_selection(servers)}
-
-          {:error, reason} ->
-            Logger.error("Failed to fetch Plex servers: #{inspect(reason)}")
-
-            {:noreply,
-             socket
-             |> assign(:plex_oauth_state, :error)
-             |> put_flash(:error, "Failed to fetch Plex servers: #{reason}")
-             |> push_event("plex_auth_failed", %{})}
-        end
-
-      :pending ->
-        {:noreply, socket}
-
-      {:error, reason} ->
-        Logger.error("Plex PIN check failed: #{inspect(reason)}")
-
-        {:noreply,
-         socket
-         |> assign(:plex_oauth_state, :error)
-         |> put_flash(:error, "Authentication failed: #{reason}")
-         |> push_event("plex_auth_failed", %{})}
-    end
-  end
-
-  @impl true
-  def handle_event("plex_popup_closed", _params, socket) do
-    if socket.assigns.plex_oauth_state == :authorizing do
-      {:noreply,
-       socket
-       |> assign(:plex_oauth_state, :idle)
-       |> assign(:plex_oauth_pin_id, nil)}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  @impl true
-  def handle_event("select_plex_server", %{"server_id" => server_id}, socket) do
-    case Enum.find(socket.assigns.plex_oauth_servers, &(&1.client_identifier == server_id)) do
-      nil -> {:noreply, put_flash(socket, :error, "Server not found")}
-      server -> {:noreply, attach_server(socket, server)}
-    end
-  end
-
-  @impl true
-  def handle_event("cancel_plex_oauth", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:plex_oauth_state, :idle)
-     |> assign(:plex_oauth_pin_id, nil)
-     |> assign(:plex_oauth_servers, [])
-     |> assign(:plex_oauth_token, nil)
-     |> assign(:plex_reachability, :checking)
-     |> assign(:plex_discovery, nil)
-     |> assign(:plex_discovery_summary, nil)
-     |> push_event("plex_auth_cancelled", %{})}
-  end
-
-  @impl true
-  def handle_event("toggle_plex_manual_entry", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:plex_manual_entry, !socket.assigns.plex_manual_entry)
-     |> assign(:plex_oauth_state, :idle)
-     |> assign(:plex_oauth_pin_id, nil)
-     |> assign(:plex_oauth_servers, [])
-     |> assign(:plex_oauth_token, nil)
-     |> assign(:plex_reachability, :checking)
-     |> assign(:plex_discovery, nil)
-     |> assign(:plex_discovery_summary, nil)}
-  end
-
   @impl true
   def handle_event("test_media_server", %{"id" => id}, socket) do
     server = Settings.get_media_server_config!(id)
@@ -567,7 +379,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     server = Settings.get_media_server_config!(id)
 
     # Server mode rather than a job for the clicking user. A job carrying no
-    # link_id used to fall back to the config token, which read the admin's Plex
+    # link_id used to fall back to the config token, which read the admin's
     # watch state and wrote it onto whoever clicked. The worker refuses that
     # shape now; server mode is what gives every job it fans out a link to name.
     changeset =
@@ -593,24 +405,13 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     changeset = socket.assigns.media_server_form.source
     params = Ecto.Changeset.apply_changes(changeset)
 
-    type =
-      case params.type do
-        type when is_atom(type) -> type
-        type when is_binary(type) -> String.to_existing_atom(type)
-        _ -> :plex
-      end
+    type = :jellyfin
 
-    # `connections` and `machine_identifier` have to ride along. A server just
-    # picked through the OAuth wizard has no url yet and addresses itself purely
-    # through its advertised connections, so dropping them here made the test
-    # button report "URL is required" for a server it had only just discovered.
     test_config = %MediaServerConfig{
-      type: type,
+      type: :jellyfin,
       url: params.url,
       token: params.token,
-      name: params.name || "Test",
-      connections: params.connections || [],
-      machine_identifier: params.machine_identifier
+      name: params.name || "Test"
     }
 
     adapter = MediaServerClient.adapter_for(test_config)
@@ -639,73 +440,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   ## Private Helpers
 
-  # A Plex account often carries the operator's own server plus any shared by
-  # friends. Picking is only worth asking about when it is a real choice.
-  defp apply_selection(socket, servers) do
-    case Selection.auto_select(servers) do
-      {:ok, server} ->
-        attach_server(socket, server)
-
-      {:ambiguous, ranked} ->
-        socket
-        |> assign(:plex_oauth_state, :selecting_server)
-        |> assign(:plex_oauth_servers, ranked)
-
-      {:error, :no_servers} ->
-        socket
-        |> assign(:plex_oauth_state, :error)
-        |> assign(:plex_oauth_servers, [])
-        |> put_flash(:error, "No Plex servers found for this account")
-    end
-  end
-
-  defp attach_server(socket, server) do
-    attrs = Selection.config_attrs(server, socket.assigns.plex_oauth_token)
-
-    case socket.assigns.media_server_mode do
-      :edit ->
-        # Reconnect must update the existing row in place so user links and
-        # sync state are not orphaned.
-        attrs = Map.merge(attrs, %{last_auth_error: nil, last_auth_error_at: nil})
-
-        case Settings.update_media_server_config(socket.assigns.editing_media_server, attrs) do
-          {:ok, updated} ->
-            maybe_seed_user_links(updated)
-
-            socket
-            |> put_flash(:info, "Plex reconnected successfully")
-            |> load_data()
-
-          {:error, %Ecto.Changeset{} = changeset} ->
-            socket
-            |> assign(:plex_oauth_state, :error)
-            |> assign(:media_server_form, to_form(changeset))
-            |> put_flash(:error, "Failed to update media server")
-        end
-
-      :new ->
-        changeset = Settings.change_media_server_config(%MediaServerConfig{}, attrs)
-
-        socket
-        |> assign(:plex_oauth_state, :complete)
-        |> assign(:plex_reachability, :checking)
-        # `plex_discovery` keeps the full attrs (including `token` and
-        # `server_access_token`) so `Selection.merge_discovery/2` still has
-        # what it needs on submit. `plex_discovery_summary` is the
-        # template-facing view: only the fields the review panel actually
-        # renders, so the two secrets never reach template scope.
-        |> assign(:plex_discovery, attrs)
-        |> assign(
-          :plex_discovery_summary,
-          Map.take(attrs, [:name, :machine_identifier, :connections])
-        )
-        |> start_reachability_probe(server)
-        |> assign(:media_server_form, to_form(changeset))
-    end
-  end
-
-  # Both providers answer through UserLinks, so the modal never has to know
-  # whether it is looking at Plex Home profiles or Jellyfin accounts.
+  # Accounts are listed through UserLinks, so the modal never has to know
+  # which provider it is looking at.
   defp start_accounts_load(socket, config) do
     parent = self()
 
@@ -854,29 +590,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:account_mapping_saving, false)
   end
 
-  # Advisory only. The review step never blocks Save on the result, because a
-  # server that is merely powered off is still worth saving: rediscovery finds
-  # it when it comes back.
-  defp start_reachability_probe(socket, server) do
-    parent = self()
-    token = socket.assigns.plex_oauth_token
-    connections = server.connections
-
-    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
-      send(parent, {:plex_reachability, PlexEndpoint.probe_connections(connections, token)})
-    end)
-
-    socket
-  end
-
   defp read_accounts_error(server, reason) do
     "Could not read accounts from #{server.name}: #{describe_reason(reason)}"
   end
 
-  # What a server calls the things this modal maps. Plex Home calls them
-  # profiles and Jellyfin calls them users, and getting it wrong in an error
+  # What a server calls the things this modal maps. Getting it wrong in an error
   # message sends the operator looking for a screen their server does not have.
-  defp account_noun(%{type: :plex}), do: "Plex profile"
   defp account_noun(%{type: :jellyfin}), do: "Jellyfin account"
   defp account_noun(_config), do: "account"
 
@@ -893,23 +612,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   defp describe_reason(reason), do: inspect(reason)
 
-  # Moving the Type select off Plex makes the discovered data describe something
-  # other than what is being saved. Resetting the wizard is what stops a stale
-  # "Configuration complete!" panel from sitting above a Jellyfin form.
-  defp reset_wizard_if_type_changed(socket, %{"type" => "plex"}), do: socket
-
-  defp reset_wizard_if_type_changed(socket, _params) do
-    if socket.assigns[:plex_discovery] do
-      socket
-      |> assign(:plex_discovery, nil)
-      |> assign(:plex_discovery_summary, nil)
-      |> assign(:plex_oauth_state, :idle)
-      |> assign(:plex_reachability, :checking)
-    else
-      socket
-    end
-  end
-
   # Seeds per-user links after a media server config is persisted. Fires on
   # every save of a server that can be seeded, including one that only flips a
   # sync direction. The job is cheap to enqueue, its 120-second uniqueness
@@ -922,7 +624,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   # but a sync direction silently repointed a mapping the operator had made by
   # hand at whichever account shares the Mydia username.
   defp maybe_seed_user_links(%MediaServerConfig{type: type, id: id} = config)
-       when is_binary(id) and type in [:plex, :jellyfin] do
+       when is_binary(id) and type == :jellyfin do
     unless mappings_deliberately_cleared?(config) do
       %{"config_id" => id}
       |> Mydia.Jobs.MediaServerLinkSeed.new()
@@ -1047,12 +749,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:link_counts, link_counts)
     |> assign(:show_media_server_modal, false)
     |> assign(:testing_media_server_connection, false)
-    |> assign(:plex_oauth_state, :idle)
-    |> assign(:plex_oauth_servers, [])
-    |> assign(:plex_reachability, :checking)
-    |> assign(:plex_manual_entry, false)
-    |> assign(:plex_discovery, nil)
-    |> assign(:plex_discovery_summary, nil)
     |> load_plugin_instances()
   end
 end

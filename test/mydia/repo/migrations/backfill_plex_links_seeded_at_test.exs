@@ -20,35 +20,61 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
 
   alias Mydia.Repo.Migrations.BackfillPlexLinksSeededAt
 
+  # The migration shipped when Plex was a native type, and `Settings` no longer
+  # accepts `type: :plex`, so the legacy rows are inserted schemaless.
+  defp uuid(id), do: if(Mydia.DB.postgres?(), do: Ecto.UUID.dump!(id), else: id)
+  defp now, do: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+
   defp plex_config(name, settings \\ %{"sync_watched" => true}) do
-    {:ok, config} =
-      Settings.create_media_server_config(%{
+    id = Ecto.UUID.generate()
+
+    Mydia.Repo.insert_all("media_server_configs", [
+      %{
+        id: uuid(id),
         name: name,
-        type: :plex,
+        type: "plex",
         url: "http://localhost:32400",
         token: "tok",
         enabled: true,
-        connection_settings: settings
-      })
+        connection_settings: Jason.encode!(settings),
+        inserted_at: now(),
+        updated_at: now()
+      }
+    ])
 
-    config
+    %{id: id}
   end
 
   defp link(config) do
-    {:ok, link} =
-      Settings.upsert_media_server_user_link(%{
-        media_server_config_id: config.id,
-        user_id: user_fixture().id,
+    Mydia.Repo.insert_all("media_server_user_links", [
+      %{
+        id: uuid(Ecto.UUID.generate()),
+        media_server_config_id: uuid(config.id),
+        user_id: uuid(user_fixture().id),
         remote_user_id: "remote-#{System.unique_integer([:positive])}",
         remote_username: "someone",
         access_token: "user-token",
-        enabled: true
-      })
+        enabled: true,
+        inserted_at: now(),
+        updated_at: now()
+      }
+    ])
 
-    link
+    :ok
   end
 
-  defp reload(config), do: Settings.get_media_server_config!(config.id)
+  defp reload(config) do
+    import Ecto.Query
+
+    raw =
+      from(c in "media_server_configs",
+        where: c.id == type(^config.id, :binary_id),
+        select: c.connection_settings
+      )
+      |> Mydia.Repo.one()
+
+    %{connection_settings: if(is_binary(raw), do: Jason.decode!(raw), else: raw)}
+  end
 
   test "stamps a Plex server that already has mappings" do
     # Having a mapping is the evidence a seeding pass already ran on this
@@ -58,7 +84,7 @@ defmodule Mydia.Repo.Migrations.BackfillPlexLinksSeededAtTest do
     config = plex_config("Seeded Before Upgrade")
     _link = link(config)
 
-    refute MediaServerLinkSeed.seeded_before?(config)
+    refute MediaServerLinkSeed.seeded_before?(reload(config))
 
     assert :ok = BackfillPlexLinksSeededAt.backfill()
 

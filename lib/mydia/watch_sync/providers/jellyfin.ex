@@ -139,8 +139,7 @@ defmodule Mydia.WatchSync.Providers.Jellyfin do
 
   # Jellyfin's UpdatePlayState never stamps LastPlayedDate, and MarkUnplayed
   # nulls it, so a nil date does not mean "unchanged". Items carrying real
-  # state are included regardless of date, mirroring the Plex provider
-  # (providers/plex.ex:199-207). Never-played items (no watched flag, no
+  # state are included regardless of date. Never-played items (no watched flag, no
   # position) are still excluded here: Jellyfin has no server-side filter
   # like Plex's `lastViewedAt>`, so every untouched item in the library would
   # otherwise flow through the full reconcile path on every run.

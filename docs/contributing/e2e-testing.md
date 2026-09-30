@@ -43,7 +43,7 @@ if it exercises something no other layer can reach.
 
 **Put it in the browser when it depends on client-side JavaScript.** The
 `phx-hook` modules in `assets/js/` are the clearest case: `DockNav`,
-`ThemeToggle`, `PersistedCheckbox`, `VideoPlayer`, `PlexOAuth`, `DownloadFile`.
+`ThemeToggle`, `PersistedCheckbox`, `VideoPlayer`, `ExternalAuthPopup`, `DownloadFile`.
 `Phoenix.LiveViewTest` never executes them.
 
 **Put it in the browser when it is about layout.** Whether one element is painted
