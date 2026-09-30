@@ -119,7 +119,7 @@ defmodule Mydia.Plugins.Manifest do
             category: nil,
             setup: false
 
-  # Where a plugin's instances appear in the admin UI (Task 12). Closed so a
+  # Where a plugin's instances appear in the admin UI. Closed so a
   # typo fails at parse time instead of silently hiding the plugin.
   @categories ~w(media_server)
 

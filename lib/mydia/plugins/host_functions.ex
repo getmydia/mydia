@@ -363,7 +363,7 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  # The instance this invocation runs for (Task 4 puts its id in ctx). Tests and
+  # The instance this invocation runs for (its id is in ctx). Tests and
   # the admin Test button may run without one.
   defp ctx_instance(%{instance_id: id}) when is_binary(id), do: Instances.get(id)
   defp ctx_instance(_ctx), do: nil

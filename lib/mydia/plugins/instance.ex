@@ -24,9 +24,9 @@ defmodule Mydia.Plugins.Instance do
     field :remote_accounts, Mydia.Settings.JsonListType, default: []
     field :last_scheduled_at, :utc_datetime_usec
     field :schedule_failures, :integer, default: 0
-    # The declared name of a YAML/env instance (Task 11); nil for DB-created ones.
+    # The declared name of a YAML/env instance; nil for DB-created ones.
     field :runtime_key, :string
-    # Derived from runtime_key by Instances.put_source/1 (Task 11).
+    # Derived from runtime_key by Instances.put_source/1.
     field :source, Ecto.Enum, values: [:db, :runtime], default: :db, virtual: true
 
     timestamps(type: :utc_datetime_usec)

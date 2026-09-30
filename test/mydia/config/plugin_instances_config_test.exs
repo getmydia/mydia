@@ -17,6 +17,8 @@ defmodule Mydia.Config.PluginInstancesConfigTest do
 
     Enum.each(saved, fn {key, _} -> System.delete_env(key) end)
     File.rm(@yaml_path)
+    # The legacy-Plex deprecation is logged once per boot; each test starts a new one.
+    :persistent_term.erase({Loader, :legacy_plex_warned})
 
     on_exit(fn ->
       System.get_env()
@@ -113,6 +115,25 @@ defmodule Mydia.Config.PluginInstancesConfigTest do
 
     assert log =~ "PLUGIN_PLEX_<N>_URL"
     assert log =~ "Old Plex"
+  end
+
+  test "the legacy Plex deprecation is logged once per boot, not on every load" do
+    System.put_env("MEDIA_SERVER_0_NAME", "Old Plex")
+    System.put_env("MEDIA_SERVER_0_TYPE", "plex")
+    System.put_env("MEDIA_SERVER_0_URL", "http://10.0.0.4:32400")
+
+    first = capture_log(fn -> assert {:ok, _} = load_env() end)
+
+    second =
+      capture_log(fn ->
+        assert {:ok, config} = load_env()
+        send(self(), {:c, config})
+      end)
+
+    assert first =~ "PLUGIN_PLEX_<N>_URL"
+    refute second =~ "PLUGIN_PLEX_<N>_URL"
+    # The translation itself still happens on every load.
+    assert_received {:c, %{plugin_instances: [%{name: "Old Plex"}]}}
   end
 
   test "an invalid plugin slug fails validation" do

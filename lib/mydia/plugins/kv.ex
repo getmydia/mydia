@@ -227,7 +227,7 @@ defmodule Mydia.Plugins.Kv do
     end
   end
 
-  # Per-instance single-flight (Task 4) serializes writes, so read-then-write
+  # Per-instance single-flight serializes writes, so read-then-write
   # is race-free in practice.
   defp check_quota(instance_id, entries) do
     keys = Enum.map(entries, &elem(&1, 0))

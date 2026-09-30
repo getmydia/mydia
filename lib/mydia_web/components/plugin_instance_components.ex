@@ -274,10 +274,12 @@ defmodule MydiaWeb.PluginInstanceComponents do
     "Synced: pulled #{Map.get(counts, "pulled", 0)}, pushed #{Map.get(counts, "pushed", 0)}"
   end
 
-  # Task 8 adds :partial for a run that finished with some item errors.
-  defp run_label(%{status: :partial, counts: counts}) when is_map(counts) do
-    "Partly synced: #{Map.get(counts, "errors", 0)} errors"
-  end
+  # A partial run finished with some item errors. The counts may lack "errors".
+  defp run_label(%{status: :partial, counts: %{"errors" => errors}})
+       when is_integer(errors) and errors > 0,
+       do: "Partly synced: #{errors} errors"
+
+  defp run_label(%{status: :partial}), do: "Partly synced"
 
   defp run_label(%{status: :skipped}), do: "Skipped"
   defp run_label(%{status: :error}), do: "Failed"

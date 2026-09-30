@@ -179,7 +179,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
     case URI.parse(String.trim(uri)) do
       %URI{scheme: scheme, host: host, port: port}
       when scheme in ["http", "https"] and is_binary(host) and host != "" ->
-        # Lower-cased like Instances.approve_endpoints/2 (Task 2) stores them.
+        # Lower-cased like Instances.approve_endpoints/2 stores them.
         [%{"scheme" => scheme, "host" => String.downcase(host), "port" => port}]
 
       _ ->
@@ -268,7 +268,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
     end)
   end
 
-  # plugin_account_links carries no plugin_config_id (Task 2); the instance
+  # plugin_account_links carries no plugin_config_id; the instance
   # row holds that reference.
   defp link_row(attrs, instance_id, now) do
     %{
@@ -404,7 +404,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
   defp kv_row(key, value), do: %{key: key, value: value}
 
   # plugin_kv keeps its original NOT NULL plugin_config_id next to the
-  # instance_id Task 2 added, and is unique on (instance_id, key).
+  # instance_id added by the contract 1.4 migration, and is unique on (instance_id, key).
   defp finish_kv_row(row, instance_id, plugin_config_id, now) do
     Map.merge(row, %{
       id: uuid(Ecto.UUID.generate()),

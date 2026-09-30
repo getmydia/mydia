@@ -15,6 +15,8 @@ defmodule Mydia.Config.Loader do
   alias Mydia.Config.Schema
   alias Mydia.Settings
 
+  require Logger
+
   @default_sources [:yaml, :database, :env]
 
   @doc """
@@ -563,14 +565,7 @@ defmodule Mydia.Config.Loader do
     if plex == [] do
       config
     else
-      require Logger
-
-      Logger.warning(
-        "Plex media servers configured through MEDIA_SERVER_<N>_* or `media_servers:` " <>
-          "(#{Enum.map_join(plex, ", ", &Map.get(&1, :name))}) now run as the Plex plugin. " <>
-          "Rename them to PLUGIN_PLEX_<N>_NAME, PLUGIN_PLEX_<N>_URL and PLUGIN_PLEX_<N>_TOKEN, " <>
-          "or a `plugin_instances:` entry with `plugin: plex`. The old form will be removed in a later release."
-      )
+      warn_legacy_plex_once(plex)
 
       translated =
         Enum.map(plex, fn server ->
@@ -593,6 +588,23 @@ defmodule Mydia.Config.Loader do
   end
 
   defp translate_legacy_plex_media_servers(config), do: config
+
+  # The config is reloaded at runtime, so the deprecation is logged on the first
+  # load of a boot only.
+  defp warn_legacy_plex_once(plex) do
+    key = {__MODULE__, :legacy_plex_warned}
+
+    if not :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+
+      Logger.warning(
+        "Plex media servers configured through MEDIA_SERVER_<N>_* or `media_servers:` " <>
+          "(#{Enum.map_join(plex, ", ", &Map.get(&1, :name))}) now run as the Plex plugin. " <>
+          "Rename them to PLUGIN_PLEX_<N>_NAME, PLUGIN_PLEX_<N>_URL and PLUGIN_PLEX_<N>_TOKEN, " <>
+          "or a `plugin_instances:` entry with `plugin: plex`. The old form will be removed in a later release."
+      )
+    end
+  end
 
   defp load_plugins_env do
     # Support environment variables for installed plugins in the format:

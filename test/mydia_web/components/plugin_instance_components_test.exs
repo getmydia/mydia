@@ -84,6 +84,19 @@ defmodule MydiaWeb.PluginInstanceComponentsTest do
     assert LazyHTML.text(button) =~ "Confirm new addresses"
   end
 
+  test "a partial run renders whether or not its counts carry errors" do
+    with_errors =
+      render_card(%{last_run: %{status: :partial, error: nil, counts: %{"errors" => 3}}})
+
+    without = render_card(%{last_run: %{status: :partial, error: nil, counts: %{"pulled" => 1}}})
+    nil_counts = render_card(%{last_run: %{status: :partial, error: nil, counts: nil}})
+
+    assert LazyHTML.text(with_errors) =~ "Partly synced: 3 errors"
+    assert LazyHTML.text(without) =~ "Partly synced"
+    refute LazyHTML.text(without) =~ "errors"
+    assert LazyHTML.text(nil_counts) =~ "Partly synced"
+  end
+
   test "linked accounts are listed by remote username" do
     link = %AccountLink{
       id: "22222222-2222-2222-2222-222222222222",
