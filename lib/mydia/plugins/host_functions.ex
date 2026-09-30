@@ -1210,13 +1210,28 @@ defmodule Mydia.Plugins.HostFunctions do
   def set_link_token(%Plugin{} = plugin, %Instance{} = instance, link_id, token) do
     with :ok <- require_capability(plugin, "users:connections"),
          {:ok, link} <- fetch_link(plugin, instance, link_id),
+         :ok <- reject_disabled(link),
          {:ok, token} <- validate_token(token) do
       AccountLinks.set_token(link.id, token)
     end
   end
 
-  defp validate_token(token) when is_binary(token) and token != "" and byte_size(token) <= 4096,
-    do: {:ok, token}
+  # :disabled is the host's kill switch; a guest can neither revive nor edit it.
+  defp reject_disabled(%AccountLink{status: :disabled}),
+    do: {:error, Error.new(:capability_denied, "link is disabled")}
+
+  defp reject_disabled(%AccountLink{}), do: :ok
+
+  # The token is later interpolated into a header value, so control characters
+  # (CR, LF, NUL and the rest of C0/DEL) are refused.
+  defp validate_token(token)
+       when is_binary(token) and token != "" and byte_size(token) <= 4096 do
+    if String.match?(token, ~r/[\x00-\x1f\x7f]/) do
+      {:error, Error.new(:invalid_request, "token must not contain control characters")}
+    else
+      {:ok, token}
+    end
+  end
 
   defp validate_token(_) do
     {:error,
@@ -1229,6 +1244,7 @@ defmodule Mydia.Plugins.HostFunctions do
   def set_link_status(%Plugin{} = plugin, %Instance{} = instance, link_id, status, message) do
     with :ok <- require_capability(plugin, "users:connections"),
          {:ok, link} <- fetch_link(plugin, instance, link_id),
+         :ok <- reject_disabled(link),
          {:ok, status} <- link_status(status) do
       AccountLinks.set_status(link.id, status, from_option(message))
     end

@@ -295,6 +295,28 @@ defmodule Mydia.Plugins.HostFunctionsLinksTest do
       assert %{status: :error, last_error: "401"} = AccountLinks.get(link.id)
     end
 
+    test "a disabled link cannot be touched by the guest", %{instance: i, owner: owner} do
+      :ok = AccountLinks.set_status(owner.id, :disabled, "admin off")
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.set_link_token(plugin(@links_grant), i, owner.id, "new")
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.set_link_status(plugin(@links_grant), i, owner.id, :active, :none)
+
+      assert %{status: :disabled, access_token: "acct-token", last_error: "admin off"} =
+               AccountLinks.get(owner.id)
+    end
+
+    test "reject a token with control characters", %{instance: i, owner: owner} do
+      for bad <- ["a\r\nX-Evil: 1", "a\nb", "a\0b"] do
+        assert {:error, %Error{type: :invalid_request}} =
+                 HostFunctions.set_link_token(plugin(@links_grant), i, owner.id, bad)
+      end
+
+      assert AccountLinks.get(owner.id).access_token == "acct-token"
+    end
+
     test "reject an empty or oversized token", %{instance: i, owner: owner} do
       assert {:error, %Error{type: :invalid_request}} =
                HostFunctions.set_link_token(plugin(@links_grant), i, owner.id, "")

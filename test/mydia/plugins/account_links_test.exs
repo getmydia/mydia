@@ -154,6 +154,16 @@ defmodule Mydia.Plugins.AccountLinksTest do
                AccountLinks.get(link.id)
     end
 
+    test "set_token stores the token but keeps a disabled link disabled", %{instance: i} do
+      {:ok, link} = AccountLinks.put_credential(i.id, :owner, "old")
+      :ok = AccountLinks.set_status(link.id, :disabled, "off")
+
+      assert :ok = AccountLinks.set_token(link.id, "newer")
+
+      assert %{status: :disabled, access_token: "newer", last_error: "off"} =
+               AccountLinks.get(link.id)
+    end
+
     test "set_status records the message; unknown ids are not found", %{instance: i} do
       {:ok, link} = AccountLinks.put_credential(i.id, :owner, "t")
       assert :ok = AccountLinks.set_status(link.id, :error, "401 from server")

@@ -171,7 +171,15 @@ defmodule Mydia.Plugins.AccountLinks do
 
   @spec set_token(term(), String.t()) :: :ok | {:error, :not_found}
   def set_token(link_id, token) when is_binary(token) do
-    update_link(link_id, %{access_token: token, status: :active, last_error: nil})
+    case get(link_id) do
+      # :disabled is the host-side kill switch: a new token is stored but the
+      # link is never reactivated by it. Only an explicit host set_status/3 can.
+      %AccountLink{status: :disabled} ->
+        update_link(link_id, %{access_token: token})
+
+      _ ->
+        update_link(link_id, %{access_token: token, status: :active, last_error: nil})
+    end
   end
 
   @spec set_status(term(), :active | :error | :disabled, String.t() | nil) ::
