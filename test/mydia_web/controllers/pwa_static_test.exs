@@ -5,7 +5,8 @@ defmodule MydiaWeb.PwaStaticTest do
   """
   use MydiaWeb.ConnCase, async: true
 
-  for path <- ~w(/offline.html /service-worker.js /manifest.json /images/logo.svg /favicon.ico) do
+  for path <-
+        ~w(/offline.html /service-worker.js /manifest.json /images/logo.svg /favicon.ico /images/icons/apple-touch-icon.png) do
     test "serves #{path} without authentication", %{conn: conn} do
       assert conn |> get(unquote(path)) |> response(200)
     end

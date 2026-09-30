@@ -16,7 +16,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Mydia" />
-    <link rel="apple-touch-icon" sizes="192x192" href={~p"/images/icons/icon-192.png"} />
+    <link rel="apple-touch-icon" sizes="180x180" href={~p"/images/icons/apple-touch-icon.png"} />
+    <%!-- Painted before app.css arrives so an installed iOS app does not flash
+         white between launch and first render. Colours are each theme's
+         base-100 (assets/css/mydiaTheme.ts). --%>
+    <style id="launch-background">
+      html { background-color: #0f172a; }
+      html[data-theme="mydia-light"] { background-color: #f8fafc; }
+    </style>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
     </script>
