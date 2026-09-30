@@ -135,7 +135,8 @@ defmodule MydiaWeb.Endpoint do
   plug Plug.RequestId
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
-  plug Plug.Parsers,
+  # Plugin page paths skip parsing so the guest gets the raw request body.
+  plug MydiaWeb.Plugs.PageBodyBypass,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()

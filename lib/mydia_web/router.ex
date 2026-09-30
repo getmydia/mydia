@@ -12,6 +12,13 @@ defmodule MydiaWeb.Router do
     plug :put_secure_browser_headers
   end
 
+  # Plugin page frames: authenticated by a signed frame token, not the session.
+  # No session, CSRF or default browser headers: the controller sets its own
+  # CSP and CORS for the sandboxed, opaque-origin iframe.
+  pipeline :plugin_frame do
+    plug :fetch_query_params
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
     plug :fetch_session
@@ -159,6 +166,17 @@ defmodule MydiaWeb.Router do
     get "/:provider", AuthController, :request
     get "/:provider/callback", AuthController, :callback
     post "/:provider/callback", AuthController, :callback
+  end
+
+  scope "/plugins/:slug/app", MydiaWeb do
+    pipe_through :plugin_frame
+
+    options "/", PluginPageController, :preflight
+    options "/*path", PluginPageController, :preflight
+    get "/", PluginPageController, :serve
+    post "/", PluginPageController, :serve
+    get "/*path", PluginPageController, :serve
+    post "/*path", PluginPageController, :serve
   end
 
   # Flutter player web app (authenticated)
