@@ -4,6 +4,7 @@
 
 mod chat;
 mod history;
+mod provider;
 mod tools;
 
 use chat::{Config, Reply};
