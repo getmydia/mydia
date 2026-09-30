@@ -201,8 +201,16 @@ navigation entry:
 ```
 
 - `title` is 1 to 40 characters.
-- `icon` is a Heroicons name of the form `hero-*` (lowercase letters, digits and
-  hyphens).
+- `icon` is one of a fixed set of Heroicons names (the host only ships the CSS
+  for icons it uses itself, so an arbitrary name would render blank):
+  `hero-sparkles`, `hero-bookmark`, `hero-book-open`,
+  `hero-chat-bubble-left-right`, `hero-film`, `hero-tv`, `hero-star`,
+  `hero-heart`, `hero-bolt`, `hero-fire`, `hero-globe-alt`, `hero-beaker`,
+  `hero-puzzle-piece`, `hero-rectangle-stack`, `hero-queue-list`,
+  `hero-list-bullet`, `hero-clipboard-document-list`, `hero-chart-bar`,
+  `hero-magnifying-glass`, `hero-light-bulb`, `hero-cpu-chip`,
+  `hero-wrench-screwdriver`, `hero-cog-6-tooth`, `hero-folder`, `hero-tag`.
+  Any other name is rejected when the manifest is parsed.
 
 ## Private network hosts
 

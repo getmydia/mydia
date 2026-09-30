@@ -62,6 +62,21 @@ defmodule Mydia.Plugins.PageManifestTest do
     assert msg =~ "icon"
   end
 
+  test "the page icon must be on the allowlist" do
+    manifest = page_manifest(%{"page" => %{"title" => "Thing", "icon" => "hero-not-in-the-list"}})
+    assert {:error, %{message: msg}} = Manifest.parse(manifest)
+    assert msg =~ "page.icon must be one of"
+  end
+
+  test "every allowlisted page icon exists in heroicons" do
+    for "hero-" <> name <- Manifest.page_icons() do
+      assert File.exists?(
+               Path.join(["deps", "heroicons", "optimized", "24", "outline", "#{name}.svg"])
+             ),
+             "#{name} is not a heroicon"
+    end
+  end
+
   test "allow_private needs a host-granting url field" do
     manifest =
       page_manifest(%{

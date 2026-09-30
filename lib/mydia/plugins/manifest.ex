@@ -124,7 +124,7 @@ defmodule Mydia.Plugins.Manifest do
   )
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
-  # all four so they need no breaking change when the reserved ones land.
+  # every one so they need no breaking change when a reserved one lands.
   @known_classes ~w(events:subscribe net:http data:read data:search surfaces:write surfaces:page state:kv users:connections schedule:interval)
 
   # Implemented capability classes. `data:read` is honored by data-read/data-list;
@@ -138,6 +138,20 @@ defmodule Mydia.Plugins.Manifest do
   # the page functions; `media:add` and `collections:write` are page-only.
   @write_surfaces ~w(playback:watched collections:favorite media:add collections:write)
 
+  # Icons a plugin page descriptor may use in the navbar.
+  # Tailwind emits an icon's CSS only when the class name appears literally in
+  # source, so an arbitrary name would render as an empty box in the navbar.
+  # Every name below is written out here for that reason: keep the list literal
+  # (no generated names), and add a name only to this list.
+  @page_icons ~w(
+    hero-sparkles hero-bookmark hero-book-open hero-chat-bubble-left-right
+    hero-film hero-tv hero-star hero-heart hero-bolt hero-fire hero-globe-alt
+    hero-beaker hero-puzzle-piece hero-rectangle-stack hero-queue-list
+    hero-list-bullet hero-clipboard-document-list hero-chart-bar
+    hero-magnifying-glass hero-light-bulb hero-cpu-chip hero-wrench-screwdriver
+    hero-cog-6-tooth hero-folder hero-tag
+  )
+
   # The lowest interval (minutes) a scheduled plugin may request — a floor so a
   # misconfigured manifest can't tick the host to death.
   @min_schedule_interval 5
@@ -146,10 +160,9 @@ defmodule Mydia.Plugins.Manifest do
   # is served by both `data-read` (single) and `data-list` (enumerate);
   # `playback_progress` (U5) is a `data-list`-only per-user watch projection,
   # consent-scoped to users with an active connection to the calling plugin.
-  @data_namespaces ~w(media_item playback_progress library_item media_request download collection)
-
   # `media_request`, `download` and `collection` are page-only namespaces that
   # list the acting user's own rows.
+  @data_namespaces ~w(media_item playback_progress library_item media_request download collection)
 
   # Field types a `settings_schema` entry may declare. `text` renders as a
   # multiline textarea (used for template fields); otherwise like `string`.
@@ -173,6 +186,10 @@ defmodule Mydia.Plugins.Manifest do
   @doc "Returns the capability classes a host function honors in this version."
   @spec available_classes() :: [String.t()]
   def available_classes, do: @available_classes
+
+  @doc "Returns the icon names a plugin page descriptor may use."
+  @spec page_icons() :: [String.t()]
+  def page_icons, do: @page_icons
 
   @doc "Returns the v1 `data:read` namespaces (allowed scoped-read values)."
   @spec data_namespaces() :: [String.t()]
@@ -529,7 +546,6 @@ defmodule Mydia.Plugins.Manifest do
   # A `page` descriptor names the navbar entry for a plugin page. It is required
   # with `surfaces:page` and meaningless without it. The icon is a heroicon name
   # the host renders through `<.icon>`, never markup from the plugin.
-  @page_icon ~r/^hero-[a-z0-9-]+$/
   @page_title_max 40
 
   defp validate_page(nil, capabilities) do
@@ -550,8 +566,12 @@ defmodule Mydia.Plugins.Manifest do
         {:error,
          Error.new(:invalid_manifest, "page.title must be 1 to #{@page_title_max} characters")}
 
-      not (is_binary(icon) and Regex.match?(@page_icon, icon)) ->
-        {:error, Error.new(:invalid_manifest, "page.icon must be a hero-* icon name")}
+      icon not in @page_icons ->
+        {:error,
+         Error.new(
+           :invalid_manifest,
+           "page.icon must be one of: #{Enum.join(@page_icons, ", ")}"
+         )}
 
       true ->
         :ok
