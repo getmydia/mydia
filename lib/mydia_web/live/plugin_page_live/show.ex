@@ -148,7 +148,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app {assigns}>
-      <div class="flex flex-col h-[calc(100dvh-6rem)] gap-3">
+      <div class="flex flex-col h-[calc(100dvh-10rem)] lg:h-[calc(100dvh-6rem)] gap-3">
         <div class="flex items-center justify-between gap-3">
           <h1 class="text-xl font-semibold">{@title}</h1>
           <.link
