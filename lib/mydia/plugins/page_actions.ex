@@ -229,9 +229,15 @@ defmodule Mydia.Plugins.PageActions do
         end)
 
       case outcome do
-        {:ok, result} -> {:ok, {:done, Jason.encode!(result)}}
-        {:error, %Error{} = error} -> {:error, error}
-        {:error, _} -> {:error, Error.new(:unknown, "the write was rolled back")}
+        {:ok, result} ->
+          :ok = PageWrites.after_commit(op, result, user, prepared)
+          {:ok, {:done, Jason.encode!(result)}}
+
+        {:error, %Error{} = error} ->
+          {:error, error}
+
+        {:error, _} ->
+          {:error, Error.new(:unknown, "the write was rolled back")}
       end
     end
   end

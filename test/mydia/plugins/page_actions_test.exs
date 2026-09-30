@@ -3,6 +3,7 @@ defmodule Mydia.Plugins.PageActionsTest do
   # Bypass server.
   use Mydia.DataCase, async: false
 
+  import ExUnit.CaptureLog
   import Ecto.Query
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
@@ -79,6 +80,46 @@ defmodule Mydia.Plugins.PageActionsTest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
+  end
+
+  # Serves one TV show from a Bypass relay. Season requests are recorded in the
+  # returned Agent, so a test can tell when the episode fetch happened.
+  defp stub_relay_tv(tmdb_id) do
+    paths = start_supervised!({Agent, fn -> [] end})
+    bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
+    language = Mydia.Metadata.default_relay_config().options.language
+
+    on_exit(fn ->
+      Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:tv_show:#{language}::official")
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+      body = %{
+        "id" => tmdb_id,
+        "name" => "The Slate Lighthouse",
+        "first_air_date" => "2031-03-04",
+        "credits" => %{"cast" => [], "crew" => []},
+        "seasons" => [%{"season_number" => 1, "episode_count" => 1}],
+        "external_ids" => %{}
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+
+    Bypass.stub(bypass, "GET", "/tvdb/search", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"data" => []}))
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}/1", fn conn ->
+      Agent.update(paths, &[conn.request_path | &1])
+      Plug.Conn.resp(conn, 404, "{}")
+    end)
+
+    paths
   end
 
   defp movie_target(tmdb_id),
@@ -352,6 +393,69 @@ defmodule Mydia.Plugins.PageActionsTest do
                  "plugin:helper",
                  prepared
                )
+    end
+
+    test "a TV add fetches episodes after the transaction, not inside it", %{user: user} do
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      paths = stub_relay_tv(tmdb_id)
+
+      args = %{
+        "media_type" => "tv_show",
+        "provider" => "tmdb",
+        "provider_id" => tmdb_id,
+        "title" => "The Slate Lighthouse",
+        "year" => 2031
+      }
+
+      # Inside the transaction: the write itself makes no episode call.
+      assert {:ok, prepared} = Mydia.Plugins.PageWrites.prepare("media_add", args, user)
+
+      assert {:ok, %{"media_item_id" => id} = result, _} =
+               Mydia.Plugins.PageWrites.execute(
+                 "media_add",
+                 args,
+                 user,
+                 "plugin:helper",
+                 prepared
+               )
+
+      assert Agent.get(paths, & &1) == []
+      assert id
+
+      # After commit: the episode fetch runs.
+      capture_log(fn ->
+        assert :ok = Mydia.Plugins.PageWrites.after_commit("media_add", result, user, prepared)
+      end)
+
+      assert Agent.get(paths, & &1) != []
+    end
+
+    test "a TV add through PageActions still fetches its episodes", %{plugin: plugin, user: user} do
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      paths = stub_relay_tv(tmdb_id)
+      :ok = Grants.grant("helper", user.id, "media:add", "session", "s1")
+
+      capture_log(fn ->
+        assert {:ok, {:done, json}} =
+                 PageActions.media_add(plugin, ctx(user), %{
+                   "media-type": "tv_show",
+                   "tmdb-id": {:some, tmdb_id},
+                   "tvdb-id": :none
+                 })
+
+        assert %{"media_item_id" => _} = Jason.decode!(json)
+      end)
+
+      assert Agent.get(paths, & &1) != []
+    end
+
+    test "an add that is already in the library fetches nothing after commit", %{user: user} do
+      result = %{"media_item_id" => Ecto.UUID.generate(), "status" => "already-in-library"}
+
+      assert :ok =
+               Mydia.Plugins.PageWrites.after_commit("media_add", result, user, %{
+                 defaults: %{season_monitoring: "all"}
+               })
     end
 
     test "executing media_add without preparing it is an error, not I/O", %{user: user} do

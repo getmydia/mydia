@@ -204,7 +204,10 @@ defmodule Mydia.Plugins.PageWrites do
     scope = Scope.for_user(user)
 
     with {:ok, %{attrs: attrs, defaults: defaults}} <- require_prepared(prepared) do
-      case Media.Add.from_attrs(scope, attrs, nil, Media.AddDefaults.to_add_opts(defaults)) do
+      # The episode fetch is a relay round trip, so it waits for `after_commit/4`.
+      opts = Keyword.put(Media.AddDefaults.to_add_opts(defaults), :skip_episode_refresh, true)
+
+      case Media.Add.from_attrs(scope, attrs, nil, opts) do
         {:ok, item} ->
           Mydia.Search.maybe_queue_search(item, defaults.search_on_add)
           {:ok, %{"media_item_id" => item.id}, %{"media_item_id" => item.id}}
@@ -221,6 +224,26 @@ defmodule Mydia.Plugins.PageWrites do
       end
     end
   end
+
+  @doc """
+  Runs the network work a committed write still owes. Call it after the
+  transaction that ran `execute/5` has committed, never inside it.
+
+  A newly added TV show has its episodes fetched here; every other write, and a
+  show that was already in the library, has nothing to do.
+  """
+  @spec after_commit(String.t(), map(), User.t(), map() | nil) :: :ok
+  def after_commit("media_add", %{"media_item_id" => id} = result, user, %{defaults: defaults})
+      when not is_map_key(result, "status") do
+    with {:ok, %Media.MediaItem{type: "tv_show"} = item} <-
+           fetch_media_item(Scope.for_user(user), id) do
+      Media.fetch_episodes_for_new_show(item, season_monitoring: defaults.season_monitoring)
+    else
+      _ -> :ok
+    end
+  end
+
+  def after_commit(_op, _result, _user, _prepared), do: :ok
 
   @spec undo(String.t(), map(), map(), map() | :noop | :irreversible, User.t(), String.t()) ::
           :ok | {:error, :conflict | :irreversible | Error.t()}

@@ -455,24 +455,7 @@ defmodule Mydia.Media do
         {:ok, _approved_requests} ->
           # For TV shows, automatically fetch episodes unless explicitly skipped
           if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
-            season_monitoring = Keyword.get(opts, :season_monitoring, "all")
-
-            refresh_opts =
-              [season_monitoring: season_monitoring]
-              |> maybe_put_refresh_config(Keyword.get(opts, :config))
-
-            case refresh_episodes_for_tv_show(media_item, refresh_opts) do
-              {:ok, count} ->
-                Logger.info("Created #{count} episodes for #{media_item.title}")
-                apply_initial_season_monitoring(media_item, season_monitoring)
-
-              {:error, reason} ->
-                # Log the error but don't fail the media item creation
-                # The show is still usable and episodes can be refreshed later
-                Logger.warning(
-                  "Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}"
-                )
-            end
+            fetch_episodes_for_new_show(media_item, opts)
           end
 
           {:ok, media_item}
@@ -514,6 +497,40 @@ defmodule Mydia.Media do
     else
       attrs
     end
+  end
+
+  @doc """
+  Fetches the episodes of a just-added TV show and applies the initial season
+  monitoring. Failures are logged, never raised: the show is still usable and
+  its episodes can be refreshed later.
+
+  `create_media_item/3` calls this itself unless `:skip_episode_refresh` is set.
+  Callers that skip it because they are inside a transaction call this once the
+  transaction has committed.
+
+  ## Options
+
+    * `:season_monitoring` - defaults to `"all"`
+    * `:config` - relay config to use
+  """
+  @spec fetch_episodes_for_new_show(MediaItem.t(), keyword()) :: :ok
+  def fetch_episodes_for_new_show(%MediaItem{} = media_item, opts \\ []) do
+    season_monitoring = Keyword.get(opts, :season_monitoring, "all")
+
+    refresh_opts =
+      [season_monitoring: season_monitoring]
+      |> maybe_put_refresh_config(Keyword.get(opts, :config))
+
+    case refresh_episodes_for_tv_show(media_item, refresh_opts) do
+      {:ok, count} ->
+        Logger.info("Created #{count} episodes for #{media_item.title}")
+        apply_initial_season_monitoring(media_item, season_monitoring)
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}")
+    end
+
+    :ok
   end
 
   defp apply_initial_season_monitoring(%MediaItem{monitored: false}, _season_monitoring), do: :ok
