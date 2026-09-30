@@ -274,7 +274,7 @@ defmodule Mydia.Config.Schema do
       field :pool_size, :integer, default: 4
       # Official plugin index (R13). HTTPS is the v1 trust anchor (KTD10), so all
       # index/source URLs are validated to be https at config time.
-      field :index_url, :string, default: "https://plugins.getmydia.com/index.json"
+      field :index_url, :string, default: "https://plugins.mydia.dev/index.json"
       field :extra_source_urls, {:array, :string}, default: []
       # Filesystem override directory (PLUGINS_OVERRIDE_DIR). When set, a
       # `<slug>.wasm` dropped here takes precedence over the DB blob and the
