@@ -59,6 +59,8 @@ jobs:
             crate=$(basename "$dir")
             echo "::group::$crate"
             cargo test --manifest-path "$cargo_toml"
+            node_tests=("$dir"/test/*.test.mjs)
+            if (( ${#node_tests[@]} )); then node --test "${node_tests[@]}"; fi
             cargo build --release --target wasm32-wasip2 --manifest-path "$cargo_toml"
             cp "$dir/target/wasm32-wasip2/release/$crate.wasm" build/wasm/
             echo "::endgroup::"
