@@ -165,6 +165,25 @@ defmodule Mydia.Metadata.RegionalSources do
   end
 
   @doc """
+  Saves the home country and the picked services in one write. A nil country
+  removes the tab and always clears the services, since they only mean
+  something inside a country. `services` must already be limited to what
+  that country offers.
+  """
+  def put_country_settings(user, country, services) do
+    services = if is_nil(country), do: [], else: services
+
+    user
+    |> Accounts.get_user_preference!()
+    |> Accounts.update_preference(%{
+      "preferences" => %{
+        "discover_home_country" => country,
+        "discover_streaming_services" => services
+      }
+    })
+  end
+
+  @doc """
   Saves a new home country (nil removes it) and prunes the saved services to
   the ones the new country offers. A service from the old country means
   nothing in the new one, so if the new list cannot be fetched the services

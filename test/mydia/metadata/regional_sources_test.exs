@@ -236,5 +236,44 @@ defmodule Mydia.Metadata.RegionalSourcesTest do
       assert {:ok, _} = RegionalSources.change_home_country(user, "FR", available)
       assert UserPreference.discover_streaming_services(prefs(user)) == []
     end
+
+    test "put_country_settings saves country and services together", %{user: user} do
+      assert {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
+
+      assert UserPreference.discover_home_country(prefs(user)) == "CA"
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
+    end
+
+    test "put_country_settings with nil clears both", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
+
+      assert {:ok, _} = RegionalSources.put_country_settings(user, nil, @services)
+
+      assert UserPreference.discover_home_country(prefs(user)) == nil
+      assert prefs(user).preferences["discover_streaming_services"] == []
+    end
+
+    test "put_country_settings rejects an unlisted country and writes nothing", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", @services)
+
+      assert {:error, %Ecto.Changeset{}} =
+               RegionalSources.put_country_settings(user, "XX", [])
+
+      assert UserPreference.discover_home_country(prefs(user)) == "CA"
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
+    end
+
+    test "put_country_settings overwrites a malformed stored value", %{user: user} do
+      {:ok, _} = RegionalSources.put_country_settings(user, "CA", [])
+
+      prefs(user)
+      |> Ecto.Changeset.change(
+        preferences: Map.put(prefs(user).preferences, "discover_streaming_services", "junk")
+      )
+      |> Mydia.Repo.update!()
+
+      assert {:ok, _} = RegionalSources.put_country_settings(user, "FR", @services)
+      assert UserPreference.discover_streaming_services(prefs(user)) == @services
+    end
   end
 end
