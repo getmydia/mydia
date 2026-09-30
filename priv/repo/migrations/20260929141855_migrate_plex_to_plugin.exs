@@ -67,7 +67,8 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
 
   # `ensure_bundled/0` runs after migrations. A row that already exists with
   # `source_url: "bundled"` is reconciled there (manifest and grant replaced,
-  # `enabled` kept), so this only has to exist and be enabled.
+  # `enabled` kept), so this only has to exist and be enabled. An existing row
+  # is left exactly as it is, disabled or not: `ensure_bundled/0` owns enablement.
   defp ensure_plugin_config do
     existing =
       from(p in "plugin_configs", where: p.slug == ^@slug, select: type(p.id, :binary_id))
@@ -105,6 +106,9 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
   defp migrate_config(config) do
     plugin_config_id = ensure_plugin_config()
     instance_id = Ecto.UUID.generate()
+    # media_server_user_links is unique per (config, user) and (config, remote
+    # account), so these links cannot collide in plugin_account_links; the
+    # inserts still use on_conflict: :nothing so a boot never fails on it.
     links = native_links(config.id)
     now = now_usec()
 
@@ -135,7 +139,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
        pull_cursor_rows(config.id, new_links))
     |> Enum.map(&finish_kv_row(&1, instance_id, plugin_config_id, now))
     |> Enum.chunk_every(500)
-    |> Enum.each(&query_repo().insert_all("plugin_kv", &1))
+    |> Enum.each(&query_repo().insert_all("plugin_kv", &1, on_conflict: :nothing))
 
     move_sync_runs(config.id, instance_id)
     delete_native(config.id)
@@ -217,7 +221,8 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
       |> Enum.filter(& &1)
       |> Enum.map(&link_row(&1, instance_id, now))
 
-    if rows != [], do: query_repo().insert_all("plugin_account_links", rows)
+    if rows != [],
+      do: query_repo().insert_all("plugin_account_links", rows, on_conflict: :nothing)
   end
 
   defp credential_row(role, token) do
@@ -254,7 +259,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
           now
         )
 
-      query_repo().insert_all("plugin_account_links", [row])
+      query_repo().insert_all("plugin_account_links", [row], on_conflict: :nothing)
 
       # Native Plex's no-Home fallback wrote a link naming no remote account
       # and carrying the admin token. The plugin expresses that as a user link
@@ -323,7 +328,9 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
           ((not is_nil(s.episode_id) and m.episode_id == s.episode_id) or
              (is_nil(s.episode_id) and is_nil(m.episode_id) and
                 m.media_item_id == s.media_item_id)),
-      where: s.provider == "plex" and s.provider_instance_id == ^config_id,
+      where:
+        s.provider == "plex" and s.provider_instance_id == ^config_id and
+          not is_nil(s.synced_at),
       select: %{
         user_id: type(s.user_id, :binary_id),
         rating_key: m.remote_id,
@@ -334,6 +341,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
       }
     )
     |> query_repo().all()
+    |> newest_per_key(link_ids)
     |> Enum.flat_map(fn state ->
       case Map.fetch(link_ids, state.user_id) do
         {:ok, link_id} ->
@@ -350,6 +358,16 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
           []
       end
     end)
+  end
+
+  # remote_item_mappings.remote_id is not unique, so two local items (or two
+  # mapping rows) can land on one rating key for a user. The store is unique on
+  # the key: keep the newest state (synced_at is never NULL here).
+  defp newest_per_key(states, link_ids) do
+    states
+    |> Enum.filter(&Map.has_key?(link_ids, &1.user_id))
+    |> Enum.group_by(&{&1.user_id, &1.rating_key})
+    |> Enum.map(fn {_key, group} -> Enum.max_by(group, & &1.synced_at, DateTime) end)
   end
 
   # The native engine's cursor is the newest synced_at for the user on this

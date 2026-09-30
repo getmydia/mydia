@@ -324,11 +324,153 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPluginTest do
     assert ctx.user.id == link.user_id
   end
 
-  test "running it twice changes nothing the second time" do
+  defp table_count(table), do: from(r in table, select: count()) |> Repo.one()
+
+  defp update_config!(config_id, set) do
+    Repo.update_all(
+      from(c in "media_server_configs", where: c.id == type(^config_id, :binary_id)),
+      set: set
+    )
+  end
+
+  test "running it twice changes nothing and raises nothing the second time" do
     :ok = MigratePlexToPlugin.migrate()
+    before = {table_count("plugin_kv"), table_count("plugin_account_links")}
     :ok = MigratePlexToPlugin.migrate()
 
     assert length(Instances.list("plex")) == 1
+    assert {table_count("plugin_kv"), table_count("plugin_account_links")} == before
+
+    assert from(c in "plugin_configs", where: c.slug == "plex", select: count()) |> Repo.one() ==
+             1
+  end
+
+  test "a Plex server that reappears after a run becomes a second instance, the first untouched",
+       ctx do
+    :ok = MigratePlexToPlugin.migrate()
+    [first] = Instances.list("plex")
+    kv_before = kv_keys(first.id)
+
+    insert_plex_config!(%{name: "Second Server"})
+    :ok = MigratePlexToPlugin.migrate()
+
+    assert length(Instances.list("plex")) == 2
+    assert kv_keys(first.id) == kv_before
+    assert ctx.config_id != first.id
+
+    assert from(c in "plugin_configs", where: c.slug == "plex", select: count()) |> Repo.one() ==
+             1
+  end
+
+  test "two local items mapped to one rating key keep the newest state", ctx do
+    twin = media_item_fixture(%{title: "The Glass Orchard Cut", type: "movie"})
+    insert_mapping!(ctx.config_id, %{media_item_id: uuid(twin.id), remote_id: "5001"})
+
+    insert_state!(ctx.config_id, ctx.user, %{
+      media_item_id: uuid(twin.id),
+      synced_watched: bool(false),
+      synced_at: ~N[2026-09-03 09:00:00]
+    })
+
+    :ok = MigratePlexToPlugin.migrate()
+
+    [instance] = Instances.list("plex")
+    [link] = Enum.filter(AccountLinks.list(instance.id), &(&1.role == :user))
+    value = Jason.decode!(kv(instance.id, "link/#{link.id}/state/5001"))
+    assert value["synced_at"] == "2026-09-03T09:00:00Z"
+    assert value["watched"] == false
+  end
+
+  test "a NULL account token migrates without an owner credential", ctx do
+    update_config!(ctx.config_id, token: nil)
+    :ok = MigratePlexToPlugin.migrate()
+
+    [instance] = Instances.list("plex")
+    assert AccountLinks.credential(instance.id, :owner) == nil
+    assert AccountLinks.credential(instance.id, :endpoint).access_token == "server-token"
+  end
+
+  test "malformed connection JSON falls back to defaults and omits server/info", ctx do
+    update_config!(ctx.config_id, connection_settings: "{not json", connections: "[oops")
+    :ok = MigratePlexToPlugin.migrate()
+
+    [instance] = Instances.list("plex")
+
+    assert instance.settings == %{
+             "url" => "http://192.168.1.20:32400",
+             "sync_watched" => "off",
+             "sync_watched_direction" => "bidirectional"
+           }
+
+    assert instance.approved_endpoints == [
+             %{"scheme" => "http", "host" => "192.168.1.20", "port" => 32400}
+           ]
+
+    assert kv(instance.id, "server/info") == nil
+  end
+
+  test "NULL or empty connections omit server/info", ctx do
+    for value <- [nil, "[]"] do
+      update_config!(ctx.config_id, connections: value)
+      :ok = MigratePlexToPlugin.migrate()
+
+      [instance] = Instances.list("plex")
+      assert kv(instance.id, "server/info") == nil
+
+      Repo.delete_all(from(i in "plugin_instances", where: i.plugin_slug == "plex"))
+      Repo.delete_all(from(k in "plugin_kv", where: k.plugin_slug == "plex"))
+      Repo.delete_all(from(l in "plugin_account_links", where: l.plugin_slug == "plex"))
+      insert_plex_config!(%{id: uuid(ctx.config_id), connections: value})
+    end
+  end
+
+  test "a disabled native server becomes a disabled instance", ctx do
+    Repo.update_all(
+      from(c in "media_server_configs",
+        where: c.id == type(^ctx.config_id, :binary_id),
+        update: [set: [enabled: type(^false, :boolean)]]
+      ),
+      []
+    )
+
+    :ok = MigratePlexToPlugin.migrate()
+    [instance] = Instances.list("plex")
+    refute instance.enabled
+  end
+
+  test "an existing disabled plex plugin config is reused and left disabled" do
+    {:ok, existing} =
+      Settings.create_plugin_config(%{
+        slug: "plex",
+        name: "Plex",
+        version: "1.0.0",
+        enabled: false,
+        source_url: "bundled"
+      })
+
+    :ok = MigratePlexToPlugin.migrate()
+
+    [instance] = Instances.list("plex")
+    assert instance.plugin_config_id == existing.id
+    refute Settings.get_plugin_config_by_slug("plex").enabled
+
+    assert from(c in "plugin_configs", where: c.slug == "plex", select: count()) |> Repo.one() ==
+             1
+  end
+
+  test "a state with a NULL synced_at is skipped and does not set the cursor", ctx do
+    fresh = user_fixture()
+    item = media_item_fixture(%{title: "Lantern Row", type: "movie"})
+    insert_link!(ctx.config_id, fresh, %{remote_user_id: "303"})
+    insert_mapping!(ctx.config_id, %{media_item_id: uuid(item.id), remote_id: "6001"})
+    insert_state!(ctx.config_id, fresh, %{media_item_id: uuid(item.id), synced_at: nil})
+
+    :ok = MigratePlexToPlugin.migrate()
+
+    [instance] = Instances.list("plex")
+    [link] = Enum.filter(AccountLinks.list(instance.id), &(&1.user_id == fresh.id))
+    assert kv(instance.id, "link/#{link.id}/state/6001") == nil
+    assert kv(instance.id, "link/#{link.id}/cursor/pull") == nil
   end
 
   test "an install without Plex gets no plex plugin row" do
