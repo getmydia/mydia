@@ -18,6 +18,7 @@ mod plextv;
 mod reconcile;
 mod setup;
 mod store;
+mod sync;
 mod time;
 
 use mydia_plugin_sdk::types::{Event, Health, ScheduleTick, SetupRequest, SetupScreen};
