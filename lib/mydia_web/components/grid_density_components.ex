@@ -125,7 +125,8 @@ defmodule MydiaWeb.GridDensityComponents do
   rather than "none".
 
   The tooltip sits on a wrapper around the trigger, never on the trigger
-  itself; `MydiaWeb.SegmentedControl` explains why.
+  itself; `MydiaWeb.SegmentedControl` explains why. It opens to the left
+  because this is the toolbar's right-most control.
   """
   attr :id, :string, default: "poster-fields-menu"
   attr :fields, :list, required: true
@@ -135,7 +136,10 @@ defmodule MydiaWeb.GridDensityComponents do
 
     ~H"""
     <div id={@id} class="dropdown dropdown-end">
-      <div class="tooltip" data-tip="Poster display">
+      <%!-- tooltip-left: the button is the toolbar's right-most control, and
+            a centred tip hangs past the viewport edge even while hidden,
+            giving the whole page a horizontal scrollbar. --%>
+      <div class="tooltip tooltip-left" data-tip="Poster display">
         <div
           tabindex="0"
           role="button"

@@ -23,6 +23,15 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
 
   @viewports [{375, 812}, {640, 960}, {768, 1024}, {1024, 768}, {1280, 800}, {1440, 900}]
 
+  # A hidden tooltip still occupies layout, so a centred tip on the
+  # right-most toolbar control widened the page by 24px at 390px wide.
+  defp horizontal_overflow(session) do
+    eval_js(session, """
+    var d = document.documentElement;
+    return d.scrollWidth - d.clientWidth;
+    """)
+  end
+
   defp top_of(session, selector) do
     eval_js(
       session,
@@ -68,6 +77,11 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
       |> visit_liveview("/tv")
 
       assert Wallaby.Browser.has_css?(session, "#poster-fields-menu")
+
+      overflow = horizontal_overflow(session)
+
+      assert overflow <= 0,
+             "at #{w}px the page scrolls horizontally by #{overflow}px"
 
       button_top = top_of(session, "#poster-fields-menu")
       density_top = top_of(session, "#library-density-toggle")
