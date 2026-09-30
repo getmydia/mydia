@@ -197,13 +197,25 @@ defmodule Mydia.Plugins.AccountLinksTest do
       assert [%AccountLink{instance: %{name: "Home"}}] = AccountLinks.list_for_user(u.id)
     end
 
-    test "delete removes the link and sweeps its legacy store prefix", %{instance: i} do
+    test "delete sweeps link/<id>/ and legacy conn/<id>/ from the link's instance store",
+         %{instance: i} do
       {:ok, link} = AccountLinks.put_credential(i.id, :owner, "t")
-      {:ok, _} = Kv.set("linker", "conn/#{link.id}/cursor", "1")
+      {:ok, other} = AccountLinks.put_credential(i.id, :endpoint, "t2")
+
+      :ok =
+        Kv.set_many(i.id, [
+          {"link/#{link.id}/cursor/pull", "1"},
+          {"link/#{link.id}/state/m:1", "2"},
+          {"conn/#{link.id}/cursor", "3"},
+          {"link/#{other.id}/cursor/pull", "4"},
+          {"global", "5"}
+        ])
 
       assert :ok = AccountLinks.delete(link)
       assert AccountLinks.get(link.id) == nil
-      assert {:ok, nil} = Kv.get("linker", "conn/#{link.id}/cursor")
+
+      assert {:ok, %{entries: rest}} = Kv.list(i.id, "", nil)
+      assert Enum.map(rest, &elem(&1, 0)) == ["global", "link/#{other.id}/cursor/pull"]
     end
   end
 end

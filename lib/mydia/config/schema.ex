@@ -275,6 +275,10 @@ defmodule Mydia.Config.Schema do
       # they get their own budget between the event and schedule timeouts.
       field :setup_timeout_ms, :integer, default: 30_000
       field :pool_size, :integer, default: 4
+      # Per-instance plugin store quotas (contract 1.4). Operator-raisable for a
+      # plugin that keeps a large mapping cache (a 10k-item media server).
+      field :store_max_keys, :integer, default: 200_000
+      field :store_max_bytes, :integer, default: 67_108_864
       # Official plugin index (R13). HTTPS is the v1 trust anchor (KTD10), so all
       # index/source URLs are validated to be https at config time.
       field :index_url, :string, default: "https://plugins.mydia.dev/index.json"
@@ -653,6 +657,8 @@ defmodule Mydia.Config.Schema do
       :schedule_timeout_ms,
       :setup_timeout_ms,
       :pool_size,
+      :store_max_keys,
+      :store_max_bytes,
       :index_url,
       :extra_source_urls,
       :override_dir
@@ -664,6 +670,8 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:schedule_timeout_ms, greater_than: 0)
     |> validate_number(:setup_timeout_ms, greater_than: 0)
     |> validate_number(:pool_size, greater_than: 0)
+    |> validate_number(:store_max_keys, greater_than: 0)
+    |> validate_number(:store_max_bytes, greater_than: 0)
     |> validate_https_source(:index_url)
     |> validate_https_sources(:extra_source_urls)
   end

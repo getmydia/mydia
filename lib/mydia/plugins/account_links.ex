@@ -239,13 +239,12 @@ defmodule Mydia.Plugins.AccountLinks do
   end
 
   @doc """
-  Per-link plugin state goes with the link. Task 7 makes the store
-  instance-scoped and extends this to sweep both the legacy `conn/<id>/` and
-  the 1.4 `link/<id>/` prefixes.
+  Per-link plugin state goes with the link: sweeps `link/<id>/` (1.4) and the
+  legacy `conn/<id>/` (1.1 to 1.3 guests) from the link's instance store.
   """
   @spec sweep_store(AccountLink.t()) :: :ok
-  def sweep_store(%AccountLink{} = link) do
-    Mydia.Plugins.Kv.delete_connection_prefix(link.plugin_slug, link.id)
+  def sweep_store(%AccountLink{instance_id: instance_id, id: id}) do
+    Mydia.Plugins.Kv.delete_link_prefix(instance_id, id)
     :ok
   end
 

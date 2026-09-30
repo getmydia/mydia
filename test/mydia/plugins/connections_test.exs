@@ -31,6 +31,9 @@ defmodule Mydia.Plugins.ConnectionsTest do
     :ok
   end
 
+  # Connections live on the plugin's default instance, and so does their store.
+  defp kv_id, do: Mydia.Plugins.Instances.default_instance("connector").id
+
   setup do
     install!("connector")
     %{user: user_fixture(), other: user_fixture()}
@@ -140,35 +143,35 @@ defmodule Mydia.Plugins.ConnectionsTest do
     test "disconnect sweeps the connection's KV prefix and removes the row", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
 
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/watermark", "1")
-      {:ok, _} = Kv.set("connector", "global", "keep")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/watermark", "1")
+      {:ok, _} = Kv.set(kv_id(), "global", "keep")
 
       assert :ok = Connections.disconnect("connector", user.id)
 
       assert Connections.get("connector", user.id) == nil
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/watermark")
-      assert {:ok, "keep"} = Kv.get("connector", "global")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/watermark")
+      assert {:ok, "keep"} = Kv.get(kv_id(), "global")
     end
 
     test "sweep_kv drops each connection's prefix and leaves unscoped keys", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
-      {:ok, _} = Kv.set("connector", "global", "keep")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "global", "keep")
 
       assert :ok = Connections.sweep_kv(Connections.list_for_user(user.id))
 
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
-      assert {:ok, "keep"} = Kv.get("connector", "global")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
+      assert {:ok, "keep"} = Kv.get(kv_id(), "global")
     end
 
     test "deleting the user cascades the rows and sweep_kv clears their state", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
 
       assert {:ok, _} = Mydia.Accounts.delete_user(user)
 
       assert Connections.get("connector", user.id) == nil
-      assert {:ok, nil} = Kv.get("connector", "conn/#{conn.id}/cursor")
+      assert {:ok, nil} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
     end
 
     # `media_requests.requester_id` is `on_delete: :restrict`, so a user who has
@@ -178,7 +181,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
     # state had been destroyed out from under them.
     test "a rejected delete leaves the user's plugin state intact", %{user: user} do
       {:ok, conn} = Connections.connect("connector", user.id, %{access_token: "t"})
-      {:ok, _} = Kv.set("connector", "conn/#{conn.id}/cursor", "x")
+      {:ok, _} = Kv.set(kv_id(), "conn/#{conn.id}/cursor", "x")
 
       {:ok, _request} =
         Mydia.MediaRequests.create_request(Scope.unrestricted(), %{
@@ -192,7 +195,7 @@ defmodule Mydia.Plugins.ConnectionsTest do
 
       assert Mydia.Accounts.get_user!(user.id)
       assert Connections.get("connector", user.id)
-      assert {:ok, "x"} = Kv.get("connector", "conn/#{conn.id}/cursor")
+      assert {:ok, "x"} = Kv.get(kv_id(), "conn/#{conn.id}/cursor")
     end
   end
 end

@@ -99,14 +99,16 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec imports_for(String.t(), keyword()) :: (map() -> map())
   def imports_for(slug, gate_opts \\ []) when is_binary(slug) do
     fn ctx ->
+      quota_flag = :atomics.new(1, [])
+
       v13 = %{
         "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
         # ── 1.1.0 ──
-        "kv-get" => {:fn, kv_get_import(slug)},
-        "kv-set" => {:fn, kv_set_import(slug)},
-        "kv-delete" => {:fn, kv_delete_import(slug)},
+        "kv-get" => {:fn, kv_get_import(slug, ctx)},
+        "kv-set" => {:fn, kv_set_import(slug, ctx, quota_flag)},
+        "kv-delete" => {:fn, kv_delete_import(slug, ctx)},
         "data-list" => {:fn, data_list_import(slug, false)},
         "ensure-watched" => {:fn, ensure_watched_import(slug)},
         "connections-list" => {:fn, connections_list_import(slug, ctx)},
@@ -127,8 +129,8 @@ defmodule Mydia.Plugins.HostFunctions do
           "propose-accounts" => {:fn, propose_accounts_import(slug, ctx)},
           "set-link-token" => {:fn, set_link_token_import(slug, ctx)},
           "set-link-status" => {:fn, set_link_status_import(slug, ctx)},
-          "kv-list" => {:fn, not_implemented(2)},
-          "kv-set-many" => {:fn, not_implemented(1)},
+          "kv-list" => {:fn, kv_list_import(slug, ctx)},
+          "kv-set-many" => {:fn, kv_set_many_import(slug, ctx, quota_flag)},
           "report-sync-run" => {:fn, not_implemented(1)}
         })
 
@@ -161,35 +163,87 @@ defmodule Mydia.Plugins.HostFunctions do
   # then a granted call returns an `internal` "not implemented" error — no plugin
   # is granted these classes before U9, which lands after U3–U7.
 
-  defp kv_get_import(slug) do
+  # kv-get/kv-set/kv-delete predate instances (1.1). An invocation without an
+  # instance (the conformance suite's 1.1 fixture, `Host.call/4` without
+  # `:instance_id`) uses the plugin's default instance, as connections-list
+  # does. kv-list/kv-set-many are 1.4-only and require the instance.
+  defp legacy_plugin_and_instance(slug, ctx) do
+    with {:ok, plugin} <- Plugins.get_plugin(slug) do
+      {:ok, plugin, ctx_instance(ctx) || Instances.default_instance(slug)}
+    end
+  end
+
+  defp kv_get_import(slug, ctx) do
     fn key ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_get(plugin, key)
-        end
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx),
+             do: kv_get(plugin, instance, key)
       end)
     end
   end
 
-  defp kv_set_import(slug) do
+  defp kv_set_import(slug, ctx, quota_flag) do
     fn key, value ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_set(plugin, key, value)
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx) do
+          plugin |> kv_set(instance, key, value) |> note_quota_denial(slug, ctx, quota_flag)
         end
       end)
     end
   end
 
-  defp kv_delete_import(slug) do
+  defp kv_delete_import(slug, ctx) do
     fn key ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          kv_delete(plugin, key)
+        with {:ok, plugin, instance} <- legacy_plugin_and_instance(slug, ctx),
+             do: kv_delete(plugin, instance, key)
+      end)
+    end
+  end
+
+  defp kv_list_import(slug, ctx) do
+    fn prefix, cursor ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx),
+             do: kv_list(plugin, instance, prefix, cursor)
+      end)
+    end
+  end
+
+  defp kv_set_many_import(slug, ctx, quota_flag) do
+    fn entries ->
+      typed_result(fn ->
+        with {:ok, plugin, instance} <- plugin_and_instance(slug, ctx) do
+          plugin |> kv_set_many(instance, entries) |> note_quota_denial(slug, ctx, quota_flag)
         end
       end)
     end
   end
+
+  # Log a store quota denial once per invocation: a guest retrying in a loop
+  # would otherwise flood plugin_logs.
+  defp note_quota_denial(
+         {:error, %Error{type: :capability_denied, message: "store quota exceeded" <> _ = msg}} =
+           err,
+         slug,
+         ctx,
+         flag
+       ) do
+    if :atomics.compare_exchange(flag, 1, 0, 1) == :ok do
+      Logs.create_async(%{
+        slug: slug,
+        invocation_id: ctx[:invocation_id],
+        source: :host,
+        level: :warn,
+        message: msg,
+        test_run: ctx[:test_run] || false
+      })
+    end
+
+    err
+  end
+
+  defp note_quota_denial(result, _slug, _ctx, _flag), do: result
 
   defp data_list_import(slug, with_origin?) do
     fn req ->
@@ -654,45 +708,66 @@ defmodule Mydia.Plugins.HostFunctions do
   # U7 connections). Returning `:internal` keeps a premature granted call loud.
 
   @doc false
-  @spec kv_get(Plugin.t(), String.t()) :: {:ok, term()} | {:error, Error.t()}
-  def kv_get(%Plugin{} = plugin, key) do
+  @spec kv_get(Plugin.t(), Instance.t(), String.t()) :: {:ok, term()} | {:error, Error.t()}
+  def kv_get(%Plugin{} = plugin, %Instance{} = instance, key) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key),
-         {:ok, value} <- Kv.get(plugin.slug, key) do
+         {:ok, value} <- Kv.get(instance.id, key) do
       {:ok, to_option(value)}
     end
   end
 
   @doc false
-  @spec kv_set(Plugin.t(), String.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
-  def kv_set(%Plugin{} = plugin, key, value) do
+  @spec kv_set(Plugin.t(), Instance.t(), String.t(), String.t()) ::
+          {:ok, boolean()} | {:error, Error.t()}
+  def kv_set(%Plugin{} = plugin, %Instance{} = instance, key, value) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key),
-         {:ok, value} <- validate_kv_value(value),
-         {:ok, _} <- Kv.set(plugin.slug, key, value) do
+         {:ok, _} <- Kv.set(instance.id, key, value) do
       {:ok, true}
     end
   end
 
   @doc false
-  @spec kv_delete(Plugin.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
-  def kv_delete(%Plugin{} = plugin, key) do
+  @spec kv_delete(Plugin.t(), Instance.t(), String.t()) :: {:ok, boolean()} | {:error, Error.t()}
+  def kv_delete(%Plugin{} = plugin, %Instance{} = instance, key) do
     with :ok <- require_capability(plugin, "state:kv"),
          {:ok, key} <- validate_kv_key(key) do
-      Kv.delete(plugin.slug, key)
+      Kv.delete(instance.id, key)
       {:ok, true}
     end
   end
+
+  @doc false
+  @spec kv_list(Plugin.t(), Instance.t(), String.t(), term()) ::
+          {:ok, map()} | {:error, Error.t()}
+  def kv_list(%Plugin{} = plugin, %Instance{} = instance, prefix, cursor) do
+    with :ok <- require_capability(plugin, "state:kv"),
+         {:ok, %{entries: entries, next_cursor: next}} <-
+           Kv.list(instance.id, prefix, from_option(cursor)) do
+      {:ok,
+       %{
+         entries: Enum.map(entries, fn {k, v} -> %{key: k, value: v} end),
+         "next-cursor": to_option(next)
+       }}
+    end
+  end
+
+  @doc false
+  @spec kv_set_many(Plugin.t(), Instance.t(), [map()]) :: :ok | {:error, Error.t()}
+  def kv_set_many(%Plugin{} = plugin, %Instance{} = instance, entries) when is_list(entries) do
+    with :ok <- require_capability(plugin, "state:kv") do
+      Kv.set_many(instance.id, Enum.map(entries, &kv_pair/1))
+    end
+  end
+
+  defp kv_pair(%{key: k, value: v}), do: {k, v}
+  defp kv_pair(other), do: other
 
   defp validate_kv_key(key) when is_binary(key) and key != "", do: {:ok, key}
 
   defp validate_kv_key(_),
     do: {:error, Error.new(:invalid_request, "kv key must be a non-empty string")}
-
-  defp validate_kv_value(value) when is_binary(value), do: {:ok, value}
-
-  defp validate_kv_value(_),
-    do: {:error, Error.new(:invalid_request, "kv value must be a string")}
 
   @doc false
   @spec data_list(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}

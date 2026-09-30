@@ -131,11 +131,11 @@ defmodule Mydia.Plugins.InstancesTest do
     test "removes the instance and its kv rows" do
       plugin_config("single")
       inst = Instances.default_instance("single")
-      {:ok, _} = Mydia.Plugins.Kv.set("single", "k", "v")
+      {:ok, _} = Mydia.Plugins.Kv.set(inst.id, "k", "v")
 
       assert :ok = Instances.delete(inst)
       assert Instances.get(inst.id) == nil
-      assert {:ok, nil} = Mydia.Plugins.Kv.get("single", "k")
+      assert {:ok, nil} = Mydia.Plugins.Kv.get(inst.id, "k")
     end
   end
 end
