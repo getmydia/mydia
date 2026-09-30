@@ -204,6 +204,7 @@ defmodule MydiaWeb.DiscoverComponents do
 
   attr :id, :string, default: "media-rail"
   attr :title, :string, default: "More like this"
+  attr :show_header, :boolean, default: true
   # :any, not :string - see the note on trending_card/1. nil renders an inert
   # poster, which is what a host with no show_details handler needs.
   attr :on_select, :any, default: "show_details"
@@ -234,7 +235,7 @@ defmodule MydiaWeb.DiscoverComponents do
 
     ~H"""
     <div :if={@items != []} id={@id} class="mb-6 md:mb-8">
-      <div class="flex items-center justify-between gap-3 mb-3">
+      <div :if={@show_header} class="flex items-center justify-between gap-3 mb-3">
         <%!-- The heading is repeated across both branches on purpose: HEEx cannot
               swap a tag name. The collapsible branch puts the button inside the
               heading rather than the other way around, because `button` takes
@@ -272,7 +273,7 @@ defmodule MydiaWeb.DiscoverComponents do
         >
           <.trending_card
             item={item}
-            media_type={@media_type}
+            media_type={item.media_type || @media_type}
             current_user={@current_user}
             adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
