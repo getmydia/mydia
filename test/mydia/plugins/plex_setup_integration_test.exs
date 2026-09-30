@@ -81,6 +81,7 @@ defmodule Mydia.Plugins.PlexSetupIntegrationTest do
 
   test "sign-in walks to a server, a mapping, a per-profile token by uuid, and done",
        %{plex_tv: plex_tv, server: server, tv_base: tv_base} do
+    # `server-token` below is what plex.tv lists as the server's accessToken.
     test_pid = self()
     instance = fresh_instance(tv_base)
     stub_pin(plex_tv, 1)
@@ -124,17 +125,25 @@ defmodule Mydia.Plugins.PlexSetupIntegrationTest do
 
     s = to_server_choice(instance)
 
+    # An SSO-provisioned user must not break the host's name matching.
+    sso = oidc_user_fixture()
+    kid = user_fixture(%{username: "kid"})
+
     {:ok, s} = Setup.advance(s, %{"option_id" => "machine-1"})
-    assert {:mapping, %{accounts: accounts}} = s.screen.body
+    assert {:mapping, %{accounts: accounts, suggestions: suggestions}} = s.screen.body
 
     assert accounts |> Enum.map(&{&1.id, &1.name}) |> Enum.sort() == [
              {"uuid-admin", "admin"},
              {"uuid-kid", "Kid"}
            ]
 
-    # An SSO-provisioned user must not break the host's name matching.
-    _sso = oidc_user_fixture()
-    kid = user_fixture()
+    # The name match still works around the SSO user.
+    assert %{remote_account_id: "uuid-kid", user_id: kid.id} in suggestions
+    # The first OIDC user is the instance's sole admin, so the owner-style admin
+    # profile falls back to it and nothing else does.
+    assert sso.role == :admin or sso.role == "admin"
+    assert %{remote_account_id: "uuid-admin", user_id: sso.id} in suggestions
+    assert length(suggestions) == 2
 
     {:ok, s} = Setup.advance(s, %{"mapping" => %{"uuid-kid" => kid.id, "uuid-admin" => ""}})
     assert s.status == :done
@@ -142,8 +151,35 @@ defmodule Mydia.Plugins.PlexSetupIntegrationTest do
     assert_received {:switch, "uuid-kid", "account-token"}
     refute_received {:switch, "2", _}
 
-    link = instance.id |> AccountLinks.list() |> Enum.find(&(&1.user_id == kid.id))
+    links = AccountLinks.list(instance.id)
+    link = Enum.find(links, &(&1.user_id == kid.id))
     assert %{access_token: "kid-token", status: :active} = AccountLinks.get(link.id)
+    refute Enum.any?(links, &(&1.user_id == sso.id))
+
+    # The chosen server's address is approved, and the two credentials are the
+    # PIN account token (owner) and the server's own accessToken (endpoint).
+    instance = Instances.get!(instance.id)
+
+    assert Enum.any?(instance.approved_endpoints, fn e ->
+             e["host"] == "127.0.0.1" and e["port"] == server.port
+           end)
+
+    assert %{access_token: "account-token"} = AccountLinks.credential(instance.id, :owner)
+    assert %{access_token: "server-token"} = AccountLinks.credential(instance.id, :endpoint)
+
+    # The configured instance can sync: its first tick reaches the server with
+    # the endpoint credential.
+    test_pid = self()
+
+    FakePlexServer.stub(server, "GET", "/library/sections", fn conn ->
+      send(test_pid, {:sections, token(conn)})
+      json(conn, 200, %{"MediaContainer" => %{"Directory" => []}})
+    end)
+
+    assert {:ok, _} = Plugins.invoke_plugin_schedule("plex", instance.id)
+    assert_received {:sections, "server-token"}
+
+    assert {:ok, %{status: :ok}} = Plugins.invoke_check_health("plex", instance.id)
   end
 
   test "a failed profile switch marks only that link",
@@ -256,7 +292,7 @@ defmodule Mydia.Plugins.PlexSetupIntegrationTest do
 
     Bypass.stub(moved, "GET", "/library/sections", fn conn ->
       send(test_pid, :contacted_unapproved_endpoint)
-      Plug.Conn.resp(conn, 200, "{}")
+      json(conn, 200, %{"MediaContainer" => %{"Directory" => []}})
     end)
 
     Bypass.stub(plex_tv, "GET", "/api/v2/resources", fn conn ->
@@ -279,5 +315,29 @@ defmodule Mydia.Plugins.PlexSetupIntegrationTest do
 
     assert {:ok, %{status: :unreachable, action: :confirm_endpoints}} =
              Plugins.invoke_check_health("plex", instance.id)
+
+    # The operator confirms the new address through the setup step.
+    {:ok, s} = Setup.start("plex", instance, step: "confirm-endpoints")
+    assert {:choice, %{options: [option]}} = s.screen.body
+    assert [%{host: "moved.plex.test"}] = option.endpoints
+    {:ok, s} = Setup.advance(s, %{"option_id" => option.id})
+    assert s.status == :done
+    assert {:ok, nil} = Kv.get(instance.id, "server/pending")
+
+    # Approved now, the next tick reaches the new address.
+    while_flush_contacts()
+    assert {:ok, _} = Plugins.invoke_plugin_schedule("plex", instance.id)
+    assert_received :contacted_unapproved_endpoint
+    assert {:ok, %{status: :ok}} = Plugins.invoke_check_health("plex", instance.id)
+  end
+
+  # Drops the probe messages the confirm step itself caused, so the assertion
+  # after it proves the following tick made its own request.
+  defp while_flush_contacts do
+    receive do
+      :contacted_unapproved_endpoint -> while_flush_contacts()
+    after
+      0 -> :ok
+    end
   end
 end

@@ -208,6 +208,7 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
 
       assert {:ok, _} = Plugins.invoke_plugin_schedule("plex", instance.id)
 
+      assert %{status: :partial} = Mydia.Sync.last_run("plugin:plex", instance.id)
       assert %{status: :error} = AccountLinks.get(bad_link.id)
       assert %{status: :active} = AccountLinks.get(good_link.id)
       assert {:ok, cursor} = Kv.get(instance.id, "link/#{good_link.id}/cursor/pull")
