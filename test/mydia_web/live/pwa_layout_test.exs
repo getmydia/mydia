@@ -41,7 +41,7 @@ defmodule MydiaWeb.PwaLayoutTest do
     doc = conn |> get(~p"/calendar") |> html_response(200) |> LazyHTML.from_document()
 
     assert doc
-           |> LazyHTML.query("body > pwa-install#pwa-install[use-local-storage]")
+           |> LazyHTML.query("body > pwa-install#pwa-install[use-local-storage][manual-chrome]")
            |> Enum.count() == 1
 
     assert doc |> LazyHTML.query("[data-phx-session] pwa-install") |> Enum.count() == 0

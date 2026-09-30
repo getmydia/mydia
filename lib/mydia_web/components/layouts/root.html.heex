@@ -95,8 +95,11 @@
   <body class="bg-base-200 text-base-content">
     <%!-- Install sheet. Outside the LiveView container so live navigation never
          remounts it. On iOS Safari it shows once, then remembers the dismissal;
-         the account menu's "Install app" reopens it. --%>
-    <pwa-install id="pwa-install" use-local-storage></pwa-install>
+         the account menu's "Install app" reopens it. `manual-chrome` keeps it
+         from opening on its own in Chromium, where every desktop visitor would
+         otherwise get a modal on first load; there the menu item is the entry
+         point. --%>
+    <pwa-install id="pwa-install" use-local-storage manual-chrome></pwa-install>
     {@inner_content}
   </body>
 </html>
