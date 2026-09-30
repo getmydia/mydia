@@ -5,6 +5,7 @@ defmodule Mydia.Plugins.ContractV14Test do
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
+  alias Mydia.Plugins.Logs
 
   @fixtures Path.join([__DIR__, "..", "..", "support", "fixtures", "plugins"])
 
@@ -166,6 +167,63 @@ defmodule Mydia.Plugins.ContractV14Test do
 
     assert {:ok, %{status: :degraded, message: "fixture degraded", action: :reconnect}} =
              Host.call("v14-health", "check-health", %{}, handler: :check_health)
+  end
+
+  describe "end markers for typed results" do
+    defp end_marker(slug) do
+      slug
+      |> Logs.recent()
+      |> Enum.find(&(&1.source == :host and &1.metadata["phase"] == "end"))
+    end
+
+    defp logged_text(slug) do
+      slug
+      |> Logs.recent()
+      |> Enum.map_join("\n", &(&1.message <> " " <> Jason.encode!(&1.metadata)))
+    end
+
+    test "a setup marker names the step and body, never the state or error text" do
+      start("v14-log-state", "host_v14_fixture.wasm")
+
+      # The fixture echoes option_id into next-state-json, standing in for a
+      # PIN or token a real plugin carries between steps.
+      assert {:ok, %{next_state_json: state}} =
+               Host.call(
+                 "v14-log-state",
+                 "setup",
+                 setup_payload("pick", %{"option_id" => "pin-secret-4821"}),
+                 handler: :setup
+               )
+
+      assert state =~ "pin-secret-4821"
+
+      assert end_marker("v14-log-state").metadata["detail"] == "step=map body=mapping"
+      refute logged_text("v14-log-state") =~ "pin-secret-4821"
+
+      start("v14-log-error", "host_v14_fixture.wasm")
+
+      assert {:ok, %{error: "url is empty"}} =
+               Host.call(
+                 "v14-log-error",
+                 "setup",
+                 setup_payload("manual", %{"url" => "", "token" => ""}),
+                 handler: :setup
+               )
+
+      assert end_marker("v14-log-error").metadata["detail"] == "step=manual body=form"
+      refute logged_text("v14-log-error") =~ "url is empty"
+    end
+
+    test "a check-health marker names only the status" do
+      start("v14-log-health", "host_v14_fixture.wasm")
+
+      assert {:ok, _} =
+               Host.call("v14-log-health", "check-health", %{}, handler: :check_health)
+
+      detail = end_marker("v14-log-health").metadata["detail"]
+      assert detail == "status=degraded"
+      refute logged_text("v14-log-health") =~ "fixture degraded"
+    end
   end
 
   test "setup and check-health are unsupported on an older guest" do

@@ -609,7 +609,7 @@ defmodule Mydia.Plugins.Host do
   defp event_type(_), do: nil
 
   defp emit_end_marker(inv, result, duration_ms) do
-    {level, outcome, detail} = classify_outcome(result)
+    {level, outcome, detail} = classify_outcome(inv.handler, result)
 
     metadata =
       %{
@@ -631,14 +631,22 @@ defmodule Mydia.Plugins.Host do
     })
   end
 
-  defp classify_outcome({:ok, result}), do: {:info, "ok", result_summary(result)}
+  defp classify_outcome(handler, {:ok, result}),
+    do: {:info, "ok", typed_summary(handler, result)}
 
-  defp classify_outcome({:error, %Error{type: type, message: message}}),
+  defp classify_outcome(_handler, {:error, %Error{type: type, message: message}}),
     do: {:error, to_string(type), sanitize_detail(message)}
 
   # Defensive: every run_invocation path is {:ok,_}|{:error,%Error{}}, but a
   # catch-all keeps an unexpected shape from raising in the marker path.
-  defp classify_outcome(_other), do: {:error, "unknown", nil}
+  defp classify_outcome(_handler, _other), do: {:error, "unknown", nil}
+
+  # Typed 1.4 results get a fixed, allow-listed summary. Setup state can carry
+  # PINs, ids or tokens (`next_state_json`, `credentials`) and `error`/`message`
+  # are guest free text, so none of them may reach the activity log.
+  defp typed_summary(:setup, %{step: step, body: {tag, _}}), do: "step=#{step} body=#{tag}"
+  defp typed_summary(:check_health, %{status: status}), do: "status=#{status}"
+  defp typed_summary(_handler, result), do: result_summary(result)
 
   # A compact "key=value" summary of the guest's returned result map, surfaced in
   # the end-marker so a successful run shows what it did (e.g. `pulled=2 pushed=1`)
