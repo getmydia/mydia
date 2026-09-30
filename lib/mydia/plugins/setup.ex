@@ -78,10 +78,11 @@ defmodule Mydia.Plugins.Setup do
         :ok
 
       instance ->
-        Enum.reduce(pending, instance, fn endpoint, acc ->
-          {:ok, acc} = Instances.remove_endpoint(acc, endpoint)
-          acc
-        end)
+        _ =
+          Enum.reduce(pending, instance, fn endpoint, acc ->
+            {:ok, acc} = Instances.remove_endpoint(acc, endpoint)
+            acc
+          end)
 
         :ok
     end
