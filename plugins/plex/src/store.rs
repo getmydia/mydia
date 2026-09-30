@@ -15,6 +15,9 @@ pub const SERVER_OWNER_ACCOUNT: &str = "server/owner_account_id";
 /// `"1"` when the account has Plex Home, `"0"` when not.
 pub const SERVER_HOME: &str = "server/home";
 pub const CRAWL_STATE: &str = "crawl/state";
+/// Id of the user link the next sync tick starts with, set when a tick runs out
+/// of budget so later links are not starved by an earlier one.
+pub const SYNC_NEXT_LINK: &str = "sync/next_link";
 
 pub fn map_key(rating_key: &str) -> String {
     format!("map/{rating_key}")

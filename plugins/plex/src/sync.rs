@@ -268,9 +268,16 @@ pub fn run_tick(
         return Ok(out);
     }
 
-    let rev = load_rev(h)?;
+    // Both scans page through the store and the data API, so a big library can
+    // spend the budget here; the next tick starts again with the crawl warm.
+    let Some(rev) = load_rev(h, deadline_ms)? else {
+        return Ok(out);
+    };
     let canonical: HashSet<String> = rev.values().cloned().collect();
-    let local = LocalIndex::build(load_progress(h)?, &rev);
+    let Some(progress) = load_progress(h, deadline_ms)? else {
+        return Ok(out);
+    };
+    let local = LocalIndex::build(progress, &rev);
     if local.unresolved > 0 {
         h.log(
             "debug",
@@ -282,21 +289,31 @@ pub fn run_tick(
     }
 
     out.complete = true;
-    let links: Vec<AccountLink> = h
+    let mut links: Vec<AccountLink> = h
         .links_list()?
         .into_iter()
         .filter(|l| {
             l.role == LinkRole::User && l.status == LinkStatus::Active && l.user_id.is_some()
         })
         .collect();
+    // A tick that runs out of budget hands the next one the link to start with,
+    // so a link with a lot to do cannot starve the links after it forever.
+    links.sort_by(|a, b| a.id.cmp(&b.id));
+    if let Some(start) = h.kv_get(store::SYNC_NEXT_LINK)? {
+        if let Some(pos) = links.iter().position(|l| l.id == start) {
+            links.rotate_left(pos);
+        }
+    }
+    let mut next_start: Option<String> = None;
 
-    for link in links {
+    for (i, link) in links.iter().enumerate() {
         if h.elapsed_ms() >= deadline_ms {
             out.complete = false;
+            next_start = Some(link.id.clone());
             break;
         }
         // One link's failure to resolve its request link must not stop the rest.
-        let req_link = match request_link(h, &link, owner_link) {
+        let req_link = match request_link(h, link, owner_link) {
             Ok(l) => l,
             Err(e) => {
                 h.log(
@@ -322,6 +339,9 @@ pub fn run_tick(
             Ok(LinkOutcome::Partial(c)) => {
                 out.counts.add(c);
                 out.complete = false;
+                // The link that ran dry resumes from its own cursors when the
+                // rotation comes back to it; the links after it go first.
+                next_start = links.get((i + 1) % links.len()).map(|l| l.id.clone());
                 break;
             }
             // A 401 on one profile invalidates just that link; others still sync.
@@ -341,6 +361,10 @@ pub fn run_tick(
                 out.counts.errors += 1;
             }
         }
+    }
+    match next_start {
+        Some(id) => h.kv_set(store::SYNC_NEXT_LINK, &id)?,
+        None => h.kv_delete(store::SYNC_NEXT_LINK)?,
     }
     Ok(out)
 }
@@ -767,10 +791,17 @@ fn read_snapshot(h: &mut dyn Host, link_id: &str, rk: &str) -> Result<Option<Sna
     Ok(store::get_json(h, &store::link_state_key(link_id, rk))?)
 }
 
-fn load_rev(h: &mut dyn Host) -> Result<HashMap<String, String>, SyncError> {
+/// `None` when the budget ran out before the scan finished.
+fn load_rev(
+    h: &mut dyn Host,
+    deadline_ms: u64,
+) -> Result<Option<HashMap<String, String>>, SyncError> {
     let mut out = HashMap::new();
     let mut cursor: Option<String> = None;
     loop {
+        if h.elapsed_ms() >= deadline_ms {
+            return Ok(None);
+        }
         let page = h.kv_list("rev/", cursor.as_deref())?;
         for e in page.entries {
             if let Ok(rk) = serde_json::from_str::<String>(&e.value) {
@@ -779,17 +810,24 @@ fn load_rev(h: &mut dyn Host) -> Result<HashMap<String, String>, SyncError> {
         }
         match page.next_cursor {
             Some(c) => cursor = Some(c),
-            None => return Ok(out),
+            None => return Ok(Some(out)),
         }
     }
 }
 
 /// Every linked user's progress rows. data-list is consent-scoped host-side,
-/// so one scan covers exactly the users with an active link.
-fn load_progress(h: &mut dyn Host) -> Result<Vec<PlaybackProgress>, SyncError> {
+/// so one scan covers exactly the users with an active link. `None` when the
+/// budget ran out before the scan finished.
+fn load_progress(
+    h: &mut dyn Host,
+    deadline_ms: u64,
+) -> Result<Option<Vec<PlaybackProgress>>, SyncError> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
     loop {
+        if h.elapsed_ms() >= deadline_ms {
+            return Ok(None);
+        }
         let res = h.data_list(&ListRequest {
             namespace: "playback_progress".into(),
             cursor: cursor.clone(),
@@ -803,7 +841,7 @@ fn load_progress(h: &mut dyn Host) -> Result<Vec<PlaybackProgress>, SyncError> {
         }
         match res.next_cursor {
             Some(c) => cursor = Some(c),
-            None => return Ok(out),
+            None => return Ok(Some(out)),
         }
     }
 }
@@ -1274,6 +1312,70 @@ mod tests {
     }
 
     #[test]
+    fn the_scans_before_the_links_stop_at_the_deadline() {
+        let mut host = crawled();
+        host.elapsed = 45_000;
+        let out = tick(&mut host);
+        assert!(!out.complete);
+        assert!(
+            host.data_requests.is_empty(),
+            "load_progress must not start past the deadline"
+        );
+        assert!(host.sent.is_empty());
+    }
+
+    #[test]
+    fn a_tick_starts_with_the_link_the_last_one_ran_out_before() {
+        let mut host = crawled();
+        add_user_link(&mut host, "L2", "u2");
+        empty_movies(&mut host);
+        host.kv.insert(store::SYNC_NEXT_LINK.into(), "L2".into());
+
+        let out = tick(&mut host);
+        assert!(out.complete);
+        let first_reads: Vec<_> = host
+            .requests_to(&format!("{B}/library/sections/1/all?includeGuids=1"))
+            .iter()
+            .filter_map(|s| s.link.clone())
+            .collect();
+        assert_eq!(first_reads, vec!["L2", "L1"]);
+        assert!(
+            !host.kv.contains_key(store::SYNC_NEXT_LINK),
+            "a complete tick clears the rotation"
+        );
+    }
+
+    #[test]
+    fn running_out_of_budget_before_a_link_makes_it_the_next_start() {
+        let mut host = crawled();
+        add_user_link(&mut host, "L2", "u2");
+        // Calls: crawl deadline, rev scan, progress scan, then the check before
+        // the first link.
+        host.elapsed_script = [0, 0, 0, 45_000].into();
+        let out = tick(&mut host);
+        assert!(!out.complete);
+        assert_eq!(
+            host.kv.get(store::SYNC_NEXT_LINK).map(String::as_str),
+            Some("L1")
+        );
+    }
+
+    #[test]
+    fn a_link_that_runs_dry_hands_the_next_tick_to_the_links_after_it() {
+        let mut host = crawled();
+        add_user_link(&mut host, "L2", "u2");
+        // The fifth call is the pull loop's check inside the first link.
+        host.elapsed_script = [0, 0, 0, 0, 45_000].into();
+        let out = tick(&mut host);
+        assert!(!out.complete);
+        assert_eq!(
+            host.kv.get(store::SYNC_NEXT_LINK).map(String::as_str),
+            Some("L2")
+        );
+        assert!(host.kv.contains_key("link/L1/cursor/pull_page"));
+    }
+
+    #[test]
     fn nothing_syncs_before_the_first_crawl_completes() {
         let mut host = FakeHost::new();
         host.now_value = NOW;
@@ -1422,13 +1524,15 @@ mod tests {
     #[test]
     fn a_large_pending_set_is_flushed_in_batches_the_host_accepts() {
         let mut host = FakeHost::new();
-        let mut ap = Applier::default();
-        ap.pending = (0..1100)
-            .map(|i| KvEntry {
-                key: format!("link/L1/state/{i}"),
-                value: "{}".into(),
-            })
-            .collect();
+        let mut ap = Applier {
+            pending: (0..1100)
+                .map(|i| KvEntry {
+                    key: format!("link/L1/state/{i}"),
+                    value: "{}".into(),
+                })
+                .collect(),
+            ..Applier::default()
+        };
         ap.flush(&mut host).unwrap();
         assert_eq!(host.kv.len(), 1100);
         assert!(host.batches.iter().all(|b| b.len() <= 500));
