@@ -118,6 +118,10 @@ pub struct PullPage {
     pub since: Option<i64>,
     pub started_at: i64,
     pub section_index: usize,
+    /// The section the index pointed at when saved. A resume looks it up by
+    /// key, so sections added or removed between ticks cannot shift it.
+    #[serde(default)]
+    pub section_key: Option<String>,
     pub offset: u32,
 }
 
@@ -291,9 +295,21 @@ pub fn run_tick(
             out.complete = false;
             break;
         }
+        // One link's failure to resolve its request link must not stop the rest.
+        let req_link = match request_link(h, &link, owner_link) {
+            Ok(l) => l,
+            Err(e) => {
+                h.log(
+                    "warn",
+                    &format!("plex: cannot resolve request link for {}: {e:?}", link.id),
+                );
+                out.counts.errors += 1;
+                continue;
+            }
+        };
         let ctx = LinkCtx {
             base,
-            req_link: request_link(h, &link, owner_link)?,
+            req_link,
             link_id: link.id.clone(),
             user_id: link.user_id.clone().unwrap_or_default(),
             direction: cfg.direction(),
@@ -418,6 +434,7 @@ fn sync_link(
                 .map(|c| c - CURSOR_OVERLAP_SECONDS),
             started_at: h.now(),
             section_index: 0,
+            section_key: None,
             offset: 0,
         },
     };
@@ -425,9 +442,20 @@ fn sync_link(
         .into_iter()
         .filter(|s| s.kind == "movie" || s.kind == "show")
         .collect();
+    if let Some(key) = &page.section_key {
+        match sections.iter().position(|s| &s.key == key) {
+            Some(i) => page.section_index = i,
+            // The section is gone: start the pass over rather than skip one.
+            None => {
+                page.section_index = 0;
+                page.offset = 0;
+            }
+        }
+    }
     let mut seen: HashSet<String> = HashSet::new();
 
     while page.section_index < sections.len() {
+        page.section_key = Some(sections[page.section_index].key.clone());
         if h.elapsed_ms() >= deadline_ms {
             ap.flush(h)?;
             store::put_json(h, &page_key, &page)?;
@@ -457,11 +485,18 @@ fn sync_link(
         for item in items.iter().filter(|i| changed_since(i, page.since)) {
             let rk = item.rating_key.as_str();
             seen.insert(rk.to_string());
-            let local_side = local
-                .get(&ctx.user_id, rk)
-                .map(|r| r.side)
-                .unwrap_or(ABSENT);
             let snapshot = read_snapshot(h, &ctx.link_id, rk)?;
+            // A duplicate Plex copy never has a local row of its own (rows
+            // resolve to the canonical key), so its "local" side is unknown, not
+            // absent: reuse the snapshot so only Plex-side changes act on it.
+            let local_side = if ctx.canonical.contains(rk) {
+                local
+                    .get(&ctx.user_id, rk)
+                    .map(|r| r.side)
+                    .unwrap_or(ABSENT)
+            } else {
+                snapshot.as_ref().map(Snapshot::side).unwrap_or(ABSENT)
+            };
             ap.item(
                 h,
                 ctx,
@@ -474,6 +509,7 @@ fn sync_link(
         if (items.len() as u32) < api::PAGE_SIZE {
             page.section_index += 1;
             page.offset = 0;
+            page.section_key = sections.get(page.section_index).map(|s| s.key.clone());
         } else {
             page.offset += api::PAGE_SIZE;
         }
@@ -503,6 +539,7 @@ fn sync_link(
         .collect();
     rows.sort_by(|a, b| a.1.updated_at.cmp(&b.1.updated_at));
 
+    let mut push_failed = false;
     for (i, (rk, row)) in rows.iter().enumerate() {
         if h.elapsed_ms() >= deadline_ms {
             ap.flush(h)?;
@@ -519,11 +556,17 @@ fn sync_link(
                 }
             },
         };
+        let errors_before = ap.counts.errors;
         ap.item(h, ctx, rk, &row.side, &remote, snapshot.as_ref())?;
-        ap.pending.push(KvEntry {
-            key: push_key.clone(),
-            value: row.updated_at.clone(),
-        });
+        // A failed push must be retried: from the first failure on, the cursor
+        // stays at the last row that succeeded (rows read with ">=").
+        push_failed |= ap.counts.errors > errors_before;
+        if !push_failed {
+            ap.pending.push(KvEntry {
+                key: push_key.clone(),
+                value: row.updated_at.clone(),
+            });
+        }
         if (i + 1) % FLUSH_EVERY == 0 {
             ap.flush(h)?;
         }
@@ -1093,6 +1136,98 @@ mod tests {
             host.kv.contains_key("link/L1/cursor/pull"),
             "state stays keyed by the user link"
         );
+    }
+
+    #[test]
+    fn the_pull_pass_never_unscrobbles_a_duplicate_plex_copy() {
+        // "101" is a second copy of item "100": it has a snapshot and Plex lists
+        // it as watched, but local rows only ever resolve to "100".
+        let mut host = crawled();
+        host.kv.insert(
+            "link/L1/state/101".into(),
+            r#"{"watched":true,"position":null,"synced_at":"2026-01-01T00:00:00Z","remote_last_watched_at":null}"#.into(),
+        );
+        host.respond("GET", &format!("{B}/library/sections/1/all?includeGuids=1"), 200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"101","type":"movie","viewCount":1,"lastViewedAt":1767225000}]}}"#);
+        let mut row = progress_row("movie");
+        row.tmdb_id = Some(4001);
+        row.watched = true;
+        row.origin = Some("plugin:plex:I1".into());
+        with_progress(&mut host, vec![row]);
+
+        tick(&mut host);
+        assert!(host
+            .sent
+            .iter()
+            .all(|s| !s.url.contains("/:/unscrobble") && !s.url.contains("/:/scrobble")));
+    }
+
+    #[test]
+    fn a_failed_push_leaves_the_cursor_so_the_next_tick_retries() {
+        let mut host = crawled();
+        empty_movies(&mut host);
+        host.respond(
+            "GET",
+            &format!("{B}/library/metadata/100?includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":0}]}}"#,
+        );
+        // No scrobble response is scripted, so the push fails as unreachable.
+        let mut row = progress_row("movie");
+        row.tmdb_id = Some(4001);
+        row.watched = true;
+        row.origin = Some("player".into());
+        with_progress(&mut host, vec![row]);
+
+        let out = tick(&mut host);
+        assert_eq!(out.counts.errors, 1);
+        assert_eq!(out.counts.pushed, 0);
+        assert!(!host.kv.contains_key("link/L1/cursor/push"));
+        assert!(!host.kv.contains_key("link/L1/state/100"));
+    }
+
+    #[test]
+    fn a_link_whose_request_link_cannot_resolve_does_not_stop_the_others() {
+        let mut host = crawled();
+        empty_movies(&mut host);
+        add_user_link(&mut host, "L2", "u2");
+        host.kv_get_failures.push("link/L1/uses_owner".into());
+
+        let out = tick(&mut host);
+        assert_eq!(out.counts.errors, 1);
+        assert!(!host.kv.contains_key("link/L1/cursor/pull"));
+        assert!(host.kv.contains_key("link/L2/cursor/pull"));
+    }
+
+    #[test]
+    fn a_resumed_pull_finds_its_section_by_key() {
+        let mut host = crawled();
+        host.responses
+            .remove(&("GET".to_string(), format!("{B}/library/sections")));
+        host.respond("GET", &format!("{B}/library/sections"), 200,
+            r#"{"MediaContainer":{"Directory":[{"key":"1","type":"movie","title":"Films"},{"key":"2","type":"show","title":"Series"}]}}"#);
+        // The saved index is stale (0); the key says the pass was in section 2.
+        host.kv.insert(
+            "link/L1/cursor/pull_page".into(),
+            r#"{"since":null,"started_at":1767225000,"section_index":0,"section_key":"2","offset":0}"#.into(),
+        );
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/2/all?type=4&includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{}}"#,
+        );
+
+        tick(&mut host);
+        assert!(host
+            .requests_to(&format!("{B}/library/sections/1/all?includeGuids=1"))
+            .is_empty());
+        assert_eq!(
+            host.requests_to(&format!("{B}/library/sections/2/all?type=4&includeGuids=1"))
+                .len(),
+            1
+        );
+        assert!(!host.kv.contains_key("link/L1/cursor/pull_page"));
     }
 
     #[test]

@@ -184,6 +184,8 @@ pub mod fake {
         /// consulted before `responses`.
         pub link_responses:
             HashMap<(String, String, String), VecDeque<Result<OutboundResponse, HostError>>>,
+        /// Keys whose `kv_get` fails with an error.
+        pub kv_get_failures: Vec<String>,
         pub sent: Vec<Sent>,
         pub kv: BTreeMap<String, String>,
         pub links: Vec<AccountLink>,
@@ -320,6 +322,11 @@ pub mod fake {
         }
 
         fn kv_get(&mut self, key: &str) -> Result<Option<String>, HostError> {
+            if self.kv_get_failures.iter().any(|k| k == key) {
+                return Err(HostError::Network(format!(
+                    "scripted kv-get failure: {key}"
+                )));
+            }
             Ok(self.kv.get(key).cloned())
         }
 
