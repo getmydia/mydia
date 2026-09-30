@@ -21,10 +21,14 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   alias Mydia.Plugins.Setup.Session
 
   @impl true
-  def update(%{poll: true}, socket) do
+  def update(%{poll: true} = assigns, socket) do
     case socket.assigns do
-      %{loading: false, session: %Session{screen: %{body: {:external_auth, _}}} = session} ->
-        {:ok, run(socket, fn -> Setup.poll(session) end)}
+      %{loading: false, session: %Session{screen: %{body: {:external_auth, _}}} = session} = a ->
+        # A scheduled poll carries the generation it was scheduled in; a newer
+        # chain (for example after the popup closed) makes older timers no-ops.
+        if Map.get(assigns, :gen, a.poll_gen) == a.poll_gen,
+          do: {:ok, run(socket, fn -> Setup.poll(session) end)},
+          else: {:ok, socket}
 
       _ ->
         {:ok, socket}
@@ -46,6 +50,9 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
         assign(socket,
           started: true,
           loading: false,
+          cancelling: false,
+          poll_gen: 0,
+          last_input: %{},
           session: nil,
           error: nil,
           users: Accounts.list_users(),
@@ -69,11 +76,23 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   end
 
   @impl true
+  # The operator cancelled while a call was running: wait for it to land, then
+  # cancel the session it produced so a draft instance never leaks.
+  def handle_async(
+        :setup,
+        {:ok, {:ok, %Session{} = session}},
+        %{assigns: %{cancelling: true}} = socket
+      ),
+      do: {:noreply, cancel_and_close(socket, session)}
+
+  def handle_async(:setup, _result, %{assigns: %{cancelling: true}} = socket),
+    do: {:noreply, cancel_and_close(socket, socket.assigns.session)}
+
   def handle_async(:setup, {:ok, {:ok, %Session{} = session}}, socket) do
     {:noreply,
      socket
      |> assign(loading: false, session: session, error: session.error)
-     |> assign(form: form_for_screen(session.screen))
+     |> assign(form: form_for_screen(session, socket.assigns.last_input))
      |> schedule_poll(session)}
   end
 
@@ -86,9 +105,11 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   end
 
   @impl true
-  def handle_event(event, _params, %{assigns: %{loading: true}} = socket)
-      when event != "cancel",
-      do: {:noreply, socket}
+  def handle_event("cancel", _params, %{assigns: %{loading: true}} = socket),
+    do: {:noreply, assign(socket, :cancelling, true)}
+
+  def handle_event(_event, _params, %{assigns: %{loading: true}} = socket),
+    do: {:noreply, socket}
 
   def handle_event("choose", %{"option_id" => option_id}, socket),
     do: advance(socket, %{"option_id" => option_id})
@@ -99,19 +120,23 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
     do: advance(socket, %{"mapping" => params["mapping"] || %{}})
 
   def handle_event("popup_closed", _params, socket) do
+    # Invalidate any pending timer, then poll now; the reply starts a new chain.
+    socket = assign(socket, :poll_gen, socket.assigns.poll_gen + 1)
     {:ok, socket} = update(%{poll: true}, socket)
     {:noreply, socket}
   end
 
-  def handle_event("cancel", _params, socket) do
-    if session = socket.assigns.session, do: Setup.cancel(session)
-    {:noreply, close(socket, :cancelled)}
-  end
+  def handle_event("cancel", _params, socket),
+    do: {:noreply, cancel_and_close(socket, socket.assigns.session)}
 
   def handle_event("close", _params, socket), do: {:noreply, close(socket, :done)}
 
-  defp advance(%{assigns: %{session: %Session{} = session}} = socket, input),
-    do: {:noreply, run(socket, fn -> Setup.advance(session, input) end)}
+  defp advance(%{assigns: %{session: %Session{} = session}} = socket, input) do
+    {:noreply,
+     socket
+     |> assign(:last_input, input)
+     |> run(fn -> Setup.advance(session, input) end)}
+  end
 
   defp advance(socket, _input), do: {:noreply, socket}
 
@@ -125,16 +150,23 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
          status: :active,
          screen: %{body: {:external_auth, %{poll_after_seconds: seconds}}}
        }) do
+    gen = socket.assigns.poll_gen + 1
+
     send_update_after(
       __MODULE__,
-      %{id: socket.assigns.id, poll: true},
+      %{id: socket.assigns.id, poll: true, gen: gen},
       max(seconds, 1) * 1000
     )
 
-    socket
+    assign(socket, :poll_gen, gen)
   end
 
   defp schedule_poll(socket, _session), do: socket
+
+  defp cancel_and_close(socket, session) do
+    if session, do: Setup.cancel(session)
+    close(socket, :cancelled)
+  end
 
   defp close(socket, status) do
     instance_id =
@@ -151,13 +183,16 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
     socket
   end
 
-  defp form_for_screen(%{body: {:form, %{fields: fields}}}) do
-    fields
-    |> Map.new(fn field -> {field.key, field.default_value || ""} end)
-    |> to_form(as: :setup)
+  defp form_for_screen(%Session{screen: %{body: {:form, %{fields: fields}}}, error: error}, input) do
+    defaults = Map.new(fields, fn field -> {field.key, field.default_value || ""} end)
+
+    # A host validation error re-renders the same screen: keep what was typed.
+    typed = if error, do: Map.take(input, Map.keys(defaults)), else: %{}
+
+    defaults |> Map.merge(typed) |> to_form(as: :setup)
   end
 
-  defp form_for_screen(_screen), do: to_form(%{}, as: :setup)
+  defp form_for_screen(_session, _input), do: to_form(%{}, as: :setup)
 
   defp suggested_user(suggestions, account_id) do
     Enum.find_value(suggestions, "", fn
@@ -233,7 +268,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
     <p class="font-medium mb-3">{@choice.title}</p>
     <ul class="space-y-2">
       <li :for={option <- @choice.options}>
-        <button
+        <.button
           id={"setup-option-#{option.id}"}
           type="button"
           class="btn btn-outline w-full justify-between h-auto py-3"
@@ -248,7 +283,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
             </span>
           </span>
           <span :if={option.badge} class="badge badge-ghost">{option.badge}</span>
-        </button>
+        </.button>
       </li>
     </ul>
     """
@@ -304,7 +339,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
 
     ~H"""
     <p class="font-medium mb-3">{@mapping.title}</p>
-    <form id="setup-mapping-form" phx-submit="save_mapping" phx-target={@myself}>
+    <.form for={@form} id="setup-mapping-form" phx-submit="save_mapping" phx-target={@myself}>
       <table class="table table-sm">
         <thead>
           <tr>
@@ -333,7 +368,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
       <div class="mt-4 flex justify-end">
         <.button type="submit" variant="primary">Save links</.button>
       </div>
-    </form>
+    </.form>
     """
   end
 

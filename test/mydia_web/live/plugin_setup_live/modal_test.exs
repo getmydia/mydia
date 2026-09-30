@@ -130,6 +130,34 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     assert Instances.get(draft.id) == nil
   end
 
+  test "cancelling before the first call lands leaves no draft instance", %{
+    conn: conn,
+    slug: slug
+  } do
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
+
+    # Sent while the initial Setup call may still be running; either ordering
+    # must end cancelled with the draft removed.
+    view |> element("#setup-cancel") |> render_click()
+    render_async(view)
+
+    assert has_element?(view, "#setup-closed-status", "cancelled")
+    assert Repo.all(Instance) == []
+  end
+
+  test "a host validation error keeps what the operator typed", %{conn: conn, slug: slug} do
+    {:ok, view, _html} =
+      live_isolated(conn, HostLive, session: %{"slug" => slug, "step" => "manual-start"})
+
+    render_async(view)
+
+    view |> form("#setup-form", setup: %{"url" => "", "token" => "keepme"}) |> render_submit()
+    render_async(view)
+
+    assert has_element?(view, "#plugin-setup-error", "Server URL is required.")
+    assert has_element?(view, "#setup-form input[name='setup[token]'][value=keepme]")
+  end
+
   @tag :capture_log
   test "a guest failure on the first step shows the error", %{conn: conn, slug: slug} do
     {:ok, view, _html} =
