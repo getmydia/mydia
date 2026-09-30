@@ -31,15 +31,31 @@ defmodule Mydia.Plugins.Notifier.Delivery do
     |> Oban.insert()
   end
 
-  @spec perform(Oban.Job.t()) :: :ok | {:error, term()}
+  @spec perform(Oban.Job.t()) :: :ok | {:error, term()} | {:cancel, term()}
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"slug" => slug, "payload" => payload} = args}) do
-    # Jobs enqueued before instances existed carry no instance_id; they belong
-    # to the plugin's default instance.
-    instance =
-      (args["instance_id"] && Instances.get(args["instance_id"])) ||
-        Instances.default_instance(slug)
+    case resolve_instance(slug, args) do
+      {:ok, instance} ->
+        deliver(slug, instance, payload)
 
+      :gone ->
+        {:cancel, "instance #{args["instance_id"]} of #{slug} no longer exists"}
+    end
+  end
+
+  # Jobs enqueued before instances existed carry no instance_id; they belong to
+  # the plugin's default instance. A job naming an instance that has since been
+  # deleted is dropped, never redirected to (or used to create) another one.
+  defp resolve_instance(_slug, %{"instance_id" => id}) when is_binary(id) do
+    case Instances.get(id) do
+      nil -> :gone
+      instance -> {:ok, instance}
+    end
+  end
+
+  defp resolve_instance(slug, _args), do: {:ok, Instances.default_instance(slug)}
+
+  defp deliver(slug, instance, payload) do
     full_payload = Map.put(payload, "config", Instances.config_for(instance))
 
     case Host.call(slug, "handle", full_payload, instance_id: instance.id) do
