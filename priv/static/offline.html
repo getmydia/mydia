@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Offline · Mydia</title>
+    <style>
+      :root { color-scheme: dark light; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        background: #0f172a; color: #f1f5f9;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        padding: env(safe-area-inset-top) 1.5rem env(safe-area-inset-bottom);
+        box-sizing: border-box; text-align: center;
+      }
+      @media (prefers-color-scheme: light) {
+        body { background: #f8fafc; color: #0f172a; }
+      }
+      main { max-width: 22rem; }
+      img { width: 64px; height: 64px; margin-bottom: 1.25rem; }
+      h1 { font-size: 1.25rem; margin: 0 0 0.5rem; }
+      p { margin: 0 0 1.5rem; opacity: 0.7; line-height: 1.5; }
+      button {
+        font: inherit; font-weight: 600; cursor: pointer;
+        padding: 0.65rem 1.5rem; border: 0; border-radius: 0.5rem;
+        background: #3b82f6; color: #fff;
+        transition: filter 150ms ease, transform 150ms ease;
+      }
+      button:hover { filter: brightness(1.1); }
+      button:active { transform: scale(0.97); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/images/logo.svg" alt="" />
+      <h1>Mydia can't reach your server</h1>
+      <p>Check that your server is running and that this device is on the same network or connected to your VPN.</p>
+      <button id="offline-retry" type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>
