@@ -1,7 +1,8 @@
 defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
   @moduledoc """
-  The Libraries "Show on posters" menu opens on screen, and its eye button
-  stays beside the density toggle, at every width.
+  The Libraries "Show on posters" menu opens on screen, and its trigger
+  button stays beside the density toggle, at every width. (The trigger was an
+  eye icon when the table below was measured.)
 
   Measured on /tv as admin before the fix (selection, re-scan, add, import,
   view mode, density, eye all in one `flex-wrap` bar):
@@ -57,7 +58,7 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
   end
 
   @tag :feature
-  test "the eye sits beside the density toggle and its menu opens on screen",
+  test "the poster display button sits beside the density toggle and its menu opens on screen",
        %{session: session} do
     login_as_admin(session)
 
@@ -68,11 +69,11 @@ defmodule MydiaWeb.Features.PosterFieldsMenuViewportTest do
 
       assert Wallaby.Browser.has_css?(session, "#poster-fields-menu")
 
-      eye_top = top_of(session, "#poster-fields-menu")
+      button_top = top_of(session, "#poster-fields-menu")
       density_top = top_of(session, "#library-density-toggle")
 
-      assert eye_top == density_top,
-             "at #{w}px the eye (top #{eye_top}) wrapped away from the " <>
+      assert button_top == density_top,
+             "at #{w}px the poster display button (top #{button_top}) wrapped away from the " <>
                "density toggle (top #{density_top})"
 
       session
