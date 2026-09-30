@@ -73,6 +73,33 @@ defmodule Mydia.Plugins.ConnectionsTest do
     end
   end
 
+  test "connect/3 returns an error for an unknown status instead of raising", %{user: user} do
+    assert {:error, {:invalid_status, "bogus"}} =
+             Connections.connect("connector", user.id, %{access_token: "t", status: "bogus"})
+  end
+
+  describe "multi_instance plugins" do
+    setup do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "multi-conn",
+          name: "Multi",
+          version: "1.0.0",
+          enabled: true,
+          manifest: %{"slug" => "multi-conn", "multi_instance" => true}
+        })
+
+      :ok
+    end
+
+    test "have no default-instance connection and none is created", %{user: user} do
+      assert Connections.get("multi-conn", user.id) == nil
+      assert {:error, :not_connectable} = Connections.connect("multi-conn", user.id, %{})
+      assert Connections.delete("multi-conn", user.id) == :ok
+      assert Mydia.Plugins.Instances.list("multi-conn") == []
+    end
+  end
+
   describe "connect/3 and reads" do
     test "creates a connection and round-trips identity", %{user: user} do
       assert {:ok, conn} =

@@ -308,6 +308,13 @@ defmodule Mydia.Plugins.HostFunctionsLinksTest do
                AccountLinks.get(owner.id)
     end
 
+    test "a guest cannot set a link to disabled", %{instance: i, owner: owner} do
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.set_link_status(plugin(@links_grant), i, owner.id, :disabled, :none)
+
+      assert %{status: :active} = AccountLinks.get(owner.id)
+    end
+
     test "reject a token with control characters", %{instance: i, owner: owner} do
       for bad <- ["a\r\nX-Evil: 1", "a\nb", "a\0b"] do
         assert {:error, %Error{type: :invalid_request}} =

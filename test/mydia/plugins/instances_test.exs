@@ -118,6 +118,33 @@ defmodule Mydia.Plugins.InstancesTest do
     end
   end
 
+  describe "multi_instance plugins have no default instance" do
+    test "default_instance/1 returns nil and creates nothing" do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "multi-only",
+          name: "Multi",
+          version: "1.0.0",
+          enabled: true,
+          manifest: %{"slug" => "multi-only", "multi_instance" => true}
+        })
+
+      assert Instances.default_instance("multi-only") == nil
+      assert Instances.list("multi-only") == []
+    end
+  end
+
+  describe "merge_default_settings/2" do
+    test "writes settings into a single-instance plugin's default instance" do
+      plugin_config("single")
+      inst = Instances.default_instance("single")
+
+      assert :ok = Instances.merge_default_settings("single", %{"api_base" => "https://new.test"})
+
+      assert Instances.config_for(Instances.get!(inst.id))["api_base"] == "https://new.test"
+    end
+  end
+
   describe "config_for/1" do
     test "merges the instance id into the settings" do
       plugin_config("multi")

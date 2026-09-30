@@ -38,21 +38,30 @@ defmodule Mydia.Plugins.Connections do
         {:error, :not_installed}
 
       _config ->
-        instance = Instances.default_instance(slug)
+        case Instances.default_instance(slug) do
+          nil ->
+            {:error, :not_connectable}
 
-        attrs =
-          attrs
-          |> Map.take([:access_token, :external_user_id, :external_username, :meta])
-          |> Map.put(:status, normalize_status(Map.get(attrs, :status, :active)))
+          instance ->
+            with {:ok, status} <- normalize_status(Map.get(attrs, :status, :active)) do
+              attrs =
+                attrs
+                |> Map.take([:access_token, :external_user_id, :external_username, :meta])
+                |> Map.put(:status, status)
 
-        AccountLinks.upsert_user_flow_link(instance.id, user_id, attrs)
+              AccountLinks.upsert_user_flow_link(instance.id, user_id, attrs)
+            end
+        end
     end
   end
 
   @doc "The connection for `{slug, user_id}` on the default instance, or nil."
   @spec get(String.t(), binary()) :: t() | nil
   def get(slug, user_id) when is_binary(slug) do
-    AccountLinks.user_link(Instances.default_instance(slug).id, user_id)
+    case Instances.default_instance(slug) do
+      nil -> nil
+      instance -> AccountLinks.user_link(instance.id, user_id)
+    end
   end
 
   @doc "A user link by id scoped to a plugin (any of its instances)."
@@ -161,8 +170,9 @@ defmodule Mydia.Plugins.Connections do
   end
 
   defp normalize_status(status) when status in [:active, "active", :connected, "connected"],
-    do: :active
+    do: {:ok, :active}
 
-  defp normalize_status(status) when status in [:error, "error"], do: :error
-  defp normalize_status(status) when status in [:disabled, "disabled"], do: :disabled
+  defp normalize_status(status) when status in [:error, "error"], do: {:ok, :error}
+  defp normalize_status(status) when status in [:disabled, "disabled"], do: {:ok, :disabled}
+  defp normalize_status(other), do: {:error, {:invalid_status, other}}
 end

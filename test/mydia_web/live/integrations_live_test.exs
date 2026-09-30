@@ -73,6 +73,31 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     assert has_element?(view, "#plugin-conn-#{@slug}")
   end
 
+  test "a multi_instance plugin with no device flow is not offered and gains no instance", %{
+    conn: conn
+  } do
+    {:ok, _} =
+      Settings.create_plugin_config(%{
+        slug: "media-server-x",
+        name: "Media Server X",
+        version: "1.0.0",
+        enabled: true,
+        manifest: %{
+          "slug" => "media-server-x",
+          "name" => "Media Server X",
+          "version" => "1.0.0",
+          "multi_instance" => true,
+          "capabilities" => %{"users:connections" => []},
+          "connection" => %{"type" => "none", "auth_header" => "X-Token: {token}"}
+        }
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/integrations")
+
+    refute has_element?(view, "#plugin-conn-media-server-x")
+    assert Mydia.Plugins.Instances.list("media-server-x") == []
+  end
+
   test "exposes an Integrations link in the sidebar", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/integrations")
 

@@ -86,7 +86,8 @@ defmodule Mydia.Plugins do
         config.enabled,
         is_map(config.manifest),
         descriptor = config.manifest["connection"],
-        is_map(descriptor) do
+        is_map(descriptor),
+        Manifest.device_flow?(%Manifest{connection: descriptor}) do
       %{
         slug: config.slug,
         name: config.name,
@@ -236,7 +237,11 @@ defmodule Mydia.Plugins do
   def ensure_default_instance(%Plugin{multi_instance: true}), do: :ok
 
   def ensure_default_instance(%Plugin{} = plugin) do
+    # Also heals installs that saved plugin settings before those reached the
+    # default instance: the plugin config's settings win over the instance's.
+    config = Settings.get_plugin_config_by_slug(plugin.slug)
     Instances.default_instance(plugin.slug)
+    Instances.merge_default_settings(plugin.slug, (config && config.settings) || %{})
     :ok
   end
 
@@ -721,6 +726,9 @@ defmodule Mydia.Plugins do
              settings: merged,
              granted_capabilities: granted
            }) do
+      # Guests read the default instance's settings (`Instances.config_for/1`),
+      # not the plugin config, so a single-instance plugin needs them there too.
+      Instances.merge_default_settings(slug, settings)
       if updated.enabled, do: reregister_descriptor(updated)
       {:ok, updated}
     end
@@ -1183,6 +1191,10 @@ defmodule Mydia.Plugins do
   end
 
   defp static_hosts(_manifest_map), do: []
+
+  # A multi_instance plugin's endpoints are approved per instance; plugin-level
+  # settings never widen the plugin-wide grant.
+  defp derived_hosts(%{"multi_instance" => true}, _settings), do: []
 
   defp derived_hosts(manifest_map, settings) when is_map(manifest_map) do
     manifest_map

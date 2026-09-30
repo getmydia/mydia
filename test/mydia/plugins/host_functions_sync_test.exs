@@ -175,6 +175,22 @@ defmodule Mydia.Plugins.HostFunctionsSyncTest do
       assert :ok = HostFunctions.report_sync_run(bare, i, report)
     end
 
+    test "caps the message at 500 characters", %{plugin: p, instance: i} do
+      report = %{
+        "started-at": "2026-09-29T10:00:00Z",
+        "finished-at": "2026-09-29T10:00:30Z",
+        status: :error,
+        pulled: 0,
+        pushed: 0,
+        skipped: 0,
+        errors: 1,
+        message: {:some, String.duplicate("x", 5_000)}
+      }
+
+      assert :ok = HostFunctions.report_sync_run(p, i, report)
+      assert String.length(Mydia.Sync.last_run("plugin:tester", i.id).error) == 500
+    end
+
     test "rejects a malformed timestamp", %{plugin: p, instance: i} do
       report = %{
         "started-at": "yesterday",

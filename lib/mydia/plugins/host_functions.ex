@@ -162,7 +162,10 @@ defmodule Mydia.Plugins.HostFunctions do
   # does. kv-list/kv-set-many are 1.4-only and require the instance.
   defp legacy_plugin_and_instance(slug, ctx) do
     with {:ok, plugin} <- Plugins.get_plugin(slug) do
-      {:ok, plugin, ctx_instance(ctx) || Instances.default_instance(slug)}
+      case ctx_instance(ctx) || Instances.default_instance(slug) do
+        nil -> {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+        instance -> {:ok, plugin, instance}
+      end
     end
   end
 
@@ -282,7 +285,10 @@ defmodule Mydia.Plugins.HostFunctions do
     fn ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          connections_list(plugin, ctx_instance(ctx) || Instances.default_instance(slug))
+          case ctx_instance(ctx) || Instances.default_instance(slug) do
+            nil -> {:ok, []}
+            instance -> connections_list(plugin, instance)
+          end
         end
       end)
     end
@@ -1046,7 +1052,7 @@ defmodule Mydia.Plugins.HostFunctions do
                skipped: Map.get(report, :skipped, 0),
                errors: Map.get(report, :errors, 0)
              },
-             error: from_option(Map.get(report, :message))
+             error: cap_message(from_option(Map.get(report, :message)))
            }) do
       :ok
     else
@@ -1057,6 +1063,13 @@ defmodule Mydia.Plugins.HostFunctions do
         err
     end
   end
+
+  @max_run_message 500
+
+  defp cap_message(message) when is_binary(message),
+    do: String.slice(message, 0, @max_run_message)
+
+  defp cap_message(other), do: other
 
   defp parse_run_time(iso, field) when is_binary(iso) do
     case DateTime.from_iso8601(iso) do
@@ -1295,8 +1308,13 @@ defmodule Mydia.Plugins.HostFunctions do
   @spec connection_request(Plugin.t(), term(), map(), keyword()) ::
           {:ok, map()} | {:error, Error.t()}
   def connection_request(%Plugin{} = plugin, connection_id, request, opts) do
-    instance = Keyword.get(opts, :instance) || Instances.default_instance(plugin.slug)
-    link_request(plugin, instance, connection_id, request, Keyword.put(opts, :roles, [:user]))
+    case Keyword.get(opts, :instance) || Instances.default_instance(plugin.slug) do
+      nil ->
+        {:error, Error.new(:not_found, "no plugin instance for this invocation")}
+
+      instance ->
+        link_request(plugin, instance, connection_id, request, Keyword.put(opts, :roles, [:user]))
+    end
   end
 
   @max_proposed_accounts 500
@@ -1380,10 +1398,17 @@ defmodule Mydia.Plugins.HostFunctions do
     with :ok <- require_capability(plugin, "users:connections"),
          {:ok, link} <- fetch_link(plugin, instance, link_id),
          :ok <- reject_disabled(link),
-         {:ok, status} <- link_status(status) do
+         {:ok, status} <- link_status(status),
+         :ok <- reject_guest_disable(status) do
       AccountLinks.set_status(link.id, status, from_option(message))
     end
   end
+
+  # :disabled is the host's kill switch; a guest cannot set it either.
+  defp reject_guest_disable(:disabled),
+    do: {:error, Error.new(:capability_denied, "a plugin cannot disable a link")}
+
+  defp reject_guest_disable(_status), do: :ok
 
   @link_statuses %{"active" => :active, "error" => :error, "disabled" => :disabled}
 

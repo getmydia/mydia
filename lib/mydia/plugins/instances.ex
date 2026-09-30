@@ -55,24 +55,52 @@ defmodule Mydia.Plugins.Instances do
   @doc """
   The first instance of a slug, created on first use. Single-instance plugins
   only ever have this one; it is named after the plugin config.
-  """
-  @spec default_instance(String.t()) :: Instance.t()
-  def default_instance(slug) when is_binary(slug) do
-    case Repo.one(
-           from i in Instance,
-             where: i.plugin_slug == ^slug,
-             order_by: [asc: i.inserted_at],
-             limit: 1
-         ) do
-      %Instance{} = inst ->
-        put_source(inst)
 
-      nil ->
-        config = Settings.get_plugin_config_by_slug(slug)
-        name = (config && config.name) || slug
-        {:ok, inst} = create(slug, %{name: name, settings: (config && config.settings) || %{}})
-        inst
+  A `multi_instance` plugin has no default instance: instances exist only
+  through setup, so this returns `nil` and never creates one.
+  """
+  @spec default_instance(String.t()) :: Instance.t() | nil
+  def default_instance(slug) when is_binary(slug) do
+    config = Settings.get_plugin_config_by_slug(slug)
+
+    if multi_instance?(config) do
+      nil
+    else
+      case Repo.one(
+             from i in Instance,
+               where: i.plugin_slug == ^slug,
+               order_by: [asc: i.inserted_at],
+               limit: 1
+           ) do
+        %Instance{} = inst ->
+          put_source(inst)
+
+        nil ->
+          name = (config && config.name) || slug
+          {:ok, inst} = create(slug, %{name: name, settings: (config && config.settings) || %{}})
+          inst
+      end
     end
+  end
+
+  @doc "True when the stored manifest of a plugin config declares `multi_instance`."
+  @spec multi_instance?(Settings.PluginConfig.t() | nil) :: boolean()
+  def multi_instance?(%{manifest: %{"multi_instance" => true}}), do: true
+  def multi_instance?(_config), do: false
+
+  @doc """
+  Merges `settings` into a single-instance plugin's default instance, which is
+  what guests read (`config_for/1`). No-op for multi_instance plugins.
+  """
+  @spec merge_default_settings(String.t(), map()) :: :ok
+  def merge_default_settings(slug, settings) when is_binary(slug) and is_map(settings) do
+    with %Instance{} = instance <- default_instance(slug),
+         merged = Map.merge(instance.settings || %{}, settings),
+         true <- merged != (instance.settings || %{}) do
+      {:ok, _} = update(instance, %{settings: merged})
+    end
+
+    :ok
   end
 
   @spec create(String.t(), map()) :: {:ok, Instance.t()} | {:error, Ecto.Changeset.t()}

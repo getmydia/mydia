@@ -53,7 +53,12 @@ defmodule Mydia.Plugins.Notifier.Delivery do
     end
   end
 
-  defp resolve_instance(slug, _args), do: {:ok, Instances.default_instance(slug)}
+  defp resolve_instance(slug, _args) do
+    case Instances.default_instance(slug) do
+      nil -> :gone
+      instance -> {:ok, instance}
+    end
+  end
 
   defp deliver(slug, instance, payload) do
     full_payload = Map.put(payload, "config", Instances.config_for(instance))
