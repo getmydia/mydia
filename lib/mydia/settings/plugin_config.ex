@@ -4,9 +4,7 @@ defmodule Mydia.Settings.PluginConfig do
 
   Mirrors `Mydia.Settings.DownloadClientConfig`: a row per installed plugin
   participating in the layered config model (env > DB > YAML > default) with
-  source provenance. Env/index-sourced plugins surface as read-only
-  `runtime::plugin::<slug>` rows (see `Mydia.Settings.RuntimeConfig`); DB rows
-  are editable.
+  source provenance.
 
   ## Field notes
 

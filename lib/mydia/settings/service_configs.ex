@@ -547,47 +547,23 @@ defmodule Mydia.Settings.ServiceConfigs do
   ## Plugin Configs
 
   def list_plugin_configs(opts \\ []) do
-    db_configs =
-      PluginConfig
-      |> maybe_preload(opts[:preload])
-      |> order_by([p], desc: p.enabled, asc: p.priority, asc: p.name)
-      |> Repo.all()
-
-    # Env/index plugins take precedence over DB rows by slug (env > DB per the
-    # documented layered model). A DB upsert for an env-sourced slug therefore
-    # never wins, so an env-configured plugin stays read-only (AE6). This is the
-    # one place plugins intentionally diverge from the sibling service lists,
-    # which use DB precedence.
-    runtime = RC.get_runtime_plugins()
-    runtime_slugs = MapSet.new(runtime, & &1.slug)
-    db_filtered = Enum.reject(db_configs, &MapSet.member?(runtime_slugs, &1.slug))
-    runtime ++ db_filtered
+    PluginConfig
+    |> maybe_preload(opts[:preload])
+    |> order_by([p], desc: p.enabled, asc: p.priority, asc: p.name)
+    |> Repo.all()
   end
 
   def get_plugin_config!(id, opts \\ [])
 
   def get_plugin_config!(id, opts) when is_binary(id) do
-    if RC.runtime_id?(id) do
-      case RC.parse_runtime_id(id) do
-        {:ok, {:plugin, slug}} ->
-          case Enum.find(RC.get_runtime_plugins(), &(&1.slug == slug)) do
-            nil -> raise "Runtime plugin not found: #{slug}"
-            plugin -> plugin
-          end
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} ->
+        PluginConfig
+        |> maybe_preload(opts[:preload])
+        |> Repo.get!(uuid)
 
-        _ ->
-          raise "Invalid runtime plugin ID: #{id}"
-      end
-    else
-      case Ecto.UUID.cast(id) do
-        {:ok, uuid} ->
-          PluginConfig
-          |> maybe_preload(opts[:preload])
-          |> Repo.get!(uuid)
-
-        :error ->
-          raise "Invalid plugin ID: #{id}"
-      end
+      :error ->
+        raise "Invalid plugin ID: #{id}"
     end
   end
 
@@ -623,10 +599,6 @@ defmodule Mydia.Settings.ServiceConfigs do
 
   @doc """
   Inserts or updates a plugin config keyed by slug (DB rows only).
-
-  Env/index-sourced (`runtime::`) plugins are never written here — they are
-  read-only overlays, so AE6's "DB upsert does not overwrite an env-sourced
-  field" holds: the env value wins at merge time regardless of any DB row.
   """
   def upsert_plugin_config(%{slug: slug} = attrs) when is_binary(slug) do
     case get_plugin_config_by_slug(slug) do

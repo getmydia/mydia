@@ -415,9 +415,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     assign(socket, :installed, rows)
   end
 
-  # Normalizes a config (DB or runtime/env) into a render row with provenance.
+  # Normalizes a config into a render row.
   defp row(config) do
-    source = if Settings.runtime_config?(config), do: :env, else: :index
     capabilities = capabilities_of(config)
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
@@ -430,8 +429,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       version: config.version,
       enabled: config.enabled,
-      source: source,
-      read_only: source == :env,
+      source: :index,
       capabilities: capabilities,
       granted: granted,
       # A revised manifest never widens a grant, so an approved plugin can end up

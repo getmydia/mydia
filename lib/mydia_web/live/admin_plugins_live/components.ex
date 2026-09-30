@@ -103,7 +103,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   Renders the Plugins tab: header, installed summary rows, and the store catalog.
 
   Each installed plugin renders a compact summary row with provenance and
-  lifecycle actions; env-sourced rows render read-only. The catalog lists
+  lifecycle actions. The catalog lists
   available store entries with an Install action.
   """
   attr :installed, :list, required: true
@@ -246,12 +246,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       </div>
 
       <div class="flex flex-wrap items-center gap-2 shrink-0">
-        <span :if={@plugin.read_only} class="text-xs text-base-content/50">
-          configured via env
-        </span>
-
         <.button
-          :if={not @plugin.read_only and (@plugin.pending_approval or @plugin.needs_reapproval)}
+          :if={@plugin.pending_approval or @plugin.needs_reapproval}
           id={"approve-#{@plugin.slug}"}
           class="btn btn-warning btn-sm"
           phx-click="review_approve"
@@ -262,9 +258,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
         <%!-- Always show the Settings button so its absence is never silently
               confusing; when it can't open it renders disabled with a reason. --%>
-        <.settings_button :if={@plugin.read_only or @plugin.pending_approval} plugin={@plugin} />
+        <.settings_button :if={@plugin.pending_approval} plugin={@plugin} />
 
-        <div :if={not @plugin.read_only and not @plugin.pending_approval} class="join">
+        <div :if={not @plugin.pending_approval} class="join">
           <.button
             id={"toggle-#{@plugin.slug}"}
             class="btn btn-ghost btn-sm join-item"
@@ -309,7 +305,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   The per-plugin Settings button.
 
   Always rendered so its absence is never silently confusing. When the plugin's
-  settings can't be edited (env-sourced, awaiting approval, or no configurable
+  settings can't be edited (awaiting approval, or no configurable
   schema) it renders disabled inside a tooltip that explains why.
   """
   attr :plugin, :map, required: true
@@ -339,11 +335,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
-  # Why the Settings button can't open, or nil when it can. Precedence matters:
-  # an env-sourced row is read-only regardless of approval or schema.
-  defp settings_disabled_reason(%{read_only: true}),
-    do: "Configured via environment variables; edit those to change settings"
-
+  # Why the Settings button can't open, or nil when it can.
   defp settings_disabled_reason(%{pending_approval: true}),
     do: "Approve this plugin before editing its settings"
 
@@ -930,13 +922,12 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
-  @doc "A small source-provenance badge (env/index/db)."
+  @doc "A small source-provenance badge (index/db)."
   attr :source, :atom, required: true
 
   def source_badge(assigns) do
     {label, cls} =
       case assigns.source do
-        :env -> {"env", "badge-info"}
         :index -> {"index", "badge-ghost"}
         _ -> {"db", "badge-ghost"}
       end

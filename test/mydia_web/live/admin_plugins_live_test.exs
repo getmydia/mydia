@@ -582,41 +582,6 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     end
   end
 
-  describe "provenance (AE6)" do
-    test "an env-sourced plugin renders read-only with a source badge", %{conn: conn} do
-      # May be unset: some suites (e.g. settings_test) delete the key on exit
-      # and readers fall back to Schema.defaults — mirror that fallback here.
-      original = Application.get_env(:mydia, :runtime_config)
-      base = original || Mydia.Config.Schema.defaults()
-
-      install = %Mydia.Config.Schema.PluginInstall{
-        slug: "envp",
-        name: "Env Plugin",
-        version: "1.0.0",
-        enabled: true,
-        granted_capabilities: %{"events:subscribe" => ["media_item.added"]}
-      }
-
-      Application.put_env(:mydia, :runtime_config, %{base | plugin_installs: [install]})
-
-      on_exit(fn ->
-        if original do
-          Application.put_env(:mydia, :runtime_config, original)
-        else
-          Application.delete_env(:mydia, :runtime_config)
-        end
-      end)
-
-      {:ok, view, _} = live(conn, ~p"/admin/plugins")
-
-      assert has_element?(view, "#plugin-row-envp")
-      assert render(view) =~ "configured via env"
-      # Read-only: no lifecycle controls for an env-sourced row.
-      refute has_element?(view, "#remove-envp")
-      refute has_element?(view, "#toggle-envp")
-    end
-  end
-
   describe "debug logs and test trigger (U6, U7)" do
     alias Mydia.Plugins.Logs
 
