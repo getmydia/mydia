@@ -57,7 +57,7 @@ defmodule Mydia.Config.Schema do
           indexers: [__MODULE__.Indexer.t()],
           media_servers: [__MODULE__.MediaServer.t()],
           library_paths: [__MODULE__.LibraryPath.t()],
-          plugin_installs: [__MODULE__.PluginInstall.t()],
+          plugin_settings: [__MODULE__.PluginSettingsDecl.t()],
           plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
           path_mappings: [__MODULE__.PathMapping.t()]
         }
@@ -391,19 +391,12 @@ defmodule Mydia.Config.Schema do
       field :default_for_series, :boolean, default: false
     end
 
-    # Env/YAML-sourced installed plugins (PLUGIN_<N>_*). DB-sourced installs
-    # live in the `plugin_configs` table; these merge in read-only with a
-    # source badge (see Mydia.Settings.RuntimeConfig.get_runtime_plugins/0).
-    embeds_many :plugin_installs, PluginInstall, on_replace: :delete, primary_key: false do
+    # Env/YAML settings for installed plugins (PLUGIN_<N>_SLUG + PLUGIN_<N>_SETTINGS,
+    # `plugin_settings:`). Mydia.Plugins.DeclaredSettings writes them onto the
+    # installed plugin's row. They never install, approve or enable a plugin.
+    embeds_many :plugin_settings, PluginSettingsDecl, on_replace: :delete, primary_key: false do
       field :slug, :string
-      field :name, :string
-      field :version, :string
-      field :enabled, :boolean, default: true
-      field :priority, :integer, default: 1
-      field :source_url, :string
-      field :integrity_hash, :string
       field :settings, :map, default: %{}
-      field :granted_capabilities, :map, default: %{}
     end
 
     # Env/YAML-declared plugin instances (PLUGIN_<SLUG>_<N>_*, `plugin_instances:`).
@@ -449,7 +442,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:subtitle_providers, with: &subtitle_provider_changeset/2)
     |> cast_embed(:media_servers, with: &media_server_changeset/2)
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
-    |> cast_embed(:plugin_installs, with: &plugin_install_changeset/2)
+    |> cast_embed(:plugin_settings, with: &plugin_settings_changeset/2)
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
     |> cast_embed(:path_mappings, with: &path_mapping_changeset/2)
     |> validate_configuration()
@@ -978,21 +971,10 @@ defmodule Mydia.Config.Schema do
     )
   end
 
-  defp plugin_install_changeset(schema, attrs) do
+  defp plugin_settings_changeset(schema, attrs) do
     schema
-    |> cast(attrs, [
-      :slug,
-      :name,
-      :version,
-      :enabled,
-      :priority,
-      :source_url,
-      :integrity_hash,
-      :settings,
-      :granted_capabilities
-    ])
-    |> validate_required([:slug, :name])
-    |> validate_number(:priority, greater_than: 0)
+    |> cast(attrs, [:slug, :settings])
+    |> validate_required([:slug])
   end
 
   defp path_mapping_changeset(schema, attrs) do
@@ -1139,7 +1121,7 @@ defmodule Mydia.Config.Schema do
       indexers: [],
       media_servers: [],
       library_paths: [],
-      plugin_installs: [],
+      plugin_settings: [],
       plugin_instances: [],
       path_mappings: []
     }

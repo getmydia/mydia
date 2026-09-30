@@ -14,11 +14,13 @@ defmodule MydiaWeb.PluginSetupComponents do
 
   attr :field, :map, required: true
   attr :form, :any, required: true
+  attr :disabled, :boolean, default: false
 
   def settings_field(%{field: %{"type" => "enum"}} = assigns) do
     ~H"""
     <.input
       field={@form[@field["key"]]}
+      disabled={@disabled}
       type="select"
       label={@field["label"] || @field["key"]}
       options={@field["options"] || []}
@@ -30,6 +32,7 @@ defmodule MydiaWeb.PluginSetupComponents do
     ~H"""
     <.input
       field={@form[@field["key"]]}
+      disabled={@disabled}
       type="password"
       autocomplete="off"
       label={@field["label"] || @field["key"]}
@@ -42,6 +45,7 @@ defmodule MydiaWeb.PluginSetupComponents do
     ~H"""
     <.input
       field={@form[@field["key"]]}
+      disabled={@disabled}
       type="url"
       label={@field["label"] || @field["key"]}
       hint={
@@ -57,6 +61,7 @@ defmodule MydiaWeb.PluginSetupComponents do
     ~H"""
     <.input
       field={@form[@field["key"]]}
+      disabled={@disabled}
       type="textarea"
       label={@field["label"] || @field["key"]}
     />
@@ -65,7 +70,12 @@ defmodule MydiaWeb.PluginSetupComponents do
 
   def settings_field(assigns) do
     ~H"""
-    <.input field={@form[@field["key"]]} type="text" label={@field["label"] || @field["key"]} />
+    <.input
+      field={@form[@field["key"]]}
+      disabled={@disabled}
+      type="text"
+      label={@field["label"] || @field["key"]}
+    />
     """
   end
 

@@ -74,6 +74,20 @@ the UI, so its linked accounts are kept. `media_servers:` entries with
 The same instances can be declared with `PLUGIN_<SLUG>_<N>_<KEY>` environment
 variables; see [Media Servers](environment-variables.md#media-servers).
 
+Settings for installed plugins can be declared under `plugin_settings`:
+
+```yaml
+plugin_settings:
+  - slug: assistant-openai
+    settings:
+      base_url: http://ollama.lan:11434/v1
+      model: llama3.1
+```
+
+Environment variables override these; see
+[Plugins](environment-variables.md#plugins). `plugin_installs:` is no longer
+read.
+
 Three plugin limits live in the `plugins:` block:
 
 ```yaml

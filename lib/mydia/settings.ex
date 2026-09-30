@@ -611,13 +611,12 @@ defmodule Mydia.Settings do
   # ── Plugin Configs ───────────────────────────────────────────────────
 
   @doc """
-  Lists installed plugin configs from the database and runtime (env/YAML)
-  config. Runtime plugins are read-only `runtime::plugin::<slug>` rows.
+  Lists installed plugin configs from the database.
   """
   @spec list_plugin_configs(keyword()) :: [PluginConfig.t()]
   defdelegate list_plugin_configs(opts \\ []), to: Mydia.Settings.ServiceConfigs
 
-  @doc "Gets a plugin config by ID (DB UUID or `runtime::plugin::<slug>`)."
+  @doc "Gets a plugin config by its DB UUID."
   @spec get_plugin_config!(binary(), keyword()) :: PluginConfig.t()
   defdelegate get_plugin_config!(id, opts \\ []), to: Mydia.Settings.ServiceConfigs
 

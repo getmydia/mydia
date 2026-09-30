@@ -37,6 +37,7 @@ defmodule Mydia.Plugins do
   require Logger
 
   alias Mydia.Plugins.Capabilities
+  alias Mydia.Plugins.DeclaredSettings
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Host
@@ -370,10 +371,11 @@ defmodule Mydia.Plugins do
     # ensure_bundled/0 explicitly when they need it).
     maybe_ensure_bundled()
 
-    # Persist YAML/env-declared plugin instances before plugins start scheduling
-    # against them. Same boot-side-effect gate as bundled seeding.
+    # Persist YAML/env-declared plugin instances and settings before plugins start
+    # scheduling against them. Same boot-side-effect gate as bundled seeding.
     if Application.get_env(:mydia, :start_health_monitors, true) do
       Mydia.Plugins.RuntimeInstances.sync()
+      DeclaredSettings.sync_all()
     end
 
     Settings.get_db_plugin_configs()
@@ -384,6 +386,8 @@ defmodule Mydia.Plugins do
           :ok
 
         {:error, error} ->
+          # A declared-settings sync may have pre-registered the descriptor.
+          deactivate(config.slug)
           Logger.warning("could not activate plugin #{config.slug}: #{inspect(error)}")
       end
     end)
@@ -433,6 +437,7 @@ defmodule Mydia.Plugins do
           :ok
 
         {:error, error} ->
+          deactivate(config.slug)
           Logger.warning("could not activate plugin #{config.slug}: #{inspect(error)}")
       end
     end)
@@ -520,7 +525,7 @@ defmodule Mydia.Plugins do
     }
 
     case Settings.create_plugin_config(attrs) do
-      {:ok, _config} -> :ok
+      {:ok, config} -> DeclaredSettings.sync(config.slug)
       {:error, reason} -> log_bundled_reconciliation_error(manifest.slug, reason)
     end
   end
@@ -638,7 +643,7 @@ defmodule Mydia.Plugins do
 
     with {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
          {:ok, config} <- persist_install(entry, wasm, hash, grants) do
-      finish_activation(config)
+      config |> with_declared_settings() |> finish_activation()
     end
   end
 
@@ -669,6 +674,8 @@ defmodule Mydia.Plugins do
          entry = local_entry(manifest, wasm_path, wasm),
          :ok <- deactivate(manifest.slug),
          {:ok, config} <- persist_install(entry, wasm, entry.integrity, %{}) do
+      config = with_declared_settings(config)
+
       if Keyword.get(opts, :approve, false),
         do: approve(config.slug),
         else: finish_activation(config)
@@ -823,6 +830,46 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
+  Checks the `url` fields of `schema` that `settings` sets: blank or an
+  absolute http(s) URL passes. Returns `{:error, message}` naming the first
+  field that fails. Shared by the admin settings modal and
+  `Mydia.Plugins.DeclaredSettings`.
+
+  A scheme-less value (e.g. "ntfy.example.com/x") would derive no host,
+  silently dropping the grant and breaking delivery, hence the check.
+  """
+  @spec validate_url_settings([map()], map()) :: :ok | {:error, String.t()}
+  def validate_url_settings(schema, settings) do
+    schema
+    |> Enum.filter(&(&1["type"] == "url"))
+    |> Enum.reduce_while(:ok, fn field, :ok ->
+      value = Map.get(settings, field["key"])
+
+      if blank_value?(value) or absolute_url?(value) do
+        {:cont, :ok}
+      else
+        label = field["label"] || field["key"]
+        {:halt, {:error, "#{label} must be a full URL including https://"}}
+      end
+    end)
+  end
+
+  defp blank_value?(value), do: is_nil(value) or value == ""
+
+  defp absolute_url?(value) when is_binary(value) do
+    case URI.parse(value) do
+      %URI{scheme: scheme, host: host}
+      when scheme in ["http", "https"] and is_binary(host) and host != "" ->
+        true
+
+      _ ->
+        false
+    end
+  end
+
+  defp absolute_url?(_), do: false
+
+  @doc """
   Revokes all grants for `slug` and deactivates it.
 
   The plugin stays installed (its config and artifact remain) but inactive with
@@ -964,6 +1011,13 @@ defmodule Mydia.Plugins do
 
   # ── Internals ─────────────────────────────────────────────────────────────
 
+  # Env-declared settings reach a fresh install before it activates, so its
+  # first run has them and its net:http grant covers the declared URL.
+  defp with_declared_settings(config) do
+    DeclaredSettings.sync(config.slug)
+    Settings.get_plugin_config_by_slug(config.slug) || config
+  end
+
   defp persist_install(entry, wasm, hash, grants) do
     Settings.upsert_plugin_config(%{
       slug: entry.slug,
@@ -997,6 +1051,8 @@ defmodule Mydia.Plugins do
         # A row that cannot activate must not claim to be enabled with no live
         # plugin behind it.
         _ = Settings.update_plugin_config(config, %{enabled: false})
+        # A settings write may have pre-registered the descriptor; drop it.
+        deactivate(config.slug)
         reload()
         err
     end

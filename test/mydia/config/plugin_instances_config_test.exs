@@ -18,7 +18,7 @@ defmodule Mydia.Config.PluginInstancesConfigTest do
     Enum.each(saved, fn {key, _} -> System.delete_env(key) end)
     File.rm(@yaml_path)
     # The legacy-Plex deprecation is logged once per boot; each test starts a new one.
-    :persistent_term.erase({Loader, :legacy_plex_warned})
+    for {{Loader, :warned, _} = key, _} <- :persistent_term.get(), do: :persistent_term.erase(key)
 
     on_exit(fn ->
       System.get_env()
@@ -53,13 +53,14 @@ defmodule Mydia.Config.PluginInstancesConfigTest do
              by_plugin["simkl_sync"]
   end
 
-  test "numeric PLUGIN_<N>_* installs are not read as instances and vice versa" do
+  test "numeric PLUGIN_<N>_* settings are not read as instances and vice versa" do
     System.put_env("PLUGIN_0_SLUG", "webhook_notifier")
+    System.put_env("PLUGIN_0_SETTINGS", ~s({"target":"discord"}))
     System.put_env("PLUGIN_PLEX_0_URL", "http://10.0.0.2:32400")
 
     assert {:ok, config} = load_env()
 
-    assert [%{slug: "webhook_notifier"}] = config.plugin_installs
+    assert [%{slug: "webhook_notifier"}] = config.plugin_settings
     assert [%{plugin: "plex"}] = config.plugin_instances
   end
 

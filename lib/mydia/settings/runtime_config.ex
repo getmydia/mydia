@@ -16,7 +16,6 @@ defmodule Mydia.Settings.RuntimeConfig do
     MediaServerConfig,
     LibraryPath,
     PathMappingConfig,
-    PluginConfig,
     SubtitleProviderConfig
   }
 
@@ -416,23 +415,23 @@ defmodule Mydia.Settings.RuntimeConfig do
     paths
   end
 
-  def get_runtime_plugins do
-    runtime_config = get_runtime_config()
-
-    if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_installs) do
-      runtime_config.plugin_installs
-      |> Enum.map(&map_to_plugin_config/1)
-    else
-      []
-    end
-  end
-
   @doc "Plugin instances declared in YAML/env (`Mydia.Config.Schema.PluginInstanceDecl`)."
   def get_runtime_plugin_instances do
     runtime_config = get_runtime_config()
 
     if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_instances) do
       runtime_config.plugin_instances
+    else
+      []
+    end
+  end
+
+  @doc "Plugin settings declared in YAML/env (`Mydia.Config.Schema.PluginSettingsDecl`)."
+  def get_runtime_plugin_settings do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_settings) do
+      runtime_config.plugin_settings
     else
       []
     end
@@ -513,26 +512,6 @@ defmodule Mydia.Settings.RuntimeConfig do
       download_directory: Map.get(map, :download_directory),
       connection_settings: Map.get(map, :connection_settings, %{}),
       external_torrents: Map.get(map, :external_torrents, :auto),
-      updated_by_id: nil,
-      inserted_at: nil,
-      updated_at: nil
-    }
-  end
-
-  defp map_to_plugin_config(map) when is_map(map) do
-    slug = Map.get(map, :slug)
-
-    %PluginConfig{
-      id: build_runtime_id(:plugin, slug),
-      slug: slug,
-      name: Map.get(map, :name) || slug,
-      version: Map.get(map, :version),
-      enabled: Map.get(map, :enabled, true),
-      priority: Map.get(map, :priority, 1),
-      settings: Map.get(map, :settings, %{}),
-      granted_capabilities: Map.get(map, :granted_capabilities, %{}),
-      source_url: Map.get(map, :source_url),
-      integrity_hash: Map.get(map, :integrity_hash),
       updated_by_id: nil,
       inserted_at: nil,
       updated_at: nil

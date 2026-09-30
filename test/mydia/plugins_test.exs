@@ -287,6 +287,70 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "declared settings (PLUGIN_<N>_SETTINGS / plugin_settings:)" do
+    alias Mydia.Config.Schema
+    alias Mydia.Plugins.DeclaredSettings
+
+    defp declare_settings(slug, settings) do
+      base = Application.get_env(:mydia, :runtime_config) || Schema.defaults()
+
+      decl = %Schema.PluginSettingsDecl{slug: slug, settings: settings}
+      Application.put_env(:mydia, :runtime_config, %{base | plugin_settings: [decl]})
+      # The outer setup's on_exit restores :runtime_config to its original value.
+    end
+
+    defp declared_manifest do
+      manifest!(%{
+        "settings_schema" => [
+          %{"key" => "base_url", "type" => "url", "grants_host" => true, "allow_private" => true}
+        ]
+      })
+    end
+
+    test "install applies declared settings and grants the declared host", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      declare_settings("webhook-notifier", %{"base_url" => "http://ollama.lan:11434/v1"})
+
+      assert {:ok, _} =
+               Plugins.install(
+                 entry(bypass, declared_manifest(), wasm),
+                 [grants: %{"net:http" => ["discord.com"]}] ++ gate_opts()
+               )
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.settings["base_url"] == "http://ollama.lan:11434/v1"
+      assert "ollama.lan" in config.granted_capabilities["net:http"]
+    end
+
+    test "a failed activation after a settings sync leaves no registered descriptor" do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "ghost-plugin",
+          name: "Ghost",
+          version: "1.0.0",
+          manifest:
+            Plugins.manifest_to_map(
+              manifest!(%{
+                "slug" => "ghost-plugin",
+                "settings_schema" => [%{"key" => "model", "type" => "string"}]
+              })
+            ),
+          granted_capabilities: %{"net:http" => ["discord.com"]},
+          enabled: true
+        })
+
+      declare_settings("ghost-plugin", %{"model" => "m"})
+      DeclaredSettings.sync("ghost-plugin")
+      assert Registry.registered?("ghost-plugin")
+
+      assert {:error, _} = Plugins.set_enabled("ghost-plugin", true)
+
+      refute Registry.registered?("ghost-plugin")
+      assert Settings.get_plugin_config_by_slug("ghost-plugin").enabled == false
+    end
+  end
+
   describe "revoke/1 and remove/1 (R8, R14)" do
     setup %{bypass: bypass} do
       wasm = guest_wasm()

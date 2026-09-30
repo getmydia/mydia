@@ -582,41 +582,6 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     end
   end
 
-  describe "provenance (AE6)" do
-    test "an env-sourced plugin renders read-only with a source badge", %{conn: conn} do
-      # May be unset: some suites (e.g. settings_test) delete the key on exit
-      # and readers fall back to Schema.defaults — mirror that fallback here.
-      original = Application.get_env(:mydia, :runtime_config)
-      base = original || Mydia.Config.Schema.defaults()
-
-      install = %Mydia.Config.Schema.PluginInstall{
-        slug: "envp",
-        name: "Env Plugin",
-        version: "1.0.0",
-        enabled: true,
-        granted_capabilities: %{"events:subscribe" => ["media_item.added"]}
-      }
-
-      Application.put_env(:mydia, :runtime_config, %{base | plugin_installs: [install]})
-
-      on_exit(fn ->
-        if original do
-          Application.put_env(:mydia, :runtime_config, original)
-        else
-          Application.delete_env(:mydia, :runtime_config)
-        end
-      end)
-
-      {:ok, view, _} = live(conn, ~p"/admin/plugins")
-
-      assert has_element?(view, "#plugin-row-envp")
-      assert render(view) =~ "configured via env"
-      # Read-only: no lifecycle controls for an env-sourced row.
-      refute has_element?(view, "#remove-envp")
-      refute has_element?(view, "#toggle-envp")
-    end
-  end
-
   describe "debug logs and test trigger (U6, U7)" do
     alias Mydia.Plugins.Logs
 
@@ -916,6 +881,51 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#settings-page-helper") |> render_click()
 
       assert has_element?(view, "#plugin-settings-form", "may be on your local network")
+    end
+  end
+
+  describe "env-declared settings" do
+    defp declare_settings(slug, settings) do
+      base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
+      decl = %Mydia.Config.Schema.PluginSettingsDecl{slug: slug, settings: settings}
+      Application.put_env(:mydia, :runtime_config, %{base | plugin_settings: [decl]})
+    end
+
+    setup do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", [])
+      env = %{"webhook_url" => "https://env.example.com/x"}
+      declare_settings("webhook-notifier", env)
+      Mydia.Plugins.DeclaredSettings.sync("webhook-notifier")
+      # Syncing an enabled plugin re-registers it, which reloads :runtime_config
+      # from the real environment and drops the injected declaration.
+      declare_settings("webhook-notifier", env)
+      :ok
+    end
+
+    test "render disabled with an ENV badge while other fields stay editable", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-webhook-notifier") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form input[name=webhook_url][disabled]")
+      refute has_element?(view, "#plugin-settings-form select[name=target][disabled]")
+      assert has_element?(view, "#settings-env-webhook_url")
+    end
+
+    test "a save cannot overwrite an env-declared key", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-webhook-notifier") |> render_click()
+
+      view
+      |> element("#plugin-settings-form")
+      |> render_submit(%{
+        "slug" => "webhook-notifier",
+        "target" => "ntfy",
+        "webhook_url" => "https://other.example.com/x"
+      })
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.settings["webhook_url"] == "https://env.example.com/x"
+      assert config.settings["target"] == "ntfy"
     end
   end
 end
