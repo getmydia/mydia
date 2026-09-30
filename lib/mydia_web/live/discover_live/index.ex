@@ -117,6 +117,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
         selected_genres != [] or selected_language != nil or selected_country != nil or
           selected_year != nil or min_rating != nil
 
+      # The home tab needs a saved country. Without one (an old link, or the
+      # tab was just removed) it falls back the same way an unknown category
+      # does. Filters stay on the home tab rather than switching to Custom.
       category =
         if category == :home and is_nil(socket.assigns.home_country),
           do: :trending,
@@ -177,6 +180,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:default_sort, default_sort)
         |> assign(:sort_by, params["sort"] || default_sort)
 
+      # Load genres if not loaded yet or media type changed
       socket =
         if socket.assigns.genres == [] do
           send(self(), :load_genres)
@@ -185,8 +189,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
           socket
         end
 
+      # Load library status map
       library_status_map = Media.get_library_status_map(socket.assigns.current_scope)
 
+      # request_status only ever affects the Request button, which only a
+      # guest sees (Authorization.can_submit_request?/1), so a viewer who
+      # cannot submit a request skips the two unfiltered list_requests/1
+      # scans entirely rather than paying for a result they can never act on.
+      # Mirrors FranchiseEvents/RecommendationEvents (#461).
       request_status_map =
         if AccountsAuthorization.can_submit_request?(socket.assigns.current_user) do
           MediaRequestHelpers.request_status_map()
@@ -235,7 +245,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("switch_category", %{"category" => category}, socket) do
-    params = build_url_params(socket.assigns, category: category)
+    # A tab click always lands on the tab itself, so the country tab opens
+    # on its rows even when clicked from one of its See all grids.
+    params = build_url_params(socket.assigns, category: category) |> Map.delete("source")
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -314,7 +326,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("clear_filters", _, socket) do
-    params = %{"type" => to_string(socket.assigns.media_type)}
+    # On a See all grid, clearing keeps the grid rather than leaving the tab.
+    params =
+      case socket.assigns do
+        %{category: :home, source: source} when not is_nil(source) ->
+          %{
+            "type" => to_string(socket.assigns.media_type),
+            "category" => "home",
+            "source" => RegionalSources.to_param(source)
+          }
+
+        _ ->
+          %{"type" => to_string(socket.assigns.media_type)}
+      end
+
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -728,7 +753,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> DetailModal.refresh_selected([items, recommendations])
+         |> refresh_lists(items, recommendations, fn row_items ->
+           row_items
+           |> MediaAddHelpers.enrich_with_library_status(updated_map)
+           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+         end)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -753,7 +782,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> DetailModal.refresh_selected([items, recommendations])
+         |> refresh_lists(items, recommendations, fn row_items ->
+           row_items
+           |> MediaAddHelpers.enrich_with_library_status(updated_map)
+           |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
+         end)
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, :restricted} ->
@@ -804,7 +837,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:items, items)
         |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
-        |> DetailModal.refresh_selected([items, recommendations])
+        |> refresh_lists(
+          items,
+          recommendations,
+          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
+        )
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->
@@ -814,6 +851,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  @impl true
   def handle_async({:regional_row, media_type, param}, result, socket) do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end
@@ -826,7 +864,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, update_picker(socket, %{status: :error, providers: []})}
   end
 
-  @impl true
   def handle_async({:load_recommendations, item_ref}, {:ok, {:ok, results}}, socket) do
     {:noreply, apply_recommendations(socket, item_ref, results)}
   end
@@ -929,6 +966,18 @@ defmodule MydiaWeb.DiscoverLive.Index do
       socket.assigns
 
     assign(socket, :regional_sources, RegionalSources.sources_for(country, services, media_type))
+  end
+
+  # Country-tab rows are a third list of the same shape as the grid and the
+  # rail. Without re-enriching them a row keeps offering "Add" for a title
+  # that was just added from it, and a second click fails on the tmdb_id index.
+  defp refresh_lists(socket, items, recommendations, enrich_rows) do
+    socket = RegionalRows.map_items(socket, enrich_rows)
+
+    DetailModal.refresh_selected(socket, [
+      items,
+      recommendations | RegionalRows.item_lists(socket.assigns)
+    ])
   end
 
   defp selectable_lists(assigns),

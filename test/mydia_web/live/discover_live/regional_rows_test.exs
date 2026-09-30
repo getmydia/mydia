@@ -268,6 +268,30 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
       {:ok, view, _html} = live(conn, ~p"/discover?type=tv_show&category=home&source=in_cinemas")
       assert has_element?(view, "#discover-regional-rows")
     end
+
+    test "the country tab returns from See all to the rows", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=made_here")
+
+      view |> element("#discover-home-tab") |> render_click()
+
+      assert_patch(view, ~p"/discover?#{%{"category" => "home", "type" => "movie"}}")
+    end
+
+    test "clearing filters stays on the See all grid", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      {:ok, view, _html} =
+        live(conn, ~p"/discover?type=movie&category=home&source=made_here&language=fr")
+
+      render_click(view, "clear_filters", %{})
+
+      assert_patch(
+        view,
+        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+      )
+    end
   end
 
   describe "restricted accounts on See all" do

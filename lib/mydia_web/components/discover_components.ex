@@ -273,7 +273,7 @@ defmodule MydiaWeb.DiscoverComponents do
         >
           <.trending_card
             item={item}
-            media_type={item.media_type || @media_type}
+            media_type={Map.get(item, :media_type) || @media_type}
             current_user={@current_user}
             adding_ids={@adding_ids}
             current={Map.get(item, :current, false)}
