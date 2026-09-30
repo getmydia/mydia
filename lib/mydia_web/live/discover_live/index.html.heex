@@ -383,6 +383,12 @@
     <% end %>
   </div>
 
+  <.services_picker
+    :if={@services_picker}
+    picker={@services_picker}
+    saved_ids={Enum.map(@streaming_services, & &1["id"])}
+  />
+
   <%!-- Detail Modal --%>
   <.live_component
     module={MydiaWeb.Live.Components.TrendingDetailModal}
