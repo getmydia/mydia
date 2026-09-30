@@ -5,6 +5,9 @@
 [hidden] { display: none !important; }
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
+/* daisyUI paints :root and [data-theme] with --root-bg (base-100). Clearing
+   the variable lets the host page show through the frame. */
+:root, [data-theme] { --root-bg: transparent; }
 body {
   display: flex;
   flex-direction: column;
@@ -204,5 +207,6 @@ button, input, textarea { font: inherit; color: inherit; }
 /* Narrow frames */
 @media (max-width: 30rem) {
   .as-chips { grid-template-columns: 1fr; }
+  .as-empty { padding-block: 0; }
   .as-user { max-width: 90%; }
 }
