@@ -592,7 +592,8 @@ defmodule Mydia.Plugins.Host do
 
   defp via(slug), do: {:via, Registry, {@registry, slug}}
 
-  defp config do
+  @doc "The effective `plugins` runtime config (defaults when none is loaded)."
+  def config do
     case Application.get_env(:mydia, :runtime_config) do
       %{plugins: %{} = plugins} -> plugins
       _ -> Mydia.Config.Schema.defaults().plugins

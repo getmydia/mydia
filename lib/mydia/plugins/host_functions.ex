@@ -428,14 +428,18 @@ defmodule Mydia.Plugins.HostFunctions do
          :ok <- require_granted_host(plugin, url) do
       hosts = Plugin.granted_http_hosts(plugin)
 
+      # Gate.request/2 reads options with Keyword.get/3 (first match wins), so
+      # the host-side options go first and override the derived defaults.
       gate_opts =
-        [
-          allowed_hosts: hosts,
-          slug: plugin.slug,
-          method: Map.get(request, "method", "GET"),
-          headers: Map.get(request, "headers", %{}),
-          body: Map.get(request, "body")
-        ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+        Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout]) ++
+          [
+            allowed_hosts: hosts,
+            slug: plugin.slug,
+            method: Map.get(request, "method", "GET"),
+            headers: Map.get(request, "headers", %{}),
+            body: Map.get(request, "body"),
+            allow_private: private_host?(plugin, url)
+          ]
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}
@@ -463,6 +467,34 @@ defmodule Mydia.Plugins.HostFunctions do
       _ ->
         :ok
     end
+  end
+
+  # An operator-configured private destination (`net:private`, derived from an
+  # `allow_private` setting) skips the gate's private-range check for that exact
+  # host only. Every other host keeps the default deny.
+  defp private_host?(plugin, url) do
+    case URI.parse(url).host do
+      host when is_binary(host) ->
+        String.downcase(host) in downcased(Plugin.private_hosts(plugin))
+
+      _ ->
+        false
+    end
+  end
+
+  @page_http_max_bytes 4_194_304
+
+  @doc """
+  Gate options for `http-request` calls made during a page (`on-http`)
+  invocation: a longer timeout and a larger response cap than event handlers
+  get, because a page call waits on a slow upstream while a user watches.
+  """
+  @spec page_http_opts() :: keyword()
+  def page_http_opts do
+    [
+      timeout: Mydia.Plugins.Host.config().page_http_timeout_ms,
+      max_bytes: @page_http_max_bytes
+    ]
   end
 
   defp downcased(hosts), do: hosts |> List.wrap() |> Enum.map(&String.downcase/1)
