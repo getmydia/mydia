@@ -82,7 +82,7 @@ defmodule MydiaWeb.Layouts do
         <!-- Mobile header with menu button -->
         <header
           id="mobile-header"
-          class="lg:hidden sticky top-0 z-30 navbar pt-[env(safe-area-inset-top,0px)] bg-base-300/95 backdrop-blur border-b border-base-content/10"
+          class="lg:hidden sticky top-0 z-30 navbar pt-[calc(0.5rem+env(safe-area-inset-top,0px))] bg-base-300/95 backdrop-blur border-b border-base-content/10"
         >
           <div class="flex-none">
             <label for="main-drawer" class="btn btn-square btn-ghost">

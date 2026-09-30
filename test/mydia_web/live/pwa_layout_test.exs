@@ -33,7 +33,7 @@ defmodule MydiaWeb.PwaLayoutTest do
   test "mobile header and drawer clear the iOS status bar", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/calendar")
 
-    assert has_element?(view, "#mobile-header[class*='pt-[env(safe-area-inset-top']")
+    assert has_element?(view, "#mobile-header[class*='pt-[calc(0.5rem+env(safe-area-inset-top']")
     assert has_element?(view, "#sidebar-brand[class*='pt-[calc(1rem+env(safe-area-inset-top']")
   end
 
