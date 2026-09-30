@@ -2459,6 +2459,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#install-a-plugin-that-is-not-in-the-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install a plugin that is not in the index
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2992,6 +3003,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#install-a-plugin-that-is-not-in-the-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install a plugin that is not in the index
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3083,12 +3105,25 @@ restart. The loop:</p>
 <p>So the cycle is <code>edit -&gt; build -&gt; copy -&gt; re-activate -&gt; test</code>. The plugin must
 already be installed (its manifest seeded) so the host knows its capabilities;
 the copy only refreshes the Wasm bytes.</p>
+<h2 id="install-a-plugin-that-is-not-in-the-index">Install a plugin that is not in the index</h2>
+<p><strong>Goal:</strong> try an unpublished plugin on a real server, manifest and all.</p>
+<p>Copy the component and its <code>manifest.json</code> somewhere the container can read,
+such as the <code>/config</code> volume, then install them with <code>mydia-cli</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>docker<span class="w"> </span><span class="nb">exec</span><span class="w"> </span>mydia<span class="w"> </span>mydia-cli<span class="w"> </span>plugin<span class="w"> </span>install<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>/config/my_plugin.wasm<span class="w"> </span>/config/manifest.json
+</code></pre></div>
+<p>The plugin installs inactive. Open <strong>Admin &gt; System &gt; Plugins</strong> to review and
+approve its capabilities, exactly as for an index install, or pass <code>--approve</code>
+to grant the declared set immediately. Running the command again with a new
+build replaces the bytes and manifest and clears the grant, so approve it again
+afterwards. A bundled plugin cannot be replaced this way; use the override
+directory above.</p>
 <div class="admonition tip">
 <p class="admonition-title">Shortcut for repo contributors</p>
 <p>If you have the Mydia repo checked out, <code>native/mydia_plugin_sdk/sideload.sh</code>
 wraps steps 1 and 2 into one command:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/path/mydia/reads
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>native/mydia_plugin_sdk/sideload.sh<span class="w"> </span>path/to/my_plugin<span class="w"> </span>--name<span class="w"> </span>my-plugin
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/path/mydia/reads
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>native/mydia_plugin_sdk/sideload.sh<span class="w"> </span>path/to/my_plugin<span class="w"> </span>--name<span class="w"> </span>my-plugin
 </code></pre></div>
 <p>External plugin authors who pull the SDK as a dependency will not have this
 script, so the manual build-and-copy above is the canonical path.</p>
