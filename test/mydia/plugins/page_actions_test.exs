@@ -1,0 +1,286 @@
+defmodule Mydia.Plugins.PageActionsTest do
+  # Not async: the media_add tests point the global metadata relay URL at a
+  # Bypass server.
+  use Mydia.DataCase, async: false
+
+  import Ecto.Query
+  import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
+
+  alias Mydia.Accounts.Scope
+  alias Mydia.Collections
+  alias Mydia.Media
+  alias Mydia.Metadata.Cache
+  alias Mydia.Plugins.Grants
+  alias Mydia.Plugins.Journal
+  alias Mydia.Plugins.PageActions
+  alias Mydia.Plugins.PendingWrite
+  alias Mydia.Plugins.Plugin
+  alias Mydia.Settings
+
+  @surfaces ["playback:watched", "collections:favorite", "collections:write", "media:add"]
+
+  setup do
+    {:ok, _} =
+      Settings.create_plugin_config(%{
+        slug: "helper",
+        name: "Helper",
+        version: "0.1.0",
+        source_url: "test",
+        manifest: %{"slug" => "helper", "name" => "Helper", "version" => "0.1.0"},
+        granted_capabilities: %{"surfaces:write" => @surfaces},
+        enabled: true
+      })
+
+    plugin = %Plugin{
+      slug: "helper",
+      name: "Helper",
+      enabled: true,
+      granted_capabilities: %{"surfaces:write" => @surfaces, "surfaces:page" => []}
+    }
+
+    user = user_fixture()
+    movie = media_item_fixture(%{title: "Harbor of Glass", tmdb_id: "777001"})
+    {:ok, plugin: plugin, user: user, movie: movie}
+  end
+
+  defp ctx(user, session \\ "s1", invocation \\ "inv-1"),
+    do: %{
+      handler: :on_http,
+      acting_user_id: user.id,
+      role: user.role,
+      session_id: session,
+      invocation_id: invocation,
+      slug: "helper"
+    }
+
+  # Serves one movie from a Bypass relay and points the default relay config at
+  # it for the rest of the test.
+  defp stub_relay_movie(tmdb_id, title, year) do
+    bypass = Bypass.open()
+    previous = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    language = Mydia.Metadata.default_relay_config().options.language
+
+    on_exit(fn ->
+      if previous,
+        do: Application.put_env(:mydia, :metadata_relay_url, previous),
+        else: Application.delete_env(:mydia, :metadata_relay_url)
+
+      Cache.delete("fetch_by_ref:tmdb:#{tmdb_id}:movie:#{language}::official")
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/#{tmdb_id}", fn conn ->
+      body = %{
+        "id" => tmdb_id,
+        "title" => title,
+        "release_date" => "#{year}-03-04",
+        "overview" => "x",
+        "credits" => %{"cast" => [], "crew" => []},
+        "genres" => []
+      }
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(body))
+    end)
+  end
+
+  defp movie_target(tmdb_id),
+    do: %{"media-type": "movie", "tmdb-id": {:some, tmdb_id}, "tvdb-id": :none}
+
+  test "without a grant a write becomes pending", %{plugin: plugin, user: user, movie: movie} do
+    assert {:ok, {:"needs-confirmation", id}} =
+             PageActions.add_favorite(plugin, ctx(user), %{
+               "tmdb-id": {:some, 777_001},
+               "user-id": "ignored"
+             })
+
+    refute Collections.is_favorite?(Scope.for_user(user), movie.id)
+    assert {:ok, [pending]} = PageActions.pending("helper", user.id, "s1", [id])
+    assert pending.description =~ "Harbor of Glass"
+  end
+
+  test "with a grant a write executes and is journaled", %{
+    plugin: plugin,
+    user: user,
+    movie: movie
+  } do
+    :ok = Grants.grant("helper", user.id, "collections:favorite", "always", "s0")
+
+    assert {:ok, {:done, json}} =
+             PageActions.add_favorite(plugin, ctx(user), %{"tmdb-id": {:some, 777_001}})
+
+    assert %{"status" => "changed"} = Jason.decode!(json)
+    assert Collections.is_favorite?(Scope.for_user(user), movie.id)
+    assert [%{op: "favorite_add", batch_id: "inv-1"}] = Journal.list("helper", user.id)
+  end
+
+  test "a journal failure rolls the write back", %{plugin: plugin, user: user} do
+    :ok = Grants.grant("helper", user.id, "collections:write", "always", "s0")
+
+    # A blank batch id cannot be journaled.
+    assert {:error, %{type: :unknown}} =
+             PageActions.collection_create(plugin, ctx(user, "s1", ""), %{
+               name: {:some, "Ghost Shelf"}
+             })
+
+    refute Enum.any?(Collections.list_collections(user), &(&1.name == "Ghost Shelf"))
+    assert Journal.list("helper", user.id) == []
+  end
+
+  test "confirm with session records the grant and runs the batch", %{plugin: plugin, user: user} do
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Rainy Sundays"}})
+
+    assert {:ok, [%{id: ^id, ok: true}]} =
+             PageActions.confirm("helper", user, "s1", [id], "session")
+
+    assert Grants.granted?("helper", user.id, "collections:write", "s1")
+    assert {:ok, []} = PageActions.pending("helper", user.id, "s1", [])
+    assert [%{op: "collection_create"}] = Journal.list("helper", user.id)
+  end
+
+  test "confirming the same ids twice runs the write once", %{plugin: plugin, user: user} do
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Once Only"}})
+
+    assert {:ok, [%{ok: true}]} = PageActions.confirm("helper", user, "s1", [id], "once")
+    assert {:error, :invalid} = PageActions.confirm("helper", user, "s1", [id], "once")
+    assert length(Journal.list("helper", user.id)) == 1
+  end
+
+  test "confirm refuses ids from another session or user", %{plugin: plugin, user: user} do
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(user), %{name: {:some, "X"}})
+
+    assert {:error, :invalid} = PageActions.confirm("helper", user, "other", [id], "once")
+    assert {:error, :invalid} = PageActions.confirm("helper", user_fixture(), "s1", [id], "once")
+  end
+
+  test "expired pending writes are not offered or confirmable", %{plugin: plugin, user: user} do
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(user), %{name: {:some, "Stale"}})
+
+    past = DateTime.utc_now() |> DateTime.add(-60) |> DateTime.truncate(:second)
+    Repo.update_all(PendingWrite, set: [expires_at: past])
+
+    assert {:ok, []} = PageActions.pending("helper", user.id, "s1", [])
+    assert {:error, :invalid} = PageActions.confirm("helper", user, "s1", [id], "once")
+  end
+
+  test "confirm refuses a choice above the ceiling", %{plugin: plugin} do
+    guest = user_fixture(%{role: "guest"})
+
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(guest), %{name: {:some, "X"}})
+
+    assert {:error, :choice_not_allowed} =
+             PageActions.confirm("helper", guest, "s1", [id], "always")
+  end
+
+  test "readonly users are denied without a prompt", %{plugin: plugin} do
+    ro = user_fixture(%{role: "readonly"})
+
+    assert {:error, %{type: :capability_denied}} =
+             PageActions.collection_create(plugin, ctx(ro), %{name: {:some, "X"}})
+  end
+
+  test "a surface the plugin lacks is denied", %{user: user} do
+    bare = %Plugin{slug: "helper", name: "H", enabled: true, granted_capabilities: %{}}
+
+    assert {:error, %{type: :capability_denied}} =
+             PageActions.collection_create(bare, ctx(user), %{name: {:some, "X"}})
+  end
+
+  test "page writes are denied outside on-http", %{plugin: plugin} do
+    event_ctx = %{handler: :on_event, invocation_id: "e1", slug: "helper"}
+
+    assert {:error, %{type: :capability_denied, message: msg}} =
+             PageActions.collection_create(plugin, event_ctx, %{name: {:some, "X"}})
+
+    assert msg =~ "interactive"
+  end
+
+  test "deny drops the pending rows", %{plugin: plugin, user: user} do
+    {:ok, {:"needs-confirmation", id}} =
+      PageActions.collection_create(plugin, ctx(user), %{name: {:some, "X"}})
+
+    assert :ok = PageActions.deny("helper", user.id, "s1", [id])
+    assert {:error, :invalid} = PageActions.confirm("helper", user, "s1", [id], "once")
+    assert Repo.aggregate(from(p in PendingWrite, where: p.id == ^id), :count) == 0
+  end
+
+  describe "media:add" do
+    test "a user adds the item to the library through the relay", %{plugin: plugin, user: user} do
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      stub_relay_movie(tmdb_id, "The Tin Orchard", 2031)
+      :ok = Grants.grant("helper", user.id, "media:add", "session", "s1")
+
+      assert {:ok, {:done, json}} =
+               PageActions.media_add(plugin, ctx(user), movie_target(tmdb_id))
+
+      assert %{"media_item_id" => item_id} = Jason.decode!(json)
+
+      item = Media.get_media_item!(Scope.for_user(user), item_id)
+      assert item.title == "The Tin Orchard"
+      assert item.tmdb_id == tmdb_id
+
+      assert [%{op: "media_add", description: "Add The Tin Orchard (2031) to the library"}] =
+               Journal.list("helper", user.id)
+    end
+
+    test "without a grant the confirmation text carries the relay title", %{
+      plugin: plugin,
+      user: user
+    } do
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      stub_relay_movie(tmdb_id, "The Tin Orchard", 2031)
+
+      assert {:ok, {:"needs-confirmation", id}} =
+               PageActions.media_add(plugin, ctx(user), movie_target(tmdb_id))
+
+      assert {:ok, [%{description: "Add The Tin Orchard (2031) to the library"}]} =
+               PageActions.pending("helper", user.id, "s1", [id])
+    end
+
+    test "a guest gets a request instead", %{plugin: plugin} do
+      guest = user_fixture(%{role: "guest"})
+      tmdb_id = 900_000_000 + System.unique_integer([:positive])
+      stub_relay_movie(tmdb_id, "The Tin Orchard", 2031)
+      :ok = Grants.grant("helper", guest.id, "media:add", "session", "s1")
+
+      assert {:ok, {:done, json}} =
+               PageActions.media_add(plugin, ctx(guest), movie_target(tmdb_id))
+
+      assert %{"request_id" => _} = Jason.decode!(json)
+    end
+
+    test "a role that can neither add nor request is refused", %{plugin: plugin} do
+      ro = user_fixture(%{role: "readonly"})
+
+      assert {:error, %{type: :capability_denied}} =
+               PageActions.media_add(plugin, ctx(ro), movie_target(900_000_001))
+    end
+
+    test "a title the relay does not know is not found", %{plugin: plugin, user: user} do
+      bypass = Bypass.open()
+      previous = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        if previous,
+          do: Application.put_env(:mydia, :metadata_relay_url, previous),
+          else: Application.delete_env(:mydia, :metadata_relay_url)
+      end)
+
+      Bypass.stub(bypass, "GET", "/tmdb/movies/900000002", fn conn ->
+        Plug.Conn.resp(conn, 404, "{}")
+      end)
+
+      assert {:error, %{type: :not_found}} =
+               PageActions.media_add(plugin, ctx(user), movie_target(900_000_002))
+    end
+  end
+end

@@ -57,6 +57,8 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Net.Gate
   alias Mydia.Plugins.Plugin
 
+  import Mydia.Plugins.PageContext, only: [to_option: 1]
+
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
 
@@ -398,9 +400,6 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   # ── option<T> marshalling ──────────────────────────────────────────────────
-
-  defp to_option(nil), do: :none
-  defp to_option(value), do: {:some, value}
 
   defp from_option({:some, value}), do: value
   defp from_option(:none), do: nil
