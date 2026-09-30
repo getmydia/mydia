@@ -36,4 +36,24 @@ defmodule MydiaWeb.PwaLayoutTest do
     assert has_element?(view, "#mobile-header[class*='pt-[env(safe-area-inset-top']")
     assert has_element?(view, "#sidebar-brand[class*='pt-[calc(1rem+env(safe-area-inset-top']")
   end
+
+  test "root layout mounts one install sheet outside the LiveView", %{conn: conn} do
+    doc = conn |> get(~p"/calendar") |> html_response(200) |> LazyHTML.from_document()
+
+    assert doc
+           |> LazyHTML.query("body > pwa-install#pwa-install[use-local-storage]")
+           |> Enum.count() == 1
+
+    assert doc |> LazyHTML.query("[data-phx-session] pwa-install") |> Enum.count() == 0
+  end
+
+  test "account menu has a hidden Install app item driven by the hook", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/calendar")
+
+    assert has_element?(
+             view,
+             ~s|li#user-menu-install.hidden[phx-hook="PwaInstallMenuItem"][phx-update="ignore"] button#user-menu-install-button|,
+             "Install app"
+           )
+  end
 end
