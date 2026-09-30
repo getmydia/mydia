@@ -22,6 +22,9 @@ defmodule Mydia.Plugins.Setup.Session do
           status: status()
         }
 
+  # The screen can carry option credentials and the state is guest-opaque; neither
+  # belongs in a crash report or a `inspect` of the LiveView assigns.
+  @derive {Inspect, except: [:screen, :state_json]}
   @enforce_keys [:slug, :instance_id]
   defstruct [
     :slug,

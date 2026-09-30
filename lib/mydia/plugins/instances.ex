@@ -132,24 +132,42 @@ defmodule Mydia.Plugins.Instances do
     :ok
   end
 
-  @spec approve_endpoints(Instance.t(), [map()]) :: {:ok, Instance.t()}
-  def approve_endpoints(%Instance{} = instance, endpoints) when is_list(endpoints) do
-    merged =
-      (instance.approved_endpoints ++ Enum.map(endpoints, &normalize_endpoint/1))
-      |> Enum.map(&normalize_endpoint/1)
-      |> Enum.uniq()
+  @typedoc "Why an endpoint was refused: it has no http(s) scheme, host, or valid port."
+  @type endpoint_error :: {:invalid_endpoint, map()}
 
-    update(instance, %{approved_endpoints: merged})
+  @spec approve_endpoints(Instance.t(), [map()]) ::
+          {:ok, Instance.t()} | {:error, endpoint_error() | Ecto.Changeset.t()}
+  def approve_endpoints(%Instance{} = instance, endpoints) when is_list(endpoints) do
+    with {:ok, wanted} <- validate_endpoints(endpoints) do
+      merged =
+        (Enum.map(instance.approved_endpoints, &normalize_endpoint/1) ++ wanted)
+        |> Enum.uniq()
+
+      update(instance, %{approved_endpoints: merged})
+    end
   end
 
   @doc "Replaces the approved endpoints with exactly `endpoints`."
   @spec replace_endpoints(Instance.t(), [map()]) ::
-          {:ok, Instance.t()} | {:error, Ecto.Changeset.t()}
+          {:ok, Instance.t()} | {:error, endpoint_error() | Ecto.Changeset.t()}
   def replace_endpoints(%Instance{} = instance, endpoints) when is_list(endpoints) do
-    update(instance, %{
-      approved_endpoints: endpoints |> Enum.map(&normalize_endpoint/1) |> Enum.uniq()
-    })
+    with {:ok, wanted} <- validate_endpoints(endpoints) do
+      update(instance, %{approved_endpoints: Enum.uniq(wanted)})
+    end
   end
+
+  defp validate_endpoints(endpoints) do
+    Enum.reduce_while(endpoints, {:ok, []}, fn endpoint, {:ok, acc} ->
+      normalized = normalize_endpoint(endpoint)
+
+      if valid_endpoint?(normalized),
+        do: {:cont, {:ok, acc ++ [normalized]}},
+        else: {:halt, {:error, {:invalid_endpoint, normalized}}}
+    end)
+  end
+
+  defp valid_endpoint?(%{"scheme" => scheme, "host" => host, "port" => port}),
+    do: scheme in ["http", "https"] and host != "" and is_integer(port) and port in 1..65535
 
   @spec remove_endpoint(Instance.t(), map()) :: {:ok, Instance.t()}
   def remove_endpoint(%Instance{} = instance, endpoint) do
@@ -191,8 +209,18 @@ defmodule Mydia.Plugins.Instances do
     }
   end
 
+  # A bad or missing port becomes nil, which `valid_endpoint?/1` refuses; it
+  # never raises.
   defp to_port(p) when is_integer(p), do: p
-  defp to_port(p) when is_binary(p), do: String.to_integer(p)
+
+  defp to_port(p) when is_binary(p) do
+    case Integer.parse(p) do
+      {n, ""} -> n
+      _ -> nil
+    end
+  end
+
+  defp to_port(_p), do: nil
 
   defp fetch(map, key), do: Map.get(map, key, Map.get(map, Atom.to_string(key)))
 end

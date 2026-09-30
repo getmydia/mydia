@@ -104,6 +104,35 @@ defmodule Mydia.Plugins.InstancesTest do
     end
   end
 
+  describe "approve_endpoints/2 with unusable endpoints" do
+    test "returns an error instead of raising on a bad or missing port" do
+      plugin_config("multi")
+      {:ok, inst} = Instances.create("multi", %{name: "Den"})
+
+      for port <- [nil, "abc", "", 0, 70_000, 1.5] do
+        assert {:error, {:invalid_endpoint, _}} =
+                 Instances.approve_endpoints(inst, [
+                   %{"scheme" => "http", "host" => "plex.lan", "port" => port}
+                 ])
+      end
+
+      assert {:error, {:invalid_endpoint, _}} =
+               Instances.replace_endpoints(inst, [
+                 %{"scheme" => "ftp", "host" => "plex.lan", "port" => 21}
+               ])
+
+      assert Instances.get!(inst.id).approved_endpoints == []
+    end
+
+    test "remove_endpoint/2 tolerates a bad port" do
+      plugin_config("multi")
+      {:ok, inst} = Instances.create("multi", %{name: "Den"})
+
+      assert {:ok, _} =
+               Instances.remove_endpoint(inst, %{"scheme" => "http", "host" => "x", "port" => nil})
+    end
+  end
+
   describe "set_remote_accounts/2" do
     test "stores the proposed accounts" do
       plugin_config("multi")

@@ -185,8 +185,9 @@ defmodule Mydia.Plugins.Setup do
         {:error, "Choose one of the options."}
 
       option ->
-        session = session |> approve(option.endpoints) |> store_credentials(option.credentials)
-        {:ok, session, %{"option_id" => option.id}}
+        with {:ok, session} <- approve(session, option.endpoints) do
+          {:ok, store_credentials(session, option.credentials), %{"option_id" => option.id}}
+        end
     end
   end
 
@@ -195,12 +196,9 @@ defmodule Mydia.Plugins.Setup do
 
     case Enum.find(fields, &(&1.required and String.trim(values[&1.key]) == "")) do
       nil ->
-        session =
-          session
-          |> approve(url_endpoints(fields, values))
-          |> persist_declared_settings(values)
-
-        {:ok, session, values}
+        with {:ok, session} <- approve(session, url_endpoints(fields, values)) do
+          {:ok, persist_declared_settings(session, values), values}
+        end
 
       field ->
         {:error, "#{field.label} is required."}
@@ -269,7 +267,8 @@ defmodule Mydia.Plugins.Setup do
       |> store_credentials(screen.credentials)
       |> Map.merge(%{
         step: screen.step,
-        screen: screen,
+        # Persisted above; the session (kept in LiveView assigns) holds none.
+        screen: %{screen | credentials: []},
         state_json: screen.next_state_json,
         error: screen.error
       })
@@ -303,18 +302,36 @@ defmodule Mydia.Plugins.Setup do
     session
   end
 
-  defp approve(session, []), do: session
+  defp approve(session, []), do: {:ok, session}
 
   defp approve(session, endpoints) do
     instance = Instances.get!(session.instance_id)
     wanted = Enum.map(endpoints, &stringify_endpoint/1)
     new = Enum.reject(wanted, &(&1 in instance.approved_endpoints))
-    {:ok, _} = Instances.approve_endpoints(instance, wanted)
-    %{session | pending_endpoints: Enum.uniq(session.pending_endpoints ++ new)}
+
+    case Instances.approve_endpoints(instance, wanted) do
+      {:ok, _} ->
+        {:ok, %{session | pending_endpoints: Enum.uniq(session.pending_endpoints ++ new)}}
+
+      {:error, {:invalid_endpoint, endpoint}} ->
+        {:error,
+         "The server address #{describe_endpoint(endpoint)} is not valid. " <>
+           "Use a full http:// or https:// address with a port between 1 and 65535."}
+
+      {:error, _changeset} ->
+        {:error, "The server address could not be saved."}
+    end
   end
 
+  defp describe_endpoint(%{"scheme" => scheme, "host" => host, "port" => port}),
+    do: "#{scheme}://#{host}:#{port || "?"}"
+
   defp stringify_endpoint(%{scheme: scheme, host: host, port: port}),
-    do: %{"scheme" => scheme, "host" => String.downcase(host), "port" => port}
+    do: %{
+      "scheme" => scheme,
+      "host" => host |> to_string() |> String.downcase(),
+      "port" => port
+    }
 
   defp stringify_endpoint(%{"scheme" => _, "host" => _, "port" => _} = endpoint), do: endpoint
 

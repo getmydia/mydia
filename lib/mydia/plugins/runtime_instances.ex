@@ -92,6 +92,12 @@ defmodule Mydia.Plugins.RuntimeInstances do
         Logger.warning(
           "could not apply declared plugin instance #{decl.plugin}/#{decl.name}: #{inspect(changeset.errors)}"
         )
+
+      {:error, {:invalid_endpoint, endpoint}} ->
+        Logger.warning(
+          "could not apply declared plugin instance #{decl.plugin}/#{decl.name}: " <>
+            "url is not a valid http(s) endpoint (#{inspect(endpoint)})"
+        )
     end
   end
 

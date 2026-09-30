@@ -103,6 +103,20 @@ defmodule Mydia.Plugins.SetupTest do
       assert link.source == :admin_mapped
     end
 
+    test "the session holds no persisted credential and does not inspect tokens", %{slug: slug} do
+      {:ok, session} = Setup.start(slug, nil)
+      session = poll_until_choice(session)
+
+      assert AccountLinks.credential(session.instance_id, :owner).access_token == "owner-token"
+      assert session.screen.credentials == []
+
+      {:ok, session} = Setup.advance(session, %{"option_id" => "server-a"})
+
+      dump = inspect(session, limit: :infinity, printable_limit: :infinity)
+      refute dump =~ "owner-token"
+      refute dump =~ "endpoint-token-a"
+    end
+
     test "an unknown option keeps the screen and reports an error", %{slug: slug} do
       {:ok, session} = Setup.start(slug, nil)
       session = poll_until_choice(session)
@@ -257,6 +271,18 @@ defmodule Mydia.Plugins.SetupTest do
       assert instance.settings["url"] == "http://192.168.1.20:32400"
       refute Map.has_key?(instance.settings, "token")
       assert AccountLinks.credential(instance.id, :owner).access_token == "typed-token"
+    end
+
+    test "an unusable port is shown to the operator, not raised", %{slug: slug} do
+      {:ok, session} = Setup.start(slug, nil, step: "manual-start")
+
+      {:ok, after_bad} =
+        Setup.advance(session, %{"url" => "http://plex.lan:99999", "token" => "t"})
+
+      assert after_bad.error =~ "http://plex.lan:99999"
+      assert after_bad.error =~ "not valid"
+      assert after_bad.status == :active
+      assert Instances.get!(session.instance_id).approved_endpoints == []
     end
 
     test "an empty optional token yields no owner credential", %{slug: slug} do
