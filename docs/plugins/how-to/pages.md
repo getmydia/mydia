@@ -22,7 +22,6 @@ For every field and function, see the [host API](../reference/host-api.md#14-hos
   "capabilities": {
     "surfaces:page": [],
     "data:read": ["collection"],
-    "data:search": [],
     "surfaces:write": ["collections:write"],
     "state:kv": []
   }
@@ -38,30 +37,43 @@ Use the `on_http` argument of the plugin macro. The host routes every request
 under `/plugins/shelf-notes/app/` to your function, with the path below `/app`.
 
 ```rust
-use mydia_plugin_sdk::types::{Event, PageRequest, PageResponse};
+use mydia_plugin_sdk::host;
+use mydia_plugin_sdk::types::{
+    Event, HostError, ListItem, ListRequest, PageRequest, PageResponse, WriteOutcome,
+};
+use serde_json::{json, Value};
 
 #[mydia_plugin_sdk::plugin(on_http = handle_http)]
 fn on_event(_evt: Event) -> Result<String, String> {
     Ok("{}".into())
 }
 
+const UI: &str = include_str!("ui.html");
+
 fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
     match (req.method.as_str(), req.path.as_str()) {
-        ("GET", "/") => html(200, include_str!("ui.html")),
-        ("POST", "/api/collections") => list_collections(&req),
+        ("GET", "/") => page(200, "text/html; charset=utf-8", UI.into()),
+        ("POST", "/api/collections") => list_collections(),
         ("POST", "/api/add") => add_title(&req),
-        _ => html(404, "Not found"),
+        _ => page(404, "text/plain; charset=utf-8", "Not found".into()),
     }
 }
 
-fn html(status: u16, body: &str) -> Result<PageResponse, String> {
+fn page(status: u16, content_type: &str, body: String) -> Result<PageResponse, String> {
     Ok(PageResponse {
         status,
-        headers: vec![("content-type".into(), "text/html; charset=utf-8".into())],
-        body: body.into(),
+        headers: vec![("content-type".into(), content_type.into())],
+        body,
     })
 }
-```
+
+fn respond_json(status: u16, value: Value) -> Result<PageResponse, String> {
+    page(status, "application/json", value.to_string())
+}
+
+fn host_error(e: HostError) -> Result<PageResponse, String> {
+    respond_json(500, json!({ "error": format!("{e:?}") }))
+}
 
 The request carries `user_id`, `role` and `session_id`, all verified by the
 host. Keep any per-user state under per-user keys such as
@@ -76,7 +88,7 @@ and send it back on every request in the `x-mydia-frame-token` header.
 
 ```html
 <link rel="stylesheet" href="/assets/css/app.css">
-<div id="list"></div>
+<ul id="list"></ul>
 <script>
   let token = new URLSearchParams(location.search).get("frame_token") || ""
   const base = location.pathname.replace(/\/$/, "")
@@ -93,6 +105,15 @@ and send it back on every request in the `x-mydia-frame-token` header.
     if (e.source !== window.parent || !e.data) return
     if (e.data.mydia === "token" && e.data.token) token = e.data.token
   })
+
+  api("collections").then((r) => r.json()).then(({ collections = [] }) => {
+    const list = document.getElementById("list")
+    for (const c of collections) {
+      const li = document.createElement("li")
+      li.textContent = c.name
+      list.appendChild(li)
+    }
+  })
 </script>
 ```
 
@@ -100,22 +121,46 @@ On the guest side, a write returns a `WriteOutcome`. Pass `Done` results through
 and report a parked write's id to the page:
 
 ```rust
-use mydia_plugin_sdk::host;
-use mydia_plugin_sdk::types::WriteOutcome;
+fn list_collections() -> Result<PageResponse, String> {
+    let listed = host::data_list(&ListRequest {
+        namespace: "collection".into(),
+        cursor: None,
+        updated_since: None,
+        limit: Some(50),
+    });
+
+    match listed {
+        Ok(page) => {
+            let rows: Vec<Value> = page
+                .items
+                .into_iter()
+                .filter_map(|item| match item {
+                    ListItem::Collection(c) => Some(json!({ "id": c.id, "name": c.name })),
+                    _ => None,
+                })
+                .collect();
+            respond_json(200, json!({ "collections": rows }))
+        }
+        Err(e) => host_error(e),
+    }
+}
 
 fn add_title(req: &PageRequest) -> Result<PageResponse, String> {
-    // Parse req.body yourself; the host never does.
-    let (collection_id, item_id) = parse_add(req.body.as_deref().unwrap_or("{}"))?;
+    // The host hands the body over untouched; parsing it is the guest's job.
+    let body: Value = serde_json::from_str(req.body.as_deref().unwrap_or("{}"))
+        .map_err(|e| e.to_string())?;
+    let collection_id = body["collectionId"].as_str().unwrap_or_default().to_string();
+    let item_id = body["itemId"].as_str().unwrap_or_default().to_string();
 
     match host::collection_add_items(&collection_id, &[item_id]) {
-        Ok(WriteOutcome::Done(result)) => json(200, &format!(r#"{{"done":{result}}}"#)),
-        Ok(WriteOutcome::NeedsConfirmation(id)) => {
-            json(200, &format!(r#"{{"pending":["{id}"]}}"#))
-        }
-        Err(e) => json(500, &format!(r#"{{"error":"{e:?}"}}"#)),
+        Ok(WriteOutcome::Done(result)) => respond_json(200, json!({ "done": result })),
+        Ok(WriteOutcome::NeedsConfirmation(id)) => respond_json(200, json!({ "pending": [id] })),
+        Err(e) => host_error(e),
     }
 }
 ```
+
+The example depends on `serde_json` in addition to the SDK.
 
 ## 4. Ask the host to confirm
 

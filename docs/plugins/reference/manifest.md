@@ -82,7 +82,8 @@ confirmation first. See [Pages and writes on a user's behalf](../explanation/plu
 (`on-http`). In a page call every namespace, including `media_item`,
 `library_item` and `playback_progress`, is read as the acting user, so a page
 never sees more than the person using it. `media_request` and `collection` are
-the user's own rows, and `download` lists active downloads. Outside a page these
+the user's own rows, and `download` lists active downloads for items the acting
+user requested (even administrators see only those). Outside a page these
 three namespaces are not available.
 
 The event catalog for `events:subscribe`:

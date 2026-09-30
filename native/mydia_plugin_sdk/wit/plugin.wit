@@ -297,7 +297,7 @@ interface types {
 
   record page-response {
     status: u16,
-    /// The host keeps content-type and cache-control and drops the rest.
+    /// The host keeps content-type and drops the rest.
     headers: list<tuple<string, string>>,
     body: string,
   }

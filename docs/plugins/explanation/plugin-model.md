@@ -170,6 +170,10 @@ body or the guest, and refuses the same functions from an event or schedule
 handler. Reads in a page call are scoped to that user too, so a page never sees
 more than the person using it.
 
+**The frame token.** The page authenticates with a signed token that is a
+one-hour bearer. A password change invalidates it at once, but logging out does
+not revoke it.
+
 **Grants.** A write surface the plugin declares in `surfaces:write` is still not
 enough on its own. The first time a page writes to a surface for a user, the
 write is parked and the user is asked. They can answer **once** (this write
@@ -191,20 +195,20 @@ change, resolved by the host), not from anything the plugin sent. The allow or
 deny decision comes from a click in the host's UI, and the plugin only hears
 back `confirmed`, `denied` or `expired`. A pending write expires after an hour.
 
-**Journal and undo.** Every write that happens is recorded, together with the
-inverse needed to revert it. The write and its journal entry commit together, so
-nothing changes without being undoable. Users see their entries on
-`/plugins/<slug>/activity` and can undo one entry or a whole batch. Undo checks
-that the item has not changed since, and leaves it alone if it has.
+**Journal and undo.** Every write that happens is recorded in a journal, and
+the write and its entry commit together, so nothing changes unrecorded. Most
+entries carry the inverse needed to revert them; one the host cannot reverse is
+shown as irreversible. Users see their entries on `/plugins/<slug>/activity` and
+can undo one entry or a whole batch. Undo refuses when the item has changed
+since, and cannot be applied twice.
 
 **Why the host never sees page content.** The host is a courier for page
 traffic. Request and response bodies pass through to and from the guest as
 opaque text; the host does not parse, store or log them, and no host code knows
 what a page is for. The only data the host keeps is what it resolved itself: the
-pending-write rows and the journal, which hold host-resolved arguments (ids, titles it looked up)
-and never the page's own content. A page that wants an assistant, a dashboard or
-a form is the plugin's business, and its data stays in the plugin's own per-user
-`state:kv` keys.
+pending-write rows and the journal, which hold host-resolved arguments (ids,
+titles it looked up) and never the page's own content. What a page is for is the plugin's business,
+and its data stays in the plugin's own per-user `state:kv` keys.
 
 To build one, see [Serve a page](../how-to/pages.md).
 
