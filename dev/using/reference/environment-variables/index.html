@@ -1648,6 +1648,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#media-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Media Servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#indexers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3383,6 +3394,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#media-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Media Servers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#indexers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3988,6 +4010,28 @@ host/port.</p>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">DOWNLOAD_CLIENT_8_WATCH_FOLDER</span><span class="o">=</span>/downloads/watch
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">DOWNLOAD_CLIENT_8_COMPLETED_FOLDER</span><span class="o">=</span>/downloads/complete
 </code></pre></div>
+<h2 id="media-servers">Media Servers</h2>
+<p>Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
+The easiest setup is Admin &gt; Media servers &gt; Add server &gt; Plex, which signs in
+with your Plex account and finds your servers. To declare a server in the
+environment instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PLUGIN_PLEX_0_NAME</span><span class="o">=</span><span class="s2">"Living room"</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">PLUGIN_PLEX_0_URL</span><span class="o">=</span>http://192.168.1.20:32400
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">PLUGIN_PLEX_0_TOKEN</span><span class="o">=</span>your-plex-token
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># Optional</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nv">PLUGIN_PLEX_0_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nv">PLUGIN_PLEX_0_SYNC_WATCHED</span><span class="o">=</span>on<span class="w">                        </span><span class="c1"># on or off (default off)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nv">PLUGIN_PLEX_0_SYNC_WATCHED_DIRECTION</span><span class="o">=</span>bidirectional<span class="w">   </span><span class="c1"># bidirectional, import or export</span>
+</code></pre></div>
+<p><code>PLUGIN_PLEX_&lt;N&gt;_URL</code> is required for a declared server. Servers declared this
+way show as read-only in the UI. The URL you declare is the only private address
+the plugin may reach for that server. <code>NAME</code> identifies the server across
+restarts (it defaults to <code>plex-&lt;N&gt;</code>): renaming it creates a new server, and the
+old one stays behind as a disabled server you can delete in the UI.</p>
+<p><code>MEDIA_SERVER_&lt;N&gt;_*</code> variables with <code>MEDIA_SERVER_&lt;N&gt;_TYPE=plex</code> still work and
+are translated into Plex instances, but they are deprecated: Mydia logs a
+warning at startup and shows a banner on the Media servers page. Rename them to
+<code>PLUGIN_PLEX_&lt;N&gt;_*</code>. Jellyfin keeps using <code>MEDIA_SERVER_&lt;N&gt;_*</code>.</p>
 <h2 id="indexers">Indexers</h2>
 <p>Configure multiple indexers using numbered variables (<code>&lt;N&gt;</code> = 1, 2, 3, etc.):</p>
 <table>
@@ -4057,25 +4101,25 @@ host/port.</p>
 </tbody>
 </table>
 <p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>newznab</code>, <code>public</code></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Prowlarr</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">INDEXER_1_NAME</span><span class="o">=</span>Prowlarr
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">INDEXER_1_TYPE</span><span class="o">=</span>prowlarr
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nv">INDEXER_1_BASE_URL</span><span class="o">=</span>http://prowlarr:9696
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nv">INDEXER_1_API_KEY</span><span class="o">=</span>your-prowlarr-api-key
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="c1"># Jackett</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="nv">INDEXER_2_NAME</span><span class="o">=</span>Jackett
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="nv">INDEXER_2_TYPE</span><span class="o">=</span>jackett
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="c1"># Newznab (works with any Newznab-compatible indexer)</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZB<span class="w"> </span>Indexer
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>newznab
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>https://indexer.example
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-newznab-api-key
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="c1"># Optional; defaults to /api</span>
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="nv">INDEXER_3_API_PATH</span><span class="o">=</span>/api
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Prowlarr</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">INDEXER_1_NAME</span><span class="o">=</span>Prowlarr
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">INDEXER_1_TYPE</span><span class="o">=</span>prowlarr
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nv">INDEXER_1_BASE_URL</span><span class="o">=</span>http://prowlarr:9696
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nv">INDEXER_1_API_KEY</span><span class="o">=</span>your-prowlarr-api-key
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Jackett</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nv">INDEXER_2_NAME</span><span class="o">=</span>Jackett
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nv">INDEXER_2_TYPE</span><span class="o">=</span>jackett
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="c1"># Newznab (works with any Newznab-compatible indexer)</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZB<span class="w"> </span>Indexer
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>newznab
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>https://indexer.example
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-newznab-api-key
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1"># Optional; defaults to /api</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="nv">INDEXER_3_API_PATH</span><span class="o">=</span>/api
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Legacy <code>nzbhydra2</code> type</p>

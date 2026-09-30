@@ -2647,6 +2647,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#15-host-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 host functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-exports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 exports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#scheduled-handler" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3183,6 +3205,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#15-host-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 host functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#15-exports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 exports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#scheduled-handler" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3622,6 +3666,97 @@ schedule calls. At most <code>pool_size - 1</code> (minimum one) page calls per 
 at once, with a bounded wait before the 503. Because a page call and an event
 call can overlap, keep page state in per-user <code>state:kv</code> keys (for example
 <code>user/&lt;user-id&gt;/history</code>); a shared key written from both paths can lose an update.</p>
+<h3 id="15-host-functions">1.5 host functions</h3>
+<p>WIT 1.5.0 is additive over 1.4.0: every 1.4 type, function and export, including
+the separate <code>page</code> interface, is unchanged.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Capability</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>links-list()</code></td>
+<td><code>users:connections</code></td>
+<td>This instance's account links, with <code>id</code>, <code>role</code> (<code>owner</code>, <code>endpoint</code> or <code>user</code>), <code>user-id</code>, <code>external-user-id</code>, <code>external-username</code> and <code>status</code>. Never returns a token.</td>
+</tr>
+<tr>
+<td><code>link-request(link-id, req)</code></td>
+<td><code>users:connections</code> + <code>net:http</code></td>
+<td>Sends <code>req</code> with the link's token attached using the manifest's <code>connection.auth_header</code> template (default <code>Authorization: Bearer {token}</code>). A guest-supplied header of the same name is removed first. A disabled link is refused.</td>
+</tr>
+<tr>
+<td><code>propose-accounts(accounts)</code></td>
+<td><code>users:connections</code></td>
+<td>Records the remote accounts the plugin discovered, for the setup mapping screen and profile pages. Creates no links.</td>
+</tr>
+<tr>
+<td><code>set-link-token(link-id, token)</code></td>
+<td><code>users:connections</code></td>
+<td>Stores a token the remote service minted for a link, such as a Plex Home profile token. The guest necessarily saw this token in the response that minted it. Refuses a disabled link and a token containing control characters.</td>
+</tr>
+<tr>
+<td><code>set-link-status(link-id, status, message)</code></td>
+<td><code>users:connections</code></td>
+<td>Marks a link <code>active</code>, <code>error</code> or <code>disabled</code>, with an optional message. Refuses a link the host has already disabled, so a guest cannot revive it.</td>
+</tr>
+<tr>
+<td><code>kv-list(prefix, cursor)</code></td>
+<td><code>state:kv</code></td>
+<td>Up to 200 entries whose key starts with <code>prefix</code>, in key order, with an opaque cursor for the next page.</td>
+</tr>
+<tr>
+<td><code>kv-set-many(entries)</code></td>
+<td><code>state:kv</code></td>
+<td>Writes up to 500 entries in one transaction, or none.</td>
+</tr>
+<tr>
+<td><code>report-sync-run(run)</code></td>
+<td>none</td>
+<td>Records a sync run (<code>started-at</code>, <code>finished-at</code>, <code>status</code> of <code>ok</code>, <code>partial</code> or <code>error</code>, and pulled, pushed, skipped and error counts) shown on the instance card.</td>
+</tr>
+</tbody>
+</table>
+<p>Every 1.5 import acts on the calling instance only: links, store and sync runs
+are scoped to the instance the host is running the guest for.</p>
+<p>Store quotas are per instance: <code>plugins.store_max_keys</code> (default 1,000,000) and
+<code>plugins.store_max_bytes</code> (default 268,435,456, or 256 MiB). Values stay capped at
+64 KiB and keys at 512 bytes. A write past a quota returns <code>denied</code>.</p>
+<p><code>playback-progress</code> gains <code>origin</code>, the origin tag of the row's last write.
+Plugin writes are tagged <code>plugin:&lt;slug&gt;:&lt;instance-id&gt;</code>, so a plugin can skip
+its own writes when pushing.</p>
+<p>The host puts the instance's id in the guest's config as <code>instance_id</code>, in
+event metadata, in the schedule tick and in setup requests.</p>
+<h3 id="15-exports">1.5 exports</h3>
+<ul>
+<li><code>setup(req) -&gt; setup-screen</code>: called with <code>step = "start"</code> when an operator
+  adds or reconnects an instance, then with each screen's <code>step</code> and the
+  operator's answer as <code>input-json</code>. While an <code>external-auth</code> screen is open,
+  the host calls it with <code>step = "poll"</code> every <code>poll-after-seconds</code>. Choosing a
+  <code>choice</code> option approves that option's <code>endpoints</code> for the instance and
+  stores its <code>credentials</code> as the <code>owner</code> or <code>endpoint</code> link. Saving a
+  <code>mapping</code> screen creates the <code>user</code> links and calls <code>setup</code> again with
+  <code>{"links": [...]}</code>. Setup calls time out after <code>plugins.setup_timeout_ms</code>
+  (default 30,000). A manifest must set <code>"setup": true</code> for the host to call it.</li>
+<li><code>check-health() -&gt; health</code>: returns <code>status</code> (<code>ok</code>, <code>degraded</code>,
+  <code>unauthorized</code> or <code>unreachable</code>), an optional message, and an optional
+  <code>action</code> (<code>reconnect</code> or <code>confirm-endpoints</code>) that the host shows as a button.
+  The host calls it every 5 minutes for each enabled instance and from the Test
+  button, under the normal event timeout.</li>
+</ul>
+<p>An endpoint approved for an instance, whether typed into a <code>grants_host</code> URL
+setting, picked in a <code>choice</code> screen or declared in config, may resolve to a
+private address, but never to a link-local one. Nothing a guest sends can add an
+approved endpoint. This sits beside the 1.4 <code>allow_private</code> url setting: a
+request may reach a private address when its host is one the operator marked
+<code>allow_private</code>, or when it matches an approved endpoint of the calling
+instance. <code>http-request</code> and <code>link-request</code> apply both rules.</p>
+<p><code>min_host_version</code> is compared with the Mydia release version, not the
+contract version, so a 1.5 guest sets it to the first Mydia release that
+ships contract 1.5, or omits it for a bundled guest.</p>
 <h3 id="scheduled-handler">Scheduled handler</h3>
 <p>Add <code>on-schedule</code> for periodic work (declare a <code>schedule</code> and the
 <code>schedule:interval</code> capability in the manifest):</p>
@@ -3658,7 +3793,7 @@ against an older minor keeps working: the host detects each guest's contract
 version from its bytes and serves the matching interface namespace and exports,
 so a <code>1.0</code> guest's <code>on-event</code> still resolves against a <code>1.1</code> host. Only a removal
 or a signature change bumps the major version. Target the lowest host you need
-via <code>min_host_version</code>; a <code>1.4</code> guest sets <code>"min_host_version": "0.16.0"</code> (the first host that serves it) so an
+via <code>min_host_version</code>; a <code>1.5</code> guest sets <code>"min_host_version": "0.16.0"</code> (the first host that serves it) so an
 older host refuses it cleanly rather than failing to link.</p>
 <h2 id="reference">Reference</h2>
 <ul>

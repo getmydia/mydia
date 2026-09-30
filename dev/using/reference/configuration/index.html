@@ -1586,6 +1586,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#plugin-instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin instances
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3094,6 +3105,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#plugin-instances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin instances
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3148,6 +3170,30 @@ adapter is fixed at build time and cannot change at runtime at all; see
 <a href="../../how-to/postgresql/">PostgreSQL Support</a>.</p>
 <p>For why the layers exist and what the database layer buys you, see
 <a href="../../explanation/configuration-model/">Why Configuration Is Layered</a>.</p>
+<h2 id="plugin-instances">Plugin instances</h2>
+<p>Plugin instances can be declared in YAML. Keys under <code>settings</code> are the
+plugin's own settings. <code>name</code> identifies the instance across restarts.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">plugin_instances</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">plugin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">plex</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Living room</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="nt">settings</span><span class="p">:</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http://192.168.1.20:32400</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="nt">token</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">your-plex-token</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">      </span><span class="nt">sync_watched</span><span class="p">:</span><span class="w"> </span><span class="s">"on"</span>
+</code></pre></div>
+<p>Declared instances overlay the ones created in the UI and are shown read-only.
+If one disappears from the config it becomes a disabled instance you manage in
+the UI, so its linked accounts are kept. <code>media_servers:</code> entries with
+<code>type: plex</code> are translated into <code>plugin_instances</code> entries and are deprecated.</p>
+<p>The same instances can be declared with <code>PLUGIN_&lt;SLUG&gt;_&lt;N&gt;_&lt;KEY&gt;</code> environment
+variables; see <a href="../environment-variables/#media-servers">Media Servers</a>.</p>
+<p>Three plugin limits live in the <code>plugins:</code> block:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">plugins</span><span class="p">:</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">setup_timeout_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30000</span><span class="w">       </span><span class="c1"># time allowed for one setup wizard step</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">store_max_keys</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span><span class="w">       </span><span class="c1"># stored entries per instance</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">store_max_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">268435456</span><span class="w">    </span><span class="c1"># stored bytes per instance (256 MiB)</span>
+</code></pre></div>
 
 
 

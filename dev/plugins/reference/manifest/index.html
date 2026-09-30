@@ -3400,6 +3400,21 @@ This page is a practical reference, using the bundled webhook notifier
 <td>Lowest Mydia version that can run this plugin. See below.</td>
 </tr>
 <tr>
+<td><code>multi_instance</code></td>
+<td>no</td>
+<td><code>true</code> lets operators add several instances, each with its own settings, store, links and schedule. Default <code>false</code>.</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>no</td>
+<td>Where the host lists instances. <code>media_server</code> puts them on Admin &gt; Media servers.</td>
+</tr>
+<tr>
+<td><code>setup</code></td>
+<td>no</td>
+<td><code>true</code> when the plugin exports <code>setup</code>; the host then creates instances through the setup wizard instead of the plain settings form. Default <code>false</code>.</td>
+</tr>
+<tr>
 <td><code>capabilities</code></td>
 <td>yes</td>
 <td>What the plugin subscribes to and is allowed to do. See below.</td>
@@ -3729,6 +3744,12 @@ never sees the token.</p>
 <li>The plugin reaches the connected account with <code>connection-request</code>, which
   attaches the bearer token host-side (see the <a href="../host-api/">Reference</a>).</li>
 </ul>
+<p><code>auth_header</code> sets how the host attaches a link's token, as <code>"Name: value"</code>
+with <code>{token}</code> in the value, for example <code>"X-Plex-Token: {token}"</code>. It
+defaults to <code>"Authorization: Bearer {token}"</code>. <code>method</code> (<code>GET</code> or <code>POST</code>,
+default <code>GET</code>) and <code>headers</code> (a string map) apply to the device flow's
+<code>code_url</code> and <code>poll_url</code>. Set <code>"type": "none"</code> to declare only <code>auth_header</code>
+without a device flow.</p>
 <h2 id="host-version-floor">Host-version floor</h2>
 <p><code>min_host_version</code> (optional, a semantic version) declares the lowest Mydia
 release your plugin supports. It is a Mydia release version, not a contract

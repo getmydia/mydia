@@ -3095,7 +3095,7 @@ artifact on the <code>Test / E2E Browser</code> job.</p>
 if it exercises something no other layer can reach.</p>
 <p><strong>Put it in the browser when it depends on client-side JavaScript.</strong> The
 <code>phx-hook</code> modules in <code>assets/js/</code> are the clearest case: <code>DockNav</code>,
-<code>ThemeToggle</code>, <code>PersistedCheckbox</code>, <code>VideoPlayer</code>, <code>PlexOAuth</code>, <code>DownloadFile</code>.
+<code>ThemeToggle</code>, <code>PersistedCheckbox</code>, <code>VideoPlayer</code>, <code>ExternalAuthPopup</code>, <code>DownloadFile</code>.
 <code>Phoenix.LiveViewTest</code> never executes them.</p>
 <p><strong>Put it in the browser when it is about layout.</strong> Whether one element is painted
 over another, or clipped by its scroll container, is only answerable by a real
