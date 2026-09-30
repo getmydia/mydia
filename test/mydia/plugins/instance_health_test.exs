@@ -26,7 +26,7 @@ defmodule Mydia.Plugins.InstanceHealthTest do
         enabled: true
       })
 
-    :persistent_term.put({Mydia.Plugins.Host, :contract, @slug}, :v14)
+    :persistent_term.put({Mydia.Plugins.Host, :contract, @slug}, :v15)
     on_exit(fn -> :persistent_term.erase({Mydia.Plugins.Host, :contract, @slug}) end)
 
     start_supervised!({InstanceHealth, check_on_start: false})
@@ -80,7 +80,7 @@ defmodule Mydia.Plugins.InstanceHealthTest do
     assert %{status: :disabled} = InstanceHealth.status_map([off])[off.id]
   end
 
-  test "a pre-1.4 plugin reports :unsupported without calling the guest", %{instance: i} do
+  test "a pre-1.5 plugin reports :unsupported without calling the guest", %{instance: i} do
     :persistent_term.put({Mydia.Plugins.Host, :contract, @slug}, :v13)
     boom = fn _, _ -> raise "must not be called" end
 

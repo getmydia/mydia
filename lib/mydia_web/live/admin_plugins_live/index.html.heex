@@ -1,13 +1,12 @@
 <Layouts.app {assigns}>
   <.admin_page page={:plugins} count={length(@installed)}>
     <:actions>
-      <MydiaWeb.AdminPluginsLive.Components.header_actions />
+      <MydiaWeb.AdminPluginsLive.Components.header_actions browsing?={@browsing?} />
     </:actions>
     <MydiaWeb.AdminPluginsLive.Components.plugins_tab
       installed={@installed}
-      catalog={@catalog}
       updates={@updates}
-      browse_error={@browse_error}
+      browse={@browse}
     />
 
     <%!-- Capability approval modal (the emphasized surface) --%>

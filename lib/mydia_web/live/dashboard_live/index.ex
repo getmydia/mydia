@@ -6,6 +6,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.UserPreference
+  alias Mydia.Metadata.RegionalSources
+  alias MydiaWeb.DashboardLive.RegionalComponents
   alias Mydia.Accounts.HomeLayout
   alias Mydia.Health.Rollup
   alias Mydia.Downloads.ClientHealth
@@ -82,6 +85,11 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:trending_tv, [])
     |> assign(:trending_movies_loading, false)
     |> assign(:trending_tv_loading, false)
+    |> assign(:regional_country, nil)
+    |> assign(:regional_sources, [])
+    |> assign(:regional_selected, nil)
+    |> assign(:regional_status, :idle)
+    |> assign(:regional_items, [])
     |> assign(:pending_requests_count, socket.assigns[:pending_requests_count] || 0)
     |> assign(:clients_rollup, %Rollup{
       healthy: 0,
@@ -221,6 +229,26 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> tap(fn _ -> send(self(), :load_trending_tv) end)
   end
 
+  defp load_widget(socket, :regional) do
+    pref =
+      socket.assigns[:current_user] && Accounts.get_user_preference!(socket.assigns.current_user)
+
+    country = pref && UserPreference.discover_home_country(pref)
+    services = if pref, do: UserPreference.discover_streaming_services(pref), else: []
+    sources = RegionalSources.home_sources(country, services)
+
+    socket =
+      socket
+      |> ensure_trending_prerequisites()
+      |> assign(:regional_country, country)
+      |> assign(:regional_sources, sources)
+
+    case sources do
+      [first | _] -> select_regional(socket, RegionalSources.to_param(first))
+      [] -> socket
+    end
+  end
+
   defp load_widget(socket, :episodes) do
     today = Date.utc_today()
     seven_days_ago = Date.add(today, -7)
@@ -240,6 +268,25 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   defp load_widget(socket, _unknown), do: socket
+
+  defp select_regional(socket, param) do
+    case RegionalSources.find(socket.assigns.regional_sources, param) do
+      nil ->
+        socket
+
+      source ->
+        country = socket.assigns.regional_country
+        extra = RemoteFilter.discover_params(socket.assigns.current_scope)
+        today = Date.utc_today()
+
+        socket
+        |> assign(:regional_selected, param)
+        |> assign(:regional_status, :loading)
+        |> start_async({:regional_rail, param}, fn ->
+          RegionalSources.fetch_mixed(source, country, extra, today)
+        end)
+    end
+  end
 
   defp ensure_trending_prerequisites(socket) do
     if socket.assigns.trending_prerequisites_loaded do
@@ -270,6 +317,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_event("select_regional_source", %{"source" => param}, socket),
+    do: {:noreply, select_regional(socket, param)}
+
   def handle_event("dismiss_player_banner", _params, socket) do
     case Accounts.dismiss_player_banner(socket.assigns.current_user) do
       {:ok, _preference} ->
@@ -286,7 +336,7 @@ defmodule MydiaWeb.DashboardLive.Index do
        socket,
        params,
        socket.assigns.current_user,
-       [socket.assigns.trending_movies, socket.assigns.trending_tv]
+       rail_lists(socket.assigns)
      )}
   end
 
@@ -452,6 +502,30 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   @impl true
+  def handle_async({:regional_rail, param}, result, socket) do
+    if param == socket.assigns.regional_selected do
+      socket =
+        case result do
+          {:ok, {:ok, results}} ->
+            items =
+              results
+              |> RemoteFilter.filter(socket.assigns.current_scope)
+              |> Enum.take(@trending_rail_limit * 2)
+              |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+              |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+
+            socket |> assign(:regional_items, items) |> assign(:regional_status, :ok)
+
+          _ ->
+            socket |> assign(:regional_items, []) |> assign(:regional_status, :error)
+        end
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_async(:duplicate_count, {:ok, count}, socket) when is_integer(count) do
     {:noreply,
      socket
@@ -564,10 +638,10 @@ defmodule MydiaWeb.DashboardLive.Index do
   end
 
   def handle_info({:request_media, ref, media_type}, socket) do
-    trending = socket.assigns.trending_movies ++ socket.assigns.trending_tv
-    id_string = to_string(Ref.id(ref))
-
-    case Enum.find(trending, &(to_string(&1.provider_id) == id_string)) do
+    # Matched on media_type too: the regional rail mixes movies and shows,
+    # and TMDB numbers the two catalogs independently, so an id alone can
+    # resolve a TV request to a movie that happens to share it.
+    case DetailModal.find_selectable_item(rail_lists(socket.assigns), Ref.id(ref), media_type) do
       nil ->
         {:noreply, assign(socket, :requesting_item_id, nil)}
 
@@ -683,13 +757,19 @@ defmodule MydiaWeb.DashboardLive.Index do
           |> MediaAddHelpers.enrich_with_library_status(updated_map)
           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
 
+        regional_items =
+          socket.assigns.regional_items
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+
         {:noreply,
          socket
          |> clear_adding(ref)
          |> assign(:library_status_map, updated_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
-         |> DetailModal.refresh_selected([trending_movies, trending_tv])
+         |> assign(:regional_items, regional_items)
+         |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -705,6 +785,11 @@ defmodule MydiaWeb.DashboardLive.Index do
           |> MediaAddHelpers.enrich_with_library_status(updated_map)
           |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
 
+        regional_items =
+          socket.assigns.regional_items
+          |> MediaAddHelpers.enrich_with_library_status(updated_map)
+          |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
+
         {:noreply,
          socket
          |> clear_adding(ref)
@@ -712,7 +797,8 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:request_status_map, request_status_map)
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
-         |> DetailModal.refresh_selected([trending_movies, trending_tv])
+         |> assign(:regional_items, regional_items)
+         |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, :restricted} ->
@@ -788,12 +874,19 @@ defmodule MydiaWeb.DashboardLive.Index do
             request_status_map
           )
 
+        regional_items =
+          MediaRequestHelpers.enrich_with_request_status(
+            socket.assigns.regional_items,
+            request_status_map
+          )
+
         socket
         |> assign(:requesting_item_id, nil)
         |> assign(:request_status_map, request_status_map)
         |> assign(:trending_movies, trending_movies)
         |> assign(:trending_tv, trending_tv)
-        |> DetailModal.refresh_selected([trending_movies, trending_tv])
+        |> assign(:regional_items, regional_items)
+        |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->
@@ -819,9 +912,9 @@ defmodule MydiaWeb.DashboardLive.Index do
   defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_event_media_type(_), do: :error
 
-  defp find_trending_item(socket, id, :movie),
-    do: Enum.find(socket.assigns.trending_movies, &(&1.provider_id == id))
+  defp rail_lists(assigns),
+    do: [assigns.trending_movies, assigns.trending_tv, assigns.regional_items]
 
-  defp find_trending_item(socket, id, :tv_show),
-    do: Enum.find(socket.assigns.trending_tv, &(&1.provider_id == id))
+  defp find_trending_item(socket, id, media_type),
+    do: DetailModal.find_selectable_item(rail_lists(socket.assigns), id, media_type)
 end

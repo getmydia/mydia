@@ -56,53 +56,38 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/discover", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"page" => 1, "total_pages" => 1, "results" => []}))
+    end)
   end
 
   defp home_country(user),
     do: user |> Accounts.get_user_preference!() |> UserPreference.discover_home_country()
 
-  describe "the one-off country filter" do
-    test "?country=CA filters by origin and saves nothing", %{
-      conn: conn,
-      user: user,
-      bypass: bypass
-    } do
-      stub_discover(bypass)
-
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "CA"}}")
-
-      assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
-      assert has_element?(view, "#discover-grid h3", "Frostbound Ferry")
-
-      assert has_element?(
-               view,
-               "#discover-filter-form select[name='country'] option[value='CA'][selected]"
-             )
-
-      assert home_country(user) == nil
-    end
-
-    test "an unknown ?country= is ignored", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "XX"}}")
-
-      refute has_element?(view, "#discover-filter-form")
-      refute_received {:discover_query, _}
-    end
-
-    test "picking a country in the filter bar patches the URL", %{conn: conn, bypass: bypass} do
+  describe "the removed country filter" do
+    test "a ?country= link is ignored", %{conn: conn, user: user, bypass: bypass} do
       stub_discover(bypass)
 
       {:ok, view, _html} =
-        live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "discover"}}")
+        live(
+          conn,
+          ~p"/discover?#{%{"type" => "movie", "category" => "discover", "country" => "CA"}}"
+        )
 
-      view
-      |> element("#discover-filter-form")
-      |> render_change(%{"country" => "CA"})
+      assert_receive {:discover_query, q}
+      refute Map.has_key?(q, "with_origin_country")
+      refute has_element?(view, "#discover-filter-form select[name='country']")
+      assert home_country(user) == nil
+    end
 
-      assert_patch(
-        view,
-        ~p"/discover?#{%{"category" => "discover", "country" => "CA", "type" => "movie"}}"
-      )
+    test "?country= alone does not switch to Custom", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "country" => "CA"}}")
+
+      refute has_element?(view, "#discover-filter-form")
+      assert has_element?(view, "[role='tab'].tab-active", "Trending")
     end
   end
 
@@ -118,42 +103,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       {:ok, view, _html} = live(conn, ~p"/discover")
 
       refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-add")
-    end
-
-    test "a forged or blank country is ignored", %{conn: conn, user: user} do
-      {:ok, view, _html} = live(conn, ~p"/discover")
-
-      view |> element("#discover-home-country-add") |> render_click()
-
-      for code <- ["XX", ""] do
-        view
-        |> element("#discover-home-country-picker")
-        |> render_change(%{"country" => code})
-      end
-
-      assert home_country(user) == nil
-      refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-picker")
-    end
-
-    test "picking a country saves it and opens its tab", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      {:ok, view, _html} = live(conn, ~p"/discover")
-
-      view |> element("#discover-home-country-add") |> render_click()
-      assert has_element?(view, "#discover-home-country-picker")
-
-      view
-      |> element("#discover-home-country-picker")
-      |> render_change(%{"country" => "CA"})
-
-      assert_patch(view, ~p"/discover?#{%{"category" => "home", "type" => "movie"}}")
-      assert home_country(user) == "CA"
-      assert has_element?(view, "#discover-home-tab.tab-active", "Canada")
-      refute has_element?(view, "#discover-home-country-picker")
-      assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
-      assert has_element?(view, "#discover-grid h3", "Frostbound Ferry")
+      assert has_element?(view, "#discover-country-settings-button")
     end
 
     test "the saved tab shows on the next mount", %{conn: conn, user: user} do
@@ -163,21 +113,6 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
 
       assert has_element?(view, "#discover-home-tab", "Canada")
       refute has_element?(view, "#discover-home-tab.tab-active")
-      refute has_element?(view, "#discover-home-country-add")
-    end
-
-    test "removing the tab clears the preference", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      set_home_country(user, "CA")
-
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
-
-      view |> element("#discover-home-country-remove") |> render_click()
-
-      assert_patch(view, ~p"/discover?#{%{"type" => "movie"}}")
-      assert home_country(user) == nil
-      refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-add")
     end
 
     test "category=home with no preference falls back to Trending", %{conn: conn} do
@@ -188,23 +123,25 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       refute_received {:discover_query, _}
     end
 
-    test "filters apply inside the tab, and the tab's country wins over ?country=",
-         %{conn: conn, user: user, bypass: bypass} do
+    test "filters apply on a See all grid inside the tab", %{
+      conn: conn,
+      user: user,
+      bypass: bypass
+    } do
       stub_discover(bypass)
       set_home_country(user, "CA")
 
       {:ok, view, _html} =
         live(
           conn,
-          ~p"/discover?#{%{"type" => "movie", "category" => "home", "language" => "fr", "country" => "FR"}}"
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "in_cinemas", "language" => "fr"}}"
         )
 
-      assert_receive {:discover_query,
-                      %{"with_origin_country" => "CA", "with_original_language" => "fr"}}
+      assert_receive {:discover_query, %{"region" => "CA", "with_original_language" => "fr"} = q}
+      refute Map.has_key?(q, "with_origin_country")
 
       assert has_element?(view, "#discover-home-tab.tab-active")
       assert has_element?(view, "#discover-filter-form")
-      refute has_element?(view, "#discover-filter-form select[name='country']")
     end
 
     test "hide-owned auto-advance works on the tab", %{conn: conn, user: user, bypass: bypass} do
@@ -223,7 +160,11 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
         _ -> {[%{"id" => visible_id, "title" => "Paper Comet"}], 2}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "in_cinemas"}}"
+        )
 
       wait_until(fn -> has_element?(view, "#discover-grid h3", "Paper Comet") end)
       refute has_element?(view, "#discover-grid h3", "Marooned Aurora")
@@ -256,12 +197,14 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
           search_query: "",
           category: :home,
           home_country: "CA",
-          selected_country: nil,
           selected_genres: [],
           selected_language: nil,
           selected_year: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
+          source: :in_cinemas,
+          default_sort: "popularity.desc",
+          regional_rows: %{},
           current_scope: %Scope{Scope.unrestricted() | max_content_age: 12}
         }
       }
@@ -270,7 +213,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
 
       assert_receive {:discover_query,
                       %{
-                        "with_origin_country" => "CA",
+                        "region" => "CA",
                         "certification_country" => "US",
                         "certification.lte" => "PG"
                       }}

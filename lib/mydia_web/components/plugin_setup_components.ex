@@ -40,7 +40,16 @@ defmodule MydiaWeb.PluginSetupComponents do
 
   def settings_field(%{field: %{"type" => "url"}} = assigns) do
     ~H"""
-    <.input field={@form[@field["key"]]} type="url" label={@field["label"] || @field["key"]} />
+    <.input
+      field={@form[@field["key"]]}
+      type="url"
+      label={@field["label"] || @field["key"]}
+      hint={
+        if @field["allow_private"],
+          do:
+            "This address may be on your local network. Saving it lets the plugin reach that one host."
+      }
+    />
     """
   end
 

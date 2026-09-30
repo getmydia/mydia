@@ -154,4 +154,30 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     assert has_element?(view, "#account-links #account-link-#{link.id}", "harbor_kid")
     assert has_element?(view, "#account-link-#{link.id}", "Glass Orchard Server")
   end
+
+  describe "plugin permissions" do
+    test "lists grants and revokes one", %{conn: conn, user: user} do
+      :ok = Mydia.Plugins.Grants.grant("helper", user.id, "collections:write", "always", "s")
+      [grant] = Mydia.Plugins.Grants.list_for_user(user.id)
+
+      {:ok, view, _} = live(conn, ~p"/integrations")
+      assert has_element?(view, "#plugin-grant-#{grant.id}")
+
+      view |> element("#revoke-grant-#{grant.id}") |> render_click()
+      refute has_element?(view, "#plugin-grant-#{grant.id}")
+      assert Mydia.Plugins.Grants.list_for_user(user.id) == []
+    end
+
+    test "session grants are not listed", %{conn: conn, user: user} do
+      :ok = Mydia.Plugins.Grants.grant("helper", user.id, "collections:write", "session", "s")
+
+      {:ok, view, _} = live(conn, ~p"/integrations")
+      refute has_element?(view, "#plugin-permissions")
+    end
+
+    test "shows no permissions card without grants", %{conn: conn} do
+      {:ok, view, _} = live(conn, ~p"/integrations")
+      refute has_element?(view, "#plugin-permissions")
+    end
+  end
 end

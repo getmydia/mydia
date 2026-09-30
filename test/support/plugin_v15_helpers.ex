@@ -1,6 +1,6 @@
-defmodule Mydia.PluginV14Helpers do
+defmodule Mydia.PluginV15Helpers do
   @moduledoc """
-  Starts the checked-in 1.4 contract fixture component under a slug, with a
+  Starts the checked-in 1.5 contract fixture component under a slug, with a
   plugin config row, a registry entry and a running pool, the way the Simkl
   integration test starts its guest. Registers `on_exit` cleanup, so call it
   from a test or `setup` block.
@@ -14,7 +14,7 @@ defmodule Mydia.PluginV14Helpers do
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
 
-  @fixture "test/support/fixtures/plugins/host_v14_fixture.wasm"
+  @fixture "test/support/fixtures/plugins/host_v15_fixture.wasm"
 
   @grants %{
     "net:http" => ["auth.example.invalid"],
@@ -27,13 +27,13 @@ defmodule Mydia.PluginV14Helpers do
     %{"key" => "suggest_user_id", "label" => "Suggested user", "type" => "string"}
   ]
 
-  @spec start_v14_fixture!(keyword()) :: String.t()
-  def start_v14_fixture!(opts \\ []) do
-    slug = Keyword.get(opts, :slug, "v14_fixture")
+  @spec start_v15_fixture!(keyword()) :: String.t()
+  def start_v15_fixture!(opts \\ []) do
+    slug = Keyword.get(opts, :slug, "v15_fixture")
 
     manifest = %{
       "slug" => slug,
-      "name" => "V14 Fixture",
+      "name" => "V15 Fixture",
       "version" => "1.0.0",
       "multi_instance" => true,
       "category" => "media_server",
@@ -45,7 +45,7 @@ defmodule Mydia.PluginV14Helpers do
     {:ok, _} =
       Settings.create_plugin_config(%{
         slug: slug,
-        name: "V14 Fixture",
+        name: "V15 Fixture",
         version: "1.0.0",
         source_url: "test",
         manifest: manifest,
@@ -57,7 +57,7 @@ defmodule Mydia.PluginV14Helpers do
     {:ok, _} =
       Registry.register(slug, %Plugin{
         slug: slug,
-        name: "V14 Fixture",
+        name: "V15 Fixture",
         granted_capabilities: @grants,
         enabled: true,
         setup: true,

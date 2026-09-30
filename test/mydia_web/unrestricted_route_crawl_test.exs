@@ -117,7 +117,15 @@ defmodule MydiaWeb.UnrestrictedRouteCrawlTest do
         "/api/v1/stream/episode/#{s.episode.id}/candidates",
       "/api/player/v1/subtitles/:type/:id" => "/api/player/v1/subtitles/episode/#{s.episode.id}",
       "/api/player/v1/subtitles/:type/:id/:track" =>
-        "/api/player/v1/subtitles/movie/#{s.movie.id}/0"
+        "/api/player/v1/subtitles/movie/#{s.movie.id}/0",
+      # Plugin pages read no media. An unknown slug is enough: the crawl only
+      # requires no 5xx and no raise. The two LiveViews redirect or render empty
+      # for it, and the frame routes authenticate by frame token rather than
+      # session, so they answer 401 without one.
+      "/plugins/:slug" => "/plugins/crawl-no-such-plugin",
+      "/plugins/:slug/activity" => "/plugins/crawl-no-such-plugin/activity",
+      "/plugins/:slug/app" => "/plugins/crawl-no-such-plugin/app",
+      "/plugins/:slug/app/*path" => "/plugins/crawl-no-such-plugin/app/index.html"
     }
   end
 

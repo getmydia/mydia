@@ -103,12 +103,6 @@ jobs:
       - name: Assert the Android shell resolves the pinned Flutter
         run: nix eval --raw .#packages.x86_64-linux.flutter.version
 
-      # Assert npmDeps.hash in nix/packages/flake-module.nix matches assets/package-lock.json.
-      # A mismatch fails as "error: hash mismatch in fixed-output derivation '...npm-deps.drv'".
-      # This runs in seconds and catches stale hashes on PRs before auto-merge.
-      - name: Assert npmDeps.hash matches assets/package-lock.json
-        run: nix build .#packages.x86_64-linux.default.npmDeps --no-link
-
   check-beam-pin:
     name: Check / BEAM Pin
     runs-on: ubuntu-latest
@@ -227,6 +221,15 @@ jobs:
       # whatever the runner image ships.
       - name: Install the pinned Rust toolchain
         run: rustup show active-toolchain || rustup toolchain install
+
+      # Nix runs prefetch-npm-deps from the flake's pinned nixpkgs, which the
+      # check uses to recompute npmDeps.hash from assets/package-lock.json.
+      # The cache only ever holds that tool, never the hash under test.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
 
       # Guards the two ways a dependency bump ships a broken tree while every
       # check stays green: generated frb bindings left behind by a version pin

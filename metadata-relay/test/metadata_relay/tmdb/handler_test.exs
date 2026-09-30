@@ -184,4 +184,66 @@ defmodule MetadataRelay.TMDB.HandlerTest do
       assert Jason.decode!(conn.resp_body) == error_body
     end
   end
+
+  defp watch_providers_fixture do
+    %{
+      "results" => [
+        %{
+          "provider_id" => 8001,
+          "provider_name" => "Maplestream",
+          "logo_path" => "/maple.png",
+          "display_priority" => 4,
+          "display_priorities" => %{"CA" => 1}
+        }
+      ]
+    }
+  end
+
+  describe "GET /tmdb/watch/providers/:type" do
+    test "movie: forwards watch_region and returns the body verbatim" do
+      test_pid = self()
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        send(test_pid, {:request_url, request.url})
+        {request, Req.Response.new(status: 200, body: watch_providers_fixture())}
+      end)
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/watch/providers/movie?watch_region=CA")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == watch_providers_fixture()
+      assert_received {:request_url, url}
+      assert url.path == "/3/watch/providers/movie"
+      assert URI.decode_query(url.query || "")["watch_region"] == "CA"
+    end
+
+    test "tv: forwards watch_region and returns the body verbatim" do
+      test_pid = self()
+
+      TMDBHelpers.set_tmdb_adapter(fn request ->
+        send(test_pid, {:request_url, request.url})
+        {request, Req.Response.new(status: 200, body: watch_providers_fixture())}
+      end)
+
+      conn =
+        Plug.Test.conn(:get, "/tmdb/watch/providers/tv?watch_region=CA")
+        |> Router.call([])
+
+      assert conn.status == 200
+      assert Jason.decode!(conn.resp_body) == watch_providers_fixture()
+      assert_received {:request_url, url}
+      assert url.path == "/3/watch/providers/tv"
+      assert URI.decode_query(url.query || "")["watch_region"] == "CA"
+    end
+
+    test "an unknown type is a 404 and never reaches TMDB" do
+      TMDBHelpers.set_tmdb_adapter(fn _request -> flunk("TMDB must not be called") end)
+
+      conn = Plug.Test.conn(:get, "/tmdb/watch/providers/music") |> Router.call([])
+
+      assert conn.status == 404
+    end
+  end
 end

@@ -1,6 +1,6 @@
 defmodule Mydia.Plugins.Setup do
   @moduledoc """
-  Drives a plugin's declarative setup screens (contract 1.4 `setup` export).
+  Drives a plugin's declarative setup screens (contract 1.5 `setup` export).
 
   The host owns the wizard: it keeps the session, validates what it can before
   calling the guest, applies what a screen carries (credentials, approved

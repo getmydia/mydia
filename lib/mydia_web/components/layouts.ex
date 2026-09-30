@@ -52,6 +52,7 @@ defmodule MydiaWeb.Layouts do
     doc: "number of pending import candidate groups awaiting review"
 
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
+  attr :plugin_nav, :list, default: [], doc: "enabled plugin pages for the sidebar"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"
   attr :feedback_form, :any, default: nil, doc: "feedback form state"
@@ -76,11 +77,17 @@ defmodule MydiaWeb.Layouts do
 
     ~H"""
     <div class="drawer lg:drawer-open">
-      <input id="main-drawer" type="checkbox" class="drawer-toggle" />
+      <%!-- The drawer's open state lives only in the browser. Without ignore,
+           every layout re-render (jobs status, page timers) resets it to the
+           server's unchecked markup and the drawer closes by itself. --%>
+      <input id="main-drawer" type="checkbox" class="drawer-toggle" phx-update="ignore" />
 
       <div class="drawer-content flex flex-col">
         <!-- Mobile header with menu button -->
-        <header class="lg:hidden sticky top-0 z-30 navbar bg-base-300/95 backdrop-blur border-b border-base-content/10">
+        <header
+          id="mobile-header"
+          class="lg:hidden sticky top-0 z-30 navbar pt-[calc(0.5rem+env(safe-area-inset-top,0px))] bg-base-300/95 backdrop-blur border-b border-base-content/10"
+        >
           <div class="flex-none">
             <label for="main-drawer" class="btn btn-square btn-ghost">
               <.icon name="hero-bars-3" class="w-6 h-6" />
@@ -140,7 +147,10 @@ defmodule MydiaWeb.Layouts do
 
         <aside class="flex flex-col w-64 h-full bg-base-300">
           <!-- Logo and branding -->
-          <div class="p-4 border-b border-base-300">
+          <div
+            id="sidebar-brand"
+            class="px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top,0px))] border-b border-base-300"
+          >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
                 <img src={~p"/images/logo.svg"} alt="Mydia" class="w-8 h-8" />
@@ -234,6 +244,15 @@ defmodule MydiaWeb.Layouts do
                 path="/calendar"
                 icon="hero-calendar"
                 label="Calendar"
+                current_path={@current_path}
+              />
+
+              <.nav_item
+                :for={page <- @plugin_nav}
+                id={"plugin-nav-#{page.slug}"}
+                path={"/plugins/#{page.slug}"}
+                icon={page.icon}
+                label={page.title}
                 current_path={@current_path}
               />
 

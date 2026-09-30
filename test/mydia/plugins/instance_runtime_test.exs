@@ -11,7 +11,7 @@ defmodule Mydia.Plugins.InstanceRuntimeTest do
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
 
-  @fixture Path.expand("../../support/fixtures/plugins/host_v14_fixture.wasm", __DIR__)
+  @fixture Path.expand("../../support/fixtures/plugins/host_v15_fixture.wasm", __DIR__)
   @slug "v14rt"
 
   defp config!(slug, manifest_extra) do

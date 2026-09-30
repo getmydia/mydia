@@ -36,7 +36,8 @@ defmodule Mydia.Plugins.Plugin do
           multi_instance: boolean(),
           category: String.t() | nil,
           setup: boolean(),
-          connection: map() | nil
+          connection: map() | nil,
+          page: map() | nil
         }
 
   defstruct slug: nil,
@@ -54,7 +55,8 @@ defmodule Mydia.Plugins.Plugin do
             multi_instance: false,
             category: nil,
             setup: false,
-            connection: nil
+            connection: nil,
+            page: nil
 
   alias Mydia.Plugins.Manifest
 
@@ -83,7 +85,8 @@ defmodule Mydia.Plugins.Plugin do
       multi_instance: manifest.multi_instance,
       category: manifest.category,
       setup: manifest.setup,
-      connection: manifest.connection
+      connection: manifest.connection,
+      page: manifest.page
     }
   end
 
@@ -94,6 +97,15 @@ defmodule Mydia.Plugins.Plugin do
   @spec granted_http_hosts(t()) :: [String.t()]
   def granted_http_hosts(%__MODULE__{granted_capabilities: granted}) do
     Map.get(granted, "net:http", [])
+  end
+
+  @doc """
+  Hosts the operator allowed to resolve to a private address, derived from
+  `allow_private` settings. `[]` unless granted.
+  """
+  @spec private_hosts(t()) :: [String.t()]
+  def private_hosts(%__MODULE__{granted_capabilities: granted}) do
+    Map.get(granted, "net:private", [])
   end
 
   @doc "True when `class` is present in the plugin's granted capabilities."

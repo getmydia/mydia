@@ -142,6 +142,7 @@ nav:
           - plugins/how-to/notifications.md
           - plugins/how-to/media-data.md
           - plugins/how-to/two-way-sync.md
+          - plugins/how-to/pages.md
           - plugins/how-to/test-and-iterate.md
       - Reference:
           - plugins/reference/manifest.md

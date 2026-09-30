@@ -8,10 +8,11 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 
-/// Optional macro arguments, comma-separated, any order:
-/// `on_schedule = f`, `setup = g`, `check_health = h`.
+/// Optional macro arguments, comma-separated, any order, each at most once:
+/// `on_schedule = f`, `on_http = p`, `setup = g`, `check_health = h`.
 struct PluginArgs {
     on_schedule: Option<Path>,
+    on_http: Option<Path>,
     setup: Option<Path>,
     check_health: Option<Path>,
 }
@@ -20,6 +21,7 @@ impl Parse for PluginArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut args = PluginArgs {
             on_schedule: None,
+            on_http: None,
             setup: None,
             check_health: None,
         };
@@ -31,12 +33,13 @@ impl Parse for PluginArgs {
 
             let slot = match key.to_string().as_str() {
                 "on_schedule" => &mut args.on_schedule,
+                "on_http" => &mut args.on_http,
                 "setup" => &mut args.setup,
                 "check_health" => &mut args.check_health,
                 _ => {
                     return Err(syn::Error::new(
                         key.span(),
-                        "expected `on_schedule`, `setup` or `check_health`",
+                        "expected `on_schedule`, `on_http`, `setup` or `check_health`",
                     ))
                 }
             };
@@ -87,10 +90,25 @@ impl Parse for PluginArgs {
 /// }
 /// ```
 ///
+/// A plugin that serves a page names an HTTP handler the same way:
+///
+/// ```ignore
+/// #[mydia_plugin_sdk::plugin(on_http = handle_http)]
+/// fn on_event(evt: mydia_plugin_sdk::types::Event) -> Result<String, String> {
+///     Ok("{}".into())
+/// }
+///
+/// fn handle_http(
+///     req: mydia_plugin_sdk::types::PageRequest,
+/// ) -> Result<mydia_plugin_sdk::types::PageResponse, String> {
+///     Err("no routes".into())
+/// }
+/// ```
+///
 /// Without `on_schedule`, the generated `on-schedule` export returns an error,
 /// so a plugin that declares a manifest schedule but forgets the handler fails
-/// loudly rather than silently doing nothing. `setup` and `check_health`
-/// (1.4.0) default to returning an error, so a plugin that declares
+/// loudly rather than silently doing nothing. `on-http` behaves the same way,
+/// as do `setup` and `check_health` (1.5.0): a plugin that declares
 /// `setup: true` in its manifest but forgets the handler fails loudly.
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -103,6 +121,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         None => quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("on-schedule not implemented by this plugin"),
+            )
+        },
+    };
+
+    let on_http_body = match args.on_http {
+        Some(path) => quote! { #path(req) },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("on-http not implemented by this plugin"),
             )
         },
     };
@@ -160,6 +187,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::std::string::String,
             > {
                 #check_health_body
+            }
+        }
+
+        impl ::mydia_plugin_sdk::PageGuest for __MydiaPluginImpl {
+            fn on_http(
+                req: ::mydia_plugin_sdk::types::PageRequest,
+            ) -> ::core::result::Result<::mydia_plugin_sdk::types::PageResponse, ::std::string::String> {
+                let _ = &req;
+                #on_http_body
             }
         }
 

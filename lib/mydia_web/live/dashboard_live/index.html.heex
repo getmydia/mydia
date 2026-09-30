@@ -231,6 +231,18 @@
               </.media_rail>
           <% end %>
         </div>
+      <% :regional -> %>
+        <RegionalComponents.regional_widget
+          country={@regional_country}
+          sources={@regional_sources}
+          selected={@regional_selected}
+          status={@regional_status}
+          items={@regional_items}
+          current_user={@current_user}
+          adding_ids={@adding_item_ids}
+          requesting_item_id={@requesting_item_id}
+          rail_limit={@trending_rail_limit}
+        />
       <% :trending_tv -> %>
         <div id="trending-tv-widget" class="mb-6 md:mb-8">
           <%= cond do %>

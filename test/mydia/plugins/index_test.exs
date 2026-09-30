@@ -190,4 +190,61 @@ defmodule Mydia.Plugins.IndexTest do
       assert Index.official_index_url() in Index.sources()
     end
   end
+
+  describe "browse/2" do
+    alias Mydia.Plugins.Index.BrowseResult
+
+    defp browse_opts(bypass, paths) do
+      [
+        sources: Enum.map(paths, &"http://allowed.test:#{bypass.port}#{&1}"),
+        allow_private: true,
+        resolver: loopback()
+      ]
+    end
+
+    defp serve(bypass, path, body) do
+      Bypass.expect_once(bypass, "GET", path, fn conn -> Plug.Conn.resp(conn, 200, body) end)
+    end
+
+    test "lists entries that are not installed", %{bypass: bypass} do
+      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+
+      assert %BrowseResult{status: :available, error: nil, source_count: 1, catalog: [entry]} =
+               Index.browse([], browse_opts(bypass, ["/index.json"]))
+
+      assert entry.slug == "webhook-notifier"
+    end
+
+    test "reports :all_installed when every listed entry is installed", %{bypass: bypass} do
+      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+
+      assert %BrowseResult{status: :all_installed, catalog: [], error: nil} =
+               Index.browse(["webhook-notifier"], browse_opts(bypass, ["/index.json"]))
+    end
+
+    test "reports :empty when the source lists nothing", %{bypass: bypass} do
+      serve(bypass, "/index.json", Jason.encode!(%{"version" => 1, "plugins" => []}))
+
+      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 1} =
+               Index.browse([], browse_opts(bypass, ["/index.json"]))
+    end
+
+    test "keeps entries from a working source when another fails", %{bypass: bypass} do
+      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+
+      Bypass.expect_once(bypass, "GET", "/missing.json", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      assert %BrowseResult{status: :available, catalog: [_], source_count: 2, error: error} =
+               Index.browse([], browse_opts(bypass, ["/index.json", "/missing.json"]))
+
+      assert error =~ "HTTP 404"
+    end
+
+    test "reports :empty with no sources configured" do
+      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 0} =
+               Index.browse([], sources: [])
+    end
+  end
 end

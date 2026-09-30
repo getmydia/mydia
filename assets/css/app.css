@@ -18,6 +18,12 @@
    test/mydia/collections/sidebar_icon_safelist_test.exs keeps the two in sync. */
 @source inline("hero-{sparkles,film,tv,star,bolt,fire,globe-alt,face-smile,rocket-launch,squares-2x2,book-open,beaker}");
 
+/* Plugin page icons are named in a plugin manifest and rendered in the navbar,
+   so the class never appears in markup the scanner can see either. The
+   allowlist is @page_icons in lib/mydia/plugins/manifest.ex;
+   test/mydia/plugins/page_icon_safelist_test.exs keeps the two in sync. */
+@source inline("hero-{sparkles,bookmark,book-open,chat-bubble-left-right,film,tv,star,heart,bolt,fire,globe-alt,beaker,puzzle-piece,rectangle-stack,queue-list,list-bullet,clipboard-document-list,chart-bar,magnifying-glass,light-bulb,cpu-chip,wrench-screwdriver,cog-6-tooth,folder,tag}");
+
 /* A Tailwind plugin that makes "hero-#{ICON}" classes available.
    The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";

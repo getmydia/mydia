@@ -1,9 +1,9 @@
-defmodule Mydia.Repo.Migrations.PluginContract14 do
+defmodule Mydia.Repo.Migrations.PluginContract15 do
   use Ecto.Migration
   import Ecto.Query
 
   @moduledoc """
-  Host contract 1.4: plugin instances and account links.
+  Host contract 1.5: plugin instances and account links.
 
   * `plugin_instances` holds per-instance operator settings, approved private
     endpoints and proposed remote accounts. Every existing plugin config gets

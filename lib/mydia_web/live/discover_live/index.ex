@@ -13,6 +13,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias Mydia.Media.Recommendations
   alias Mydia.Metadata
   alias Mydia.Metadata.Countries
+  alias Mydia.Metadata.RegionalSources
   alias Mydia.Metadata.Ref
   alias Mydia.Accounts.Authorization, as: AccountsAuthorization
   alias Mydia.Settings
@@ -22,7 +23,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   alias MydiaWeb.Live.Helpers.MediaAddHelpers
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias Mydia.Media.RemoteFilter
+  alias MydiaWeb.DiscoverLive.RegionalRows
 
+  import MydiaWeb.DiscoverLive.RegionalComponents
   import MydiaWeb.GridDensityComponents
 
   @movie_categories [
@@ -82,7 +85,12 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> GridDensity.assign_current(session)
       |> assign_hide_owned()
       |> assign_home_country()
-      |> assign(:home_country_picker_open, false)
+      |> assign_streaming_services()
+      |> assign(:regional_sources, [])
+      |> assign(:regional_rows, %{})
+      |> assign(:source, nil)
+      |> assign(:default_sort, "popularity.desc")
+      |> assign(:country_settings, nil)
 
     {:ok, socket}
   end
@@ -98,15 +106,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
       selected_language = params["language"]
-      selected_country = parse_country_param(params["country"])
       selected_year = parse_year_param(params["year"])
       min_rating = parse_rating_param(params["rating"])
-      sort_by = params["sort"] || "popularity.desc"
       page = parse_page_param(params["page"])
 
       # Determine if filters are active or discover mode is explicitly selected
       filters_active? =
-        selected_genres != [] or selected_language != nil or selected_country != nil or
+        selected_genres != [] or selected_language != nil or
           selected_year != nil or min_rating != nil
 
       # The home tab needs a saved country. Without one (an old link, or the
@@ -136,16 +142,40 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:search_mode, search_mode)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
-        |> assign(:selected_country, selected_country)
         |> assign(:selected_year, selected_year)
         |> assign(:min_rating, min_rating)
-        |> assign(:sort_by, sort_by)
         |> assign(:page, page)
         |> assign(:items, [])
         |> assign_visible_items()
         |> assign(:loading, true)
         |> assign(:load_error, nil)
         |> assign(:has_more, false)
+
+      socket =
+        if effective_category == :home do
+          assign_regional_sources(socket)
+        else
+          assign(socket, :regional_sources, [])
+        end
+
+      source =
+        if effective_category == :home,
+          do: RegionalSources.find(socket.assigns.regional_sources, params["source"]),
+          else: nil
+
+      source =
+        if source && RegionalSources.movies_only?(source) && media_type == :tv_show,
+          do: nil,
+          else: source
+
+      default_sort =
+        if source, do: RegionalSources.default_sort(source, media_type), else: "popularity.desc"
+
+      socket =
+        socket
+        |> assign(:source, source)
+        |> assign(:default_sort, default_sort)
+        |> assign(:sort_by, params["sort"] || default_sort)
 
       # Load genres if not loaded yet or media type changed
       socket =
@@ -176,7 +206,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:library_status_map, library_status_map)
         |> assign(:request_status_map, request_status_map)
 
-      send(self(), :load_data)
+      socket =
+        if landing?(socket.assigns) do
+          socket |> assign(:loading, false) |> RegionalRows.load_all()
+        else
+          send(self(), :load_data)
+          assign(socket, :regional_rows, %{})
+        end
 
       {:noreply, socket}
     else
@@ -190,7 +226,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
        |> assign(:selected_language, nil)
-       |> assign(:selected_country, nil)
        |> assign(:selected_year, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")}
@@ -206,7 +241,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   def handle_event("switch_category", %{"category" => category}, socket) do
-    params = build_url_params(socket.assigns, category: category)
+    # A tab click always lands on the tab itself, so the country tab opens
+    # on its rows even when clicked from one of its See all grids.
+    params = build_url_params(socket.assigns, category: category) |> Map.delete("source")
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -233,7 +270,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
       build_url_params(socket.assigns,
         genre: params["genre"],
         language: params["language"],
-        country: params["country"],
         year: params["year"],
         rating: params["rating"],
         sort: params["sort"]
@@ -242,8 +278,124 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, push_patch(socket, to: ~p"/discover?#{url_params}")}
   end
 
+  def handle_event("retry_regional_row", %{"source" => param}, socket) do
+    {:noreply, RegionalRows.load(socket, param)}
+  end
+
+  def handle_event("open_country_settings", _params, socket) do
+    %{home_country: country, streaming_services: services} = socket.assigns
+
+    settings = %{
+      country: country,
+      selected_ids: MapSet.new(services, & &1["id"]),
+      status: :idle,
+      providers: []
+    }
+
+    {:noreply, socket |> assign(:country_settings, settings) |> load_country_services()}
+  end
+
+  def handle_event("close_country_settings", _params, socket),
+    do: {:noreply, assign(socket, :country_settings, nil)}
+
+  def handle_event("retry_country_settings", _params, socket),
+    do: {:noreply, load_country_services(socket)}
+
+  # The form posts every field on each change: the country select and the
+  # ticked services. A new country reloads its services; the ticks are
+  # pruned to what it offers once they arrive.
+  def handle_event("country_settings_changed", params, socket) do
+    case socket.assigns.country_settings do
+      nil ->
+        {:noreply, socket}
+
+      settings ->
+        country = if Countries.valid_code?(params["country"]), do: params["country"], else: nil
+        settings = %{settings | selected_ids: ticked_ids(params, settings)}
+
+        socket =
+          if country == settings.country do
+            assign(socket, :country_settings, settings)
+          else
+            socket
+            |> assign(:country_settings, %{
+              settings
+              | country: country,
+                status: :idle,
+                providers: []
+            })
+            |> load_country_services()
+          end
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("save_country_settings", params, socket) do
+    with %{} = settings <- socket.assigns.country_settings,
+         country when is_binary(country) <- params["country"],
+         true <- Countries.valid_code?(country),
+         {:ok, _} <-
+           RegionalSources.put_country_settings(
+             socket.assigns.current_user,
+             country,
+             services_to_save(socket, settings, country, params)
+           ) do
+      params = %{"type" => to_string(socket.assigns.media_type), "category" => "home"}
+
+      {:noreply,
+       socket
+       |> assign(:home_country, country)
+       |> assign(:country_settings, nil)
+       |> assign_streaming_services()
+       |> assign_regional_sources()
+       |> push_patch(to: ~p"/discover?#{params}")}
+    else
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
+
+      _invalid ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_home_country", _params, socket) do
+    case RegionalSources.put_country_settings(socket.assigns.current_user, nil, []) do
+      {:ok, _} ->
+        socket =
+          socket
+          |> assign(:home_country, nil)
+          |> assign(:country_settings, nil)
+          |> assign_streaming_services()
+          |> assign_regional_sources()
+
+        if socket.assigns.category == :home do
+          params = %{"type" => to_string(socket.assigns.media_type)}
+          {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
+        else
+          {:noreply, socket}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
+    end
+  end
+
   def handle_event("clear_filters", _, socket) do
-    params = %{"type" => to_string(socket.assigns.media_type)}
+    # On a See all grid, clearing keeps the grid rather than leaving the tab.
+    params =
+      case socket.assigns do
+        %{category: :home, source: source} when not is_nil(source) ->
+          %{
+            "type" => to_string(socket.assigns.media_type),
+            "category" => "home",
+            "source" => RegionalSources.to_param(source)
+          }
+
+        _ ->
+          %{"type" => to_string(socket.assigns.media_type)}
+      end
+
     {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
   end
 
@@ -268,7 +420,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
        socket,
        params,
        socket.assigns.current_user,
-       [socket.assigns.items, socket.assigns.selected_recommendations]
+       selectable_lists(socket.assigns)
      )}
   end
 
@@ -340,7 +492,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     with {:ok, media_type} <- parse_event_media_type(type),
          item when not is_nil(item) <-
            DetailModal.find_selectable_item(
-             [socket.assigns.items, socket.assigns.selected_recommendations],
+             selectable_lists(socket.assigns),
              id
            ) do
       # Recommendations are not sent here: the TMDB cross-reference they need
@@ -374,56 +526,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:hide_owned, value)
          |> assign_visible_items()
          |> maybe_auto_advance(0, @page_size)}
-
-      :error ->
-        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
-    end
-  end
-
-  def handle_event("open_home_country_picker", _params, socket) do
-    {:noreply, assign(socket, :home_country_picker_open, true)}
-  end
-
-  def handle_event("close_home_country_picker", _params, socket) do
-    {:noreply, assign(socket, :home_country_picker_open, false)}
-  end
-
-  # The blank placeholder option and any client-forged code both land here
-  # and are ignored; only a listed code is saved.
-  def handle_event("set_home_country", %{"country" => code}, socket) do
-    if Countries.valid_code?(code) do
-      case persist_preference(socket, "discover_home_country", code) do
-        :ok ->
-          params = %{"type" => to_string(socket.assigns.media_type), "category" => "home"}
-
-          {:noreply,
-           socket
-           |> assign(:home_country, code)
-           |> assign(:home_country_picker_open, false)
-           |> push_patch(to: ~p"/discover?#{params}")}
-
-        :error ->
-          {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("remove_home_country", _params, socket) do
-    case persist_preference(socket, "discover_home_country", nil) do
-      :ok ->
-        socket =
-          socket
-          |> assign(:home_country, nil)
-          |> assign(:home_country_picker_open, false)
-
-        if socket.assigns.category == :home do
-          params = %{"type" => to_string(socket.assigns.media_type)}
-          {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
-        else
-          {:noreply, socket}
-        end
 
       :error ->
         {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
@@ -598,7 +700,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
     # whatever item is found here, so a mismatch here is what would decide the
     # provider a bogus request gets stored under.
     case DetailModal.find_selectable_item(
-           [socket.assigns.items, socket.assigns.selected_recommendations],
+           selectable_lists(socket.assigns),
            Ref.id(ref),
            media_type
          ) do
@@ -653,7 +755,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> DetailModal.refresh_selected([items, recommendations])
+         |> refresh_lists(items, recommendations, fn row_items ->
+           row_items
+           |> MediaAddHelpers.enrich_with_library_status(updated_map)
+           |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+         end)
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -678,7 +784,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> assign(:items, items)
          |> assign_visible_items()
          |> assign(:selected_recommendations, recommendations)
-         |> DetailModal.refresh_selected([items, recommendations])
+         |> refresh_lists(items, recommendations, fn row_items ->
+           row_items
+           |> MediaAddHelpers.enrich_with_library_status(updated_map)
+           |> MediaRequestHelpers.enrich_with_request_status(request_status_map)
+         end)
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, :restricted} ->
@@ -729,7 +839,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:items, items)
         |> assign_visible_items()
         |> assign(:selected_recommendations, recommendations)
-        |> DetailModal.refresh_selected([items, recommendations])
+        |> refresh_lists(
+          items,
+          recommendations,
+          &MediaRequestHelpers.enrich_with_request_status(&1, request_status_map)
+        )
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->
@@ -740,6 +854,38 @@ defmodule MydiaWeb.DiscoverLive.Index do
   end
 
   @impl true
+  def handle_async({:regional_row, media_type, param}, result, socket) do
+    {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
+  end
+
+  # Keyed by country so a slow answer for a country the user already moved
+  # away from is dropped instead of replacing the current list.
+  def handle_async({:country_services, country}, result, socket) do
+    case socket.assigns.country_settings do
+      %{country: ^country} = settings ->
+        settings =
+          case result do
+            {:ok, {:ok, providers}} ->
+              offered = MapSet.new(providers, & &1.id)
+
+              %{
+                settings
+                | status: :ok,
+                  providers: providers,
+                  selected_ids: MapSet.intersection(settings.selected_ids, offered)
+              }
+
+            _error_or_exit ->
+              %{settings | status: :error, providers: []}
+          end
+
+        {:noreply, assign(socket, :country_settings, settings)}
+
+      _closed_or_moved_on ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_async({:load_recommendations, item_ref}, {:ok, {:ok, results}}, socket) do
     {:noreply, apply_recommendations(socket, item_ref, results)}
   end
@@ -821,6 +967,97 @@ defmodule MydiaWeb.DiscoverLive.Index do
     assign(socket, :hide_owned, value)
   end
 
+  defp landing?(assigns),
+    do: assigns.category == :home and is_nil(assigns.source) and not assigns.search_mode
+
+  defp assign_streaming_services(socket) do
+    value =
+      case socket.assigns[:current_user] do
+        nil ->
+          []
+
+        user ->
+          user |> Accounts.get_user_preference!() |> UserPreference.discover_streaming_services()
+      end
+
+    assign(socket, :streaming_services, value)
+  end
+
+  defp assign_regional_sources(socket) do
+    %{home_country: country, streaming_services: services, media_type: media_type} =
+      socket.assigns
+
+    assign(socket, :regional_sources, RegionalSources.sources_for(country, services, media_type))
+  end
+
+  # Country-tab rows are a third list of the same shape as the grid and the
+  # rail. Without re-enriching them a row keeps offering "Add" for a title
+  # that was just added from it, and a second click fails on the tmdb_id index.
+  defp refresh_lists(socket, items, recommendations, enrich_rows) do
+    socket = RegionalRows.map_items(socket, enrich_rows)
+
+    DetailModal.refresh_selected(socket, [
+      items,
+      recommendations | RegionalRows.item_lists(socket.assigns)
+    ])
+  end
+
+  defp selectable_lists(assigns),
+    do: [assigns.items, assigns.selected_recommendations | RegionalRows.item_lists(assigns)]
+
+  defp enrich(results, socket) do
+    results
+    |> RemoteFilter.filter(socket.assigns.current_scope)
+    |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
+    |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+  end
+
+  defp load_country_services(socket) do
+    case socket.assigns.country_settings do
+      %{country: country} = settings when is_binary(country) ->
+        socket
+        |> assign(:country_settings, %{settings | status: :loading})
+        |> start_async({:country_services, country}, fn ->
+          RegionalSources.available_services(country)
+        end)
+
+      _no_country ->
+        socket
+    end
+  end
+
+  # Only ids from the loaded provider list count, so a forged value is
+  # dropped. Before the list loads, the current ticks are kept as they are.
+  defp ticked_ids(params, %{status: :ok, providers: providers}) do
+    posted = MapSet.new(List.wrap(params["services"]))
+
+    providers
+    |> Enum.filter(&(to_string(&1.id) in posted))
+    |> MapSet.new(& &1.id)
+  end
+
+  defp ticked_ids(_params, settings), do: settings.selected_ids
+
+  # With the list loaded for the country being saved, save exactly what is
+  # ticked. Without it, an unchanged country keeps its saved services, and a
+  # new one starts with none, since the old services mean nothing there.
+  defp services_to_save(socket, settings, country, params) do
+    cond do
+      settings.status == :ok and settings.country == country ->
+        ids = ticked_ids(params, settings)
+
+        settings.providers
+        |> Enum.filter(&MapSet.member?(ids, &1.id))
+        |> Enum.map(&%{"id" => &1.id, "name" => &1.name})
+
+      country == socket.assigns.home_country ->
+        socket.assigns.streaming_services
+
+      true ->
+        []
+    end
+  end
+
   defp assign_home_country(socket) do
     value =
       case socket.assigns[:current_user] do
@@ -834,11 +1071,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp handle_load_result(socket, result, mode) do
     case result do
       {:ok, %{results: results, page: page, total_pages: total_pages}} ->
-        enriched =
-          results
-          |> RemoteFilter.filter(socket.assigns.current_scope)
-          |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
-          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+        enriched = enrich(results, socket)
 
         items =
           if mode == :append do
@@ -858,11 +1091,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
       {:ok, results} when is_list(results) ->
         # Search returns a flat list
-        enriched =
-          results
-          |> RemoteFilter.filter(socket.assigns.current_scope)
-          |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
-          |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
+        enriched = enrich(results, socket)
 
         items =
           if mode == :append do
@@ -944,15 +1173,16 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
-    # On the home tab the saved country wins over any one-off ?country=.
-    country =
-      if assigns.category == :home, do: assigns.home_country, else: assigns.selected_country
-
-    opts =
-      if country do
-        Keyword.put(opts, :origin_country, country)
+    base =
+      if assigns.category == :home and assigns.source do
+        RegionalSources.opts(
+          assigns.source,
+          assigns.media_type,
+          assigns.home_country,
+          Date.utc_today()
+        )
       else
-        opts
+        []
       end
 
     opts =
@@ -969,7 +1199,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
-    Keyword.put(opts, :sort_by, assigns.sort_by)
+    Keyword.merge(base, Keyword.put(opts, :sort_by, assigns.sort_by))
   end
 
   defp build_url_params(assigns, overrides) do
@@ -982,6 +1212,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
         Map.put(params, "category", category)
       else
         params
+      end
+
+    params =
+      case {category, assigns[:source]} do
+        {"home", source} when not is_nil(source) ->
+          Map.put(params, "source", RegionalSources.to_param(source))
+
+        _ ->
+          params
       end
 
     genre = Keyword.get(overrides, :genre)
@@ -1003,11 +1242,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if language && language != "", do: Map.put(params, "language", language), else: params
 
-    country = Keyword.get(overrides, :country, assigns.selected_country)
-
-    params =
-      if country && country != "", do: Map.put(params, "country", country), else: params
-
     year = Keyword.get(overrides, :year, assigns.selected_year)
     params = if year && year != "", do: Map.put(params, "year", to_string(year)), else: params
 
@@ -1016,8 +1250,9 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if rating && rating != "", do: Map.put(params, "rating", to_string(rating)), else: params
 
+    default_sort = assigns[:default_sort] || "popularity.desc"
     sort = Keyword.get(overrides, :sort, assigns.sort_by)
-    params = if sort && sort != "popularity.desc", do: Map.put(params, "sort", sort), else: params
+    params = if sort && sort != default_sort, do: Map.put(params, "sort", sort), else: params
 
     params
   end
@@ -1043,12 +1278,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   defp parse_category("on_the_air", :tv_show), do: :on_the_air
   defp parse_category("airing_today", :tv_show), do: :airing_today
   defp parse_category(_, _), do: :trending
-
-  # URL params are user-typed: an unlisted or lowercase code is dropped rather
-  # than sent to TMDB.
-  defp parse_country_param(code) do
-    if Countries.valid_code?(code), do: code, else: nil
-  end
 
   defp parse_genres_param(nil), do: []
   defp parse_genres_param(""), do: []

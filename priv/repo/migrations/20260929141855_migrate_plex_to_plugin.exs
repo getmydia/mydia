@@ -404,7 +404,7 @@ defmodule Mydia.Repo.Migrations.MigratePlexToPlugin do
   defp kv_row(key, value), do: %{key: key, value: value}
 
   # plugin_kv keeps its original NOT NULL plugin_config_id next to the
-  # instance_id added by the contract 1.4 migration, and is unique on (instance_id, key).
+  # instance_id added by the contract 1.5 migration, and is unique on (instance_id, key).
   defp finish_kv_row(row, instance_id, plugin_config_id, now) do
     Map.merge(row, %{
       id: uuid(Ecto.UUID.generate()),

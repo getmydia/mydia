@@ -3,7 +3,7 @@ defmodule Mydia.Repo.Migrations.PluginKvInstanceStore do
 
   import Mydia.Repo.Migrations.Helpers
 
-  # The plugin KV becomes a per-instance store (contract 1.4). 20260929141207
+  # The plugin KV becomes a per-instance store (contract 1.5). 20260929141207
   # already added instance_id and moved the unique index to (instance_id, key).
   # This adds the two things the store quotas need:
   #

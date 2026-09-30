@@ -501,7 +501,7 @@ defmodule Mydia.Plugins.ManifestTest do
     end
   end
 
-  describe "1.4 instance fields" do
+  describe "1.5 instance fields" do
     test "defaults multi_instance, category and setup" do
       assert {:ok, %Manifest{multi_instance: false, category: nil, setup: false}} =
                Manifest.parse(valid_map(%{}))

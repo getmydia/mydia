@@ -9,9 +9,9 @@ defmodule Mydia.Plugins.HostFunctions do
   revoked capability takes effect immediately (a plugin can never widen its own
   grant — KTD6).
 
-  ## Component import ABI (1.4)
+  ## Component import ABI (1.5)
 
-  Imports live under the `"mydia:plugin/host@1.4.0"` interface namespace and
+  Imports live under the `"mydia:plugin/host@1.5.0"` interface namespace and
   receive/return **typed WIT records** — no linear-memory marshalling. Wasmex
   hands each import closure the decoded record (atom-keyed map; `option<T>` as
   `{:some, v}` / `:none`; `list<tuple>` as `[{k, v}]`) and marshals the closure's
@@ -23,10 +23,16 @@ defmodule Mydia.Plugins.HostFunctions do
 
   are joined in 1.1 by `kv-get/set/delete`, `data-list`, `ensure-watched`,
   `connections-list`, and `connection-request` (each capability-gated), and in
-  1.2 by `set-watch-state` plus position fields on `playback-progress`, in
-  1.3 by `ensure-favorite`, and in 1.4 by `links-list`, `link-request`,
-  `propose-accounts`, `set-link-token`, `set-link-status`, `kv-list`,
-  `kv-set-many` and `report-sync-run`, plus `origin` on `playback-progress`.
+  1.2 by `set-watch-state` plus position fields on `playback-progress`, and in
+  1.3 by `ensure-favorite`. Version 1.4 adds the page functions `search`,
+  `media-add`, `collection-create`, `collection-update`,
+  `collection-add-items`, `collection-remove-items`, `mark-watched-state` and
+  `add-favorite`. They act as the user of the current `on-http` invocation
+  (`Mydia.Plugins.PageReads`, `Mydia.Plugins.PageActions`) and are denied from
+  any other handler. Inside `on-http`, `data-list` reads as that user too.
+  Version 1.5 adds `links-list`, `link-request`, `propose-accounts`,
+  `set-link-token`, `set-link-status`, `kv-list`, `kv-set-many` and
+  `report-sync-run`, plus `origin` on `playback-progress`.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -63,24 +69,32 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Matcher
   alias Mydia.Plugins.Net.Gate
+  alias Mydia.Plugins.PageActions
+  alias Mydia.Plugins.PageReads
   alias Mydia.Plugins.Plugin
   alias Mydia.Sync
+
+  import Mydia.Plugins.PageContext, only: [page_user: 1, to_option: 1]
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.4 superset to a 1.3/1.2/1.1/1.0 guest (which imports
-  # the correspondingly older `host@x.y.z`) via component semver matching, so
-  # older guests keep working. wasmex still needs exact namespace keys in the
-  # imports map (see `Mydia.Plugins.Host`), so every supported version is also
-  # published under its own key, each narrowed to the functions that version
-  # defined.
-  @namespace "mydia:plugin/host@1.4.0"
+  # wasmtime serves this 1.5 superset to a 1.4/1.3/1.2/1.1/1.0 guest (which
+  # imports the correspondingly older `host@x.y.z`) via component semver
+  # matching, so older guests keep working. wasmex still needs exact namespace
+  # keys in the imports map (see `Mydia.Plugins.Host`), so every supported
+  # version is also published under its own key, each narrowed to the functions
+  # that version defined.
+  @namespace "mydia:plugin/host@1.5.0"
+  @v14_namespace "mydia:plugin/host@1.4.0"
   @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
   @v11_namespace "mydia:plugin/host@1.1.0"
 
+  # Functions only the 1.4 interface defines (pages); older namespaces are
+  # narrowed without them.
+  @page_funcs ~w(search media-add collection-create collection-update collection-add-items collection-remove-items mark-watched-state add-favorite)
   # Per-invocation guest log-line cap. `log` is ungated, so a buggy or hostile
   # guest could spam it in a loop and flood plugin_logs before retention fires.
   # Past the cap we drop further lines and emit one sentinel.
@@ -102,7 +116,7 @@ defmodule Mydia.Plugins.HostFunctions do
     fn ctx ->
       quota_flag = :atomics.new(1, [])
 
-      v13 = %{
+      v14 = %{
         "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
         "data-read" => {:fn, data_import(slug)},
         "log" => {:fn, log_import(slug, ctx)},
@@ -117,12 +131,25 @@ defmodule Mydia.Plugins.HostFunctions do
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug, ctx)},
         # ── 1.3.0 ──
-        "ensure-favorite" => {:fn, ensure_favorite_import(slug)}
+        "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
+        # ── 1.4.0: page functions, acting as the on-http user ──
+        "search" => {:fn, page_import(slug, ctx, &PageReads.search/3)},
+        "media-add" => {:fn, page_import(slug, ctx, &PageActions.media_add/3)},
+        "collection-create" => {:fn, page_import(slug, ctx, &PageActions.collection_create/3)},
+        "collection-update" => {:fn, page_import2(slug, ctx, &PageActions.collection_update/4)},
+        "collection-add-items" =>
+          {:fn, page_import2(slug, ctx, &PageActions.collection_add_items/4)},
+        "collection-remove-items" =>
+          {:fn, page_import2(slug, ctx, &PageActions.collection_remove_items/4)},
+        "mark-watched-state" => {:fn, page_import(slug, ctx, &PageActions.mark_watched_state/3)},
+        "add-favorite" => {:fn, page_import(slug, ctx, &PageActions.add_favorite/3)}
       }
 
-      v14 =
-        Map.merge(v13, %{
-          # 1.4 playback-progress records carry `origin`; older guests' records
+      v13 = Map.drop(v14, @page_funcs)
+
+      v15 =
+        Map.merge(v14, %{
+          # 1.5 playback-progress records carry `origin`; older guests' records
           # must not, or the record shape no longer matches their contract.
           "data-list" => {:fn, data_list_import(slug, ctx, true)},
           "links-list" => {:fn, links_list_import(slug, ctx)},
@@ -140,7 +167,8 @@ defmodule Mydia.Plugins.HostFunctions do
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
       %{
-        @namespace => v14,
+        @namespace => v15,
+        @v14_namespace => v14,
         @v13_namespace => v13,
         @v12_namespace => Map.delete(v13, "ensure-favorite"),
         @v11_namespace => v13 |> Map.delete("ensure-favorite") |> Map.delete("set-watch-state")
@@ -159,7 +187,7 @@ defmodule Mydia.Plugins.HostFunctions do
   # kv-get/kv-set/kv-delete predate instances (1.1). An invocation without an
   # instance (the conformance suite's 1.1 fixture, `Host.call/4` without
   # `:instance_id`) uses the plugin's default instance, as connections-list
-  # does. kv-list/kv-set-many are 1.4-only and require the instance.
+  # does. kv-list/kv-set-many are 1.5-only and require the instance.
   defp legacy_plugin_and_instance(slug, ctx) do
     with {:ok, plugin} <- Plugins.get_plugin(slug) do
       case ctx_instance(ctx) || Instances.default_instance(slug) do
@@ -241,11 +269,33 @@ defmodule Mydia.Plugins.HostFunctions do
 
   defp note_quota_denial(result, _slug, _ctx, _flag), do: result
 
+  # Page functions take the invocation context so they act as the on-http user;
+  # PageActions/PageReads refuse any other handler.
+  defp page_import(slug, ctx, fun) do
+    fn arg ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug), do: fun.(plugin, ctx, arg)
+      end)
+    end
+  end
+
+  defp page_import2(slug, ctx, fun) do
+    fn a, b ->
+      typed_result(fn ->
+        with {:ok, plugin} <- Plugins.get_plugin(slug), do: fun.(plugin, ctx, a, b)
+      end)
+    end
+  end
+
   defp data_list_import(slug, ctx, with_origin?) do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug) do
-          data_list(plugin, req, with_origin: with_origin?, instance: ctx_instance(ctx))
+          data_list(plugin, req,
+            with_origin: with_origin?,
+            instance: ctx_instance(ctx),
+            ctx: ctx
+          )
         end
       end)
     end
@@ -368,7 +418,7 @@ defmodule Mydia.Plugins.HostFunctions do
   defp ctx_instance(%{instance_id: id}) when is_binary(id), do: Instances.get(id)
   defp ctx_instance(_ctx), do: nil
 
-  # 1.4 imports are instance-scoped by definition: without an instance there is
+  # 1.5 imports are instance-scoped by definition: without an instance there is
   # nothing to act on.
   defp plugin_and_instance(slug, ctx) do
     with {:ok, plugin} <- Plugins.get_plugin(slug) do
@@ -382,6 +432,8 @@ defmodule Mydia.Plugins.HostFunctions do
   # ── http-request import ────────────────────────────────────────────────────
 
   defp http_import(slug, ctx, gate_opts) do
+    budget = if Map.get(ctx, :handler) == :on_http, do: page_http_opts(), else: []
+
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
@@ -389,7 +441,7 @@ defmodule Mydia.Plugins.HostFunctions do
                http_request(
                  plugin,
                  from_outbound_request(req),
-                 [instance: ctx_instance(ctx)] ++ gate_opts
+                 [instance: ctx_instance(ctx)] ++ gate_opts ++ budget
                ) do
           {:ok, to_outbound_response(resp)}
         end
@@ -565,9 +617,6 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # ── option<T> marshalling ──────────────────────────────────────────────────
 
-  defp to_option(nil), do: :none
-  defp to_option(value), do: {:some, value}
-
   defp from_option({:some, value}), do: value
   defp from_option(:none), do: nil
   defp from_option(nil), do: nil
@@ -593,14 +642,22 @@ defmodule Mydia.Plugins.HostFunctions do
     with :ok <- require_capability(plugin, "net:http"),
          {:ok, url} <- fetch_string(request, "url"),
          :ok <- require_granted_host(plugin, url) do
+      # Gate.request/2 reads options with Keyword.get/3 (first match wins), so
+      # the host-side options go first and override the derived defaults. A
+      # private address is admitted when EITHER the host is one the operator
+      # marked private (`allow_private` setting, `private_host?/2`) OR the
+      # request matches an approved endpoint of the calling instance (the gate
+      # applies the stricter approved-endpoint rules for that path).
       gate_opts =
-        Endpoints.gate_opts(plugin, Keyword.get(opts, :instance)) ++
+        Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout]) ++
+          Endpoints.gate_opts(plugin, Keyword.get(opts, :instance)) ++
           [
             slug: plugin.slug,
             method: Map.get(request, "method", "GET"),
             headers: Map.get(request, "headers", %{}),
-            body: Map.get(request, "body")
-          ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+            body: Map.get(request, "body"),
+            allow_private: private_host?(plugin, url)
+          ]
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}
@@ -628,6 +685,34 @@ defmodule Mydia.Plugins.HostFunctions do
       _ ->
         :ok
     end
+  end
+
+  # An operator-configured private destination (`net:private`, derived from an
+  # `allow_private` setting) skips the gate's private-range check for that exact
+  # host only. Every other host keeps the default deny.
+  defp private_host?(plugin, url) do
+    case URI.parse(url).host do
+      host when is_binary(host) ->
+        String.downcase(host) in downcased(Plugin.private_hosts(plugin))
+
+      _ ->
+        false
+    end
+  end
+
+  @page_http_max_bytes 4_194_304
+
+  @doc """
+  Gate options for `http-request` calls made during a page (`on-http`)
+  invocation: a longer timeout and a larger response cap than event handlers
+  get, because a page call waits on a slow upstream while a user watches.
+  """
+  @spec page_http_opts() :: keyword()
+  def page_http_opts do
+    [
+      timeout: Mydia.Plugins.Host.config().page_http_timeout_ms,
+      max_bytes: @page_http_max_bytes
+    ]
   end
 
   defp downcased(hosts), do: hosts |> List.wrap() |> Enum.map(&String.downcase/1)
@@ -768,22 +853,53 @@ defmodule Mydia.Plugins.HostFunctions do
   defp validate_kv_key(_),
     do: {:error, Error.new(:invalid_request, "kv key must be a non-empty string")}
 
+  @page_namespaces ~w(media_request download collection)
+
+  # Lists a namespace. Outside `on-http` the plugin sees the whole instance
+  # (`Scope.system()`, and the connected users' progress); inside an `on-http`
+  # call every namespace is read as the acting user instead, so a page never
+  # sees more than the person using it.
+  #
+  # The third argument is either the invocation context map (`%{handler: ...}`)
+  # or a keyword list of host-side options: `:with_origin` (1.5 records carry
+  # `origin`), `:instance`, and `:ctx`.
   @doc false
-  @spec data_list(Plugin.t(), map(), keyword()) :: {:ok, map()} | {:error, Error.t()}
-  def data_list(%Plugin{} = plugin, req, opts \\ []) do
+  @spec data_list(Plugin.t(), map(), map() | keyword()) :: {:ok, map()} | {:error, Error.t()}
+  def data_list(%Plugin{} = plugin, req, ctx_or_opts \\ []) do
+    {ctx, opts} = split_list_opts(ctx_or_opts)
     namespace = Map.get(req, :namespace, "")
 
-    with :ok <- require_data_namespace(plugin, namespace),
-         {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
-         {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
-      limit = clamp_list_limit(from_option(Map.get(req, :limit)))
-      list_namespace(plugin, namespace, cursor, since, limit, opts)
+    if namespace in @page_namespaces do
+      PageReads.list(namespace, plugin, ctx)
+    else
+      with :ok <- require_data_namespace(plugin, namespace),
+           {:ok, viewer} <- list_viewer(ctx),
+           {:ok, cursor} <- decode_list_cursor(from_option(Map.get(req, :cursor))),
+           {:ok, since} <- parse_updated_since(from_option(Map.get(req, :"updated-since"))) do
+        limit = clamp_list_limit(from_option(Map.get(req, :limit)))
+        list_namespace(plugin, viewer, namespace, cursor, since, limit, opts)
+      end
     end
   end
 
-  defp list_namespace(_plugin, "media_item", cursor, since, limit, _opts) do
+  defp split_list_opts(ctx) when is_map(ctx), do: {ctx, []}
+  defp split_list_opts(opts) when is_list(opts), do: {Keyword.get(opts, :ctx, %{}), opts}
+
+  # `:system` for event and schedule handlers; the acting user for on-http,
+  # taken from the host-provided invocation context.
+  defp list_viewer(%{handler: :on_http} = ctx), do: page_user(ctx)
+  defp list_viewer(_ctx), do: {:ok, :system}
+
+  defp list_scope(:system), do: Scope.system()
+  defp list_scope(user), do: Scope.for_user(user)
+
+  defp list_namespace(_plugin, viewer, "media_item", cursor, since, limit, _opts) do
     rows =
-      Media.list_items_page(Scope.system(), after: cursor, updated_since: since, limit: limit + 1)
+      Media.list_items_page(list_scope(viewer),
+        after: cursor,
+        updated_since: since,
+        limit: limit + 1
+      )
 
     {page, next} = paginate(rows, limit)
 
@@ -793,9 +909,9 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(_plugin, "library_item", cursor, since, limit, _opts) do
+  defp list_namespace(_plugin, viewer, "library_item", cursor, since, limit, _opts) do
     rows =
-      Media.list_library_items_page(Scope.system(),
+      Media.list_library_items_page(list_scope(viewer),
         after: cursor,
         updated_since: since,
         limit: limit + 1
@@ -806,10 +922,11 @@ defmodule Mydia.Plugins.HostFunctions do
     {:ok, %{items: items, "next-cursor": next_cursor(next)}}
   end
 
-  defp list_namespace(plugin, "playback_progress", cursor, since, limit, opts) do
-    # Consent-scoped (R21): only users with an active connection to this plugin
-    # are visible — a non-connected user's rows are absent entirely.
-    case Connections.connected_user_ids(plugin.slug) do
+  defp list_namespace(plugin, viewer, "playback_progress", cursor, since, limit, opts) do
+    # Consent-scoped (R21): outside a page, only users with an active connection
+    # to this plugin are visible, so a non-connected user's rows are absent
+    # entirely. A page reads the acting user's own rows.
+    case progress_user_ids(plugin, viewer) do
       [] ->
         {:ok, %{items: [], "next-cursor": :none}}
 
@@ -833,9 +950,12 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
-  defp list_namespace(_plugin, other, _cursor, _since, _limit, _opts) do
+  defp list_namespace(_plugin, _viewer, other, _cursor, _since, _limit, _opts) do
     {:error, Error.new(:invalid_request, "unknown data-list namespace: #{other}")}
   end
+
+  defp progress_user_ids(plugin, :system), do: Connections.connected_user_ids(plugin.slug)
+  defp progress_user_ids(_plugin, user), do: [user.id]
 
   # Fetch limit+1 to detect a next page; the cursor is the keyset of the last
   # *returned* row.
@@ -922,8 +1042,8 @@ defmodule Mydia.Plugins.HostFunctions do
       "updated-at": DateTime.to_iso8601(p.updated_at)
     }
 
-    # The 1.4 record appends `origin`; a 1.1 to 1.3 guest's record has no such
-    # field, and wasmex rejects unknown record fields, so only 1.4 gets it.
+    # The 1.5 record appends `origin`; a 1.1 to 1.4 guest's record has no such
+    # field, and wasmex rejects unknown record fields, so only 1.5 gets it.
     if with_origin?, do: Map.put(record, :origin, to_option(p.last_write_origin)), else: record
   end
 
@@ -1262,7 +1382,7 @@ defmodule Mydia.Plugins.HostFunctions do
   end
 
   @doc false
-  # Serves 1.4 link-request and, through connection_request/4, 1.1-1.3
+  # Serves 1.5 link-request and, through connection_request/4, 1.1-1.4
   # connection-request. Any role may be used; the link must belong to the
   # calling instance, not be disabled, and hold a token. The manifest's
   # auth_header template names the header; any guest header with that name
@@ -1285,14 +1405,19 @@ defmodule Mydia.Plugins.HostFunctions do
         |> Map.new()
         |> Map.put(name, String.replace(template, "{token}", link.access_token))
 
+      # Same combined egress rule as http-request: host-side options first
+      # (first match wins), then the instance's approved endpoints, and a
+      # private address is also admitted for an operator-marked private host.
       gate_opts =
-        Endpoints.gate_opts(plugin, instance) ++
+        Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout]) ++
+          Endpoints.gate_opts(plugin, instance) ++
           [
             slug: plugin.slug,
             method: Map.get(request, "method", "GET"),
             headers: headers,
-            body: Map.get(request, "body")
-          ] ++ Keyword.take(opts, [:allow_private, :resolver, :max_bytes, :timeout])
+            body: Map.get(request, "body"),
+            allow_private: private_host?(plugin, url)
+          ]
 
       case Gate.request(url, gate_opts) do
         {:ok, resp} -> {:ok, http_response_map(resp)}

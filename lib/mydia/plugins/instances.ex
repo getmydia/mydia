@@ -1,7 +1,7 @@
 defmodule Mydia.Plugins.Instances do
   @moduledoc """
   Plugin instances: per-instance settings, approved endpoints and proposed
-  remote accounts (host contract 1.4).
+  remote accounts (host contract 1.5).
   """
   # `update/2` is this module's public API; keep Ecto's query macro out of scope.
   import Ecto.Query, except: [update: 2]

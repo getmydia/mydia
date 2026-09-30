@@ -49,25 +49,26 @@ authors never hand-write the generated binding boilerplate.
 ## Exports, imports, and the contract version
 
 A plugin is a Wasm **component** built for `wasm32-wasip2` against the
-canonical WIT contract `mydia:plugin@1.4.0`, living at
+canonical WIT contract `mydia:plugin@1.5.0`, living at
 `native/mydia_plugin_sdk/wit/plugin.wit`.
 
 It **exports** `handler.on-event`, called for each event it subscribed to,
-`handler.on-schedule`, called on a fixed interval, and, from 1.4,
+`handler.on-schedule`, called on a fixed interval, and, from 1.5,
 `handler.setup`, which drives the setup wizard the host renders, and
-`handler.check-health`, which the host calls to show an instance's health. The
-SDK macro generates all four exports, and one a plugin does not implement
+`handler.check-health`, which the host calls to show an instance's health. A
+plugin that serves its own pages also exports `page.on-http` (from 1.4). The
+SDK macro generates all of these exports, and one a plugin does not implement
 returns an error. It
 **imports** the host's capabilities: `http-request`, `data-read` and `log`
 from 1.0; the key-value store, `data-list`, watch-state writes and
-per-user connections from 1.1 to 1.3; and account links, store listing and
-batch writes, and sync-run reports from 1.4. Every import is enforced
+per-user connections from 1.1 to 1.3; the page functions from 1.4; and account
+links, store listing and batch writes, and sync-run reports from 1.5. Every import is enforced
 server-side on every call; there is no path around it.
 
 The package version in the WIT file **is** the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against `1.0` keep running unmodified against a `1.4` host: the host
+built against `1.0` keep running unmodified against a `1.5` host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.
@@ -214,6 +215,63 @@ than treating the sandbox as the sole safety boundary against an arbitrary,
 unvetted one: the capability system and the instantiation-time memory cap are
 real, meaningful guards, but they are not a substitute for knowing what a
 plugin you install actually does.
+
+## Pages and writes on a user's behalf
+
+Most plugins react to events with no user in the room. A plugin that declares
+`surfaces:page` is different: it serves its own page inside Mydia, and what it
+does there it does for the person looking at it. The model that keeps this safe
+has a few parts.
+
+**Interaction scope.** Page host functions (`search`, `media-add`, the
+`collection-*` writes, `mark-watched-state`, `add-favorite`) work only during an
+`on-http` call, and only as the user of that call. The host takes the user, role
+and page session from a signed token and the database, never from the request
+body or the guest, and refuses the same functions from an event or schedule
+handler. Reads in a page call are scoped to that user too, so a page never sees
+more than the person using it.
+
+**The frame token.** The page authenticates with a signed token that is a
+one-hour bearer. A password change invalidates it at once, but logging out does
+not revoke it.
+
+**Grants.** A write surface the plugin declares in `surfaces:write` is still not
+enough on its own. The first time a page writes to a surface for a user, the
+write is parked and the user is asked. They can answer **once** (this write
+only), **for this session** (until the page is closed or reloaded) or **always**
+(until revoked). Later writes to that surface by that plugin for that user then
+go through without a prompt.
+
+**Role ceilings.** An administrator caps the longest grant each role may hold
+per plugin, in the plugin's settings. The defaults are `always` for admins and
+users, `session` for guests and `none` for read-only users. A user is only
+offered choices at or below their role's ceiling, and lowering a ceiling stops
+counting stored grants above it at once. Role also decides what a write means:
+a guest's `media-add` files a request, a user's adds to the library.
+
+**A confirmation the plugin cannot fake.** The page runs in a sandboxed iframe
+and can only ask, by posting `{mydia: "confirm", ids}` to its parent. The host
+then shows its own modal, built from the pending-write rows it stored (what will
+change, resolved by the host), not from anything the plugin sent. The allow or
+deny decision comes from a click in the host's UI, and the plugin only hears
+back `confirmed`, `denied` or `expired`. A pending write expires after an hour.
+
+**Journal and undo.** Every write that happens is recorded in a journal, and
+the write and its entry commit together, so nothing changes unrecorded. Most
+entries carry the inverse needed to revert them; one the host cannot reverse is
+shown as irreversible. Users see their entries on `/plugins/<slug>/activity` and
+can undo one entry or a whole batch. Undo refuses when the item has changed
+since, and cannot be applied twice.
+
+**Why the host never sees page content.** The host is a courier for page
+traffic. Request and response bodies pass through to and from the guest as
+opaque text; the host does not parse, store or log them, and no host code knows
+what a page is for. The only data the host keeps is what it resolved itself: the
+pending-write rows and the journal, which hold host-resolved arguments (ids,
+titles it looked up) and never the page's own content. Whatever the page keeps
+stays in the plugin's own per-user `state:kv` keys.
+
+To build one, see [Serve a page](../how-to/pages.md).
 
 ## What the host-version floor is for
 

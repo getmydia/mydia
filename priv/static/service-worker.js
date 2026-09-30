@@ -1,114 +1,85 @@
-// Mydia Service Worker
-const CACHE_NAME = 'mydia-v1';
-const OFFLINE_URL = '/offline';
+// Mydia service worker.
+//
+// It caches exactly one thing: the offline page, shown when a page navigation
+// cannot reach the server. Static assets are not cached here because
+// fingerprinted files already carry long-lived HTTP cache headers. Everything
+// else, including the API, LiveView, media streams, downloads, range requests
+// and the Flutter player under /player, is left to the browser untouched.
+// Caching those filled the origin's storage quota with video and replayed
+// authenticated API responses offline.
+const CACHE_NAME = "mydia-v2";
+const OFFLINE_URL = "/offline.html";
 
-// Assets to cache immediately on install
-const PRECACHE_ASSETS = [
-  '/assets/css/app.css',
-  '/assets/js/app.js',
-  '/images/logo.svg',
-  '/favicon.ico'
-];
+const PASSTHROUGH_PREFIXES = ["/api", "/live", "/phoenix", "/player"];
+const GATEWAY_ERRORS = [502, 503, 504];
 
-// Install event - precache essential assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
-    })
-  );
-  // Activate immediately
-  self.skipWaiting();
-});
+function route(request, origin) {
+  if (request.method !== "GET") return "passthrough";
 
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
-  );
-  // Take control of all pages immediately
-  self.clients.claim();
-});
-
-// Fetch event - network first, fall back to cache
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
   const url = new URL(request.url);
-
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
-    return;
+  if (url.origin !== origin) return "passthrough";
+  if (request.headers.get("range")) return "passthrough";
+  if (PASSTHROUGH_PREFIXES.some((p) => url.pathname === p || url.pathname.startsWith(p + "/"))) {
+    return "passthrough";
   }
 
-  // Skip WebSocket and LiveView connections
-  if (url.pathname.startsWith('/live') ||
-      url.pathname.startsWith('/phoenix') ||
-      request.headers.get('upgrade') === 'websocket') {
-    return;
+  return request.mode === "navigate" ? "navigate" : "passthrough";
+}
+
+// A failed cache lookup counts as a miss, so it never replaces the network
+// response (or Response.error()) the caller would otherwise return.
+async function cachedOfflinePage() {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    return await cache.match(OFFLINE_URL);
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+async function networkWithOfflineFallback(request) {
+  let response;
+  try {
+    response = await fetch(request);
+  } catch (_error) {
+    return (await cachedOfflinePage()) || Response.error();
   }
 
-  // For navigation requests, use network-first strategy
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .catch(() => caches.match(request))
+  if (GATEWAY_ERRORS.includes(response.status)) {
+    return (await cachedOfflinePage()) || response;
+  }
+  return response;
+}
+
+if (typeof self !== "undefined" && typeof self.addEventListener === "function") {
+  self.addEventListener("install", (event) => {
+    // Swallow failures so the worker still installs when offline.html cannot be fetched (e.g. an auth proxy redirects it).
+    event.waitUntil(
+      caches
+        .open(CACHE_NAME)
+        .then((cache) => cache.add(OFFLINE_URL))
+        .catch(() => {})
     );
-    return;
-  }
+    self.skipWaiting();
+  });
 
-  // For static assets, use cache-first strategy
-  if (url.pathname.startsWith('/assets/') ||
-      url.pathname.startsWith('/images/') ||
-      url.pathname.startsWith('/fonts/')) {
-    event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Return cached version and update cache in background
-          event.waitUntil(
-            fetch(request).then((response) => {
-              if (response.ok) {
-                caches.open(CACHE_NAME).then((cache) => {
-                  cache.put(request, response);
-                });
-              }
-            }).catch(() => {})
-          );
-          return cachedResponse;
-        }
-        // Not in cache, fetch and cache
-        return fetch(request).then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return response;
-        });
-      })
+  self.addEventListener("activate", (event) => {
+    event.waitUntil(
+      caches
+        .keys()
+        .then((names) => Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n))))
+        .then(() => self.clients.claim())
     );
-    return;
-  }
+  });
 
-  // Default: network-first for everything else
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        // Cache successful responses
-        if (response.ok && response.type === 'basic') {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
-});
+  self.addEventListener("fetch", (event) => {
+    if (route(event.request, self.location.origin) === "navigate") {
+      event.respondWith(networkWithOfflineFallback(event.request));
+    }
+    // passthrough: no respondWith, the browser handles it.
+  });
+}
+
+// Lets assets/test/unit/service_worker_route.test.mjs load `route` in Node.
+// `module` does not exist in a browser worker, so this is a no-op there.
+if (typeof module !== "undefined") module.exports = { route, CACHE_NAME };

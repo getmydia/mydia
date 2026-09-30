@@ -4,6 +4,8 @@ defmodule MydiaWeb.IntegrationsLive.Index do
   alias Mydia.Plugins
   alias Mydia.Plugins.Connections
   alias Mydia.Plugins.DeviceFlow
+  alias Mydia.Plugins.Grants
+  alias Mydia.Plugins.PageWrites
 
   require Logger
 
@@ -17,6 +19,7 @@ defmodule MydiaWeb.IntegrationsLive.Index do
       |> assign(:plugin_connect, nil)
       |> assign(:account_links, load_account_links(user.id))
       |> assign(:plugin_names, Map.new(Plugins.list_plugins(), &{&1.slug, &1.name}))
+      |> assign(:plugin_grants, Grants.list_for_user(user.id))
 
     {:ok, socket}
   end
@@ -42,6 +45,12 @@ defmodule MydiaWeb.IntegrationsLive.Index do
   end
 
   @impl true
+  def handle_event("revoke_grant", %{"id" => id}, socket) when is_binary(id) do
+    user = socket.assigns.current_user
+    _ = Grants.revoke(user.id, id)
+    {:noreply, assign(socket, :plugin_grants, Grants.list_for_user(user.id))}
+  end
+
   def handle_event("plugin_connect", %{"slug" => slug}, socket) do
     case find_connectable(socket, slug) do
       nil ->

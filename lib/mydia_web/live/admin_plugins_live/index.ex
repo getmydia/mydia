@@ -13,9 +13,13 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   """
   use MydiaWeb, :live_view
 
+  require Logger
+
   alias Mydia.Events
   alias Mydia.Plugins
+  alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
+  alias Mydia.Plugins.Index.BrowseResult
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
@@ -23,6 +27,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   # Max log rows loaded into the detail timeline on open / filter.
   @log_limit 200
+
+  @ceiling_roles ~w(admin user guest readonly)
 
   @impl true
   def mount(_params, _session, socket) do
@@ -35,9 +41,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     {:ok,
      socket
      |> assign(:page_title, "Configuration - Plugins")
-     |> assign(:catalog, [])
+     |> assign(:browse, nil)
      |> assign(:browsing?, false)
-     |> assign(:browse_error, nil)
      |> assign(:approval, nil)
      |> assign(:detail, nil)
      |> assign(:logs, nil)
@@ -53,22 +58,23 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   ## Store browsing (R13)
 
   @impl true
+  def handle_event("browse_store", _params, %{assigns: %{browsing?: true}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("browse_store", _params, socket) do
-    {entries, error} = browse()
-    installed_slugs = MapSet.new(socket.assigns.installed, & &1.slug)
-    available = Enum.reject(entries, &MapSet.member?(installed_slugs, &1.slug))
+    # Computed outside the closure so the task does not copy the socket.
+    slugs = Enum.map(socket.assigns.installed, & &1.slug)
 
     {:noreply,
      socket
-     |> assign(:catalog, available)
-     |> assign(:browse_error, error)
-     |> assign(:browsing?, false)}
+     |> assign(browsing?: true, browse: nil)
+     |> start_async(:browse, fn -> Index.browse(slugs) end)}
   end
 
   ## Capability approval (KTD6, AE1)
 
   def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(socket.assigns.catalog, &(&1.slug == slug)) do
+    case Enum.find(catalog_of(socket.assigns.browse), &(&1.slug == slug)) do
       nil -> {:noreply, socket}
       entry -> {:noreply, assign(socket, :approval, approval_from_entry(entry))}
     end
@@ -104,7 +110,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           socket
           |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
-          |> assign(:catalog, [])
+          |> assign(:browse, nil)
           |> load_installed()
 
         {:error, error} ->
@@ -156,6 +162,26 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
         {:noreply, assign(socket, :settings, %{settings | values: values, form: to_form(values)})}
     end
   end
+
+  def handle_event("save_ceilings", %{"slug" => slug, "ceilings" => ceilings}, socket)
+      when is_binary(slug) and is_map(ceilings) do
+    with %{} = config <- Settings.get_plugin_config_by_slug(slug),
+         true <- page_writes?(config),
+         {:ok, _} <- Grants.put_ceilings(slug, ceilings) do
+      settings =
+        case socket.assigns.settings do
+          %{slug: ^slug} = open -> %{open | ceilings_form: ceilings_form(config)}
+          other -> other
+        end
+
+      {:noreply, socket |> assign(:settings, settings) |> put_flash(:info, "Permissions saved.")}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Could not save permissions.")}
+    end
+  end
+
+  def handle_event("save_ceilings", _params, socket),
+    do: {:noreply, put_flash(socket, :error, "Could not save permissions.")}
 
   def handle_event("save_settings", %{"slug" => slug} = params, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
@@ -257,6 +283,23 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   end
 
   ## Live tail (U6) — activity log + network activity
+
+  @impl true
+  def handle_async(:browse, {:ok, %BrowseResult{} = result}, socket) do
+    {:noreply, assign(socket, browse: result, browsing?: false)}
+  end
+
+  def handle_async(:browse, {:exit, reason}, socket) do
+    Logger.warning("plugin store lookup failed: #{inspect(reason)}")
+
+    result = %BrowseResult{
+      status: :empty,
+      error: "store lookup failed",
+      source_count: length(Index.sources())
+    }
+
+    {:noreply, assign(socket, browse: result, browsing?: false)}
+  end
 
   @impl true
   def handle_info({:plugin_log, %Log{} = log}, socket) do
@@ -399,8 +442,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # capabilities are still pending approval.
       pending_approval: capabilities != %{} and granted == %{},
       # A multi_instance plugin is configured per instance on Media servers; a
-      # plugin-level form would write settings no instance reads.
-      has_settings: settings_schema != [] and not multi_instance,
+      # plugin-level form would write settings no instance reads. The role
+      # ceilings of a page plugin still live in this modal.
+      has_settings: (settings_schema != [] and not multi_instance) or page_writes?(config),
       # Once approved, the granted net:http reflects the operator-configured host.
       network_hosts: Map.get(granted, "net:http", Map.get(capabilities, "net:http", []))
     }
@@ -433,8 +477,19 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       schema: schema,
       values: stringify_values(form_data),
-      form: to_form(form_data)
+      form: to_form(form_data),
+      page_writes?: page_writes?(config),
+      ceilings_form: ceilings_form(config)
     }
+  end
+
+  defp ceilings_form(config),
+    do: to_form(Map.new(@ceiling_roles, &{&1, Grants.ceiling(config.slug, &1)}), as: :ceilings)
+
+  # Role ceilings only mean something for a plugin whose page can write.
+  defp page_writes?(config) do
+    caps = capabilities_of(config)
+    Map.has_key?(caps, "surfaces:write") and Map.has_key?(caps, "surfaces:page")
   end
 
   # Current field values keyed by string, used to resolve `visible_when`.
@@ -499,14 +554,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     assign(socket, :updates, slugs)
   end
 
-  defp browse do
-    Enum.reduce(Index.sources(), {[], nil}, fn source, {acc, err} ->
-      case Index.fetch_catalog(source) do
-        {:ok, entries} -> {acc ++ entries, err}
-        {:error, error} -> {acc, err || error_message(error)}
-      end
-    end)
-  end
+  defp catalog_of(nil), do: []
+  defp catalog_of(%BrowseResult{catalog: catalog}), do: catalog
 
   defp approval_from_entry(entry) do
     %{

@@ -1,10 +1,10 @@
 defmodule Mydia.Plugins.Connections do
   @moduledoc """
-  Per-user plugin connections: the pre-1.4 API over account links.
+  Per-user plugin connections: the pre-1.5 API over account links.
 
   A connection is a `:user` account link on the plugin's **default instance**,
   created by the user's own device flow. Simkl, the Integrations page and
-  account deletion use this module; 1.4 plugins and the admin mapping flow use
+  account deletion use this module; 1.5 plugins and the admin mapping flow use
   `Mydia.Plugins.AccountLinks` directly.
 
   The plugin never receives a token. It reads identity and status through

@@ -1,6 +1,6 @@
 defmodule MydiaWeb.PluginSetupLive.Modal do
   @moduledoc """
-  Renders a plugin's setup screens (contract 1.4) in a modal.
+  Renders a plugin's setup screens (contract 1.5) in a modal.
 
   Every `Mydia.Plugins.Setup` call runs through `start_async`, so a slow guest
   step never blocks the page. An external sign-in screen is polled from the

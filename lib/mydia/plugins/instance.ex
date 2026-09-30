@@ -1,6 +1,6 @@
 defmodule Mydia.Plugins.Instance do
   @moduledoc """
-  One configured instance of a plugin (host contract 1.4).
+  One configured instance of a plugin (host contract 1.5).
 
   A single-instance plugin has exactly one, its default instance. A plugin whose
   manifest declares `multi_instance: true` may have many, each with its own

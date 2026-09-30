@@ -179,7 +179,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
-      assert %{"mydia:plugin/host@1.4.0" => fns} = imports
+      assert %{"mydia:plugin/host@1.5.0" => fns} = imports
 
       assert %{"http-request" => {:fn, f1}, "data-read" => {:fn, f2}, "log" => {:fn, f3}} = fns
       assert is_function(f1, 1) and is_function(f2, 1) and is_function(f3, 2)
@@ -208,6 +208,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       builder = HostFunctions.imports_for("tester")
       imports = builder.(%{slug: "tester", invocation_id: "x", test_run: false})
 
+      v15 = Map.fetch!(imports, "mydia:plugin/host@1.5.0")
       v14 = Map.fetch!(imports, "mydia:plugin/host@1.4.0")
       v13 = Map.fetch!(imports, "mydia:plugin/host@1.3.0")
       v12 = Map.fetch!(imports, "mydia:plugin/host@1.2.0")
@@ -218,6 +219,15 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       # must be handed exactly what its own contract declared.
       for name <-
             ~w(links-list link-request propose-accounts set-link-token set-link-status kv-list kv-set-many report-sync-run) do
+        assert Map.has_key?(v15, name)
+        refute Map.has_key?(v14, name)
+        refute Map.has_key?(v13, name)
+      end
+
+      # The 1.4 key keeps exactly the page surface upstream shipped.
+      for name <-
+            ~w(search media-add collection-create collection-update collection-add-items collection-remove-items mark-watched-state add-favorite) do
+        assert Map.has_key?(v15, name)
         assert Map.has_key?(v14, name)
         refute Map.has_key?(v13, name)
       end

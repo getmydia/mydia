@@ -1,4 +1,4 @@
-//! 1.4 host-contract fixture. Each event name is an op that calls one 1.4 host
+//! 1.5 host-contract fixture. Each event name is an op that calls one 1.5 host
 //! import and returns its result as JSON; `setup` and `check-health` return
 //! canned screens. See Cargo.toml.
 

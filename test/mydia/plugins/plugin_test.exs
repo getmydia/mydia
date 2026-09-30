@@ -4,7 +4,7 @@ defmodule Mydia.Plugins.PluginTest do
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Plugin
 
-  test "from_manifest/2 carries the 1.4 instance fields" do
+  test "from_manifest/2 carries the 1.5 instance fields" do
     {:ok, manifest} =
       Manifest.parse(%{
         "slug" => "plex",

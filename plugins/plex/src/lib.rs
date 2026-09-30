@@ -2,7 +2,7 @@
 //!
 //! Owns the plex.tv and Plex Media Server protocol, endpoint probing, the
 //! mapping crawl and the watched-sync loop. Talks to Mydia only through the
-//! `mydia:plugin@1.4.0` host imports, wrapped by `host::Host`.
+//! `mydia:plugin@1.5.0` host imports, wrapped by `host::Host`.
 
 mod api;
 mod endpoint;

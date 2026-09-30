@@ -1,6 +1,6 @@
 defmodule Mydia.Plugins.Kv do
   @moduledoc """
-  Per-instance plugin store (contract 1.4), gated by the `state:kv` capability.
+  Per-instance plugin store (contract 1.5), gated by the `state:kv` capability.
 
   An opaque-string store a plugin uses for its working state: cursors,
   checkpoints, mapping caches. Values are never decoded by the host. Keys are

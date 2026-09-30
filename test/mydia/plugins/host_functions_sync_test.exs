@@ -119,7 +119,7 @@ defmodule Mydia.Plugins.HostFunctionsSyncTest do
       :ok
     end
 
-    test "1.4 marshalling includes origin", %{plugin: p, instance: i} do
+    test "1.5 marshalling includes origin", %{plugin: p, instance: i} do
       assert {:ok, %{items: [{:"playback-progress", row}]}} =
                HostFunctions.data_list(p, %{namespace: "playback_progress"},
                  with_origin: true,

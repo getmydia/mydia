@@ -71,7 +71,7 @@ defmodule Mydia.Plugins.Dispatcher do
   defp event_origin(_), do: nil
 
   @doc false
-  # Never deliver an event back to the plugin that originated it (R14). A 1.4
+  # Never deliver an event back to the plugin that originated it (R14). A 1.5
   # write is tagged "plugin:<slug>:<instance_id>"; every instance of the same
   # plugin is suppressed, since each instance's scheduled push already skips
   # rows whose `origin` is its own and pushes a sibling's writes (spec 1.7).

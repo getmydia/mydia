@@ -9,6 +9,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
+  alias MydiaWeb.AdminPluginsLive.Components
 
   # A prebuilt wasm32-wasip2 component (the host only accepts components, not
   # core-wasm modules) — see test/support/fixtures/plugins/host_test_fixture/.
@@ -49,6 +50,14 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       })
 
     config
+  end
+
+  # Points the store at `index_url` only. The file's setup restores
+  # :runtime_config on exit.
+  defp put_plugin_sources(index_url) do
+    base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
+    plugins = %{base.plugins | index_url: index_url, extra_source_urls: []}
+    Application.put_env(:mydia, :runtime_config, %{base | plugins: plugins})
   end
 
   defp schema_manifest_map(slug, name) do
@@ -192,6 +201,41 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/admin/plugins")
     assert has_element?(view, "#plugins-installed")
     assert render(view) =~ "No plugins installed"
+  end
+
+  describe "store browsing" do
+    test "an empty store says so instead of rendering nothing", %{conn: conn} do
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#catalog-empty")
+      refute has_element?(view, "#plugin-catalog")
+      refute has_element?(view, "#browse-error")
+    end
+
+    test "a failing source shows the error", %{conn: conn} do
+      # Non-https fails in require_https/2 before any network I/O.
+      put_plugin_sources("http://insecure.test/index.json")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+
+      assert has_element?(view, "#browse-error")
+      refute has_element?(view, "#catalog-empty")
+    end
+
+    test "the button is disabled while a browse is in flight" do
+      doc =
+        render_component(&Components.header_actions/1, browsing?: true)
+        |> LazyHTML.from_fragment()
+
+      refute doc |> LazyHTML.query("#browse-store[disabled]") |> Enum.empty?()
+      refute doc |> LazyHTML.query("#browse-store .loading") |> Enum.empty?()
+    end
   end
 
   describe "capability approval (AE1, R7)" do
@@ -732,6 +776,114 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#details-plex") |> render_click()
 
       refute has_element?(view, "#detail-host-grant")
+    end
+  end
+
+  describe "page write ceilings and private hosts" do
+    defp seed_page_plugin(slug, schema) do
+      manifest =
+        slug
+        |> manifest_map("Page Helper")
+        |> Map.update!("capabilities", fn caps ->
+          Map.merge(caps, %{
+            "surfaces:page" => [],
+            "surfaces:write" => ["collections:write"]
+          })
+        end)
+        |> Map.put("settings_schema", schema)
+
+      {:ok, config} =
+        Settings.create_plugin_config(%{
+          slug: slug,
+          name: "Page Helper",
+          version: "1.0.0",
+          manifest: manifest,
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{"events:subscribe" => ["media_item.added"]},
+          enabled: false
+        })
+
+      config
+    end
+
+    test "admins save role ceilings from the settings modal", %{conn: conn} do
+      seed_page_plugin("page-helper", [])
+      guest_before = Mydia.Plugins.Grants.ceiling("page-helper", "guest")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-page-helper") |> render_click()
+      assert has_element?(view, "#plugin-ceilings-form")
+
+      view
+      |> form("#plugin-ceilings-form", %{
+        "slug" => "page-helper",
+        "ceilings" => %{"user" => "session"}
+      })
+      |> render_submit()
+
+      assert Mydia.Plugins.Grants.ceiling("page-helper", "user") == "session"
+      assert Mydia.Plugins.Grants.ceiling("page-helper", "guest") == guest_before
+    end
+
+    test "the modal shows the saved values and hides the empty settings form", %{conn: conn} do
+      seed_page_plugin("page-helper", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-page-helper") |> render_click()
+      refute has_element?(view, "#plugin-settings-form")
+
+      view
+      |> form("#plugin-ceilings-form", %{
+        "slug" => "page-helper",
+        "ceilings" => %{"user" => "always"}
+      })
+      |> render_submit()
+
+      assert has_element?(
+               view,
+               "#plugin-ceilings-form select[name='ceilings[user]'] option[selected][value=always]"
+             )
+    end
+
+    test "malformed or non-page ceilings payloads flash an error", %{conn: conn} do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
+      seed_page_plugin("page-helper", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      render_click(view, "save_ceilings", %{"bogus" => "x"})
+      assert has_element?(view, "#flash-error")
+
+      render_click(view, "save_ceilings", %{
+        "slug" => "webhook-notifier",
+        "ceilings" => %{"user" => "always"}
+      })
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.role_ceilings in [nil, %{}]
+    end
+
+    test "a plugin without page writes has no ceilings form", %{conn: conn} do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-webhook-notifier") |> render_click()
+      refute has_element?(view, "#plugin-ceilings-form")
+    end
+
+    test "a url setting that may be private carries a hint", %{conn: conn} do
+      seed_page_plugin("page-helper", [
+        %{
+          "key" => "server_url",
+          "type" => "url",
+          "label" => "Server URL",
+          "grants_host" => true,
+          "allow_private" => true
+        }
+      ])
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-page-helper") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form", "may be on your local network")
     end
   end
 end

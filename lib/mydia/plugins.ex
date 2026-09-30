@@ -38,6 +38,7 @@ defmodule Mydia.Plugins do
 
   alias Mydia.Plugins.Capabilities
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
   alias Mydia.Plugins.Index
@@ -96,6 +97,22 @@ defmodule Mydia.Plugins do
         allowed_hosts: connectable_hosts(config.slug)
       }
     end
+  end
+
+  @doc """
+  Enabled plugins holding `surfaces:page`, as navbar entries. The title and icon
+  come from the manifest's `page` descriptor, validated at parse time.
+  """
+  @spec list_pages() :: [%{slug: String.t(), title: String.t(), icon: String.t()}]
+  def list_pages do
+    pages =
+      for %Plugin{enabled: true, page: %{"title" => title, "icon" => icon}} = plugin <-
+            list_plugins(),
+          Plugin.granted?(plugin, "surfaces:page") do
+        %{slug: plugin.slug, title: title, icon: icon}
+      end
+
+    Enum.sort_by(pages, & &1.title)
   end
 
   defp connectable_hosts(slug) do
@@ -168,12 +185,12 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
-  Calls a plugin instance's 1.4 `setup` export with the operator's answers.
+  Calls a plugin instance's 1.5 `setup` export with the operator's answers.
 
   `request` carries `step`, `input_json` and `state_json` (the setup protocol in
   the plugin host reference). Runs under `plugins.setup_timeout_ms` and waits
   for the instance lock. Errors: `:unsupported` when the manifest does not
-  declare `setup: true` (or the guest predates 1.4), `:not_found` for an
+  declare `setup: true` (or the guest predates 1.5), `:not_found` for an
   unknown instance or a plugin that is not running, `:guest_error` carrying the
   guest's own message when it returns `Err`.
   """
@@ -193,7 +210,7 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
-  Calls a plugin instance's 1.4 `check-health` export under the event timeout.
+  Calls a plugin instance's 1.5 `check-health` export under the event timeout.
   Same errors as `invoke_setup/3`.
   """
   @spec invoke_check_health(String.t(), binary()) :: {:ok, map()} | {:error, Error.t()}
@@ -756,6 +773,10 @@ defmodule Mydia.Plugins do
   def remove(slug) do
     with {:ok, config} <- fetch_config(slug),
          {:ok, _} <- Settings.delete_plugin_config(config) do
+      # Role ceilings went with the config row. Approvals and queued writes are
+      # keyed by slug alone, so they are cleared too. The journal stays as
+      # history and stays undoable: undo needs only the entry.
+      Grants.purge(slug)
       deactivate(slug)
       reload()
       {:ok, :removed}
@@ -902,6 +923,10 @@ defmodule Mydia.Plugins do
         {:ok, descriptor}
 
       {:error, _} = err ->
+        # A row that cannot activate must not claim to be enabled with no live
+        # plugin behind it.
+        _ = Settings.update_plugin_config(config, %{enabled: false})
+        reload()
         err
     end
   end
@@ -912,7 +937,7 @@ defmodule Mydia.Plugins do
   defp activate(config) do
     with manifest_map when not is_nil(manifest_map) <- config.manifest,
          {:ok, manifest} <- Manifest.parse(manifest_map),
-         :ok <- check_host_version_floor(config.slug, manifest),
+         :ok <- check_host_version_floor(config, manifest),
          {:ok, wasm} <- resolve_artifact(config) do
       descriptor =
         Plugin.from_manifest(manifest,
@@ -978,7 +1003,12 @@ defmodule Mydia.Plugins do
   # the running Mydia version, with an actionable message — before instantiation,
   # so the admin gets "requires mydia ≥ X" rather than a cryptic link-time trap
   # (R7). A manifest with no floor (the common case) always passes.
-  defp check_host_version_floor(slug, %Manifest{min_host_version: floor}) do
+  #
+  # Bundled plugins ship with the host that runs them, so a floor is meaningless
+  # for them and is not enforced (simkl_sync declares its WIT contract version).
+  defp check_host_version_floor(%{source_url: "bundled"}, _manifest), do: :ok
+
+  defp check_host_version_floor(%{slug: slug}, %Manifest{min_host_version: floor}) do
     cond do
       is_nil(floor) ->
         :ok
@@ -995,15 +1025,33 @@ defmodule Mydia.Plugins do
     end
   end
 
-  defp host_meets_floor?(floor) do
-    case {Version.parse(host_version()), Version.parse(floor)} do
-      {{:ok, host}, {:ok, min}} -> Version.compare(host, min) != :lt
+  # A development build (`-dev` pre-release, built from source) meets any floor.
+  # Otherwise the comparison ignores pre-release tags, so 0.16.0-beta.1 meets a
+  # 0.16.0 floor: betas carry the feature the floor names.
+  @doc false
+  def host_meets_floor?(floor, host \\ host_version()) do
+    case {Version.parse(host), Version.parse(floor)} do
+      {{:ok, %Version{pre: ["dev" | _]}}, {:ok, _}} ->
+        true
+
+      {{:ok, host}, {:ok, min}} ->
+        Version.compare(%{host | pre: []}, %{min | pre: []}) != :lt
+
       # If either side is unparseable, do not block activation on the floor.
-      _ -> true
+      _ ->
+        true
     end
   end
 
+  # `:plugin_host_version` lets tests stand in for a release build.
   defp host_version do
+    case Application.get_env(:mydia, :plugin_host_version) do
+      vsn when is_binary(vsn) -> vsn
+      _ -> app_version()
+    end
+  end
+
+  defp app_version do
     case Application.spec(:mydia, :vsn) do
       vsn when is_list(vsn) -> List.to_string(vsn)
       _ -> "0.0.0"
@@ -1150,11 +1198,9 @@ defmodule Mydia.Plugins do
         stale = derived_hosts(config.manifest, config.settings) -- static_hosts(config.manifest)
         kept = hosts -- stale
 
-        Map.put(
-          granted,
-          "net:http",
-          Enum.uniq(kept ++ derived_hosts(config.manifest, new_settings))
-        )
+        granted
+        |> Map.put("net:http", Enum.uniq(kept ++ derived_hosts(config.manifest, new_settings)))
+        |> put_private_hosts(derived_private_hosts(config.manifest, new_settings))
     end
   end
 
@@ -1166,7 +1212,36 @@ defmodule Mydia.Plugins do
     manifest_map
     |> Map.get("capabilities", %{})
     |> put_effective_http(manifest_map, settings)
+    |> put_effective_private(manifest_map, settings)
   end
+
+  # `net:private` is never declared in a manifest: it is derived from
+  # `allow_private` settings, and only alongside a granted `net:http`, so a
+  # plugin cannot reach a private address it was not also allowed to reach.
+  defp put_effective_private(map, manifest_map, settings) do
+    if Map.has_key?(map, "net:http") do
+      put_private_hosts(map, derived_private_hosts(manifest_map, settings))
+    else
+      map
+    end
+  end
+
+  # An empty list is left out entirely, so a plugin with no private host carries
+  # no `net:private` class at all.
+  defp put_private_hosts(map, []), do: Map.delete(map, "net:private")
+  defp put_private_hosts(map, hosts), do: Map.put(map, "net:private", hosts)
+
+  defp derived_private_hosts(manifest_map, settings) when is_map(manifest_map) do
+    manifest_map
+    |> Map.get("settings_schema")
+    |> Manifest.private_host_keys()
+    |> Enum.map(&Map.get(settings || %{}, &1))
+    |> Enum.map(&url_host/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+  end
+
+  defp derived_private_hosts(_manifest_map, _settings), do: []
 
   # Replaces a capability map's `net:http` with the effective host set, but only
   # when `net:http` is already present — so this never grants a capability that
@@ -1243,7 +1318,9 @@ defmodule Mydia.Plugins do
     end
   end
 
-  defp manifest_to_map(%Manifest{} = m) do
+  # Must carry every field `Manifest.parse/1` reads: activation re-parses this map.
+  @doc false
+  def manifest_to_map(%Manifest{} = m) do
     %{
       "slug" => m.slug,
       "name" => m.name,
@@ -1255,6 +1332,7 @@ defmodule Mydia.Plugins do
       "settings_schema" => m.settings_schema,
       "connection" => m.connection,
       "schedule" => m.schedule,
+      "page" => m.page,
       "min_host_version" => m.min_host_version,
       "multi_instance" => m.multi_instance,
       "category" => m.category,

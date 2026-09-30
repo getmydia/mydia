@@ -38,7 +38,7 @@ defmodule Mydia.Plugins.BundledManifestRoundtripTest do
     assert Mydia.Plugins.Manifest.auth_header(plugin.connection) == {"X-Plex-Token", "{token}"}
   end
 
-  test "a freshly seeded bundled plugin keeps its 1.4 fields when activated from the row" do
+  test "a freshly seeded bundled plugin keeps its 1.5 fields when activated from the row" do
     assert :ok = Plugins.ensure_bundled()
 
     config = Settings.get_plugin_config_by_slug(@slug)

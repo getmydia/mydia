@@ -43,7 +43,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
   import Mydia.AccountsFixtures
   import Phoenix.LiveViewTest
 
-  alias Mydia.PluginV14Helpers
+  alias Mydia.PluginV15Helpers
   alias Mydia.Plugins.AccountLinks
   alias Mydia.Plugins.Instance
   alias Mydia.Plugins.Instances
@@ -52,7 +52,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
   alias MydiaWeb.PluginSetupLive.ModalTest.HostLive
 
   setup do
-    %{slug: PluginV14Helpers.start_v14_fixture!()}
+    %{slug: PluginV15Helpers.start_v15_fixture!()}
   end
 
   defp poll(view) do

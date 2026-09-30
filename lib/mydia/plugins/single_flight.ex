@@ -24,6 +24,19 @@ defmodule Mydia.Plugins.SingleFlight do
   no persistent flag to get stuck — on host restart the GenServer starts empty,
   so a tick always fires (no schedule deadlock).
 
+    * `{:wait_up_to, ms}` - like `:wait`, but give up with `:busy` after `ms`
+      milliseconds. Implemented by polling `:skip`, so an abandoned attempt
+      never leaves a stale waiter in the queue.
+
+  ## What the lock does not cover
+
+  Page (`on-http`) invocations lock per user (`"<slug>:user:<id>"`) and run
+  concurrently with each other and with the plugin's event and schedule
+  invocations, which hold the plugin-wide key. Shared plugin KV keys are
+  therefore no longer serialized between those two paths: page state must live
+  in per-user KV keys, and a shared key written from both a page and an event or
+  schedule handler can race (a lost update).
+
   Despite the namespace this GenServer is a plain named-lock server with no
   plugin-specific behaviour. `Mydia.Streaming.SessionSubtitles` runs a second
   instance under `Mydia.Streaming.SubtitleLock` to serialize subtitle
@@ -36,7 +49,9 @@ defmodule Mydia.Plugins.SingleFlight do
 
   use GenServer
 
-  @type mode :: :wait | :skip
+  @type mode :: :wait | :skip | {:wait_up_to, non_neg_integer()}
+
+  @poll_ms 20
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -49,10 +64,33 @@ defmodule Mydia.Plugins.SingleFlight do
 
   `:wait` blocks until granted and returns `:ok`. `:skip` returns `:ok` if the
   lock was free (now held) or `:busy` if another process holds it.
+  `{:wait_up_to, ms}` retries `:skip` until granted or `ms` elapse.
   """
   @spec acquire(term(), mode(), GenServer.server()) :: :ok | :busy
-  def acquire(key, mode \\ :wait, server \\ __MODULE__) when mode in [:wait, :skip] do
+  def acquire(key, mode \\ :wait, server \\ __MODULE__)
+
+  def acquire(key, {:wait_up_to, ms}, server) when is_integer(ms) and ms >= 0 do
+    deadline = System.monotonic_time(:millisecond) + ms
+    poll(key, deadline, server)
+  end
+
+  def acquire(key, mode, server) when mode in [:wait, :skip] do
     GenServer.call(server, {:acquire, key, mode, self()}, :infinity)
+  end
+
+  defp poll(key, deadline, server) do
+    case acquire(key, :skip, server) do
+      :ok ->
+        :ok
+
+      :busy ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          :busy
+        else
+          Process.sleep(@poll_ms)
+          poll(key, deadline, server)
+        end
+    end
   end
 
   @doc "Releases the lock for `key` held by the calling process."

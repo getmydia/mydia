@@ -1,4 +1,4 @@
-defmodule Mydia.Repo.Migrations.PluginContract14Test do
+defmodule Mydia.Repo.Migrations.PluginContract15Test do
   # async: false: creates a legacy table with DDL inside the sandbox.
   use Mydia.DataCase, async: false
 
@@ -12,11 +12,11 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
 
   # Migration modules are not compiled into the app; load the file explicitly.
   # Guarded because the test alias already ran `ecto.migrate` in this VM.
-  unless Code.ensure_loaded?(Mydia.Repo.Migrations.PluginContract14) do
-    Code.require_file("priv/repo/migrations/20260929141207_plugin_contract_1_4.exs")
+  unless Code.ensure_loaded?(Mydia.Repo.Migrations.PluginContract15) do
+    Code.require_file("priv/repo/migrations/20260929141207_plugin_contract_1_5.exs")
   end
 
-  alias Mydia.Repo.Migrations.PluginContract14
+  alias Mydia.Repo.Migrations.PluginContract15
 
   defp plugin_config(slug, attrs \\ %{}) do
     {:ok, config} =
@@ -80,8 +80,8 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
   test "creates one default instance per plugin config, copying settings" do
     config = plugin_config("legacy_one")
 
-    assert :ok = PluginContract14.backfill()
-    assert :ok = PluginContract14.backfill()
+    assert :ok = PluginContract15.backfill()
+    assert :ok = PluginContract15.backfill()
 
     assert [%Instance{} = inst] =
              Repo.all(from i in Instance, where: i.plugin_slug == "legacy_one")
@@ -108,7 +108,7 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
       }
     ])
 
-    assert :ok = PluginContract14.backfill()
+    assert :ok = PluginContract15.backfill()
 
     inst = Repo.one!(from i in Instance, where: i.plugin_slug == "legacy_kv")
 
@@ -135,8 +135,8 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
       legacy_params(config, user)
     )
 
-    assert :ok = PluginContract14.backfill()
-    assert :ok = PluginContract14.backfill()
+    assert :ok = PluginContract15.backfill()
+    assert :ok = PluginContract15.backfill()
 
     assert [%AccountLink{} = link] =
              Repo.all(from l in AccountLink, where: l.plugin_slug == "legacy_conn")
@@ -170,7 +170,7 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
       )
     end
 
-    assert :ok = PluginContract14.backfill()
+    assert :ok = PluginContract15.backfill()
 
     links = Repo.all(from l in AccountLink, where: l.plugin_slug == "legacy_dup")
     assert Enum.sort(Enum.map(links, & &1.user_id)) == Enum.sort([first.id, second.id])

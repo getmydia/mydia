@@ -13,7 +13,7 @@ defmodule Mydia.Plugins.HostFunctionsLinksTest do
   alias Mydia.Settings
 
   @slug "linkhost"
-  @fixture Path.expand("../../support/fixtures/plugins/host_v14_fixture.wasm", __DIR__)
+  @fixture Path.expand("../../support/fixtures/plugins/host_v15_fixture.wasm", __DIR__)
   @links_grant %{"net:http" => ["127.0.0.1"], "users:connections" => []}
   @plex_conn %{
     "type" => "none",
@@ -338,7 +338,7 @@ defmodule Mydia.Plugins.HostFunctionsLinksTest do
     end
   end
 
-  describe "through a real 1.4 guest" do
+  describe "through a real 1.5 guest" do
     setup do
       {:ok, _} =
         Host.start_plugin(@slug, File.read!(@fixture),

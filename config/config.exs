@@ -232,6 +232,10 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Phoenix's default is ["password"]. Keys are matched by substring, so this
+# also keeps a plugin page's `frame_token` query parameter out of the logs.
+config :phoenix, :filter_parameters, ["password", "frame_token"]
+
 # Configure Guardian for JWT authentication
 config :mydia, Mydia.Auth.Guardian,
   issuer: "mydia",

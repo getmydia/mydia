@@ -140,6 +140,7 @@ defmodule MydiaWeb.Live.UserAuth do
       |> assign(:pending_requests_count, pending_requests_count)
       |> assign(:configured_library_types, configured_library_types)
       |> assign(:executing_jobs, executing_jobs)
+      |> assign(:plugin_nav, Mydia.Plugins.list_pages())
       |> assign(:current_path, nil)
       |> assign(:feedback_enabled?, Mydia.Feedback.enabled?())
       |> assign(:show_feedback_modal, false)

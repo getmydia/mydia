@@ -239,7 +239,7 @@ defmodule Mydia.Plugins.AccountLinks do
   end
 
   @doc """
-  Per-link plugin state goes with the link: sweeps `link/<id>/` (1.4) and the
+  Per-link plugin state goes with the link: sweeps `link/<id>/` (1.5) and the
   legacy `conn/<id>/` (1.1 to 1.3 guests) from the link's instance store.
   """
   @spec sweep_store(AccountLink.t()) :: :ok

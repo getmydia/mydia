@@ -1,4 +1,4 @@
-defmodule Mydia.Plugins.ContractV14Test do
+defmodule Mydia.Plugins.ContractV15Test do
   # async: false: starts real pools under the app-wide PoolRegistry.
   use Mydia.DataCase, async: false
 
@@ -24,16 +24,28 @@ defmodule Mydia.Plugins.ContractV14Test do
     }
   end
 
-  test "detects a 1.4 guest and an older guest" do
-    start("v14-detect", "host_v14_fixture.wasm")
+  test "detects a 1.5 guest, a 1.4 page guest and an older guest" do
+    start("v15-detect", "host_v15_fixture.wasm")
+    start("v14-detect", "page_fixture.wasm")
     start("v13-detect", "host_fns_fixture.wasm")
 
+    assert Host.contract_version("v15-detect") == :v15
     assert Host.contract_version("v14-detect") == :v14
     assert Host.contract_version("v13-detect") in [:v11, :v12, :v13]
   end
 
-  test "a 1.4 guest still handles events and schedule ticks" do
-    start("v14-events", "host_v14_fixture.wasm")
+  test "setup and check-health are unsupported on a 1.4 page guest" do
+    start("v14-unsupported", "page_fixture.wasm")
+
+    assert {:error, %Error{type: :unsupported}} =
+             Host.call("v14-unsupported", "setup", setup_payload("start"), handler: :setup)
+
+    assert {:error, %Error{type: :unsupported}} =
+             Host.call("v14-unsupported", "check-health", %{}, handler: :check_health)
+  end
+
+  test "a 1.5 guest still handles events and schedule ticks" do
+    start("v14-events", "host_v15_fixture.wasm")
 
     assert {:ok, %{"config" => %{"instance_id" => "inst-1"}}} =
              Host.call("v14-events", "handle", %{
@@ -51,7 +63,7 @@ defmodule Mydia.Plugins.ContractV14Test do
   end
 
   test "setup walks auth, poll, choice with endpoints and credentials" do
-    start("v14-setup", "host_v14_fixture.wasm")
+    start("v14-setup", "host_v15_fixture.wasm")
     call = fn p -> Host.call("v14-setup", "setup", p, handler: :setup) end
 
     assert {:ok, auth} = call.(setup_payload("start"))
@@ -93,7 +105,7 @@ defmodule Mydia.Plugins.ContractV14Test do
   end
 
   test "setup decodes mapping, form and done screens and guest errors" do
-    start("v14-screens", "host_v14_fixture.wasm")
+    start("v14-screens", "host_v15_fixture.wasm")
     call = fn p -> Host.call("v14-screens", "setup", p, handler: :setup) end
 
     payload =
@@ -163,7 +175,7 @@ defmodule Mydia.Plugins.ContractV14Test do
   end
 
   test "check-health decodes the health record" do
-    start("v14-health", "host_v14_fixture.wasm")
+    start("v14-health", "host_v15_fixture.wasm")
 
     assert {:ok, %{status: :degraded, message: "fixture degraded", action: :reconnect}} =
              Host.call("v14-health", "check-health", %{}, handler: :check_health)
@@ -183,7 +195,7 @@ defmodule Mydia.Plugins.ContractV14Test do
     end
 
     test "a setup marker names the step and body, never the state or error text" do
-      start("v14-log-state", "host_v14_fixture.wasm")
+      start("v14-log-state", "host_v15_fixture.wasm")
 
       # The fixture echoes option_id into next-state-json, standing in for a
       # PIN or token a real plugin carries between steps.
@@ -200,7 +212,7 @@ defmodule Mydia.Plugins.ContractV14Test do
       assert end_marker("v14-log-state").metadata["detail"] == "step=map body=mapping"
       refute logged_text("v14-log-state") =~ "pin-secret-4821"
 
-      start("v14-log-error", "host_v14_fixture.wasm")
+      start("v14-log-error", "host_v15_fixture.wasm")
 
       assert {:ok, %{error: "url is empty"}} =
                Host.call(
@@ -215,7 +227,7 @@ defmodule Mydia.Plugins.ContractV14Test do
     end
 
     test "a check-health marker names only the status" do
-      start("v14-log-health", "host_v14_fixture.wasm")
+      start("v14-log-health", "host_v15_fixture.wasm")
 
       assert {:ok, _} =
                Host.call("v14-log-health", "check-health", %{}, handler: :check_health)
@@ -236,8 +248,8 @@ defmodule Mydia.Plugins.ContractV14Test do
              Host.call("v13-setup", "check-health", %{}, handler: :check_health)
   end
 
-  test "1.4 imports are linked (stub bodies until their tasks land)" do
-    start("v14-stubs", "host_v14_fixture.wasm")
+  test "1.5 imports are linked (stub bodies until their tasks land)" do
+    start("v14-stubs", "host_v15_fixture.wasm")
 
     assert {:error, %Error{type: :guest_error, message: "links_list error: " <> _}} =
              Host.call("v14-stubs", "handle", %{"event" => "links_list"})

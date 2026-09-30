@@ -5,14 +5,14 @@ defmodule Mydia.Plugins.SetupTest do
   import ExUnit.CaptureLog
   import Mydia.AccountsFixtures
 
-  alias Mydia.PluginV14Helpers
+  alias Mydia.PluginV15Helpers
   alias Mydia.Plugins.AccountLinks
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Setup
   alias Mydia.Plugins.Setup.Session
 
   setup do
-    %{slug: PluginV14Helpers.start_v14_fixture!()}
+    %{slug: PluginV15Helpers.start_v15_fixture!()}
   end
 
   defp poll_until_choice(session) do
