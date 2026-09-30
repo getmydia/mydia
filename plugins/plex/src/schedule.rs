@@ -15,12 +15,12 @@ pub const BUDGET_MS: u64 = 45_000;
 
 pub fn run(host: &mut dyn Host, config_json: &str) -> Result<String, String> {
     let cfg = PluginConfig::parse(config_json);
-    if !cfg.sync_enabled() {
-        return Ok(json!({"skipped": "sync_disabled"}).to_string());
-    }
     let started = host.now();
     let deadline_ms = host.elapsed_ms() + BUDGET_MS;
 
+    // Resolving the endpoint is not sync: it is what keeps a moved server
+    // findable (rediscovery, `endpoint/current`, `server/pending`), and library
+    // refresh and health depend on it whether or not watched sync is on.
     let resolved = endpoint::resolve(host, &cfg).and_then(|base| {
         Ok((
             base,
@@ -39,6 +39,14 @@ pub fn run(host: &mut dyn Host, config_json: &str) -> Result<String, String> {
             );
             return Ok(json!({"skipped": "unauthorized"}).to_string());
         }
+        Err(e) if !cfg.sync_enabled() => {
+            // No sync ran, so there is no sync run to record; health shows it.
+            host.log(
+                "warn",
+                &format!("plex: server not reachable: {}", e.message()),
+            );
+            return Ok(json!({"skipped": "sync_disabled"}).to_string());
+        }
         Err(e) => {
             report(
                 host,
@@ -56,6 +64,9 @@ pub fn run(host: &mut dyn Host, config_json: &str) -> Result<String, String> {
         store::ENDPOINT_CURRENT,
         &json!({"url": base, "checked_at": started}),
     );
+    if !cfg.sync_enabled() {
+        return Ok(json!({"skipped": "sync_disabled"}).to_string());
+    }
 
     match sync::run_tick(host, &base, &server_link, &owner_link, &cfg, deadline_ms) {
         Ok(out) => {
@@ -141,13 +152,76 @@ mod tests {
     }
 
     #[test]
-    fn sync_disabled_does_nothing() {
+    fn sync_disabled_only_resolves_the_endpoint() {
+        let mut h = host();
+        h.respond(
+            "GET",
+            &format!("{B}/library/sections"),
+            200,
+            r#"{"MediaContainer":{"Directory":[]}}"#,
+        );
+        assert_eq!(
+            run(&mut h, &cfg("off")).unwrap(),
+            r#"{"skipped":"sync_disabled"}"#
+        );
+        // Only the probe: no crawl, no sync, no run recorded.
+        assert_eq!(h.sent.len(), 1);
+        assert!(h.runs.is_empty());
+        assert!(h.data_requests.is_empty());
+        assert!(!h.kv.contains_key(store::CRAWL_STATE));
+        let current: serde_json::Value =
+            serde_json::from_str(&h.kv[store::ENDPOINT_CURRENT]).unwrap();
+        assert_eq!(current["url"], B);
+    }
+
+    #[test]
+    fn a_moved_server_is_rediscovered_even_with_sync_off() {
+        let mut h = host();
+        let info = endpoint::ServerInfo {
+            machine_identifier: Some("m1".into()),
+            name: "Den".into(),
+            candidates: vec!["http://old.test:1".into()],
+        };
+        store::put_json(&mut h, store::SERVER_INFO, &info).unwrap();
+        h.fail(
+            "GET",
+            "http://old.test:1/library/sections",
+            mydia_plugin_sdk::types::HostError::Network("refused".into()),
+        )
+        .respond(
+            "GET",
+            "https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1",
+            200,
+            r#"[{"name":"Den","clientIdentifier":"m1","provides":"server","connections":[{"uri":"http://new.test:2","local":true}]}]"#,
+        )
+        .respond(
+            "GET",
+            "http://new.test:2/library/sections",
+            200,
+            r#"{"MediaContainer":{"Directory":[]}}"#,
+        );
+        let cfg_no_url = r#"{"instance_id":"I1","sync_watched":"off"}"#;
+        assert_eq!(
+            run(&mut h, cfg_no_url).unwrap(),
+            r#"{"skipped":"sync_disabled"}"#
+        );
+        let current: serde_json::Value =
+            serde_json::from_str(&h.kv[store::ENDPOINT_CURRENT]).unwrap();
+        assert_eq!(current["url"], "http://new.test:2");
+        let saved: endpoint::ServerInfo = store::get_json(&mut h, store::SERVER_INFO)
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.candidates, vec!["http://new.test:2"]);
+        assert!(h.runs.is_empty());
+    }
+
+    #[test]
+    fn an_unreachable_server_with_sync_off_records_no_sync_run() {
         let mut h = host();
         assert_eq!(
             run(&mut h, &cfg("off")).unwrap(),
             r#"{"skipped":"sync_disabled"}"#
         );
-        assert!(h.sent.is_empty());
         assert!(h.runs.is_empty());
     }
 
