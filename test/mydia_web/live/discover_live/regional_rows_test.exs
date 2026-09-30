@@ -191,4 +191,135 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
 
     assert has_element?(view, "#discover-detail-modal")
   end
+
+  describe "See all" do
+    test "opens the grid for one source with the filter bar", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=service-8001")
+
+      assert_receive {:discover_query, "/tmdb/movies/discover",
+                      %{
+                        "with_watch_providers" => "8001",
+                        "sort_by" => "primary_release_date.desc"
+                      }}
+
+      assert has_element?(view, "#discover-grid", "Maple Lantern")
+      assert has_element?(view, "#discover-filter-form")
+      assert has_element?(view, "#discover-see-all-title", "Latest on Maplestream")
+      assert has_element?(view, "#discover-see-all-back")
+    end
+
+    test "the row's See all link patches there", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home")
+      render_async(view)
+
+      view |> element("#discover-row-made_here-see-all") |> render_click()
+
+      assert_patch(
+        view,
+        ~p"/discover?#{%{"category" => "home", "source" => "made_here", "type" => "movie"}}"
+      )
+
+      assert_receive {:discover_query, _, %{"with_origin_country" => "CA"}}
+    end
+
+    test "filters keep the source and the source's sort", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=service-8001")
+
+      view
+      |> element("#discover-filter-form")
+      |> render_change(%{"language" => "fr", "sort" => "primary_release_date.desc"})
+
+      assert_patch(
+        view,
+        ~p"/discover?#{%{"category" => "home", "language" => "fr", "source" => "service-8001", "type" => "movie"}}"
+      )
+    end
+
+    test "picking popularity on a date-sorted source keeps it in the URL", %{
+      conn: conn,
+      bypass: bypass
+    } do
+      stub_discover(bypass)
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=service-8001")
+
+      view |> element("#discover-filter-form") |> render_change(%{"sort" => "popularity.desc"})
+
+      assert_patch(
+        view,
+        ~p"/discover?#{%{"category" => "home", "sort" => "popularity.desc", "source" => "service-8001", "type" => "movie"}}"
+      )
+    end
+
+    test "an unknown or unsaved source falls back to the rows", %{conn: conn, bypass: bypass} do
+      stub_discover(bypass)
+
+      for source <- ["service-9999", "bogus"] do
+        {:ok, view, _html} = live(conn, ~p"/discover?type=movie&category=home&source=#{source}")
+        assert has_element?(view, "#discover-regional-rows")
+      end
+
+      {:ok, view, _html} = live(conn, ~p"/discover?type=tv_show&category=home&source=in_cinemas")
+      assert has_element?(view, "#discover-regional-rows")
+    end
+  end
+
+  describe "restricted accounts on See all" do
+    test "certification params go out alongside the service", %{bypass: bypass} do
+      stub_discover(bypass)
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          flash: %{},
+          library_status_map: %{},
+          request_status_map: %{},
+          selected_recommendations: [],
+          selected_item: nil,
+          hide_owned: false,
+          visible_items: [],
+          loading_more: false,
+          items: [],
+          page: 1,
+          total_pages: 1,
+          has_more: false,
+          load_error: nil,
+          loading: true,
+          media_type: :movie,
+          search_mode: false,
+          search_query: "",
+          category: :home,
+          home_country: "CA",
+          source: {:service, 8001, "Maplestream"},
+          default_sort: "primary_release_date.desc",
+          regional_rows: %{},
+          selected_country: nil,
+          selected_genres: [],
+          selected_language: nil,
+          selected_year: nil,
+          min_rating: nil,
+          sort_by: "primary_release_date.desc",
+          current_scope: %Mydia.Accounts.Scope{
+            Mydia.Accounts.Scope.unrestricted()
+            | max_content_age: 12
+          }
+        }
+      }
+
+      {:noreply, _updated} = MydiaWeb.DiscoverLive.Index.handle_info(:load_data, socket)
+
+      assert_receive {:discover_query, "/tmdb/movies/discover",
+                      %{
+                        "with_watch_providers" => "8001",
+                        "certification_country" => "US",
+                        "certification.lte" => "PG"
+                      }}
+    end
+  end
 end
