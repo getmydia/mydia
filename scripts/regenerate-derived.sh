@@ -29,6 +29,8 @@ cd "$root"
 
 # shellcheck source=scripts/lib/cargo-lock-dirs.sh
 source scripts/lib/cargo-lock-dirs.sh
+# shellcheck source=scripts/lib/npm-deps-hash.sh
+source scripts/lib/npm-deps-hash.sh
 
 # --inputs-from . resolves nixpkgs to this flake's pinned input, so the tools
 # match what the Nix build uses rather than whatever is newest.
@@ -50,16 +52,6 @@ for d in "${cargo_lock_dirs[@]}"; do
 done
 
 echo "npmDeps.hash <- assets/package-lock.json"
-npm_hash="$(nixpkgs_run prefetch-npm-deps assets/package-lock.json | tail -n 1)"
-case "$npm_hash" in
-  sha256-*) ;;
-  *)
-    echo "prefetch-npm-deps printed '$npm_hash', which is not a hash" >&2
-    exit 1
-    ;;
-esac
-# Scoped to the fetchNpmDeps block so no other `hash =` in the file can match.
-sed -i -E "/npmDeps = pkgs\.fetchNpmDeps \{/,/\};/ s|hash = \"sha256-[^\"]+\";|hash = \"${npm_hash}\";|" \
-  nix/packages/flake-module.nix
+npm_deps_hash_write "$(npm_deps_hash)"
 
 ./scripts/check-generated-freshness.sh

@@ -29,41 +29,36 @@ For any `.nix` or `assets/` change, verify locally before merge and then watch
 master's push-triggered `CI / Nix` run after. Do not report a nix fix as proven
 on PR green.
 
-Local pre-merge verification that actually proves a `fetchNpmDeps` hash, without
-a full build:
-
-```
-nix run nixpkgs#prefetch-npm-deps -- assets/package-lock.json      # prints the hash
-nix build --impure --expr '
-  let f = builtins.getFlake (toString /abs/path/to/worktree);
-      pkgs = f.inputs.nixpkgs.legacyPackages.x86_64-linux;
-  in pkgs.fetchNpmDeps { src = /abs/path/to/worktree/assets; hash = "sha256-..."; }'
-```
-
-Use the flake's own pinned nixpkgs for the second step, not whatever `nix run`
-resolved, so a `prefetch-npm-deps` version skew cannot give a false pass. Then run
-`nix build --dry-run .#default` and grep the resulting `mydia-*.drv` for the
-npm-deps store path to confirm the package consumes it.
-
 ## npmDeps.hash must move with package-lock.json
 
 `npmDeps.hash` in `nix/packages/flake-module.nix` is a fixed-output derivation
 hash and must be bumped in the same commit as any `assets/package-lock.json`
-change. A stale value fails as
-`error: hash mismatch in fixed-output derivation '...npm-deps.drv'` with
-`specified:` and `got:` lines, and the `got:` line is the correct value. Read it
-straight out of a failed CI log rather than computing anything.
+change. A stale value fails the Nix build as
+`error: hash mismatch in fixed-output derivation '...npm-deps.drv'`, with the
+correct value on the `got:` line.
 
-This has drifted twice unnoticed, because of the push-only rule above. `d1109d65c`
-(2026-08-23) changed the lockfile and left the hash, then `f00681d22` (2026-08-26)
-changed it again. `CI / Nix` was red on master for 15 consecutive runs across
-three days before anyone bumped it, fixed in #584 as `e5fd485f0`.
-Lockfile-touching commits are usually chores nobody watches CI for, which is
-exactly why this hides.
+Two things keep it in step:
+
+- The devenv pre-commit hook `npm-deps-hash` runs
+  `scripts/update-npm-deps-hash.sh` whenever the lockfile is staged. It
+  rewrites the hash and stops the commit; stage `flake-module.nix` and commit
+  again.
+- `Check / Generated Freshness` recomputes the hash on every pull request and
+  fails with the pinned and computed values side by side.
+
+Both compute the hash with `prefetch-npm-deps` from the flake's pinned nixpkgs
+(`scripts/lib/npm-deps-hash.sh`) and compare strings. Never gate this by
+building `.#packages.x86_64-linux.default.npmDeps`. A fixed-output derivation's
+store path depends only on its declared hash, so an unbumped hash names the path
+master already built, magic-nix-cache substitutes it, nothing is fetched, and
+the build passes. `Check / Flutter Pin` ran exactly that step. It passed on #967,
+which changed the lockfile and left the hash, and master's `CI / Nix` went red
+on the merge. The hash had drifted twice before (`d1109d65c`, `f00681d22`, 15
+red master runs, fixed in #584), both times behind the push-only rule above.
 
 When triaging a red `CI / Nix`, grep the job log for `hash mismatch` first. It is
-a one-line fix and it masks everything downstream, since the build aborts before
-the Rust crate vendoring even starts.
+a one-line fix (`./scripts/update-npm-deps-hash.sh`) and it masks everything
+downstream, since the build aborts before the Rust crate vendoring even starts.
 
 ## The Elixir and OTP pins each live in one file
 
