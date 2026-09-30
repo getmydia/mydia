@@ -160,12 +160,24 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   end
 
   def handle_event("save_ceilings", %{"slug" => slug, "ceilings" => ceilings}, socket)
-      when is_map(ceilings) do
-    case Grants.put_ceilings(slug, ceilings) do
-      {:ok, _} -> {:noreply, put_flash(socket, :info, "Permissions saved.")}
-      {:error, _} -> {:noreply, put_flash(socket, :error, "Could not save permissions.")}
+      when is_binary(slug) and is_map(ceilings) do
+    with %{} = config <- Settings.get_plugin_config_by_slug(slug),
+         true <- page_writes?(config),
+         {:ok, _} <- Grants.put_ceilings(slug, ceilings) do
+      settings =
+        case socket.assigns.settings do
+          %{slug: ^slug} = open -> %{open | ceilings_form: ceilings_form(config)}
+          other -> other
+        end
+
+      {:noreply, socket |> assign(:settings, settings) |> put_flash(:info, "Permissions saved.")}
+    else
+      _ -> {:noreply, put_flash(socket, :error, "Could not save permissions.")}
     end
   end
+
+  def handle_event("save_ceilings", _params, socket),
+    do: {:noreply, put_flash(socket, :error, "Could not save permissions.")}
 
   def handle_event("save_settings", %{"slug" => slug} = params, socket) do
     case Settings.get_plugin_config_by_slug(slug) do
@@ -425,10 +437,12 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       values: stringify_values(form_data),
       form: to_form(form_data),
       page_writes?: page_writes?(config),
-      ceilings_form:
-        to_form(Map.new(@ceiling_roles, &{&1, Grants.ceiling(config.slug, &1)}), as: :ceilings)
+      ceilings_form: ceilings_form(config)
     }
   end
+
+  defp ceilings_form(config),
+    do: to_form(Map.new(@ceiling_roles, &{&1, Grants.ceiling(config.slug, &1)}), as: :ceilings)
 
   # Role ceilings only mean something for a plugin whose page can write.
   defp page_writes?(config) do

@@ -743,6 +743,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.icon name="hero-cog-6-tooth" class="w-5 h-5" /> {@settings.name} settings
         </h3>
         <.form
+          :if={@settings.schema != []}
           for={@settings.form}
           id="plugin-settings-form"
           phx-change="settings_changed"

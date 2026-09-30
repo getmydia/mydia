@@ -85,6 +85,11 @@ defmodule MydiaWeb.PluginPageLiveTest do
              "/plugins/#{@slug}/app/?#{MydiaWeb.PluginFrameToken.param()}="
   end
 
+  test "links to the activity page", %{conn: conn} do
+    {:ok, view, _} = live(conn, ~p"/plugins/#{@slug}")
+    assert has_element?(view, "#plugin-activity-link[href='/plugins/#{@slug}/activity']")
+  end
+
   test "the navbar lists the page", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
     assert has_element?(view, "#plugin-nav-#{@slug}")

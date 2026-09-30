@@ -66,7 +66,8 @@ defmodule MydiaWeb.PluginActivityLiveTest do
 
     view |> element("#undo-#{entry.id}") |> render_click()
 
-    assert has_element?(view, "#journal-#{entry.id} .badge")
+    assert has_element?(view, "#journal-#{entry.id} .badge", "Changed since")
+    assert has_element?(view, "#flash-error", "changed since")
     refute has_element?(view, "#undo-#{entry.id}")
   end
 

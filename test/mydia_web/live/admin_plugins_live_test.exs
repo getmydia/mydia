@@ -718,6 +718,42 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert Mydia.Plugins.Grants.ceiling("page-helper", "guest") == guest_before
     end
 
+    test "the modal shows the saved values and hides the empty settings form", %{conn: conn} do
+      seed_page_plugin("page-helper", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#settings-page-helper") |> render_click()
+      refute has_element?(view, "#plugin-settings-form")
+
+      view
+      |> form("#plugin-ceilings-form", %{
+        "slug" => "page-helper",
+        "ceilings" => %{"user" => "always"}
+      })
+      |> render_submit()
+
+      assert has_element?(
+               view,
+               "#plugin-ceilings-form select[name='ceilings[user]'] option[selected][value=always]"
+             )
+    end
+
+    test "malformed or non-page ceilings payloads flash an error", %{conn: conn} do
+      seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
+      seed_page_plugin("page-helper", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      render_click(view, "save_ceilings", %{"bogus" => "x"})
+      assert has_element?(view, "#flash-error")
+
+      render_click(view, "save_ceilings", %{
+        "slug" => "webhook-notifier",
+        "ceilings" => %{"user" => "always"}
+      })
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.role_ceilings in [nil, %{}]
+    end
+
     test "a plugin without page writes has no ceilings form", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
       {:ok, view, _} = live(conn, ~p"/admin/plugins")

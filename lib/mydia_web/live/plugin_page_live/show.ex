@@ -147,7 +147,16 @@ defmodule MydiaWeb.PluginPageLive.Show do
     ~H"""
     <Layouts.app {assigns}>
       <div class="flex flex-col h-[calc(100dvh-6rem)] gap-3">
-        <h1 class="text-xl font-semibold">{@title}</h1>
+        <div class="flex items-center justify-between gap-3">
+          <h1 class="text-xl font-semibold">{@title}</h1>
+          <.link
+            navigate={~p"/plugins/#{@slug}/activity"}
+            id="plugin-activity-link"
+            class="btn btn-ghost btn-sm"
+          >
+            <.icon name="hero-clock" class="w-4 h-4" /> Activity
+          </.link>
+        </div>
         <div
           id="plugin-frame-host"
           phx-hook="PluginFrame"
