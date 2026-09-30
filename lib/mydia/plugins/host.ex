@@ -124,7 +124,12 @@ defmodule Mydia.Plugins.Host do
 
   # A per-invocation context handed to an imports builder so host-function
   # closures can correlate to the run without a shared registry.
-  @type invocation_ctx :: %{slug: slug(), invocation_id: String.t(), test_run: boolean()}
+  @type invocation_ctx :: %{
+          slug: slug(),
+          instance_id: binary() | nil,
+          invocation_id: String.t(),
+          test_run: boolean()
+        }
 
   # ── Public API ──────────────────────────────────────────────────────────
 
@@ -208,7 +213,11 @@ defmodule Mydia.Plugins.Host do
       `:check_health`. The last two are typed 1.4 exports: they return decoded
       maps with snake_case atom keys instead of the guest's JSON, and an
       `:unsupported` error without instantiating when the guest predates 1.4.
-    * `:single_flight` - `:wait` (default; block until the plugin's lock is free)
+    * `:instance_id` - the plugin instance this call belongs to. It scopes the
+      single-flight lock (`{slug, instance_id}`) and reaches host functions
+      through the invocation context. `nil` for callers without an instance
+      (fixture tests).
+    * `:single_flight` - `:wait` (default; block until the instance's lock is free)
       or `:skip` (return a `:busy` error if a sibling invocation is in flight —
       the scheduler's non-reentrancy)
   """
@@ -228,6 +237,7 @@ defmodule Mydia.Plugins.Host do
 
       invocation = %{
         slug: slug,
+        instance_id: Keyword.get(opts, :instance_id),
         invocation_id: Ecto.UUID.generate(),
         test_run: Keyword.get(opts, :test_run, false),
         function: function,
@@ -237,10 +247,12 @@ defmodule Mydia.Plugins.Host do
         timeout: timeout
       }
 
-      # Serialize invocations per plugin so shared KV state is consistent (U4). A
-      # `:skip` acquirer (the scheduler) bails out without running when busy; a
-      # `:wait` acquirer queues behind the in-flight invocation.
-      case SingleFlight.run(slug, mode, fn -> invoke_with_markers(invocation) end) do
+      # Serialize invocations per plugin instance so its store state is
+      # consistent. A `:skip` acquirer (the scheduler) bails out without running
+      # when busy; a `:wait` acquirer queues behind the in-flight invocation.
+      case SingleFlight.run({slug, invocation.instance_id}, mode, fn ->
+             invoke_with_markers(invocation)
+           end) do
         {:busy} -> {:error, Error.new(:busy, "plugin #{slug} invocation already in flight")}
         result -> result
       end
@@ -387,7 +399,12 @@ defmodule Mydia.Plugins.Host do
   defp build_imports(spec, _inv) when is_map(spec), do: spec
 
   defp invocation_ctx(inv) do
-    %{slug: inv.slug, invocation_id: inv.invocation_id, test_run: inv.test_run}
+    %{
+      slug: inv.slug,
+      instance_id: inv.instance_id,
+      invocation_id: inv.invocation_id,
+      test_run: inv.test_run
+    }
   end
 
   defp invoke(pid, inv) do
@@ -728,8 +745,10 @@ defmodule Mydia.Plugins.Host do
     end
   end
 
-  # on-schedule gets the larger schedule budget; everything else the event budget.
+  # on-schedule gets the schedule budget, setup the setup budget, everything
+  # else (on-event, check-health) the event budget.
   defp default_timeout(cfg, :on_schedule), do: Map.get(cfg, :schedule_timeout_ms) || 60_000
+  defp default_timeout(cfg, :setup), do: Map.get(cfg, :setup_timeout_ms) || 30_000
   defp default_timeout(cfg, _handler), do: cfg.invocation_timeout_ms
 
   defp to_string_reason(reason) when is_binary(reason), do: reason
