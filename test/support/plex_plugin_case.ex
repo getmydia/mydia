@@ -200,6 +200,37 @@ defmodule Mydia.PlexPluginCase do
     {show, ep}
   end
 
+  @doc """
+  Runs `fun`, then waits for the plugin event deliveries it caused to finish.
+
+  Writing a watched row publishes `playback.finished`; the real `Dispatcher`
+  turns that into a task that invokes the plex instance under its single-flight
+  lock. A test that then calls `Plugins.invoke_plugin_schedule/2` (which skips
+  instead of waiting) would race that task and see "invocation already in
+  flight". The dispatcher handles messages in order, so once it answers, every
+  event `fun` broadcast has become a task; the tasks that appeared while `fun`
+  ran are waited for, leaving the tick as the only thing running, which is what
+  a real first tick is. Tasks that were already running are not waited for:
+  unrelated long-lived work shares the supervisor.
+  """
+  def settle_events(fun, timeout \\ 10_000) when is_function(fun, 0) do
+    before = Task.Supervisor.children(Mydia.TaskSupervisor)
+    result = fun.()
+    _ = :sys.get_state(Mydia.Plugins.Dispatcher)
+
+    for pid <- Task.Supervisor.children(Mydia.TaskSupervisor) -- before do
+      ref = Process.monitor(pid)
+
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+      after
+        timeout -> raise "plugin event delivery did not finish within #{timeout}ms"
+      end
+    end
+
+    result
+  end
+
   @doc "Plex's paging offset, which the guest sends as a request header."
   def container_start(conn) do
     conn

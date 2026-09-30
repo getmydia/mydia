@@ -120,6 +120,13 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
         json(conn, 200, %{"MediaContainer" => %{"Metadata" => [movie_json("100", movie.tmdb_id)]}})
       end)
 
+      # An unwatched change always clears the watched flag first, then sets the
+      # resume point (the watched flag and the offset are separate on Plex).
+      FakePlexServer.stub(server, "GET", "/:/unscrobble", fn conn ->
+        send(test_pid, {:unscrobble, token(conn), query(conn)["key"]})
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
       FakePlexServer.stub(server, "GET", "/:/progress", fn conn ->
         send(test_pid, {:progress, token(conn), query(conn)})
         Plug.Conn.resp(conn, 200, "")
@@ -127,6 +134,7 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
 
       assert {:ok, _} = Plugins.invoke_plugin_schedule("plex", instance.id)
 
+      assert_received {:unscrobble, "user-token", "100"}
       assert_received {:progress, "user-token", params}
       assert %{"key" => "100", "time" => "95000", "state" => "stopped"} = params
       refute_received {:progress, _, _}
@@ -174,6 +182,11 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
         end)
       end
 
+      FakePlexServer.stub(server, "GET", "/:/unscrobble", fn conn ->
+        send(test_pid, {:unscrobble, query(conn)["key"]})
+        Plug.Conn.resp(conn, 200, "")
+      end)
+
       FakePlexServer.stub(server, "GET", "/:/progress", fn conn ->
         send(test_pid, {:progress, query(conn)["key"]})
         Plug.Conn.resp(conn, 200, "")
@@ -183,6 +196,7 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
 
       assert_received {:progress, "200"}
       refute_received {:progress, "100"}
+      refute_received {:unscrobble, "100"}
     end
 
     test "a 401 on one profile marks only that link as errored",
@@ -317,12 +331,17 @@ defmodule Mydia.Plugins.PlexSyncIntegrationTest do
       stub_empty_shows(server)
       test_pid = self()
 
+      # The watched write publishes playback.finished, which the real
+      # dispatcher delivers to this instance in a task. Let it finish, or the
+      # skip-if-busy schedule call below races it.
       {:ok, _} =
-        Playback.save_progress(user.id, [media_item_id: watched_here.id], %{
-          position_seconds: 6000,
-          duration_seconds: 6000,
-          watched: true
-        })
+        settle_events(fn ->
+          Playback.save_progress(user.id, [media_item_id: watched_here.id], %{
+            position_seconds: 6000,
+            duration_seconds: 6000,
+            watched: true
+          })
+        end)
 
       FakePlexServer.stub(server, "GET", "/library/sections/1/all", fn conn ->
         json(conn, 200, %{
