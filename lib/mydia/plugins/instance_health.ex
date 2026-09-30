@@ -23,8 +23,10 @@ defmodule Mydia.Plugins.InstanceHealth do
   alias Mydia.Plugins.Instance
   alias Mydia.Plugins.Instances
 
-  @cache_ttl :timer.minutes(5)
   @check_interval :timer.minutes(5)
+  # Twice the loop interval, so an entry never expires before the next round
+  # has had time to replace it.
+  @cache_ttl 2 * @check_interval
   @table :plugin_instance_health
 
   @type status ::
@@ -141,10 +143,29 @@ defmodule Mydia.Plugins.InstanceHealth do
   end
 
   defp perform_all do
-    for %{enabled: true, slug: slug} <- Plugins.list_plugins(),
+    plugins = Plugins.list_plugins()
+
+    live_ids =
+      for %{slug: slug} <- plugins, instance <- Instances.list(slug), into: MapSet.new() do
+        instance.id
+      end
+
+    evict_missing(live_ids)
+
+    for %{enabled: true, slug: slug} <- plugins,
         supported?(slug),
         instance <- Instances.list_enabled(slug) do
       Task.start(fn -> perform(instance.id, &Plugins.invoke_check_health/2) end)
+    end
+
+    :ok
+  end
+
+  # Drop cache entries for instances that were deleted (or whose plugin is gone).
+  defp evict_missing(live_ids) do
+    for id <- :ets.select(@table, [{{:"$1", :_, :_}, [], [:"$1"]}]),
+        not MapSet.member?(live_ids, id) do
+      :ets.delete(@table, id)
     end
 
     :ok

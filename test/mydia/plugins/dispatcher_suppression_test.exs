@@ -17,5 +17,6 @@ defmodule Mydia.Plugins.DispatcherSuppressionTest do
     refute Dispatcher.suppressed?("player", "plex")
     refute Dispatcher.suppressed?("sync:jellyfin", "plex")
     refute Dispatcher.suppressed?(nil, "plex")
+    refute Dispatcher.suppressed?(:plugin, "plex")
   end
 end

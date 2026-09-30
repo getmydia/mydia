@@ -136,6 +136,36 @@ defmodule Mydia.Plugins.DispatcherTest do
     refute_receive {:invoked, "simkl_sync", _}, 200
   end
 
+  test "R14: an instance-qualified origin is not delivered back to that plugin" do
+    start_dispatcher!(self())
+    register!("plex", ["playback.finished"])
+    register!("other", ["playback.finished"])
+
+    PubSub.broadcast(
+      Mydia.PubSub,
+      "events:all",
+      {:event_created,
+       %{type: "playback.finished", metadata: %{"origin" => "plugin:plex:0b7e-1234"}}}
+    )
+
+    assert_receive {:invoked, "other", "playback.finished"}, 1_000
+    refute_receive {:invoked, "plex", _}, 200
+  end
+
+  test "a non-binary origin does not crash the dispatcher and is delivered" do
+    pid = start_dispatcher!(self())
+    register!("other", ["playback.finished"])
+
+    PubSub.broadcast(
+      Mydia.PubSub,
+      "events:all",
+      {:event_created, %{type: "playback.finished", metadata: %{"origin" => :player}}}
+    )
+
+    assert_receive {:invoked, "other", "playback.finished"}, 1_000
+    assert Process.alive?(pid)
+  end
+
   test "R14: a sync-origin event is delivered with the origin visible in metadata" do
     test_pid = self()
 

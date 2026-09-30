@@ -78,6 +78,34 @@ defmodule Mydia.Plugins.HostFunctionsSyncTest do
     end
   end
 
+  describe "ensure_watched carries the instance origin" do
+    test "on a fresh row", %{plugin: p, instance: i, user: u, movie: m} do
+      target = %{"user-id": u.id, "tmdb-id": {:some, 4242}}
+
+      assert {:ok, %{status: :changed}} = HostFunctions.ensure_watched(p, target, instance: i)
+      progress = Playback.get_progress(u.id, media_item_id: m.id)
+      assert progress.watched
+      assert progress.last_write_origin == "plugin:tester:#{i.id}"
+    end
+
+    test "on an existing row (mark_watched branch)", %{plugin: p, instance: i, user: u, movie: m} do
+      {:ok, _} =
+        Playback.save_progress(
+          u.id,
+          [media_item_id: m.id],
+          %{position_seconds: 5, duration_seconds: 600},
+          origin: "player"
+        )
+
+      target = %{"user-id": u.id, "tmdb-id": {:some, 4242}}
+
+      assert {:ok, %{status: :changed}} = HostFunctions.ensure_watched(p, target, instance: i)
+      progress = Playback.get_progress(u.id, media_item_id: m.id)
+      assert progress.watched
+      assert progress.last_write_origin == "plugin:tester:#{i.id}"
+    end
+  end
+
   describe "data_list playback_progress origin" do
     setup %{user: u, movie: m} do
       {:ok, _} =

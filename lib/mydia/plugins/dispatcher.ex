@@ -84,6 +84,9 @@ defmodule Mydia.Plugins.Dispatcher do
     origin == own or String.starts_with?(origin, own <> ":")
   end
 
+  # An origin is free-form metadata; anything that is not a string cannot name a plugin.
+  def suppressed?(_origin, _slug), do: false
+
   # Run one plugin invocation in an isolated, supervised task. Crashes are
   # caught and logged so one misbehaving plugin never affects the others or the
   # dispatcher (R2, fail-soft).
