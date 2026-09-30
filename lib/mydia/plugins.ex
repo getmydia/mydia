@@ -386,6 +386,8 @@ defmodule Mydia.Plugins do
           :ok
 
         {:error, error} ->
+          # A declared-settings sync may have pre-registered the descriptor.
+          deactivate(config.slug)
           Logger.warning("could not activate plugin #{config.slug}: #{inspect(error)}")
       end
     end)
@@ -435,6 +437,7 @@ defmodule Mydia.Plugins do
           :ok
 
         {:error, error} ->
+          deactivate(config.slug)
           Logger.warning("could not activate plugin #{config.slug}: #{inspect(error)}")
       end
     end)
@@ -1012,7 +1015,7 @@ defmodule Mydia.Plugins do
   # first run has them and its net:http grant covers the declared URL.
   defp with_declared_settings(config) do
     DeclaredSettings.sync(config.slug)
-    Settings.get_plugin_config_by_slug(config.slug)
+    Settings.get_plugin_config_by_slug(config.slug) || config
   end
 
   defp persist_install(entry, wasm, hash, grants) do
@@ -1048,6 +1051,8 @@ defmodule Mydia.Plugins do
         # A row that cannot activate must not claim to be enabled with no live
         # plugin behind it.
         _ = Settings.update_plugin_config(config, %{enabled: false})
+        # A settings write may have pre-registered the descriptor; drop it.
+        deactivate(config.slug)
         reload()
         err
     end

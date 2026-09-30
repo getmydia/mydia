@@ -675,23 +675,21 @@ defmodule Mydia.Config.Loader do
     slug = env["PLUGIN_#{index}_SLUG"]
     raw = env["PLUGIN_#{index}_SETTINGS"]
 
-    cond do
-      slug in [nil, ""] or raw in [nil, ""] ->
-        []
+    if slug in [nil, ""] or raw in [nil, ""] do
+      []
+    else
+      case parse_json(raw) do
+        {:ok, settings} ->
+          [%{slug: slug, settings: settings}]
 
-      true ->
-        case parse_json(raw) do
-          {:ok, settings} ->
-            [%{slug: slug, settings: settings}]
+        :error ->
+          warn_once(
+            {:plugin_settings_json, index},
+            "PLUGIN_#{index}_SETTINGS is not a JSON object; ignoring the settings declared for #{slug}"
+          )
 
-          :error ->
-            warn_once(
-              {:plugin_settings_json, index},
-              "PLUGIN_#{index}_SETTINGS is not a JSON object; ignoring the settings declared for #{slug}"
-            )
-
-            []
-        end
+          []
+      end
     end
   end
 

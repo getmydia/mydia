@@ -797,7 +797,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
                 class="flex items-center gap-2 text-xs text-base-content/60"
               >
                 <.config_source_badge source={:env} size="xs" />
-                Set by PLUGIN_&lt;N&gt;_SETTINGS. Change it there.
+                Set in the environment or config file. Change it there.
               </p>
             </div>
           </div>

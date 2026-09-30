@@ -288,7 +288,9 @@ keys. Settings set this way are applied at startup and when the plugin is
 installed, and show as read-only in the plugin's Settings dialog. Keys the
 plugin does not define, and URLs that are not full `http(s)` URLs, are skipped
 with a warning in the log. Removing a variable leaves its last value in place,
-editable in the UI.
+editable in the UI. Values set this way are saved in Mydia's database, the same
+as values entered in the Settings dialog, so an API key set by env is also in
+the database and its backups.
 
 A URL setting that the plugin uses to reach a server (such as the Assistant's
 `base_url`) is added to the plugin's allowed hosts, as it is when you type it in

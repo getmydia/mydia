@@ -86,6 +86,17 @@ defmodule Mydia.Plugins.DeclaredSettingsTest do
     assert Instances.default_instance(@slug).settings["model"] == "llama3.1"
   end
 
+  test "a default instance lacking a declared key gets it though the row already matches" do
+    seed(granted: %{"net:http" => []}, settings: %{"model" => "llama3.1"})
+    declare([{@slug, %{"model" => "llama3.1"}}])
+    {:ok, instance} = Instances.create(@slug, %{name: "Default", settings: %{}})
+    assert instance.settings == %{}
+
+    DeclaredSettings.sync(@slug)
+
+    assert Instances.default_instance(@slug).settings["model"] == "llama3.1"
+  end
+
   test "a declared base_url enters net:http for an approved plugin" do
     seed(granted: %{"net:http" => []})
     declare([{@slug, %{"base_url" => "http://ollama.lan:11434/v1"}}])

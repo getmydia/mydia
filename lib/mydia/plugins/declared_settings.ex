@@ -16,6 +16,7 @@ defmodule Mydia.Plugins.DeclaredSettings do
   """
 
   alias Mydia.Plugins
+  alias Mydia.Plugins.Instances
   alias Mydia.Settings
   alias Mydia.Settings.PluginConfig
   alias Mydia.Settings.RuntimeConfig
@@ -122,7 +123,8 @@ defmodule Mydia.Plugins.DeclaredSettings do
 
   defp write(config, accepted) do
     if Map.take(config.settings || %{}, Map.keys(accepted)) == accepted do
-      :ok
+      # The row already matches, but a recreated default instance may not.
+      Instances.merge_default_settings(config.slug, accepted)
     else
       case Plugins.update_settings(config.slug, accepted) do
         {:ok, _config} ->

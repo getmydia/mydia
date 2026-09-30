@@ -108,6 +108,20 @@ defmodule Mydia.Config.PluginSettingsConfigTest do
              config.plugin_settings
   end
 
+  test "YAML plugin_settings keep the exact case of setting keys" do
+    File.write!(@yaml_path, """
+    plugin_settings:
+      - slug: assistant-openai
+        settings:
+          baseURL: http://x.lan/v1
+    """)
+
+    assert {:ok, config} = Loader.load(config_file: @yaml_path, sources: [:yaml])
+
+    assert [%{settings: %{"baseURL" => "http://x.lan/v1"} = settings}] = config.plugin_settings
+    assert Map.keys(settings) == ["baseURL"]
+  end
+
   test "YAML plugin_installs is ignored with a warning" do
     File.write!(@yaml_path, """
     plugin_installs:
