@@ -193,6 +193,10 @@ window.addEventListener("message", (e) => {
     case "expired":
       // e.data.ids: the approval is gone (an hour passed or the session changed). Ask again.
       break
+    case "theme":
+      // e.data.theme: "mydia-dark" or "mydia-light". Sent on load and when the user switches.
+      document.documentElement.setAttribute("data-theme", e.data.theme)
+      break
   }
 })
 ```
@@ -207,6 +211,9 @@ Details worth knowing:
 - If the user picked "for this session" or "always", later writes to the same
   surface return `Done` directly and no modal appears.
 - Whatever the outcome, nothing reaches the page until the user has decided.
+- The host posts `{mydia: "theme", theme}` when your page loads and whenever
+  the user changes theme. Set it on your `<html>` so daisyUI's theme variables
+  match the host. Without it your page follows the operating system theme.
 
 ## What the host sets
 
