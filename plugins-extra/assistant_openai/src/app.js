@@ -42,14 +42,16 @@
     if (e.data.mydia === "token") {
       if (typeof e.data.token === "string" && e.data.token) token = e.data.token
     } else if (e.data.mydia === "confirmed") {
-      const ok = (e.data.results || []).filter((r) => r.ok).length
+      const results = Array.isArray(e.data.results) ? e.data.results : []
+      const ok = results.filter((r) => r.ok).length
       bubble("assistant", `Done: ${ok} change(s) applied. You can undo them under Activity.`)
-      api("confirmed", { results: e.data.results })
+      api("confirmed", { results })
     } else if (e.data.mydia === "denied") {
       bubble("assistant", "Okay, I left things as they were.")
       api("denied", { ids: e.data.ids })
     } else if (e.data.mydia === "expired") {
       bubble("error", "That approval expired. Ask again.")
+      api("expired", { ids: e.data.ids })
     }
   })
 
