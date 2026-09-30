@@ -114,90 +114,17 @@
                 </button>
               </div>
 
-              <%= if @category == :home and is_nil(@source) do %>
-                <button
-                  id="discover-services-button"
-                  class="btn btn-sm btn-ghost gap-1"
-                  phx-click="open_services_picker"
-                ><.icon name="hero-tv" class="w-4 h-4" /> Services</button>
-              <% end %>
-
-              <%= if @home_country do %>
-                <div id="discover-home-country-menu" class="dropdown dropdown-end">
-                  <div
-                    tabindex="0"
-                    role="button"
-                    class="btn btn-ghost btn-xs btn-square"
-                    aria-label="Home country options"
-                  >
-                    <.icon name="hero-ellipsis-vertical" class="w-4 h-4" />
-                  </div>
-                  <ul
-                    tabindex="0"
-                    class="dropdown-content menu bg-base-100 rounded-box z-10 w-44 p-2 shadow"
-                  >
-                    <li>
-                      <button
-                        id="discover-home-country-change"
-                        type="button"
-                        phx-click={
-                          JS.push("open_home_country_picker")
-                          |> JS.focus(to: "#discover-home-country-picker select")
-                        }
-                      >
-                        Change country
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        id="discover-home-country-remove"
-                        type="button"
-                        phx-click="remove_home_country"
-                      >
-                        Remove tab
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              <% else %>
-                <button
-                  id="discover-home-country-add"
-                  type="button"
-                  phx-click="open_home_country_picker"
-                  class="btn btn-ghost btn-xs gap-1 text-base-content/60 hover:text-base-content transition-colors"
-                >
-                  <.icon name="hero-plus" class="w-3.5 h-3.5" /> Home country
-                </button>
-              <% end %>
-
-              <form
-                :if={@home_country_picker_open}
-                id="discover-home-country-picker"
-                phx-change="set_home_country"
-                class="flex items-center gap-1"
+              <button
+                id="discover-country-settings-button"
+                type="button"
+                phx-click="open_country_settings"
+                class="btn btn-ghost btn-sm gap-1 text-base-content/70 hover:text-base-content transition-colors"
               >
-                <select
-                  name="country"
-                  phx-mounted={JS.focus()}
-                  class="select select-bordered select-xs"
-                  aria-label="Home country"
-                >
-                  <option value="">Pick a country</option>
-                  <%= for {code, name} <- @countries do %>
-                    <option value={code} selected={@home_country == code}>
-                      {Countries.flag(code)} {name}
-                    </option>
-                  <% end %>
-                </select>
-                <button
-                  type="button"
-                  phx-click="close_home_country_picker"
-                  class="btn btn-ghost btn-xs btn-circle"
-                  aria-label="Cancel"
-                >
-                  <.icon name="hero-x-mark" class="w-3.5 h-3.5" />
-                </button>
-              </form>
+                <.icon
+                  name={if(@home_country, do: "hero-map-pin", else: "hero-plus")}
+                  class="w-4 h-4"
+                /> Your country
+              </button>
             </div>
           <% end %>
         </div>
@@ -370,10 +297,11 @@
     <% end %>
   </div>
 
-  <.services_picker
-    :if={@services_picker}
-    picker={@services_picker}
-    saved_ids={Enum.map(@streaming_services, & &1["id"])}
+  <.country_settings
+    :if={@country_settings}
+    settings={@country_settings}
+    countries={@countries}
+    saved_country={@home_country}
   />
 
   <%!-- Detail Modal --%>

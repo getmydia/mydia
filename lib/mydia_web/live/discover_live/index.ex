@@ -90,8 +90,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
       |> assign(:regional_rows, %{})
       |> assign(:source, nil)
       |> assign(:default_sort, "popularity.desc")
-      |> assign(:services_picker, nil)
-      |> assign(:home_country_picker_open, false)
+      |> assign(:country_settings, nil)
 
     {:ok, socket}
   end
@@ -283,41 +282,102 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, RegionalRows.load(socket, param)}
   end
 
-  def handle_event("open_services_picker", _params, socket),
-    do: {:noreply, load_services_list(socket)}
+  def handle_event("open_country_settings", _params, socket) do
+    %{home_country: country, streaming_services: services} = socket.assigns
 
-  def handle_event("retry_services_picker", _params, socket),
-    do: {:noreply, load_services_list(socket)}
+    settings = %{
+      country: country,
+      selected_ids: MapSet.new(services, & &1["id"]),
+      status: :idle,
+      providers: []
+    }
 
-  def handle_event("close_services_picker", _params, socket),
-    do: {:noreply, assign(socket, :services_picker, nil)}
+    {:noreply, socket |> assign(:country_settings, settings) |> load_country_services()}
+  end
 
-  def handle_event("save_services", params, socket) do
-    chosen = MapSet.new(List.wrap(params["services"]))
+  def handle_event("close_country_settings", _params, socket),
+    do: {:noreply, assign(socket, :country_settings, nil)}
 
-    services =
-      case socket.assigns.services_picker do
-        %{status: :ok, providers: providers} ->
-          providers
-          |> Enum.filter(&(to_string(&1.id) in chosen))
-          |> Enum.map(&%{"id" => &1.id, "name" => &1.name})
+  def handle_event("retry_country_settings", _params, socket),
+    do: {:noreply, load_country_services(socket)}
 
-        _ ->
-          nil
-      end
+  # The form posts every field on each change: the country select and the
+  # ticked services. A new country reloads its services; the ticks are
+  # pruned to what it offers once they arrive.
+  def handle_event("country_settings_changed", params, socket) do
+    case socket.assigns.country_settings do
+      nil ->
+        {:noreply, socket}
 
-    with services when is_list(services) <- services,
-         {:ok, _} <- RegionalSources.put_services(socket.assigns.current_user, services) do
-      socket =
-        socket
-        |> assign(:services_picker, nil)
-        |> assign_streaming_services()
-        |> assign_regional_sources()
+      settings ->
+        country = if Countries.valid_code?(params["country"]), do: params["country"], else: nil
+        settings = %{settings | selected_ids: ticked_ids(params, settings)}
 
-      socket = if landing?(socket.assigns), do: RegionalRows.load_all(socket), else: socket
-      {:noreply, socket}
+        socket =
+          if country == settings.country do
+            assign(socket, :country_settings, settings)
+          else
+            socket
+            |> assign(:country_settings, %{
+              settings
+              | country: country,
+                status: :idle,
+                providers: []
+            })
+            |> load_country_services()
+          end
+
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("save_country_settings", params, socket) do
+    with %{} = settings <- socket.assigns.country_settings,
+         country when is_binary(country) <- params["country"],
+         true <- Countries.valid_code?(country),
+         {:ok, _} <-
+           RegionalSources.put_country_settings(
+             socket.assigns.current_user,
+             country,
+             services_to_save(socket, settings, country, params)
+           ) do
+      params = %{"type" => to_string(socket.assigns.media_type), "category" => "home"}
+
+      {:noreply,
+       socket
+       |> assign(:home_country, country)
+       |> assign(:country_settings, nil)
+       |> assign_streaming_services()
+       |> assign_regional_sources()
+       |> push_patch(to: ~p"/discover?#{params}")}
     else
-      _ -> {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
+
+      _invalid ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("remove_home_country", _params, socket) do
+    case RegionalSources.put_country_settings(socket.assigns.current_user, nil, []) do
+      {:ok, _} ->
+        socket =
+          socket
+          |> assign(:home_country, nil)
+          |> assign(:country_settings, nil)
+          |> assign_streaming_services()
+          |> assign_regional_sources()
+
+        if socket.assigns.category == :home do
+          params = %{"type" => to_string(socket.assigns.media_type)}
+          {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
+        else
+          {:noreply, socket}
+        end
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Could not save your country settings")}
     end
   end
 
@@ -468,62 +528,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
          |> maybe_auto_advance(0, @page_size)}
 
       :error ->
-        {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
-    end
-  end
-
-  def handle_event("open_home_country_picker", _params, socket) do
-    {:noreply, assign(socket, :home_country_picker_open, true)}
-  end
-
-  def handle_event("close_home_country_picker", _params, socket) do
-    {:noreply, assign(socket, :home_country_picker_open, false)}
-  end
-
-  # The blank placeholder option and any client-forged code both land here
-  # and are ignored; only a listed code is saved.
-  def handle_event("set_home_country", %{"country" => code}, socket) do
-    if Countries.valid_code?(code) do
-      case RegionalSources.change_home_country(socket.assigns.current_user, code) do
-        {:ok, _} ->
-          params = %{"type" => to_string(socket.assigns.media_type), "category" => "home"}
-
-          {:noreply,
-           socket
-           |> assign(:home_country, code)
-           |> assign(:services_picker, nil)
-           |> assign_streaming_services()
-           |> assign_regional_sources()
-           |> assign(:home_country_picker_open, false)
-           |> push_patch(to: ~p"/discover?#{params}")}
-
-        {:error, _} ->
-          {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
-      end
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("remove_home_country", _params, socket) do
-    case RegionalSources.change_home_country(socket.assigns.current_user, nil) do
-      {:ok, _} ->
-        socket =
-          socket
-          |> assign(:home_country, nil)
-          |> assign(:services_picker, nil)
-          |> assign_streaming_services()
-          |> assign_regional_sources()
-          |> assign(:home_country_picker_open, false)
-
-        if socket.assigns.category == :home do
-          params = %{"type" => to_string(socket.assigns.media_type)}
-          {:noreply, push_patch(socket, to: ~p"/discover?#{params}")}
-        else
-          {:noreply, socket}
-        end
-
-      {:error, _} ->
         {:noreply, put_flash(socket, :error, "Could not save that filter preference")}
     end
   end
@@ -854,12 +858,32 @@ defmodule MydiaWeb.DiscoverLive.Index do
     {:noreply, RegionalRows.put_result(socket, media_type, param, result, &enrich(&1, socket))}
   end
 
-  def handle_async(:services_list, {:ok, {:ok, providers}}, socket) do
-    {:noreply, update_picker(socket, %{status: :ok, providers: providers})}
-  end
+  # Keyed by country so a slow answer for a country the user already moved
+  # away from is dropped instead of replacing the current list.
+  def handle_async({:country_services, country}, result, socket) do
+    case socket.assigns.country_settings do
+      %{country: ^country} = settings ->
+        settings =
+          case result do
+            {:ok, {:ok, providers}} ->
+              offered = MapSet.new(providers, & &1.id)
 
-  def handle_async(:services_list, _error_or_exit, socket) do
-    {:noreply, update_picker(socket, %{status: :error, providers: []})}
+              %{
+                settings
+                | status: :ok,
+                  providers: providers,
+                  selected_ids: MapSet.intersection(settings.selected_ids, offered)
+              }
+
+            _error_or_exit ->
+              %{settings | status: :error, providers: []}
+          end
+
+        {:noreply, assign(socket, :country_settings, settings)}
+
+      _closed_or_moved_on ->
+        {:noreply, socket}
+    end
   end
 
   def handle_async({:load_recommendations, item_ref}, {:ok, {:ok, results}}, socket) do
@@ -988,16 +1012,50 @@ defmodule MydiaWeb.DiscoverLive.Index do
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end
 
-  defp load_services_list(socket) do
-    country = socket.assigns.home_country
+  defp load_country_services(socket) do
+    case socket.assigns.country_settings do
+      %{country: country} = settings when is_binary(country) ->
+        socket
+        |> assign(:country_settings, %{settings | status: :loading})
+        |> start_async({:country_services, country}, fn ->
+          RegionalSources.available_services(country)
+        end)
 
-    socket
-    |> assign(:services_picker, %{status: :loading, providers: []})
-    |> start_async(:services_list, fn -> RegionalSources.available_services(country) end)
+      _no_country ->
+        socket
+    end
   end
 
-  defp update_picker(socket, picker) do
-    if socket.assigns.services_picker, do: assign(socket, :services_picker, picker), else: socket
+  # Only ids from the loaded provider list count, so a forged value is
+  # dropped. Before the list loads, the current ticks are kept as they are.
+  defp ticked_ids(params, %{status: :ok, providers: providers}) do
+    posted = MapSet.new(List.wrap(params["services"]))
+
+    providers
+    |> Enum.filter(&(to_string(&1.id) in posted))
+    |> MapSet.new(& &1.id)
+  end
+
+  defp ticked_ids(_params, settings), do: settings.selected_ids
+
+  # With the list loaded for the country being saved, save exactly what is
+  # ticked. Without it, an unchanged country keeps its saved services, and a
+  # new one starts with none, since the old services mean nothing there.
+  defp services_to_save(socket, settings, country, params) do
+    cond do
+      settings.status == :ok and settings.country == country ->
+        ids = ticked_ids(params, settings)
+
+        settings.providers
+        |> Enum.filter(&MapSet.member?(ids, &1.id))
+        |> Enum.map(&%{"id" => &1.id, "name" => &1.name})
+
+      country == socket.assigns.home_country ->
+        socket.assigns.streaming_services
+
+      true ->
+        []
+    end
   end
 
   defp assign_home_country(socket) do

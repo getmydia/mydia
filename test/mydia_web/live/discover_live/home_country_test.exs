@@ -103,42 +103,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       {:ok, view, _html} = live(conn, ~p"/discover")
 
       refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-add")
-    end
-
-    test "a forged or blank country is ignored", %{conn: conn, user: user} do
-      {:ok, view, _html} = live(conn, ~p"/discover")
-
-      view |> element("#discover-home-country-add") |> render_click()
-
-      for code <- ["XX", ""] do
-        view
-        |> element("#discover-home-country-picker")
-        |> render_change(%{"country" => code})
-      end
-
-      assert home_country(user) == nil
-      refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-picker")
-    end
-
-    test "picking a country saves it and opens its tab", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      {:ok, view, _html} = live(conn, ~p"/discover")
-
-      view |> element("#discover-home-country-add") |> render_click()
-      assert has_element?(view, "#discover-home-country-picker")
-
-      view
-      |> element("#discover-home-country-picker")
-      |> render_change(%{"country" => "CA"})
-
-      assert_patch(view, ~p"/discover?#{%{"category" => "home", "type" => "movie"}}")
-      assert home_country(user) == "CA"
-      assert has_element?(view, "#discover-home-tab.tab-active", "Canada")
-      refute has_element?(view, "#discover-home-country-picker")
-      render_async(view)
-      assert has_element?(view, "#discover-regional-rows")
+      assert has_element?(view, "#discover-country-settings-button")
     end
 
     test "the saved tab shows on the next mount", %{conn: conn, user: user} do
@@ -148,21 +113,6 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
 
       assert has_element?(view, "#discover-home-tab", "Canada")
       refute has_element?(view, "#discover-home-tab.tab-active")
-      refute has_element?(view, "#discover-home-country-add")
-    end
-
-    test "removing the tab clears the preference", %{conn: conn, user: user, bypass: bypass} do
-      stub_discover(bypass)
-      set_home_country(user, "CA")
-
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
-
-      view |> element("#discover-home-country-remove") |> render_click()
-
-      assert_patch(view, ~p"/discover?#{%{"type" => "movie"}}")
-      assert home_country(user) == nil
-      refute has_element?(view, "#discover-home-tab")
-      assert has_element?(view, "#discover-home-country-add")
     end
 
     test "category=home with no preference falls back to Trending", %{conn: conn} do

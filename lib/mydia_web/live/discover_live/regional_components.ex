@@ -1,10 +1,11 @@
 defmodule MydiaWeb.DiscoverLive.RegionalComponents do
-  @moduledoc "The Discover country tab: landing rows and the services picker."
+  @moduledoc "The Discover country tab: landing rows and the country settings modal."
   use MydiaWeb, :html
 
   import MydiaWeb.DiscoverComponents
   import MydiaWeb.PosterCardComponents
 
+  alias Mydia.Metadata.Countries
   alias Mydia.Metadata.RegionalSources
 
   attr :sources, :list, required: true
@@ -31,7 +32,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
           <button
             id="discover-services-prompt-open"
             class="btn btn-primary btn-sm"
-            phx-click="open_services_picker"
+            phx-click="open_country_settings"
           >
             Pick services
           </button>
@@ -94,57 +95,109 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
     """
   end
 
-  attr :picker, :map, required: true
-  attr :saved_ids, :list, required: true
+  attr :settings, :map, required: true
+  attr :countries, :list, required: true
+  attr :saved_country, :string, default: nil
 
-  def services_picker(assigns) do
+  def country_settings(assigns) do
     ~H"""
-    <div id="discover-services-picker" class="modal modal-open" role="dialog">
+    <div
+      id="discover-country-settings"
+      class="modal modal-open"
+      role="dialog"
+      phx-window-keydown="close_country_settings"
+      phx-key="Escape"
+    >
       <div class="modal-box max-w-2xl">
-        <h3 class="font-bold text-lg">Your streaming services</h3>
+        <h3 class="font-bold text-lg">Your country</h3>
         <p class="text-sm text-base-content/60 mt-1">
-          Pick the services you subscribe to. Each gets a row of its latest titles.
+          See what is in cinemas and on your streaming services where you live.
         </p>
-        <%= case @picker.status do %>
-          <% :loading -> %>
-            <div class="flex justify-center py-10">
-              <span class="loading loading-spinner loading-md text-primary"></span>
-            </div>
-          <% :error -> %>
-            <div class="alert alert-warning mt-4">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-              <span>Could not load the services for your country.</span>
-              <button
-                id="discover-services-retry"
-                class="btn btn-sm"
-                phx-click="retry_services_picker"
+        <form
+          id="discover-country-settings-form"
+          phx-change="country_settings_changed"
+          phx-submit="save_country_settings"
+          class="mt-4 space-y-4"
+        >
+          <label class="fieldset">
+            <span class="fieldset-legend">Country</span>
+            <select name="country" class="select select-bordered w-full" aria-label="Country">
+              <option value="" selected={is_nil(@settings.country)}>Pick a country</option>
+              <option
+                :for={{code, name} <- @countries}
+                value={code}
+                selected={@settings.country == code}
               >
-                Retry
-              </button>
-            </div>
-          <% :ok -> %>
-            <form id="discover-services-form" phx-submit="save_services" class="mt-4">
-              <div class="filter flex flex-wrap gap-2">
-                <input
-                  :for={provider <- @picker.providers}
-                  type="checkbox"
-                  name="services[]"
-                  value={provider.id}
-                  class="btn btn-sm"
-                  aria-label={provider.name}
-                  checked={provider.id in @saved_ids}
-                />
-              </div>
-              <div class="modal-action">
-                <button type="button" class="btn btn-ghost" phx-click="close_services_picker">
-                  Cancel
-                </button>
-                <button type="submit" class="btn btn-primary">Save</button>
-              </div>
-            </form>
-        <% end %>
+                {Countries.flag(code)} {name}
+              </option>
+            </select>
+          </label>
+
+          <div :if={@settings.country} id="discover-country-settings-services">
+            <span class="fieldset-legend">Streaming services</span>
+            <%= case @settings.status do %>
+              <% :error -> %>
+                <div class="alert alert-warning">
+                  <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+                  <span>Could not load the services for this country.</span>
+                  <button
+                    id="discover-country-settings-retry"
+                    type="button"
+                    class="btn btn-sm"
+                    phx-click="retry_country_settings"
+                  >
+                    Retry
+                  </button>
+                </div>
+              <% :ok -> %>
+                <div class="filter flex flex-wrap gap-2">
+                  <input
+                    :for={provider <- @settings.providers}
+                    type="checkbox"
+                    name="services[]"
+                    value={provider.id}
+                    class="btn btn-sm"
+                    aria-label={provider.name}
+                    checked={MapSet.member?(@settings.selected_ids, provider.id)}
+                  />
+                </div>
+              <% _loading -> %>
+                <div class="flex justify-center py-6">
+                  <span class="loading loading-spinner loading-md text-primary"></span>
+                </div>
+            <% end %>
+          </div>
+
+          <div class="modal-action items-center">
+            <button
+              :if={@saved_country}
+              id="discover-country-settings-remove"
+              type="button"
+              class="btn btn-ghost text-error mr-auto"
+              phx-click="remove_home_country"
+            >
+              Remove
+            </button>
+            <button
+              id="discover-country-settings-cancel"
+              type="button"
+              class="btn btn-ghost"
+              phx-click="close_country_settings"
+            >
+              Cancel
+            </button>
+            <button
+              id="discover-country-settings-save"
+              type="submit"
+              class="btn btn-primary"
+              disabled={is_nil(@settings.country)}
+            >
+              Save
+            </button>
+          </div>
+        </form>
       </div>
-      <div class="modal-backdrop" phx-click="close_services_picker"></div>
+      <div class="modal-backdrop" phx-click="close_country_settings"></div>
     </div>
     """
   end

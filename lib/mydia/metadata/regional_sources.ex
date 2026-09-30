@@ -14,7 +14,6 @@ defmodule Mydia.Metadata.RegionalSources do
   """
 
   alias Mydia.Accounts
-  alias Mydia.Accounts.UserPreference
   alias Mydia.Metadata
 
   @type source :: :in_cinemas | :coming_soon | {:service, pos_integer(), String.t()}
@@ -180,47 +179,6 @@ defmodule Mydia.Metadata.RegionalSources do
         "discover_home_country" => country,
         "discover_streaming_services" => services
       }
-    })
-  end
-
-  @doc """
-  Saves a new home country (nil removes it) and prunes the saved services to
-  the ones the new country offers. A service from the old country means
-  nothing in the new one, so if the new list cannot be fetched the services
-  are cleared rather than kept.
-  """
-  def change_home_country(user, code, available_fun \\ &available_services/1) do
-    pref = Accounts.get_user_preference!(user)
-    current = UserPreference.discover_streaming_services(pref)
-
-    services =
-      cond do
-        is_nil(code) or current == [] -> []
-        code == UserPreference.discover_home_country(pref) -> current
-        true -> keep_available(current, available_fun.(code))
-      end
-
-    Accounts.update_preference(pref, %{
-      "preferences" => %{
-        "discover_home_country" => code,
-        "discover_streaming_services" => services
-      }
-    })
-  end
-
-  defp keep_available(current, {:ok, providers}) do
-    ids = MapSet.new(providers, & &1.id)
-    Enum.filter(current, &MapSet.member?(ids, &1["id"]))
-  end
-
-  defp keep_available(_current, {:error, _}), do: []
-
-  @doc "Saves the picked services, in order."
-  def put_services(user, services) do
-    user
-    |> Accounts.get_user_preference!()
-    |> Accounts.update_preference(%{
-      "preferences" => %{"discover_streaming_services" => services}
     })
   end
 
