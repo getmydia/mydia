@@ -40,6 +40,29 @@ defmodule Mydia.Metadata do
   # Must agree with the relay provider's default so cache keys and fetches align.
   @default_language "en-US"
 
+  # Every Metadata.discover/2 option that changes the response. The cache key
+  # is built from this list so a new option cannot be forgotten in the key:
+  # leaving one out lets two different queries share an entry.
+  @discover_cache_fields [
+    :genres,
+    :original_language,
+    :year,
+    :min_rating,
+    :min_votes,
+    :sort_by,
+    :page,
+    :certification_country,
+    :certification_lte,
+    :origin_country,
+    :region,
+    :with_release_type,
+    :release_date_gte,
+    :release_date_lte,
+    :watch_region,
+    :with_watch_providers,
+    :with_watch_monetization_types
+  ]
+
   alias Mydia.Metadata.Provider
   alias Mydia.Metadata.Ref
 
@@ -728,21 +751,17 @@ defmodule Mydia.Metadata do
     alias Mydia.Metadata.Cache
     alias Mydia.Metadata.Provider.Relay
 
-    page = Keyword.get(opts, :page, 1)
-    genres = Keyword.get(opts, :genres)
-    original_language = Keyword.get(opts, :original_language)
-    year = Keyword.get(opts, :year)
-    min_rating = Keyword.get(opts, :min_rating)
-    sort_by = Keyword.get(opts, :sort_by, "popularity.desc")
-    certification_country = Keyword.get(opts, :certification_country)
-    certification_lte = Keyword.get(opts, :certification_lte)
-    origin_country = Keyword.get(opts, :origin_country)
+    opts =
+      opts
+      |> Keyword.put_new(:page, 1)
+      |> Keyword.put_new(:sort_by, "popularity.desc")
 
     # The certification ceiling varies per caller, so it has to be part of the
     # key. Leaving it out would let an unrestricted browse populate the entry
     # that a restricted account then reads, and vice versa.
     cache_key =
-      "discover:#{media_type}:#{genres}:#{original_language}:#{year}:#{min_rating}:#{sort_by}:#{page}:#{certification_country}:#{certification_lte}:#{origin_country}"
+      "discover:#{media_type}:" <>
+        Enum.map_join(@discover_cache_fields, ":", &Keyword.get(opts, &1))
 
     Cache.fetch(
       cache_key,
@@ -775,6 +794,23 @@ defmodule Mydia.Metadata do
       fn ->
         Relay.fetch_genres(default_relay_config(), media_type)
       end,
+      ttl: :timer.hours(24)
+    )
+  end
+
+  @doc """
+  Streaming services available in `region` for a media type, cached 24h.
+
+      iex> Mydia.Metadata.watch_providers(:movie, "CA")
+      {:ok, [%Mydia.Metadata.Structs.WatchProvider{}, ...]}
+  """
+  def watch_providers(media_type, region) do
+    alias Mydia.Metadata.Cache
+    alias Mydia.Metadata.Provider.Relay
+
+    Cache.fetch(
+      "watch_providers:#{media_type}:#{region}",
+      fn -> Relay.fetch_watch_providers(default_relay_config(), media_type, region) end,
       ttl: :timer.hours(24)
     )
   end

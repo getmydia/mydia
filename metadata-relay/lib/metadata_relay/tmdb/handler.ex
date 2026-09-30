@@ -169,6 +169,13 @@ defmodule MetadataRelay.TMDB.Handler do
   end
 
   @doc """
+  GET /tmdb/watch/providers/{movie,tv}
+  Streaming services available in a region (`watch_region`), from JustWatch.
+  """
+  def watch_providers(:movie, params), do: Client.get("/watch/providers/movie", params: params)
+  def watch_providers(:tv, params), do: Client.get("/watch/providers/tv", params: params)
+
+  @doc """
   GET /tmdb/list/{id}
   Get a user-created TMDB list.
   """

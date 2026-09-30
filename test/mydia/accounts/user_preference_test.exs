@@ -275,4 +275,67 @@ defmodule Mydia.Accounts.UserPreferenceTest do
       assert changeset.valid?
     end
   end
+
+  describe "discover_streaming_services" do
+    defp services_changeset(value, stored \\ %{}) do
+      UserPreference.update_preferences_changeset(
+        %UserPreference{preferences: stored},
+        %{"discover_streaming_services" => value}
+      )
+    end
+
+    test "accepts a list of id/name maps" do
+      assert services_changeset([%{"id" => 8001, "name" => "Maplestream"}]).valid?
+      assert services_changeset([]).valid?
+      assert services_changeset(nil).valid?
+    end
+
+    test "rejects bad ids, blank names, duplicates and non-lists" do
+      refute services_changeset([%{"id" => 0, "name" => "Maplestream"}]).valid?
+      refute services_changeset([%{"id" => "8001", "name" => "Maplestream"}]).valid?
+      refute services_changeset([%{"id" => 8001, "name" => ""}]).valid?
+      refute services_changeset([%{"id" => 8001}]).valid?
+
+      refute services_changeset([
+               %{"id" => 8001, "name" => "Maplestream"},
+               %{"id" => 8001, "name" => "Maplestream"}
+             ]).valid?
+
+      refute services_changeset("8001").valid?
+    end
+
+    test "an unchanged stored value is not re-validated" do
+      stale = [%{"id" => 8001}]
+
+      changeset =
+        UserPreference.update_preferences_changeset(
+          %UserPreference{preferences: %{"discover_streaming_services" => stale}},
+          %{"theme" => "dark"}
+        )
+
+      assert changeset.valid?
+    end
+
+    test "the accessor needs a home country" do
+      services = [%{"id" => 8001, "name" => "Maplestream"}]
+
+      assert UserPreference.discover_streaming_services(%UserPreference{
+               preferences: %{
+                 "discover_home_country" => "CA",
+                 "discover_streaming_services" => services
+               }
+             }) == services
+
+      assert UserPreference.discover_streaming_services(%UserPreference{
+               preferences: %{"discover_streaming_services" => services}
+             }) == []
+
+      assert UserPreference.discover_streaming_services(%UserPreference{
+               preferences: %{
+                 "discover_home_country" => "CA",
+                 "discover_streaming_services" => "junk"
+               }
+             }) == []
+    end
+  end
 end

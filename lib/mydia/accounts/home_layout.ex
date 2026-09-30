@@ -81,6 +81,13 @@ defmodule Mydia.Accounts.HomeLayout do
       default?: true
     },
     %Widget{
+      key: :regional,
+      label: "In your country",
+      description: "What's in cinemas and on your streaming services",
+      roles: :all,
+      default?: false
+    },
+    %Widget{
       key: :episodes,
       label: "Your activity",
       description: "Recently aired and coming soon episodes",

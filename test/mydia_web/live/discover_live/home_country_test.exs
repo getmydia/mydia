@@ -56,6 +56,12 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       |> Plug.Conn.put_resp_content_type("application/json")
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/tv/discover", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"page" => 1, "total_pages" => 1, "results" => []}))
+    end)
   end
 
   defp home_country(user),
@@ -152,8 +158,9 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       assert home_country(user) == "CA"
       assert has_element?(view, "#discover-home-tab.tab-active", "Canada")
       refute has_element?(view, "#discover-home-country-picker")
+      render_async(view)
+      assert has_element?(view, "#discover-regional-rows")
       assert_receive {:discover_query, %{"with_origin_country" => "CA"}}
-      assert has_element?(view, "#discover-grid h3", "Frostbound Ferry")
     end
 
     test "the saved tab shows on the next mount", %{conn: conn, user: user} do
@@ -196,7 +203,7 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
       {:ok, view, _html} =
         live(
           conn,
-          ~p"/discover?#{%{"type" => "movie", "category" => "home", "language" => "fr", "country" => "FR"}}"
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "made_here", "language" => "fr", "country" => "FR"}}"
         )
 
       assert_receive {:discover_query,
@@ -223,7 +230,11 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
         _ -> {[%{"id" => visible_id, "title" => "Paper Comet"}], 2}
       end)
 
-      {:ok, view, _html} = live(conn, ~p"/discover?#{%{"type" => "movie", "category" => "home"}}")
+      {:ok, view, _html} =
+        live(
+          conn,
+          ~p"/discover?#{%{"type" => "movie", "category" => "home", "source" => "made_here"}}"
+        )
 
       wait_until(fn -> has_element?(view, "#discover-grid h3", "Paper Comet") end)
       refute has_element?(view, "#discover-grid h3", "Marooned Aurora")
@@ -262,6 +273,9 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
           selected_year: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
+          source: :made_here,
+          default_sort: "popularity.desc",
+          regional_rows: %{},
           current_scope: %Scope{Scope.unrestricted() | max_content_age: 12}
         }
       }

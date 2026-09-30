@@ -114,6 +114,14 @@
                 </button>
               </div>
 
+              <%= if @category == :home and is_nil(@source) do %>
+                <button
+                  id="discover-services-button"
+                  class="btn btn-sm btn-ghost gap-1"
+                  phx-click="open_services_picker"
+                ><.icon name="hero-tv" class="w-4 h-4" /> Services</button>
+              <% end %>
+
               <%= if @home_country do %>
                 <div id="discover-home-country-menu" class="dropdown dropdown-end">
                   <div
@@ -194,8 +202,23 @@
           <% end %>
         </div>
 
+        <%= if @category == :home and @source do %>
+          <div class="flex items-center gap-2">
+            <.link
+              id="discover-see-all-back"
+              patch={~p"/discover?#{%{"type" => @media_type, "category" => "home"}}"}
+              class="btn btn-sm btn-ghost"
+            ><.icon name="hero-arrow-left" class="w-4 h-4" /> Back</.link><h2
+              id="discover-see-all-title"
+              class="text-lg font-semibold"
+            >
+              {RegionalSources.label(@source, @home_country)}
+            </h2>
+          </div>
+        <% end %>
+
         <%!-- Filter controls — only visible in custom/discover mode --%>
-        <%= if @category in [:discover, :home] do %>
+        <%= if @category == :discover or (@category == :home and @source != nil) do %>
           <form
             id="discover-filter-form"
             phx-change="apply_filters"
@@ -279,6 +302,18 @@
 
     <%!-- Results --%>
     <%= cond do %>
+      <% @category == :home and is_nil(@source) and not @search_mode -> %>
+        <.regional_rows
+          sources={@regional_sources}
+          rows={@regional_rows}
+          country={@home_country}
+          media_type={@media_type}
+          has_services={@streaming_services != []}
+          hide_owned={@hide_owned}
+          current_user={@current_user}
+          adding_ids={@adding_item_ids}
+          requesting_item_id={@requesting_item_id}
+        />
       <% @loading -> %>
         <.poster_card_grid_skeleton
           id="discover-grid-skeleton"
@@ -347,6 +382,12 @@
         <% end %>
     <% end %>
   </div>
+
+  <.services_picker
+    :if={@services_picker}
+    picker={@services_picker}
+    saved_ids={Enum.map(@streaming_services, & &1["id"])}
+  />
 
   <%!-- Detail Modal --%>
   <.live_component
