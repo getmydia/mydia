@@ -638,16 +638,16 @@ impl Applier {
         match decide(local, remote, snap_side.as_ref(), ctx.direction) {
             Action::Noop => self.counts.unchanged += 1,
             Action::Record(c) => {
-                self.record(h, ctx, rk, c, remote.at);
+                self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
                 self.counts.unchanged += 1;
             }
             Action::SkippedByDirection(c) => {
-                self.record(h, ctx, rk, c, remote.at);
+                self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
                 self.counts.skipped += 1;
             }
             Action::Pull(c) => {
                 if pull(h, ctx, rk, c, remote.at)? {
-                    self.record(h, ctx, rk, c, remote.at);
+                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
                     self.counts.pulled += 1;
                 } else {
                     self.counts.not_found += 1;
@@ -655,7 +655,7 @@ impl Applier {
             }
             Action::Push(c) => match push(h, ctx, rk, c) {
                 Ok(()) => {
-                    self.record(h, ctx, rk, c, remote.at);
+                    self.record(h, ctx, rk, c, remote.at, snapshot.is_some());
                     self.counts.pushed += 1;
                 }
                 Err(PlexError::Unauthorized) => return Err(SyncError::Unauthorized),
@@ -678,7 +678,15 @@ impl Applier {
         rk: &str,
         c: Change,
         remote_at: Option<i64>,
+        has_snapshot: bool,
     ) {
+        // A missing snapshot and an unwatched, position-less one reconcile
+        // identically, so storing the latter for every unwatched item in the
+        // library only spends quota. An existing snapshot is always refreshed:
+        // leaving a stale "watched" behind would repeat the unwatch forever.
+        if !has_snapshot && !c.watched && c.position.is_none() {
+            return;
+        }
         let snap = Snapshot {
             watched: c.watched,
             position: c.position,
@@ -732,13 +740,15 @@ fn pull(
 }
 
 /// Watched flag first, then position: an unscrobble must never clear a resume
-/// point written for an in-progress item. An unwatched change with a position
-/// is an in-progress item, which /:/progress alone expresses.
+/// point written for an in-progress item, so the resume point is set after it.
+/// An unwatched change always unscrobbles, position or not: the local unwatch
+/// (a watched item with a resume point) has to clear Plex's watched flag, and
+/// skipping the call would leave Plex watched for the next pull to bring back.
 fn push(h: &mut dyn Host, ctx: &LinkCtx, rk: &str, c: Change) -> Result<(), PlexError> {
-    match (c.watched, c.position) {
-        (true, _) => api::scrobble(h, ctx.base, &ctx.req_link, rk)?,
-        (false, None) => api::unscrobble(h, ctx.base, &ctx.req_link, rk)?,
-        (false, Some(_)) => {}
+    if c.watched {
+        api::scrobble(h, ctx.base, &ctx.req_link, rk)?;
+    } else {
+        api::unscrobble(h, ctx.base, &ctx.req_link, rk)?;
     }
     if let Some(p) = c.position {
         api::progress(h, ctx.base, &ctx.req_link, rk, p.max(0) as u32)?;
@@ -1016,6 +1026,12 @@ mod tests {
             "{B}/:/progress?identifier=com.plexapp.plugins.library&key=100&time=95000&state=stopped"
         );
         host.respond("GET", &progress, 200, "");
+        host.respond(
+            "GET",
+            &format!("{B}/:/unscrobble?identifier=com.plexapp.plugins.library&key=100"),
+            200,
+            "",
+        );
         let mut row = progress_row("movie");
         row.tmdb_id = Some(4001);
         row.position_seconds = Some(95);
@@ -1026,10 +1042,9 @@ mod tests {
         let out = tick(&mut host);
         assert_eq!(out.counts.pushed, 1);
         assert_eq!(host.requests_to(&progress)[0].link.as_deref(), Some("L1"));
-        assert!(host
-            .sent
-            .iter()
-            .all(|s| !s.url.contains("/:/scrobble") && !s.url.contains("/:/unscrobble")));
+        // An unwatched change always clears the watched flag first (native
+        // parity); the resume point is set after it.
+        assert!(host.sent.iter().all(|s| !s.url.contains("/:/scrobble?")));
         assert_eq!(
             host.kv.get("link/L1/cursor/push").map(String::as_str),
             Some("2026-01-01T00:00:00.000000Z")
@@ -1267,6 +1282,113 @@ mod tests {
         assert!(!out.complete);
         assert!(host.watch_writes.is_empty());
         assert!(host.data_requests.is_empty());
+    }
+
+    #[test]
+    fn an_item_unwatched_on_both_sides_leaves_no_snapshot() {
+        let mut host = crawled();
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/1/all?includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":0}]}}"#,
+        );
+        let out = tick(&mut host);
+        assert_eq!(out.counts.unchanged, 1);
+        assert!(
+            !host.kv.contains_key("link/L1/state/100"),
+            "a missing snapshot and an unwatched one reconcile identically"
+        );
+    }
+
+    #[test]
+    fn an_item_with_a_position_or_a_watch_still_records_its_snapshot() {
+        let mut host = crawled();
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/1/all?includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":0,"viewOffset":120000}]}}"#,
+        );
+        let out = tick(&mut host);
+        assert_eq!(out.counts.pulled, 1);
+        let snap: Snapshot = serde_json::from_str(&host.kv["link/L1/state/100"]).unwrap();
+        assert_eq!((snap.watched, snap.position), (false, Some(120)));
+    }
+
+    #[test]
+    fn an_unwatch_of_a_known_item_still_updates_its_stale_snapshot() {
+        // The snapshot said watched; both sides now agree on unwatched with no
+        // position. Dropping the write would leave "watched" behind to be
+        // unscrobbled again on every tick.
+        let mut host = crawled();
+        host.respond(
+            "GET",
+            &format!("{B}/library/sections/1/all?includeGuids=1"),
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":0}]}}"#,
+        );
+        host.kv.insert(
+            "link/L1/state/100".into(),
+            r#"{"watched":true,"position":null,"synced_at":"2026-01-01T00:00:00Z","remote_last_watched_at":null}"#.into(),
+        );
+        tick(&mut host);
+        let snap: Snapshot = serde_json::from_str(&host.kv["link/L1/state/100"]).unwrap();
+        assert!(!snap.watched);
+    }
+
+    #[test]
+    fn an_unwatch_with_a_resume_position_unscrobbles_first_then_sets_progress() {
+        let mut host = crawled();
+        empty_movies(&mut host);
+        let unscrobble = format!("{B}/:/unscrobble?identifier=com.plexapp.plugins.library&key=100");
+        let progress = format!(
+            "{B}/:/progress?identifier=com.plexapp.plugins.library&key=100&time=95000&state=stopped"
+        );
+        host.respond("GET", &unscrobble, 200, "");
+        host.respond("GET", &progress, 200, "");
+        host.kv.insert(
+            "link/L1/state/100".into(),
+            r#"{"watched":true,"position":null,"synced_at":"2026-01-01T00:00:00Z","remote_last_watched_at":null}"#.into(),
+        );
+        let mut row = progress_row("movie");
+        row.tmdb_id = Some(4001);
+        row.watched = false;
+        row.position_seconds = Some(95);
+        row.origin = Some("player".into());
+        with_progress(&mut host, vec![row.clone()]);
+
+        let out = tick(&mut host);
+        assert_eq!(out.counts.pushed, 1);
+        let order: Vec<&str> = host
+            .sent
+            .iter()
+            .filter(|s| s.url.contains("/:/"))
+            .map(|s| s.url.as_str())
+            .collect();
+        assert_eq!(order, vec![unscrobble.as_str(), progress.as_str()]);
+        let snap: Snapshot = serde_json::from_str(&host.kv["link/L1/state/100"]).unwrap();
+        assert_eq!((snap.watched, snap.position), (false, Some(95)));
+
+        // Next tick: Plex now reports the item unwatched with the resume point.
+        // Nothing may be written again.
+        let sent_before = host.sent.len();
+        let since = format!(
+            "{B}/library/sections/1/all?includeGuids=1&lastViewedAt%3E={}",
+            NOW - 900
+        );
+        host.respond(
+            "GET",
+            &since,
+            200,
+            r#"{"MediaContainer":{"Metadata":[{"ratingKey":"100","type":"movie","viewCount":0,"viewOffset":95000}]}}"#,
+        );
+        with_progress(&mut host, vec![row]);
+        let out = tick(&mut host);
+        assert_eq!((out.counts.pushed, out.counts.pulled), (0, 0));
+        assert!(host.sent[sent_before..]
+            .iter()
+            .all(|s| !s.url.contains("/:/")));
     }
 
     #[test]
