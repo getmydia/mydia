@@ -365,8 +365,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     capabilities = capabilities_of(config)
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
+    multi_instance = Map.get(config.manifest || %{}, "multi_instance", false) == true
 
     %{
+      multi_instance: multi_instance,
+      instances: if(multi_instance, do: Mydia.Plugins.Instances.list(config.slug), else: []),
       slug: config.slug,
       name: config.name,
       version: config.version,

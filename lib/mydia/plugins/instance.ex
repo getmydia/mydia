@@ -50,4 +50,11 @@ defmodule Mydia.Plugins.Instance do
     |> unique_constraint([:plugin_slug, :runtime_key])
     |> foreign_key_constraint(:plugin_config_id)
   end
+
+  @doc "Renders an approved endpoint map as `scheme://host:port`."
+  @spec endpoint_label(map()) :: String.t()
+  def endpoint_label(%{"scheme" => scheme, "host" => host, "port" => port}),
+    do: "#{scheme}://#{host}:#{port}"
+
+  def endpoint_label(other), do: inspect(other)
 end

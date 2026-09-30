@@ -14,11 +14,12 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
   attr :media_server_health, :map, required: true
   attr :last_runs, :map, default: %{}
   attr :link_counts, :map, default: %{}
+  attr :has_plugin_instances, :boolean, default: false
 
   def media_servers_tab(assigns) do
     ~H"""
     <div class="p-4 sm:p-6 space-y-4">
-      <%= if @media_servers == [] do %>
+      <%= if @media_servers == [] and not @has_plugin_instances do %>
         <div
           id="media-servers-empty"
           class="card bg-base-100 border border-base-300"
@@ -262,16 +263,41 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
     """
   end
 
-  @doc "The page header's New button."
+  @doc """
+  The page header's Add server menu: the native Jellyfin form plus one entry per
+  media server plugin. The Jellyfin entry keeps the `new-media-server` id the
+  page has always had.
+  """
+  attr :media_server_plugins, :list, default: []
+
   def header_actions(assigns) do
     ~H"""
-    <button
-      id="new-media-server"
-      class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
-      phx-click="new_media_server"
-    >
-      <.icon name="hero-plus" class="w-4 h-4" /> New
-    </button>
+    <div id="add-server-menu" class="dropdown dropdown-end w-full sm:w-auto">
+      <div
+        tabindex="0"
+        role="button"
+        class="btn btn-primary w-full min-h-11 sm:btn-sm sm:w-auto sm:min-h-8"
+      >
+        <.icon name="hero-plus" class="w-4 h-4" /> Add server
+      </div>
+      <ul
+        tabindex="0"
+        class="dropdown-content menu bg-base-100 rounded-box z-10 w-56 p-2 shadow border border-base-300"
+      >
+        <li :for={plugin <- @media_server_plugins}>
+          <button
+            id={"add-server-plugin-#{plugin.slug}"}
+            phx-click="add_plugin_server"
+            phx-value-slug={plugin.slug}
+          >
+            {plugin.name}
+          </button>
+        </li>
+        <li>
+          <button id="new-media-server" phx-click="new_media_server">Jellyfin</button>
+        </li>
+      </ul>
+    </div>
     """
   end
 

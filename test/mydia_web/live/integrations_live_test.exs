@@ -113,4 +113,20 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     {:ok, view, _html} = live(conn, ~p"/integrations")
     assert has_element?(view, "#plugin-conn-errored-#{@slug}")
   end
+
+  test "lists account links an admin made for this user", %{conn: conn, user: user} do
+    {:ok, instance} = Mydia.Plugins.Instances.create("plex", %{name: "Glass Orchard Server"})
+
+    {:ok, [link]} =
+      Mydia.Plugins.AccountLinks.replace_user_links(
+        instance.id,
+        [%{remote_account_id: "42", remote_username: "harbor_kid", user_id: user.id}],
+        :admin_mapped
+      )
+
+    {:ok, view, _html} = live(conn, ~p"/integrations")
+
+    assert has_element?(view, "#account-links #account-link-#{link.id}", "harbor_kid")
+    assert has_element?(view, "#account-link-#{link.id}", "Glass Orchard Server")
+  end
 end

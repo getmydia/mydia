@@ -189,6 +189,20 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           This version asks for more than you approved: {ungranted_summary(@plugin.ungranted)}. Those
           calls are denied until you re-approve it.
         </p>
+        <ul
+          :if={@plugin.multi_instance}
+          id={"plugin-instances-#{@plugin.slug}"}
+          class="text-xs text-base-content/70 mt-1 space-y-0.5"
+        >
+          <li :if={@plugin.instances == []}>No instances configured yet.</li>
+          <li :for={instance <- @plugin.instances} class="flex items-center gap-1">
+            <span class={[
+              "inline-block w-1.5 h-1.5 rounded-full",
+              if(instance.enabled, do: "bg-success", else: "bg-base-content/30")
+            ]}></span>
+            {instance.name}
+          </li>
+        </ul>
       </div>
 
       <div class="flex flex-wrap items-center gap-2 shrink-0">

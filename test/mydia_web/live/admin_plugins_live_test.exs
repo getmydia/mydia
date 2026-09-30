@@ -671,4 +671,24 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert html =~ "118ms"
     end
   end
+
+  describe "multi-instance plugins" do
+    test "lists each instance under the plugin row", %{conn: conn} do
+      config = seed_plugin("plex", "Plex", granted: %{"events:subscribe" => []}, enabled: true)
+
+      {:ok, _} =
+        Settings.update_plugin_config(config, %{
+          manifest: Map.put(config.manifest, "multi_instance", true)
+        })
+
+      {:ok, a} = Mydia.Plugins.Instances.create("plex", %{name: "Glass Orchard Server"})
+      {:ok, b} = Mydia.Plugins.Instances.create("plex", %{name: "Harbor Lights Server"})
+
+      {:ok, view, _html} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#plugin-instances-plex")
+      assert has_element?(view, "#plugin-instances-plex li", a.name)
+      assert has_element?(view, "#plugin-instances-plex li", b.name)
+    end
+  end
 end

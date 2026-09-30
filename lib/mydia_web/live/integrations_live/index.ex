@@ -15,8 +15,19 @@ defmodule MydiaWeb.IntegrationsLive.Index do
       socket
       |> assign(:plugin_connections, load_plugin_connections(user.id))
       |> assign(:plugin_connect, nil)
+      |> assign(:account_links, load_account_links(user.id))
+      |> assign(:plugin_names, Map.new(Plugins.list_plugins(), &{&1.slug, &1.name}))
 
     {:ok, socket}
+  end
+
+  # Links an administrator made (setup mapping, seeding) belong here. Links the
+  # user made through a device flow already render as that plugin's connect
+  # card, and listing them twice would show one account as two.
+  defp load_account_links(user_id) do
+    user_id
+    |> Mydia.Plugins.AccountLinks.list_for_user()
+    |> Enum.filter(&(&1.role == :user and &1.source != :user_flow))
   end
 
   defp load_plugin_connections(user_id) do

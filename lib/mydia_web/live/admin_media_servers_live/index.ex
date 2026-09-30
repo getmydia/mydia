@@ -4,6 +4,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   alias Mydia.Accounts
   alias Mydia.Accounts.User
   alias Mydia.Accounts.UsernameIndex
+  alias Mydia.Plugins
+  alias Mydia.Plugins.AccountLinks
+  alias Mydia.Plugins.InstanceHealth
+  alias Mydia.Plugins.Instances
+  alias Mydia.Plugins.RuntimeInstances
   alias Mydia.Settings
   alias Mydia.Settings.MediaServerConfig
   alias Mydia.MediaServer.Client, as: MediaServerClient
@@ -24,6 +29,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      socket
      |> assign(:page_title, "Configuration - Media Servers")
      |> clear_account_mapping()
+     |> assign(:plugin_setup, nil)
      |> load_data()}
   end
 
@@ -61,6 +67,118 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       %{id: ^config_id} = config -> {:noreply, apply_mapping_save(socket, config, result)}
       _ -> {:noreply, socket}
     end
+  end
+
+  ## Plugin setup modal
+
+  @impl true
+  def handle_info({MydiaWeb.PluginSetupLive.Modal, :closed, %{status: :done}}, socket) do
+    {:noreply,
+     socket
+     |> assign(:plugin_setup, nil)
+     |> put_flash(:info, "Server saved")
+     |> load_data()}
+  end
+
+  @impl true
+  def handle_info({MydiaWeb.PluginSetupLive.Modal, :closed, %{status: :cancelled}}, socket) do
+    {:noreply, assign(socket, :plugin_setup, nil)}
+  end
+
+  @impl true
+  def handle_info({:plugin_instance_tested, _id}, socket) do
+    {:noreply, load_data(socket)}
+  end
+
+  ## Plugin instances
+
+  @impl true
+  def handle_event("add_plugin_server", %{"slug" => slug}, socket) do
+    {:noreply, open_setup(socket, slug, nil, "start")}
+  end
+
+  @impl true
+  def handle_event("plugin_instance_reconnect", %{"id" => id}, socket) do
+    with_editable_instance(socket, id, &open_setup(&2, &1.plugin_slug, &1.id, "start"))
+  end
+
+  @impl true
+  def handle_event("plugin_instance_accounts", %{"id" => id}, socket) do
+    with_editable_instance(socket, id, &open_setup(&2, &1.plugin_slug, &1.id, "accounts"))
+  end
+
+  @impl true
+  def handle_event("plugin_instance_health_action", %{"id" => id}, socket) do
+    health = Map.get(socket.assigns.plugin_instance_health, id, %{})
+
+    step =
+      case health[:action] do
+        :confirm_endpoints -> "confirm-endpoints"
+        _ -> "start"
+      end
+
+    with_editable_instance(socket, id, &open_setup(&2, &1.plugin_slug, &1.id, step))
+  end
+
+  @impl true
+  def handle_event("plugin_instance_sync", %{"id" => id}, socket) do
+    case Instances.get(id) do
+      nil ->
+        {:noreply, put_flash(socket, :error, "That server no longer exists")}
+
+      instance ->
+        # A schedule run can take up to a minute; never block the page on it.
+        Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+          Plugins.invoke_plugin_schedule(instance.plugin_slug, instance.id)
+        end)
+
+        {:noreply, put_flash(socket, :info, "Sync started for #{instance.name}")}
+    end
+  end
+
+  @impl true
+  def handle_event("plugin_instance_test", %{"id" => id}, socket) do
+    parent = self()
+
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      InstanceHealth.check(id, force: true)
+      send(parent, {:plugin_instance_tested, id})
+    end)
+
+    {:noreply, put_flash(socket, :info, "Checking connection...")}
+  end
+
+  @impl true
+  def handle_event("plugin_instance_toggle", %{"id" => id}, socket) do
+    with_editable_instance(socket, id, fn instance, socket ->
+      {:ok, _} = Instances.update(instance, %{enabled: not instance.enabled})
+      load_data(socket)
+    end)
+  end
+
+  @impl true
+  def handle_event("plugin_instance_delete", %{"id" => id}, socket) do
+    with_editable_instance(socket, id, fn instance, socket ->
+      :ok = Instances.delete(instance)
+
+      socket
+      |> put_flash(:info, "#{instance.name} deleted")
+      |> load_data()
+    end)
+  end
+
+  @impl true
+  def handle_event("plugin_instance_remove_endpoint", %{"id" => id, "index" => index}, socket) do
+    with_editable_instance(socket, id, fn instance, socket ->
+      case Enum.at(instance.approved_endpoints, String.to_integer(index)) do
+        nil ->
+          socket
+
+        endpoint ->
+          {:ok, _} = Instances.remove_endpoint(instance, endpoint)
+          load_data(socket)
+      end
+    end)
   end
 
   ## Media Server Events
@@ -831,6 +949,66 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     RuntimeError -> Mydia.Repo.insert(changeset)
   end
 
+  defp open_setup(socket, slug, instance_id, entry_step) do
+    assign(socket, :plugin_setup, %{slug: slug, instance_id: instance_id, entry_step: entry_step})
+  end
+
+  # Runtime instances (declared in YAML or env) are DB rows with a runtime_key,
+  # and read-only here exactly like runtime Jellyfin configs: the declaration
+  # overwrites them on the next boot, so an edit would silently revert.
+  defp with_editable_instance(socket, id, fun) do
+    case Instances.get(id) do
+      %{source: :db} = instance ->
+        {:noreply, fun.(instance, socket)}
+
+      %{source: :runtime} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "This server is configured via environment variables and is read-only in the UI."
+         )}
+
+      nil ->
+        {:noreply, put_flash(socket, :error, "That server no longer exists")}
+    end
+  end
+
+  defp media_server_plugins do
+    Plugins.list_plugins()
+    |> Enum.filter(&(&1.category == "media_server"))
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp load_plugin_instances(socket) do
+    plugins = media_server_plugins()
+
+    # Instances.list/1 returns DB and runtime rows alike (declared instances are
+    # persisted at boot), enabled or not.
+    pairs =
+      for plugin <- plugins, instance <- Instances.list(plugin.slug), do: {plugin, instance}
+
+    instances = Enum.map(pairs, &elem(&1, 1))
+
+    last_runs =
+      Map.new(pairs, fn {plugin, instance} ->
+        {instance.id, Sync.last_run("plugin:#{plugin.slug}", instance.id)}
+      end)
+
+    links =
+      Map.new(instances, fn instance ->
+        {instance.id, Enum.filter(AccountLinks.list(instance.id), &(&1.role == :user))}
+      end)
+
+    socket
+    |> assign(:media_server_plugins, plugins)
+    |> assign(:plugin_instances, pairs)
+    |> assign(:plugin_instance_health, InstanceHealth.status_map(instances))
+    |> assign(:plugin_instance_runs, last_runs)
+    |> assign(:plugin_instance_links, links)
+    |> assign(:plex_deprecations, RuntimeInstances.legacy_declarations())
+  end
+
   defp load_data(socket) do
     media_servers = Settings.list_media_server_configs()
     media_server_health = MediaServerHealth.status_map(media_servers)
@@ -858,5 +1036,6 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     |> assign(:plex_manual_entry, false)
     |> assign(:plex_discovery, nil)
     |> assign(:plex_discovery_summary, nil)
+    |> load_plugin_instances()
   end
 end
