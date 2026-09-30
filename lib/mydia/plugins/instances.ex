@@ -114,6 +114,15 @@ defmodule Mydia.Plugins.Instances do
     update(instance, %{approved_endpoints: merged})
   end
 
+  @doc "Replaces the approved endpoints with exactly `endpoints`."
+  @spec replace_endpoints(Instance.t(), [map()]) ::
+          {:ok, Instance.t()} | {:error, Ecto.Changeset.t()}
+  def replace_endpoints(%Instance{} = instance, endpoints) when is_list(endpoints) do
+    update(instance, %{
+      approved_endpoints: endpoints |> Enum.map(&normalize_endpoint/1) |> Enum.uniq()
+    })
+  end
+
   @spec remove_endpoint(Instance.t(), map()) :: {:ok, Instance.t()}
   def remove_endpoint(%Instance{} = instance, endpoint) do
     target = normalize_endpoint(endpoint)

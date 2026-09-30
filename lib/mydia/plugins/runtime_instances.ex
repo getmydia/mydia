@@ -58,7 +58,17 @@ defmodule Mydia.Plugins.RuntimeInstances do
     Enum.filter(RuntimeConfig.get_runtime_plugin_instances(), &(&1.legacy_source != nil))
   end
 
+  # Config-declared data must never crash boot: each declaration fails soft.
   defp upsert(decl) do
+    apply_declaration(decl)
+  rescue
+    error ->
+      Logger.warning(
+        "could not apply declared plugin instance #{decl.plugin}/#{decl.name}: #{Exception.message(error)}"
+      )
+  end
+
+  defp apply_declaration(decl) do
     declared_settings = decl.settings || %{}
     token = declared_settings["token"]
     settings = Map.delete(declared_settings, "token")
@@ -70,21 +80,24 @@ defmodule Mydia.Plugins.RuntimeInstances do
         instance -> Instances.update(instance, attrs)
       end
 
-    case result do
-      {:ok, instance} ->
-        approve_url(instance, settings["url"], token)
-        store_token(instance, token)
-
-      {:error, changeset} ->
+    with {:ok, instance} <- result,
+         {:ok, instance} <-
+           Instances.replace_endpoints(
+             instance,
+             declared_endpoints(instance, settings["url"], token)
+           ) do
+      sync_token(instance, token)
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
         Logger.warning(
           "could not apply declared plugin instance #{decl.plugin}/#{decl.name}: #{inspect(changeset.errors)}"
         )
     end
   end
 
-  # A declared instance has no setup session, so a token without a url leaves
-  # it with a credential but no approved endpoint to use it on.
-  defp approve_url(instance, url, token) when url in [nil, ""] do
+  # The declaration is the whole truth for a declared instance: exactly the
+  # declared url is approved, so changing it never leaves the old host trusted.
+  defp declared_endpoints(instance, url, token) when url in [nil, ""] do
     if token not in [nil, ""] do
       Logger.warning(
         "plugin instance #{instance.plugin_slug}/#{instance.name} declares a token but no url; " <>
@@ -92,24 +105,32 @@ defmodule Mydia.Plugins.RuntimeInstances do
       )
     end
 
-    :ok
+    []
   end
 
-  defp approve_url(instance, url, _token) do
+  defp declared_endpoints(instance, url, _token) do
     case Setup.endpoint_from_url(url) do
       {:ok, endpoint} ->
-        {:ok, _} = Instances.approve_endpoints(instance, [endpoint])
+        [endpoint]
 
       :error ->
         Logger.warning(
           "plugin instance #{instance.plugin_slug}/#{instance.name} declares an unusable url #{inspect(url)}"
         )
+
+        []
     end
   end
 
-  defp store_token(_instance, token) when token in [nil, ""], do: :ok
+  # The owner credential mirrors the declaration: no token declared, no token kept.
+  defp sync_token(instance, token) when token in [nil, ""] do
+    case AccountLinks.credential(instance.id, :owner) do
+      nil -> :ok
+      link -> AccountLinks.delete(link)
+    end
+  end
 
-  defp store_token(instance, token) do
+  defp sync_token(instance, token) do
     {:ok, _} = AccountLinks.put_credential(instance.id, :owner, token)
     :ok
   end

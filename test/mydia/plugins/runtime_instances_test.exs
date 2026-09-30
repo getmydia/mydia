@@ -77,22 +77,46 @@ defmodule Mydia.Plugins.RuntimeInstancesTest do
     assert again.id == first.id
     refute again.enabled
     assert again.settings["url"] == "http://10.0.0.3:32400"
+
+    assert again.approved_endpoints == [
+             %{"scheme" => "http", "host" => "10.0.0.3", "port" => 32400}
+           ]
   end
 
-  test "an undeclared runtime row becomes a disabled DB instance" do
-    declare([%{plugin: "plex", name: "Gone", settings: %{}}])
+  test "dropping the declared token clears the stored owner credential" do
+    declare([
+      %{
+        plugin: "plex",
+        name: "Den",
+        settings: %{"url" => "http://10.0.0.2:32400", "token" => "abc"}
+      }
+    ])
+
     :ok = RuntimeInstances.sync()
-    [row] = Instances.list("plex")
+    [instance] = Instances.list("plex")
+    assert AccountLinks.credential(instance.id, :owner)
 
-    declare([])
+    declare([%{plugin: "plex", name: "Den", settings: %{"url" => "http://10.0.0.2:32400"}}])
+    :ok = RuntimeInstances.sync()
 
-    log = capture_log(fn -> :ok = RuntimeInstances.sync() end)
+    assert AccountLinks.credential(instance.id, :owner) == nil
+  end
 
-    kept = Instances.get!(row.id)
-    assert kept.runtime_key == nil
-    assert kept.source == :db
-    refute kept.enabled
-    assert log =~ "Gone"
+  test "one invalid declaration does not stop the others" do
+    declare([
+      %{
+        plugin: "plex",
+        name: String.duplicate("x", 300),
+        settings: %{"url" => "http://10.0.0.2:32400", "token" => "s3cret"}
+      },
+      %{plugin: "plex", name: "Good", settings: %{}}
+    ])
+
+    log = capture_log(fn -> assert :ok = RuntimeInstances.sync() end)
+
+    assert [%{name: "Good"}] = Instances.list("plex")
+    assert log =~ "could not apply declared plugin instance plex/"
+    refute log =~ "s3cret"
   end
 
   test "duplicate names for one plugin are skipped with a warning" do
