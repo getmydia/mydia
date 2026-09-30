@@ -150,7 +150,7 @@ defmodule MydiaWeb.DiscoverLive.RegionalComponents do
                   </button>
                 </div>
               <% :ok -> %>
-                <div class="filter flex flex-wrap gap-2">
+                <div class="filter flex flex-wrap gap-2 max-h-64 overflow-y-auto p-1">
                   <input
                     :for={provider <- @settings.providers}
                     type="checkbox"
