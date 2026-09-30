@@ -31,11 +31,19 @@ defmodule Mydia.Repo.Migrations.PluginKvInstanceStore do
         "UPDATE plugin_kv SET size_bytes = length(CAST(key AS BLOB)) + coalesce(length(CAST(value AS BLOB)), 0)"
       )
     end
+
+    # Every set/set-many measures the instance with count(*) and sum(size_bytes);
+    # this covers both aggregates so they never read the value column.
+    create index(:plugin_kv, [:instance_id, :size_bytes], name: :plugin_kv_instance_size_index)
   end
 
   # The text widening is kept on rollback: narrowing back to varchar(255)
   # could truncate keys written after the upgrade.
   def down do
+    drop_if_exists index(:plugin_kv, [:instance_id, :size_bytes],
+                     name: :plugin_kv_instance_size_index
+                   )
+
     alter table(:plugin_kv) do
       remove :size_bytes
     end

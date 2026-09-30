@@ -42,7 +42,7 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
 
   # The migrated test database no longer has plugin_user_connections; recreate
   # the legacy shape inside the sandbox so the copy step has something to read.
-  defp postgres?, do: Repo.__adapter__() == Ecto.Adapters.Postgres
+  defp postgres?, do: Mydia.DB.postgres?()
 
   defp create_legacy_connections_table do
     {id, ts} = if postgres?(), do: {"uuid", "timestamp"}, else: {"TEXT", "TEXT"}
@@ -149,11 +149,41 @@ defmodule Mydia.Repo.Migrations.PluginContract14Test do
     assert link.external_username == "robin"
   end
 
+  test "two users who linked the same external account both keep their link" do
+    config = plugin_config("legacy_dup")
+    first = user_fixture()
+    second = user_fixture()
+    create_legacy_connections_table()
+
+    for {user, at} <- [{first, "2026-01-01 00:00:00"}, {second, "2026-02-01 00:00:00"}] do
+      [id, cfg, uid, _now] = legacy_params(config, user)
+      ts = if postgres?(), do: NaiveDateTime.from_iso8601!(at), else: at
+
+      Repo.query!(
+        """
+        INSERT INTO plugin_user_connections
+          (id, plugin_config_id, plugin_slug, user_id, status, access_token,
+           external_user_id, external_username, meta, inserted_at, updated_at)
+        VALUES ($1, $2, 'legacy_dup', $3, 'connected', 'tok', 'shared-ext', 'robin', '{}', $4, $4)
+        """,
+        [id, cfg, uid, ts]
+      )
+    end
+
+    assert :ok = PluginContract14.backfill()
+
+    links = Repo.all(from l in AccountLink, where: l.plugin_slug == "legacy_dup")
+    assert Enum.sort(Enum.map(links, & &1.user_id)) == Enum.sort([first.id, second.id])
+
+    assert Enum.find(links, &(&1.user_id == first.id)).external_user_id == "shared-ext"
+    assert Enum.find(links, &(&1.user_id == second.id)).external_user_id == nil
+  end
+
   defp dump_uuid(id) do
-    if Mydia.Repo.__adapter__() == Ecto.Adapters.Postgres, do: Ecto.UUID.dump!(id), else: id
+    if postgres?(), do: Ecto.UUID.dump!(id), else: id
   end
 
   defp maybe_string_uuid(bin) do
-    if Mydia.Repo.__adapter__() == Ecto.Adapters.Postgres, do: bin, else: Ecto.UUID.load!(bin)
+    if postgres?(), do: bin, else: Ecto.UUID.load!(bin)
   end
 end

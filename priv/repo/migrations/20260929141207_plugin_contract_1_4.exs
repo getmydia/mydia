@@ -36,7 +36,7 @@ defmodule Mydia.Repo.Migrations.PluginContract14 do
       add :remote_accounts, :text
       add :last_scheduled_at, :utc_datetime_usec
       add :schedule_failures, :integer, null: false, default: 0
-      # Set only for instances declared in YAML/env (Task 11); the declared name.
+      # Set only for instances declared in YAML/env; the declared name.
       add :runtime_key, :text
 
       timestamps(type: :utc_datetime_usec)
@@ -182,7 +182,19 @@ defmodule Mydia.Repo.Migrations.PluginContract14 do
          external_user_id, external_username, last_error, meta, inserted_at, updated_at)
       SELECT c.id, i.id, c.plugin_slug, c.user_id, 'user', 'user_flow',
              CASE c.status WHEN 'connected' THEN 'active' ELSE c.status END,
-             c.access_token, c.external_user_id, c.external_username, NULL, c.meta,
+             c.access_token,
+             -- Two users may have linked the same external account. The
+             -- (instance_id, external_user_id) index allows one, so the earliest
+             -- row keeps it and later rows lose only the external id, never the link.
+             CASE WHEN c.external_user_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM plugin_user_connections d
+                    WHERE d.plugin_config_id = c.plugin_config_id
+                      AND d.external_user_id = c.external_user_id
+                      AND (d.inserted_at < c.inserted_at
+                           OR (d.inserted_at = c.inserted_at AND d.id < c.id))
+                  )
+                  THEN NULL ELSE c.external_user_id END,
+             c.external_username, NULL, c.meta,
              c.inserted_at, c.updated_at
       FROM plugin_user_connections c
       JOIN plugin_instances i ON i.plugin_config_id = c.plugin_config_id
