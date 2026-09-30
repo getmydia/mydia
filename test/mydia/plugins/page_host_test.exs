@@ -90,6 +90,33 @@ defmodule Mydia.Plugins.PageHostTest do
     assert {"content-type", "application/json"} in headers
   end
 
+  test "headers given as [k, v] lists or malformed entries do not raise", %{user: user} do
+    payload = %{
+      "method" => "POST",
+      "path" => "/echo",
+      "query" => "",
+      "headers" => [["content-type", "application/json"], ["only-a-name"], "junk", 7],
+      "body" => Jason.encode!(%{"x" => 1}),
+      "config" => %{}
+    }
+
+    assert {:ok, %{status: 200}} =
+             Host.call(@slug, "on-http", payload,
+               handler: :on_http,
+               acting_user_id: user.id,
+               role: user.role,
+               session_id: "s1"
+             )
+
+    assert {:ok, %{status: 200}} =
+             Host.call(@slug, "on-http", Map.put(payload, "headers", %{"accept" => "x"}),
+               handler: :on_http,
+               acting_user_id: user.id,
+               role: user.role,
+               session_id: "s1"
+             )
+  end
+
   test "a caller cannot smuggle a different user through the payload", %{user: user} do
     other = user_fixture()
 

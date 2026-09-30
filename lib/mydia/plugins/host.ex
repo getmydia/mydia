@@ -572,8 +572,7 @@ defmodule Mydia.Plugins.Host do
       method: to_string(Map.get(payload, "method", "GET")),
       path: to_string(Map.get(payload, "path", "/")),
       query: to_string(Map.get(payload, "query", "")),
-      headers:
-        Enum.map(Map.get(payload, "headers", []), fn {k, v} -> {to_string(k), to_string(v)} end),
+      headers: page_headers(Map.get(payload, "headers")),
       body: opt_string(Map.get(payload, "body")),
       "user-id": to_string(Map.get(payload, "user_id", "")),
       role: to_string(Map.get(payload, "role", "")),
@@ -581,6 +580,18 @@ defmodule Mydia.Plugins.Host do
       "config-json": Jason.encode!(Map.get(payload, "config") || %{})
     }
   end
+
+  # Headers arrive as `{k, v}` pairs (a map, or a list built in Elixir) or as
+  # `[k, v]` pairs (decoded JSON). Anything else is dropped, not raised on.
+  defp page_headers(headers) when is_map(headers) or is_list(headers) do
+    Enum.flat_map(headers, fn
+      {k, v} -> [{to_string(k), to_string(v)}]
+      [k, v] -> [{to_string(k), to_string(v)}]
+      _ -> []
+    end)
+  end
+
+  defp page_headers(_), do: []
 
   defp opt_string(nil), do: :none
   defp opt_string(value), do: {:some, to_string(value)}
