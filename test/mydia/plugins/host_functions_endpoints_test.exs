@@ -68,6 +68,77 @@ defmodule Mydia.Plugins.HostFunctionsEndpointsTest do
              )
   end
 
+  describe "link_request/5 and connection_request/4" do
+    setup %{plugin: plugin, instance: instance} do
+      plugin = %{
+        plugin
+        | granted_capabilities: %{"net:http" => [], "users:connections" => []},
+          connection: %{"type" => "none", "auth_header" => "X-Plex-Token: {token}"}
+      }
+
+      {:ok, owner} = Mydia.Plugins.AccountLinks.put_credential(instance.id, :owner, "tok")
+      %{plugin: plugin, owner: owner}
+    end
+
+    test "link_request reaches an approved private endpoint and is refused without approval",
+         %{plugin: plugin, instance: instance, owner: owner, bypass: bypass} do
+      Bypass.expect(bypass, "GET", "/identity", fn conn -> Plug.Conn.resp(conn, 200, "{}") end)
+      request = %{"url" => "http://plex.lan:#{bypass.port}/identity"}
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.link_request(plugin, instance, owner.id, request,
+                 resolver: loopback()
+               )
+
+      {:ok, instance} =
+        Instances.approve_endpoints(instance, [
+          %{"scheme" => "http", "host" => "plex.lan", "port" => bypass.port}
+        ])
+
+      assert {:ok, %{"status" => 200}} =
+               HostFunctions.link_request(plugin, instance, owner.id, request,
+                 resolver: loopback()
+               )
+    end
+
+    test "connection_request shares the same path", %{
+      plugin: plugin,
+      instance: instance,
+      bypass: bypass
+    } do
+      alias Mydia.Plugins.AccountLinks
+      user = Mydia.AccountsFixtures.user_fixture()
+
+      {:ok, [link]} =
+        AccountLinks.replace_user_links(
+          instance.id,
+          [%{remote_account_id: "r1", remote_username: "Robin", user_id: user.id}],
+          :admin_mapped
+        )
+
+      :ok = AccountLinks.set_token(link.id, "utok")
+      Bypass.expect(bypass, "GET", "/identity", fn conn -> Plug.Conn.resp(conn, 200, "{}") end)
+      request = %{"url" => "http://plex.lan:#{bypass.port}/identity"}
+
+      assert {:error, %Error{type: :capability_denied}} =
+               HostFunctions.connection_request(plugin, link.id, request,
+                 instance: instance,
+                 resolver: loopback()
+               )
+
+      {:ok, instance} =
+        Instances.approve_endpoints(instance, [
+          %{"scheme" => "http", "host" => "plex.lan", "port" => bypass.port}
+        ])
+
+      assert {:ok, %{"status" => 200}} =
+               HostFunctions.connection_request(plugin, link.id, request,
+                 instance: instance,
+                 resolver: loopback()
+               )
+    end
+  end
+
   test "an endpoint approved on a sibling instance does not leak",
        %{plugin: plugin, instance: instance, bypass: bypass} do
     {:ok, other} = Instances.create(@slug, %{name: "Office"})

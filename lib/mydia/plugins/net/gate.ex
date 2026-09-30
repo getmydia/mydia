@@ -31,7 +31,9 @@ defmodule Mydia.Plugins.Net.Gate do
   **Approved endpoints** are the one production exception: a request whose
   scheme, host and port exactly match an entry in `:approved_endpoints` (the
   plugin instance's operator-confirmed endpoints) skips the allowlist and may
-  resolve to a private address. Nothing a guest sends can add one.
+  resolve to a private address (RFC1918, CGNAT, ULA, loopback). Link-local
+  addresses, including the `169.254.169.254` metadata address, stay refused even
+  for an approved endpoint. Nothing a guest sends can add one.
 
   Every call emits a `plugin` audit event (slug, URL, status, byte size) so
   egress is queryable and surfaceable in the admin UI (U9).
@@ -98,8 +100,11 @@ defmodule Mydia.Plugins.Net.Gate do
 
   # An approved endpoint is operator-confirmed (typed into a host-granting
   # setting or picked in a setup `choice` step), so it may resolve to a private
-  # address. Nothing else may: the test seam stays the only other way in.
-  defp private_opts(opts, true), do: Keyword.put(opts, :allow_private, true)
+  # address (RFC1918, CGNAT, ULA, loopback). Link-local, which holds the cloud
+  # metadata address 169.254.169.254, stays refused: setup choices are offered by
+  # the plugin, so approval must never reach it. The test seam is the only other
+  # way past the private-range check.
+  defp private_opts(opts, true), do: Keyword.put(opts, :allow_private_except_link_local, true)
   defp private_opts(opts, false), do: opts
 
   # ── 1. Parse & normalize ──────────────────────────────────────────────────
@@ -181,13 +186,14 @@ defmodule Mydia.Plugins.Net.Gate do
   defp resolve_and_validate(host, opts) do
     resolver = Keyword.get(opts, :resolver, &default_resolve/1)
     allow_private = Keyword.get(opts, :allow_private, false)
+    approved? = Keyword.get(opts, :allow_private_except_link_local, false)
 
     case resolver.(host) do
       {:ok, []} ->
         {:error, Error.new(:network_error, "no addresses for #{host}")}
 
       {:ok, ips} ->
-        validate_ips(ips, allow_private)
+        validate_ips(ips, allow_private, approved?)
 
       {:error, reason} ->
         {:error, Error.new(:network_error, "could not resolve #{host}: #{inspect(reason)}")}
@@ -197,10 +203,23 @@ defmodule Mydia.Plugins.Net.Gate do
   # All resolved addresses must be public (deny-if-any-private) so a multi-record
   # name can't smuggle one private answer past the gate. Returns one validated IP
   # to pin the connection to.
-  defp validate_ips(ips, allow_private) do
+  defp validate_ips(ips, allow_private, approved?) do
     cond do
       allow_private ->
         {:ok, hd(ips)}
+
+      approved? ->
+        case Enum.find(ips, &link_local?/1) do
+          nil ->
+            {:ok, hd(ips)}
+
+          blocked ->
+            {:error,
+             Error.new(
+               :blocked,
+               "destination resolves to a link-local IP: #{fmt_ip(blocked)}"
+             )}
+        end
 
       blocked = Enum.find(ips, &(not public_ip?(&1))) ->
         {:error,
@@ -237,6 +256,13 @@ defmodule Mydia.Plugins.Net.Gate do
   end
 
   # ── IP classification ─────────────────────────────────────────────────────
+
+  # 169.254.0.0/16 and fe80::/10, unwrapping IPv4-mapped and NAT64 forms.
+  defp link_local?({169, 254, _, _}), do: true
+  defp link_local?({_, _, _, _}), do: false
+  defp link_local?({0, 0, 0, 0, 0, 0xFFFF, g7, g8}), do: link_local?(embedded_v4(g7, g8))
+  defp link_local?({0x0064, 0xFF9B, 0, 0, 0, 0, g7, g8}), do: link_local?(embedded_v4(g7, g8))
+  defp link_local?({h1, _, _, _, _, _, _, _}), do: (h1 &&& 0xFFC0) == 0xFE80
 
   @doc false
   @spec public_ip?(:inet.ip_address()) :: boolean()

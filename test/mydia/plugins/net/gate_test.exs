@@ -270,6 +270,52 @@ defmodule Mydia.Plugins.Net.GateTest do
                )
     end
 
+    test "an approved endpoint resolving to link-local (metadata) is still refused" do
+      for ip <- [
+            {169, 254, 169, 254},
+            {0, 0, 0, 0, 0, 0xFFFF, 0xA9FE, 0xA9FE},
+            {0xFE80, 0, 0, 0, 0, 0, 0, 1}
+          ] do
+        assert {:error, %Error{type: :blocked}} =
+                 Gate.request("http://meta.lan:80/latest",
+                   approved_endpoints: [endpoint("meta.lan", 80)],
+                   resolver: resolver(ip)
+                 )
+      end
+    end
+
+    test "an approved endpoint on RFC1918, CGNAT or ULA passes the address check" do
+      for ip <- [{10, 1, 2, 3}, {100, 64, 0, 1}, {0xFD00, 0, 0, 0, 0, 0, 0, 5}] do
+        result =
+          Gate.request("http://plex.lan:9/",
+            approved_endpoints: [endpoint("plex.lan", 9)],
+            resolver: resolver(ip),
+            timeout: 100
+          )
+
+        refute match?(
+                 {:error, %Error{type: type}} when type in [:blocked, :capability_denied],
+                 result
+               )
+      end
+    end
+
+    test "a 3xx from an approved endpoint is returned, not followed", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://169.254.169.254/")
+        |> Plug.Conn.resp(302, "")
+      end)
+
+      assert {:ok, %{status: 302, headers: headers}} =
+               Gate.request("http://plex.lan:#{bypass.port}/",
+                 approved_endpoints: [endpoint("plex.lan", bypass.port)],
+                 resolver: resolver({127, 0, 0, 1})
+               )
+
+      assert inspect(headers) =~ "169.254.169.254"
+    end
+
     test "the default port is matched when the URL omits it" do
       # http://plex.lan/ means port 80; an endpoint on 80 approves it. The
       # request fails later at connect (nothing listens), which proves both the
