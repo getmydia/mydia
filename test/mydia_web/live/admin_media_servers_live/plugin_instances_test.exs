@@ -111,6 +111,52 @@ defmodule MydiaWeb.AdminMediaServersLive.PluginInstancesTest do
     assert Instances.get(i.id).approved_endpoints == []
   end
 
+  test "malformed remove-endpoint params neither crash nor remove anything", %{
+    view: view,
+    instance: i
+  } do
+    render_click(view, "plugin_instance_remove_endpoint", %{
+      "id" => i.id,
+      "scheme" => "http",
+      "host" => "10.9.9.9",
+      "port" => "abc"
+    })
+
+    assert length(Instances.get(i.id).approved_endpoints) == 1
+  end
+
+  test "a finished connection test leaves an open Jellyfin modal alone", %{
+    view: view,
+    instance: i
+  } do
+    view |> element("#new-media-server") |> render_click()
+    assert has_element?(view, "#media-server-modal")
+
+    send(view.pid, {:plugin_instance_tested, i.id})
+    render(view)
+
+    assert has_element?(view, "#media-server-modal")
+  end
+
+  test "the add-server menu skips a plugin that is disabled", %{view: view, instance: i} do
+    {:ok, _} =
+      Registry.register("shelf", %Plugin{
+        slug: "shelf",
+        name: "Shelf",
+        category: "media_server",
+        setup: true,
+        enabled: false
+      })
+
+    on_exit(fn -> Registry.unregister("shelf") end)
+
+    send(view.pid, {:plugin_instance_tested, i.id})
+    render(view)
+
+    assert has_element?(view, "#add-server-plugin-#{@slug}")
+    refute has_element?(view, "#add-server-plugin-shelf")
+  end
+
   test "sync now starts a run off the LiveView process", %{view: view, instance: i} do
     html = view |> element("#plugin-instance-sync-#{i.id}") |> render_click()
     assert html =~ "Sync started for Glass Orchard Server"

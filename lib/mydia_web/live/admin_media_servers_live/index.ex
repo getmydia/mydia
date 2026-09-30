@@ -77,7 +77,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
      socket
      |> assign(:plugin_setup, nil)
      |> put_flash(:info, "Server saved")
-     |> load_data()}
+     |> load_plugin_instances()}
   end
 
   @impl true
@@ -87,7 +87,8 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
   @impl true
   def handle_info({:plugin_instance_tested, _id}, socket) do
-    {:noreply, load_data(socket)}
+    # Only plugin state: load_data/1 would also close an open Jellyfin/Plex modal.
+    {:noreply, load_plugin_instances(socket)}
   end
 
   ## Plugin instances
@@ -152,7 +153,7 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
   def handle_event("plugin_instance_toggle", %{"id" => id}, socket) do
     with_editable_instance(socket, id, fn instance, socket ->
       {:ok, _} = Instances.update(instance, %{enabled: not instance.enabled})
-      load_data(socket)
+      load_plugin_instances(socket)
     end)
   end
 
@@ -163,20 +164,28 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
 
       socket
       |> put_flash(:info, "#{instance.name} deleted")
-      |> load_data()
+      |> load_plugin_instances()
     end)
   end
 
+  # Removes by value (scheme, host, port), so a stale page or malformed params
+  # can never remove the wrong address or crash the view.
   @impl true
-  def handle_event("plugin_instance_remove_endpoint", %{"id" => id, "index" => index}, socket) do
+  def handle_event(
+        "plugin_instance_remove_endpoint",
+        %{"id" => id, "scheme" => scheme, "host" => host, "port" => port},
+        socket
+      ) do
     with_editable_instance(socket, id, fn instance, socket ->
-      case Enum.at(instance.approved_endpoints, String.to_integer(index)) do
+      wanted = {to_string(scheme), to_string(host), to_string(port)}
+
+      case Enum.find(instance.approved_endpoints, &(endpoint_key(&1) == wanted)) do
         nil ->
           socket
 
         endpoint ->
           {:ok, _} = Instances.remove_endpoint(instance, endpoint)
-          load_data(socket)
+          load_plugin_instances(socket)
       end
     end)
   end
@@ -974,6 +983,11 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
     end
   end
 
+  defp endpoint_key(%{"scheme" => scheme, "host" => host, "port" => port}),
+    do: {to_string(scheme), to_string(host), to_string(port)}
+
+  defp endpoint_key(_), do: nil
+
   defp media_server_plugins do
     Plugins.list_plugins()
     |> Enum.filter(&(&1.category == "media_server"))
@@ -1001,7 +1015,10 @@ defmodule MydiaWeb.AdminMediaServersLive.Index do
       end)
 
     socket
-    |> assign(:media_server_plugins, plugins)
+    # The Add server menu offers only plugins an operator can add a server for:
+    # enabled, with a setup flow. Existing instances of any media server plugin
+    # still get a card.
+    |> assign(:media_server_plugins, Enum.filter(plugins, &(&1.enabled and &1.setup)))
     |> assign(:plugin_instances, pairs)
     |> assign(:plugin_instance_health, InstanceHealth.status_map(instances))
     |> assign(:plugin_instance_runs, last_runs)

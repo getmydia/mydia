@@ -289,12 +289,19 @@ defmodule MydiaWeb.AdminMediaServersLive.Components do
             id={"add-server-plugin-#{plugin.slug}"}
             phx-click="add_plugin_server"
             phx-value-slug={plugin.slug}
+            onclick="document.activeElement && document.activeElement.blur()"
           >
             {plugin.name}
           </button>
         </li>
         <li>
-          <button id="new-media-server" phx-click="new_media_server">Jellyfin</button>
+          <button
+            id="new-media-server"
+            phx-click="new_media_server"
+            onclick="document.activeElement && document.activeElement.blur()"
+          >
+            Jellyfin
+          </button>
         </li>
       </ul>
     </div>

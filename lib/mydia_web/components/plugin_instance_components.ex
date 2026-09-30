@@ -99,7 +99,9 @@ defmodule MydiaWeb.PluginInstanceComponents do
                 class="btn btn-ghost btn-xs text-error"
                 phx-click="plugin_instance_remove_endpoint"
                 phx-value-id={@instance.id}
-                phx-value-index={index}
+                phx-value-scheme={endpoint["scheme"]}
+                phx-value-host={endpoint["host"]}
+                phx-value-port={endpoint["port"]}
                 data-confirm="Remove this address? The plugin will no longer be able to reach it."
                 aria-label="Remove address"
               >
