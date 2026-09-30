@@ -38,6 +38,7 @@ defmodule Mydia.Plugins do
 
   alias Mydia.Plugins.Capabilities
   alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Host
   alias Mydia.Plugins.HostFunctions
   alias Mydia.Plugins.Index
@@ -641,6 +642,10 @@ defmodule Mydia.Plugins do
   def remove(slug) do
     with {:ok, config} <- fetch_config(slug),
          {:ok, _} <- Settings.delete_plugin_config(config) do
+      # Role ceilings went with the config row. Approvals and queued writes are
+      # keyed by slug alone, so they are cleared too. The journal stays as
+      # history and stays undoable: undo needs only the entry.
+      Grants.purge(slug)
       deactivate(slug)
       reload()
       {:ok, :removed}

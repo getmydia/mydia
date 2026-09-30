@@ -45,16 +45,18 @@ defmodule MydiaWeb.PluginPageLive.Show do
     end
   end
 
-  # The frame's id carries the session id, so a reconnect (which mints a new
-  # session) replaces the iframe rather than keeping one holding the old token.
   # The mount runs twice on a page load (static render, then connected). The
   # browser keeps the iframe from whichever render created it, so only the
   # connected mount mints the page session and renders the frame; otherwise the
-  # frame and this process would hold different session ids.
+  # frame and this process would hold different session ids. The frame's id
+  # carries the session id, so a reconnect (which mints a new session) replaces
+  # the iframe instead of keeping one that holds the old token. Session grants
+  # from earlier page sessions can never apply again, so they are pruned here.
   defp start_session(socket, slug, user) do
     if connected?(socket) do
       session_id = Ecto.UUID.generate()
       schedule_token_refresh()
+      Grants.prune_sessions(user.id, slug, session_id)
 
       socket
       |> assign(:session_id, session_id)

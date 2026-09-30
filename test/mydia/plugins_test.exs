@@ -154,6 +154,54 @@ defmodule Mydia.PluginsTest do
       assert Settings.get_plugin_config_by_slug("webhook-notifier") == nil
     end
 
+    test "remove purges grants and pending writes but keeps the journal, still undoable" do
+      user = Mydia.AccountsFixtures.user_fixture()
+      slug = "webhook-notifier"
+      :ok = Mydia.Plugins.Grants.grant(slug, user.id, "collections:write", "always", "s")
+
+      {:ok, _} =
+        %Mydia.Plugins.PendingWrite{}
+        |> Mydia.Plugins.PendingWrite.changeset(%{
+          plugin_slug: slug,
+          user_id: user.id,
+          session_id: "s",
+          op: "collection_create",
+          surface: "collections:write",
+          args: %{},
+          description: "d",
+          expires_at: DateTime.add(DateTime.utc_now(), 3600) |> DateTime.truncate(:second)
+        })
+        |> Mydia.Repo.insert()
+
+      args = %{"name" => "Kept", "type" => "manual"}
+
+      {:ok, result, inverse} =
+        Mydia.Plugins.PageWrites.execute("collection_create", args, user, "plugin:#{slug}")
+
+      {:ok, entry} =
+        Mydia.Plugins.Journal.record(
+          slug,
+          user.id,
+          "collection_create",
+          args,
+          result,
+          inverse,
+          "Create the collection \"Kept\"",
+          "b1"
+        )
+
+      assert {:ok, :removed} = Plugins.remove(slug)
+
+      assert Mydia.Plugins.Grants.list_for_user(user.id) == []
+      refute Mydia.Repo.exists?(Ecto.Query.from(p in Mydia.Plugins.PendingWrite))
+      # A plugin installed later under the same slug starts with no approval.
+      refute Mydia.Plugins.Grants.granted?(slug, user.id, "collections:write", "s2")
+
+      assert [%{id: id}] = Mydia.Plugins.Journal.list(slug, user.id)
+      assert id == entry.id
+      assert {:ok, %{status: "undone"}} = Mydia.Plugins.Journal.undo_entry(user, entry.id)
+    end
+
     test "set_enabled toggles activation" do
       assert {:ok, :disabled} = Plugins.set_enabled("webhook-notifier", false)
       refute Host.running?("webhook-notifier")

@@ -148,7 +148,7 @@
             <span class="font-medium">{grant.plugin_slug}</span>
             <span class="flex-1">{PageWrites.surface_label(grant.surface)}</span>
             <span class="badge badge-ghost badge-sm">
-              {if grant.scope == "always", do: "Always", else: "This session"}
+              Always
             </span>
             <button
               id={"revoke-grant-#{grant.id}"}

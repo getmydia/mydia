@@ -127,6 +127,13 @@ defmodule MydiaWeb.IntegrationsLiveTest do
       assert Mydia.Plugins.Grants.list_for_user(user.id) == []
     end
 
+    test "session grants are not listed", %{conn: conn, user: user} do
+      :ok = Mydia.Plugins.Grants.grant("helper", user.id, "collections:write", "session", "s")
+
+      {:ok, view, _} = live(conn, ~p"/integrations")
+      refute has_element?(view, "#plugin-permissions")
+    end
+
     test "shows no permissions card without grants", %{conn: conn} do
       {:ok, view, _} = live(conn, ~p"/integrations")
       refute has_element?(view, "#plugin-permissions")

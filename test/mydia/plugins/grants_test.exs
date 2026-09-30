@@ -1,6 +1,7 @@
 defmodule Mydia.Plugins.GrantsTest do
   use Mydia.DataCase, async: true
 
+  import Ecto.Query
   import Mydia.AccountsFixtures
 
   alias Mydia.Plugins.Grants
@@ -64,6 +65,69 @@ defmodule Mydia.Plugins.GrantsTest do
     :ok = Grants.grant("helper", user.id, "media:add", "always", "s1")
     {:ok, _} = Grants.put_ceilings("helper", %{"user" => "session"})
     refute Grants.granted?("helper", user.id, "media:add", "s2")
+  end
+
+  test "a malformed stored ceiling fails closed", %{user: user} do
+    :ok = Grants.grant("helper", user.id, "media:add", "always", "s1")
+
+    config = Settings.get_plugin_config_by_slug("helper")
+    {:ok, _} = Settings.update_plugin_config(config, %{role_ceilings: %{"user" => "bogus"}})
+
+    assert Grants.allowed_choices("helper", user.role) == []
+    refute Grants.granted?("helper", user.id, "media:add", "s1")
+  end
+
+  test "list_for_user omits session grants", %{user: user} do
+    :ok = Grants.grant("helper", user.id, "media:add", "session", "s1")
+    :ok = Grants.grant("helper", user.id, "collections:write", "always", "s1")
+
+    assert [%{surface: "collections:write", scope: "always"}] = Grants.list_for_user(user.id)
+  end
+
+  test "prune_sessions drops other sessions' grants for the plugin only", %{user: user} do
+    :ok = Grants.grant("helper", user.id, "media:add", "session", "old")
+    :ok = Grants.grant("helper", user.id, "collections:write", "session", "current")
+    :ok = Grants.grant("helper", user.id, "collections:favorite", "always", "old")
+    :ok = Grants.grant("other", user.id, "media:add", "session", "old")
+
+    :ok = Grants.prune_sessions(user.id, "helper", "current")
+
+    refute Grants.granted?("helper", user.id, "media:add", "old")
+    assert Grants.granted?("helper", user.id, "collections:write", "current")
+    assert Grants.granted?("helper", user.id, "collections:favorite", "new")
+    assert Repo.get_by(Mydia.Plugins.WriteGrant, plugin_slug: "other", session_id: "old")
+  end
+
+  test "purge removes the slug's grants and pending writes only", %{user: user} do
+    :ok = Grants.grant("helper", user.id, "media:add", "always", "s1")
+    :ok = Grants.grant("helper", user.id, "collections:write", "session", "s1")
+    :ok = Grants.grant("other", user.id, "media:add", "always", "s1")
+
+    expires = DateTime.add(DateTime.utc_now(), 3600) |> DateTime.truncate(:second)
+
+    for slug <- ["helper", "other"] do
+      {:ok, _} =
+        %Mydia.Plugins.PendingWrite{}
+        |> Mydia.Plugins.PendingWrite.changeset(%{
+          plugin_slug: slug,
+          user_id: user.id,
+          session_id: "s1",
+          op: "media_add",
+          surface: "media:add",
+          args: %{},
+          description: "d",
+          expires_at: expires
+        })
+        |> Repo.insert()
+    end
+
+    :ok = Grants.purge("helper")
+
+    refute Repo.exists?(from g in Mydia.Plugins.WriteGrant, where: g.plugin_slug == "helper")
+    assert Repo.exists?(from g in Mydia.Plugins.WriteGrant, where: g.plugin_slug == "other")
+
+    refute Repo.exists?(from p in Mydia.Plugins.PendingWrite, where: p.plugin_slug == "helper")
+    assert Repo.exists?(from p in Mydia.Plugins.PendingWrite, where: p.plugin_slug == "other")
   end
 
   test "revoke deletes only the user's own grant", %{user: user} do

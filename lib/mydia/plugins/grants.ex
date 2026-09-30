@@ -42,8 +42,8 @@ defmodule Mydia.Plugins.Grants do
   @doc "The confirmation choices `role` may pick for plugin `slug`, lowest first."
   @spec allowed_choices(String.t(), String.t()) :: [String.t()]
   def allowed_choices(slug, role) do
-    max = @ranks[ceiling(slug, role)]
-    Enum.filter(@choices, &(@ranks[&1] <= max))
+    max = rank(ceiling(slug, role))
+    Enum.filter(@choices, &(rank(&1) <= max))
   end
 
   @doc "True when a grant lets `slug` write `surface` for the user in this session."
@@ -51,7 +51,7 @@ defmodule Mydia.Plugins.Grants do
   def granted?(slug, user_id, surface, session_id) do
     case Accounts.get_user_by_id(user_id) do
       %{role: role} ->
-        max = @ranks[ceiling(slug, role)]
+        max = rank(ceiling(slug, role))
 
         WriteGrant
         |> where([g], g.plugin_slug == ^slug and g.user_id == ^user_id and g.surface == ^surface)
@@ -61,7 +61,7 @@ defmodule Mydia.Plugins.Grants do
         )
         |> select([g], g.scope)
         |> Repo.all()
-        |> Enum.any?(&(@ranks[&1] <= max))
+        |> Enum.any?(&(rank(&1) <= max))
 
       _ ->
         false
@@ -96,13 +96,48 @@ defmodule Mydia.Plugins.Grants do
 
   def grant(_slug, _user_id, _surface, _scope, _session_id), do: {:error, :invalid_scope}
 
-  @doc "A user's grants across all plugins, newest first."
+  # An unknown scope ranks as none, so a malformed stored ceiling grants
+  # nothing rather than everything.
+  defp rank(scope), do: Map.get(@ranks, scope, 0)
+
+  @doc """
+  A user's standing (`always`) grants across all plugins, newest first.
+  Session grants are left out: they end with the page session that made them.
+  """
   @spec list_for_user(binary()) :: [WriteGrant.t()]
   def list_for_user(user_id) do
     WriteGrant
-    |> where([g], g.user_id == ^user_id)
+    |> where([g], g.user_id == ^user_id and g.scope == "always")
     |> order_by([g], desc: g.inserted_at)
     |> Repo.all()
+  end
+
+  @doc """
+  Deletes the user's session grants for `slug` that belong to any page session
+  other than `session_id`. Those sessions are over, so the rows can never apply
+  again.
+  """
+  @spec prune_sessions(binary(), String.t(), String.t()) :: :ok
+  def prune_sessions(user_id, slug, session_id) do
+    Repo.delete_all(
+      from g in WriteGrant,
+        where:
+          g.user_id == ^user_id and g.plugin_slug == ^slug and g.scope == "session" and
+            g.session_id != ^session_id
+    )
+
+    :ok
+  end
+
+  @doc """
+  Deletes every grant and pending write held for `slug`. Called when a plugin is
+  removed so a plugin installed later under the same slug inherits no approvals.
+  """
+  @spec purge(String.t()) :: :ok
+  def purge(slug) do
+    Repo.delete_all(from g in WriteGrant, where: g.plugin_slug == ^slug)
+    Repo.delete_all(from p in Mydia.Plugins.PendingWrite, where: p.plugin_slug == ^slug)
+    :ok
   end
 
   @doc "Deletes one of the user's own grants."

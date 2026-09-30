@@ -85,6 +85,16 @@ defmodule MydiaWeb.PluginPageLiveTest do
              "/plugins/#{@slug}/app/?#{MydiaWeb.PluginFrameToken.param()}="
   end
 
+  test "a new page session prunes the user's stale session grants", %{conn: conn, user: user} do
+    :ok = Grants.grant(@slug, user.id, "collections:write", "session", "dead-session")
+    :ok = Grants.grant(@slug, user.id, "collections:favorite", "always", "dead-session")
+
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+
+    refute Grants.granted?(@slug, user.id, "collections:write", "dead-session")
+    assert Grants.granted?(@slug, user.id, "collections:favorite", session_id(view))
+  end
+
   test "links to the activity page", %{conn: conn} do
     {:ok, view, _} = live(conn, ~p"/plugins/#{@slug}")
     assert has_element?(view, "#plugin-activity-link[href='/plugins/#{@slug}/activity']")
