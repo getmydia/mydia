@@ -30,6 +30,15 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_label("surfaces:write", surfaces),
     do: "Write to these surfaces: #{join(surfaces)}"
 
+  def capability_label("data:search", _),
+    do: "Search your library on behalf of the person using it"
+
+  def capability_label("surfaces:page", _),
+    do: "Serve its own page inside Mydia"
+
+  def capability_label("net:private", hosts),
+    do: "Reach servers on your private network: #{join(hosts)}"
+
   def capability_label("state:kv", _),
     do: "Store its own state across runs"
 
@@ -50,6 +59,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_icon("events:subscribe"), do: "hero-bell-alert"
   def capability_icon("data:read"), do: "hero-book-open"
   def capability_icon("surfaces:write"), do: "hero-pencil-square"
+  def capability_icon("data:search"), do: "hero-magnifying-glass"
+  def capability_icon("surfaces:page"), do: "hero-window"
+  def capability_icon("net:private"), do: "hero-server-stack"
   def capability_icon("state:kv"), do: "hero-circle-stack"
   def capability_icon("users:connections"), do: "hero-users"
   def capability_icon("schedule:interval"), do: "hero-clock"
@@ -58,7 +70,15 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   @doc "True when a capability class carries privacy/security weight worth emphasizing."
   @spec sensitive_capability?(String.t()) :: boolean()
   def sensitive_capability?(class),
-    do: class in ["net:http", "data:read", "surfaces:write", "users:connections"]
+    do:
+      class in [
+        "net:http",
+        "net:private",
+        "data:read",
+        "data:search",
+        "surfaces:write",
+        "users:connections"
+      ]
 
   defp join([]), do: "(none)"
   defp join(values), do: Enum.join(values, ", ")
@@ -743,6 +763,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.icon name="hero-cog-6-tooth" class="w-5 h-5" /> {@settings.name} settings
         </h3>
         <.form
+          :if={@settings.schema != []}
           for={@settings.form}
           id="plugin-settings-form"
           phx-change="settings_changed"
@@ -765,9 +786,45 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             </.button>
           </div>
         </.form>
+        <.ceilings_form :if={@settings.page_writes?} settings={@settings} />
       </div>
       <div class="modal-backdrop" phx-click="close_settings"></div>
     </div>
+    """
+  end
+
+  @ceiling_options [
+    {"Nothing", "none"},
+    {"Ask every time", "once"},
+    {"Up to a session", "session"},
+    {"Up to always", "always"}
+  ]
+
+  attr :settings, :map, required: true
+
+  defp ceilings_form(assigns) do
+    assigns = assign(assigns, :options, @ceiling_options)
+
+    ~H"""
+    <.form
+      for={@settings.ceilings_form}
+      id="plugin-ceilings-form"
+      phx-submit="save_ceilings"
+      class="border-t border-base-300 pt-4 space-y-2"
+    >
+      <input type="hidden" name="slug" value={@settings.slug} />
+      <h4 class="font-medium">What each role may allow without asking</h4>
+      <.input
+        :for={role <- ~w(admin user guest readonly)}
+        field={@settings.ceilings_form[role]}
+        type="select"
+        label={String.capitalize(role)}
+        options={@options}
+      />
+      <div class="flex justify-end">
+        <.button type="submit" id="save-ceilings" class="btn btn-sm">Save permissions</.button>
+      </div>
+    </.form>
     """
   end
 
@@ -800,7 +857,16 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
   defp settings_field(%{field: %{"type" => "url"}} = assigns) do
     ~H"""
-    <.input field={@form[@field["key"]]} type="url" label={@field["label"] || @field["key"]} />
+    <.input
+      field={@form[@field["key"]]}
+      type="url"
+      label={@field["label"] || @field["key"]}
+      hint={
+        if @field["allow_private"],
+          do:
+            "This address may be on your local network. Saving it lets the plugin reach that one host."
+      }
+    />
     """
   end
 

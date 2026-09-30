@@ -272,6 +272,10 @@ defmodule Mydia.Config.Schema do
       # (no fuel metering on component stores).
       field :schedule_timeout_ms, :integer, default: 60_000
       field :pool_size, :integer, default: 4
+      # Page (`on-http`) invocations wait on a user-facing upstream, so they get
+      # their own budgets: the whole invocation, and each outbound request in it.
+      field :page_timeout_ms, :integer, default: 120_000
+      field :page_http_timeout_ms, :integer, default: 90_000
       # Official plugin index (R13). HTTPS is the v1 trust anchor (KTD10), so all
       # index/source URLs are validated to be https at config time.
       field :index_url, :string, default: "https://plugins.mydia.dev/index.json"
@@ -649,6 +653,8 @@ defmodule Mydia.Config.Schema do
       :invocation_timeout_ms,
       :schedule_timeout_ms,
       :pool_size,
+      :page_timeout_ms,
+      :page_http_timeout_ms,
       :index_url,
       :extra_source_urls,
       :override_dir
@@ -659,6 +665,8 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:invocation_timeout_ms, greater_than: 0)
     |> validate_number(:schedule_timeout_ms, greater_than: 0)
     |> validate_number(:pool_size, greater_than: 0)
+    |> validate_number(:page_timeout_ms, greater_than: 0)
+    |> validate_number(:page_http_timeout_ms, greater_than: 0)
     |> validate_https_source(:index_url)
     |> validate_https_sources(:extra_source_urls)
   end

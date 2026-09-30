@@ -1,0 +1,22 @@
+{
+  "slug": "assistant-openai",
+  "name": "Assistant",
+  "version": "0.1.0",
+  "description": "Chat with your library through your own OpenAI-compatible model: OpenAI, OpenRouter, Ollama, LM Studio and others. It can search, organize collections, mark things watched and add media, with every change undoable. Choosing \"Allow for this session\" in the approval dialog lets later changes of that kind by the model go through without another prompt.",
+  "author": "Mydia",
+  "min_host_version": "0.16.0",
+  "page": { "title": "Assistant", "icon": "hero-sparkles" },
+  "capabilities": {
+    "surfaces:page": [],
+    "net:http": [],
+    "data:search": [],
+    "data:read": ["media_request", "download", "collection", "playback_progress"],
+    "surfaces:write": ["playback:watched", "collections:favorite", "collections:write", "media:add"],
+    "state:kv": []
+  },
+  "settings_schema": [
+    { "key": "base_url", "type": "url", "label": "API base URL (for example https://api.openai.com/v1 or http://ollama.lan:11434/v1)", "grants_host": true, "allow_private": true },
+    { "key": "api_key", "type": "secret", "label": "API key (leave empty for local servers)" },
+    { "key": "model", "type": "string", "label": "Model (for example gpt-4.1-mini or llama3.1)" }
+  ]
+}

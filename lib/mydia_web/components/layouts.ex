@@ -52,6 +52,7 @@ defmodule MydiaWeb.Layouts do
     doc: "number of pending import candidate groups awaiting review"
 
   attr :executing_jobs, :list, default: [], doc: "list of currently executing background jobs"
+  attr :plugin_nav, :list, default: [], doc: "enabled plugin pages for the sidebar"
   attr :feedback_enabled?, :boolean, default: false, doc: "whether to render feedback UI"
   attr :show_feedback_modal, :boolean, default: false, doc: "whether the feedback modal is open"
   attr :feedback_form, :any, default: nil, doc: "feedback form state"
@@ -243,6 +244,15 @@ defmodule MydiaWeb.Layouts do
                 path="/calendar"
                 icon="hero-calendar"
                 label="Calendar"
+                current_path={@current_path}
+              />
+
+              <.nav_item
+                :for={page <- @plugin_nav}
+                id={"plugin-nav-#{page.slug}"}
+                path={"/plugins/#{page.slug}"}
+                icon={page.icon}
+                label={page.title}
                 current_path={@current_path}
               />
 
