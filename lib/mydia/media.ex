@@ -455,24 +455,7 @@ defmodule Mydia.Media do
         {:ok, _approved_requests} ->
           # For TV shows, automatically fetch episodes unless explicitly skipped
           if media_item.type == "tv_show" and not Keyword.get(opts, :skip_episode_refresh, false) do
-            season_monitoring = Keyword.get(opts, :season_monitoring, "all")
-
-            refresh_opts =
-              [season_monitoring: season_monitoring]
-              |> maybe_put_refresh_config(Keyword.get(opts, :config))
-
-            case refresh_episodes_for_tv_show(media_item, refresh_opts) do
-              {:ok, count} ->
-                Logger.info("Created #{count} episodes for #{media_item.title}")
-                apply_initial_season_monitoring(media_item, season_monitoring)
-
-              {:error, reason} ->
-                # Log the error but don't fail the media item creation
-                # The show is still usable and episodes can be refreshed later
-                Logger.warning(
-                  "Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}"
-                )
-            end
+            fetch_episodes_for_new_show(media_item, opts)
           end
 
           {:ok, media_item}
@@ -514,6 +497,40 @@ defmodule Mydia.Media do
     else
       attrs
     end
+  end
+
+  @doc """
+  Fetches the episodes of a just-added TV show and applies the initial season
+  monitoring. Failures are logged, never raised: the show is still usable and
+  its episodes can be refreshed later.
+
+  `create_media_item/3` calls this itself unless `:skip_episode_refresh` is set.
+  Callers that skip it because they are inside a transaction call this once the
+  transaction has committed.
+
+  ## Options
+
+    * `:season_monitoring` - defaults to `"all"`
+    * `:config` - relay config to use
+  """
+  @spec fetch_episodes_for_new_show(MediaItem.t(), keyword()) :: :ok
+  def fetch_episodes_for_new_show(%MediaItem{} = media_item, opts \\ []) do
+    season_monitoring = Keyword.get(opts, :season_monitoring, "all")
+
+    refresh_opts =
+      [season_monitoring: season_monitoring]
+      |> maybe_put_refresh_config(Keyword.get(opts, :config))
+
+    case refresh_episodes_for_tv_show(media_item, refresh_opts) do
+      {:ok, count} ->
+        Logger.info("Created #{count} episodes for #{media_item.title}")
+        apply_initial_season_monitoring(media_item, season_monitoring)
+
+      {:error, reason} ->
+        Logger.warning("Failed to fetch episodes for #{media_item.title}: #{inspect(reason)}")
+    end
+
+    :ok
   end
 
   defp apply_initial_season_monitoring(%MediaItem{monitored: false}, _season_monitoring), do: :ok
@@ -740,6 +757,43 @@ defmodule Mydia.Media do
   defp count_list(nil), do: 0
   defp count_list(list) when is_list(list), do: length(list)
   defp count_list(_), do: 0
+
+  @doc """
+  True when something other than `user_id`'s own bookkeeping depends on the item:
+  a media file (movie files carry `media_item_id`, episode files only
+  `episode_id`), a download, or another user's progress, collection item or
+  request. Used to decide whether an item added moments ago can be withdrawn
+  without taking someone else's data or files with it.
+  """
+  @spec in_use?(MediaItem.t(), binary()) :: boolean()
+  def in_use?(%MediaItem{id: id}, user_id) do
+    episode_ids = from(e in Episode, where: e.media_item_id == ^id, select: e.id)
+
+    queries = [
+      from(f in MediaFile,
+        where: f.media_item_id == ^id or f.episode_id in subquery(episode_ids)
+      ),
+      from(l in MediaFileEpisode, where: l.episode_id in subquery(episode_ids)),
+      from(d in Mydia.Downloads.Download,
+        where: d.media_item_id == ^id or d.episode_id in subquery(episode_ids)
+      ),
+      from(p in Mydia.Playback.Progress,
+        where:
+          p.user_id != ^user_id and
+            (p.media_item_id == ^id or p.episode_id in subquery(episode_ids))
+      ),
+      from(ci in Mydia.Collections.CollectionItem,
+        join: c in Mydia.Collections.Collection,
+        on: c.id == ci.collection_id,
+        where: ci.media_item_id == ^id and c.user_id != ^user_id
+      ),
+      from(r in Mydia.Media.MediaRequest,
+        where: r.media_item_id == ^id and r.requester_id != ^user_id
+      )
+    ]
+
+    Enum.any?(queries, &Repo.exists?/1)
+  end
 
   @doc """
   Deletes a media item.

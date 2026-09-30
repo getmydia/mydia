@@ -33,6 +33,7 @@ defmodule Mydia.Settings.PluginConfig do
           priority: integer(),
           settings: map() | nil,
           granted_capabilities: map() | nil,
+          role_ceilings: map() | nil,
           source_url: String.t() | nil,
           integrity_hash: String.t() | nil,
           manifest: map() | nil,
@@ -53,6 +54,7 @@ defmodule Mydia.Settings.PluginConfig do
     field :priority, :integer, default: 1
     field :settings, Mydia.Settings.JsonMapType
     field :granted_capabilities, Mydia.Settings.JsonMapType
+    field :role_ceilings, Mydia.Settings.JsonMapType
     field :source_url, :string
     field :integrity_hash, :string
     # The plugin's manifest (declared events + capabilities), kept so a descriptor
@@ -82,6 +84,7 @@ defmodule Mydia.Settings.PluginConfig do
       :priority,
       :settings,
       :granted_capabilities,
+      :role_ceilings,
       :source_url,
       :integrity_hash,
       :manifest,

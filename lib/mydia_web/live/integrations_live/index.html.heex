@@ -127,5 +127,40 @@
         </div>
       </div>
     </div>
+    <div
+      :if={@plugin_grants != []}
+      id="plugin-permissions"
+      class="card bg-base-100 shadow-sm mt-6"
+    >
+      <div class="card-body">
+        <h2 class="card-title text-lg">
+          <.icon name="hero-shield-check" class="w-5 h-5" /> Plugin permissions
+        </h2>
+        <p class="text-sm text-base-content/60">
+          Changes these plugins may make for you without asking.
+        </p>
+        <ul class="divide-y divide-base-300">
+          <li
+            :for={grant <- @plugin_grants}
+            id={"plugin-grant-#{grant.id}"}
+            class="flex flex-wrap items-center gap-3 py-2 text-sm"
+          >
+            <span class="font-medium">{grant.plugin_slug}</span>
+            <span class="flex-1">{PageWrites.surface_label(grant.surface)}</span>
+            <span class="badge badge-ghost badge-sm">
+              Always
+            </span>
+            <button
+              id={"revoke-grant-#{grant.id}"}
+              class="btn btn-ghost btn-xs"
+              phx-click="revoke_grant"
+              phx-value-id={grant.id}
+            >
+              Revoke
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 </Layouts.app>

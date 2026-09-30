@@ -8,34 +8,44 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 
-/// Optional macro arguments. `#[mydia_plugin_sdk::plugin]` takes no args (event-only); a
-/// scheduled plugin passes `#[mydia::plugin(on_schedule = handle_tick)]` naming
-/// a second handler `fn(ScheduleTick) -> Result<String, String>`.
+/// Optional macro arguments, comma-separated, each at most once:
+/// `on_schedule = <fn(ScheduleTick) -> Result<String, String>>` and
+/// `on_http = <fn(PageRequest) -> Result<PageResponse, String>>`.
 struct PluginArgs {
     on_schedule: Option<Path>,
+    on_http: Option<Path>,
 }
 
 impl Parse for PluginArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.is_empty() {
-            return Ok(PluginArgs { on_schedule: None });
+        let mut args = PluginArgs {
+            on_schedule: None,
+            on_http: None,
+        };
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let path: Path = input.parse()?;
+
+            match key.to_string().as_str() {
+                "on_schedule" if args.on_schedule.is_none() => args.on_schedule = Some(path),
+                "on_http" if args.on_http.is_none() => args.on_http = Some(path),
+                _ => {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        "expected `on_schedule = <fn>` or `on_http = <fn>`, each at most once",
+                    ))
+                }
+            }
+
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<Token![,]>()?;
         }
 
-        let key: Ident = input.parse()?;
-
-        if key != "on_schedule" {
-            return Err(syn::Error::new(
-                key.span(),
-                "expected `on_schedule = <handler fn>`",
-            ));
-        }
-
-        input.parse::<Token![=]>()?;
-        let path: Path = input.parse()?;
-
-        Ok(PluginArgs {
-            on_schedule: Some(path),
-        })
+        Ok(args)
     }
 }
 
@@ -60,9 +70,24 @@ impl Parse for PluginArgs {
 /// }
 /// ```
 ///
+/// A plugin that serves a page names an HTTP handler the same way:
+///
+/// ```ignore
+/// #[mydia_plugin_sdk::plugin(on_http = handle_http)]
+/// fn on_event(evt: mydia_plugin_sdk::types::Event) -> Result<String, String> {
+///     Ok("{}".into())
+/// }
+///
+/// fn handle_http(
+///     req: mydia_plugin_sdk::types::PageRequest,
+/// ) -> Result<mydia_plugin_sdk::types::PageResponse, String> {
+///     Err("no routes".into())
+/// }
+/// ```
+///
 /// Without `on_schedule`, the generated `on-schedule` export returns an error,
 /// so a plugin that declares a manifest schedule but forgets the handler fails
-/// loudly rather than silently doing nothing.
+/// loudly rather than silently doing nothing. `on-http` behaves the same way.
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as PluginArgs);
@@ -74,6 +99,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         None => quote! {
             ::core::result::Result::Err(
                 ::std::string::String::from("on-schedule not implemented by this plugin"),
+            )
+        },
+    };
+
+    let on_http_body = match args.on_http {
+        Some(path) => quote! { #path(req) },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("on-http not implemented by this plugin"),
             )
         },
     };
@@ -96,6 +130,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             ) -> ::core::result::Result<::std::string::String, ::std::string::String> {
                 let _ = &tick;
                 #on_schedule_body
+            }
+        }
+
+        impl ::mydia_plugin_sdk::PageGuest for __MydiaPluginImpl {
+            fn on_http(
+                req: ::mydia_plugin_sdk::types::PageRequest,
+            ) -> ::core::result::Result<::mydia_plugin_sdk::types::PageResponse, ::std::string::String> {
+                let _ = &req;
+                #on_http_body
             }
         }
 
