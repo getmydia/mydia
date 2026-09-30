@@ -1320,5 +1320,20 @@ defmodule Mydia.MediaRequestsTest do
       assert {:error, :not_pending} =
                MediaRequests.cancel_request(Scope.for_user(guest), approved)
     end
+
+    test "a request approved after it was loaded is not deleted", %{
+      guest: guest,
+      request: request
+    } do
+      # `request` is the stale struct, still "pending" in memory.
+      Repo.update_all(from(r in MediaRequest, where: r.id == ^request.id),
+        set: [status: "approved"]
+      )
+
+      assert {:error, :not_pending} =
+               MediaRequests.cancel_request(Scope.for_user(guest), request)
+
+      assert MediaRequests.get_request!(request.id).status == "approved"
+    end
   end
 end

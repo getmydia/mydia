@@ -132,8 +132,17 @@ defmodule Mydia.MediaRequests do
         {:error, :unauthorized}
 
       true ->
-        Repo.delete(request)
+        delete_if_pending(request)
     end
+  end
+
+  # The status was checked on a struct that may be stale: an admin can approve
+  # the request between the load and this delete. Let the database decide.
+  defp delete_if_pending(%MediaRequest{id: id} = request) do
+    {count, _} =
+      Repo.delete_all(from(r in MediaRequest, where: r.id == ^id and r.status == "pending"))
+
+    if count == 1, do: {:ok, request}, else: {:error, :not_pending}
   end
 
   @doc """
