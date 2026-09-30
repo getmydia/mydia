@@ -1,0 +1,58 @@
+{
+  "slug": "plex",
+  "name": "Plex",
+  "version": "1.0.0",
+  "description": "Connects Plex Media Server: refreshes Plex libraries after imports, and syncs watched state and resume positions both ways for each linked Plex Home profile.",
+  "author": "Mydia",
+  "multi_instance": true,
+  "category": "media_server",
+  "setup": true,
+  "capabilities": {
+    "events:subscribe": ["media_file.imported", "playback.finished"],
+    "net:http": ["plex.tv"],
+    "state:kv": [],
+    "data:read": ["playback_progress"],
+    "surfaces:write": ["playback:watched"],
+    "users:connections": [],
+    "schedule:interval": []
+  },
+  "delivery": "durable",
+  "schedule": {
+    "interval_minutes": 30
+  },
+  "connection": {
+    "type": "none",
+    "auth_header": "X-Plex-Token: {token}"
+  },
+  "settings_schema": [
+    {
+      "key": "url",
+      "type": "url",
+      "label": "Server URL (overrides discovered addresses)",
+      "grants_host": true
+    },
+    {
+      "key": "token",
+      "type": "secret",
+      "label": "X-Plex-Token (only for a manually configured server)"
+    },
+    {
+      "key": "sync_watched",
+      "type": "enum",
+      "options": ["off", "on"],
+      "label": "Sync watched state with Plex"
+    },
+    {
+      "key": "sync_watched_direction",
+      "type": "enum",
+      "options": ["bidirectional", "import", "export"],
+      "label": "Watched sync direction",
+      "visible_when": {"sync_watched": "on"}
+    },
+    {
+      "key": "plex_tv_base",
+      "type": "string",
+      "label": "plex.tv API base URL (advanced / testing)"
+    }
+  ]
+}

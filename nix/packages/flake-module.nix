@@ -89,6 +89,15 @@
         extraRegistries = crateRegistries;
       };
 
+      # Vendored crates for the bundled plex plugin guest. Each guest is its
+      # own crate with its own lock, so it needs this binding and the
+      # `.cargo/config.toml` written in postConfigure, or the no-network sandbox
+      # build dies after `[plugins] compiling plex` without printing an error.
+      plexCargoDeps = pkgs.rustPlatform.importCargoLock {
+        lockFile = ../../plugins/plex/Cargo.lock;
+        extraRegistries = crateRegistries;
+      };
+
       # Vendored crates for the subtitle re-sync NIF. Like the p2p NIF above,
       # this is its own crate with its own lock, so it needs both this binding
       # and a `.cargo/config.toml` in postConfigure or the no-network sandbox
@@ -421,6 +430,16 @@
 
             [source.vendored-sources]
             directory = "${simklSyncCargoDeps}"
+            CARGO_EOF
+
+            # Same for the bundled plex plugin guest.
+            mkdir -p plugins/plex/.cargo
+            cat > plugins/plex/.cargo/config.toml <<CARGO_EOF
+            [source.crates-io]
+            replace-with = "vendored-sources"
+
+            [source.vendored-sources]
+            directory = "${plexCargoDeps}"
             CARGO_EOF
 
             # Same for the subtitle re-sync NIF, compiled by rustler during
