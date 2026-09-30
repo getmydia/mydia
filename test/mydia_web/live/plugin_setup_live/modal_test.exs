@@ -119,6 +119,36 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     assert has_element?(view, "#setup-done", "Manual http://10.0.0.9:32400")
   end
 
+  test "a choice option shows every endpoint it would approve and flags private ones", %{
+    conn: conn,
+    slug: slug
+  } do
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
+    render_async(view)
+    poll(view)
+    poll(view)
+
+    assert has_element?(
+             view,
+             "#setup-option-server-a-endpoint-0",
+             "http://127.0.0.1:32400"
+           )
+
+    assert has_element?(view, "#setup-option-server-a-endpoint-0 .badge", "private network")
+  end
+
+  test "a draft that cannot be created shows a readable error", %{conn: conn, slug: slug} do
+    config = Mydia.Settings.get_plugin_config_by_slug(slug)
+    {:ok, _} = Mydia.Settings.update_plugin_config(config, %{name: String.duplicate("n", 300)})
+
+    {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
+    render_async(view)
+
+    assert has_element?(view, "#plugin-setup-error", "Setup could not start: name")
+    refute has_element?(view, "#plugin-setup-error", "Ecto")
+    assert has_element?(view, "#setup-cancel")
+  end
+
   test "cancel deletes the draft instance and tells the parent", %{conn: conn, slug: slug} do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
     render_async(view)

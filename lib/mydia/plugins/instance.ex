@@ -56,5 +56,29 @@ defmodule Mydia.Plugins.Instance do
   def endpoint_label(%{"scheme" => scheme, "host" => host, "port" => port}),
     do: "#{scheme}://#{host}:#{port}"
 
+  def endpoint_label(%{scheme: scheme, host: host, port: port}),
+    do: endpoint_label(%{"scheme" => scheme, "host" => host, "port" => port})
+
   def endpoint_label(other), do: inspect(other)
+
+  @doc """
+  True when an endpoint's host is a loopback, private, link-local or otherwise
+  non-public IP literal, or `localhost`. Hostnames are not resolved here, so a
+  name that resolves privately is not flagged; the label always shows the host.
+  """
+  @spec endpoint_private?(map()) :: boolean()
+  def endpoint_private?(%{scheme: s, host: h, port: p}),
+    do: endpoint_private?(%{"scheme" => s, "host" => h, "port" => p})
+
+  def endpoint_private?(%{"host" => host}) when is_binary(host) do
+    host = host |> String.trim("[") |> String.trim("]") |> String.downcase()
+
+    host == "localhost" or
+      case :inet.parse_address(String.to_charlist(host)) do
+        {:ok, ip} -> not Mydia.Plugins.Net.Gate.public_ip?(ip)
+        {:error, _} -> false
+      end
+  end
+
+  def endpoint_private?(_), do: false
 end

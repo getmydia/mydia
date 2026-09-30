@@ -690,5 +690,48 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#plugin-instances-plex li", a.name)
       assert has_element?(view, "#plugin-instances-plex li", b.name)
     end
+
+    defp seed_multi_instance_with_schema(multi?) do
+      config =
+        seed_plugin("plex", "Plex", granted: %{"events:subscribe" => []}, enabled: true)
+
+      manifest =
+        "plex"
+        |> schema_manifest_map("Plex")
+        |> Map.put("multi_instance", multi?)
+
+      {:ok, _} = Settings.update_plugin_config(config, %{manifest: manifest})
+    end
+
+    test "has no plugin-level settings form and points to Media servers", %{conn: conn} do
+      seed_multi_instance_with_schema(true)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#settings-plex[disabled]")
+      assert render(view) =~ "Configured per server on Media servers"
+
+      render_hook(view, "edit_settings", %{"slug" => "plex"})
+      refute has_element?(view, "#settings-modal")
+    end
+
+    test "a single-instance plugin with the same schema keeps its settings form", %{conn: conn} do
+      seed_multi_instance_with_schema(false)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/plugins")
+
+      refute has_element?(view, "#settings-plex[disabled]")
+      view |> element("#settings-plex") |> render_click()
+      assert has_element?(view, "#plugin-settings-form")
+    end
+
+    test "the detail view does not claim settings can grant hosts", %{conn: conn} do
+      seed_multi_instance_with_schema(true)
+
+      {:ok, view, _html} = live(conn, ~p"/admin/plugins")
+      view |> element("#details-plex") |> render_click()
+
+      refute has_element?(view, "#detail-host-grant")
+    end
   end
 end

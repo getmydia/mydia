@@ -307,6 +307,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   defp settings_disabled_reason(%{pending_approval: true}),
     do: "Approve this plugin before editing its settings"
 
+  defp settings_disabled_reason(%{multi_instance: true}),
+    do: "Configured per server on Media servers"
+
   defp settings_disabled_reason(%{has_settings: false}),
     do: "This plugin has no configurable settings"
 

@@ -16,6 +16,8 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   import MydiaWeb.PluginSetupComponents
 
   alias Mydia.Accounts
+  alias Mydia.Plugins.Error
+  alias Mydia.Plugins.Instance
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Setup
   alias Mydia.Plugins.Setup.Session
@@ -97,7 +99,7 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   end
 
   def handle_async(:setup, {:ok, {:error, reason}}, socket) do
-    {:noreply, assign(socket, loading: false, error: "Setup could not start: #{inspect(reason)}")}
+    {:noreply, assign(socket, loading: false, error: start_error(reason))}
   end
 
   def handle_async(:setup, {:exit, _reason}, socket) do
@@ -162,6 +164,20 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
   end
 
   defp schedule_poll(socket, _session), do: socket
+
+  defp start_error(%Error{message: message}) when is_binary(message),
+    do: "Setup could not start: #{message}"
+
+  defp start_error(%Ecto.Changeset{} = changeset) do
+    details =
+      changeset
+      |> Ecto.Changeset.traverse_errors(fn {msg, _opts} -> msg end)
+      |> Enum.map_join("; ", fn {field, msgs} -> "#{field} #{Enum.join(msgs, ", ")}" end)
+
+    "Setup could not start: #{details}"
+  end
+
+  defp start_error(_reason), do: "Setup could not start. Try again."
 
   defp cancel_and_close(socket, session) do
     if session, do: Setup.cancel(session)
@@ -280,6 +296,17 @@ defmodule MydiaWeb.PluginSetupLive.Modal do
             <span class="block font-medium">{option.label}</span>
             <span :if={option.detail} class="block text-xs text-base-content/60">
               {option.detail}
+            </span>
+            <%!-- Choosing approves these addresses, and the plugin supplied them. --%>
+            <span
+              :for={{endpoint, index} <- Enum.with_index(option.endpoints)}
+              id={"setup-option-#{option.id}-endpoint-#{index}"}
+              class="mt-1 flex flex-wrap items-center gap-1 text-xs font-mono text-base-content/70"
+            >
+              {Instance.endpoint_label(endpoint)}
+              <span :if={Instance.endpoint_private?(endpoint)} class="badge badge-warning badge-xs">
+                private network
+              </span>
             </span>
           </span>
           <span :if={option.badge} class="badge badge-ghost">{option.badge}</span>
