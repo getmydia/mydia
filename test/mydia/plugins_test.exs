@@ -127,6 +127,84 @@ defmodule Mydia.PluginsTest do
     end
   end
 
+  describe "page plugins" do
+    defp page_manifest! do
+      manifest!(%{
+        "slug" => "page-fixture",
+        "name" => "Page Fixture",
+        "min_host_version" => "0.0.0-dev",
+        "capabilities" => %{"surfaces:page" => []},
+        "page" => %{"title" => "Fixture", "icon" => "hero-sparkles"},
+        "settings_schema" => [
+          %{
+            "key" => "endpoint",
+            "type" => "url",
+            "grants_host" => true,
+            "allow_private" => true
+          }
+        ]
+      })
+    end
+
+    test "the stored manifest map re-parses to the same manifest" do
+      manifest = page_manifest!()
+
+      assert {:ok, ^manifest} =
+               manifest |> Plugins.manifest_to_map() |> Manifest.parse()
+    end
+
+    test "installing a page plugin activates it and lists its page", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:ok, descriptor} =
+               Plugins.install(entry(bypass, page_manifest!(), wasm), gate_opts())
+
+      assert descriptor.enabled
+      assert Host.running?("page-fixture")
+
+      assert [%{slug: "page-fixture", title: "Fixture", icon: "hero-sparkles"}] =
+               Plugins.list_pages()
+    end
+
+    test "approving a page plugin activates it", %{bypass: bypass} do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:ok, :inactive} =
+               Plugins.install(
+                 entry(bypass, page_manifest!(), wasm),
+                 [grants: %{}] ++ gate_opts()
+               )
+
+      assert {:ok, _} = Plugins.approve("page-fixture")
+      assert Host.running?("page-fixture")
+      assert [%{slug: "page-fixture"}] = Plugins.list_pages()
+    end
+
+    test "a failed activation leaves the row disabled, not enabled with no live plugin" do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "broken-page",
+          name: "Broken",
+          version: "1.0.0",
+          manifest: %{
+            "slug" => "broken-page",
+            "name" => "Broken",
+            "version" => "1.0.0",
+            "capabilities" => %{"surfaces:page" => []}
+          },
+          wasm_module: guest_wasm(),
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      assert {:error, %{type: :invalid_manifest}} = Plugins.approve("broken-page")
+      assert Settings.get_plugin_config_by_slug("broken-page").enabled == false
+      refute Registry.registered?("broken-page")
+    end
+  end
+
   describe "revoke/1 and remove/1 (R8, R14)" do
     setup %{bypass: bypass} do
       wasm = guest_wasm()

@@ -792,6 +792,10 @@ defmodule Mydia.Plugins do
         {:ok, descriptor}
 
       {:error, _} = err ->
+        # A row that cannot activate must not claim to be enabled with no live
+        # plugin behind it.
+        _ = Settings.update_plugin_config(config, %{enabled: false})
+        reload()
         err
     end
   end
@@ -1154,7 +1158,9 @@ defmodule Mydia.Plugins do
     end
   end
 
-  defp manifest_to_map(%Manifest{} = m) do
+  # Must carry every field `Manifest.parse/1` reads: activation re-parses this map.
+  @doc false
+  def manifest_to_map(%Manifest{} = m) do
     %{
       "slug" => m.slug,
       "name" => m.name,
@@ -1165,7 +1171,9 @@ defmodule Mydia.Plugins do
       "capabilities" => m.capabilities,
       "settings_schema" => m.settings_schema,
       "connection" => m.connection,
-      "schedule" => m.schedule
+      "schedule" => m.schedule,
+      "page" => m.page,
+      "min_host_version" => m.min_host_version
     }
   end
 
