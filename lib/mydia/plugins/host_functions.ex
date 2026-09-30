@@ -992,6 +992,9 @@ defmodule Mydia.Plugins.HostFunctions do
       records =
         plugin.slug
         |> Connections.list_for_plugin()
+        # The WIT connection-status enum is connected|error; a disabled link is
+        # not a connection the guest may use, so it is not listed at all.
+        |> Enum.reject(&(&1.status == "disabled"))
         |> Enum.map(&to_connection_record/1)
 
       {:ok, records}

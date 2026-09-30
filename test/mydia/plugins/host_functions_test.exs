@@ -330,6 +330,13 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       refute Map.has_key?(record, :"access-token")
     end
 
+    test "omits disabled links, since the guest enum only has connected|error", %{user: user} do
+      {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t", status: "disabled"})
+
+      p = plugin(%{"users:connections" => []})
+      assert {:ok, []} = HostFunctions.connections_list(p)
+    end
+
     test "AE4: a plugin without users:connections is denied" do
       p = plugin(%{"events:subscribe" => ["media_item.added"]})
       assert {:error, %Error{type: :capability_denied}} = HostFunctions.connections_list(p)
