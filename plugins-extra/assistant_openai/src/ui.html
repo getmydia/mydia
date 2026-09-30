@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/assets/css/app.css" />
+  <title>Assistant</title>
+</head>
+<body class="bg-base-100 text-base-content h-screen flex flex-col">
+  <main id="log" class="flex-1 overflow-y-auto p-4 space-y-3"></main>
+  <form id="composer" class="p-3 border-t border-base-300 flex gap-2">
+    <button type="button" id="reset" class="btn btn-ghost btn-sm" title="New chat">New</button>
+    <input id="message" class="input input-bordered flex-1" autocomplete="off" placeholder="Ask about your library…" />
+    <button id="send" class="btn btn-primary">Send</button>
+  </form>
+  <script>__APP_JS__</script>
+</body>
+</html>
