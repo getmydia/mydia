@@ -45,15 +45,23 @@ pub fn validate(a: &Value) -> Result<(), String> {
 pub fn source_label(origin: Option<&str>) -> &'static str {
     match origin {
         Some("player") => "Mydia",
-        Some(o) if o.starts_with("plugin:plex:") => "Plex sync",
-        Some(o) if o.starts_with("plugin:simkl_sync:") => "Simkl sync",
+        Some(o) if is_plugin_origin(o, "plex") => "Plex sync",
+        Some(o) if is_plugin_origin(o, "simkl_sync") => "Simkl sync",
         _ => "other",
     }
 }
 
+/// `plugin:<slug>` or `plugin:<slug>:<instance>`, but not a longer slug.
+fn is_plugin_origin(origin: &str, slug: &str) -> bool {
+    origin
+        .strip_prefix("plugin:")
+        .and_then(|rest| rest.strip_prefix(slug))
+        .is_some_and(|tail| tail.is_empty() || tail.starts_with(':'))
+}
+
 pub fn percent(position: Option<u32>, duration: Option<u32>) -> Option<u32> {
     match (position, duration) {
-        (Some(p), Some(d)) if d > 0 => Some(((p as f64 / d as f64) * 100.0).round() as u32),
+        (Some(p), Some(d)) if d > 0 => Some(((p as f64 / d as f64) * 100.0).round().min(100.0) as u32),
         _ => None,
     }
 }
@@ -167,6 +175,9 @@ mod tests {
         assert_eq!(source_label(Some("player")), "Mydia");
         assert_eq!(source_label(Some("plugin:plex:abc")), "Plex sync");
         assert_eq!(source_label(Some("plugin:simkl_sync:x")), "Simkl sync");
+        assert_eq!(source_label(Some("plugin:plex")), "Plex sync");
+        assert_eq!(source_label(Some("plugin:simkl_sync")), "Simkl sync");
+        assert_eq!(source_label(Some("plugin:plexfoo")), "other");
         assert_eq!(source_label(Some("plugin:other:x")), "other");
         assert_eq!(source_label(None), "other");
     }
@@ -174,6 +185,7 @@ mod tests {
     #[test]
     fn percent_handles_missing_and_zero() {
         assert_eq!(percent(Some(300), Some(1200)), Some(25));
+        assert_eq!(percent(Some(1300), Some(1200)), Some(100));
         assert_eq!(percent(None, Some(1200)), None);
         assert_eq!(percent(Some(10), Some(0)), None);
         assert_eq!(percent(Some(10), None), None);

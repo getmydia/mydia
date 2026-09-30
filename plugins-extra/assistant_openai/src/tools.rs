@@ -207,7 +207,7 @@ fn list_item(item: &ListItem) -> Value {
         ListItem::Download(d) => json!({"title": clip(&d.title, 200), "status": d.status, "progress": d.progress, "eta_seconds": d.eta_seconds}),
         ListItem::MediaItem(m) => json!({"id": m.id, "title": clip(&m.title, 200), "year": m.year}),
         ListItem::LibraryItem(l) => json!({"id": l.id, "title": clip(&l.title, 200), "year": l.year, "owned": l.owned}),
-        _ => json!({}),
+        ListItem::PlaybackProgress(_) => json!({}),
     }
 }
 
