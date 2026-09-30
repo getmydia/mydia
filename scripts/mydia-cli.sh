@@ -64,8 +64,9 @@ elixir_args() {
         else
             args="$args, "
         fi
-        # Escape quotes in argument
-        escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        # Escape backslashes, quotes and interpolation, so the argument stays a
+        # literal string when the node evaluates the expression
+        escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g; s/#{/\\#{/g')
         args="$args\"$escaped\""
     done
     printf '%s]' "$args"
