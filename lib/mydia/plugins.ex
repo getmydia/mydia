@@ -515,6 +515,77 @@ defmodule Mydia.Plugins do
   end
 
   @doc """
+  Installs a plugin from a local `.wasm` component and its `manifest.json`,
+  bypassing the index. This is how an operator tests a plugin that has not been
+  published yet (`mydia-cli plugin install`).
+
+  The files come from the operator's own disk, so they are trusted the way the
+  override directory is: there is no catalog to verify an integrity hash
+  against, and the recorded hash is simply the file's. Capability approval is
+  not bypassed. The plugin installs inactive and waits for approval in
+  Admin > Plugins, unless `approve: true` grants the declared set right away
+  through `approve/2`.
+
+  Reinstalling over an existing sideloaded or index install replaces its bytes
+  and manifest and clears its grant, as a fresh install would. A bundled slug is
+  refused: its bytes come from the image, and replacing them is what
+  `PLUGINS_OVERRIDE_DIR` is for.
+  """
+  @spec install_file(Path.t(), Path.t(), keyword()) ::
+          {:ok, Plugin.t() | :inactive} | {:error, Error.t()}
+  def install_file(wasm_path, manifest_path, opts \\ []) do
+    with {:ok, wasm} <- read_local(wasm_path, "package"),
+         {:ok, json} <- read_local(manifest_path, "manifest"),
+         {:ok, manifest} <- Manifest.parse(json),
+         :ok <- refuse_bundled(manifest.slug),
+         entry = local_entry(manifest, wasm_path, wasm),
+         :ok <- deactivate(manifest.slug),
+         {:ok, config} <- persist_install(entry, wasm, entry.integrity, %{}) do
+      if Keyword.get(opts, :approve, false),
+        do: approve(config.slug),
+        else: finish_activation(config)
+    end
+  end
+
+  defp read_local(path, what) do
+    case File.read(path) do
+      {:ok, bytes} ->
+        {:ok, bytes}
+
+      {:error, reason} ->
+        {:error,
+         Error.new(:invalid_config, "cannot read #{what} #{path}: #{:file.format_error(reason)}")}
+    end
+  end
+
+  defp refuse_bundled(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      %{source_url: "bundled"} ->
+        {:error,
+         Error.new(
+           :invalid_config,
+           "#{slug} is a bundled plugin; replace its bytes with PLUGINS_OVERRIDE_DIR instead"
+         )}
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp local_entry(manifest, wasm_path, wasm) do
+    %Index.Entry{
+      slug: manifest.slug,
+      name: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      author: manifest.author,
+      package_url: "file://" <> Path.expand(wasm_path),
+      integrity: :crypto.hash(:sha256, wasm) |> Base.encode16(case: :lower),
+      manifest: manifest
+    }
+  end
+
+  @doc """
   Approves the full declared capability set for an already-installed plugin and
   activates it.
 

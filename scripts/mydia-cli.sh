@@ -17,6 +17,8 @@ Usage: mydia-cli <command> [args...]
 
 Commands:
     user <subcommand>     User management (list, add, delete, reset-password, reset-2fa)
+    plugin install <wasm> <manifest> [--approve]
+                          Install a plugin that is not in the index
     eval <code>           Evaluate Elixir code
     rpc <code>            Run code via RPC on running node
     remote                Connect to running node via IEx
@@ -28,13 +30,32 @@ Examples:
     mydia-cli user delete user@example.com
     mydia-cli user reset-password admin --password=newpass
     mydia-cli user reset-2fa admin
+    mydia-cli plugin install /config/assistant_openai.wasm /config/manifest.json
     mydia-cli eval 'IO.puts("hello")'
     mydia-cli remote
 EOF
 }
 
 run_user_command() {
-    # Build Elixir list of arguments
+    run_mydia eval "Mix.Tasks.Mydia.User.run($(elixir_args "$@"))"
+}
+
+# Runs over rpc on the live node, so the plugin starts without a restart. File
+# arguments are made absolute here because the node's working directory is not
+# the caller's.
+run_plugin_command() {
+    for arg in "$@"; do
+        shift
+        if [ -f "$arg" ]; then
+            arg=$(realpath "$arg")
+        fi
+        set -- "$@" "$arg"
+    done
+    run_mydia rpc "Mydia.Plugins.CLI.run($(elixir_args "$@"))"
+}
+
+# Prints the arguments as an Elixir list of strings
+elixir_args() {
     args="["
     first=true
     for arg in "$@"; do
@@ -47,15 +68,17 @@ run_user_command() {
         escaped=$(printf '%s' "$arg" | sed 's/\\/\\\\/g; s/"/\\"/g')
         args="$args\"$escaped\""
     done
-    args="$args]"
-
-    run_mydia eval "Mix.Tasks.Mydia.User.run($args)"
+    printf '%s]' "$args"
 }
 
 case "${1:-help}" in
     user)
         shift
         run_user_command "$@"
+        ;;
+    plugin)
+        shift
+        run_plugin_command "$@"
         ;;
     eval)
         shift
