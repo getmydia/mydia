@@ -30,12 +30,13 @@ Be brief.";
 const UI_HTML: &str = include_str!("ui.html");
 const UI_CSS: &str = include_str!("ui.css");
 const MARKDOWN_JS: &str = include_str!("markdown.js");
+const CHATS_JS: &str = include_str!("chats.js");
 const APP_JS: &str = include_str!("app.js");
 
 /// The page with its stylesheet and scripts inlined: the frame's CSP allows
 /// inline code but no other origin.
 fn page_html() -> String {
-    UI_HTML.replace("__APP_CSS__", UI_CSS).replace("__MARKDOWN_JS__", MARKDOWN_JS).replace("__APP_JS__", APP_JS)
+    UI_HTML.replace("__APP_CSS__", UI_CSS).replace("__MARKDOWN_JS__", MARKDOWN_JS).replace("__CHATS_JS__", CHATS_JS).replace("__APP_JS__", APP_JS)
 }
 
 fn respond(status: u16, content_type: &str, body: String) -> Result<PageResponse, String> {
@@ -351,11 +352,12 @@ mod tests {
     #[test]
     fn the_page_is_fully_assembled() {
         let html = page_html();
-        for placeholder in ["__APP_CSS__", "__MARKDOWN_JS__", "__APP_JS__"] {
+        for placeholder in ["__APP_CSS__", "__MARKDOWN_JS__", "__CHATS_JS__", "__APP_JS__"] {
             assert!(!html.contains(placeholder), "{placeholder} left in the page");
         }
-        assert!(html.contains(".as-composer") && html.contains("const Markdown") && html.contains("frame_token"));
-        assert!(!MARKDOWN_JS.contains("</script") && !APP_JS.contains("</script") && !UI_CSS.contains("</style"));
+        assert!(html.contains(".as-composer") && html.contains("const Markdown") && html.contains("const Chats") && html.contains("frame_token"));
+        assert!(html.contains(r#"id="new-chat""#) && html.contains(r#"id="chat-pill""#) && !html.contains(r#"id="reset""#));
+        assert!(!MARKDOWN_JS.contains("</script") && !CHATS_JS.contains("</script") && !APP_JS.contains("</script") && !UI_CSS.contains("</style"));
     }
 
     #[test]
