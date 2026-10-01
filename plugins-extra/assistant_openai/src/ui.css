@@ -48,21 +48,6 @@ button, input, textarea { font: inherit; color: inherit; }
   background: color-mix(in oklab, var(--color-base-content) 8%, transparent); color: var(--color-base-content);
 }
 .as-title-btn:disabled, .as-new:disabled { opacity: 0.5; cursor: default; }
-.as-popover-down { top: calc(100% + 0.375rem); bottom: auto; }
-.as-group {
-  padding: 0.5rem 0.625rem 0.125rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-  color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
-}
-.as-chat-row { flex-direction: row; align-items: center; gap: 0.5rem; }
-.as-chat-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.as-row-btn {
-  flex: none; padding: 0.05rem 0.375rem; border: 0; border-radius: 0.375rem; background: transparent; cursor: pointer;
-  font-size: 0.75rem; line-height: 1.4; opacity: 0; color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
-}
-.as-chat-row:hover .as-row-btn, .as-chat-row[aria-selected="true"] .as-row-btn, .as-row-btn:focus-visible, .as-row-confirm { opacity: 1; }
-.as-row-btn:hover { background: color-mix(in oklab, var(--color-error) 15%, transparent); color: var(--color-error); }
-.as-row-confirm { background: color-mix(in oklab, var(--color-error) 15%, transparent); color: var(--color-error); font-weight: 600; }
-@media (hover: none) { .as-row-btn { opacity: 1; } }
 
 /* The mark */
 .as-mark {
@@ -222,6 +207,24 @@ button, input, textarea { font: inherit; color: inherit; }
 .as-option[aria-selected="true"], .as-option:hover { background: color-mix(in oklab, var(--color-primary) 12%, transparent); }
 .as-option-current { font-weight: 600; }
 .as-list-note { padding: 0.5rem 0.625rem; font-size: 0.8125rem; color: color-mix(in oklab, var(--color-base-content) 55%, transparent); }
+
+/* Chat list: the model picker's popover and options, opening downward. These
+   rules override that block, so they stay below it. */
+.as-popover-down { top: calc(100% + 0.375rem); bottom: auto; }
+.as-group {
+  padding: 0.5rem 0.625rem 0.125rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+}
+.as-chat-row { flex-direction: row; align-items: center; gap: 0.5rem; }
+.as-chat-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-row-btn {
+  flex: none; padding: 0.05rem 0.375rem; border: 0; border-radius: 0.375rem; background: transparent; cursor: pointer;
+  font-size: 0.75rem; line-height: 1.4; opacity: 0; color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}
+.as-chat-row:hover .as-row-btn, .as-chat-row[aria-selected="true"] .as-row-btn, .as-row-btn:focus-visible, .as-row-confirm { opacity: 1; }
+.as-row-btn:hover { background: color-mix(in oklab, var(--color-error) 15%, transparent); color: var(--color-error); }
+.as-row-confirm { background: color-mix(in oklab, var(--color-error) 15%, transparent); color: var(--color-error); font-weight: 600; }
+@media (hover: none) { .as-row-btn { opacity: 1; } }
 
 /* Motion */
 @keyframes as-in { from { opacity: 0; transform: translateY(4px); } }

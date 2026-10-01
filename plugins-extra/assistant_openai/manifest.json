@@ -1,7 +1,7 @@
 {
   "slug": "assistant-openai",
   "name": "Assistant",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Chat with your library through the model provider you choose: OpenAI, Anthropic, OpenRouter, Google Gemini, Groq, Mistral, DeepSeek, xAI, a local Ollama or LM Studio, or any other OpenAI-compatible server. It can search, organize collections, mark things watched and add media, with every change undoable. Choosing \"Allow for this session\" in the approval dialog lets later changes of that kind by the model go through without another prompt.",
   "author": "Mydia",
   "min_host_version": "0.16.0",
