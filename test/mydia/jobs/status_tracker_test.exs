@@ -31,6 +31,8 @@ defmodule Mydia.Jobs.StatusTrackerTest do
       )
 
     start_supervised!({StatusTracker, opts})
+    # A starting tracker announces an empty list; consume it so tests see only later changes.
+    assert_receive {:jobs_status_changed, []}, 500
     name
   end
 
@@ -129,6 +131,13 @@ defmodule Mydia.Jobs.StatusTrackerTest do
     assert id == row.id
 
     refute_receive {:jobs_status_changed, []}, 400
+  end
+
+  test "announces an empty list when it starts, clearing pages left over from a restart" do
+    name = :"status_tracker_#{System.unique_integer([:positive])}"
+    start_supervised!({StatusTracker, name: name})
+
+    assert_receive {:jobs_status_changed, []}, 500
   end
 
   test "visible_jobs/1 is empty when the tracker is not running" do

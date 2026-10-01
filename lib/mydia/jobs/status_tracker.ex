@@ -17,6 +17,8 @@ defmodule Mydia.Jobs.StatusTracker do
   seeded from `oban_jobs`: it starts before `Mydia.Application` resets stale
   jobs, so at boot every `executing` row is a leftover of the previous run.
   If this process restarts, jobs already in flight go unreported until they end.
+  On start it broadcasts an empty list, so pages showing a job from before a
+  restart clear it.
 
   A stop event can be lost when a queue is killed past its shutdown grace
   period. While any job is tracked, the tracker checks the database every
@@ -79,8 +81,18 @@ defmodule Mydia.Jobs.StatusTracker do
 
   @impl true
   def init(opts) do
-    {:ok,
-     struct!(__MODULE__, Keyword.take(opts, [:show_after_ms, :min_visible_ms, :reconcile_ms]))}
+    state =
+      struct!(__MODULE__, Keyword.take(opts, [:show_after_ms, :min_visible_ms, :reconcile_ms]))
+
+    {:ok, state, {:continue, :announce}}
+  end
+
+  # A restart forgets what was shown. Pages that were showing a job would keep
+  # it until the next change, so say that nothing is shown now.
+  @impl true
+  def handle_continue(:announce, state) do
+    broadcast([])
+    {:noreply, state}
   end
 
   @impl true
@@ -108,7 +120,7 @@ defmodule Mydia.Jobs.StatusTracker do
 
   @impl true
   def handle_info(:tick, state) do
-    {:noreply, recompute(%{state | timer: nil})}
+    {:noreply, recompute(state)}
   end
 
   def handle_info(:reconcile, state) do
@@ -142,14 +154,13 @@ defmodule Mydia.Jobs.StatusTracker do
         state
 
       true ->
-        Phoenix.PubSub.broadcast(
-          Mydia.PubSub,
-          Broadcaster.topic(),
-          {:jobs_status_changed, eligible}
-        )
-
+        broadcast(eligible)
         %{state | visible: eligible, shown_at: shown_at(state, eligible, now)}
     end
+  end
+
+  defp broadcast(jobs) do
+    Phoenix.PubSub.broadcast(Mydia.PubSub, Broadcaster.topic(), {:jobs_status_changed, jobs})
   end
 
   defp holding?(%{shown_at: nil}, _now), do: false
