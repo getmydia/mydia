@@ -148,7 +148,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
   def render(assigns) do
     ~H"""
     <Layouts.app {assigns}>
-      <div class="flex flex-col h-[calc(100dvh-6rem)] gap-3">
+      <div class="flex flex-col h-[calc(100dvh-10rem)] lg:h-[calc(100dvh-6rem)] gap-3">
         <div class="flex items-center justify-between gap-3">
           <h1 class="text-xl font-semibold">{@title}</h1>
           <.link
@@ -162,7 +162,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
         <div
           id="plugin-frame-host"
           phx-hook="PluginFrame"
-          class="flex-1 rounded-box overflow-hidden border border-base-300 bg-base-100"
+          class="flex-1 min-h-0 overflow-hidden"
         >
           <iframe
             :if={@frame_src}
@@ -171,7 +171,7 @@ defmodule MydiaWeb.PluginPageLive.Show do
             src={@frame_src}
             sandbox="allow-scripts allow-forms"
             referrerpolicy="no-referrer"
-            class="w-full h-full"
+            class="w-full h-full bg-transparent"
             title={@title}
           ></iframe>
         </div>

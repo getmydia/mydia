@@ -3,6 +3,8 @@
 // The frame may only ask for confirmation of pending writes
 // ({mydia: "confirm", ids: [...]}). The deciding click happens in the LiveView.
 // Only the documented host messages are ever forwarded back to the frame.
+import { themeMessage } from "./plugin_frame_theme.mjs"
+
 const FRAME_MESSAGES = ["confirmed", "denied", "expired", "token"]
 
 const PluginFrame = {
@@ -25,9 +27,24 @@ const PluginFrame = {
       // message goes to this iframe's own window only.
       this.frame()?.contentWindow?.postMessage(message, "*")
     })
+    // The frame follows the host theme. It is told on every load (the iframe
+    // is replaced on reconnect) and whenever the theme toggle changes it.
+    this.postTheme = () => {
+      const message = themeMessage(document.documentElement)
+      if (message) this.frame()?.contentWindow?.postMessage(message, "*")
+    }
+    // load does not bubble, so listen in the capture phase.
+    this.el.addEventListener("load", this.postTheme, true)
+    this.themeObserver = new MutationObserver(this.postTheme)
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    })
   },
   destroyed() {
     window.removeEventListener("message", this.onMessage)
+    this.el.removeEventListener("load", this.postTheme, true)
+    this.themeObserver?.disconnect()
   },
 }
 

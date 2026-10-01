@@ -85,6 +85,14 @@ defmodule MydiaWeb.PluginPageLiveTest do
              "/plugins/#{@slug}/app/?#{MydiaWeb.PluginFrameToken.param()}="
   end
 
+  test "the frame host draws no box around the plugin page", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/plugins/#{@slug}")
+
+    assert has_element?(view, "#plugin-frame-host")
+    refute has_element?(view, "#plugin-frame-host.border")
+    refute has_element?(view, "#plugin-frame-host.bg-base-100")
+  end
+
   test "a new page session prunes the user's stale session grants", %{conn: conn, user: user} do
     :ok = Grants.grant(@slug, user.id, "collections:write", "session", "dead-session")
     :ok = Grants.grant(@slug, user.id, "collections:favorite", "always", "dead-session")

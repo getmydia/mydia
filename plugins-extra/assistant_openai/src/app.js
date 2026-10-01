@@ -5,16 +5,28 @@
   // requests use the newest one.
   let token = new URLSearchParams(location.search).get("frame_token") || ""
   const base = location.pathname.replace(/\/$/, "")
-  const log = document.getElementById("log")
-  const input = document.getElementById("message")
-  const send = document.getElementById("send")
+  const $ = (id) => document.getElementById(id)
+
+  const log = $("log")
+  const turns = $("turns")
+  const empty = $("empty")
+  const reset = $("reset")
+  const input = $("message")
+  const send = $("send")
+  const notice = $("notice")
+  const pill = $("model-pill")
+  const pillLabel = $("model-label")
+  const popover = $("model-popover")
+  const filter = $("model-filter")
+  const list = $("model-list")
 
   const BUSY = "The assistant is busy right now. Try again in a few seconds."
+  const THEMES = ["mydia-dark", "mydia-light"]
 
-  const modelInput = document.getElementById("model")
-  const modelFixed = document.getElementById("model-fixed")
-  const modelOptions = document.getElementById("model-options")
-  const modelError = document.getElementById("model-error")
+  let waiting = false
+  let models = { provider: "", current: "", locked: false, list: [] }
+  let options = []
+  let active = 0
 
   const api = async (path, body) => {
     const r = await fetch(`${base}/api/${path}`, {
@@ -30,128 +42,330 @@
     }
   }
 
-  const bubble = (role, text) => {
-    const row = document.createElement("div")
-    row.className = `chat ${role === "user" ? "chat-end" : "chat-start"}`
-    const b = document.createElement("div")
-    b.className = `chat-bubble ${role === "user" ? "chat-bubble-primary" : role === "error" ? "chat-bubble-error" : ""}`
-    b.textContent = text
-    row.appendChild(b)
-    log.appendChild(row)
-    log.scrollTop = log.scrollHeight
-    return b
+  // DOM
+
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag)
+    if (className) node.className = className
+    if (text != null) node.textContent = text
+    return node
   }
+
+  const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 120
+  const scrollToEnd = () => {
+    log.scrollTop = log.scrollHeight
+  }
+
+  const showConversation = () => {
+    const any = turns.childElementCount > 0
+    empty.hidden = any
+    reset.hidden = !any
+  }
+
+  // Appends a turn, or swaps it in for `replacing` (the thinking row).
+  const put = (node, replacing) => {
+    const stick = nearBottom()
+    if (!node) replacing?.remove()
+    else if (replacing) replacing.replaceWith(node)
+    else turns.appendChild(node)
+    showConversation()
+    if (stick) scrollToEnd()
+    return node
+  }
+
+  const assistantRow = (body) => {
+    const row = el("div", "as-turn as-assistant")
+    const mark = el("div", "as-mark", "✦")
+    mark.setAttribute("aria-hidden", "true")
+    row.append(mark, body)
+    return row
+  }
+
+  // A Markdown.parse node as DOM. Text only, never innerHTML.
+  const TAGS = { p: "p", ul: "ul", ol: "ol", li: "li", strong: "strong", em: "em", br: "br" }
+  const toDom = (node) => {
+    if (node.t === "text") return document.createTextNode(node.text)
+    if (node.t === "code") return el("code", null, node.text)
+    if (node.t === "pre") {
+      const pre = el("pre")
+      pre.appendChild(el("code", null, node.text))
+      return pre
+    }
+    const tag = node.t === "h" ? `h${node.level + 1}` : TAGS[node.t]
+    if (!tag) return document.createTextNode("")
+    const out = el(tag)
+    for (const child of node.children || []) out.appendChild(toDom(child))
+    return out
+  }
+
+  const userRow = (text) => el("div", "as-turn as-user", String(text ?? ""))
+
+  const replyRow = (text) => {
+    const body = el("div", "as-body as-prose")
+    for (const node of Markdown.parse(text)) body.appendChild(toDom(node))
+    return assistantRow(body)
+  }
+
+  const errorRow = (text) => assistantRow(el("div", "as-body as-error", text))
+
+  const thinkingRow = () => {
+    const dots = el("div", "as-dots")
+    dots.setAttribute("aria-label", "Thinking")
+    dots.append(el("span"), el("span"), el("span"))
+    return assistantRow(dots)
+  }
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`
+
+  const statusRow = ({ applied = 0, failed = 0, denied = 0, expired = 0 }) => {
+    const body = el("div", "as-body as-status")
+    const tag = (tone, text) => body.appendChild(el("span", `as-tag as-tag-${tone}`, text))
+    if (applied) tag("success", `✓ Applied ${plural(applied, "change")} · Undo in Activity`)
+    if (failed) tag("error", `${plural(failed, "change")} failed`)
+    if (denied) tag("neutral", "Left things as they were")
+    if (expired) tag("warning", "That approval expired. Ask again.")
+    return body.childElementCount ? assistantRow(body) : null
+  }
+
+  const showNotice = (text) => {
+    notice.textContent = text || ""
+    notice.hidden = !text
+  }
+
+  // Composer
+
+  const autosize = () => {
+    input.style.height = "auto"
+    input.style.height = `${Math.min(input.scrollHeight, 192)}px`
+  }
+  const syncSend = () => {
+    send.disabled = waiting || !input.value.trim()
+    reset.disabled = waiting
+  }
+
+  const submit = async (raw) => {
+    const text = raw.trim()
+    if (!text || waiting) return
+    waiting = true
+    input.value = ""
+    autosize()
+    syncSend()
+    put(userRow(text))
+    scrollToEnd()
+    const thinking = put(thinkingRow())
+    try {
+      const res = await api("chat", { message: text })
+      put(res.error ? errorRow(res.error) : replyRow(res.reply || ""), thinking)
+      if (res.error && !models.current) openPopover()
+      if (res.pending && res.pending.length) window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
+    } catch (_) {
+      put(errorRow("The assistant did not respond."), thinking)
+    } finally {
+      waiting = false
+      syncSend()
+      if (popover.hidden) input.focus()
+    }
+  }
+
+  $("composer").addEventListener("submit", (e) => {
+    e.preventDefault()
+    submit(input.value)
+  })
+  input.addEventListener("input", () => {
+    autosize()
+    syncSend()
+  })
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault()
+      submit(input.value)
+    }
+  })
+  for (const chip of document.querySelectorAll(".as-chip")) {
+    chip.addEventListener("click", () => submit(chip.textContent))
+  }
+  reset.addEventListener("click", async () => {
+    if (waiting) return
+    try {
+      const res = await api("reset")
+      if (res.error) {
+        showNotice(res.error)
+        return
+      }
+      showNotice("")
+      turns.replaceChildren()
+      showConversation()
+      input.focus()
+    } catch (_) {
+      showNotice("Could not start a new chat.")
+    }
+  })
+
+  // Host messages
 
   window.addEventListener("message", (e) => {
     if (e.source !== window.parent || !e.data) return
-    if (e.data.mydia === "token") {
-      if (typeof e.data.token === "string" && e.data.token) token = e.data.token
-    } else if (e.data.mydia === "confirmed") {
-      const results = Array.isArray(e.data.results) ? e.data.results : []
-      const ok = results.filter((r) => r.ok).length
-      bubble("assistant", `Done: ${ok} change(s) applied. You can undo them under Activity.`)
+    const data = e.data
+    if (data.mydia === "token") {
+      if (typeof data.token === "string" && data.token) token = data.token
+    } else if (data.mydia === "theme") {
+      if (THEMES.includes(data.theme)) document.documentElement.setAttribute("data-theme", data.theme)
+    } else if (data.mydia === "confirmed") {
+      const results = Array.isArray(data.results) ? data.results : []
+      const applied = results.filter((r) => r && r.ok === true).length
+      put(statusRow({ applied, failed: results.length - applied }))
       api("confirmed", { results })
-    } else if (e.data.mydia === "denied") {
-      bubble("assistant", "Okay, I left things as they were.")
-      api("denied", { ids: e.data.ids })
-    } else if (e.data.mydia === "expired") {
-      bubble("error", "That approval expired. Ask again.")
-      api("expired", { ids: e.data.ids })
+    } else if (data.mydia === "denied") {
+      put(statusRow({ denied: 1 }))
+      api("denied", { ids: data.ids })
+    } else if (data.mydia === "expired") {
+      put(statusRow({ expired: 1 }))
+      api("expired", { ids: data.ids })
     }
   })
 
-  document.getElementById("composer").addEventListener("submit", async (e) => {
-    e.preventDefault()
-    const text = input.value.trim()
-    if (!text) return
-    input.value = ""
-    bubble("user", text)
-    send.disabled = true
-    const thinking = bubble("assistant", "…")
-    try {
-      const res = await api("chat", { message: text })
-      thinking.textContent = res.error || res.reply || ""
-      if (res.error) thinking.classList.add("chat-bubble-error")
-      if (res.error && !modelInput.value) modelInput.focus()
-      if (res.pending && res.pending.length) window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
-    } catch (_) {
-      thinking.textContent = "The assistant did not respond."
-      thinking.classList.add("chat-bubble-error")
-    } finally {
-      send.disabled = false
-      input.focus()
-    }
-  })
+  // Model picker
 
-  document.getElementById("reset").addEventListener("click", async () => {
-    await api("reset")
-    log.innerHTML = ""
-  })
-
-  const showModelError = (text) => {
-    modelError.textContent = text || ""
-    modelError.classList.toggle("hidden", !text)
+  const setPill = () => {
+    pillLabel.textContent = [models.provider, models.current || "Choose a model"].filter(Boolean).join(" · ")
+    pill.disabled = models.locked
+    pill.title = models.locked ? "Set by your admin" : "Change model"
   }
 
-  let currentModel = ""
+  const highlight = () => {
+    list.querySelectorAll(".as-option").forEach((li, i) => {
+      li.setAttribute("aria-selected", String(i === active))
+      if (i === active) li.scrollIntoView({ block: "nearest" })
+    })
+  }
+
+  const renderOptions = () => {
+    const typed = filter.value.trim()
+    const needle = typed.toLowerCase()
+    const matches = models.list.filter(
+      (m) => !needle || m.id.toLowerCase().includes(needle) || (m.name || "").toLowerCase().includes(needle),
+    )
+    options = []
+    if (typed && !models.list.some((m) => m.id === typed)) options.push({ id: typed, label: `Use "${typed}"` })
+    for (const m of matches.slice(0, 200)) {
+      options.push({ id: m.id, label: m.id, hint: m.name && m.name !== m.id ? m.name : "" })
+    }
+    if (!options.length) {
+      list.replaceChildren(el("li", "as-list-note", models.list.length ? "No matches" : "Type a model id"))
+      return
+    }
+    list.replaceChildren(
+      ...options.map((option) => {
+        const li = el("li", option.id === models.current ? "as-option as-option-current" : "as-option")
+        li.setAttribute("role", "option")
+        li.appendChild(el("span", null, option.label))
+        if (option.hint) li.appendChild(el("small", null, option.hint))
+        li.addEventListener("mousedown", (e) => {
+          e.preventDefault()
+          choose(option.id)
+        })
+        return li
+      }),
+    )
+    active = Math.min(active, options.length - 1)
+    highlight()
+  }
+
+  const openPopover = () => {
+    if (models.locked) return
+    popover.hidden = false
+    pill.setAttribute("aria-expanded", "true")
+    filter.value = ""
+    active = 0
+    renderOptions()
+    filter.focus()
+  }
+
+  const closePopover = () => {
+    popover.hidden = true
+    pill.setAttribute("aria-expanded", "false")
+  }
+
+  const choose = async (id) => {
+    closePopover()
+    input.focus()
+    if (!id || id === models.current) return
+    try {
+      const res = await api("model", { model: id })
+      if (res.error) {
+        showNotice(res.error)
+      } else {
+        showNotice("")
+        models.current = res.current || ""
+        setPill()
+      }
+    } catch (_) {
+      showNotice("Could not save your model choice.")
+    }
+  }
+
+  pill.addEventListener("click", () => (popover.hidden ? openPopover() : closePopover()))
+  document.addEventListener("mousedown", (e) => {
+    if (!popover.hidden && !e.target.closest(".as-model")) closePopover()
+  })
+  document.querySelector(".as-model").addEventListener("focusout", (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) closePopover()
+  })
+  filter.addEventListener("input", () => {
+    active = 0
+    renderOptions()
+  })
+  filter.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closePopover()
+      pill.focus()
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      if (!options.length) return
+      active = (active + (e.key === "ArrowDown" ? 1 : options.length - 1)) % options.length
+      highlight()
+    } else if (e.key === "Enter") {
+      if (e.isComposing) return
+      e.preventDefault()
+      choose(options[active]?.id || filter.value.trim())
+    }
+  })
+
+  // Load
 
   const loadModels = async () => {
     try {
       const res = await api("models")
-      document.getElementById("provider").textContent = res.provider || ""
-      currentModel = res.current || ""
-      modelInput.value = currentModel
-      if (res.locked) {
-        modelInput.classList.add("hidden")
-        modelFixed.classList.remove("hidden")
-        modelFixed.textContent = res.current || "No model set"
+      models = {
+        provider: res.provider || "",
+        current: res.current || "",
+        locked: !!res.locked,
+        list: Array.isArray(res.models) ? res.models : [],
       }
-      modelOptions.replaceChildren(
-        ...(res.models || []).map((m) => {
-          const o = document.createElement("option")
-          o.value = m.id
-          if (m.name && m.name !== m.id) o.label = m.name
-          return o
-        }),
-      )
-      showModelError(res.error ? `${res.error} You can still type a model id.` : "")
+      showNotice(res.error ? `${res.error} You can still type a model id.` : "")
     } catch (_) {
-      showModelError("Could not reach the assistant. You can still type a model id.")
+      showNotice("Could not load models. You can still type a model id.")
     }
+    setPill()
   }
 
-  // Browsers filter datalist suggestions by the input's text, so empty the
-  // field while it has focus to show the whole list.
-  modelInput.addEventListener("focus", () => {
-    modelInput.placeholder = currentModel || "Model"
-    modelInput.value = ""
-  })
-
-  modelInput.addEventListener("blur", () => {
-    if (!modelInput.value.trim()) {
-      modelInput.value = currentModel
-      modelInput.placeholder = "Model"
-    }
-  })
-
-  modelInput.addEventListener("change", async () => {
-    const value = modelInput.value.trim()
-    if (!value) return
+  const loadHistory = async () => {
     try {
-      const res = await api("model", { model: value })
-      if (res.error) {
-        modelInput.value = currentModel
-        showModelError(res.error)
-      } else {
-        showModelError("")
-        currentModel = res.current || ""
-        modelInput.value = currentModel
+      const res = await api("history")
+      for (const m of Array.isArray(res.messages) ? res.messages : []) {
+        if (m.role === "user") put(userRow(m.text))
+        else if (m.role === "assistant") put(replyRow(m.text))
+        else if (m.role === "status") put(statusRow(m))
       }
     } catch (_) {
-      modelInput.value = currentModel
-      showModelError("Could not save your model choice.")
+      // An empty chat is still usable.
     }
-  })
+    showConversation()
+    scrollToEnd()
+  }
 
-  loadModels()
+  Promise.all([loadHistory(), loadModels()]).finally(() => {
+    syncSend()
+    input.focus()
+  })
 })()
