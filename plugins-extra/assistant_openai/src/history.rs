@@ -1,5 +1,5 @@
-//! Conversation memory kept in plugin KV under `conv:<user-id>`, as OpenAI chat
-//! messages. Trimmed to fit one KV value.
+//! Conversation memory kept in plugin KV under `chat:<user-id>:<chat-id>`, as
+//! OpenAI chat messages. Trimmed to fit one KV value.
 
 use serde_json::{json, Value};
 
@@ -8,7 +8,12 @@ pub const MAX_BYTES: usize = 60_000;
 /// Tool results are stored truncated: the model already used them.
 pub const MAX_TOOL_CHARS: usize = 2_000;
 
-pub fn key(user_id: &str) -> String {
+pub fn key(user_id: &str, chat_id: &str) -> String {
+    format!("chat:{user_id}:{chat_id}")
+}
+
+/// Where the single conversation lived before chats were listed.
+pub fn legacy_key(user_id: &str) -> String {
     format!("conv:{user_id}")
 }
 
@@ -86,6 +91,12 @@ fn outcome_counts(rest: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_are_per_chat_and_the_legacy_key_is_unchanged() {
+        assert_eq!(key("u1", "abc-1"), "chat:u1:abc-1");
+        assert_eq!(legacy_key("u1"), "conv:u1");
+    }
 
     #[test]
     fn roundtrip() {

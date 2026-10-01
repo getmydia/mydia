@@ -11,6 +11,7 @@ mod tools;
 mod watch_history;
 
 use chat::Reply;
+use chats::Chat;
 use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::{Event, OutboundRequest, PageRequest, PageResponse};
 use serde_json::{json, Value};
@@ -59,12 +60,88 @@ fn user_pick(user_id: &str, settings: &Value) -> Option<String> {
     models::decode_pick(&raw, provider::selected(settings).label)
 }
 
-fn load(user_id: &str) -> Vec<Value> {
-    history::decode(host::kv_get(&history::key(user_id)).ok().flatten())
+fn load(user_id: &str, chat_id: &str) -> Vec<Value> {
+    history::decode(host::kv_get(&history::key(user_id, chat_id)).ok().flatten())
 }
 
-fn save(user_id: &str, messages: Vec<Value>) {
-    let _ = host::kv_set(&history::key(user_id), &history::encode(messages));
+fn save(user_id: &str, chat_id: &str, messages: Vec<Value>) {
+    let _ = host::kv_set(&history::key(user_id, chat_id), &history::encode(messages));
+}
+
+fn chat_id_of(body: &Value) -> Option<String> {
+    chats::valid_id(&body["chat_id"]).map(str::to_string)
+}
+
+fn now_of(body: &Value) -> u64 {
+    body["now"].as_u64().unwrap_or(0)
+}
+
+fn invalid_chat() -> Result<PageResponse, String> {
+    respond_json(400, json!({"error": "invalid chat"}))
+}
+
+/// The user's chats, or `None` when the store could not be read: callers must
+/// not write an index back in that case, or one bad read would erase the list.
+/// The first read after an upgrade adopts the conversation stored under the
+/// old single key.
+fn load_chats(user_id: &str) -> Option<Vec<Chat>> {
+    if let Some(raw) = host::kv_get(&chats::key(user_id)).ok()? {
+        return Some(chats::decode(Some(raw)));
+    }
+    let legacy_key = history::legacy_key(user_id);
+    let Some(raw) = host::kv_get(&legacy_key).ok()? else {
+        return Some(vec![]);
+    };
+    let adopted: Vec<Chat> = chats::adopt(&history::decode(Some(raw.clone()))).into_iter().collect();
+    if !adopted.is_empty() {
+        host::kv_set(&history::key(user_id, chats::LEGACY_ID), &raw).ok()?;
+    }
+    host::kv_set(&chats::key(user_id), &chats::encode(&adopted)).ok()?;
+    let _ = host::kv_delete(&legacy_key);
+    Some(adopted)
+}
+
+/// Saves a turn's messages and moves the chat to the top of the list. The
+/// entry returned is what the page shows even if the list could not be saved.
+fn store_turn(user_id: &str, chat_id: &str, now: u64, messages: Vec<Value>) -> Chat {
+    let entry = match load_chats(user_id) {
+        Some(mut list) => {
+            for evicted in chats::touch(&mut list, chat_id, &messages, now) {
+                let _ = host::kv_delete(&history::key(user_id, &evicted));
+            }
+            let _ = host::kv_set(&chats::key(user_id), &chats::encode(&list));
+            list.swap_remove(0)
+        }
+        None => Chat { id: chat_id.into(), title: chats::title_from(&messages), updated_at: now },
+    };
+    save(user_id, chat_id, messages);
+    entry
+}
+
+fn list_chats(req: &PageRequest) -> Result<PageResponse, String> {
+    match load_chats(&req.user_id) {
+        Some(list) => respond_json(200, json!({"chats": list})),
+        None => respond_json(200, json!({"chats": [], "error": "Could not load your chats."})),
+    }
+}
+
+fn show_history(req: &PageRequest) -> Result<PageResponse, String> {
+    let Some(chat_id) = chat_id_of(&body(req)) else { return invalid_chat() };
+    respond_json(200, json!({"messages": history::transcript(&load(&req.user_id, &chat_id))}))
+}
+
+fn delete_chat(req: &PageRequest) -> Result<PageResponse, String> {
+    const FAILED: &str = "Could not delete that chat.";
+    let Some(chat_id) = chat_id_of(&body(req)) else { return invalid_chat() };
+    let Some(mut list) = load_chats(&req.user_id) else {
+        return respond_json(200, json!({"error": FAILED}));
+    };
+    chats::remove(&mut list, &chat_id);
+    if host::kv_set(&chats::key(&req.user_id), &chats::encode(&list)).is_err() {
+        return respond_json(200, json!({"error": FAILED}));
+    }
+    let _ = host::kv_delete(&history::key(&req.user_id, &chat_id));
+    respond_json(200, json!({"ok": true}))
 }
 
 fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
@@ -76,11 +153,9 @@ fn handle_http(req: PageRequest) -> Result<PageResponse, String> {
         ("POST", "/api/confirmed") => note(&req, Outcome::Confirmed),
         ("POST", "/api/denied") => note(&req, Outcome::Denied),
         ("POST", "/api/expired") => note(&req, Outcome::Expired),
-        ("POST", "/api/reset") => {
-            let _ = host::kv_delete(&history::key(&req.user_id));
-            respond_json(200, json!({"ok": true}))
-        }
-        ("POST", "/api/history") => respond_json(200, json!({"messages": history::transcript(&load(&req.user_id))})),
+        ("POST", "/api/chats") => list_chats(&req),
+        ("POST", "/api/history") => show_history(&req),
+        ("POST", "/api/delete_chat") => delete_chat(&req),
         ("POST", "/api/models") => list_models(&req),
         ("POST", "/api/model") => choose_model(&req),
         _ => respond_json(404, json!({"error": "not found"})),
@@ -97,21 +172,16 @@ enum Outcome {
 /// Most write ids one outcome note lists.
 const MAX_NOTE_IDS: usize = 20;
 
-/// A write id as the host issues it. Anything else in the frame's message is
-/// ignored, so the note never carries text the frame chose.
-fn valid_id(v: &Value) -> Option<&str> {
-    v.as_str().filter(|s| !s.is_empty() && s.len() <= 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
-}
-
 /// The fixed-template line stored for a write outcome, built only from
 /// validated ids and flags. The frame supplies the JSON, so none of its free
-/// text (`error`, `result`, ...) is copied.
+/// text (`error`, `result`, ...) is copied and anything that is not a write id
+/// as the host issues it is ignored.
 fn outcome_note(kind: Outcome, body: &Value) -> String {
     let mut lines: Vec<String> = vec![];
     match kind {
         Outcome::Confirmed => {
             for r in body["results"].as_array().into_iter().flatten().take(MAX_NOTE_IDS) {
-                if let Some(id) = valid_id(&r["id"]) {
+                if let Some(id) = chats::valid_id(&r["id"]) {
                     let word = if r["ok"] == json!(true) { "applied" } else { "failed" };
                     lines.push(format!("write {id}: {word}"));
                 }
@@ -120,7 +190,7 @@ fn outcome_note(kind: Outcome, body: &Value) -> String {
         Outcome::Denied | Outcome::Expired => {
             let word = if kind == Outcome::Denied { "denied" } else { "expired" };
             for id in body["ids"].as_array().into_iter().flatten().take(MAX_NOTE_IDS) {
-                if let Some(id) = valid_id(id) {
+                if let Some(id) = chats::valid_id(id) {
                     lines.push(format!("write {id}: {word}"));
                 }
             }
@@ -130,10 +200,15 @@ fn outcome_note(kind: Outcome, body: &Value) -> String {
 }
 
 fn note(req: &PageRequest, kind: Outcome) -> Result<PageResponse, String> {
-    let mut msgs = load(&req.user_id);
-    // Recorded as the assistant's own bookkeeping, not as something the user said.
-    msgs.push(json!({"role": "assistant", "content": outcome_note(kind, &body(req))}));
-    save(&req.user_id, msgs);
+    let body = body(req);
+    let Some(chat_id) = chat_id_of(&body) else { return invalid_chat() };
+    let mut msgs = load(&req.user_id, &chat_id);
+    // A chat deleted while its approval was open has nothing to add the note to.
+    if !msgs.is_empty() {
+        // Recorded as the assistant's own bookkeeping, not as something the user said.
+        msgs.push(json!({"role": "assistant", "content": outcome_note(kind, &body)}));
+        save(&req.user_id, &chat_id, msgs);
+    }
     respond_json(200, json!({"ok": true}))
 }
 
@@ -195,6 +270,9 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
 }
 
 fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
+    let body = body(req);
+    let Some(chat_id) = chat_id_of(&body) else { return invalid_chat() };
+    let now = now_of(&body);
     let settings = match settings(req) {
         Ok(s) => s,
         Err(e) => return respond_json(200, json!({"error": e})),
@@ -206,12 +284,12 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
     let Some(model) = models::effective(&settings, user_pick(&req.user_id, &settings).as_deref()) else {
         return respond_json(200, json!({"error": models::missing_message(&settings)}));
     };
-    let text = body(req)["message"].as_str().unwrap_or("").trim().to_string();
+    let text = body["message"].as_str().unwrap_or("").trim().to_string();
     if text.is_empty() {
         return respond_json(400, json!({"error": "empty message"}));
     }
 
-    let mut msgs = load(&req.user_id);
+    let mut msgs = load(&req.user_id, &chat_id);
     msgs.push(json!({"role": "user", "content": text}));
     let defs = tools::definitions();
     let mut pending: Vec<String> = vec![];
@@ -224,20 +302,20 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         let resp = match resp {
             Ok(r) => r,
             Err(e) => {
-                save(&req.user_id, msgs);
-                return respond_json(200, json!({"error": format!("Could not reach the model server. {}", tools::host_error_text(&e)), "pending": pending}));
+                let chat = store_turn(&req.user_id, &chat_id, now, msgs);
+                return respond_json(200, json!({"error": format!("Could not reach the model server. {}", tools::host_error_text(&e)), "pending": pending, "chat": chat}));
             }
         };
 
         match chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")) {
             Err(e) => {
-                save(&req.user_id, msgs);
-                return respond_json(200, json!({"error": format!("{} ({model}): {e}", endpoint.preset.label), "pending": pending}));
+                let chat = store_turn(&req.user_id, &chat_id, now, msgs);
+                return respond_json(200, json!({"error": format!("{} ({model}): {e}", endpoint.preset.label), "pending": pending, "chat": chat}));
             }
             Ok(Reply::Text { message, text }) => {
                 msgs.push(message);
-                save(&req.user_id, msgs);
-                return respond_json(200, json!({"reply": text, "pending": pending}));
+                let chat = store_turn(&req.user_id, &chat_id, now, msgs);
+                return respond_json(200, json!({"reply": text, "pending": pending, "chat": chat}));
             }
             Ok(Reply::Tools { message, calls }) => {
                 msgs.push(message);
@@ -255,8 +333,8 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         }
     }
 
-    save(&req.user_id, msgs);
-    respond_json(200, json!({"reply": "I stopped after too many steps. Try a narrower request.", "pending": pending}))
+    let chat = store_turn(&req.user_id, &chat_id, now, msgs);
+    respond_json(200, json!({"reply": "I stopped after too many steps. Try a narrower request.", "pending": pending, "chat": chat}))
 }
 
 #[mydia_plugin_sdk::plugin(on_http = handle_http)]
@@ -278,6 +356,21 @@ mod tests {
         }
         assert!(html.contains(".as-composer") && html.contains("const Markdown") && html.contains("frame_token"));
         assert!(!MARKDOWN_JS.contains("</script") && !APP_JS.contains("</script") && !UI_CSS.contains("</style"));
+    }
+
+    #[test]
+    fn chat_id_comes_only_from_a_valid_body_field() {
+        assert_eq!(chat_id_of(&json!({"chat_id": ID})), Some(ID.to_string()));
+        assert_eq!(chat_id_of(&json!({"chat_id": "conv:someone-else"})), None);
+        assert_eq!(chat_id_of(&json!({})), None);
+    }
+
+    #[test]
+    fn now_defaults_to_zero() {
+        assert_eq!(now_of(&json!({"now": 1_790_000_000_000u64})), 1_790_000_000_000);
+        assert_eq!(now_of(&json!({"now": "soon"})), 0);
+        assert_eq!(now_of(&json!({"now": -5})), 0);
+        assert_eq!(now_of(&json!({})), 0);
     }
 
     #[test]
