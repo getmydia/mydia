@@ -29,17 +29,22 @@ defmodule Mydia.Application do
 
     children = children()
 
-    # Attached before the supervisor starts, unlike its sibling
-    # Mydia.Jobs.Broadcaster below: Oban is one of the children
+    # Both attached before the supervisor starts: Oban is one of the children
     # Supervisor.start_link/2 is about to start, and it can begin executing
     # (and failing) jobs immediately. Attaching after start_link/2 leaves a
-    # window where a job can fail before anything is listening, and the
-    # failure goes unlogged, exactly what this handler exists to prevent. This
-    # is safe to do this early because the handler only calls Logger.error and
-    # touches no Repo. Broadcaster stays below: its handlers cast to
-    # Mydia.Jobs.StatusTracker and enqueue failure events on
-    # Mydia.Events.Writer, both children of the tree that is not up yet.
+    # window where a job can start or fail before anything is listening. For
+    # ErrorLogger the failure goes unlogged, exactly what that handler exists
+    # to prevent. For Broadcaster the job is never reported to
+    # Mydia.Jobs.StatusTracker, which learns jobs only from these events, so a
+    # long job picked up at boot would stay out of the sidebar for its whole
+    # run.
+    #
+    # Safe this early because neither handler needs a process until a job
+    # runs. ErrorLogger only calls Logger.error. Broadcaster casts to
+    # StatusTracker and enqueues failure events on Mydia.Events.Writer, and
+    # both of those are children that start before Oban does.
     Mydia.Jobs.ErrorLogger.attach()
+    Mydia.Jobs.Broadcaster.attach()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -51,8 +56,6 @@ defmodule Mydia.Application do
 
       # Reset any jobs stuck in executing state from previous runs
       reset_stale_jobs()
-      # Attach Oban job broadcaster for real-time job status updates
-      Mydia.Jobs.Broadcaster.attach()
       # Register download client adapters after supervisor has started
       Mydia.Downloads.register_clients()
       # Register indexer adapters after supervisor has started
