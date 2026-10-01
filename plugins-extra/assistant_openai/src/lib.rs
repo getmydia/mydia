@@ -3,6 +3,7 @@
 //! the page and gates the writes.
 
 mod chat;
+mod chats;
 mod history;
 mod models;
 mod provider;
