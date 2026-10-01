@@ -46,7 +46,7 @@ jobs:
         run: echo "key=$(player/appimage/pins.sh | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
       - name: Cache the mpv stack
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /opt/mpv-prefix
           key: appimage-mpv-${{ steps.pins.outputs.key }}-${{ hashFiles('player/appimage/build.sh') }}
