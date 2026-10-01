@@ -107,10 +107,14 @@ fn load_chats(user_id: &str) -> Option<Vec<Chat>> {
 fn store_turn(user_id: &str, chat_id: &str, now: u64, messages: Vec<Value>) -> Chat {
     let entry = match load_chats(user_id) {
         Some(mut list) => {
-            for evicted in chats::touch(&mut list, chat_id, &messages, now) {
-                let _ = host::kv_delete(&history::key(user_id, &evicted));
+            let evicted = chats::touch(&mut list, chat_id, &messages, now);
+            // Only once the list no longer names them: a failed save must not
+            // leave entries pointing at deleted messages.
+            if host::kv_set(&chats::key(user_id), &chats::encode(&list)).is_ok() {
+                for id in evicted {
+                    let _ = host::kv_delete(&history::key(user_id, &id));
+                }
             }
-            let _ = host::kv_set(&chats::key(user_id), &chats::encode(&list));
             list.swap_remove(0)
         }
         None => Chat { id: chat_id.into(), title: chats::title_from(&messages), updated_at: now },

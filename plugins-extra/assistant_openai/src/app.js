@@ -28,7 +28,9 @@
   const BUSY = "The assistant is busy right now. Try again in a few seconds."
   const THEMES = ["mydia-dark", "mydia-light"]
 
-  let waiting = false
+  // True while a reply, a chat switch or the first load is in flight: sending,
+  // switching and New chat all wait, so none of them can land on the wrong chat.
+  let waiting = true
   let models = { provider: "", current: "", locked: false, list: [] }
   let options = []
   let active = 0
@@ -167,15 +169,16 @@
     scrollToEnd()
     const thinking = put(thinkingRow())
     try {
-      const res = await api("chat", { chat_id: chatId, message: text, now: Date.now() })
+      const sentTo = chatId
+      const res = await api("chat", { chat_id: sentTo, message: text, now: Date.now() })
       put(res.error ? errorRow(res.error) : replyRow(res.reply || ""), thinking)
-      if (res.chat && res.chat.id === chatId) {
+      if (res.chat && res.chat.id === sentTo) {
         chats = Chats.upsert(chats, res.chat)
         setTitle()
       }
       if (res.error && !models.current) openPopover()
       if (res.pending && res.pending.length) {
-        for (const id of res.pending) pendingChat.set(id, chatId)
+        for (const id of res.pending) pendingChat.set(id, sentTo)
         window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
       }
     } catch (_) {
@@ -265,19 +268,23 @@
     closeChats()
     input.focus()
     if (waiting || id === chatId) return
+    waiting = true
+    syncSend()
     try {
       const res = await api("history", { chat_id: id })
       if (res.error) {
         showNotice(res.error)
-        return
+      } else {
+        chatId = id
+        render(Array.isArray(res.messages) ? res.messages : [])
+        setTitle()
+        showNotice("")
       }
-      chatId = id
-      render(Array.isArray(res.messages) ? res.messages : [])
-      setTitle()
-      showNotice("")
     } catch (_) {
       showNotice("Could not open that chat.")
     }
+    waiting = false
+    syncSend()
   }
 
   const deleteChat = async (id) => {
@@ -545,7 +552,9 @@
     showConversation()
   }
 
+  syncSend()
   Promise.all([loadChats(), loadModels()]).finally(() => {
+    waiting = false
     syncSend()
     input.focus()
   })
