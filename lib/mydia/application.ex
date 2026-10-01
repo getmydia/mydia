@@ -36,9 +36,9 @@ defmodule Mydia.Application do
     # window where a job can fail before anything is listening, and the
     # failure goes unlogged, exactly what this handler exists to prevent. This
     # is safe to do this early because the handler only calls Logger.error and
-    # touches no Repo. Broadcaster cannot move here: its handler calls
-    # Mydia.Jobs.list_executing_jobs(), which needs the Repo child already
-    # running.
+    # touches no Repo. Broadcaster stays below: its handlers cast to
+    # Mydia.Jobs.StatusTracker and enqueue failure events on
+    # Mydia.Events.Writer, both children of the tree that is not up yet.
     Mydia.Jobs.ErrorLogger.attach()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -151,6 +151,12 @@ defmodule Mydia.Application do
         Mydia.Jobs.ImportRunReconciler,
         {DNSCluster, query: Application.get_env(:mydia, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Mydia.PubSub},
+        # Decides which executing jobs the sidebar shows. Uses PubSub, and must
+        # be up before the Oban child below: a job-start event cast to a
+        # tracker that is not running yet is dropped. Starts empty and touches
+        # the repo only on its reconcile tick, so it is safe in every
+        # environment.
+        Mydia.Jobs.StatusTracker,
         # Owns every asynchronous event insert. Must sit after the repo and
         # PubSub, which it uses, and therefore stops before them on shutdown so
         # its terminate/2 has a chance to flush what is still buffered (best

@@ -1,10 +1,13 @@
 defmodule Mydia.Jobs.Broadcaster do
   @moduledoc """
-  Broadcasts Oban job status changes to PubSub for real-time UI updates.
+  Bridges Oban job telemetry to the rest of the app.
 
-  This module attaches to Oban telemetry events and broadcasts to a PubSub topic
-  so that LiveViews can subscribe and update their UI when jobs start/complete.
+  Job starts and stops are forwarded to `Mydia.Jobs.StatusTracker`, which
+  decides what the sidebar shows and broadcasts on this module's topic.
+  LiveViews subscribe here. Failed jobs are also recorded as events.
   """
+
+  alias Mydia.Jobs.StatusTracker
 
   @pubsub Mydia.PubSub
   @topic "jobs:status"
@@ -45,27 +48,18 @@ defmodule Mydia.Jobs.Broadcaster do
     :telemetry.detach("mydia-jobs-broadcaster")
   end
 
-  @doc """
-  Broadcasts the current job status to all subscribers.
-  Called after job events to notify listeners.
-  """
-  def broadcast_status do
-    executing_jobs = Mydia.Jobs.list_executing_jobs()
-    Phoenix.PubSub.broadcast(@pubsub, @topic, {:jobs_status_changed, executing_jobs})
-  end
-
   # Telemetry event handlers
 
-  def handle_event([:oban, :job, :start], _measurements, _metadata, _config) do
-    broadcast_status()
+  def handle_event([:oban, :job, :start], _measurements, %{job: job}, _config) do
+    StatusTracker.job_started(job)
   end
 
-  def handle_event([:oban, :job, :stop], _measurements, _metadata, _config) do
-    broadcast_status()
+  def handle_event([:oban, :job, :stop], _measurements, %{job: job}, _config) do
+    StatusTracker.job_finished(job)
   end
 
-  def handle_event([:oban, :job, :exception], _measurements, metadata, _config) do
-    broadcast_status()
+  def handle_event([:oban, :job, :exception], _measurements, %{job: job} = metadata, _config) do
+    StatusTracker.job_finished(job)
     record_job_failure(metadata)
   end
 

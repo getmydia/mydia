@@ -138,24 +138,41 @@ defmodule MydiaWeb.SidebarNavLiveTest do
   end
 
   describe "running jobs" do
-    setup do
+    # The card is driven by the broadcast the job status tracker sends once a
+    # job has been running long enough to be worth showing.
+    defp broadcast_running_job do
+      Phoenix.PubSub.broadcast(
+        Mydia.PubSub,
+        Mydia.Jobs.Broadcaster.topic(),
+        {:jobs_status_changed,
+         [%{id: 1, worker: "Fixture.Sweep", worker_name: "Fixture sweep", attempted_at: nil}]}
+      )
+    end
+
+    test "an executing job row alone does not show the card" do
       %{}
       |> Oban.Job.new(worker: Mydia.Jobs.LibraryScanner, queue: :default)
       |> Ecto.Changeset.change(state: "executing", attempted_at: DateTime.utc_now())
       |> Repo.insert!()
 
-      :ok
+      refute has_element?(mount_as("admin"), "#sidebar-running-jobs")
     end
 
     test "admins see the card, linked to Background Jobs" do
       view = mount_as("admin")
+      refute has_element?(view, "#sidebar-running-jobs")
+
+      broadcast_running_job()
 
       assert has_element?(view, ~s|a#sidebar-running-jobs[href="/admin/jobs"]|)
     end
 
     test "non-admins do not see the card" do
       for role <- ~w(user readonly guest) do
-        refute has_element?(mount_as(role), "#sidebar-running-jobs")
+        view = mount_as(role)
+        broadcast_running_job()
+
+        refute has_element?(view, "#sidebar-running-jobs")
       end
     end
   end
