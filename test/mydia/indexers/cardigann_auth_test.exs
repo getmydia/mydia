@@ -593,4 +593,355 @@ defmodule Mydia.Indexers.CardigannAuthTest do
       assert Enum.any?(cookies, &String.contains?(&1, "session=granted"))
     end
   end
+
+  describe "form login redirects" do
+    test "a relative 302 lands as a GET without the credential body or query" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "POST", "/login.php", fn conn ->
+        assert conn.query_string =~ "username=from-query"
+        assert conn.query_string =~ "password=from-query"
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        assert URI.decode_query(body)["username"] == "testuser"
+        assert URI.decode_query(body)["password"] == "testpass"
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "landing")
+        |> Plug.Conn.put_resp_header("set-cookie", "interim=leak; Path=/")
+        |> Plug.Conn.resp(302, logout_page())
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/landing", fn conn ->
+        conn = refute_replayed_credentials(conn)
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=landed; Path=/")
+        |> Plug.Conn.resp(200, logout_page())
+      end)
+
+      parsed =
+        form_login(
+          "http://localhost:#{bypass.port}",
+          "/login.php?username=from-query&password=from-query"
+        )
+
+      assert {:ok, session} = CardigannAuth.authenticate(parsed, credentials())
+      assert session.method == :form
+      assert Enum.any?(session.cookies, &String.starts_with?(&1, "session=landed"))
+      refute Enum.any?(session.cookies, &String.starts_with?(&1, "interim="))
+    end
+
+    test "301 and 303 switch POST to GET, and a later 307 does not restore the body" do
+      for status <- [301, 303] do
+        login = Bypass.open()
+        middle = Bypass.open()
+        landing = Bypass.open()
+
+        Bypass.expect_once(login, "POST", "/login", fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          assert URI.decode_query(body)["password"] == "secret"
+
+          conn
+          |> Plug.Conn.put_resp_header("location", "http://localhost:#{middle.port}/step")
+          |> Plug.Conn.resp(status, logout_page())
+        end)
+
+        Bypass.expect_once(middle, "GET", "/step", fn conn ->
+          conn = refute_replayed_credentials(conn)
+
+          conn
+          |> Plug.Conn.put_resp_header("location", "http://localhost:#{landing.port}/done")
+          |> Plug.Conn.resp(307, logout_page())
+        end)
+
+        Bypass.expect_once(landing, "GET", "/done", fn conn ->
+          conn = refute_replayed_credentials(conn)
+
+          conn
+          |> Plug.Conn.put_resp_header("set-cookie", "session=landed; Path=/")
+          |> Plug.Conn.resp(200, logout_page())
+        end)
+
+        parsed = form_login("http://localhost:#{login.port}", "/login")
+
+        assert {:ok, session} =
+                 CardigannAuth.authenticate(parsed, credentials("me", "secret")),
+               "HTTP #{status} redirect chain should reach the landing page"
+
+        assert Enum.any?(session.cookies, &String.starts_with?(&1, "session=landed"))
+      end
+    end
+
+    test "307 and 308 to a cleartext non-loopback host are refused before connecting" do
+      for status <- [307, 308] do
+        bypass = Bypass.open()
+
+        Bypass.expect_once(bypass, "POST", "/login", fn conn ->
+          conn
+          |> Plug.Conn.put_resp_header("location", "http://tracker.example/login")
+          |> Plug.Conn.resp(status, logout_page())
+        end)
+
+        parsed = form_login("http://localhost:#{bypass.port}", "/login")
+
+        assert {:error, error} =
+                 CardigannAuth.authenticate(parsed, credentials("me", "secret"))
+
+        assert error.type == :connection_failed
+        assert error.message =~ "unencrypted"
+        assert error.message =~ "http://tracker.example/login"
+        refute error.message =~ "nxdomain"
+        refute error.message =~ "econnrefused"
+      end
+    end
+
+    test "307 and 308 preserve the POST form across a permitted cross-origin redirect" do
+      username = "alice@tracker"
+      password = "p@ss&word=1"
+
+      for status <- [307, 308] do
+        login = Bypass.open()
+        landing = Bypass.open()
+
+        Bypass.expect_once(login, "POST", "/login", fn conn ->
+          conn = assert_exact_form(conn, username, password)
+
+          conn
+          |> Plug.Conn.put_resp_header(
+            "location",
+            "http://localhost:#{landing.port}/continue"
+          )
+          |> Plug.Conn.put_resp_header("set-cookie", "interim=leak; Path=/")
+          |> Plug.Conn.resp(status, logout_page())
+        end)
+
+        Bypass.expect_once(landing, "POST", "/continue", fn conn ->
+          conn = assert_exact_form(conn, username, password)
+
+          conn
+          |> Plug.Conn.put_resp_header("set-cookie", "session=kept; Path=/")
+          |> Plug.Conn.resp(200, logout_page())
+        end)
+
+        parsed = form_login("http://localhost:#{login.port}", "/login")
+
+        assert {:ok, session} =
+                 CardigannAuth.authenticate(parsed, credentials(username, password)),
+               "HTTP #{status} should keep the POST body on the other loopback origin"
+
+        assert Enum.any?(session.cookies, &String.starts_with?(&1, "session=kept"))
+        refute Enum.any?(session.cookies, &String.starts_with?(&1, "interim="))
+      end
+    end
+
+    test "a permitted hop is still checked before the next redirect target" do
+      first = Bypass.open()
+      second = Bypass.open()
+
+      Bypass.expect_once(first, "POST", "/login", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://localhost:#{second.port}/next")
+        |> Plug.Conn.resp(302, logout_page())
+      end)
+
+      Bypass.expect_once(second, "GET", "/next", fn conn ->
+        conn = refute_replayed_credentials(conn)
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "http://tracker.example/login")
+        |> Plug.Conn.resp(307, logout_page())
+      end)
+
+      parsed = form_login("http://localhost:#{first.port}", "/login")
+      assert {:error, error} = CardigannAuth.authenticate(parsed, credentials())
+      assert error.type == :connection_failed
+      assert error.message =~ "unencrypted"
+      assert error.message =~ "http://tracker.example/login"
+      refute error.message =~ "nxdomain"
+    end
+
+    test "absolute and scheme-relative Locations resolve against the current URL" do
+      for kind <- [:absolute, :scheme_relative] do
+        login = Bypass.open()
+        landing = Bypass.open()
+
+        location =
+          case kind do
+            :absolute -> "http://localhost:#{landing.port}/welcome"
+            :scheme_relative -> "//localhost:#{landing.port}/welcome"
+          end
+
+        Bypass.expect_once(login, "POST", "/login.php", fn conn ->
+          assert conn.query_string =~ "password=from-query"
+
+          conn
+          |> Plug.Conn.put_resp_header("location", location)
+          |> Plug.Conn.resp(302, logout_page())
+        end)
+
+        Bypass.expect_once(landing, "GET", "/welcome", fn conn ->
+          conn = refute_replayed_credentials(conn)
+
+          conn
+          |> Plug.Conn.put_resp_header("set-cookie", "session=welcomed; Path=/")
+          |> Plug.Conn.resp(200, logout_page())
+        end)
+
+        parsed =
+          form_login(
+            "http://localhost:#{login.port}",
+            "/login.php?username=from-query&password=from-query"
+          )
+
+        assert {:ok, session} =
+                 CardigannAuth.authenticate(parsed, credentials()),
+               "#{kind} Location should reach the landing host"
+
+        assert Enum.any?(session.cookies, &String.starts_with?(&1, "session=welcomed"))
+      end
+    end
+
+    test "missing, empty, malformed, hostless, and non-HTTP Locations fail" do
+      cases = [
+        {:missing, nil, "missing a Location"},
+        {:empty, "", "Location is empty"},
+        {:blank, "   ", "Location is empty"},
+        {:malformed, "http://exa mple.com/login", "malformed"},
+        {:hostless, "http:///login", "no host"},
+        {:unsupported, "ftp://localhost/login", "unsupported scheme"}
+      ]
+
+      for {name, location, expected} <- cases do
+        bypass = Bypass.open()
+
+        Bypass.expect_once(bypass, "POST", "/login", fn conn ->
+          redirect_response(conn, 302, location)
+        end)
+
+        parsed = form_login("http://localhost:#{bypass.port}", "/login")
+        assert {:error, error} = CardigannAuth.authenticate(parsed, credentials())
+        assert error.type == :connection_failed
+
+        assert error.message =~ expected,
+               "#{name} redirect should mention #{inspect(expected)}, got: #{error.message}"
+
+        refute error.message =~ "nxdomain"
+      end
+    end
+
+    test "a redirect cycle fails at the hop bound" do
+      bypass = Bypass.open()
+      {:ok, hits} = Agent.start_link(fn -> 0 end)
+
+      # 307 keeps the method, so every hop is this POST. Ten followed redirects
+      # plus the original request means the eleventh response is the one that
+      # must not be followed.
+      Bypass.expect(bypass, "POST", "/login", fn conn ->
+        Agent.update(hits, &(&1 + 1))
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "/login")
+        |> Plug.Conn.resp(307, logout_page())
+      end)
+
+      parsed = form_login("http://localhost:#{bypass.port}", "/login")
+      assert {:error, error} = CardigannAuth.authenticate(parsed, credentials())
+      assert error.type == :connection_failed
+      assert error.message =~ "too many redirects"
+      assert error.message =~ "10"
+      assert Agent.get(hits, & &1) == 11
+    end
+
+    test "a GET login does not reattach credential query parameters after a redirect" do
+      bypass = Bypass.open()
+
+      Bypass.expect_once(bypass, "GET", "/login.php", fn conn ->
+        assert URI.decode_query(conn.query_string) == %{
+                 "username" => "testuser",
+                 "password" => "testpass"
+               }
+
+        conn
+        |> Plug.Conn.put_resp_header("location", "landing")
+        |> Plug.Conn.resp(302, logout_page())
+      end)
+
+      Bypass.expect_once(bypass, "GET", "/landing", fn conn ->
+        conn = refute_replayed_credentials(conn)
+
+        conn
+        |> Plug.Conn.put_resp_header("set-cookie", "session=from-get; Path=/")
+        |> Plug.Conn.resp(200, logout_page())
+      end)
+
+      parsed = form_login("http://localhost:#{bypass.port}", "/login.php", "get")
+      assert {:ok, session} = CardigannAuth.authenticate(parsed, credentials())
+      assert Enum.any?(session.cookies, &String.starts_with?(&1, "session=from-get"))
+    end
+  end
+
+  defp form_login(link, path, method \\ "form") do
+    parsed =
+      login_definition(%{
+        method: method,
+        path: path,
+        inputs: %{
+          "username" => "{{ .Config.username }}",
+          "password" => "{{ .Config.password }}"
+        },
+        test: %{selector: "a[href*=logout]"}
+      })
+
+    %{parsed | links: [link]}
+  end
+
+  defp credentials, do: credentials("testuser", "testpass")
+
+  defp credentials(username, password) do
+    %{username: username, password: password}
+  end
+
+  defp logout_page do
+    "<html><body><a href='/logout'>Logout</a></body></html>"
+  end
+
+  defp redirect_response(conn, status, location) do
+    conn =
+      if is_binary(location) do
+        Plug.Conn.put_resp_header(conn, "location", location)
+      else
+        conn
+      end
+
+    Plug.Conn.resp(conn, status, logout_page())
+  end
+
+  defp refute_replayed_credentials(conn) do
+    assert conn.method == "GET"
+    {:ok, body, conn} = Plug.Conn.read_body(conn)
+    assert body == ""
+    assert Plug.Conn.get_req_header(conn, "content-type") == []
+    refute conn.query_string =~ "username"
+    refute conn.query_string =~ "password"
+    assert Plug.Conn.get_req_header(conn, "cookie") == []
+    conn
+  end
+
+  defp assert_exact_form(conn, username, password) do
+    assert conn.method == "POST"
+    {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+    assert URI.decode_query(body) == %{
+             "username" => username,
+             "password" => password
+           }
+
+    assert Enum.any?(
+             Plug.Conn.get_req_header(conn, "content-type"),
+             &String.contains?(&1, "application/x-www-form-urlencoded")
+           )
+
+    assert Plug.Conn.get_req_header(conn, "cookie") == []
+    conn
+  end
 end
