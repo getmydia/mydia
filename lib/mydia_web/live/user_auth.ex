@@ -108,8 +108,9 @@ defmodule MydiaWeb.Live.UserAuth do
     # Get configured library types (for showing/hiding sidebar links)
     configured_library_types = get_configured_library_types()
 
-    # Get executing jobs for sidebar status indicator
-    executing_jobs = Mydia.Jobs.list_executing_jobs()
+    # Jobs the sidebar indicator should show. The tracker leaves out jobs too
+    # short to be worth showing, and answers from memory.
+    executing_jobs = Mydia.Jobs.StatusTracker.visible_jobs()
 
     sections =
       case Map.fetch(socket.assigns, :current_user) do

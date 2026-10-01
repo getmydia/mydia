@@ -360,7 +360,11 @@ defmodule Mydia.Jobs do
     |> humanize_name()
   end
 
-  defp worker_display_name_from_string(worker_string) when is_binary(worker_string) do
+  @doc """
+  Human-readable name for a worker given as Oban stores it, a string such as
+  `"Mydia.Jobs.LibraryScanner"`.
+  """
+  def worker_display_name_from_string(worker_string) when is_binary(worker_string) do
     worker_string
     |> String.split(".")
     |> List.last()
