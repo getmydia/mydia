@@ -10,7 +10,12 @@
   const log = $("log")
   const turns = $("turns")
   const empty = $("empty")
-  const reset = $("reset")
+  const chatPill = $("chat-pill")
+  const chatTitle = $("chat-title")
+  const chatPopover = $("chat-popover")
+  const chatFilter = $("chat-filter")
+  const chatList = $("chat-list")
+  const newChat = $("new-chat")
   const input = $("message")
   const send = $("send")
   const notice = $("notice")
@@ -23,10 +28,20 @@
   const BUSY = "The assistant is busy right now. Try again in a few seconds."
   const THEMES = ["mydia-dark", "mydia-light"]
 
-  let waiting = false
+  // True while a reply, a chat switch or the first load is in flight: sending,
+  // switching and New chat all wait, so none of them can land on the wrong chat.
+  let waiting = true
   let models = { provider: "", current: "", locked: false, list: [] }
   let options = []
   let active = 0
+  let chats = []
+  let chatId = Chats.newId()
+  let chatRows = []
+  let chatActive = 0
+  let confirming = ""
+  // Which chat asked for each pending write, so its outcome lands there even
+  // after switching chats.
+  const pendingChat = new Map()
 
   const api = async (path, body) => {
     const r = await fetch(`${base}/api/${path}`, {
@@ -57,9 +72,7 @@
   }
 
   const showConversation = () => {
-    const any = turns.childElementCount > 0
-    empty.hidden = any
-    reset.hidden = !any
+    empty.hidden = turns.childElementCount > 0
   }
 
   // Appends a turn, or swaps it in for `replacing` (the thinking row).
@@ -140,7 +153,9 @@
   }
   const syncSend = () => {
     send.disabled = waiting || !input.value.trim()
-    reset.disabled = waiting
+    newChat.disabled = waiting
+    chatPill.disabled = waiting
+    if (waiting) closeChats()
   }
 
   const submit = async (raw) => {
@@ -154,10 +169,18 @@
     scrollToEnd()
     const thinking = put(thinkingRow())
     try {
-      const res = await api("chat", { message: text })
+      const sentTo = chatId
+      const res = await api("chat", { chat_id: sentTo, message: text, now: Date.now() })
       put(res.error ? errorRow(res.error) : replyRow(res.reply || ""), thinking)
+      if (res.chat && res.chat.id === sentTo) {
+        chats = Chats.upsert(chats, res.chat)
+        setTitle()
+      }
       if (res.error && !models.current) openPopover()
-      if (res.pending && res.pending.length) window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
+      if (res.pending && res.pending.length) {
+        for (const id of res.pending) pendingChat.set(id, sentTo)
+        window.parent.postMessage({ mydia: "confirm", ids: res.pending }, "*")
+      }
     } catch (_) {
       put(errorRow("The assistant did not respond."), thinking)
     } finally {
@@ -184,24 +207,18 @@
   for (const chip of document.querySelectorAll(".as-chip")) {
     chip.addEventListener("click", () => submit(chip.textContent))
   }
-  reset.addEventListener("click", async () => {
-    if (waiting) return
-    try {
-      const res = await api("reset")
-      if (res.error) {
-        showNotice(res.error)
-        return
-      }
-      showNotice("")
-      turns.replaceChildren()
-      showConversation()
-      input.focus()
-    } catch (_) {
-      showNotice("Could not start a new chat.")
-    }
-  })
 
   // Host messages
+
+  // Records a write outcome against the chat that asked for it, and shows it
+  // only when that chat is the one on screen.
+  const outcome = (path, ids, counts, body) => {
+    const list = Array.isArray(ids) ? ids : []
+    const owner = list.map((id) => pendingChat.get(id)).find(Boolean) || chatId
+    for (const id of list) pendingChat.delete(id)
+    if (owner === chatId) put(statusRow(counts))
+    api(path, { ...body, chat_id: owner })
+  }
 
   window.addEventListener("message", (e) => {
     if (e.source !== window.parent || !e.data) return
@@ -213,14 +230,179 @@
     } else if (data.mydia === "confirmed") {
       const results = Array.isArray(data.results) ? data.results : []
       const applied = results.filter((r) => r && r.ok === true).length
-      put(statusRow({ applied, failed: results.length - applied }))
-      api("confirmed", { results })
+      const ids = results.map((r) => r && r.id)
+      outcome("confirmed", ids, { applied, failed: results.length - applied }, { results })
     } else if (data.mydia === "denied") {
-      put(statusRow({ denied: 1 }))
-      api("denied", { ids: data.ids })
+      outcome("denied", data.ids, { denied: 1 }, { ids: data.ids })
     } else if (data.mydia === "expired") {
-      put(statusRow({ expired: 1 }))
-      api("expired", { ids: data.ids })
+      outcome("expired", data.ids, { expired: 1 }, { ids: data.ids })
+    }
+  })
+
+  // Chats
+
+  const setTitle = () => {
+    chatTitle.textContent = chats.find((c) => c.id === chatId)?.title || "New chat"
+  }
+
+  const render = (messages) => {
+    turns.replaceChildren()
+    for (const m of messages) {
+      if (m.role === "user") put(userRow(m.text))
+      else if (m.role === "assistant") put(replyRow(m.text))
+      else if (m.role === "status") put(statusRow(m))
+    }
+    showConversation()
+    scrollToEnd()
+  }
+
+  const startNew = () => {
+    chatId = Chats.newId()
+    render([])
+    setTitle()
+    showNotice("")
+    input.focus()
+  }
+
+  const openChat = async (id) => {
+    closeChats()
+    input.focus()
+    if (waiting || id === chatId) return
+    waiting = true
+    syncSend()
+    try {
+      const res = await api("history", { chat_id: id })
+      if (res.error) {
+        showNotice(res.error)
+      } else {
+        chatId = id
+        render(Array.isArray(res.messages) ? res.messages : [])
+        setTitle()
+        showNotice("")
+      }
+    } catch (_) {
+      showNotice("Could not open that chat.")
+    }
+    waiting = false
+    syncSend()
+  }
+
+  const deleteChat = async (id) => {
+    confirming = ""
+    try {
+      const res = await api("delete_chat", { chat_id: id })
+      if (res.error) {
+        showNotice(res.error)
+      } else {
+        chats = chats.filter((c) => c.id !== id)
+        if (id === chatId) startNew()
+      }
+    } catch (_) {
+      showNotice("Could not delete that chat.")
+    }
+    if (!chatPopover.hidden) {
+      renderChats()
+      chatFilter.focus()
+    }
+  }
+
+  const highlightChats = () => {
+    chatList.querySelectorAll(".as-chat-row").forEach((li, i) => {
+      li.setAttribute("aria-selected", String(i === chatActive))
+      if (i === chatActive) li.scrollIntoView({ block: "nearest" })
+    })
+  }
+
+  const chatRow = (chat) => {
+    const li = el("li", chat.id === chatId ? "as-option as-chat-row as-option-current" : "as-option as-chat-row")
+    li.setAttribute("role", "option")
+    li.appendChild(el("span", null, chat.title))
+    const asking = confirming === chat.id
+    const del = el("button", asking ? "as-row-btn as-row-confirm" : "as-row-btn", asking ? "Delete?" : "✕")
+    del.type = "button"
+    del.tabIndex = -1
+    del.setAttribute("aria-label", asking ? `Confirm deleting ${chat.title}` : `Delete ${chat.title}`)
+    // mousedown, not click: the popover closes on focusout before a click lands.
+    del.addEventListener("mousedown", (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (asking) {
+        deleteChat(chat.id)
+        return
+      }
+      confirming = chat.id
+      renderChats()
+    })
+    li.addEventListener("mousedown", (e) => {
+      e.preventDefault()
+      openChat(chat.id)
+    })
+    li.appendChild(del)
+    return li
+  }
+
+  const renderChats = () => {
+    const groups = Chats.group(chats, chatFilter.value, Date.now())
+    chatRows = groups.flatMap((g) => g.chats)
+    if (!chatRows.length) {
+      chatList.replaceChildren(el("li", "as-list-note", chats.length ? "No matches" : "No chats yet"))
+      return
+    }
+    chatList.replaceChildren(...groups.flatMap((g) => [el("li", "as-group", g.label), ...g.chats.map(chatRow)]))
+    chatActive = Math.min(chatActive, chatRows.length - 1)
+    highlightChats()
+  }
+
+  const openChats = () => {
+    chatPopover.hidden = false
+    chatPill.setAttribute("aria-expanded", "true")
+    chatFilter.value = ""
+    confirming = ""
+    chatActive = Math.max(0, chats.findIndex((c) => c.id === chatId))
+    renderChats()
+    chatFilter.focus()
+  }
+
+  // A declaration, so syncSend above can call it.
+  function closeChats() {
+    chatPopover.hidden = true
+    chatPill.setAttribute("aria-expanded", "false")
+    confirming = ""
+  }
+
+  chatPill.addEventListener("click", () => (chatPopover.hidden ? openChats() : closeChats()))
+  newChat.addEventListener("click", () => {
+    if (!waiting) startNew()
+  })
+  document.addEventListener("mousedown", (e) => {
+    if (!chatPopover.hidden && !e.target.closest(".as-chats")) closeChats()
+  })
+  document.querySelector(".as-chats").addEventListener("focusout", (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) closeChats()
+  })
+  chatList.addEventListener("mouseleave", () => {
+    if (!confirming) return
+    confirming = ""
+    renderChats()
+  })
+  chatFilter.addEventListener("input", () => {
+    chatActive = 0
+    confirming = ""
+    renderChats()
+  })
+  chatFilter.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeChats()
+      chatPill.focus()
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      if (!chatRows.length) return
+      chatActive = (chatActive + (e.key === "ArrowDown" ? 1 : chatRows.length - 1)) % chatRows.length
+      highlightChats()
+    } else if (e.key === "Enter") {
+      if (e.isComposing) return
+      e.preventDefault()
+      if (chatRows[chatActive]) openChat(chatRows[chatActive].id)
     }
   })
 
@@ -349,22 +531,30 @@
     setPill()
   }
 
-  const loadHistory = async () => {
+  // Resumes the most recent chat.
+  const loadChats = async () => {
     try {
-      const res = await api("history")
-      for (const m of Array.isArray(res.messages) ? res.messages : []) {
-        if (m.role === "user") put(userRow(m.text))
-        else if (m.role === "assistant") put(replyRow(m.text))
-        else if (m.role === "status") put(statusRow(m))
+      const res = await api("chats")
+      chats = Array.isArray(res.chats) ? res.chats : []
+      if (res.error) showNotice(res.error)
+      if (chats[0]) {
+        const latest = chats[0].id
+        const history = await api("history", { chat_id: latest })
+        if (!history.error) {
+          chatId = latest
+          render(Array.isArray(history.messages) ? history.messages : [])
+        }
       }
     } catch (_) {
       // An empty chat is still usable.
     }
+    setTitle()
     showConversation()
-    scrollToEnd()
   }
 
-  Promise.all([loadHistory(), loadModels()]).finally(() => {
+  syncSend()
+  Promise.all([loadChats(), loadModels()]).finally(() => {
+    waiting = false
     syncSend()
     input.focus()
   })
