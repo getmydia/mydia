@@ -14,18 +14,29 @@ defmodule Mydia.Plugins.Shelves do
 
   import Ecto.Query
 
+  alias Mydia.Accounts
   alias Mydia.Accounts.User
+  alias Mydia.Jobs.ShelfFill
   alias Mydia.Media.ProviderKey
   alias Mydia.Plugins
+  alias Mydia.Plugins.Error
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Shelf
   alias Mydia.Plugins.ShelfDismissal
   alias Mydia.Plugins.ShelfItem
   alias Mydia.Plugins.Shelves.Declared
+  alias Mydia.Plugins.Shelves.Pick
+  alias Mydia.Plugins.Shelves.Verifier
   alias Mydia.Plugins.Shelves.View
   alias Mydia.Repo
 
   @capability "surfaces:shelf"
+
+  # What the dashboard shows, and what a plugin is asked for. Twice the rail so
+  # that the picks the verifier drops still leave a full row.
+  @rail_limit 12
+  @fill_limit 24
+  @error_max 500
 
   # ── Declarations ──────────────────────────────────────────────────────────
 
@@ -80,6 +91,15 @@ defmodule Mydia.Plugins.Shelves do
   def stale?(%Shelf{stale_at: nil}, _now), do: true
   def stale?(%Shelf{stale_at: stale_at}, now), do: DateTime.compare(now, stale_at) != :lt
 
+  @doc "A shelf row by id, or `nil`."
+  @spec get_shelf(String.t()) :: Shelf.t() | nil
+  def get_shelf(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.get(Shelf, uuid)
+      :error -> nil
+    end
+  end
+
   defp ensure_shelf(%Declared{slug: slug, key: key}, %User{id: user_id}) do
     identity = [plugin_slug: slug, shelf_key: key, user_id: user_id]
 
@@ -96,6 +116,158 @@ defmodule Mydia.Plugins.Shelves do
 
   defp items(%Shelf{id: id}) do
     Repo.all(from i in ShelfItem, where: i.shelf_id == ^id, order_by: [asc: i.position])
+  end
+
+  # ── Filling ───────────────────────────────────────────────────────────────
+
+  @doc """
+  Enqueues a fill for every stale shelf among `views`. Jobs are unique per
+  shelf, so two tabs or two visits cause one run.
+  """
+  @spec refresh_stale([View.t()]) :: :ok
+  def refresh_stale(views) when is_list(views) do
+    for %View{stale?: true, shelf: shelf} <- views, do: request_fill(shelf)
+    :ok
+  end
+
+  @doc "Enqueues a fill for one shelf."
+  @spec request_fill(Shelf.t()) :: :ok
+  def request_fill(%Shelf{id: id}) do
+    {:ok, _job} = Oban.insert(ShelfFill.new(%{shelf_id: id}))
+    :ok
+  end
+
+  @doc """
+  Asks the plugin for picks, verifies them, and stores the result.
+
+  Returns `:filled` when the items changed (and broadcasts), `:kept` when the
+  plugin had nothing new worth storing, `:failed` when the plugin or the relay
+  failed (the shelf backs off and keeps its items), and `:busy` when a fill for
+  this user is already running, which leaves the row untouched.
+
+  Options: `:now`, and two test seams, `:invoker` (in place of
+  `Mydia.Plugins.invoke_fill_shelf/4`) and `:resolver` (passed to the verifier).
+  """
+  @spec fill(Shelf.t(), Declared.t(), keyword()) :: :filled | :kept | :failed | :busy
+  def fill(%Shelf{} = shelf, %Declared{} = declared, opts \\ []) do
+    now = Keyword.get(opts, :now) || DateTime.utc_now()
+    invoker = Keyword.get(opts, :invoker) || (&Plugins.invoke_fill_shelf/4)
+
+    case Accounts.get_user_by_id(shelf.user_id) do
+      %User{} = user ->
+        request = [exclude: exclude(shelf), limit: @fill_limit, now: now]
+
+        case invoker.(declared.slug, declared.key, user, request) do
+          {:ok, %{items: raw}} -> store_picks(shelf, declared, user, raw, now, opts)
+          {:error, %Error{type: :busy}} -> :busy
+          {:error, %Error{message: message}} -> mark_failed(shelf, declared, message, now)
+        end
+
+      nil ->
+        :kept
+    end
+  end
+
+  defp store_picks(shelf, declared, user, raw, now, opts) do
+    picks = Enum.map(raw, &Pick.from_wit/1)
+
+    verify_opts = [
+      dismissed: dismissed_keys(shelf),
+      limit: @rail_limit,
+      resolver: Keyword.get(opts, :resolver)
+    ]
+
+    case Verifier.verify(picks, user, verify_opts) do
+      {:ok, items} ->
+        replace_items(shelf, declared, items, now)
+
+      {:error, :too_few} ->
+        mark_filled(shelf, declared, now)
+        :kept
+
+      {:error, :relay_unavailable} ->
+        mark_failed(
+          shelf,
+          declared,
+          "could not verify picks: the metadata relay is unavailable",
+          now
+        )
+    end
+  end
+
+  defp replace_items(shelf, declared, items, now) do
+    rows =
+      for {attrs, position} <- Enum.with_index(items) do
+        Map.merge(attrs, %{
+          id: Ecto.UUID.generate(),
+          shelf_id: shelf.id,
+          position: position,
+          inserted_at: now,
+          updated_at: now
+        })
+      end
+
+    {:ok, _} =
+      Repo.transaction(fn ->
+        Repo.delete_all(from i in ShelfItem, where: i.shelf_id == ^shelf.id)
+        Repo.insert_all(ShelfItem, rows)
+        mark_filled(shelf, declared, now)
+      end)
+
+    # After the commit, so a subscriber that reloads sees the new rows.
+    Phoenix.PubSub.broadcast(Mydia.PubSub, topic(shelf.user_id), {:shelf_updated, shelf.id})
+    :filled
+  end
+
+  defp mark_filled(shelf, declared, now) do
+    shelf
+    |> Shelf.changeset(%{
+      status: :idle,
+      filled_at: now,
+      stale_at: DateTime.add(now, declared.ttl_seconds),
+      failure_count: 0,
+      last_error: nil
+    })
+    |> Repo.update!()
+  end
+
+  defp mark_failed(shelf, declared, message, now) do
+    failures = shelf.failure_count + 1
+
+    shelf
+    |> Shelf.changeset(%{
+      status: :failed,
+      stale_at: DateTime.add(now, backoff_seconds(failures, declared.ttl_seconds)),
+      failure_count: failures,
+      last_error: message |> to_string() |> String.slice(0, @error_max)
+    })
+    |> Repo.update!()
+
+    :failed
+  end
+
+  # One hour, then six, then the shelf's own TTL: a misconfigured API key must
+  # not spend a model call on every page load.
+  defp backoff_seconds(1, ttl), do: min(3_600, ttl)
+  defp backoff_seconds(2, ttl), do: min(21_600, ttl)
+  defp backoff_seconds(_failures, ttl), do: ttl
+
+  # What the host would reject anyway: the cards on the shelf now, and what the
+  # user dismissed. Sent to the plugin so it does not spend picks on them.
+  defp exclude(%Shelf{} = shelf) do
+    current =
+      for %ShelfItem{} = item <- items(shelf),
+          into: MapSet.new(),
+          do: {item.media_type, item.provider, item.provider_id}
+
+    for {media_type, provider, id} <- MapSet.union(current, dismissed_keys(shelf)) do
+      %{
+        media_type: media_type,
+        tmdb_id: if(provider == :tmdb, do: id),
+        tvdb_id: if(provider == :tvdb, do: id),
+        imdb_id: nil
+      }
+    end
   end
 
   # ── Dismissals ────────────────────────────────────────────────────────────
@@ -133,7 +305,8 @@ defmodule Mydia.Plugins.Shelves do
             ]
           )
 
-          Repo.delete!(item)
+          # Not delete!/1: a fill may have replaced the items since the lookup.
+          Repo.delete_all(from i in ShelfItem, where: i.id == ^item.id)
         end)
 
       :ok

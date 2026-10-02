@@ -109,6 +109,15 @@ defmodule Mydia.Plugins.ShelvesTest do
       assert Repo.aggregate(ShelfDismissal, :count) == 1
     end
 
+    test "an item whose row is already gone is not found and does not raise" do
+      user = user_fixture()
+      item = shelf_item_fixture(shelf_fixture(user))
+      Repo.delete!(item)
+
+      assert {:error, :not_found} = Shelves.dismiss_item(user, item.id)
+      assert Repo.aggregate(ShelfDismissal, :count) == 0
+    end
+
     test "refuses another user's item and an unknown id" do
       item = shelf_item_fixture(shelf_fixture(user_fixture()))
 
