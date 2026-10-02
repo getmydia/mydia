@@ -53,6 +53,13 @@ defmodule Mydia.Accounts.HomeLayout do
       default?: true
     },
     %Widget{
+      key: :shelves,
+      label: "Picked for you",
+      description: "Suggestions from your plugins, such as the Assistant",
+      roles: :all,
+      default?: true
+    },
+    %Widget{
       key: :recently_added_movies,
       label: "Recently added movies",
       description: "Recently added movies only",

@@ -19,8 +19,11 @@ defmodule MydiaWeb.DashboardLive.Index do
   alias Mydia.Downloads
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
+  alias Mydia.Plugins.Shelves
   alias Mydia.Accounts.Authorization
   alias MydiaWeb.DashboardLive.Components
+  alias MydiaWeb.DashboardLive.ShelfComponents
+  alias MydiaWeb.DashboardLive.ShelfRail
   alias MydiaWeb.DashboardLive.HealthComponents
   alias MydiaWeb.DashboardLive.EditHomeComponents
   alias MydiaWeb.Live.Authorization, as: LiveAuthorization
@@ -59,6 +62,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     socket =
       if connected?(socket) do
         Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+        if user, do: Shelves.subscribe(user)
 
         Enum.reduce(home_widgets, socket, fn key, acc ->
           load_widget(acc, key)
@@ -90,6 +94,7 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:regional_selected, nil)
     |> assign(:regional_status, :idle)
     |> assign(:regional_items, [])
+    |> assign(:shelves, [])
     |> assign(:pending_requests_count, socket.assigns[:pending_requests_count] || 0)
     |> assign(:clients_rollup, %Rollup{
       healthy: 0,
@@ -267,6 +272,21 @@ defmodule MydiaWeb.DashboardLive.Index do
     |> assign(:upcoming_episodes, Enum.take(upcoming_episodes, 10))
   end
 
+  # Renders what is stored and asks for a fill of anything stale. The fill runs
+  # in a job; its result arrives as `{:shelf_updated, _}`.
+  defp load_widget(socket, :shelves) do
+    case socket.assigns[:current_user] do
+      nil ->
+        socket
+
+      user ->
+        socket = ensure_trending_prerequisites(socket)
+        views = Shelves.list_for(user, :home)
+        Shelves.refresh_stale(views)
+        assign_shelves(socket, views)
+    end
+  end
+
   defp load_widget(socket, _unknown), do: socket
 
   defp select_regional(socket, param) do
@@ -415,6 +435,13 @@ defmodule MydiaWeb.DashboardLive.Index do
 
   def handle_event("close_details", _, socket) do
     {:noreply, DetailModal.close(socket)}
+  end
+
+  def handle_event("dismiss_shelf_item", %{"id" => item_id}, socket) do
+    user = socket.assigns.current_user
+    # An unknown or foreign id is ignored: the reload below is the answer either way.
+    Shelves.dismiss_item(user, item_id)
+    {:noreply, assign_shelves(socket, Shelves.list_for(user, :home))}
   end
 
   def handle_event("open_edit_home", _params, socket) do
@@ -602,6 +629,17 @@ defmodule MydiaWeb.DashboardLive.Index do
     end
   end
 
+  def handle_info({:shelf_updated, _shelf_id}, socket) do
+    if :shelves in socket.assigns.home_widgets do
+      user = socket.assigns.current_user
+
+      {:noreply,
+       socket |> ensure_trending_prerequisites() |> assign_shelves(Shelves.list_for(user, :home))}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info({:download_updated, _download_id}, socket) do
     # Just trigger a re-render to update the downloads counter in the sidebar
     # The counter will be recalculated when the layout renders
@@ -769,7 +807,8 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
-         |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
+         |> reenrich_shelves()
+         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(:info, "#{media_item.title} has been added to your library")}
 
       {:already_in_library, media_item, updated_map} ->
@@ -798,7 +837,8 @@ defmodule MydiaWeb.DashboardLive.Index do
          |> assign(:trending_movies, trending_movies)
          |> assign(:trending_tv, trending_tv)
          |> assign(:regional_items, regional_items)
-         |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
+         |> reenrich_shelves()
+         |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
          |> put_flash(:info, "#{media_item.title} is already in your library")}
 
       {:error, :restricted} ->
@@ -886,7 +926,8 @@ defmodule MydiaWeb.DashboardLive.Index do
         |> assign(:trending_movies, trending_movies)
         |> assign(:trending_tv, trending_tv)
         |> assign(:regional_items, regional_items)
-        |> DetailModal.refresh_selected([trending_movies, trending_tv, regional_items])
+        |> reenrich_shelves()
+        |> then(&DetailModal.refresh_selected(&1, rail_lists(&1.assigns)))
         |> put_flash(:info, "#{request.title} requested. An admin will review it soon.")
 
       {:error, reason} ->
@@ -912,8 +953,34 @@ defmodule MydiaWeb.DashboardLive.Index do
   defp parse_event_media_type("tv_show"), do: {:ok, :tv_show}
   defp parse_event_media_type(_), do: :error
 
+  defp assign_shelves(socket, views) do
+    assign(
+      socket,
+      :shelves,
+      ShelfRail.build(views, socket.assigns.library_status_map, socket.assigns.request_status_map)
+    )
+  end
+
+  # Called after the status maps on the socket changed (an add, a request).
+  defp reenrich_shelves(socket) do
+    assign(
+      socket,
+      :shelves,
+      ShelfRail.reenrich(
+        socket.assigns.shelves,
+        socket.assigns.library_status_map,
+        socket.assigns.request_status_map
+      )
+    )
+  end
+
   defp rail_lists(assigns),
-    do: [assigns.trending_movies, assigns.trending_tv, assigns.regional_items]
+    do: [
+      assigns.trending_movies,
+      assigns.trending_tv,
+      assigns.regional_items,
+      ShelfRail.items(assigns.shelves)
+    ]
 
   defp find_trending_item(socket, id, media_type),
     do: DetailModal.find_selectable_item(rail_lists(socket.assigns), id, media_type)

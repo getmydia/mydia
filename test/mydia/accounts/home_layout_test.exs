@@ -9,7 +9,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
     test "returns all ten widgets in default display order" do
       catalog = HomeLayout.catalog()
 
-      assert length(catalog) == 10
+      assert length(catalog) == 11
       assert Enum.all?(catalog, &match?(%Widget{}, &1))
 
       assert Enum.map(catalog, & &1.key) == [
@@ -17,6 +17,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
                :system_health,
                :quick_actions,
                :recently_added,
+               :shelves,
                :recently_added_movies,
                :recently_added_tv,
                :trending_movies,
@@ -33,7 +34,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
       keys = admin |> HomeLayout.available() |> Enum.map(& &1.key)
 
       assert :system_health in keys
-      assert length(keys) == 10
+      assert length(keys) == 11
     end
 
     test "non-admin roles do not see system_health" do
@@ -42,7 +43,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
         keys = user |> HomeLayout.available() |> Enum.map(& &1.key)
 
         refute :system_health in keys
-        assert length(keys) == 9
+        assert length(keys) == 10
       end
     end
 
@@ -61,6 +62,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
                :system_health,
                :quick_actions,
                :recently_added,
+               :shelves,
                :trending_movies,
                :trending_tv,
                :episodes
@@ -74,6 +76,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
                :library_stats,
                :quick_actions,
                :recently_added,
+               :shelves,
                :trending_movies,
                :trending_tv,
                :episodes
@@ -142,6 +145,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
                :system_health,
                :quick_actions,
                :recently_added,
+               :shelves,
                :recently_added_movies,
                :recently_added_tv,
                :trending_tv,
