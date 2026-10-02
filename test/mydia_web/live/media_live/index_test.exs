@@ -1045,6 +1045,56 @@ defmodule MydiaWeb.MediaLive.IndexTest do
     end
   end
 
+  describe "select all matching" do
+    setup %{conn: conn} do
+      %{conn: log_in_user(conn, admin_user_fixture())}
+    end
+
+    test "selects every matching item, including those past the first page", %{conn: conn} do
+      # 55 is past the first page of 50, so the selection has to come from
+      # the listing and not from what is rendered.
+      [first | _rest] = insert_list(55, :media_item, type: "movie")
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      refute has_element?(view, "#select-all-matching")
+
+      render_click(view, "start_selection", %{"id" => first.id})
+
+      assert has_element?(view, "#selection-count", "1")
+      assert has_element?(view, "#select-all-matching", "Select all 55")
+
+      view |> element("#select-all-matching") |> render_click()
+
+      assert has_element?(view, "#selection-count", "55")
+      refute has_element?(view, "#select-all-matching")
+    end
+
+    test "covers only what the quality filter matches", %{conn: conn} do
+      wide = media_item_fixture(%{type: "movie", title: "Wide Harbor"})
+      media_file_fixture(%{media_item_id: wide.id, resolution: "4K"})
+      plain = media_item_fixture(%{type: "movie", title: "Plain Harbor"})
+      media_file_fixture(%{media_item_id: plain.id, resolution: "2160p"})
+      small = media_item_fixture(%{type: "movie", title: "Small Harbor"})
+      media_file_fixture(%{media_item_id: small.id, resolution: "1080p"})
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("form#library-filter-form")
+      |> render_change(%{"quality" => "2160p"})
+
+      render_click(view, "start_selection", %{"id" => wide.id})
+
+      assert has_element?(view, "#select-all-matching", "Select all 2")
+
+      view |> element("#select-all-matching") |> render_click()
+
+      assert has_element?(view, "#selection-count", "2")
+      refute has_element?(view, "#grid-item-#{small.id}")
+    end
+  end
+
   describe "batch edit" do
     setup %{conn: conn} do
       %{conn: log_in_user(conn, admin_user_fixture())}

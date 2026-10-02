@@ -768,10 +768,24 @@
               <%= if selected_count == 0 do %>
                 <span class="text-sm">Select All</span>
               <% else %>
-                <span class="font-medium tabular-nums">{selected_count}</span>
+                <span id="selection-count" class="font-medium tabular-nums">{selected_count}</span>
                 <span class="text-sm text-base-content/60 hidden sm:inline">selected</span>
               <% end %>
             </label>
+
+            <%!-- Explicit select-all: the checkbox alone reads as "N selected" --%>
+            <button
+              :if={has_selection and not all_selected}
+              id="select-all-matching"
+              type="button"
+              class="btn btn-sm btn-ghost whitespace-nowrap"
+              phx-click={
+                JS.push("select_all")
+                |> JS.dispatch("mydia:select-all", to: "#media-items")
+              }
+            >
+              Select all {MapSet.size(@all_visible_ids)}
+            </button>
 
             <div class="w-px h-6 bg-base-300 mx-1"></div>
 
