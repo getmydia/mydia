@@ -1171,6 +1171,7 @@ defmodule Mydia.Streaming.HlsSession do
         %{
           state
           | backend_pid: backend_pid,
+            backend_opts: opts,
             window: TranscodeWindow.relocate(state.window, target),
             window_generation: generation
         }
