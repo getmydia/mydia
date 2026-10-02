@@ -41,6 +41,8 @@ dependencies:
   # ImageRenderMethodForWeb lives here, not in cached_network_image's exports.
   # core/cache/artwork_decode.dart picks HttpGet so web decodes honour a size.
   cached_network_image_platform_interface: ^5.0.0
+  # ArtworkImage builds on this directly; it is what CachedNetworkImage wraps.
+  octo_image: ^2.1.0
   flutter_cache_manager: ^3.3.0
   # 1.5.0 added AbortableRequest, which the crash reporter uses to cancel a
   # send that timed out instead of leaving it running.
