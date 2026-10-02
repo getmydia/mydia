@@ -104,9 +104,60 @@ defmodule Mydia.Plugins.ShelfHostTest do
     assert item.reason =~ "Ember Tide"
   end
 
-  test "watch history reads as the acting user", %{user: user} do
-    assert {:ok, %{items: [item]}} = fill(user, "history")
-    assert item.reason == "0"
+  describe "reads run as the acting user, not the system" do
+    defp recategorize(media_item, category) do
+      Repo.update_all(from(m in Mydia.Media.MediaItem, where: m.id == ^media_item.id),
+        set: [category: to_string(category)]
+      )
+    end
+
+    defp watch(user, media_item) do
+      {:ok, _} =
+        Mydia.Playback.save_progress(user.id, [media_item_id: media_item.id], %{
+          position_seconds: 60,
+          duration_seconds: 600
+        })
+    end
+
+    test "watch history counts only the acting user's rows", %{user: user} do
+      one = media_item_fixture(%{type: "movie", title: "Ivory Causeway"})
+      two = media_item_fixture(%{type: "movie", title: "Umber Coast"})
+      three = media_item_fixture(%{type: "movie", title: "Slate Harbour"})
+      other = user_fixture()
+
+      watch(user, one)
+      watch(user, two)
+      watch(other, one)
+      watch(other, two)
+      watch(other, three)
+
+      assert {:ok, %{items: [mine]}} = fill(user, "history")
+      assert mine.reason == "2"
+
+      assert {:ok, %{items: [theirs]}} = fill(other, "history")
+      assert theirs.reason == "3"
+
+      assert {:ok, %{items: [nobody]}} = fill(user_fixture(), "history")
+      assert nobody.reason == "0"
+    end
+
+    test "search does not return a title outside the user's restriction", %{user: user} do
+      media_item_fixture(%{type: "movie", title: "Ember Tide"}) |> recategorize(:movie)
+
+      media_item_fixture(%{type: "movie", title: "Ember Lantern"})
+      |> recategorize(:cartoon_movie)
+
+      restricted = restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      assert {:ok, %{items: [seen]}} = fill(restricted, "search")
+      assert seen.reason =~ "Ember Lantern"
+      refute seen.reason =~ "Ember Tide"
+
+      # Without the restriction both come back, so the filter above is the cause.
+      assert {:ok, %{items: [all]}} = fill(user, "search")
+      assert all.reason =~ "Ember Lantern"
+      assert all.reason =~ "Ember Tide"
+    end
   end
 
   test "a write is refused during a fill", %{user: user} do
