@@ -3,14 +3,14 @@ defmodule Mydia.Plugins.Host do
   WASM **component-model** runtime host for the plugin platform.
 
   Guests are WebAssembly components built against the canonical
-  `mydia:plugin@1.5.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
+  `mydia:plugin@1.6.0` WIT contract (`native/mydia_plugin_sdk/wit/plugin.wit`).
   The host instantiates them through `Wasmex.Components.*` and calls the typed
   `handler.on-event` / `handler.on-schedule` exports, plus (1.5) the typed
   `handler.setup` / `handler.check-health` exports and `page.on-http` for a
-  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.4)
+  plugin's own pages (1.5+). A guest built against an older minor (1.0 to 1.5)
   is served the matching namespace + export, detected from the component bytes
   at `start_plugin` (`detect_contract/1`), so old guests keep working against
-  the 1.5 host.
+  the 1.6 host.
 
   Each installed plugin gets its own `NimblePool`, which bounds how many guests
   run concurrently on the dirty NIF schedulers. Each *invocation* checks out a
@@ -81,40 +81,43 @@ defmodule Mydia.Plugins.Host do
   # The typed handler exports, addressed by their interface path. The interface
   # version is part of the path because the WIT package version IS the ABI
   # version; wasmtime semver-matches so a 1.1 guest's `handler@1.1.0/on-event`
-  # still resolves against this 1.5 lookup. `on-schedule` is 1.1+: a 1.0
+  # still resolves against this 1.6 lookup. `on-schedule` is 1.1+: a 1.0
   # guest has no such export and the schedule call fails soft. `setup` and
-  # `check-health` are 1.5-only; `call/4` refuses them on an older guest. The
+  # `check-health` are 1.5+; `call/4` refuses them on an older guest. The
   # `page` interface (1.4+) is versioned with the package, so a 1.4 page guest
-  # exports `page@1.4.0` and a 1.5 one `page@1.5.0`.
-  @handler_export ["mydia:plugin/handler@1.5.0", "on-event"]
-  @schedule_export ["mydia:plugin/handler@1.5.0", "on-schedule"]
-  @setup_export ["mydia:plugin/handler@1.5.0", "setup"]
-  @check_health_export ["mydia:plugin/handler@1.5.0", "check-health"]
-  @page_export ["mydia:plugin/page@1.5.0", "on-http"]
-  @v14_handler_export ["mydia:plugin/handler@1.4.0", "on-event"]
-  @v14_schedule_export ["mydia:plugin/handler@1.4.0", "on-schedule"]
-  @v14_page_export ["mydia:plugin/page@1.4.0", "on-http"]
-  @v13_handler_export ["mydia:plugin/handler@1.3.0", "on-event"]
-  @v13_schedule_export ["mydia:plugin/handler@1.3.0", "on-schedule"]
-  @v12_handler_export ["mydia:plugin/handler@1.2.0", "on-event"]
-  @v12_schedule_export ["mydia:plugin/handler@1.2.0", "on-schedule"]
-  @v11_handler_export ["mydia:plugin/handler@1.1.0", "on-event"]
-  @v11_schedule_export ["mydia:plugin/handler@1.1.0", "on-schedule"]
-  @legacy_handler_export ["mydia:plugin/handler@1.0.0", "on-event"]
-
+  # exports `page@1.4.0` and a 1.6 one `page@1.6.0`.
+  #
   # Provided host-import namespaces. wasmex links the provided imports map to the
   # guest's *exact* imported package name (no semver fuzzing), so a 1.0 guest
   # (which imports `host@1.0.0` with only the original three functions) needs the
   # map re-keyed and narrowed. Older guests are served via parallel keys that
   # `HostFunctions.imports_for/2` publishes alongside the current one. We detect
   # the contract once per plugin from the bytes and memoize it.
-  @host_namespace "mydia:plugin/host@1.5.0"
-  @v14_host_namespace "mydia:plugin/host@1.4.0"
-  @v13_host_namespace "mydia:plugin/host@1.3.0"
-  @v12_host_namespace "mydia:plugin/host@1.2.0"
-  @v11_host_namespace "mydia:plugin/host@1.1.0"
-  @legacy_host_namespace "mydia:plugin/host@1.0.0"
   @legacy_host_funcs ~w(http-request data-read log)
+
+  # Contract versions the host serves, newest first. The WIT package version is
+  # the ABI version, so it is part of every export path and import namespace.
+  @contracts [
+    v16: "1.6.0",
+    v15: "1.5.0",
+    v14: "1.4.0",
+    v13: "1.3.0",
+    v12: "1.2.0",
+    v11: "1.1.0",
+    v10: "1.0.0"
+  ]
+
+  @type contract :: :v10 | :v11 | :v12 | :v13 | :v14 | :v15 | :v16
+
+  # First version that exports each interface or function.
+  @schedule_since [:v11, :v12, :v13, :v14, :v15, :v16]
+  @page_since [:v14, :v15, :v16]
+  @typed_since [:v15, :v16]
+
+  defp export(version, interface, function),
+    do: ["mydia:plugin/#{interface}@#{Keyword.fetch!(@contracts, version)}", function]
+
+  defp host_namespace(version), do: "mydia:plugin/host@#{Keyword.fetch!(@contracts, version)}"
 
   # Every field, variant-case and enum atom a 1.5 typed result can carry. Kept
   # as a literal so `String.to_existing_atom/1` in normalize_wit/1 never mints
@@ -257,7 +260,7 @@ defmodule Mydia.Plugins.Host do
     cfg = config()
     handler = Keyword.get(opts, :handler, :on_event)
 
-    if handler in [:setup, :check_health] and contract_version(slug) != :v15 do
+    if handler in [:setup, :check_health] and not typed_exports?(slug) do
       {:error,
        Error.new(:unsupported, "plugin #{slug} does not implement #{function} (contract < 1.5)")}
     else
@@ -479,34 +482,27 @@ defmodule Mydia.Plugins.Host do
   # Re-key the full imports map to the 1.0 namespace, keeping only the three
   # functions a 1.0 guest imports.
   defp to_legacy_imports(full_imports) do
-    funcs =
-      Map.get(full_imports, @host_namespace) ||
-        Map.get(full_imports, @v14_host_namespace) ||
-        Map.get(full_imports, @v13_host_namespace) ||
-        Map.get(full_imports, @v12_host_namespace) ||
-        Map.get(full_imports, @v11_host_namespace, %{})
-
-    %{@legacy_host_namespace => Map.take(funcs, @legacy_host_funcs)}
+    funcs = Map.get(full_imports, host_namespace(:v16), %{})
+    %{host_namespace(:v10) => Map.take(funcs, @legacy_host_funcs)}
   end
 
   # A guest's contract version is read from the UTF-8 interface names embedded
-  # in the component bytes. 1.1 to 1.5 all get the full imports map (published
+  # in the component bytes. 1.1 and later get the full imports map (published
   # under every namespace key, each narrowed); only 1.0 needs the legacy map.
-  # Order matters: the newest match wins.
+  # The list is newest first, so the newest match wins.
   defp detect_contract(bytes) do
-    cond do
-      String.contains?(bytes, @host_namespace) -> :v15
-      String.contains?(bytes, @v14_host_namespace) -> :v14
-      String.contains?(bytes, @v13_host_namespace) -> :v13
-      String.contains?(bytes, @v12_host_namespace) -> :v12
-      String.contains?(bytes, @v11_host_namespace) -> :v11
-      true -> :v10
-    end
+    Enum.find_value(@contracts, :v10, fn {version, _} ->
+      if version != :v10 and String.contains?(bytes, host_namespace(version)), do: version
+    end)
   end
 
   @doc "The contract version detected for `slug` when its pool started."
-  @spec contract_version(slug()) :: :v10 | :v11 | :v12 | :v13 | :v14 | :v15
+  @spec contract_version(slug()) :: contract()
   def contract_version(slug), do: :persistent_term.get({__MODULE__, :contract, slug}, :v15)
+
+  @doc "True when the guest exports the typed handlers (`setup`, `check-health`)."
+  @spec typed_exports?(slug()) :: boolean()
+  def typed_exports?(slug), do: contract_version(slug) in @typed_since
 
   # A static map is used as-is; a builder is called per invocation so closures
   # can capture this run's context (slug + invocation id, for log correlation).
@@ -554,40 +550,29 @@ defmodule Mydia.Plugins.Host do
   # check-health only reach here for a 1.5 guest (call/4 gates them). The page
   # export follows the guest's own package version (1.4 or 1.5).
   defp handler_call(%{handler: :on_http, slug: slug, payload: payload}) do
-    export = if contract_version(slug) == :v14, do: @v14_page_export, else: @page_export
-    {export, [to_page_record(payload)]}
+    {export(supported(slug, @page_since), "page", "on-http"), [to_page_record(payload)]}
   end
 
   defp handler_call(%{handler: :on_schedule, slug: slug, payload: payload}) do
-    export =
-      case contract_version(slug) do
-        :v11 -> @v11_schedule_export
-        :v12 -> @v12_schedule_export
-        :v13 -> @v13_schedule_export
-        :v14 -> @v14_schedule_export
-        _ -> @schedule_export
-      end
-
-    {export, [to_schedule_record(payload)]}
+    {export(supported(slug, @schedule_since), "handler", "on-schedule"),
+     [to_schedule_record(payload)]}
   end
 
-  defp handler_call(%{handler: :setup, payload: payload}),
-    do: {@setup_export, [to_setup_record(payload)]}
+  defp handler_call(%{handler: :setup, slug: slug, payload: payload}),
+    do: {export(contract_version(slug), "handler", "setup"), [to_setup_record(payload)]}
 
-  defp handler_call(%{handler: :check_health}), do: {@check_health_export, []}
+  defp handler_call(%{handler: :check_health, slug: slug}),
+    do: {export(contract_version(slug), "handler", "check-health"), []}
 
-  defp handler_call(%{slug: slug, payload: payload}) do
-    export =
-      case contract_version(slug) do
-        :v10 -> @legacy_handler_export
-        :v11 -> @v11_handler_export
-        :v12 -> @v12_handler_export
-        :v13 -> @v13_handler_export
-        :v14 -> @v14_handler_export
-        :v15 -> @handler_export
-      end
+  defp handler_call(%{slug: slug, payload: payload}),
+    do: {export(contract_version(slug), "handler", "on-event"), [to_event_record(payload)]}
 
-    {export, [to_event_record(payload)]}
+  # The guest's own version when it exports the interface, else the newest: a
+  # guest too old for it has no such export and the call fails soft, exactly
+  # as before.
+  defp supported(slug, since) do
+    version = contract_version(slug)
+    if version in since, do: version, else: :v16
   end
 
   # Marshal a setup payload into the WIT `setup-request` record. The instance

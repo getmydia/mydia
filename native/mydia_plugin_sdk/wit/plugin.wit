@@ -40,7 +40,15 @@
 // declarative setup screens) and `check-health`. Every 1.4 type, function and
 // export, including the separate `page` interface, is byte-stable; 1.0 to 1.4
 // guests are served their own namespaces by the host.
-package mydia:plugin@1.5.0;
+//
+// 1.6.0 (additive over 1.5.0): shelves. A new optional handler export,
+// `fill-shelf`, returns an ordered list of titles for a shelf the manifest
+// declares; the host verifies, stores and renders them. New records
+// `media-ref`, `shelf-request` and `shelf-item`. No new host functions. Inside
+// `fill-shelf` the read functions (`search`, `data-list`, `data-read`) act as
+// the request's user; every `write-outcome` function is refused. Every 1.5
+// type, function and export is byte-stable.
+package mydia:plugin@1.6.0;
 
 /// Shared types for the plugin contract.
 interface types {
@@ -489,6 +497,42 @@ interface types {
     state-json: string,           // previous screen's next-state-json, "{}" for start
     config-json: string,          // instance settings, same shape as the injected config
   }
+
+  // ── 1.6.0 additions ──────────────────────────────────────────────────────
+
+  /// A title named by its provider ids. The host resolves `tmdb-id` first,
+  /// then `tvdb-id` for a TV show. A ref carrying only `imdb-id` cannot be
+  /// resolved yet and is dropped.
+  record media-ref {
+    /// "movie" | "tv_show".
+    media-type: string,
+    tmdb-id: option<s64>,
+    tvdb-id: option<s64>,
+    imdb-id: option<string>,
+  }
+
+  /// Delivered to `fill-shelf`. `shelf` is the key the manifest declared.
+  /// `user-id` is the user the shelf belongs to, absent for a server-wide
+  /// shelf. `subject` is the title the shelf is about, absent on the home
+  /// page. `exclude` lists titles the host will reject (already shown or
+  /// dismissed), so returning them wastes a slot. `limit` is the most items
+  /// worth returning. `now` is Unix epoch seconds.
+  record shelf-request {
+    shelf: string,
+    user-id: option<string>,
+    subject: option<media-ref>,
+    exclude: list<media-ref>,
+    limit: u32,
+    now: s64,
+    config-json: string,
+  }
+
+  /// One title on a shelf. `reason` is a single line of plain text the host
+  /// shows under the card, clipped to 140 characters.
+  record shelf-item {
+    item: media-ref,
+    reason: option<string>,
+  }
 }
 
 /// Host-implemented capabilities the guest may import. Each call is
@@ -626,7 +670,8 @@ interface host {
 /// The guest's handlers. The SDK's #[mydia_plugin_sdk::plugin] macro implements this from a
 /// plain author-written function (plus an optional schedule handler).
 interface handler {
-  use types.{event, schedule-tick, setup-request, setup-screen, health};
+  use types.{event, schedule-tick, setup-request, setup-screen, health,
+             shelf-request, shelf-item};
 
   /// Handle one lifecycle event. Returns a small JSON result string the host
   /// reads (e.g. {"delivered":true,"status":204}); an Err string is surfaced as
@@ -646,6 +691,12 @@ interface handler {
 
   /// 1.5.0: the instance's current health, for the admin card.
   check-health: func() -> result<health, string>;
+
+  /// 1.6.0: fill one shelf the manifest declares. Invoked only for plugins
+  /// granted `surfaces:shelf`. Return an ordered list, best first; an empty
+  /// list means "nothing to suggest" and keeps whatever the shelf held. An
+  /// Err string is recorded as the shelf's last error and backs off.
+  fill-shelf: func(req: shelf-request) -> result<list<shelf-item>, string>;
 }
 
 /// A plugin page (`surfaces:page`). The host serves /plugins/<slug>/app/* by

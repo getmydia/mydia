@@ -33,6 +33,8 @@ defmodule Mydia.Plugins.HostFunctions do
   Version 1.5 adds `links-list`, `link-request`, `propose-accounts`,
   `set-link-token`, `set-link-status`, `kv-list`, `kv-set-many` and
   `report-sync-run`, plus `origin` on `playback-progress`.
+  Version 1.6 adds no host function; it adds the `fill-shelf` export, inside
+  which the read functions act as the shelf's user.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -80,13 +82,14 @@ defmodule Mydia.Plugins.HostFunctions do
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.5 superset to a 1.4/1.3/1.2/1.1/1.0 guest (which
+  # wasmtime serves this 1.6 superset to a 1.5/1.4/1.3/1.2/1.1/1.0 guest (which
   # imports the correspondingly older `host@x.y.z`) via component semver
   # matching, so older guests keep working. wasmex still needs exact namespace
   # keys in the imports map (see `Mydia.Plugins.Host`), so every supported
   # version is also published under its own key, each narrowed to the functions
   # that version defined.
-  @namespace "mydia:plugin/host@1.5.0"
+  @namespace "mydia:plugin/host@1.6.0"
+  @v15_namespace "mydia:plugin/host@1.5.0"
   @v14_namespace "mydia:plugin/host@1.4.0"
   @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
@@ -167,7 +170,9 @@ defmodule Mydia.Plugins.HostFunctions do
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
       %{
+        # 1.6 added an export, not a host function, so both keys serve one map.
         @namespace => v15,
+        @v15_namespace => v15,
         @v14_namespace => v14,
         @v13_namespace => v13,
         @v12_namespace => Map.delete(v13, "ensure-favorite"),
