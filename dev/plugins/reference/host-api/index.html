@@ -2209,6 +2209,8 @@
       
         
       
+        
+      
     
     
     
@@ -2356,6 +2358,34 @@
     
   
     Serve a page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/shelves/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fill a shelf
   
 
     
@@ -2662,6 +2692,17 @@
     <span class="md-ellipsis">
       
         1.5 exports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fill-shelf-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fill-shelf (1.6)
       
     </span>
   </a>
@@ -3227,6 +3268,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#fill-shelf-16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fill-shelf (1.6)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#scheduled-handler" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3315,7 +3367,8 @@
 <h1 id="host-api-reference">Host API Reference</h1>
 <p>The contract Mydia plugins run against: the event envelope and catalog, the
 capability classes and their host functions, the scheduled-handler export, and
-the manifest fields that govern versioning.</p>
+the manifest fields that govern versioning. The current contract is
+<code>mydia:plugin@1.6.0</code>.</p>
 <p>New to plugins? Start with the
 <a href="../../tutorial/write-your-first-plugin/">tutorial</a>. For task-oriented recipes,
 see the <a href="../../how-to/notifications/">how-to guides</a>. For why the platform is
@@ -3757,20 +3810,84 @@ instance. <code>http-request</code> and <code>link-request</code> apply both rul
 <p><code>min_host_version</code> is compared with the Mydia release version, not the
 contract version, so a 1.5 guest sets it to the first Mydia release that
 ships contract 1.5, or omits it for a bundled guest.</p>
+<h3 id="fill-shelf-16">fill-shelf (1.6)</h3>
+<p>WIT 1.6.0 is additive over 1.5.0: every 1.5 type, function and export is
+unchanged, and there are no new host functions. A guest that declares
+<code>surfaces:shelf</code> and shelves in its manifest exports <code>fill-shelf</code>, and the host
+calls it for one user when a shelf is stale. Build the guest with
+<code>#[mydia_plugin_sdk::plugin(fill_shelf = fill)]</code>. See
+<a href="../../how-to/shelves/">Fill a shelf</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>record media-ref {
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>  media-type: string,          // "movie" | "tv_show"
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>  tmdb-id: option&lt;s64&gt;,
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>  tvdb-id: option&lt;s64&gt;,
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>  imdb-id: option&lt;string&gt;,
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>}
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>record shelf-request {
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>  shelf: string,               // the key the manifest declared
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>  user-id: option&lt;string&gt;,
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>  subject: option&lt;media-ref&gt;,
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>  exclude: list&lt;media-ref&gt;,
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>  limit: u32,
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>  now: s64,                    // Unix epoch seconds
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>  config-json: string,
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>}
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>record shelf-item {
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>  item: media-ref,
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>  reason: option&lt;string&gt;,
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>}
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>fill-shelf: func(req: shelf-request) -&gt; result&lt;list&lt;shelf-item&gt;, string&gt;;
+</code></pre></div>
+<p>Payload rules:</p>
+<ul>
+<li>Return the list best first. An empty list means nothing to suggest and keeps
+  the shelf's current items. An <code>Err</code> string is recorded as the shelf's last
+  error and starts a backoff of one hour, then six hours, then the TTL.</li>
+<li>The host resolves <code>tmdb-id</code> first, then <code>tvdb-id</code> for a TV show. A ref with
+  only <code>imdb-id</code> is dropped.</li>
+<li><code>exclude</code> lists titles the host will reject. <code>limit</code> is 24; the rail shows 12.</li>
+<li><code>reason</code> is plain text. The host collapses it to one line and clips it to 140
+  characters.</li>
+<li>The host drops unresolvable, owned, requested, dismissed and restricted
+  titles and duplicates, and keeps the previous list when fewer than three
+  survive. It resolves at most 48 candidates per fill, four times the 12 the
+  rail shows.</li>
+</ul>
+<p>A fill acts as the shelf's user. <code>search</code>, <code>data-list</code>, <code>data-read</code>,
+<code>http-request</code>, <code>connection-request</code>, <code>link-request</code> and the KV functions work
+under their usual capabilities, and <code>http-request</code> gets the page budget. The
+two request functions are outbound calls gated by grants, not writes to Mydia.
+A fill runs against the plugin's default instance; a <code>multi_instance</code> plugin has
+none, so its instance-scoped functions (the KV functions and <code>link-request</code>)
+return <code>not_found</code> during a fill.
+<code>data-list</code> is scoped to the user. <code>data-read</code> returns a media item by id
+without applying the user's restrictions. A failing shelf is listed on the
+plugin's row in Admin &gt; System &gt; Plugins, with the last error the plugin
+returned.</p>
+<p>Every write function is refused during a fill and returns <code>denied</code>, whatever
+the plugin has been granted. That covers the <code>write-outcome</code> functions
+(<code>media-add</code>, <code>collection-create</code>, <code>collection-update</code>,
+<code>collection-add-items</code>, <code>collection-remove-items</code>, <code>mark-watched-state</code> and
+<code>add-favorite</code>) and the sync writes (<code>ensure-watched</code>, <code>set-watch-state</code> and
+<code>ensure-favorite</code>). The plugin's own KV store stays writable. A fill runs under
+the page timeout (120 seconds by default).</p>
 <h3 id="scheduled-handler">Scheduled handler</h3>
 <p>Add <code>on-schedule</code> for periodic work (declare a <code>schedule</code> and the
 <code>schedule:interval</code> capability in the manifest):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::{</span><span class="n">Event</span><span class="p">,</span><span class="w"> </span><span class="n">ScheduleTick</span><span class="p">};</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="cp">#[mydia_plugin_sdk::plugin(on_schedule = on_schedule)]</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_schedule</span><span class="p">(</span><span class="n">tick</span><span class="p">:</span><span class="w"> </span><span class="nc">ScheduleTick</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="c1">// tick.config_json carries the operator settings. Return a small JSON result;</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="c1">// include "connections_invalid": ["&lt;user-id&gt;"] to flag users whose token</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">    </span><span class="c1">// the provider rejected (a 401). The host marks those connections errored.</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{</span><span class="se">\"</span><span class="s">connections_invalid</span><span class="se">\"</span><span class="s">:[]}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">use</span><span class="w"> </span><span class="n">mydia_plugin_sdk</span><span class="p">::</span><span class="n">types</span><span class="p">::{</span><span class="n">Event</span><span class="p">,</span><span class="w"> </span><span class="n">ScheduleTick</span><span class="p">};</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="cp">#[mydia_plugin_sdk::plugin(on_schedule = on_schedule)]</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_event</span><span class="p">(</span><span class="n">evt</span><span class="p">:</span><span class="w"> </span><span class="nc">Event</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">fn</span><span class="w"> </span><span class="nf">on_schedule</span><span class="p">(</span><span class="n">tick</span><span class="p">:</span><span class="w"> </span><span class="nc">ScheduleTick</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">String</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">    </span><span class="c1">// tick.config_json carries the operator settings. Return a small JSON result;</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">    </span><span class="c1">// include "connections_invalid": ["&lt;user-id&gt;"] to flag users whose token</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">    </span><span class="c1">// the provider rejected (a 401). The host marks those connections errored.</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="s">"{</span><span class="se">\"</span><span class="s">connections_invalid</span><span class="se">\"</span><span class="s">:[]}"</span><span class="p">.</span><span class="n">into</span><span class="p">())</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="p">}</span>
 </code></pre></div>
 <p>A run that takes longer than one interval is fine: the next tick is skipped
 while it runs (non-reentrant), and your state must survive a wall-clock kill, so

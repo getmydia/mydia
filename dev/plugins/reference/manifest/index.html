@@ -2209,6 +2209,8 @@
       
         
       
+        
+      
     
     
     
@@ -2356,6 +2358,34 @@
     
   
     Serve a page
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/shelves/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fill a shelf
   
 
     
@@ -2661,6 +2691,17 @@
     <span class="md-ellipsis">
       
         Page descriptor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shelves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shelves
       
     </span>
   </a>
@@ -3259,6 +3300,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#shelves" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shelves
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#private-network-hosts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3424,6 +3476,11 @@ This page is a practical reference, using the bundled webhook notifier
 <td>no</td>
 <td>Operator-editable configuration fields. See below.</td>
 </tr>
+<tr>
+<td><code>shelves</code></td>
+<td>no</td>
+<td>Shelves the plugin fills for the Home dashboard, at most four. Requires <code>surfaces:shelf</code>. See <a href="#shelves">Shelves</a>.</td>
+</tr>
 </tbody>
 </table>
 <h2 id="capabilities">Capabilities</h2>
@@ -3441,7 +3498,7 @@ its own grant at runtime.</p>
 <tbody>
 <tr>
 <td><code>events:subscribe</code></td>
-<td>The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares <code>surfaces:page</code>, so a page-only plugin can omit it.</td>
+<td>The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares <code>surfaces:page</code> or <code>surfaces:shelf</code>, so a page-only or shelf-only plugin can omit it.</td>
 </tr>
 <tr>
 <td><code>net:http</code></td>
@@ -3474,6 +3531,10 @@ its own grant at runtime.</p>
 <tr>
 <td><code>schedule:interval</code></td>
 <td>Lets the plugin run on a fixed interval via <code>on-schedule</code>. Paired with the <code>schedule</code> descriptor.</td>
+</tr>
+<tr>
+<td><code>surfaces:shelf</code></td>
+<td>Fill shelves the host renders. Requires <code>shelves</code>. See <a href="#shelves">Shelves</a>. Takes an empty list.</td>
 </tr>
 </tbody>
 </table>
@@ -3692,14 +3753,74 @@ navigation entry:</p>
   <code>hero-wrench-screwdriver</code>, <code>hero-cog-6-tooth</code>, <code>hero-folder</code>, <code>hero-tag</code>.
   Any other name is rejected when the manifest is parsed.</li>
 </ul>
+<h2 id="shelves">Shelves</h2>
+<p>A plugin that declares <code>surfaces:shelf</code> must also declare a <code>shelves</code> list, and
+a non-empty <code>shelves</code> list without <code>surfaces:shelf</code> is rejected. Each entry
+describes one shelf the host asks the plugin to fill through its <code>fill-shelf</code>
+export:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">"shelves"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"picks"</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="nt">"title"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Picked for you"</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nt">"placement"</span><span class="p">:</span><span class="w"> </span><span class="s2">"home"</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nt">"scope"</span><span class="p">:</span><span class="w"> </span><span class="s2">"user"</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nt">"ttl_seconds"</span><span class="p">:</span><span class="w"> </span><span class="mi">86400</span><span class="p">,</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">    </span><span class="nt">"refresh_on"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"playback.finished"</span><span class="p">]</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="p">],</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"surfaces:shelf"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Bounds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>key</code></td>
+<td>yes</td>
+<td>Matches <code>[a-z][a-z0-9_]{0,31}</code>. Unique within the plugin.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>yes</td>
+<td>1 to 40 characters, and not blank. Shown as the shelf heading.</td>
+</tr>
+<tr>
+<td><code>placement</code></td>
+<td>yes</td>
+<td><code>home</code>.</td>
+</tr>
+<tr>
+<td><code>scope</code></td>
+<td>yes</td>
+<td><code>user</code>. The shelf is filled for, and shown to, one person.</td>
+</tr>
+<tr>
+<td><code>ttl_seconds</code></td>
+<td>yes</td>
+<td>An integer from 3600 to 2592000. How long a fill lasts before the host asks again.</td>
+</tr>
+<tr>
+<td><code>refresh_on</code></td>
+<td>no</td>
+<td>A list of event types from the <a href="#capabilities">catalog</a>. Defaults to <code>[]</code>. An event marks the shelf stale for the user it belongs to.</td>
+</tr>
+</tbody>
+</table>
+<p>A plugin may declare at most four shelves. Because a fill reads a person's
+watch history, the approval screen flags <code>surfaces:shelf</code> as sensitive.</p>
 <h2 id="private-network-hosts">Private network hosts</h2>
 <p>A <code>url</code> field with <code>grants_host: true</code> may also set <code>"allow_private": true</code>.
 The operator's value is then allowed to resolve to a private address (a
 LAN service such as <code>http://ollama.lan:11434</code>), which the outbound gate refuses
 by default. <code>allow_private</code> is only accepted on <code>url</code> fields that also set
 <code>grants_host</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"base_url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"API base URL"</span><span class="p">,</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">"grants_host"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"allow_private"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"base_url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"url"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"API base URL"</span><span class="p">,</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"grants_host"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">"allow_private"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <p>When such a field has a value, the host derives a <code>net:private</code> grant for that
 one host next to its <code>net:http</code> grant. You never declare <code>net:private</code> in the
@@ -3707,8 +3828,8 @@ manifest, and while the field is empty no <code>net:private</code> grant exists.
 <h2 id="scheduled-plugins">Scheduled plugins</h2>
 <p>A plugin that needs a clock declares a <code>schedule</code> and the <code>schedule:interval</code>
 capability. The host invokes its <code>on-schedule</code> export on a fixed interval:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">"schedule"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"interval_minutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"schedule:interval"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">"schedule"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"interval_minutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">"capabilities"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"schedule:interval"</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>interval_minutes</code> is floored at <strong>5 minutes</strong>; a smaller value is rejected at
@@ -3728,13 +3849,13 @@ capability. The host invokes its <code>on-schedule</code> export on a fixed inte
 descriptor. The <strong>host</strong> runs the OAuth device (PIN) flow end to end from a
 generic card on the user's profile; the guest never executes during connect and
 never sees the token.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">"connection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"oauth_device"</span><span class="p">,</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="nt">"code_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin?client_id={client_id}"</span><span class="p">,</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span><span class="nt">"poll_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin/{user_code}?client_id={client_id}"</span><span class="p">,</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nt">"verification_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://example.com/pin"</span><span class="p">,</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-public-embeddable-client-id"</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nt">"connection"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"oauth_device"</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">"code_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin?client_id={client_id}"</span><span class="p">,</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">"poll_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://api.example.com/oauth/pin/{user_code}?client_id={client_id}"</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">"verification_url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"https://example.com/pin"</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">"client_id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"your-public-embeddable-client-id"</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>code_url</code>, <code>poll_url</code>, and <code>verification_url</code> must all sit on a host declared
