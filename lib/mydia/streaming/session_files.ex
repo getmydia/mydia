@@ -8,7 +8,61 @@ defmodule Mydia.Streaming.SessionFiles do
   safety, and the two had drifted: the p2p table knew `.vtt`, the HTTP one did
   not, and only the p2p path validated against traversal at all. One module so
   a receiver gets the same answer whichever route it came in on.
+  `resolve/3` is the single answer to what a requested name means, so the two
+  routes cannot serve different playlists for one session.
   """
+
+  alias Mydia.Streaming.{HlsSession, SegmentPlan, SessionSubtitles}
+
+  @playlist_name "index.m3u8"
+
+  @doc """
+  What `name` means inside the session `pid`.
+
+  A session with a published plan answers its playlist from the plan and its
+  segments through `HlsSession.request_segment/2`, which waits for the encoder
+  or moves it. Serving either from disk instead hands the player FFmpeg's own
+  bookkeeping playlist, which starts at the resume point and never ends, and
+  segments that only exist where the encoder happens to be.
+
+  A session without a plan, and any name that is neither, resolves by path as
+  before.
+  """
+  @spec resolve(pid(), map(), String.t()) ::
+          {:ok, {:content, binary()}} | {:ok, {:file, String.t()}} | {:error, term()}
+  def resolve(pid, info, @playlist_name = name) do
+    case HlsSession.playlist(pid) do
+      {:ok, playlist} -> {:ok, {:content, playlist}}
+      {:error, :window_mode} -> file(info, name)
+    end
+  end
+
+  def resolve(pid, info, name) do
+    case SegmentPlan.index_from_name(name) do
+      {:ok, index} -> segment(pid, info, name, index)
+      :error -> file(info, name)
+    end
+  end
+
+  defp segment(pid, info, name, index) do
+    case HlsSession.request_segment(pid, index) do
+      {:ok, path} -> {:ok, {:file, path}}
+      {:error, :window_mode} -> file(info, name)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # A subtitle is materialized on demand; anything else is an ordinary file
+  # that either exists in the session directory or does not.
+  defp file(info, name) do
+    result =
+      case SessionSubtitles.ensure(info, name) do
+        :not_subtitle -> safe_path(info.temp_dir, name)
+        other -> other
+      end
+
+    with {:ok, path} <- result, do: {:ok, {:file, path}}
+  end
 
   @doc """
   Content type for a session file, by extension.
