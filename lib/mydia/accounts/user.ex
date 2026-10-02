@@ -185,7 +185,7 @@ defmodule Mydia.Accounts.User do
   end
 
   @doc """
-  The name to greet a user with: the display name they chose, when they set one.
+  The name to show where a user is addressed by name: the display name they chose, when they set one.
 
   Falls back exactly as `label/1` does, so it never returns blank.
   """
