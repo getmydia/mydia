@@ -1,6 +1,7 @@
 //! Assistant plugin page: a chat UI whose model calls Mydia through the page
 //! host functions. Everything model-specific lives here; the host only serves
-//! the page and gates the writes.
+//! the page and gates the writes. It also fills the `picks` shelf, which the
+//! host renders as "Picked for you" on Home (`shelf.rs`).
 
 mod chat;
 mod chats;
@@ -275,6 +276,13 @@ fn choose_model(req: &PageRequest) -> Result<PageResponse, String> {
     respond_json(200, json!({"current": models::effective(&settings, picked)}))
 }
 
+/// One chat-completions round trip. The error text is ready to show a person.
+pub(crate) fn ask_model(endpoint: &provider::Resolved, model: &str, convo: &[Value], defs: &Value) -> Result<Reply, String> {
+    let resp = host::http_request(&OutboundRequest { url: endpoint.chat_url(), method: "POST".into(), headers: endpoint.chat_headers(), body: Some(chat::request_body(model, convo, defs)) })
+        .map_err(|e| format!("Could not reach the model server. {}", tools::host_error_text(&e)))?;
+    chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")).map_err(|e| format!("{} ({model}): {e}", endpoint.preset.label))
+}
+
 fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
     let body = body(req);
     let Some(chat_id) = chat_id_of(&body) else { return invalid_chat() };
@@ -304,19 +312,10 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
         let mut convo = vec![json!({"role": "system", "content": SYSTEM_PROMPT})];
         convo.extend(msgs.iter().cloned());
 
-        let resp = host::http_request(&OutboundRequest { url: endpoint.chat_url(), method: "POST".into(), headers: endpoint.chat_headers(), body: Some(chat::request_body(&model, &convo, &defs)) });
-        let resp = match resp {
-            Ok(r) => r,
+        match ask_model(&endpoint, &model, &convo, &defs) {
             Err(e) => {
                 let chat = store_turn(&req.user_id, &chat_id, now, msgs);
-                return respond_json(200, json!({"error": format!("Could not reach the model server. {}", tools::host_error_text(&e)), "pending": pending, "chat": chat}));
-            }
-        };
-
-        match chat::parse_reply(resp.status, resp.body.as_deref().unwrap_or("")) {
-            Err(e) => {
-                let chat = store_turn(&req.user_id, &chat_id, now, msgs);
-                return respond_json(200, json!({"error": format!("{} ({model}): {e}", endpoint.preset.label), "pending": pending, "chat": chat}));
+                return respond_json(200, json!({"error": e, "pending": pending, "chat": chat}));
             }
             Ok(Reply::Text { message, text }) => {
                 msgs.push(message);
@@ -343,7 +342,7 @@ fn chat_turn(req: &PageRequest) -> Result<PageResponse, String> {
     respond_json(200, json!({"reply": "I stopped after too many steps. Try a narrower request.", "pending": pending, "chat": chat}))
 }
 
-#[mydia_plugin_sdk::plugin(on_http = handle_http)]
+#[mydia_plugin_sdk::plugin(on_http = handle_http, fill_shelf = shelf::fill)]
 fn on_event(_evt: Event) -> Result<String, String> {
     Ok("{}".into())
 }
