@@ -2,7 +2,8 @@
 
 The contract Mydia plugins run against: the event envelope and catalog, the
 capability classes and their host functions, the scheduled-handler export, and
-the manifest fields that govern versioning.
+the manifest fields that govern versioning. The current contract is
+`mydia:plugin@1.6.0`.
 
 New to plugins? Start with the
 [tutorial](../tutorial/write-your-first-plugin.md). For task-oriented recipes,
@@ -302,6 +303,61 @@ instance. `http-request` and `link-request` apply both rules.
 `min_host_version` is compared with the Mydia release version, not the
 contract version, so a 1.5 guest sets it to the first Mydia release that
 ships contract 1.5, or omits it for a bundled guest.
+
+### fill-shelf (1.6)
+
+WIT 1.6.0 is additive over 1.5.0: every 1.5 type, function and export is
+unchanged, and there are no new host functions. A guest that declares
+`surfaces:shelf` and shelves in its manifest exports `fill-shelf`, and the host
+calls it for one user when a shelf is stale. Build the guest with
+`#[mydia_plugin_sdk::plugin(fill_shelf = fill)]`. See
+[Fill a shelf](../how-to/shelves.md).
+
+```wit
+record media-ref {
+  media-type: string,          // "movie" | "tv_show"
+  tmdb-id: option<s64>,
+  tvdb-id: option<s64>,
+  imdb-id: option<string>,
+}
+
+record shelf-request {
+  shelf: string,               // the key the manifest declared
+  user-id: option<string>,
+  subject: option<media-ref>,
+  exclude: list<media-ref>,
+  limit: u32,
+  now: s64,                    // Unix epoch seconds
+  config-json: string,
+}
+
+record shelf-item {
+  item: media-ref,
+  reason: option<string>,
+}
+
+fill-shelf: func(req: shelf-request) -> result<list<shelf-item>, string>;
+```
+
+Payload rules:
+
+- Return the list best first. An empty list means nothing to suggest and keeps
+  the shelf's current items. An `Err` string is recorded as the shelf's last
+  error and starts a backoff of one hour, then six hours, then the TTL.
+- The host resolves `tmdb-id` first, then `tvdb-id` for a TV show. A ref with
+  only `imdb-id` is dropped.
+- `exclude` lists titles the host will reject. `limit` is 24; the rail shows 12.
+- `reason` is plain text. The host collapses it to one line and clips it to 140
+  characters.
+- The host drops unresolvable, owned, requested, dismissed and restricted
+  titles and duplicates, and keeps the previous list when fewer than three
+  survive. It resolves at most `limit * 4` candidates per fill.
+
+A fill acts as the shelf's user. `search`, `data-list`, `data-read`,
+`http-request` and the KV functions work under their usual capabilities, and
+`http-request` gets the page budget. Every function that returns a
+`write-outcome` returns `denied`. A fill runs under the page timeout (120
+seconds by default).
 
 ### Scheduled handler
 

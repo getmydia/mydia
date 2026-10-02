@@ -1,6 +1,6 @@
 # Bundled plugin guests
 
-Guests are wasip2 **components** (WIT `mydia:plugin@1.5.0`, built on the
+Guests are wasip2 **components** (WIT `mydia:plugin@1.6.0`, built on the
 `mydia-plugin-sdk` crate and the `#[mydia::plugin]` macro), which the host runs
 via `Wasmex.Components.*`. They migrated from `wasm32-unknown-unknown` core
 modules.

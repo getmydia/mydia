@@ -89,8 +89,9 @@ Two questions place any piece of a design:
 
 **Host nouns** are watch state, favorites, which Mydia user is linked to which
 remote account, per-user connections and their tokens, operator settings and
-secrets, plugin instances, sync-run history, health status, schedules, and
-egress policy. The host also renders every screen. A plugin describes setup
+secrets, plugin instances, sync-run history, health status, schedules, egress
+policy, and shelves. For a shelf, the list, its staleness and its dismissals are
+the host's; choosing the titles is the plugin's. The host also renders every screen. A plugin describes setup
 steps declaratively and ships no UI code of its own.
 
 **Plugin behaviour** is the protocol: auth handshakes, server discovery and

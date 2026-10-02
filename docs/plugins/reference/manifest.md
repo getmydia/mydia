@@ -47,6 +47,7 @@ This page is a practical reference, using the bundled webhook notifier
 | `setup` | no | `true` when the plugin exports `setup`; the host then creates instances through the setup wizard instead of the plain settings form. Default `false`. |
 | `capabilities` | yes | What the plugin subscribes to and is allowed to do. See below. |
 | `settings_schema` | no | Operator-editable configuration fields. See below. |
+| `shelves` | no | Shelves the plugin fills for the Home dashboard, at most four. Requires `surfaces:shelf`. See [Shelves](#shelves). |
 
 ## Capabilities
 
@@ -242,7 +243,7 @@ export:
 | Field | Required | Bounds |
 |-------|----------|--------|
 | `key` | yes | Matches `[a-z][a-z0-9_]{0,31}`. Unique within the plugin. |
-| `title` | yes | 1 to 40 characters. Shown as the shelf heading. |
+| `title` | yes | 1 to 40 characters, and not blank. Shown as the shelf heading. |
 | `placement` | yes | `home`. |
 | `scope` | yes | `user`. The shelf is filled for, and shown to, one person. |
 | `ttl_seconds` | yes | An integer from 3600 to 2592000. How long a fill lasts before the host asks again. |
