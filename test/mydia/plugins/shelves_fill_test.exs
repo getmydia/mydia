@@ -9,17 +9,13 @@ defmodule Mydia.Plugins.ShelvesFillTest do
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Shelf
+  alias Mydia.Plugins.ShelfDismissal
   alias Mydia.Plugins.ShelfItem
   alias Mydia.Plugins.Shelves
 
   @now ~U[2026-10-01 12:00:00.000000Z]
 
   setup do
-    # The app skips Oban in test, so start an isolated manual-mode instance for
-    # request_fill/1 to insert into.
-    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
-    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
-
     register_shelf_plugin!(ttl_seconds: 86_400)
     user = user_fixture()
 
@@ -189,7 +185,37 @@ defmodule Mydia.Plugins.ShelvesFillTest do
     assert String.length(Repo.get!(Shelf, ctx.shelf.id).last_error) == 500
   end
 
+  test "a dismissal recorded while the plugin runs is honoured", ctx do
+    user_id = ctx.user.id
+
+    invoker = fn _slug, _key, _user, _opts ->
+      Repo.insert!(%ShelfDismissal{
+        plugin_slug: "shelf-test",
+        shelf_key: "picks",
+        user_id: user_id,
+        media_type: :movie,
+        provider: :tmdb,
+        provider_id: 2
+      })
+
+      {:ok, %{items: [wit(1), wit(2), wit(3), wit(4)]}}
+    end
+
+    assert :filled = fill(ctx.shelf, ctx.declared, invoker)
+    assert titles(ctx.shelf) == ["Title 1", "Title 3", "Title 4"]
+  end
+
+  test "request_fill returns :ok and does not raise when Oban is not running", ctx do
+    assert :ok = Shelves.request_fill(ctx.shelf)
+    assert [%Oban.Job{args: %{"shelf_id" => id}}] = all_enqueued(worker: ShelfFill)
+    assert id == ctx.shelf.id
+  end
+
   test "refresh_stale enqueues one job per stale shelf and none for a fresh one", ctx do
+    # The fallback insert does not enforce `unique:`, so this one needs Oban.
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
     views = Shelves.list_for(ctx.user, :home, @now)
     assert :ok = Shelves.refresh_stale(views)
     assert :ok = Shelves.refresh_stale(views)

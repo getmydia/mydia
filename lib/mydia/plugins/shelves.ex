@@ -14,6 +14,8 @@ defmodule Mydia.Plugins.Shelves do
 
   import Ecto.Query
 
+  require Logger
+
   alias Mydia.Accounts
   alias Mydia.Accounts.User
   alias Mydia.Jobs.ShelfFill
@@ -133,8 +135,15 @@ defmodule Mydia.Plugins.Shelves do
   @doc "Enqueues a fill for one shelf."
   @spec request_fill(Shelf.t()) :: :ok
   def request_fill(%Shelf{id: id}) do
-    {:ok, _job} = Oban.insert(ShelfFill.new(%{shelf_id: id}))
-    :ok
+    case Mydia.Jobs.insert(ShelfFill.new(%{shelf_id: id})) do
+      {:ok, _job} ->
+        :ok
+
+      {:error, reason} ->
+        # Best effort: the page that asked still renders, and the next visit asks again.
+        Logger.warning("Failed to enqueue ShelfFill", shelf_id: id, reason: inspect(reason))
+        :ok
+    end
   end
 
   @doc """

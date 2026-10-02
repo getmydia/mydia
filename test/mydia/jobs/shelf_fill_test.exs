@@ -8,13 +8,6 @@ defmodule Mydia.Jobs.ShelfFillTest do
   alias Mydia.Jobs.ShelfFill
   alias Mydia.Plugins.Shelf
 
-  setup do
-    # The app skips Oban in test, so start an isolated manual-mode instance.
-    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
-    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
-    :ok
-  end
-
   test "an unknown shelf is a no-op" do
     assert :ok = perform_job(ShelfFill, %{"shelf_id" => Ecto.UUID.generate()})
   end
@@ -45,6 +38,10 @@ defmodule Mydia.Jobs.ShelfFillTest do
   end
 
   test "jobs are unique per shelf" do
+    # The app skips Oban in test, so start an isolated manual-mode instance.
+    engine = if Mydia.DB.postgres?(), do: Oban.Engines.Basic, else: Oban.Engines.Lite
+    start_supervised!({Oban, repo: Mydia.Repo, engine: engine, testing: :manual})
+
     id = Ecto.UUID.generate()
 
     assert {:ok, %Oban.Job{conflict?: false}} = Oban.insert(ShelfFill.new(%{shelf_id: id}))
