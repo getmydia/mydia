@@ -40,6 +40,10 @@ defmodule Mydia.Plugins.Shelves do
   @fill_limit 24
   @error_max 500
 
+  # However often its events fire, a shelf is not refilled within this long of
+  # its last fill. A binge would otherwise cost a model run per dashboard visit.
+  @min_refresh_seconds 3_600
+
   # ── Declarations ──────────────────────────────────────────────────────────
 
   @doc "Every shelf declared by an enabled plugin holding `surfaces:shelf`."
@@ -131,6 +135,41 @@ defmodule Mydia.Plugins.Shelves do
     for %View{stale?: true, shelf: shelf} <- views, do: request_fill(shelf)
     :ok
   end
+
+  @doc """
+  Marks a user's shelves stale when an event their manifest names in
+  `refresh_on` fires for that user.
+
+  `stale_at` moves to now, or to an hour after the last fill if that is later,
+  and never moves later than it already was. A shelf that has never been
+  filled is already stale and is left alone. Nothing runs here: the fill
+  happens on the user's next visit.
+  """
+  @spec mark_stale(map(), DateTime.t()) :: :ok
+  def mark_stale(event, now \\ DateTime.utc_now())
+
+  def mark_stale(%{type: type, actor_id: user_id} = event, now)
+      when is_binary(type) and is_binary(user_id) do
+    watching = for %Declared{} = d <- declared(), type in d.refresh_on, do: {d.slug, d.key}
+
+    if watching != [] and to_string(Map.get(event, :actor_type)) == "user" do
+      shelves =
+        Repo.all(from s in Shelf, where: s.user_id == ^user_id and not is_nil(s.filled_at))
+
+      for %Shelf{} = shelf <- shelves, {shelf.plugin_slug, shelf.shelf_key} in watching do
+        earliest = DateTime.add(shelf.filled_at, @min_refresh_seconds)
+        target = if DateTime.compare(now, earliest) == :lt, do: earliest, else: now
+
+        if DateTime.compare(target, shelf.stale_at) == :lt do
+          shelf |> Shelf.changeset(%{stale_at: target}) |> Repo.update!()
+        end
+      end
+    end
+
+    :ok
+  end
+
+  def mark_stale(_event, _now), do: :ok
 
   @doc "Enqueues a fill for one shelf."
   @spec request_fill(Shelf.t()) :: :ok
