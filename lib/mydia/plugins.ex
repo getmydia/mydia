@@ -222,6 +222,47 @@ defmodule Mydia.Plugins do
     end
   end
 
+  @doc """
+  Calls a plugin's 1.6 `fill-shelf` export for one of its declared shelves, as
+  `user`. The plugin's settings ride along under `config`, as they do for a
+  page call.
+
+  Options: `:exclude` (maps with `:media_type`, `:tmdb_id`, `:tvdb_id`,
+  `:imdb_id`), `:limit`, `:now` (a `DateTime`, or Unix seconds).
+
+  Errors: `:unsupported` for a guest older than 1.6, `:busy` when a fill for
+  this user is already running, `:guest_error` carrying the guest's message.
+  """
+  @spec invoke_fill_shelf(String.t(), String.t(), Mydia.Accounts.User.t(), keyword()) ::
+          {:ok, %{items: [map()]}} | {:error, Error.t()}
+  def invoke_fill_shelf(slug, shelf_key, %Mydia.Accounts.User{} = user, opts \\ [])
+      when is_binary(slug) and is_binary(shelf_key) do
+    payload = %{
+      "shelf" => shelf_key,
+      "exclude" => Keyword.get(opts, :exclude, []),
+      "limit" => Keyword.get(opts, :limit, 12),
+      "now" => unix_seconds(Keyword.get(opts, :now)),
+      "config" => plugin_settings(slug)
+    }
+
+    Host.call(slug, "fill-shelf", payload,
+      handler: :fill_shelf,
+      acting_user_id: user.id,
+      role: user.role
+    )
+  end
+
+  defp unix_seconds(%DateTime{} = now), do: DateTime.to_unix(now)
+  defp unix_seconds(now) when is_integer(now), do: now
+  defp unix_seconds(_), do: System.system_time(:second)
+
+  defp plugin_settings(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      %{settings: %{} = settings} -> settings
+      _ -> %{}
+    end
+  end
+
   # setup and check-health are the plugin-driven admin surfaces; a manifest
   # opts in with `setup: true`.
   defp setup_capable(slug) do

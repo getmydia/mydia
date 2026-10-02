@@ -76,7 +76,7 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Plugin
   alias Mydia.Sync
 
-  import Mydia.Plugins.PageContext, only: [page_user: 1, to_option: 1]
+  import Mydia.Plugins.PageContext, only: [acting_user: 1, to_option: 1]
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
@@ -437,7 +437,9 @@ defmodule Mydia.Plugins.HostFunctions do
   # ── http-request import ────────────────────────────────────────────────────
 
   defp http_import(slug, ctx, gate_opts) do
-    budget = if Map.get(ctx, :handler) == :on_http, do: page_http_opts(), else: []
+    # Page and shelf invocations wait on a slow upstream (a model server), so
+    # they get the longer timeout and larger response cap.
+    budget = if Map.get(ctx, :handler) in [:on_http, :fill_shelf], do: page_http_opts(), else: []
 
     fn req ->
       typed_result(fn ->
@@ -708,8 +710,8 @@ defmodule Mydia.Plugins.HostFunctions do
   @page_http_max_bytes 4_194_304
 
   @doc """
-  Gate options for `http-request` calls made during a page (`on-http`)
-  invocation: a longer timeout and a larger response cap than event handlers
+  Gate options for `http-request` calls made during a page (`on-http`) or
+  shelf (`fill-shelf`) invocation: a longer timeout and a larger response cap than event handlers
   get, because a page call waits on a slow upstream while a user watches.
   """
   @spec page_http_opts() :: keyword()
@@ -896,9 +898,11 @@ defmodule Mydia.Plugins.HostFunctions do
   defp split_list_opts(ctx) when is_map(ctx), do: {ctx, []}
   defp split_list_opts(opts) when is_list(opts), do: {Keyword.get(opts, :ctx, %{}), opts}
 
-  # `:system` for event and schedule handlers; the acting user for on-http,
-  # taken from the host-provided invocation context.
-  defp list_viewer(%{handler: :on_http} = ctx), do: page_user(ctx)
+  # `:system` for event and schedule handlers; the acting user for on-http and
+  # fill-shelf, taken from the host-provided invocation context.
+  defp list_viewer(%{handler: handler} = ctx) when handler in [:on_http, :fill_shelf],
+    do: acting_user(ctx)
+
   defp list_viewer(_ctx), do: {:ok, :system}
 
   defp list_scope(:system), do: Scope.system()
