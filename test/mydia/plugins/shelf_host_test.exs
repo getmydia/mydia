@@ -190,7 +190,7 @@ defmodule Mydia.Plugins.ShelfHostTest do
              )
   end
 
-  test "invoke_fill_shelf injects the plugin's settings", %{user: user} do
+  defp echoed_config(user) do
     assert {:ok, %{items: [item]}} =
              Plugins.invoke_fill_shelf(@slug, "echo", user,
                exclude: [],
@@ -199,6 +199,26 @@ defmodule Mydia.Plugins.ShelfHostTest do
              )
 
     assert item.item.tmdb_id == 5
-    assert item.reason == ~s(#{user.id}|0|{"greeting":"hi"})
+    [user_id, "0", json] = String.split(item.reason, "|", parts: 3)
+    assert user_id == user.id
+    Jason.decode!(json)
+  end
+
+  test "invoke_fill_shelf carries the default instance and its config", %{user: user} do
+    instance = Mydia.Plugins.Instances.default_instance(@slug)
+
+    assert echoed_config(user) == %{"greeting" => "hi", "instance_id" => instance.id}
+  end
+
+  test "invoke_fill_shelf falls back to the plugin settings without an instance", %{user: user} do
+    config = Settings.get_plugin_config_by_slug(@slug)
+
+    {:ok, _} =
+      Settings.update_plugin_config(config, %{
+        manifest: Map.put(config.manifest, "multi_instance", true)
+      })
+
+    assert Mydia.Plugins.Instances.default_instance(@slug) == nil
+    assert echoed_config(user) == %{"greeting" => "hi"}
   end
 end

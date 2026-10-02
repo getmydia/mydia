@@ -358,6 +358,9 @@ A fill acts as the shelf's user. `search`, `data-list`, `data-read`,
 `http-request`, `connection-request`, `link-request` and the KV functions work
 under their usual capabilities, and `http-request` gets the page budget. The
 two request functions are outbound calls gated by grants, not writes to Mydia.
+A fill runs against the plugin's default instance; a `multi_instance` plugin has
+none, so its instance-scoped functions (the KV functions and `link-request`)
+return `not_found` during a fill.
 `data-list` is scoped to the user. `data-read` returns a media item by id
 without applying the user's restrictions. A failing shelf is listed on the
 plugin's row in Admin > System > Plugins, with the last error the plugin

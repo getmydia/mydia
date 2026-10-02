@@ -122,6 +122,10 @@ A fill acts as the shelf's user and can only read:
 - `kv-get`, `kv-set` and the other KV functions, with `state:kv`. Keys are
   yours, so use per-user keys such as `user/<user_id>/seen`.
 
+A fill runs against the plugin's default instance, which is what the KV and
+link functions are scoped to. A `multi_instance` plugin has no default
+instance, so it fills with none and those functions return `not_found`.
+
 Every function that changes the user's data is refused during a fill, because
 nobody is present to approve a change. Each returns `denied`, whatever the
 plugin has been granted. Two groups are refused:

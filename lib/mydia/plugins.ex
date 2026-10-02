@@ -238,18 +238,23 @@ defmodule Mydia.Plugins do
           {:ok, %{items: [map()]}} | {:error, Error.t()}
   def invoke_fill_shelf(slug, shelf_key, %Mydia.Accounts.User{} = user, opts \\ [])
       when is_binary(slug) and is_binary(shelf_key) do
+    # The instance-scoped imports (KV, link-request) need one; a multi_instance
+    # plugin has no default instance, so it fills with none.
+    instance = Instances.default_instance(slug)
+
     payload = %{
       "shelf" => shelf_key,
       "exclude" => Keyword.get(opts, :exclude, []),
       "limit" => Keyword.get(opts, :limit, 12),
       "now" => unix_seconds(Keyword.get(opts, :now)),
-      "config" => plugin_settings(slug)
+      "config" => if(instance, do: Instances.config_for(instance), else: plugin_settings(slug))
     }
 
     Host.call(slug, "fill-shelf", payload,
       handler: :fill_shelf,
       acting_user_id: user.id,
-      role: user.role
+      role: user.role,
+      instance_id: instance && instance.id
     )
   end
 
