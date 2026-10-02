@@ -95,5 +95,62 @@ defmodule Mydia.Streaming.FfmpegSegmentPollTest do
 
       refute_received {:segments, _}
     end
+
+    test "ignores a playlist left behind by an encoder that started elsewhere", %{
+      playlist_path: playlist_path
+    } do
+      # The previous encoder ran from segment 150. This one was relocated to
+      # 0 and has written nothing yet, so the file on disk is still the old
+      # one. Reporting 150..152 under this encoder's generation makes the
+      # session wait on segments nothing is producing.
+      File.write!(playlist_path, """
+      #EXTM3U
+      #EXTINF:4.000000,
+      segment_00150.ts
+      #EXTINF:4.000000,
+      segment_00151.ts
+      #EXTINF:4.000000,
+      segment_00152.ts
+      """)
+
+      test_pid = self()
+
+      state = %FfmpegHlsTranscoder.State{
+        playlist_path: playlist_path,
+        ready_notified: true,
+        start_number: 0,
+        on_segments: fn indices -> send(test_pid, {:segments, indices}) end
+      }
+
+      updated = FfmpegHlsTranscoder.final_segment_catchup(state)
+
+      refute_received {:segments, _}
+      assert updated.seen_segments == MapSet.new()
+    end
+
+    test "reports a playlist that begins at this encoder's start number", %{
+      playlist_path: playlist_path
+    } do
+      File.write!(playlist_path, """
+      #EXTM3U
+      #EXTINF:4.000000,
+      segment_00150.ts
+      #EXTINF:4.000000,
+      segment_00151.ts
+      """)
+
+      test_pid = self()
+
+      state = %FfmpegHlsTranscoder.State{
+        playlist_path: playlist_path,
+        ready_notified: true,
+        start_number: 150,
+        on_segments: fn indices -> send(test_pid, {:segments, indices}) end
+      }
+
+      FfmpegHlsTranscoder.final_segment_catchup(state)
+
+      assert_receive {:segments, [150, 151]}
+    end
   end
 end
