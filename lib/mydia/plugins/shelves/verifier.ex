@@ -27,6 +27,9 @@ defmodule Mydia.Plugins.Shelves.Verifier do
   @min_items 3
   @default_limit 12
   @reason_max 140
+  # A multiple of the limit, not the limit itself: unresolvable and restricted
+  # picks are dropped, so the rail needs spare candidates to still fill.
+  @candidate_headroom 4
   # Requests in these states already claim a title.
   @outstanding ~w(pending approved)
 
@@ -47,6 +50,9 @@ defmodule Mydia.Plugins.Shelves.Verifier do
   never replaces a full shelf. `{:error, :relay_unavailable}` when candidates
   existed and not one resolved, which is a relay outage rather than a list of
   bad ids.
+
+  At most `:limit * #{@candidate_headroom}` picks are resolved against the
+  relay, taken in the plugin's order after the cheap filters.
 
   Options: `:dismissed` (provider keys the user dismissed), `:limit`, and
   `:resolver`, a `(ref, media_type) -> {:ok, metadata} | {:error, term}` that
@@ -70,6 +76,7 @@ defmodule Mydia.Plugins.Shelves.Verifier do
       |> Enum.flat_map(&keyed/1)
       |> Enum.uniq_by(fn {key, _pick} -> key end)
       |> Enum.reject(fn {key, _pick} -> MapSet.member?(taken, key) end)
+      |> Enum.take(limit * @candidate_headroom)
 
     resolved = Enum.map(candidates, &resolve_candidate(&1, resolver))
 

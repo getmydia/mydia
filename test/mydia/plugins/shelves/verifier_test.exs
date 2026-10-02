@@ -156,6 +156,23 @@ defmodule Mydia.Plugins.Shelves.VerifierTest do
     assert length(items) == 5
   end
 
+  test "bounds how many picks are resolved, however many the plugin returns" do
+    test_pid = self()
+
+    counting = fn ref, type ->
+      send(test_pid, :resolved)
+      {:ok, meta(ref, type)}
+    end
+
+    picks = for n <- 1..200, do: pick(n)
+
+    assert {:ok, items} = verify(picks, user_fixture(), limit: 3, resolver: counting)
+    assert Enum.map(items, & &1.provider_id) == [1, 2, 3]
+
+    {:messages, messages} = Process.info(self(), :messages)
+    assert length(messages) <= 3 * 4
+  end
+
   test "clips and cleans the reason, and keeps a missing one nil" do
     long = String.duplicate("a", 200)
 
