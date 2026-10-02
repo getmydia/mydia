@@ -218,6 +218,25 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, type: "tv_show", quality: "1080p")) == []
     end
 
+    test "the quality filter matches every spelling of a resolution", %{user: user} do
+      analyzed = media_item_fixture(%{type: "movie", title: "Wide Harbor"})
+      media_file_fixture(%{media_item_id: analyzed.id, resolution: "4K"})
+      parsed = media_item_fixture(%{type: "movie", title: "Tall Harbor"})
+      media_file_fixture(%{media_item_id: parsed.id, resolution: "UHD"})
+      plain = media_item_fixture(%{type: "movie", title: "Plain Harbor"})
+      media_file_fixture(%{media_item_id: plain.id, resolution: "2160p"})
+      lower = media_item_fixture(%{type: "movie", title: "Small Harbor"})
+      media_file_fixture(%{media_item_id: lower.id, resolution: "1080p"})
+      unanalyzed = media_item_fixture(%{type: "movie", title: "Dark Harbor"})
+      media_file_fixture(%{media_item_id: unanalyzed.id, resolution: nil})
+
+      assert user |> page(type: "movie", quality: "2160p") |> titles() |> Enum.sort() ==
+               ["Plain Harbor", "Tall Harbor", "Wide Harbor"]
+
+      assert titles(page(user, type: "movie", quality: "1080p")) == ["Small Harbor"]
+      assert titles(page(user, type: "movie", quality: "720p")) == []
+    end
+
     test "the progress filter matches the row's status", %{user: user} do
       owned = media_item_fixture(%{title: "Filed Away"})
       media_file_fixture(%{media_item_id: owned.id})
