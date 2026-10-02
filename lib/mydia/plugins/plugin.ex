@@ -37,7 +37,8 @@ defmodule Mydia.Plugins.Plugin do
           category: String.t() | nil,
           setup: boolean(),
           connection: map() | nil,
-          page: map() | nil
+          page: map() | nil,
+          shelves: [map()]
         }
 
   defstruct slug: nil,
@@ -56,7 +57,8 @@ defmodule Mydia.Plugins.Plugin do
             category: nil,
             setup: false,
             connection: nil,
-            page: nil
+            page: nil,
+            shelves: []
 
   alias Mydia.Plugins.Manifest
 
@@ -86,7 +88,8 @@ defmodule Mydia.Plugins.Plugin do
       category: manifest.category,
       setup: manifest.setup,
       connection: manifest.connection,
-      page: manifest.page
+      page: manifest.page,
+      shelves: manifest.shelves
     }
   end
 

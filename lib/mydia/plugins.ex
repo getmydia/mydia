@@ -1501,6 +1501,7 @@ defmodule Mydia.Plugins do
       "connection" => m.connection,
       "schedule" => m.schedule,
       "page" => m.page,
+      "shelves" => m.shelves,
       "min_host_version" => m.min_host_version,
       "multi_instance" => m.multi_instance,
       "category" => m.category,

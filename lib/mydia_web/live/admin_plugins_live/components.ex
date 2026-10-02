@@ -38,6 +38,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_label("surfaces:page", _),
     do: "Serve its own page inside Mydia"
 
+  def capability_label("surfaces:shelf", _),
+    do: "Suggest titles on each person's Home page, reading as that person"
+
   def capability_label("net:private", hosts),
     do: "Reach servers on your private network: #{join(hosts)}"
 
@@ -63,6 +66,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def capability_icon("surfaces:write"), do: "hero-pencil-square"
   def capability_icon("data:search"), do: "hero-magnifying-glass"
   def capability_icon("surfaces:page"), do: "hero-window"
+  def capability_icon("surfaces:shelf"), do: "hero-rectangle-stack"
   def capability_icon("net:private"), do: "hero-server-stack"
   def capability_icon("state:kv"), do: "hero-circle-stack"
   def capability_icon("users:connections"), do: "hero-users"
@@ -79,6 +83,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         "data:read",
         "data:search",
         "surfaces:write",
+        "surfaces:shelf",
         "users:connections"
       ]
 
