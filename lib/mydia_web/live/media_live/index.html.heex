@@ -747,153 +747,162 @@
       <% has_selection = selected_count > 0 %>
       <% all_selected =
         MapSet.equal?(@selected_ids, @all_visible_ids) and MapSet.size(@all_visible_ids) > 0 %>
-      <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300">
+      <%!-- Below lg the mobile dock occupies the bottom edge, so sit above it --%>
+      <div
+        id="selection-toolbar"
+        class="fixed bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] lg:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300"
+      >
         <div class="bg-base-100 shadow-2xl rounded-box border border-base-300 px-2 py-2">
-          <div class="flex items-center gap-1">
-            <%!-- Select All checkbox with count --%>
-            <label
-              class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-base-200 cursor-pointer transition-colors"
-              title={if all_selected, do: "Deselect all", else: "Select all"}
-            >
-              <input
-                id="select-all"
-                type="checkbox"
-                class="checkbox checkbox-sm checkbox-primary"
-                checked={all_selected}
+          <%!-- Two rows below sm, one row from sm up (the row wrappers use display: contents) --%>
+          <div class="flex flex-col items-stretch gap-1 sm:flex-row sm:items-center">
+            <div class="flex items-center justify-center gap-1 sm:contents">
+              <%!-- Select All checkbox with count --%>
+              <label
+                class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-base-200 cursor-pointer transition-colors"
+                title={if all_selected, do: "Deselect all", else: "Select all"}
+              >
+                <input
+                  id="select-all"
+                  type="checkbox"
+                  class="checkbox checkbox-sm checkbox-primary"
+                  checked={all_selected}
+                  phx-click={
+                    JS.push("toggle_select_all")
+                    |> JS.dispatch("mydia:toggle-select-all", to: "#media-items")
+                  }
+                />
+                <%= if selected_count == 0 do %>
+                  <span class="text-sm">Select All</span>
+                <% else %>
+                  <span id="selection-count" class="font-medium tabular-nums">{selected_count}</span>
+                  <span class="text-sm text-base-content/60 hidden sm:inline">selected</span>
+                <% end %>
+              </label>
+
+              <%!-- Explicit select-all: the checkbox alone reads as "N selected" --%>
+              <button
+                :if={has_selection and not all_selected}
+                id="select-all-matching"
+                type="button"
+                class="btn btn-sm btn-ghost whitespace-nowrap"
                 phx-click={
-                  JS.push("toggle_select_all")
-                  |> JS.dispatch("mydia:toggle-select-all", to: "#media-items")
+                  JS.push("select_all")
+                  |> JS.dispatch("mydia:select-all", to: "#media-items")
                 }
-              />
-              <%= if selected_count == 0 do %>
-                <span class="text-sm">Select All</span>
-              <% else %>
-                <span id="selection-count" class="font-medium tabular-nums">{selected_count}</span>
-                <span class="text-sm text-base-content/60 hidden sm:inline">selected</span>
-              <% end %>
-            </label>
-
-            <%!-- Explicit select-all: the checkbox alone reads as "N selected" --%>
-            <button
-              :if={has_selection and not all_selected}
-              id="select-all-matching"
-              type="button"
-              class="btn btn-sm btn-ghost whitespace-nowrap"
-              phx-click={
-                JS.push("select_all")
-                |> JS.dispatch("mydia:select-all", to: "#media-items")
-              }
-            >
-              Select all {MapSet.size(@all_visible_ids)}
-            </button>
-
-            <div class="w-px h-6 bg-base-300 mx-1"></div>
-
-            <%!-- Primary action buttons (icon only with tooltips) --%>
-            <div class="flex items-center">
-              <div class="tooltip tooltip-top" data-tip="Auto Search">
-                <button
-                  id="batch-auto-search-btn"
-                  type="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                  phx-click="batch_auto_search"
-                  disabled={!has_selection}
-                >
-                  <.icon name="hero-magnifying-glass" class="w-4 h-4" />
-                </button>
-              </div>
-
-              <div class="tooltip tooltip-top" data-tip="Monitor">
-                <button
-                  id="batch-monitor"
-                  type="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                  phx-click="batch_monitor"
-                  disabled={!has_selection}
-                >
-                  <.icon name="hero-bookmark" class="w-4 h-4" />
-                </button>
-              </div>
-
-              <div class="tooltip tooltip-top" data-tip="Unmonitor">
-                <button
-                  id="batch-unmonitor"
-                  type="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                  phx-click="batch_unmonitor"
-                  disabled={!has_selection}
-                >
-                  <.icon name="hero-bookmark-slash" class="w-4 h-4" />
-                </button>
-              </div>
-
-              <div class="tooltip tooltip-top" data-tip="Edit">
-                <button
-                  type="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                  phx-click="show_batch_edit"
-                  disabled={!has_selection}
-                >
-                  <.icon name="hero-pencil-square" class="w-4 h-4" />
-                </button>
-              </div>
-
-              <div class="tooltip tooltip-top" data-tip="Add to Collection">
-                <button
-                  type="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                  phx-click="show_add_to_collection"
-                  disabled={!has_selection}
-                >
-                  <.icon name="hero-folder-plus" class="w-4 h-4" />
-                </button>
-              </div>
-
-              <%!-- More dropdown for less common actions --%>
-              <div class={[
-                "dropdown dropdown-top dropdown-end",
-                !has_selection && "pointer-events-none"
-              ]}>
-                <div
-                  tabindex="0"
-                  role="button"
-                  class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
-                >
-                  <.icon name="hero-ellipsis-horizontal" class="w-4 h-4" />
-                </div>
-                <ul
-                  tabindex="0"
-                  class="dropdown-content menu bg-base-100 rounded-box z-[1] w-48 p-2 shadow-lg border border-base-300 mb-2"
-                >
-                  <li>
-                    <button type="button" phx-click="batch_reclassify" class="gap-2">
-                      <.icon name="hero-tag" class="w-4 h-4" /> Re-classify
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      type="button"
-                      phx-click="show_delete_confirmation"
-                      class="gap-2 text-error"
-                    >
-                      <.icon name="hero-trash" class="w-4 h-4" /> Delete
-                    </button>
-                  </li>
-                </ul>
-              </div>
+              >
+                Select all {MapSet.size(@all_visible_ids)}
+              </button>
             </div>
 
-            <div class="w-px h-6 bg-base-300 mx-1"></div>
+            <div class="hidden sm:block w-px h-6 bg-base-300 mx-1"></div>
 
-            <%!-- Done button --%>
-            <button
-              type="button"
-              class="btn btn-sm btn-primary"
-              phx-click="toggle_selection_mode"
-              title="Done (Esc)"
-            >
-              Done
-            </button>
+            <div class="flex items-center justify-center gap-1 sm:contents">
+              <%!-- Primary action buttons (icon only with tooltips) --%>
+              <div class="flex items-center">
+                <div class="tooltip tooltip-top" data-tip="Auto Search">
+                  <button
+                    id="batch-auto-search-btn"
+                    type="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                    phx-click="batch_auto_search"
+                    disabled={!has_selection}
+                  >
+                    <.icon name="hero-magnifying-glass" class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div class="tooltip tooltip-top" data-tip="Monitor">
+                  <button
+                    id="batch-monitor"
+                    type="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                    phx-click="batch_monitor"
+                    disabled={!has_selection}
+                  >
+                    <.icon name="hero-bookmark" class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div class="tooltip tooltip-top" data-tip="Unmonitor">
+                  <button
+                    id="batch-unmonitor"
+                    type="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                    phx-click="batch_unmonitor"
+                    disabled={!has_selection}
+                  >
+                    <.icon name="hero-bookmark-slash" class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div class="tooltip tooltip-top" data-tip="Edit">
+                  <button
+                    type="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                    phx-click="show_batch_edit"
+                    disabled={!has_selection}
+                  >
+                    <.icon name="hero-pencil-square" class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div class="tooltip tooltip-top" data-tip="Add to Collection">
+                  <button
+                    type="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                    phx-click="show_add_to_collection"
+                    disabled={!has_selection}
+                  >
+                    <.icon name="hero-folder-plus" class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <%!-- More dropdown for less common actions --%>
+                <div class={[
+                  "dropdown dropdown-top dropdown-end",
+                  !has_selection && "pointer-events-none"
+                ]}>
+                  <div
+                    tabindex="0"
+                    role="button"
+                    class={["btn btn-sm btn-ghost btn-square", !has_selection && "btn-disabled"]}
+                  >
+                    <.icon name="hero-ellipsis-horizontal" class="w-4 h-4" />
+                  </div>
+                  <ul
+                    tabindex="0"
+                    class="dropdown-content menu bg-base-100 rounded-box z-[1] w-48 p-2 shadow-lg border border-base-300 mb-2"
+                  >
+                    <li>
+                      <button type="button" phx-click="batch_reclassify" class="gap-2">
+                        <.icon name="hero-tag" class="w-4 h-4" /> Re-classify
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        phx-click="show_delete_confirmation"
+                        class="gap-2 text-error"
+                      >
+                        <.icon name="hero-trash" class="w-4 h-4" /> Delete
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="w-px h-6 bg-base-300 mx-1"></div>
+
+              <%!-- Done button --%>
+              <button
+                type="button"
+                class="btn btn-sm btn-primary"
+                phx-click="toggle_selection_mode"
+                title="Done (Esc)"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       </div>
