@@ -234,6 +234,8 @@ class PlaybackController {
       // absorb transient failures on the session URL (auth blip, proxy or relay
       // hiccup) before the player opens it. Without it, these failures become
       // hard errors. A dead session is ended here rather than surfacing downstream.
+      // The probe's body is also what tells a genuinely full playlist from one
+      // that only claims to be: whether it ends.
       final terminated = await _awaitPlaylist(resolved.url,
           headers: resolved.probeHeaders,
           onProgress: onProgress,

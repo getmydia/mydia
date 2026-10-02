@@ -273,12 +273,6 @@ defmodule MydiaWeb.Api.HlsController do
       |> put_resp_header("cache-control", cache_control_for(segment))
       |> send_file(200, path)
     else
-      {:ok, {:content, body}} ->
-        conn
-        |> put_resp_content_type(SessionFiles.content_type(segment))
-        |> put_resp_header("cache-control", "no-cache")
-        |> send_resp(200, body)
-
       {:error, :no_user} ->
         conn
         |> put_status(:unauthorized)
@@ -328,7 +322,10 @@ defmodule MydiaWeb.Api.HlsController do
 
       # :out_of_range lands here too: the segment will never exist, so a
       # terminal 404 is the honest answer rather than a 503 the player would
-      # keep retrying.
+      # keep retrying. So does {:ok, {:content, _}}: resolve/3 answers a
+      # playlist as content, but the router sends index.m3u8 to
+      # master_playlist/2 ahead of this route, so that answer cannot arrive
+      # here, and would be a 404 if it did.
       _missing ->
         conn
         |> put_status(:not_found)

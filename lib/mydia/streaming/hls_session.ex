@@ -209,8 +209,8 @@ defmodule Mydia.Streaming.HlsSession do
   end
 
   # Under mpv's 5s network-timeout, which media_kit sets and the player does
-  # not override. At 10s mpv dropped the connection before the 503 below was
-  # ever sent, so its retry never saw Retry-After and counted a network error.
+  # not override. At 10s mpv dropped the connection before the controller's 503
+  # was ever sent, so its retry never saw Retry-After and counted a network error.
   @segment_wait_timeout 4_000
 
   @doc """
