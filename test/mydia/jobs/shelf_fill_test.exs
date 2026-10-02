@@ -7,6 +7,7 @@ defmodule Mydia.Jobs.ShelfFillTest do
 
   alias Mydia.Jobs.ShelfFill
   alias Mydia.Plugins.Shelf
+  alias Mydia.Plugins.Shelves
 
   test "an unknown shelf is a no-op" do
     assert :ok = perform_job(ShelfFill, %{"shelf_id" => Ecto.UUID.generate()})
@@ -35,6 +36,24 @@ defmodule Mydia.Jobs.ShelfFillTest do
     assert :ok = perform_job(ShelfFill, %{"shelf_id" => shelf.id})
 
     assert %Shelf{status: :failed, failure_count: 1} = Repo.get!(Shelf, shelf.id)
+  end
+
+  test "a fill that raises is recorded as a failure and the job still returns :ok" do
+    # `perform/1` takes no injected invoker, so the rescue is exercised through
+    # `run/3`, which `perform/1` delegates to.
+    register_shelf_plugin!()
+    shelf = shelf_fixture(user_fixture())
+    declared = Shelves.get_declared("shelf-test", "picks")
+
+    raising = fn _shelf, _declared -> raise ArgumentError, "the invoker blew up" end
+
+    assert :ok = ShelfFill.run(shelf, declared, raising)
+
+    reloaded = Repo.get!(Shelf, shelf.id)
+    assert %Shelf{status: :failed, failure_count: 1} = reloaded
+    assert reloaded.last_error =~ "the invoker blew up"
+    refute reloaded.last_error =~ "shelf_fill"
+    assert DateTime.compare(reloaded.stale_at, DateTime.utc_now()) == :gt
   end
 
   test "jobs are unique per shelf" do

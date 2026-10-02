@@ -178,6 +178,62 @@ defmodule Mydia.Plugins.ShelvesFillTest do
              Repo.get!(Shelf, ctx.shelf.id)
   end
 
+  test "the shelf is claimed before the plugin runs, so a killed fill backs off", ctx do
+    test = self()
+
+    invoker = fn _slug, _key, _user, _opts ->
+      send(test, {:claimed, Repo.get!(Shelf, ctx.shelf.id)})
+      {:ok, %{items: []}}
+    end
+
+    fill(ctx.shelf, ctx.declared, invoker)
+
+    assert_receive {:claimed, claimed}
+    assert claimed.stale_at == DateTime.add(@now, 3_600)
+    # Only the claim moved: nothing is recorded as a failure yet.
+    assert %Shelf{status: :idle, failure_count: 0, last_error: nil} = claimed
+  end
+
+  test "the claim backs off as far as the next failure would", ctx do
+    test = self()
+    failed = Repo.update!(Ecto.Changeset.change(ctx.shelf, failure_count: 1))
+
+    invoker = fn _slug, _key, _user, _opts ->
+      send(test, {:claimed, Repo.get!(Shelf, ctx.shelf.id).stale_at})
+      {:ok, %{items: []}}
+    end
+
+    fill(failed, ctx.declared, invoker)
+    assert_receive {:claimed, stale_at}
+    assert stale_at == DateTime.add(@now, 21_600)
+  end
+
+  test "an unexpected invoker result marks the shelf failed", ctx do
+    assert :failed = fill(ctx.shelf, ctx.declared, returning(:surprise))
+
+    shelf = Repo.get!(Shelf, ctx.shelf.id)
+    assert %Shelf{status: :failed, failure_count: 1} = shelf
+    assert shelf.last_error =~ "unexpected"
+    assert shelf.stale_at == DateTime.add(@now, 3_600)
+  end
+
+  test "a busy plugin restores the stale_at the shelf had", ctx do
+    earlier = DateTime.add(@now, -60)
+    shelf = Repo.update!(Ecto.Changeset.change(ctx.shelf, stale_at: earlier))
+
+    assert :busy = fill(shelf, ctx.declared, returning({:error, Error.new(:busy, "in flight")}))
+    assert Repo.get!(Shelf, shelf.id).stale_at == earlier
+  end
+
+  test "record_crash counts the failure, backs off and bounds the message", ctx do
+    assert :failed = Shelves.record_crash(ctx.shelf, ctx.declared, String.duplicate("y", 900))
+
+    shelf = Repo.get!(Shelf, ctx.shelf.id)
+    assert %Shelf{status: :failed, failure_count: 1} = shelf
+    assert String.length(shelf.last_error) == 500
+    assert DateTime.compare(shelf.stale_at, DateTime.utc_now()) == :gt
+  end
+
   test "a long error is clipped to fit the column", ctx do
     long = returning({:error, Error.new(:guest_error, String.duplicate("x", 900))})
 

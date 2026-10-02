@@ -173,6 +173,51 @@ defmodule Mydia.Plugins.Shelves.VerifierTest do
     assert length(messages) <= 3 * 4
   end
 
+  test "a resolution that outlives its timeout counts as unresolved" do
+    slow = fn {_provider, id} = ref, type ->
+      if id == 2, do: Process.sleep(2_000)
+      {:ok, meta(ref, type)}
+    end
+
+    picks = for n <- 1..4, do: pick(n)
+
+    assert {:ok, items} = verify(picks, user_fixture(), resolver: slow, resolve_timeout: 100)
+    assert Enum.map(items, & &1.provider_id) == [1, 3, 4]
+  end
+
+  test "keeps the plugin's order when resolutions finish out of order" do
+    staggered = fn {_provider, id} = ref, type ->
+      Process.sleep(rem(5 - id, 5) * 20)
+      {:ok, meta(ref, type)}
+    end
+
+    picks = for n <- 1..4, do: pick(n)
+
+    assert {:ok, items} = verify(picks, user_fixture(), resolver: staggered)
+    assert Enum.map(items, & &1.provider_id) == [1, 2, 3, 4]
+  end
+
+  test "every candidate timing out is a relay outage" do
+    hung = fn _ref, _type -> Process.sleep(2_000) end
+
+    assert {:error, :relay_unavailable} =
+             verify([pick(1), pick(2), pick(3)], user_fixture(),
+               resolver: hung,
+               resolve_timeout: 50
+             )
+  end
+
+  test "a resolver that raises is unresolved, not a crash" do
+    boom = fn ref, type ->
+      if elem(ref, 1) == 2, do: raise("boom"), else: {:ok, meta(ref, type)}
+    end
+
+    assert {:ok, items} =
+             verify([pick(1), pick(2), pick(3), pick(4)], user_fixture(), resolver: boom)
+
+    assert Enum.map(items, & &1.provider_id) == [1, 3, 4]
+  end
+
   test "clips and cleans the reason, and keeps a missing one nil" do
     long = String.duplicate("a", 200)
 

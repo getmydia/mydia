@@ -204,17 +204,47 @@ defmodule Mydia.Plugins.Shelves do
     case Accounts.get_user_by_id(shelf.user_id) do
       %User{} = user ->
         request = [exclude: exclude(shelf), limit: @fill_limit, now: now]
+        claimed = claim(shelf, declared, now)
 
         case invoker.(declared.slug, declared.key, user, request) do
-          {:ok, %{items: raw}} -> store_picks(shelf, declared, user, raw, now, opts)
-          {:error, %Error{type: :busy}} -> :busy
-          {:error, %Error{message: message}} -> mark_failed(shelf, declared, message, now)
+          {:ok, %{items: raw}} when is_list(raw) ->
+            store_picks(claimed, declared, user, raw, now, opts)
+
+          {:error, %Error{type: :busy}} ->
+            release(claimed, shelf.stale_at)
+            :busy
+
+          {:error, %Error{message: message}} ->
+            mark_failed(claimed, declared, message, now)
+
+          _unexpected ->
+            mark_failed(claimed, declared, "the plugin returned an unexpected result", now)
         end
 
       nil ->
         :kept
     end
   end
+
+  @doc """
+  Records a fill that raised: counts the failure, backs the shelf off and keeps
+  `message` (clipped) as `last_error`. Returns `:failed`.
+  """
+  @spec record_crash(Shelf.t(), Declared.t(), String.t()) :: :failed
+  def record_crash(%Shelf{} = shelf, %Declared{} = declared, message),
+    do: mark_failed(shelf, declared, message, DateTime.utc_now())
+
+  # Moves `stale_at` out before the plugin is called, as if this fill had
+  # already failed once more. A fill that finishes overwrites it; one that is
+  # killed at the job timeout, or crashes, leaves it, so the shelf does not
+  # request another model run on every visit.
+  defp claim(shelf, declared, now) do
+    stale_at = DateTime.add(now, backoff_seconds(shelf.failure_count + 1, declared.ttl_seconds))
+    shelf |> Shelf.changeset(%{stale_at: stale_at}) |> Repo.update!()
+  end
+
+  defp release(shelf, stale_at),
+    do: shelf |> Shelf.changeset(%{stale_at: stale_at}) |> Repo.update!()
 
   defp store_picks(shelf, declared, user, raw, now, opts) do
     picks = Enum.map(raw, &Pick.from_wit/1)

@@ -30,6 +30,9 @@ defmodule Mydia.Plugins.Shelves.Verifier do
   # A multiple of the limit, not the limit itself: unresolvable and restricted
   # picks are dropped, so the rail needs spare candidates to still fill.
   @candidate_headroom 4
+  # Per-candidate resolution: at most this many in flight, each given this long.
+  @resolve_concurrency 6
+  @resolve_timeout 10_000
   # Requests in these states already claim a title.
   @outstanding ~w(pending approved)
 
@@ -54,8 +57,9 @@ defmodule Mydia.Plugins.Shelves.Verifier do
   At most `:limit * #{@candidate_headroom}` picks are resolved against the
   relay, taken in the plugin's order after the cheap filters.
 
-  Options: `:dismissed` (provider keys the user dismissed), `:limit`, and
-  `:resolver`, a `(ref, media_type) -> {:ok, metadata} | {:error, term}` that
+  Options: `:dismissed` (provider keys the user dismissed), `:limit`,
+  `:resolve_timeout` (milliseconds each resolution may take, default
+  #{@resolve_timeout}; a slower one counts as unresolved), and `:resolver`, a `(ref, media_type) -> {:ok, metadata} | {:error, term}` that
   tests inject instead of touching the relay.
   """
   @spec verify([Pick.t()], User.t(), keyword()) ::
@@ -78,7 +82,8 @@ defmodule Mydia.Plugins.Shelves.Verifier do
       |> Enum.reject(fn {key, _pick} -> MapSet.member?(taken, key) end)
       |> Enum.take(limit * @candidate_headroom)
 
-    resolved = Enum.map(candidates, &resolve_candidate(&1, resolver))
+    resolved =
+      resolve_all(candidates, resolver, Keyword.get(opts, :resolve_timeout, @resolve_timeout))
 
     items =
       for {:ok, metadata, key, pick} <- resolved,
@@ -123,11 +128,30 @@ defmodule Mydia.Plugins.Shelves.Verifier do
     end
   end
 
+  # Each candidate gets its own deadline, so one slow relay call cannot hold the
+  # whole fill. A timeout, an exit or a raise leaves that candidate unresolved.
+  # `ordered: true` keeps the plugin's order.
+  defp resolve_all(candidates, resolver, timeout) do
+    candidates
+    |> Task.async_stream(&resolve_candidate(&1, resolver),
+      max_concurrency: @resolve_concurrency,
+      timeout: timeout,
+      on_timeout: :kill_task,
+      ordered: true
+    )
+    |> Enum.map(fn
+      {:ok, result} -> result
+      {:exit, _reason} -> :unresolved
+    end)
+  end
+
   defp resolve_candidate({{type, provider, id} = key, pick}, resolver) do
     case resolver.({provider, id}, type) do
       {:ok, metadata} -> {:ok, metadata, key, pick}
       _error -> :unresolved
     end
+  rescue
+    _exception -> :unresolved
   end
 
   defp resolve(ref, media_type) do
