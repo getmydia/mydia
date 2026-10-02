@@ -501,9 +501,6 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     if (info == null) return const SizedBox.shrink();
 
     final durationKnown = hasKnownDuration(info.duration);
-    final value =
-        _dragFraction ?? castProgressFraction(info.position, info.duration);
-    final isPlaying = session.playbackState == CastPlaybackState.playing;
 
     // Everything below that sends a command is held back while the session
     // is catching up with the receiver: the position and play state on
@@ -511,6 +508,14 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     // place or toggle the wrong way. Detach and stop stay live; neither
     // depends on what the receiver is doing.
     final syncing = session.isSyncing;
+
+    // A drag that syncing interrupts never reaches `onChangeEnd`, which is
+    // null while syncing. Dropped here, or the thumb would stay parked where
+    // the finger left it after the session catches up.
+    if (syncing) _dragFraction = null;
+    final value =
+        _dragFraction ?? castProgressFraction(info.position, info.duration);
+    final isPlaying = session.playbackState == CastPlaybackState.playing;
 
     return CastPill(
       child: Column(
