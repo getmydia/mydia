@@ -84,6 +84,37 @@ abstract class MydiaSnapshotSource {
   DateTime? get lastSnapshotAt;
 }
 
+/// Whether a backend's published state can currently be trusted.
+///
+/// A Mydia target is polled, so what the UI shows is only as fresh as the
+/// last answer. After the app has been suspended that answer can be minutes
+/// old while the connection underneath is being replaced, and controls drawn
+/// from it would act on a position and play state that are no longer true.
+/// `CastSessionManager` copies this onto `CastSession.isSyncing` so the UI
+/// can say so instead of showing stale state as live.
+///
+/// Separate from [MydiaSnapshotSource] for the reason that one is separate
+/// from [CastBackend]: a test fake should only have to implement the seam it
+/// is scripting.
+abstract class MydiaSyncSource {
+  /// True from the moment an answer is overdue until the target next answers
+  /// a state poll.
+  bool get isSyncing;
+
+  /// Changes to [isSyncing]. Does not replay the current value.
+  Stream<bool> get syncingStream;
+}
+
+/// How far past its poll interval an answer may run before the state it
+/// carried is treated as out of date.
+const _freshnessGrace = Duration(seconds: 2);
+
+/// How many state polls in a row must fail before the target is reported
+/// lost. The first failure is what a connection that died while the app was
+/// suspended looks like, and the next poll redials; only a failure on that
+/// fresh attempt too means the target is really gone.
+const _pollFailuresBeforeLost = 2;
+
 /// The production transport: wraps [P2PHost.sendRemoteControlRequest].
 class P2pControlTransport implements MydiaControlTransport {
   final P2PHost host;
@@ -106,7 +137,8 @@ class P2pControlTransport implements MydiaControlTransport {
 /// [MydiaContentRef] — see [loadMedia] — and it is the only backend that
 /// reports real [CastCapabilityFlags], because it is the only one whose
 /// receiver is a peer that can describe itself.
-class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
+class MydiaCastBackend
+    implements CastBackend, MydiaSnapshotSource, MydiaSyncSource {
   final RemoteRoster roster;
   final MydiaControlTransport transport;
   final String selfNodeId;
@@ -132,6 +164,23 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   final _durations = StreamController<Duration>.broadcast();
   final _failures = StreamController<CastFailureKind>.broadcast();
   final _volumes = StreamController<double>.broadcast();
+  final _syncStates = StreamController<bool>.broadcast();
+
+  /// When the target last answered a state poll (or `Hello`, which starts
+  /// the clock). Compared against [_now] on every poll tick: timers do not
+  /// fire while the app is suspended, so the first tick after a resume finds
+  /// this far in the past.
+  DateTime? _lastAnswerAt;
+
+  bool _syncing = false;
+
+  /// One poll at a time. A request sent on a dead connection does not fail
+  /// until the transport gives up on it, and a 1 Hz timer would otherwise
+  /// queue one more behind it every second, each reporting its own failure
+  /// when the connection finally closes.
+  bool _pollInFlight = false;
+
+  int _failedPolls = 0;
 
   CastDevice? _connected;
   String? _connectedNodeId;
@@ -330,6 +379,9 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     // `dispose` cannot cancel this in-flight `_send`; if it raced this call
     // to completion, there is nothing left to update or poll.
     if (_disposed) return;
+    _lastAnswerAt = _now();
+    _failedPolls = 0;
+    _setSyncing(false);
     _handleResponse(response);
     _startPolling();
   }
@@ -347,6 +399,9 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     _lastSequence = null;
     _lastSnapshot = null;
     _lastSnapshotAt = null;
+    _lastAnswerAt = null;
+    _failedPolls = 0;
+    _setSyncing(false);
   }
 
   @override
@@ -455,10 +510,23 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   DateTime? get lastSnapshotAt => _lastSnapshotAt;
 
   @override
+  bool get isSyncing => _syncing;
+
+  @override
+  Stream<bool> get syncingStream => _syncStates.stream;
+
+  void _setSyncing(bool value) {
+    if (_syncing == value) return;
+    _syncing = value;
+    if (!_disposed) _syncStates.add(value);
+  }
+
+  @override
   Future<void> dispose() async {
     _disposed = true;
     _pollTimer?.cancel();
     _positionTicker?.cancel();
+    await _syncStates.close();
     await _states.close();
     await _positions.close();
     await _durations.close();
@@ -484,9 +552,12 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     }
   }
 
+  /// [reportFailure] is false only for a state poll, which decides for
+  /// itself when a failure means the target is gone (see [_pollOnce]).
   Future<FlutterRemoteControlResponse> _send(
-    FlutterRemoteControlRequest request,
-  ) async {
+    FlutterRemoteControlRequest request, {
+    bool reportFailure = true,
+  }) async {
     final nodeId = _connectedNodeId;
     if (nodeId == null) {
       throw const CastBackendException(
@@ -510,7 +581,7 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
       final kind = _everConnected
           ? CastFailureKind.connectionLost
           : CastFailureKind.unreachable;
-      if (!_disposed) _failures.add(kind);
+      if (reportFailure && !_disposed) _failures.add(kind);
       throw CastBackendException(
           'Could not reach the Mydia target: $error', kind);
     }
@@ -549,14 +620,44 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
   }
 
   Future<void> _pollOnce() async {
-    if (_connectedNodeId == null) return;
+    final nodeId = _connectedNodeId;
+    if (nodeId == null || _pollInFlight) return;
+    _pollInFlight = true;
     try {
-      final response =
-          await _send(const FlutterRemoteControlRequest.getState());
+      final response = await _send(
+        const FlutterRemoteControlRequest.getState(),
+        reportFailure: false,
+      );
+      // Answered for a target this backend has since left.
+      if (_connectedNodeId != nodeId) return;
+      _lastAnswerAt = _now();
+      _failedPolls = 0;
       _handleResponse(response);
+      _setSyncing(false);
     } catch (_) {
-      // A dead transport already reported connectionLost via `_send`; a
-      // background poll has nothing further useful to do with the error.
+      if (_connectedNodeId != nodeId) return;
+      _failedPolls++;
+      if (_failedPolls == _pollFailuresBeforeLost) {
+        // Once per run of failures: the timer keeps polling a lost target,
+        // and every later failure would only repeat what was already said.
+        if (!_disposed) _failures.add(CastFailureKind.connectionLost);
+      } else if (_failedPolls < _pollFailuresBeforeLost) {
+        _setSyncing(true);
+      }
+    } finally {
+      _pollInFlight = false;
+    }
+  }
+
+  /// Marks the state out of date once an answer is overdue: nothing has come
+  /// back for longer than [interval] plus [_freshnessGrace]. Runs on every
+  /// poll tick, including the ones that send nothing because a poll is still
+  /// in flight.
+  void _checkFreshness(Duration interval) {
+    final answeredAt = _lastAnswerAt;
+    if (answeredAt == null) return;
+    if (_now().difference(answeredAt) > interval + _freshnessGrace) {
+      _setSyncing(true);
     }
   }
 
@@ -564,10 +665,12 @@ class MydiaCastBackend implements CastBackend, MydiaSnapshotSource {
     _pollTimer?.cancel();
     _positionTicker?.cancel();
 
-    _pollTimer = Timer.periodic(
-      _remoteUiVisible ? _visiblePollInterval : _backgroundPollInterval,
-      (_) => unawaited(_pollOnce()),
-    );
+    final interval =
+        _remoteUiVisible ? _visiblePollInterval : _backgroundPollInterval;
+    _pollTimer = Timer.periodic(interval, (_) {
+      _checkFreshness(interval);
+      unawaited(_pollOnce());
+    });
 
     // Only bother interpolating between real polls while something is
     // actually showing a scrubber; the background cadence above is already

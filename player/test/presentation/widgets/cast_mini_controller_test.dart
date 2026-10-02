@@ -547,6 +547,39 @@ void main() {
             'seeking to fraction * -1s');
   });
 
+  testWidgets(
+      'holds the transport controls back while the session is catching up '
+      'with the receiver', (tester) async {
+    await _pump(
+      tester,
+      session: _session(duration: const Duration(minutes: 44))
+          .copyWith(isSyncing: true),
+    );
+
+    expect(find.textContaining('Reconnecting to'), findsOneWidget);
+
+    final slider =
+        tester.widget<Slider>(find.byKey(const Key('cast-bar-scrubber')));
+    expect(slider.onChanged, isNull);
+
+    for (final key in const [
+      Key('cast-bar-play-pause'),
+      Key('cast-bar-rewind'),
+      Key('cast-bar-forward'),
+    ]) {
+      expect(tester.widget<IconButton>(find.byKey(key)).onPressed, isNull,
+          reason: '$key would act on a position that may be minutes old');
+    }
+
+    // Stopping does not depend on what the receiver is doing.
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('cast-bar-stop')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets('renders the stale state with reconnect and stop',
       (tester) async {
     await _pump(
@@ -660,6 +693,54 @@ void main() {
     final expectedTarget =
         seekTargetForFraction(draggedValue, initialSession.mediaInfo!.duration);
     expect(harness.backend.seeks.single, expectedTarget);
+  });
+
+  testWidgets(
+      'a drag that syncing interrupts leaves the thumb on the real position '
+      'and never seeks', (tester) async {
+    final harness = _buildManagerHarness();
+    addTearDown(harness.manager.dispose);
+
+    final sessionController = StreamController<CastSession?>();
+    addTearDown(sessionController.close);
+
+    final initialSession = _session(
+      duration: const Duration(minutes: 44),
+      position: const Duration(seconds: 60),
+    );
+
+    await _pumpWithManager(
+      tester,
+      harness: harness,
+      sessionStream: sessionController.stream,
+    );
+    sessionController.add(initialSession);
+    await tester.pump();
+    await tester.pump();
+
+    final sliderFinder = find.byKey(const Key('cast-bar-scrubber'));
+    final startValue = tester.widget<Slider>(sliderFinder).value;
+
+    final gesture = await tester.startGesture(tester.getCenter(sliderFinder));
+    await tester.pump();
+    await gesture.moveBy(const Offset(120, 0));
+    await tester.pump();
+    expect(tester.widget<Slider>(sliderFinder).value,
+        isNot(closeTo(startValue, 0.01)));
+
+    // The session starts catching up while the finger is still down, and the
+    // release lands on a scrubber that no longer reports it.
+    sessionController.add(initialSession.copyWith(isSyncing: true));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    sessionController.add(initialSession);
+    await tester.pump();
+
+    expect(tester.widget<Slider>(sliderFinder).value, closeTo(startValue, 1e-9),
+        reason: 'the interrupted drag must not outlive the sync');
+    expect(harness.backend.seeks, isEmpty);
   });
 
   testWidgets(

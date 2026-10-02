@@ -7052,8 +7052,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Withheld over a stale session for the reason the glyph goes outline —
     // the receiver is gone, and a control that silently does nothing is that
     // same false "connected" claim wearing a different hat.
+    //
+    // Withheld while syncing too, like the bar's own controls: the position
+    // may be minutes old, so the segment it falls in may not be the one the
+    // receiver is playing.
     final castPosition = session.mediaInfo?.position ?? Duration.zero;
-    final skipSegment = isStale ? null : _segmentAt(castPosition);
+    final skipSegment =
+        isStale || session.isSyncing ? null : _segmentAt(castPosition);
     final panelMetrics = PanelMetrics.resolve(
       width: MediaQuery.sizeOf(context).width,
       touchPrimary: InputCapabilities.touchPrimary,

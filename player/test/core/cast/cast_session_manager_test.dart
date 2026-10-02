@@ -2487,6 +2487,37 @@ void main() {
       expect(mydia.loadedRequests, isEmpty);
     });
 
+    test('the session says so while the backend is catching up', () async {
+      final mydia = FakeSyncingCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: FakeBackend(devices: const []),
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+      ));
+      expect(manager.currentSession?.isSyncing, isFalse);
+
+      mydia.emitSyncing(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isTrue);
+
+      // An ordinary republish must not drop the flag.
+      mydia.emitPosition(const Duration(minutes: 3));
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isTrue);
+
+      mydia.emitSyncing(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isFalse);
+    });
+
     test('a playing Mydia target is adopted without sending LoadContent',
         () async {
       final chromecast = FakeBackend(devices: const []);

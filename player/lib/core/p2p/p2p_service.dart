@@ -494,8 +494,12 @@ class P2pService {
           debugPrint('[P2P] Peer connected: $peerId ($connectionType)');
           _connectedPeers.add(peerId);
           _currentConnectionType = _parseConnectionType(connectionType);
-          _autoReconnectAttempts = 0;
-          _autoReconnectTimer?.cancel();
+          // Another player connecting says nothing about the server link, so
+          // it must not cancel a redial that is still pending for it.
+          if (_isDialedPeer(peerId)) {
+            _autoReconnectAttempts = 0;
+            _autoReconnectTimer?.cancel();
+          }
           if (!_peerConnectedController.isClosed) {
             _peerConnectedController.add(peerId);
           }
@@ -517,7 +521,13 @@ class P2pService {
             _currentConnectionType = P2pConnectionType.none;
           }
           _emitStatus();
-          _scheduleAutoReconnect();
+          // Only the dialed server is worth redialing. Another player's
+          // connection comes and goes with remote control, and counting
+          // those against the attempt cap would spend it before the server
+          // link ever dropped.
+          if (_isDialedPeer(peerId)) {
+            _scheduleAutoReconnect();
+          }
         } else if (event == 'relay_connected') {
           debugPrint('[P2P] Connected to relay');
           _isRelayConnected = true;
@@ -650,6 +660,13 @@ class P2pService {
   /// JSON string -- extracting it from the JSON in the latter case.
   String? _nodeIdFor(String peer) =>
       peer.startsWith('{') ? _extractNodeIdFromEndpointAddr(peer) : peer;
+
+  /// Whether [peerId] is the server this service last dialed, the only peer
+  /// auto-reconnect tracks.
+  bool _isDialedPeer(String peerId) {
+    final dialed = _lastDialedEndpointAddr;
+    return dialed != null && _nodeIdFor(dialed) == peerId;
+  }
 
   /// Check if we're currently connected to a peer.
   /// The peer can be specified as either a bare node ID or an EndpointAddr JSON.
