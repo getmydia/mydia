@@ -109,6 +109,15 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
       {:reply, :ok, %{state | backend_pid: pid}}
     end
 
+    # Runs the real {:request_segment, index} clause and hands back the state
+    # it produced. That clause parks the caller as a waiter (it answers once
+    # the segment lands), so the harness replies with the new state itself
+    # rather than leaving the test blocked on a segment that never arrives.
+    def handle_call({:request_segment, _index} = msg, _from, state) do
+      {:noreply, new_state} = HlsSession.handle_call(msg, {self(), make_ref()}, state)
+      {:reply, :ok, new_state}
+    end
+
     @impl true
     def handle_cast(msg, state), do: HlsSession.handle_cast(msg, state)
   end
@@ -282,6 +291,36 @@ defmodule Mydia.Streaming.HlsSessionHwaccelFallbackTest do
       # (hls_session_supervisor.ex), so this is the common path, not an edge
       # case -- a hardware-init failure on it must not crash the session.
       run_hwaccel_failure_scenario(:window)
+    end
+
+    test "a hardware failure after a relocation restarts the encoder at the relocated segment" do
+      {:ok, harness_pid} = Harness.start_link(build_state(:full))
+
+      # The session was started at segment 7. A seek to segment 100 relocates
+      # the encoder through the real {:request_segment, index} clause.
+      assert 7 == Keyword.fetch!(:sys.get_state(harness_pid).backend_opts, :start_number)
+      :ok = GenServer.call(harness_pid, {:request_segment, 100})
+
+      relocated = :sys.get_state(harness_pid)
+      assert relocated.window.first_index == 100
+      assert relocated.window_generation == 1
+
+      # The relocated encoder, the one running now, reports the hardware
+      # failure for its own generation. Falling back must resume where that
+      # encoder was, not where the session originally began.
+      :ok =
+        GenServer.cast(
+          harness_pid,
+          {:hwaccel_failed, relocated.window_generation, "vaapi init failed"}
+        )
+
+      new_state = :sys.get_state(harness_pid)
+
+      assert new_state.accel == :none
+      assert new_state.accel_fallbacks == 1
+      assert new_state.window_generation == 2
+      assert Keyword.fetch!(new_state.backend_opts, :start_number) == 100
+      assert new_state.window.first_index == 100
     end
 
     for playlist_mode <- [:full, :window] do
