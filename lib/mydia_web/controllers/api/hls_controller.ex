@@ -284,7 +284,8 @@ defmodule MydiaWeb.Api.HlsController do
               # The encoder has not reached this segment yet. Both hls.js and mpv
               # retry a 503 with Retry-After rather than treating it as fatal, which
               # is what keeps a seek onto a slow transcode buffering instead of
-              # failing.
+              # failing. The session waits 4 seconds, under mpv's 5 second network
+              # timeout, so this answer reaches the player before it gives up.
               conn
               |> put_resp_header("retry-after", "1")
               |> put_status(:service_unavailable)
