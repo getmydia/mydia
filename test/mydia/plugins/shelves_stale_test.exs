@@ -7,7 +7,6 @@ defmodule Mydia.Plugins.ShelvesStaleTest do
   alias Mydia.Plugins.Dispatcher
   alias Mydia.Plugins.Shelf
   alias Mydia.Plugins.Shelves
-  alias Phoenix.PubSub
 
   @now ~U[2026-10-01 12:00:00.000000Z]
 
@@ -81,21 +80,30 @@ defmodule Mydia.Plugins.ShelvesStaleTest do
     shelf =
       shelf_fixture(user, filled_at: DateTime.add(DateTime.utc_now(), -7_200), stale_at: far)
 
-    start_supervised!(
-      {Dispatcher,
-       name: :"disp_stale_#{System.unique_integer([:positive])}", invoker: fn _, _ -> :ok end}
-    )
+    pid =
+      start_supervised!(
+        {Dispatcher,
+         name: :"disp_stale_#{System.unique_integer([:positive])}", invoker: fn _, _ -> :ok end}
+      )
 
-    PubSub.broadcast(Mydia.PubSub, "events:all", {:event_created, event(user)})
+    # Straight to the instance under test. A PubSub broadcast would also reach
+    # the application's own dispatcher, which would then do the work and let
+    # this pass even with the instance below unwired.
+    send(pid, {:event_created, event(user)})
 
-    assert eventually(fn -> DateTime.compare(stale_at(shelf), far) == :lt end)
+    # handle_info has run once this returns, so every task it started exists.
+    _ = :sys.get_state(pid)
+    await_tasks(Task.Supervisor.children(Mydia.TaskSupervisor))
+
+    assert DateTime.compare(stale_at(shelf), far) == :lt
   end
 
-  defp eventually(fun, tries \\ 40) do
-    cond do
-      fun.() -> true
-      tries == 0 -> false
-      true -> Process.sleep(50) && eventually(fun, tries - 1)
+  # Waits for each task to exit, by monitor rather than by polling the database.
+  defp await_tasks(pids) do
+    refs = for pid <- pids, do: Process.monitor(pid)
+
+    for ref <- refs do
+      assert_receive {:DOWN, ^ref, :process, _pid, _reason}, 10_000
     end
   end
 end
