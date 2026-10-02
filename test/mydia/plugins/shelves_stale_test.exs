@@ -93,14 +93,19 @@ defmodule Mydia.Plugins.ShelvesStaleTest do
          name: :"disp_stale_#{System.unique_integer([:positive])}", invoker: fn _, _ -> :ok end}
       )
 
+    # The supervisor is application-wide and holds long-lived tasks that have
+    # nothing to do with this test. Only the ones this event starts are awaited.
+    before = Task.Supervisor.children(Mydia.TaskSupervisor)
+
     # Straight to the instance under test. A PubSub broadcast would also reach
     # the application's own dispatcher, which would then do the work and let
     # this pass even with the instance below unwired.
     send(pid, {:event_created, event(user)})
 
-    # handle_info has run once this returns, so every task it started exists.
+    # handle_info has run once this returns, so every task it started exists,
+    # or has already finished, in which case there is nothing to wait for.
     _ = :sys.get_state(pid)
-    await_tasks(Task.Supervisor.children(Mydia.TaskSupervisor))
+    await_tasks(Task.Supervisor.children(Mydia.TaskSupervisor) -- before)
 
     assert DateTime.compare(stale_at(shelf), far) == :lt
   end
