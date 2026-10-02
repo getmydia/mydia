@@ -9,8 +9,10 @@ Assistant:
 
 ```bash
 PLUGIN_0_SLUG=assistant-openai
-PLUGIN_0_SETTINGS='{"base_url":"https://api.openai.com/v1","api_key":"sk-...","model":"gpt-4.1-mini"}'
+PLUGIN_0_SETTINGS='{"base_url":"https://api.openai.com/v1","api_key":"sk-...","model":"gpt-4.1-mini","shelf_model":"gpt-4.1-nano"}'
 ```
+
+`shelf_enabled` (`On` or `Off`) and `shelf_model` control the Assistant's Picked for you suggestions.
 
 `plugins/` is different: the `:plugins` Mix compiler builds every
 `plugins/*/Cargo.toml` into `priv/plugins/`, and those ship bundled and
