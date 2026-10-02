@@ -48,6 +48,7 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
+  alias Mydia.Plugins.Shelves
   alias Mydia.Settings
 
   @doc "Lists all registered plugin descriptors."
@@ -921,6 +922,8 @@ defmodule Mydia.Plugins do
     with {:ok, config} <- fetch_config(slug),
          {:ok, _} <-
            Settings.update_plugin_config(config, %{granted_capabilities: %{}, enabled: false}) do
+      # A revoked plugin lost the grant its shelves were filled under.
+      Shelves.purge(slug)
       deactivate(slug)
       reload()
       {:ok, :revoked}
@@ -936,6 +939,7 @@ defmodule Mydia.Plugins do
       # keyed by slug alone, so they are cleared too. The journal stays as
       # history and stays undoable: undo needs only the entry.
       Grants.purge(slug)
+      Shelves.purge(slug)
       deactivate(slug)
       reload()
       {:ok, :removed}
