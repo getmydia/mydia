@@ -116,6 +116,9 @@ A fill acts as the shelf's user and can only read:
   apply the user's restrictions.
 - `http-request`, with `net:http`. A fill gets the same outbound budget as a
   page call.
+- `connection-request` and `link-request`, with `users:connections` and
+  `net:http`. These are outbound calls authenticated with a stored token, gated
+  by grants like `http-request`. They do not write to Mydia.
 - `kv-get`, `kv-set` and the other KV functions, with `state:kv`. Keys are
   yours, so use per-user keys such as `user/<user_id>/seen`.
 
@@ -133,8 +136,17 @@ A plugin's own KV store is not user data and stays writable.
 ## Limits
 
 - A fill has 120 seconds. A slow guest is stopped and the fill counts as failed.
+  The host gives each title it checks ten seconds, and a title that takes
+  longer is dropped.
 - A plugin declares at most four shelves, each key unique within the plugin.
 - Shelves are per user and appear on Home only.
+
+## Where an operator sees a failing shelf
+
+When fills fail for some people, the plugin's row in Admin > System > Plugins
+shows a line such as "Suggestions failing for 2 people", followed by the most
+recent error your plugin returned. Keep error strings short and free of
+secrets: the operator reads them.
 
 ## What users see
 

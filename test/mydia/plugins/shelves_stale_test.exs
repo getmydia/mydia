@@ -44,6 +44,13 @@ defmodule Mydia.Plugins.ShelvesStaleTest do
     assert stale_at(shelf) == soon
   end
 
+  test "skips a filled shelf whose stale_at is nil, which is already stale", %{user: user} do
+    shelf = shelf_fixture(user, filled_at: DateTime.add(@now, -7_200))
+
+    assert :ok = Shelves.mark_stale(event(user), @now)
+    assert stale_at(shelf) == nil
+  end
+
   test "leaves a never-filled shelf alone", %{user: user} do
     shelf = shelf_fixture(user)
 

@@ -156,11 +156,13 @@ defmodule Mydia.Plugins.Shelves do
       shelves =
         Repo.all(from s in Shelf, where: s.user_id == ^user_id and not is_nil(s.filled_at))
 
-      for %Shelf{} = shelf <- shelves, {shelf.plugin_slug, shelf.shelf_key} in watching do
+      # A nil stale_at is already stale, so there is nothing to pull forward.
+      for %Shelf{stale_at: %DateTime{} = stale_at} = shelf <- shelves,
+          {shelf.plugin_slug, shelf.shelf_key} in watching do
         earliest = DateTime.add(shelf.filled_at, @min_refresh_seconds)
         target = if DateTime.compare(now, earliest) == :lt, do: earliest, else: now
 
-        if DateTime.compare(target, shelf.stale_at) == :lt do
+        if DateTime.compare(target, stale_at) == :lt do
           shelf |> Shelf.changeset(%{stale_at: target}) |> Repo.update!()
         end
       end
@@ -339,11 +341,10 @@ defmodule Mydia.Plugins.Shelves do
           do: {item.media_type, item.provider, item.provider_id}
 
     for {media_type, provider, id} <- MapSet.union(current, dismissed_keys(shelf)) do
-      %{
+      %Pick{
         media_type: media_type,
         tmdb_id: if(provider == :tmdb, do: id),
-        tvdb_id: if(provider == :tvdb, do: id),
-        imdb_id: nil
+        tvdb_id: if(provider == :tvdb, do: id)
       }
     end
   end

@@ -23,8 +23,9 @@ defmodule Mydia.Plugins.Capabilities do
       hostname, a read namespace, a write surface) and the host gates on the
       *element*, not on the class. A new element is therefore a new request even
       though the class itself was already granted.
-    * **Flags** — `state:kv`, `users:connections`, `schedule:interval`, `surfaces:shelf` declare an
-      empty list; only the presence of the class matters.
+    * **Flags**: `state:kv`, `users:connections`, `schedule:interval` and
+      `surfaces:shelf` declare an empty list; only the presence of the class
+      matters.
     * **Anything else** — an opaque payload is compared by equality, and any
       change counts as a new request. Nothing in the v1 taxonomy uses this shape;
       treating a payload we cannot decompose as widened is the fail-closed

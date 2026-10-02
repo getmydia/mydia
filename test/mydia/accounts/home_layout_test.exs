@@ -6,7 +6,7 @@ defmodule Mydia.Accounts.HomeLayoutTest do
   alias Mydia.Accounts.User
 
   describe "catalog/0" do
-    test "returns all ten widgets in default display order" do
+    test "returns all eleven widgets in default display order" do
       catalog = HomeLayout.catalog()
 
       assert length(catalog) == 11

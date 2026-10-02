@@ -12,6 +12,7 @@ defmodule Mydia.Plugins.ShelvesFillTest do
   alias Mydia.Plugins.ShelfDismissal
   alias Mydia.Plugins.ShelfItem
   alias Mydia.Plugins.Shelves
+  alias Mydia.Plugins.Shelves.Pick
 
   @now ~U[2026-10-01 12:00:00.000000Z]
 
@@ -93,8 +94,8 @@ defmodule Mydia.Plugins.ShelvesFillTest do
     assert opts[:now] == @now
 
     assert Enum.sort_by(opts[:exclude], & &1.tmdb_id) == [
-             %{media_type: :movie, tmdb_id: 50, tvdb_id: nil, imdb_id: nil},
-             %{media_type: :tv_show, tmdb_id: 60, tvdb_id: nil, imdb_id: nil}
+             %Pick{media_type: :movie, tmdb_id: 50},
+             %Pick{media_type: :tv_show, tmdb_id: 60}
            ]
   end
 

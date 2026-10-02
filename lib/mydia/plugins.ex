@@ -922,10 +922,12 @@ defmodule Mydia.Plugins do
     with {:ok, config} <- fetch_config(slug),
          {:ok, _} <-
            Settings.update_plugin_config(config, %{granted_capabilities: %{}, enabled: false}) do
-      # A revoked plugin lost the grant its shelves were filled under.
-      Shelves.purge(slug)
       deactivate(slug)
       reload()
+      # A revoked plugin lost the grant its shelves were filled under. Purged
+      # last: until the registry stops declaring the shelf, a Home visit would
+      # create its row again.
+      Shelves.purge(slug)
       {:ok, :revoked}
     end
   end
@@ -939,9 +941,10 @@ defmodule Mydia.Plugins do
       # keyed by slug alone, so they are cleared too. The journal stays as
       # history and stays undoable: undo needs only the entry.
       Grants.purge(slug)
-      Shelves.purge(slug)
       deactivate(slug)
       reload()
+      # Last, for the same reason as in revoke/1: no longer declared by now.
+      Shelves.purge(slug)
       {:ok, :removed}
     end
   end

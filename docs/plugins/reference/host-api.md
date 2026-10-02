@@ -355,10 +355,13 @@ Payload rules:
   rail shows.
 
 A fill acts as the shelf's user. `search`, `data-list`, `data-read`,
-`http-request` and the KV functions work under their usual capabilities, and
-`http-request` gets the page budget. `data-list` is scoped to the user.
-`data-read` returns a media item by id without applying the user's
-restrictions.
+`http-request`, `connection-request`, `link-request` and the KV functions work
+under their usual capabilities, and `http-request` gets the page budget. The
+two request functions are outbound calls gated by grants, not writes to Mydia.
+`data-list` is scoped to the user. `data-read` returns a media item by id
+without applying the user's restrictions. A failing shelf is listed on the
+plugin's row in Admin > System > Plugins, with the last error the plugin
+returned.
 
 Every write function is refused during a fill and returns `denied`, whatever
 the plugin has been granted. That covers the `write-outcome` functions
