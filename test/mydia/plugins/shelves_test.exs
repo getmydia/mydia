@@ -128,6 +128,41 @@ defmodule Mydia.Plugins.ShelvesTest do
     end
   end
 
+  describe "reset_for_user/1" do
+    test "clears the user's items, marks the shelf stale, keeps dismissals, spares others" do
+      user = user_fixture()
+      other = user_fixture()
+      far = DateTime.add(DateTime.utc_now(), 80_000)
+
+      mine = shelf_fixture(user, filled_at: DateTime.utc_now(), stale_at: far)
+      Shelves.dismiss_item(user, shelf_item_fixture(mine).id)
+      shelf_item_fixture(mine, %{provider_id: 2})
+
+      theirs = shelf_fixture(other, filled_at: DateTime.utc_now(), stale_at: far)
+      shelf_item_fixture(theirs, %{provider_id: 3})
+
+      Shelves.subscribe(user)
+      assert :ok = Shelves.reset_for_user(user.id)
+
+      mine_id = mine.id
+      assert_receive {:shelf_updated, ^mine_id}
+
+      assert Repo.all(from i in ShelfItem, where: i.shelf_id == ^mine.id) == []
+      reloaded = Repo.get!(Shelf, mine.id)
+      assert reloaded.stale_at == nil
+      assert reloaded.filled_at == nil
+      assert Shelves.stale?(reloaded, DateTime.utc_now())
+      assert MapSet.size(Shelves.dismissed_keys(mine)) == 1
+
+      assert [%ShelfItem{}] = Repo.all(from i in ShelfItem, where: i.shelf_id == ^theirs.id)
+      assert Repo.get!(Shelf, theirs.id).stale_at == far
+    end
+
+    test "is a no-op for a user without shelves" do
+      assert :ok = Shelves.reset_for_user(user_fixture().id)
+    end
+  end
+
   describe "purge/1" do
     test "deletes a plugin's shelves, items and dismissals and nobody else's" do
       user = user_fixture()

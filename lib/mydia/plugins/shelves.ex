@@ -408,6 +408,31 @@ defmodule Mydia.Plugins.Shelves do
 
   # ── Lifecycle ─────────────────────────────────────────────────────────────
 
+  @doc """
+  Empties every shelf of a user and marks them stale, so the next visit refills
+  under whatever rules now apply (an access restriction changed). Dismissals
+  stay. Broadcasts `{:shelf_updated, shelf_id}` for each shelf so an open page
+  drops its cards.
+  """
+  @spec reset_for_user(String.t()) :: :ok
+  def reset_for_user(user_id) when is_binary(user_id) do
+    shelf_ids = Repo.all(from s in Shelf, where: s.user_id == ^user_id, select: s.id)
+
+    {:ok, _} =
+      Repo.transaction(fn ->
+        Repo.delete_all(from i in ShelfItem, where: i.shelf_id in ^shelf_ids)
+
+        Repo.update_all(from(s in Shelf, where: s.id in ^shelf_ids),
+          set: [stale_at: nil, filled_at: nil]
+        )
+      end)
+
+    for id <- shelf_ids,
+        do: Phoenix.PubSub.broadcast(Mydia.PubSub, topic(user_id), {:shelf_updated, id})
+
+    :ok
+  end
+
   @doc "Deletes every shelf, item and dismissal of a plugin. Called on revoke and remove."
   @spec purge(String.t()) :: :ok
   def purge(slug) when is_binary(slug) do

@@ -12,6 +12,7 @@ defmodule Mydia.Accounts do
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
   require Logger
+  alias Mydia.Plugins.Shelves
   alias Mydia.Repo
 
   alias Mydia.Accounts.{
@@ -414,16 +415,26 @@ defmodule Mydia.Accounts do
     |> AccessRestriction.changeset(attrs)
     |> Repo.insert_or_update()
     |> tap(&mark_restrictions_present/1)
+    |> tap(&reset_shelves_after(&1, user_id))
   end
+
+  # Shelf picks are checked against restrictions when they are filled, so a
+  # change has to drop the stored ones or they would show until the next refill.
+  defp reset_shelves_after({:ok, _restriction}, user_id), do: Shelves.reset_for_user(user_id)
+  defp reset_shelves_after(_other, _user_id), do: :ok
 
   @doc """
   Removes a user's access restriction, returning them to unrestricted access.
   """
   @spec clear_access_restriction(User.t()) :: :ok
-  def clear_access_restriction(%User{} = user) do
+  def clear_access_restriction(%User{id: user_id} = user) do
     case get_access_restriction(user) do
-      nil -> :ok
-      restriction -> Repo.delete!(restriction) && :ok
+      nil ->
+        :ok
+
+      restriction ->
+        Repo.delete!(restriction)
+        Shelves.reset_for_user(user_id)
     end
   end
 
