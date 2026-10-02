@@ -7,6 +7,7 @@ mod chats;
 mod history;
 mod models;
 mod provider;
+mod shelf;
 mod tools;
 mod watch_history;
 
