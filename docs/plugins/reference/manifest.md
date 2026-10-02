@@ -57,7 +57,7 @@ its own grant at runtime.
 
 | Capability | Meaning |
 |------------|---------|
-| `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page`, so a page-only plugin can omit it. |
+| `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page` or `surfaces:shelf`, so a page-only or shelf-only plugin can omit it. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
 | `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`, plus the page-only `media_request`, `download`, `collection`, `watch_history`). Returns a curated, read-only projection. |
 | `data:search` | Lets a page call the `search` host function against the acting user's library or the metadata catalog. Takes an empty list. |
