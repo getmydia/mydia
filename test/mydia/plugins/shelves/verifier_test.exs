@@ -218,7 +218,24 @@ defmodule Mydia.Plugins.Shelves.VerifierTest do
     assert Enum.map(items, & &1.provider_id) == [1, 3, 4]
   end
 
-  test "clips and cleans the reason, and keeps a missing one nil" do
+  test "a resolver that throws or exits is unresolved, not a crash" do
+    picky = fn ref, type ->
+      case elem(ref, 1) do
+        2 -> throw(:boom)
+        3 -> exit(:boom)
+        _ -> {:ok, meta(ref, type)}
+      end
+    end
+
+    assert {:ok, items} =
+             verify([pick(1), pick(2), pick(3), pick(4), pick(5)], user_fixture(),
+               resolver: picky
+             )
+
+    assert Enum.map(items, & &1.provider_id) == [1, 4, 5]
+  end
+
+  test "clips and cleans the reason,and keeps a missing one nil" do
     long = String.duplicate("a", 200)
 
     picks = [

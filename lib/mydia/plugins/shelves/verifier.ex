@@ -59,14 +59,15 @@ defmodule Mydia.Plugins.Shelves.Verifier do
 
   Options: `:dismissed` (provider keys the user dismissed), `:limit`,
   `:resolve_timeout` (milliseconds each resolution may take, default
-  #{@resolve_timeout}; a slower one counts as unresolved), and `:resolver`, a `(ref, media_type) -> {:ok, metadata} | {:error, term}` that
-  tests inject instead of touching the relay.
+  #{@resolve_timeout}; a slower one counts as unresolved), and `:resolver`, a
+  `(ref, media_type) -> {:ok, metadata} | {:error, term}` that tests inject
+  instead of touching the relay.
   """
   @spec verify([Pick.t()], User.t(), keyword()) ::
           {:ok, [item_attrs()]} | {:error, :too_few | :relay_unavailable}
   def verify(picks, %User{} = user, opts \\ []) when is_list(picks) do
     limit = Keyword.get(opts, :limit, @default_limit)
-    resolver = Keyword.get(opts, :resolver) || (&resolve/2)
+    resolver = Keyword.get(opts, :resolver) || default_resolver()
     scope = Scope.for_user(user)
 
     taken =
@@ -152,10 +153,20 @@ defmodule Mydia.Plugins.Shelves.Verifier do
     end
   rescue
     _exception -> :unresolved
+  catch
+    # The tasks are linked, so an uncaught throw or exit would take the
+    # calling job down with it.
+    _kind, _reason -> :unresolved
   end
 
-  defp resolve(ref, media_type) do
-    Metadata.fetch_by_ref_cached(Metadata.default_relay_config(), ref, media_type: media_type)
+  # The relay config may read settings, so it is built once here, in the
+  # calling process, rather than inside every concurrent resolution.
+  defp default_resolver do
+    config = Metadata.default_relay_config()
+
+    fn ref, media_type ->
+      Metadata.fetch_by_ref_cached(config, ref, media_type: media_type)
+    end
   end
 
   defp allowed?(metadata, %Scope{} = scope) do
