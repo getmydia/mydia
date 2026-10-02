@@ -18,7 +18,10 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
         <.icon name="hero-sparkles" class="w-5 h-5 text-primary shrink-0" />
         <h2 class="text-lg md:text-xl font-semibold truncate">{@rail.title}</h2>
       </div>
-      <div class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+      <%!-- items-start keeps each wrapper at its content height. A stretched
+            flex item has a definite height, so the card's h-full would grow to
+            fill the tallest column and push the reason out of view. --%>
+      <div class="flex items-start gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
         <div
           :for={item <- @rail.items}
           id={"#{@rail.id}-item-#{item.shelf_item_id}"}
@@ -33,7 +36,9 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
             on_select="show_details"
             poster_size="w342"
           />
-          <p :if={item.reason} class="mt-2 text-xs leading-snug text-base-content/70 line-clamp-3">
+          <%!-- Three lines are always reserved (3 x 1.375 x 0.75rem) so the
+                buttons line up whatever the reason length, or without one. --%>
+          <p class="mt-2 h-[3.0938rem] overflow-hidden text-xs leading-snug text-base-content/70 line-clamp-3">
             {item.reason}
           </p>
           <button

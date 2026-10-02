@@ -63,6 +63,34 @@ defmodule MydiaWeb.DashboardLive.ShelfRailTest do
     assert all_enqueued(worker: ShelfFill) == []
   end
 
+  test "every card reserves its reason slot and the row does not stretch cards", %{
+    conn: conn,
+    user: user
+  } do
+    shelf = fresh_shelf(user)
+    with_reason = shelf_item_fixture(shelf, %{reason: "Because you finished Glass Meridian"})
+
+    without_reason =
+      shelf_item_fixture(shelf, %{
+        position: 1,
+        provider_id: 102,
+        title: "The Long Thaw",
+        reason: nil
+      })
+
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    # The reason slot is the same fixed box with or without text, so the
+    # dismiss buttons line up across the row.
+    for item <- [with_reason, without_reason] do
+      assert has_element?(view, "#{@rail}-item-#{item.id} p.line-clamp-3.h-\\[3\\.0938rem\\]")
+    end
+
+    # A stretched flex item gives the card's h-full a definite height to grow
+    # into, which pushes the reason out of view.
+    assert has_element?(view, "#{@rail} .overflow-x-auto.items-start")
+  end
+
   test "Not interested removes the card and records the dismissal", %{conn: conn, user: user} do
     shelf = fresh_shelf(user)
     item = shelf_item_fixture(shelf)
