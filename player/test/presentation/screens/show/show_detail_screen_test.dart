@@ -439,6 +439,15 @@ void main() {
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));
     expect(play.bottom, lessThan(actions.top));
+
+    // Wide layout: the row shrink-wraps to one 64px slot per action, flush
+    // with the body's 20px inset, instead of squeezing into a fixed column.
+    final slots = find.descendant(
+      of: find.byType(DetailActionRow),
+      matching: find.byType(InkWell),
+    );
+    expect(actions.left, closeTo(20, 0.5));
+    expect(actions.width, 64.0 * tester.widgetList(slots).length);
   });
 
   testWidgets('hero overlay does not overflow at phone width', (tester) async {

@@ -536,8 +536,13 @@ class ShowDetailScreen extends ConsumerWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= _kHeroBreakpoint;
-          final actionColumn =
-              _buildActionColumn(context, ref, show, selectedEpisode);
+          final actionColumn = _buildActionColumn(
+            context,
+            ref,
+            show,
+            selectedEpisode,
+            compact: wide,
+          );
           final tagColumn = _buildTagColumn(context, show, selectedEpisode);
 
           return Padding(
@@ -546,7 +551,7 @@ class ShowDetailScreen extends ConsumerWidget {
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(width: 248, child: actionColumn),
+                      actionColumn,
                       const SizedBox(width: 40),
                       Expanded(child: tagColumn),
                     ],
@@ -569,9 +574,11 @@ class ShowDetailScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     ShowDetail show,
-    Episode episode,
-  ) {
+    Episode episode, {
+    required bool compact,
+  }) {
     return DetailActionRow(
+      compact: compact,
       watched: episode.progress?.watched ?? false,
       onToggleWatched: () => episode.progress?.watched ?? false
           ? ref

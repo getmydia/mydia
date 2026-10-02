@@ -244,7 +244,8 @@ class MovieDetailScreen extends ConsumerWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final wide = constraints.maxWidth >= _kHeroBreakpoint;
-                final actionColumn = _buildActionColumn(context, ref, movie);
+                final actionColumn =
+                    _buildActionColumn(context, ref, movie, compact: wide);
                 final tagColumn = _buildTagColumn(context, movie);
 
                 return Padding(
@@ -253,7 +254,7 @@ class MovieDetailScreen extends ConsumerWidget {
                       ? Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(width: 248, child: actionColumn),
+                            actionColumn,
                             const SizedBox(width: 40),
                             Expanded(child: tagColumn),
                           ],
@@ -295,8 +296,13 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildActionColumn(
-      BuildContext context, WidgetRef ref, MovieDetail movie) {
+    BuildContext context,
+    WidgetRef ref,
+    MovieDetail movie, {
+    required bool compact,
+  }) {
     return DetailActionRow(
+      compact: compact,
       watched: movie.isWatched,
       onToggleWatched: () => _toggleWatched(context, ref, movie.isWatched),
       isFavorite: movie.isFavorite,
