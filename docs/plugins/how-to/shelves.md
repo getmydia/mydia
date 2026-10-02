@@ -50,6 +50,7 @@ fn fill(req: ShelfRequest) -> Result<Vec<ShelfItem>, String> {
     if req.shelf != "staff_picks" {
         return Err(format!("unknown shelf {}", req.shelf));
     }
+    // A real shelf should return at least three titles. With fewer, the host stores nothing.
     Ok(vec![ShelfItem {
         item: MediaRef { media_type: "movie".into(), tmdb_id: Some(101), tvdb_id: None, imdb_id: None },
         reason: Some("A slow-burn mystery set on a lighthouse".into()),
@@ -80,7 +81,8 @@ The host treats every returned title as untrusted. For each one it:
   someone has requested, that this user dismissed, or that the user's
   restrictions do not allow. Repeats are dropped too.
 - Collapses the reason to one line and clips it to 140 characters.
-- Resolves at most four times the limit in candidates per fill, in your order.
+- Resolves at most 48 candidates per fill, four times the 12 the rail shows,
+  taken in your order.
 
 The host takes the title, year and poster from its own metadata, never from
 the plugin. When fewer than three titles survive, the host keeps the previous
@@ -108,19 +110,25 @@ keep `ttl_seconds` generous.
 A fill acts as the shelf's user and can only read:
 
 - `search`, with `data:search`.
-- `data-list` and `data-read`, with `data:read`. Results are the same
-  projections the user would see.
+- `data-list`, with `data:read`. Results are scoped to the shelf's user, the
+  same projections that user would see.
+- `data-read`, with `data:read`. It returns a media item by id and does not
+  apply the user's restrictions.
 - `http-request`, with `net:http`. A fill gets the same outbound budget as a
   page call.
 - `kv-get`, `kv-set` and the other KV functions, with `state:kv`. Keys are
   yours, so use per-user keys such as `user/<user_id>/seen`.
 
-Every function that returns a `write-outcome` (`media-add`, the `collection-*`
-functions, `mark-watched-state`, `add-favorite`) returns `denied` during a fill,
-because nobody is present to approve a change. The older `ensure-watched` and
-`ensure-favorite` functions are not tied to a handler. They stay refused unless
-the plugin also declares `surfaces:write`, so a shelf plugin should not ask for
-it.
+Every function that changes the user's data is refused during a fill, because
+nobody is present to approve a change. Each returns `denied`, whatever the
+plugin has been granted. Two groups are refused:
+
+- The functions that return a `write-outcome`: `media-add`,
+  `collection-create`, `collection-update`, `collection-add-items`,
+  `collection-remove-items`, `mark-watched-state` and `add-favorite`.
+- The sync writes: `ensure-watched`, `set-watch-state` and `ensure-favorite`.
+
+A plugin's own KV store is not user data and stays writable.
 
 ## Limits
 

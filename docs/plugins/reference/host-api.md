@@ -351,13 +351,22 @@ Payload rules:
   characters.
 - The host drops unresolvable, owned, requested, dismissed and restricted
   titles and duplicates, and keeps the previous list when fewer than three
-  survive. It resolves at most `limit * 4` candidates per fill.
+  survive. It resolves at most 48 candidates per fill, four times the 12 the
+  rail shows.
 
 A fill acts as the shelf's user. `search`, `data-list`, `data-read`,
 `http-request` and the KV functions work under their usual capabilities, and
-`http-request` gets the page budget. Every function that returns a
-`write-outcome` returns `denied`. A fill runs under the page timeout (120
-seconds by default).
+`http-request` gets the page budget. `data-list` is scoped to the user.
+`data-read` returns a media item by id without applying the user's
+restrictions.
+
+Every write function is refused during a fill and returns `denied`, whatever
+the plugin has been granted. That covers the `write-outcome` functions
+(`media-add`, `collection-create`, `collection-update`,
+`collection-add-items`, `collection-remove-items`, `mark-watched-state` and
+`add-favorite`) and the sync writes (`ensure-watched`, `set-watch-state` and
+`ensure-favorite`). The plugin's own KV store stays writable. A fill runs under
+the page timeout (120 seconds by default).
 
 ### Scheduled handler
 
