@@ -1,7 +1,7 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_member.dart';
+import 'artwork_image.dart';
 import 'horizontal_wheel_scroll.dart';
 
 /// Horizontal rail of cast members below the detail hero. Renders nothing
@@ -82,13 +82,13 @@ class _CastCard extends StatelessWidget {
               width: 72,
               height: 72,
               child: member.profileUrl != null
-                  ? CachedNetworkImage(
+                  ? ArtworkImage(
                       imageUrl: member.profileUrl!,
                       fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
+                      placeholder: (context) => Container(
                         color: AppColors.surfaceVariant,
                       ),
-                      errorWidget: (context, url, error) => _fallbackAvatar(),
+                      errorWidget: (context) => _fallbackAvatar(),
                     )
                   : _fallbackAvatar(),
             ),

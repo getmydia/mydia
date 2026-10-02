@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../domain/models/search_result.dart';
+import '../../../widgets/artwork_image.dart';
 
 /// An episode search hit rendered as a list row.
 ///
@@ -47,14 +47,14 @@ class EpisodeResultRow extends StatelessWidget {
                 width: 96,
                 height: 54,
                 child: imageUrl != null
-                    ? CachedNetworkImage(
+                    ? ArtworkImage(
                         imageUrl: imageUrl,
                         fit: BoxFit.cover,
                         cacheManager: PosterCacheManager(),
-                        placeholder: (context, url) => const ColoredBox(
+                        placeholder: (context) => const ColoredBox(
                           color: AppColors.surface,
                         ),
-                        errorWidget: (context, url, error) => const ColoredBox(
+                        errorWidget: (context) => const ColoredBox(
                           color: AppColors.surface,
                           child: Icon(
                             Icons.tv_rounded,

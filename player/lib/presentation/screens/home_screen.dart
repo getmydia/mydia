@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/artwork_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/focus/focus_reveal_section.dart';
 import '../../core/graphql/watch/query_key.dart';
@@ -499,14 +499,14 @@ class _HeroSection extends StatelessWidget {
               width: size.width,
               height: heroHeight,
               child: _backdropUrl != null
-                  ? CachedNetworkImage(
+                  ? ArtworkImage(
                       imageUrl: _backdropUrl!,
                       fit: BoxFit.cover,
                       cacheManager: BackdropCacheManager(),
-                      placeholder: (context, url) => Container(
+                      placeholder: (context) => Container(
                         color: AppColors.surface,
                       ),
-                      errorWidget: (context, url, error) => Container(
+                      errorWidget: (context) => Container(
                         color: AppColors.surface,
                         child: const Icon(
                           Icons.movie_rounded,

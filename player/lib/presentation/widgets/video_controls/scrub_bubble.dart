@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
@@ -8,6 +7,7 @@ import '../../../core/player/playback_time_format.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
+import '../artwork_image.dart';
 
 /// Where the bubble's left edge goes so it sits centred over the cursor
 /// without leaving the track's horizontal bounds.
@@ -147,14 +147,14 @@ class SpriteFrame extends StatelessWidget {
             maxHeight: h,
             child: Transform.translate(
               offset: Offset(-cue.x.toDouble(), -cue.y.toDouble()),
-              child: CachedNetworkImage(
+              child: ArtworkImage(
                 imageUrl: spriteUrl,
                 cacheManager: SeekSpriteCacheManager(),
-                httpHeaders: headers,
+                headers: headers,
                 fit: BoxFit.none,
                 alignment: Alignment.topLeft,
-                placeholder: (context, url) => blank,
-                errorWidget: (context, url, error) => blank,
+                placeholder: (context) => blank,
+                errorWidget: (context) => blank,
               ),
             ),
           ),
