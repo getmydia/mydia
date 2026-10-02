@@ -24,6 +24,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
+  alias Mydia.Plugins.Shelves
   alias Mydia.Settings
 
   # Max log rows loaded into the detail timeline on open / filter.
@@ -438,6 +439,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asking for more than it holds and failing Denied at just those call sites.
       ungranted: Plugins.ungranted_capabilities(config),
       needs_reapproval: Plugins.needs_reapproval?(config),
+      shelf_failures: Shelves.failure_summary(config.slug),
       # Enabled/disabled is a runtime choice after approval; an empty grant means
       # capabilities are still pending approval.
       pending_approval: capabilities != %{} and granted == %{},

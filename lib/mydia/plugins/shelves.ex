@@ -406,6 +406,22 @@ defmodule Mydia.Plugins.Shelves do
     |> MapSet.new()
   end
 
+  # ── Operator view ─────────────────────────────────────────────────────────
+
+  @doc """
+  How many of a plugin's shelves are failing, and the `last_error` of the one
+  that failed most recently. Shown on the plugin's row in the admin page.
+  """
+  @spec failure_summary(String.t()) :: %{failing: non_neg_integer(), last_error: String.t() | nil}
+  def failure_summary(slug) when is_binary(slug) do
+    failed = from s in Shelf, where: s.plugin_slug == ^slug and s.status == :failed
+
+    latest =
+      Repo.one(from s in failed, order_by: [desc: s.updated_at], limit: 1, select: s.last_error)
+
+    %{failing: Repo.aggregate(failed, :count), last_error: latest}
+  end
+
   # ── Lifecycle ─────────────────────────────────────────────────────────────
 
   @doc """

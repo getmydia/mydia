@@ -185,6 +185,20 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
+  @shelf_error_max 160
+
+  # The error text comes from the plugin, so it is clipped here; HEEx escapes it.
+  defp shelf_failure_text(%{failing: failing, last_error: error}) do
+    who = if failing == 1, do: "1 person", else: "#{failing} people"
+    text = "Suggestions failing for #{who}"
+
+    case error |> to_string() |> String.trim() do
+      "" -> text
+      message when byte_size(message) <= @shelf_error_max -> "#{text}: #{message}"
+      message -> "#{text}: #{String.slice(message, 0, @shelf_error_max)}..."
+    end
+  end
+
   @doc "A compact summary row for one installed plugin (provenance + lifecycle)."
   attr :plugin, :map, required: true
   attr :updates, :any, required: true
@@ -233,6 +247,14 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.icon name="hero-exclamation-triangle" class="w-3 h-3 inline" />
           This version asks for more than you approved: {ungranted_summary(@plugin.ungranted)}. Those
           calls are denied until you re-approve it.
+        </p>
+        <p
+          :if={@plugin.shelf_failures.failing > 0}
+          id={"shelf-failure-note-#{@plugin.slug}"}
+          class="text-xs text-warning mt-1"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-3 h-3 inline" />
+          {shelf_failure_text(@plugin.shelf_failures)}
         </p>
         <ul
           :if={@plugin.multi_instance}

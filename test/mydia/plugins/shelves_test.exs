@@ -163,6 +163,35 @@ defmodule Mydia.Plugins.ShelvesTest do
     end
   end
 
+  describe "failure_summary/1" do
+    defp failed!(shelf, message, updated_at) do
+      shelf
+      |> Ecto.Changeset.change(
+        status: :failed,
+        failure_count: 1,
+        last_error: message,
+        updated_at: updated_at
+      )
+      |> Repo.update!()
+    end
+
+    test "counts failed shelves and reports the newest error" do
+      older = failed!(shelf_fixture(user_fixture()), "old error", ~U[2026-10-01 10:00:00.000000Z])
+      newer = failed!(shelf_fixture(user_fixture()), "new error", ~U[2026-10-01 11:00:00.000000Z])
+      shelf_fixture(user_fixture())
+
+      assert %{failing: 2, last_error: "new error"} = Shelves.failure_summary("shelf-test")
+      assert older.id != newer.id
+    end
+
+    test "is empty when nothing fails or the plugin has no shelves" do
+      shelf_fixture(user_fixture())
+
+      assert %{failing: 0, last_error: nil} = Shelves.failure_summary("shelf-test")
+      assert %{failing: 0, last_error: nil} = Shelves.failure_summary("nobody")
+    end
+  end
+
   describe "purge/1" do
     test "deletes a plugin's shelves, items and dismissals and nobody else's" do
       user = user_fixture()
