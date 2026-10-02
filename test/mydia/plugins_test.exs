@@ -359,6 +359,24 @@ defmodule Mydia.PluginsTest do
       :ok
     end
 
+    test "revoke and remove purge the plugin's shelves" do
+      user = Mydia.AccountsFixtures.user_fixture()
+
+      for slug <- ["webhook-notifier", "other-plugin"] do
+        shelf = Mydia.ShelfHelpers.shelf_fixture(user, slug: slug)
+        Mydia.ShelfHelpers.shelf_item_fixture(shelf)
+      end
+
+      assert {:ok, :revoked} = Plugins.revoke("webhook-notifier")
+      assert [%{plugin_slug: "other-plugin"}] = Mydia.Repo.all(Mydia.Plugins.Shelf)
+
+      shelf = Mydia.ShelfHelpers.shelf_fixture(user, slug: "webhook-notifier")
+      Mydia.ShelfHelpers.shelf_item_fixture(shelf)
+
+      assert {:ok, :removed} = Plugins.remove("webhook-notifier")
+      assert [%{plugin_slug: "other-plugin"}] = Mydia.Repo.all(Mydia.Plugins.Shelf)
+    end
+
     test "revoke clears grants and deactivates, keeping the config" do
       assert Host.running?("webhook-notifier")
       assert {:ok, :revoked} = Plugins.revoke("webhook-notifier")

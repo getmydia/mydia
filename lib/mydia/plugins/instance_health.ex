@@ -174,7 +174,7 @@ defmodule Mydia.Plugins.InstanceHealth do
   # The default for a slug with no memo is :v15, so an instance whose plugin
   # never started still reaches the checker, which then answers :not_found
   # (plugin not running) and caches :unreachable.
-  defp supported?(slug), do: Host.contract_version(slug) == :v15
+  defp supported?(slug), do: Host.typed_exports?(slug)
 
   defp normalize_status(s) when s in [:ok, :degraded, :unauthorized, :unreachable], do: s
   defp normalize_status(_), do: :unreachable

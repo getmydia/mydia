@@ -48,6 +48,7 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
+  alias Mydia.Plugins.Shelves
   alias Mydia.Settings
 
   @doc "Lists all registered plugin descriptors."
@@ -219,6 +220,52 @@ defmodule Mydia.Plugins do
     with {:ok, _plugin} <- setup_capable(slug),
          {:ok, instance} <- fetch_instance(slug, instance_id) do
       Host.call(slug, "check-health", %{}, handler: :check_health, instance_id: instance.id)
+    end
+  end
+
+  @doc """
+  Calls a plugin's 1.6 `fill-shelf` export for one of its declared shelves, as
+  `user`. The plugin's settings ride along under `config`, as they do for a
+  page call.
+
+  Options: `:exclude` (maps with `:media_type`, `:tmdb_id`, `:tvdb_id`,
+  `:imdb_id`), `:limit`, `:now` (a `DateTime`, or Unix seconds).
+
+  Errors: `:unsupported` for a guest older than 1.6, `:busy` when a fill for
+  this user is already running, `:guest_error` carrying the guest's message.
+  """
+  @spec invoke_fill_shelf(String.t(), String.t(), Mydia.Accounts.User.t(), keyword()) ::
+          {:ok, %{items: [map()]}} | {:error, Error.t()}
+  def invoke_fill_shelf(slug, shelf_key, %Mydia.Accounts.User{} = user, opts \\ [])
+      when is_binary(slug) and is_binary(shelf_key) do
+    # The instance-scoped imports (KV, link-request) need one; a multi_instance
+    # plugin has no default instance, so it fills with none.
+    instance = Instances.default_instance(slug)
+
+    payload = %{
+      "shelf" => shelf_key,
+      "exclude" => Keyword.get(opts, :exclude, []),
+      "limit" => Keyword.get(opts, :limit, 12),
+      "now" => unix_seconds(Keyword.get(opts, :now)),
+      "config" => if(instance, do: Instances.config_for(instance), else: plugin_settings(slug))
+    }
+
+    Host.call(slug, "fill-shelf", payload,
+      handler: :fill_shelf,
+      acting_user_id: user.id,
+      role: user.role,
+      instance_id: instance && instance.id
+    )
+  end
+
+  defp unix_seconds(%DateTime{} = now), do: DateTime.to_unix(now)
+  defp unix_seconds(now) when is_integer(now), do: now
+  defp unix_seconds(_), do: System.system_time(:second)
+
+  defp plugin_settings(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      %{settings: %{} = settings} -> settings
+      _ -> %{}
     end
   end
 
@@ -882,6 +929,10 @@ defmodule Mydia.Plugins do
            Settings.update_plugin_config(config, %{granted_capabilities: %{}, enabled: false}) do
       deactivate(slug)
       reload()
+      # A revoked plugin lost the grant its shelves were filled under. Purged
+      # last: until the registry stops declaring the shelf, a Home visit would
+      # create its row again.
+      Shelves.purge(slug)
       {:ok, :revoked}
     end
   end
@@ -897,6 +948,8 @@ defmodule Mydia.Plugins do
       Grants.purge(slug)
       deactivate(slug)
       reload()
+      # Last, for the same reason as in revoke/1: no longer declared by now.
+      Shelves.purge(slug)
       {:ok, :removed}
     end
   end
@@ -1460,6 +1513,7 @@ defmodule Mydia.Plugins do
       "connection" => m.connection,
       "schedule" => m.schedule,
       "page" => m.page,
+      "shelves" => m.shelves,
       "min_host_version" => m.min_host_version,
       "multi_instance" => m.multi_instance,
       "category" => m.category,

@@ -1,8 +1,8 @@
 defmodule Mydia.Plugins.PageReads do
   @moduledoc """
   Reads for plugin pages: search over the library and the catalog, and the
-  acting user's own requests, downloads and collections. Only valid inside an
-  `on-http` invocation, where the host knows who is asking. Every read runs as
+  acting user's own requests, downloads and collections. Valid inside an
+  `on-http` or `fill-shelf` invocation, where the host knows whose data to read. Every read runs as
   that user and never returns another user's rows.
 
   ## Download scoping
@@ -19,7 +19,7 @@ defmodule Mydia.Plugins.PageReads do
 
   import Ecto.Query, only: [from: 2]
 
-  import Mydia.Plugins.PageContext, only: [page_user: 1, opt: 2, to_option: 1, iso: 1]
+  import Mydia.Plugins.PageContext, only: [acting_user: 1, opt: 2, to_option: 1, iso: 1]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Collections
@@ -43,7 +43,7 @@ defmodule Mydia.Plugins.PageReads do
   """
   def search(plugin, ctx, req) do
     with :ok <- require_flag(plugin, "data:search"),
-         {:ok, user} <- page_user(ctx) do
+         {:ok, user} <- acting_user(ctx) do
       limit = req |> opt(:limit) |> clamp_limit()
       types = req |> opt(:"media-type") |> media_types()
       query = Map.get(req, :query, "")
@@ -62,7 +62,7 @@ defmodule Mydia.Plugins.PageReads do
   """
   def list(namespace, plugin, ctx) do
     with :ok <- require_namespace(plugin, namespace),
-         {:ok, user} <- page_user(ctx) do
+         {:ok, user} <- acting_user(ctx) do
       {:ok, %{items: rows(namespace, user), "next-cursor": :none}}
     end
   end
@@ -80,7 +80,7 @@ defmodule Mydia.Plugins.PageReads do
   """
   def watch_history(plugin, ctx, req, with_origin?) do
     with :ok <- require_namespace(plugin, "watch_history"),
-         {:ok, user} <- page_user(ctx),
+         {:ok, user} <- acting_user(ctx),
          {:ok, since} <- history_since(opt(req, :"updated-since")) do
       limit = history_limit(opt(req, :limit))
 

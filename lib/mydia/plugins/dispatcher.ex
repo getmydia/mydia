@@ -31,6 +31,7 @@ defmodule Mydia.Plugins.Dispatcher do
 
   alias Mydia.Plugins
   alias Mydia.Plugins.Manifest
+  alias Mydia.Plugins.Shelves
   alias Phoenix.PubSub
 
   @pubsub Mydia.PubSub
@@ -52,6 +53,7 @@ defmodule Mydia.Plugins.Dispatcher do
   @impl true
   def handle_info({:event_created, %{type: type} = event}, %{invoker: invoker} = state) do
     if type in Manifest.event_catalog() do
+      mark_shelves_stale(event)
       origin = event_origin(event)
 
       for plugin <- Plugins.subscribers(type), not suppressed?(origin, plugin.slug) do
@@ -106,6 +108,19 @@ defmodule Mydia.Plugins.Dispatcher do
       catch
         kind, reason ->
           Logger.warning("plugin #{plugin.slug} dispatch #{kind}: #{inspect(reason)}")
+      end
+    end)
+  end
+
+  # Shelf staleness is bookkeeping for the same events, kept off the dispatcher
+  # process for the same reason plugin invocations are: a database error here
+  # must not take event delivery down with it.
+  defp mark_shelves_stale(event) do
+    Task.Supervisor.start_child(Mydia.TaskSupervisor, fn ->
+      try do
+        Shelves.mark_stale(event)
+      rescue
+        e -> Logger.warning("marking shelves stale raised: #{Exception.message(e)}")
       end
     end)
   end

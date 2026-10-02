@@ -47,6 +47,7 @@ This page is a practical reference, using the bundled webhook notifier
 | `setup` | no | `true` when the plugin exports `setup`; the host then creates instances through the setup wizard instead of the plain settings form. Default `false`. |
 | `capabilities` | yes | What the plugin subscribes to and is allowed to do. See below. |
 | `settings_schema` | no | Operator-editable configuration fields. See below. |
+| `shelves` | no | Shelves the plugin fills for the Home dashboard, at most four. Requires `surfaces:shelf`. See [Shelves](#shelves). |
 
 ## Capabilities
 
@@ -57,7 +58,7 @@ its own grant at runtime.
 
 | Capability | Meaning |
 |------------|---------|
-| `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page`, so a page-only plugin can omit it. |
+| `events:subscribe` | The event types the plugin reacts to. Each must be in the catalog. Required unless the plugin declares `surfaces:page` or `surfaces:shelf`, so a page-only or shelf-only plugin can omit it. |
 | `net:http` | The exact hostnames the plugin may contact. No wildcards. |
 | `data:read` | Read namespaces the plugin may query (`media_item`, `playback_progress`, `library_item`, plus the page-only `media_request`, `download`, `collection`, `watch_history`). Returns a curated, read-only projection. |
 | `data:search` | Lets a page call the `search` host function against the acting user's library or the metadata catalog. Takes an empty list. |
@@ -66,6 +67,7 @@ its own grant at runtime.
 | `state:kv` | A small per-plugin key/value store that survives across invocations (watermarks, cursors, dedupe sets). |
 | `users:connections` | Per-user third-party connections the host holds on the plugin's behalf. **Cross-user**: see below. |
 | `schedule:interval` | Lets the plugin run on a fixed interval via `on-schedule`. Paired with the `schedule` descriptor. |
+| `surfaces:shelf` | Fill shelves the host renders. Requires `shelves`. See [Shelves](#shelves). Takes an empty list. |
 
 ### Write surfaces
 
@@ -216,6 +218,39 @@ navigation entry:
   `hero-magnifying-glass`, `hero-light-bulb`, `hero-cpu-chip`,
   `hero-wrench-screwdriver`, `hero-cog-6-tooth`, `hero-folder`, `hero-tag`.
   Any other name is rejected when the manifest is parsed.
+
+## Shelves
+
+A plugin that declares `surfaces:shelf` must also declare a `shelves` list, and
+a non-empty `shelves` list without `surfaces:shelf` is rejected. Each entry
+describes one shelf the host asks the plugin to fill through its `fill-shelf`
+export:
+
+```json
+"shelves": [
+  {
+    "key": "picks",
+    "title": "Picked for you",
+    "placement": "home",
+    "scope": "user",
+    "ttl_seconds": 86400,
+    "refresh_on": ["playback.finished"]
+  }
+],
+"capabilities": { "surfaces:shelf": [] }
+```
+
+| Field | Required | Bounds |
+|-------|----------|--------|
+| `key` | yes | Matches `[a-z][a-z0-9_]{0,31}`. Unique within the plugin. |
+| `title` | yes | 1 to 40 characters, and not blank. Shown as the shelf heading. |
+| `placement` | yes | `home`. |
+| `scope` | yes | `user`. The shelf is filled for, and shown to, one person. |
+| `ttl_seconds` | yes | An integer from 3600 to 2592000. How long a fill lasts before the host asks again. |
+| `refresh_on` | no | A list of event types from the [catalog](#capabilities). Defaults to `[]`. An event marks the shelf stale for the user it belongs to. |
+
+A plugin may declare at most four shelves. Because a fill reads a person's
+watch history, the approval screen flags `surfaces:shelf` as sensitive.
 
 ## Private network hosts
 

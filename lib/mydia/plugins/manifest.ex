@@ -83,6 +83,14 @@ defmodule Mydia.Plugins.Manifest do
   `"none"` when a plugin needs only that header and no device flow.
   `connection.method` (`GET` or `POST`) and `connection.headers` apply to the
   device flow's code and poll requests.
+
+  ## Shelves (1.6)
+
+  `shelves` lists the shelves a plugin fills through its `fill-shelf` export,
+  under the `surfaces:shelf` capability. Each entry has a `key` (unique within
+  the plugin), a `title` (the rail heading), a `placement` (`home`), a `scope`
+  (`user`), a `ttl_seconds` and an optional `refresh_on` list of event types
+  that mark the shelf stale for the user the event belongs to.
   """
 
   alias Mydia.Plugins.Error
@@ -100,6 +108,7 @@ defmodule Mydia.Plugins.Manifest do
           connection: map() | nil,
           schedule: map() | nil,
           page: map() | nil,
+          shelves: [map()],
           min_host_version: String.t() | nil,
           multi_instance: boolean(),
           category: String.t() | nil,
@@ -118,6 +127,7 @@ defmodule Mydia.Plugins.Manifest do
             connection: nil,
             schedule: nil,
             page: nil,
+            shelves: [],
             min_host_version: nil,
             multi_instance: false,
             category: nil,
@@ -157,13 +167,14 @@ defmodule Mydia.Plugins.Manifest do
 
   # All taxonomy classes (reserved + implemented). The schema/approval UI know
   # every one so they need no breaking change when a reserved one lands.
-  @known_classes ~w(events:subscribe net:http data:read data:search surfaces:write surfaces:page state:kv users:connections schedule:interval)
+  @known_classes ~w(events:subscribe net:http data:read data:search surfaces:write surfaces:page state:kv users:connections schedule:interval surfaces:shelf)
 
   # Implemented capability classes. `data:read` is honored by data-read/data-list;
   # `state:kv` by the kv-* host functions (U3); `users:connections` by
   # connections-list + the connect flow (U7); `schedule:interval` by the
-  # PluginScheduler tick (U4); `surfaces:write` by ensure-watched (U6).
-  @available_classes ~w(events:subscribe net:http data:read data:search state:kv users:connections schedule:interval surfaces:write surfaces:page)
+  # PluginScheduler tick (U4); `surfaces:write` by ensure-watched (U6);
+  # `surfaces:shelf` by the `fill-shelf` export and `Mydia.Plugins.Shelves`.
+  @available_classes ~w(events:subscribe net:http data:read data:search state:kv users:connections schedule:interval surfaces:write surfaces:page surfaces:shelf)
 
   # The value vocabulary for `surfaces:write`. `playback:watched` and
   # `collections:favorite` serve both the connection-scoped sync functions and
@@ -183,6 +194,17 @@ defmodule Mydia.Plugins.Manifest do
     hero-magnifying-glass hero-light-bulb hero-cpu-chip hero-wrench-screwdriver
     hero-cog-6-tooth hero-folder hero-tag
   )
+
+  # Shelves: where a shelf may render, whose it is, and how long a fill lasts.
+  # Closed sets, so a manifest written for a later host fails here with a clear
+  # message instead of declaring a shelf nothing renders.
+  @shelf_placements ~w(home)
+  @shelf_scopes ~w(user)
+  @shelf_key ~r/\A[a-z][a-z0-9_]{0,31}\z/
+  @shelf_title_max 40
+  @shelf_ttl_min 3_600
+  @shelf_ttl_max 2_592_000
+  @max_shelves 4
 
   # The lowest interval (minutes) a scheduled plugin may request — a floor so a
   # misconfigured manifest can't tick the host to death.
@@ -224,6 +246,10 @@ defmodule Mydia.Plugins.Manifest do
   @spec page_icons() :: [String.t()]
   def page_icons, do: @page_icons
 
+  @doc "Returns the placements a shelf may declare."
+  @spec shelf_placements() :: [String.t()]
+  def shelf_placements, do: @shelf_placements
+
   @doc "Returns the v1 `data:read` namespaces (allowed scoped-read values)."
   @spec data_namespaces() :: [String.t()]
   def data_namespaces, do: @data_namespaces
@@ -254,6 +280,7 @@ defmodule Mydia.Plugins.Manifest do
     with :ok <- validate_required(map),
          {:ok, capabilities} <- validate_capabilities(capabilities),
          :ok <- validate_page(page, capabilities),
+         {:ok, shelves} <- validate_shelves(Map.get(map, "shelves"), capabilities),
          {:ok, settings_schema} <- validate_settings_schema(settings_schema),
          {:ok, connection} <- validate_connection(connection, capabilities),
          :ok <- validate_schedule(schedule, capabilities),
@@ -275,6 +302,7 @@ defmodule Mydia.Plugins.Manifest do
          connection: connection,
          schedule: schedule,
          page: page,
+         shelves: shelves,
          min_host_version: Map.get(map, "min_host_version"),
          multi_instance: multi_instance,
          setup: setup,
@@ -418,9 +446,12 @@ defmodule Mydia.Plugins.Manifest do
            "capability not available in this version: #{reserved}"
          )}
 
-      "events:subscribe" not in classes and "surfaces:page" not in classes ->
+      not Enum.any?(~w(events:subscribe surfaces:page surfaces:shelf), &(&1 in classes)) ->
         {:error,
-         Error.new(:invalid_manifest, "a plugin must declare events:subscribe or surfaces:page")}
+         Error.new(
+           :invalid_manifest,
+           "a plugin must declare events:subscribe, surfaces:page or surfaces:shelf"
+         )}
 
       true ->
         :ok
@@ -728,6 +759,100 @@ defmodule Mydia.Plugins.Manifest do
 
   defp validate_page(_page, _capabilities),
     do: {:error, Error.new(:invalid_manifest, "page must be an object")}
+
+  # `shelves` lists the shelves a plugin fills through `fill-shelf`. It is
+  # required with `surfaces:shelf` and rejected without it, the same pairing
+  # `page` has with `surfaces:page`. `[]` without the capability is accepted
+  # because `Mydia.Plugins.manifest_to_map/1` writes it for every plugin.
+  defp validate_shelves(shelves, capabilities) when shelves in [nil, []] do
+    if Map.has_key?(capabilities, "surfaces:shelf"),
+      do: {:error, Error.new(:invalid_manifest, "surfaces:shelf requires a shelves list")},
+      else: {:ok, []}
+  end
+
+  defp validate_shelves(shelves, capabilities) when is_list(shelves) do
+    cond do
+      not Map.has_key?(capabilities, "surfaces:shelf") ->
+        {:error, Error.new(:invalid_manifest, "shelves require the surfaces:shelf capability")}
+
+      length(shelves) > @max_shelves ->
+        {:error,
+         Error.new(:invalid_manifest, "a plugin may declare at most #{@max_shelves} shelves")}
+
+      true ->
+        with {:ok, normalized} <- validate_each_shelf(shelves),
+             :ok <- validate_unique_shelf_keys(normalized) do
+          {:ok, normalized}
+        end
+    end
+  end
+
+  defp validate_shelves(_shelves, _capabilities),
+    do: {:error, Error.new(:invalid_manifest, "shelves must be a list")}
+
+  defp validate_each_shelf(shelves) do
+    shelves
+    |> Enum.reduce_while({:ok, []}, fn shelf, {:ok, acc} ->
+      case validate_shelf(shelf) do
+        {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
+        error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
+
+  defp validate_shelf(shelf) when is_map(shelf) do
+    key = Map.get(shelf, "key")
+    title = Map.get(shelf, "title")
+    ttl = Map.get(shelf, "ttl_seconds")
+    refresh_on = Map.get(shelf, "refresh_on", [])
+
+    cond do
+      not is_binary(key) or not Regex.match?(@shelf_key, key) ->
+        shelf_error("key must be 1 to 32 lowercase letters, digits or underscores")
+
+      not is_binary(title) or blank?(title) or String.length(title) > @shelf_title_max ->
+        shelf_error("title must be 1 to #{@shelf_title_max} characters")
+
+      Map.get(shelf, "placement") not in @shelf_placements ->
+        shelf_error("placement must be one of: #{Enum.join(@shelf_placements, ", ")}")
+
+      Map.get(shelf, "scope") not in @shelf_scopes ->
+        shelf_error("scope must be one of: #{Enum.join(@shelf_scopes, ", ")}")
+
+      not is_integer(ttl) or ttl < @shelf_ttl_min or ttl > @shelf_ttl_max ->
+        shelf_error("ttl_seconds must be an integer from #{@shelf_ttl_min} to #{@shelf_ttl_max}")
+
+      not is_list(refresh_on) or Enum.any?(refresh_on, &(&1 not in @event_catalog)) ->
+        shelf_error("refresh_on must list events from the v1 catalog")
+
+      true ->
+        {:ok,
+         %{
+           "key" => key,
+           "title" => title,
+           "placement" => shelf["placement"],
+           "scope" => shelf["scope"],
+           "ttl_seconds" => ttl,
+           "refresh_on" => refresh_on
+         }}
+    end
+  end
+
+  defp validate_shelf(_shelf), do: shelf_error("each entry must be an object")
+
+  defp shelf_error(detail), do: {:error, Error.new(:invalid_manifest, "shelves: #{detail}")}
+
+  defp validate_unique_shelf_keys(shelves) do
+    keys = Enum.map(shelves, & &1["key"])
+
+    if length(Enum.uniq(keys)) == length(keys),
+      do: :ok,
+      else: {:error, Error.new(:invalid_manifest, "shelves: keys must be unique")}
+  end
 
   # An optional `min_host_version` declares the lowest Mydia version the plugin
   # supports — the floor `Mydia.Plugins` enforces at activation (R7). It must be a

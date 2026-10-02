@@ -275,6 +275,10 @@ config :mydia, Oban,
     import_lists: 2,
     integrations: 2,
     plugins: 1,
+    # Mydia.Jobs.ShelfFill. A fill can hold a slot for two minutes, so it gets
+    # its own queue rather than blocking the scheduler tick on :plugins. Two
+    # slots: fills for different users are independent.
+    shelves: 2,
     # A user-started import can run for hours over a large library. It gets its
     # own single slot so it can never starve :media, which is only concurrency
     # 3 and also carries library, music and book scans.

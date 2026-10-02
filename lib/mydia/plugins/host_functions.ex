@@ -33,6 +33,8 @@ defmodule Mydia.Plugins.HostFunctions do
   Version 1.5 adds `links-list`, `link-request`, `propose-accounts`,
   `set-link-token`, `set-link-status`, `kv-list`, `kv-set-many` and
   `report-sync-run`, plus `origin` on `playback-progress`.
+  Version 1.6 adds no host function; it adds the `fill-shelf` export, inside
+  which the read functions act as the shelf's user.
 
   A closure must return exactly the WIT-declared shape: `{:ok, record}` /
   `{:error, host-error}` for the `result` functions. A wrong-typed return can
@@ -74,19 +76,20 @@ defmodule Mydia.Plugins.HostFunctions do
   alias Mydia.Plugins.Plugin
   alias Mydia.Sync
 
-  import Mydia.Plugins.PageContext, only: [page_user: 1, to_option: 1]
+  import Mydia.Plugins.PageContext, only: [acting_user: 1, to_option: 1]
 
   # Hard page cap for data-list — a guest may request fewer but never more.
   @data_list_page_cap 200
 
   # The WIT host interface namespace. The version suffix is the ABI version.
-  # wasmtime serves this 1.5 superset to a 1.4/1.3/1.2/1.1/1.0 guest (which
+  # wasmtime serves this 1.6 superset to a 1.5/1.4/1.3/1.2/1.1/1.0 guest (which
   # imports the correspondingly older `host@x.y.z`) via component semver
   # matching, so older guests keep working. wasmex still needs exact namespace
   # keys in the imports map (see `Mydia.Plugins.Host`), so every supported
   # version is also published under its own key, each narrowed to the functions
   # that version defined.
-  @namespace "mydia:plugin/host@1.5.0"
+  @namespace "mydia:plugin/host@1.6.0"
+  @v15_namespace "mydia:plugin/host@1.5.0"
   @v14_namespace "mydia:plugin/host@1.4.0"
   @v13_namespace "mydia:plugin/host@1.3.0"
   @v12_namespace "mydia:plugin/host@1.2.0"
@@ -131,7 +134,7 @@ defmodule Mydia.Plugins.HostFunctions do
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug, ctx)},
         # ── 1.3.0 ──
-        "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
+        "ensure-favorite" => {:fn, ensure_favorite_import(slug, ctx)},
         # ── 1.4.0: page functions, acting as the on-http user ──
         "search" => {:fn, page_import(slug, ctx, &PageReads.search/3)},
         "media-add" => {:fn, page_import(slug, ctx, &PageActions.media_add/3)},
@@ -167,7 +170,9 @@ defmodule Mydia.Plugins.HostFunctions do
       # Each older key is narrowed to what that version actually declared, or
       # the guest would import a function its own contract never defined.
       %{
+        # 1.6 added an export, not a host function, so both keys serve one map.
         @namespace => v15,
+        @v15_namespace => v15,
         @v14_namespace => v14,
         @v13_namespace => v13,
         @v12_namespace => Map.delete(v13, "ensure-favorite"),
@@ -301,20 +306,29 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  # A shelf fill has nobody to approve a change, so the sync writes, which are
+  # gated by grant rather than by handler, are refused there outright.
+  defp refuse_in_fill(%{handler: :fill_shelf}),
+    do: {:error, Error.new(:capability_denied, "writes are not available during a shelf fill")}
+
+  defp refuse_in_fill(_ctx), do: :ok
+
   defp ensure_watched_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_watched(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
   end
 
-  defp ensure_favorite_import(slug) do
+  defp ensure_favorite_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_favorite(plugin, target)
         end
       end)
@@ -324,7 +338,8 @@ defmodule Mydia.Plugins.HostFunctions do
   defp set_watch_state_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           set_watch_state(plugin, target, instance: ctx_instance(ctx))
         end
       end)
@@ -432,7 +447,9 @@ defmodule Mydia.Plugins.HostFunctions do
   # ── http-request import ────────────────────────────────────────────────────
 
   defp http_import(slug, ctx, gate_opts) do
-    budget = if Map.get(ctx, :handler) == :on_http, do: page_http_opts(), else: []
+    # Page and shelf invocations wait on a slow upstream (a model server), so
+    # they get the longer timeout and larger response cap.
+    budget = if Map.get(ctx, :handler) in [:on_http, :fill_shelf], do: page_http_opts(), else: []
 
     fn req ->
       typed_result(fn ->
@@ -703,8 +720,8 @@ defmodule Mydia.Plugins.HostFunctions do
   @page_http_max_bytes 4_194_304
 
   @doc """
-  Gate options for `http-request` calls made during a page (`on-http`)
-  invocation: a longer timeout and a larger response cap than event handlers
+  Gate options for `http-request` calls made during a page (`on-http`) or
+  shelf (`fill-shelf`) invocation: a longer timeout and a larger response cap than event handlers
   get, because a page call waits on a slow upstream while a user watches.
   """
   @spec page_http_opts() :: keyword()
@@ -891,9 +908,11 @@ defmodule Mydia.Plugins.HostFunctions do
   defp split_list_opts(ctx) when is_map(ctx), do: {ctx, []}
   defp split_list_opts(opts) when is_list(opts), do: {Keyword.get(opts, :ctx, %{}), opts}
 
-  # `:system` for event and schedule handlers; the acting user for on-http,
-  # taken from the host-provided invocation context.
-  defp list_viewer(%{handler: :on_http} = ctx), do: page_user(ctx)
+  # `:system` for event and schedule handlers; the acting user for on-http and
+  # fill-shelf, taken from the host-provided invocation context.
+  defp list_viewer(%{handler: handler} = ctx) when handler in [:on_http, :fill_shelf],
+    do: acting_user(ctx)
+
   defp list_viewer(_ctx), do: {:ok, :system}
 
   defp list_scope(:system), do: Scope.system()

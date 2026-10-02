@@ -55,9 +55,19 @@ defmodule Mydia.Media.Restrictions do
   @spec visible?(MediaItem.t(), Scope.t()) :: boolean()
   def visible?(_item, %Scope{allowed_categories: nil, max_content_age: nil}), do: true
 
-  def visible?(%MediaItem{} = item, %Scope{} = scope) do
-    category_ok?(item.category, scope.allowed_categories) and
-      age_ok?(item.content_rating_age, scope.max_content_age)
+  def visible?(%MediaItem{} = item, %Scope{} = scope),
+    do: allowed?(item.category, item.content_rating_age, scope)
+
+  @doc """
+  The same rule as `visible?/2` for a title that is not in the library, given
+  its category and minimum age directly.
+
+  A missing age under an active limit is denied, as it is for a library row: a
+  missing rating is not evidence that a title is suitable.
+  """
+  @spec allowed?(String.t() | nil, integer() | nil, Scope.t()) :: boolean()
+  def allowed?(category, age, %Scope{} = scope) do
+    category_ok?(category, scope.allowed_categories) and age_ok?(age, scope.max_content_age)
   end
 
   defp apply_categories(query, nil), do: query

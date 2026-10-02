@@ -1,0 +1,33 @@
+# Shelf test fixture (1.6). fill-shelf switches on the shelf key:
+#
+#   fixed    -> three items: movie 101 (with a reason), tv_show 202, movie 303
+#   echo     -> one movie whose tmdb id is `limit` and whose reason is
+#               "<user-id>|<exclude count>|<config-json>"
+#   search   -> library search for "Ember"; reason is the joined titles
+#   history  -> data-list watch_history; reason is the row count
+#   write    -> calls media-add; Err carries the host error, Ok means it ran
+#   fail     -> Err("boom")
+#   anything else -> an empty list
+#
+# A host error from search or history comes back as Err(debug text).
+#
+# Built to wasm32-wasip2 and checked in at ../shelf_fixture.wasm:
+#   devenv shell -- cargo build --release --target wasm32-wasip2 \
+#     --manifest-path test/support/fixtures/plugins/shelf_fixture/Cargo.toml
+[package]
+name = "shelf_fixture"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mydia-plugin-sdk = { path = "../../../../../native/mydia_plugin_sdk" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"

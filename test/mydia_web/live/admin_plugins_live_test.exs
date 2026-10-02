@@ -290,6 +290,64 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     end
   end
 
+  describe "failing shelves" do
+    defp fail_shelf(user, slug, message) do
+      user
+      |> Mydia.ShelfHelpers.shelf_fixture(slug: slug)
+      |> Ecto.Changeset.change(status: :failed, failure_count: 1, last_error: message)
+      |> Mydia.Repo.update!()
+    end
+
+    test "the plugin row says how many people it fails for and why", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "The model server answered 401"
+      )
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "The model server answered 401"
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(
+               view,
+               "#shelf-failure-note-suggester",
+               "Suggestions failing for 2 people: The model server answered 401"
+             )
+    end
+
+    test "the error text is escaped and clipped", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "<script>alert(1)</script>" <> String.duplicate("x", 400)
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      html = view |> element("#shelf-failure-note-suggester") |> render()
+      refute html =~ "<script>"
+      assert html =~ "&lt;script&gt;"
+      assert String.length(html) < 600
+    end
+
+    test "a healthy plugin shows no note", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+      Mydia.ShelfHelpers.shelf_fixture(Mydia.AccountsFixtures.user_fixture(), slug: "suggester")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      refute has_element?(view, "#shelf-failure-note-suggester")
+    end
+  end
+
   describe "manifest outgrew its grant (re-approval)" do
     # Seeds an approved, enabled plugin whose stored manifest asks for more than
     # was granted — exactly the state a built-in upgrade leaves behind.
