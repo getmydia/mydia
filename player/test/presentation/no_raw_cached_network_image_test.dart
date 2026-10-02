@@ -9,7 +9,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-final RegExp _rawImage = RegExp(r'\bCachedNetworkImage(Provider)?\s*\(');
+// A constructor call or a `.new` tear-off. Type references alone are fine.
+final RegExp _rawImage =
+    RegExp(r'\bCachedNetworkImage(Provider)?\s*(\(|\.new\b)');
 
 // The one file allowed to name the provider: it defines the subclass.
 const String _allowed = 'lib/core/cache/artwork_decode.dart';
@@ -21,6 +23,16 @@ bool _isSource(File file) =>
     !file.path.endsWith('.freezed.dart');
 
 void main() {
+  test('the scan matches construction and nothing else', () {
+    expect(_rawImage.hasMatch('child: CachedNetworkImage('), isTrue);
+    expect(_rawImage.hasMatch('CachedNetworkImageProvider(url)'), isTrue);
+    expect(_rawImage.hasMatch('urls.map(CachedNetworkImage.new)'), isTrue);
+    expect(_rawImage.hasMatch('CachedNetworkImageProvider.new'), isTrue);
+    expect(_rawImage.hasMatch('CachedNetworkImageProvider key,'), isFalse);
+    expect(_rawImage.hasMatch('extends CachedNetworkImageProvider {'), isFalse);
+    expect(_rawImage.hasMatch('CachedNetworkImage.newest'), isFalse);
+  });
+
   test('lib/ builds no CachedNetworkImage directly', () {
     final offenders = <String>[];
     final files = Directory('lib').listSync(recursive: true).whereType<File>();
