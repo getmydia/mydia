@@ -7,9 +7,7 @@ defmodule MydiaWeb.Api.HlsController do
     AudioPreferences,
     HlsSessionSupervisor,
     HlsSession,
-    SegmentPlan,
-    SessionFiles,
-    SessionSubtitles
+    SessionFiles
   }
 
   alias MydiaWeb.MediaAccess
@@ -263,83 +261,38 @@ defmodule MydiaWeb.Api.HlsController do
   This route handles FFmpeg's flat structure where segments are in the root directory.
   """
   def root_segment(conn, %{"session_id" => session_id, "segment" => segment}) do
-    # get_user_id/1 runs outside the `with` (rather than as its first clause)
-    # so `user_id` is in scope in the `else` block below: a `with`'s `else`
-    # only sees the value that failed to match, not variables bound by
-    # clauses that already succeeded.
-    case get_user_id(conn) do
-      {:ok, user_id} ->
-        with {:ok, pid} <- find_session_by_id(session_id, user_id),
-             {:ok, index} <- SegmentPlan.index_from_name(segment) do
-          case HlsSession.request_segment(pid, index) do
-            {:ok, path} ->
-              heartbeat_session(session_id, user_id)
-
-              conn
-              |> put_resp_content_type(SessionFiles.content_type(segment))
-              |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
-              |> send_file(200, path)
-
-            {:error, :timeout} ->
-              # The encoder has not reached this segment yet. Both hls.js and mpv
-              # retry a 503 with Retry-After rather than treating it as fatal, which
-              # is what keeps a seek onto a slow transcode buffering instead of
-              # failing.
-              conn
-              |> put_resp_header("retry-after", "1")
-              |> put_status(:service_unavailable)
-              |> json(%{error: "Segment not ready"})
-
-            {:error, :window_mode} ->
-              serve_window_segment(conn, session_id, user_id, segment)
-
-            {:error, :out_of_range} ->
-              # Unlike :timeout, this segment will never exist: it falls
-              # outside the plan the session published. Retrying it is
-              # pointless, so a terminal 404 is the honest answer rather than
-              # a 503 that hls.js and mpv would keep retrying forever.
-              conn
-              |> put_status(:not_found)
-              |> json(%{error: "Segment not found"})
-          end
-        else
-          :error ->
-            # Not a segment filename. Subtitles and anything else the session
-            # directory holds resolve by path as before.
-            serve_window_segment(conn, session_id, user_id, segment)
-
-          {:error, :session_not_found} ->
-            conn
-            |> put_status(:not_found)
-            |> json(%{error: "HLS session not found"})
-        end
-
-      {:error, :no_user} ->
-        conn
-        |> put_status(:unauthorized)
-        |> json(%{error: "Authentication required"})
-    end
-  end
-
-  # The pre-full-playlist compatibility path: resolves a requested name
-  # against the session directory by path rather than by segment index.
-  # Reached for anything that is not a `segment_NNNNN.ts` name (subtitles,
-  # legacy segment names) and for sessions with no `SegmentPlan`.
-  defp serve_window_segment(conn, session_id, user_id, segment) do
-    with {:ok, info} <- get_session_info_by_id(session_id, user_id),
-         {:ok, segment_path} <- resolve_session_file(info, segment),
-         true <- File.exists?(segment_path) do
+    with {:ok, user_id} <- get_user_id(conn),
+         {:ok, pid} <- find_session_by_id(session_id, user_id),
+         {:ok, info} <- HlsSession.get_info(pid),
+         {:ok, {:file, path}} <- SessionFiles.resolve(pid, info, segment),
+         true <- File.exists?(path) do
       heartbeat_session(session_id, user_id)
 
       conn
       |> put_resp_content_type(SessionFiles.content_type(segment))
       |> put_resp_header("cache-control", cache_control_for(segment))
-      |> send_file(200, segment_path)
+      |> send_file(200, path)
     else
+      {:error, :no_user} ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: "Authentication required"})
+
       {:error, :session_not_found} ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "HLS session not found"})
+
+      {:error, :timeout} ->
+        # The encoder has not reached this segment yet. Both hls.js and mpv
+        # retry a 503 with Retry-After rather than treating it as fatal, which
+        # is what keeps a seek onto a slow transcode buffering instead of
+        # failing. The session waits 4 seconds, under mpv's 5 second network
+        # timeout, so this answer reaches the player before it gives up.
+        conn
+        |> put_resp_header("retry-after", "1")
+        |> put_status(:service_unavailable)
+        |> json(%{error: "Segment not ready"})
 
       {:error, :path_traversal} ->
         conn
@@ -367,24 +320,16 @@ defmodule MydiaWeb.Api.HlsController do
         |> put_status(:unsupported_media_type)
         |> json(%{error: "Subtitle track could not be extracted"})
 
-      {:error, _reason} ->
+      # :out_of_range lands here too: the segment will never exist, so a
+      # terminal 404 is the honest answer rather than a 503 the player would
+      # keep retrying. So does {:ok, {:content, _}}: resolve/3 answers a
+      # playlist as content, but the router sends index.m3u8 to
+      # master_playlist/2 ahead of this route, so that answer cannot arrive
+      # here, and would be a 404 if it did.
+      _missing ->
         conn
         |> put_status(:not_found)
         |> json(%{error: "Segment not found"})
-
-      false ->
-        conn
-        |> put_status(:not_found)
-        |> json(%{error: "Segment not found"})
-    end
-  end
-
-  # A subtitle is materialized on demand; anything else is an ordinary file
-  # that either exists in the session directory or does not.
-  defp resolve_session_file(info, name) do
-    case SessionSubtitles.ensure(info, name) do
-      :not_subtitle -> SessionFiles.safe_path(info.temp_dir, name)
-      result -> result
     end
   end
 
@@ -545,13 +490,6 @@ defmodule MydiaWeb.Api.HlsController do
 
       error ->
         error
-    end
-  end
-
-  defp get_session_info_by_id(session_id, user_id) do
-    case find_session_by_id(session_id, user_id) do
-      {:ok, pid} -> HlsSession.get_info(pid)
-      error -> error
     end
   end
 

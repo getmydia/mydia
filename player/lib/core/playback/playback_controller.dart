@@ -214,22 +214,12 @@ class PlaybackController {
       debugPrint(
           '[PlaybackController] HLS session started: ${session.sessionId}');
 
-      final full = session.playlistMode == Enum$PlaylistMode.FULL;
+      final claimsFull = session.playlistMode == Enum$PlaylistMode.FULL;
       final echoedDuration = session.duration;
       final duration = totalDuration ??
           (echoedDuration == null
               ? null
               : Duration(milliseconds: (echoedDuration * 1000).round()));
-      // The echoed offset, not the requested one: the server clamps it, and a
-      // copied stream can only begin on a keyframe, which the server finds and
-      // echoes for MKV and MP4 sources (MPEG-TS still echoes the requested
-      // offset). A FULL playlist starts at zero regardless.
-      final timeline = full
-          ? StreamTimeline(totalDuration: duration)
-          : StreamTimeline(
-              startOffset: Duration(seconds: session.startPosition ?? 0),
-              totalDuration: duration,
-            );
       // Only a server that echoes caps gets to label the stream. The legacy
       // document selects none, so reading them there would label a capped
       // stream Original.
@@ -244,11 +234,39 @@ class PlaybackController {
       // absorb transient failures on the session URL (auth blip, proxy or relay
       // hiccup) before the player opens it. Without it, these failures become
       // hard errors. A dead session is ended here rather than surfacing downstream.
-      await _awaitPlaylist(resolved.url,
+      // The probe's body is also what tells a genuinely full playlist from one
+      // that only claims to be: whether it ends.
+      final terminated = await _awaitPlaylist(resolved.url,
           headers: resolved.probeHeaders,
           onProgress: onProgress,
           lifetime: lifetime);
       _requireActive(lifetime);
+
+      // A full playlist covers the whole file and ends. Some servers answer
+      // FULL over p2p while serving the encoder's own growing playlist, which
+      // begins at the resume point: positions there are relative to it, the
+      // way a window's are. Believing the mode put the bar at zero on the
+      // resume point and saved that over the real position.
+      final full = claimsFull && terminated;
+      if (claimsFull && !terminated) {
+        debugPrint('[PlaybackController] Session ${session.sessionId} answered '
+            'FULL but its playlist does not end; treating it as a window at '
+            '$startAt');
+      }
+      // The echoed offset, not the requested one: the server clamps it, and a
+      // copied stream can only begin on a keyframe, which the server finds and
+      // echoes for MKV and MP4 sources (MPEG-TS still echoes the requested
+      // offset). A FULL playlist starts at zero regardless. A mislabelled one
+      // echoes zero too, so the requested position is the best figure there
+      // is; the encoder began on the segment grid, at most one segment before.
+      final timeline = full
+          ? StreamTimeline(totalDuration: duration)
+          : StreamTimeline(
+              startOffset: claimsFull
+                  ? startAt
+                  : Duration(seconds: session.startPosition ?? 0),
+              totalDuration: duration,
+            );
 
       return PlaybackSource(
         url: resolved.url,
@@ -364,8 +382,9 @@ class PlaybackController {
   }
 
   /// Polls the manifest until it lists three segments, with the backoff the
-  /// screen used. A FULL playlist is complete on the first poll.
-  Future<void> _awaitPlaylist(
+  /// screen used, and returns whether the playlist is terminated. A FULL
+  /// playlist is complete, and terminated, on the first poll.
+  Future<bool> _awaitPlaylist(
     String url, {
     required Map<String, String>? headers,
     required void Function(String message)? onProgress,
@@ -384,7 +403,9 @@ class PlaybackController {
         _requireActive(lifetime);
         if (response.status == 200) {
           final segments = '.ts'.allMatches(response.body).length;
-          if (segments >= minSegments) return;
+          if (segments >= minSegments) {
+            return response.body.contains('#EXT-X-ENDLIST');
+          }
           final percentage = (segments / minSegments * 100).round();
           onProgress?.call('Preparing stream... $percentage%');
         } else {

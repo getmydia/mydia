@@ -507,7 +507,7 @@ void main() {
       await tester.pump();
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
-    }, responseBody: 'a.ts\nb.ts\nc.ts\n'.codeUnits);
+    }, responseBody: 'a.ts\nb.ts\nc.ts\n#EXT-X-ENDLIST\n'.codeUnits);
   });
 
   testWidgets('a second seek during progress saving cannot replace the first',

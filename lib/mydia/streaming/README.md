@@ -206,6 +206,31 @@ began at 30.00, 33.92 and 37.93.
 installed FFmpeg. It is tagged `:ffmpeg`, so run it with `--include ffmpeg`
 after any FFmpeg upgrade.
 
+## One answer for a session file, whichever route asks
+
+`SessionFiles.resolve/3` decides what a requested name means: the published
+playlist and on-demand segments for a `:full` session, the files on disk for a
+`:window` one. `Mydia.P2p.Server` calls it for every name. Over HTTP,
+`HlsController.root_segment/2` calls it for segments, while `master_playlist/2`
+asks the session for its playlist directly (`HlsSession.playlist/1`), which is
+the same answer `resolve/3` gives for `index.m3u8`.
+
+Until 2026-10 the p2p server resolved every name by path. A `:full` session
+then answered `playlistMode: FULL` while a relayed player received FFmpeg's
+internal `index.m3u8`: a growing playlist that starts at the resume segment.
+The player's clock began near zero at the resume point, the bar read 0 there,
+and the next progress sync saved that over the real position (#944). Local
+HTTP playback was unaffected, which is why it survived testing.
+
+FFmpeg's `index.m3u8` is bookkeeping, and it outlives the encoder that wrote
+it. A relocated encoder shares the directory, so `FfmpegHlsTranscoder` ignores
+a playlist whose first segment is not its own `-start_number`.
+
+A segment that is not ready yet is parked by the session for 4 seconds
+(`@segment_wait_timeout` in `hls_session.ex`). That is deliberately under the
+5 second `network-timeout` media_kit sets on mpv, so the 503 reaches the player
+and its retries do the waiting, instead of mpv giving up on the request first.
+
 ## Which subtitle a show opens on
 
 Two settings name subtitle languages and they are not the same setting:

@@ -237,6 +237,19 @@ defmodule Mydia.Streaming.HlsSessionSegmentsTest do
       assert Enum.sort(Map.keys(state.segment_waiters)) == [100, 101, 102]
     end
 
+    test "records the relocated position for a later hardware fallback" do
+      state = base_state()
+
+      {:noreply, state} = HlsSession.handle_call({:request_segment, 100}, fake_from(), state)
+
+      # The hardware-failure handler restarts the encoder at
+      # backend_opts[:start_number]. Left at the session's original value, a
+      # failure after a seek restarts the encoder where the viewer no longer is.
+      assert Keyword.get(state.backend_opts, :start_number) == 100
+      assert Keyword.get(state.backend_opts, :start_position) == 400
+      assert Keyword.get(state.backend_opts, :transcoder_module) == FakeBackend
+    end
+
     test "relocation preserves the segments an earlier window already wrote" do
       state = base_state()
 
