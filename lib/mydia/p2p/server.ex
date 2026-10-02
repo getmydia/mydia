@@ -17,7 +17,6 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
-  alias Mydia.Streaming.SessionSubtitles
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   # What a peer is told when handling its request failed unexpectedly.
@@ -711,9 +710,12 @@ defmodule Mydia.P2p.Server do
         # Wait for the session to be ready (FFmpeg has created initial files)
         case HlsSession.await_ready(pid, @session_ready_timeout) do
           :ok ->
-            case resolve_session_file(session_info, req.path) do
-              {:ok, file_path} ->
+            case SessionFiles.resolve(pid, session_info, req.path) do
+              {:ok, {:file, file_path}} ->
                 stream_hls_file(resource, stream_id, file_path, req)
+
+              {:ok, {:content, body}} ->
+                send_hls_content(resource, stream_id, body, req.path)
 
               {:error, reason} ->
                 log_session_file_error(reason, req.path)
@@ -820,15 +822,6 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  # A subtitle is materialized on demand; anything else is an ordinary file
-  # that either exists in the session directory or does not.
-  defp resolve_session_file(info, name) do
-    case SessionSubtitles.ensure(info, name) do
-      :not_subtitle -> SessionFiles.safe_path(info.temp_dir, name)
-      result -> result
-    end
-  end
-
   @doc false
   # The status and body a session file that cannot be served answers with,
   # matching HlsController's. Public for its test: the stream path that
@@ -848,6 +841,10 @@ defmodule Mydia.P2p.Server do
   def session_file_error(:extraction_failed),
     do: {415, "Subtitle track could not be extracted"}
 
+  # The encoder has not produced this segment yet. p2p carries no
+  # Retry-After, so the player retries on its own interval.
+  def session_file_error(:timeout), do: {503, "Segment not ready"}
+
   def session_file_error(_reason), do: {404, "Not found"}
 
   defp log_session_file_error(:path_traversal, path),
@@ -858,6 +855,9 @@ defmodule Mydia.P2p.Server do
 
   # Polled every couple of seconds for minutes; a line each time is noise.
   defp log_session_file_error(:pending, _path), do: :ok
+
+  # A seek onto a slow transcode asks for the same segment every few seconds.
+  defp log_session_file_error(:timeout, _path), do: :ok
 
   defp log_session_file_error(reason, _path),
     do: Logger.warning("HLS file unavailable: #{inspect(reason)}")
@@ -1052,6 +1052,36 @@ defmodule Mydia.P2p.Server do
     rescue
       e ->
         Logger.debug("Failed to send HLS error response: #{inspect(e)}")
+        :ok
+    end
+  end
+
+  # A body held in memory rather than on disk: the playlist a session
+  # publishes from its segment plan. Same guard as send_hls_error/4, since
+  # the peer may already have gone. A range request is ignored and the whole
+  # body answered with 200; players do not range a playlist. The chunk
+  # framing is a u32 length prefix with no cap, so the body goes as one chunk.
+  defp send_hls_content(resource, stream_id, body, name) do
+    header = %P2p.HlsResponseHeader{
+      status: 200,
+      content_type: SessionFiles.content_type(name),
+      content_length: byte_size(body),
+      content_range: nil,
+      cache_control: hls_cache_control(name)
+    }
+
+    try do
+      case P2p.send_hls_header(resource, stream_id, header) do
+        "ok" ->
+          P2p.send_hls_chunk(resource, stream_id, body)
+          P2p.finish_hls_stream(resource, stream_id)
+
+        _ ->
+          :ok
+      end
+    rescue
+      e ->
+        Logger.debug("Failed to send HLS content: #{inspect(e)}")
         :ok
     end
   end
