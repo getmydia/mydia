@@ -237,6 +237,13 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, type: "movie", quality: "720p")) == []
     end
 
+    test "an unparseable quality matches nothing, not the unparseable files", %{user: user} do
+      garbled = media_item_fixture(%{type: "movie", title: "Garbled Harbor"})
+      media_file_fixture(%{media_item_id: garbled.id, resolution: "widescreen"})
+
+      assert titles(page(user, type: "movie", quality: "nonsense")) == []
+    end
+
     test "the progress filter matches the row's status", %{user: user} do
       owned = media_item_fixture(%{title: "Filed Away"})
       media_file_fixture(%{media_item_id: owned.id})

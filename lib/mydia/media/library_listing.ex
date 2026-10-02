@@ -333,11 +333,16 @@ defmodule Mydia.Media.LibraryListing do
   # By height, not by string: the analyzer stores "4K" for a full-width UHD
   # file and "2160p" for a narrower one, and the release parser adds "UHD".
   defp filter_quality(rows, quality) do
-    wanted = FileRanking.resolution_pixels(quality)
+    case FileRanking.resolution_pixels(quality) do
+      # An unparseable value is 0, and so is an unparseable stored resolution.
+      0 ->
+        []
 
-    Enum.filter(rows, fn row ->
-      Enum.any?(row.resolutions, &(FileRanking.resolution_pixels(&1) == wanted))
-    end)
+      wanted ->
+        Enum.filter(rows, fn row ->
+          Enum.any?(row.resolutions, &(FileRanking.resolution_pixels(&1) == wanted))
+        end)
+    end
   end
 
   defp filter_progress(rows, nil), do: rows
