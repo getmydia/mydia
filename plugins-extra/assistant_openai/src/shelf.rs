@@ -22,6 +22,9 @@ pub const SHELF: &str = "picks";
 
 /// Most titles one `resolve_titles` call may carry: each is a catalog search.
 pub const MAX_TITLES: usize = 30;
+/// Most catalog searches one whole fill may make, across every call and step:
+/// each is a metadata-relay request made on behalf of a self-hosted install.
+const MAX_SEARCHES: usize = 60;
 /// Most history lines given to the model.
 const MAX_HISTORY_LINES: usize = 40;
 const REASON_MAX: usize = 100;
@@ -275,11 +278,29 @@ pub fn user_message(lines: &[String], limit: u32) -> String {
     )
 }
 
-/// Runs `resolve_titles`: one catalog search per title. A search that fails is
-/// reported for that title alone, so one bad lookup does not sink the batch.
-fn resolve(wanted: &[Wanted], excluded: &Seen, seen: &mut Seen) -> Value {
+/// How many of `wanted` titles may be searched with `remaining` searches left
+/// in the fill's budget.
+pub fn searchable(remaining: usize, wanted: usize) -> usize {
+    wanted.min(remaining)
+}
+
+/// What the model is told for a title the search budget did not cover.
+pub fn over_budget(want: &Wanted) -> Value {
+    json!({"title": clip(&want.title, 200), "error": "Search budget used up, so this title was not looked up. Call submit_picks with the titles that resolved."})
+}
+
+/// Runs `resolve_titles`: one catalog search per title, while `budget` lasts.
+/// A search that fails is reported for that title alone, so one bad lookup
+/// does not sink the batch. Titles past the budget are reported, not searched.
+fn resolve(wanted: &[Wanted], excluded: &Seen, seen: &mut Seen, budget: &mut usize) -> Value {
     let mut out = vec![];
-    for want in wanted {
+    let allowed = searchable(*budget, wanted.len());
+    *budget -= allowed;
+    for (n, want) in wanted.iter().enumerate() {
+        if n >= allowed {
+            out.push(over_budget(want));
+            continue;
+        }
         let hits = host::search(&SearchRequest {
             kind: SearchKind::Catalog,
             query: want.title.clone(),
@@ -333,11 +354,14 @@ pub fn fill(req: ShelfRequest) -> Result<Vec<ShelfItem>, String> {
 
     let endpoint = provider::resolve(&settings)?;
     let model = model(&settings).ok_or_else(|| "An admin needs to set a model in the plugin settings.".to_string())?;
+    // Entries without a tmdb id are skipped: this shelf only deals in tmdb ids and the host verifies again.
     let excluded: Seen = req.exclude.iter().filter_map(|r| r.tmdb_id.map(|id| (r.media_type.clone(), id))).collect();
-    let limit = req.limit.max(1) as usize;
+    // The host's fill limit is larger than the rail, so the surplus gives the host's verifier slack.
+    let limit = req.limit.max(1);
     let defs = definitions();
     let mut seen = Seen::new();
-    let mut msgs = vec![json!({"role": "user", "content": user_message(&lines, req.limit)})];
+    let mut searches = MAX_SEARCHES;
+    let mut msgs = vec![json!({"role": "user", "content": user_message(&lines, limit)})];
 
     for _ in 0..MAX_STEPS {
         let mut convo = vec![json!({"role": "system", "content": PROMPT})];
@@ -351,10 +375,10 @@ pub fn fill(req: ShelfRequest) -> Result<Vec<ShelfItem>, String> {
                     let content = match (call.name.as_str(), &call.arguments) {
                         (_, Err(m)) => json!({"error": m}),
                         ("resolve_titles", Ok(args)) => match wanted(args) {
-                            Ok(titles) => resolve(&titles, &excluded, &mut seen),
+                            Ok(titles) => resolve(&titles, &excluded, &mut seen, &mut searches),
                             Err(m) => json!({"error": m}),
                         },
-                        ("submit_picks", Ok(args)) => match accept(args, &seen, limit) {
+                        ("submit_picks", Ok(args)) => match accept(args, &seen, limit as usize) {
                             Ok(picks) => return Ok(picks.into_iter().map(to_item).collect()),
                             Err(m) => json!({"error": m}),
                         },
@@ -667,6 +691,37 @@ mod tests {
         assert_eq!(summarize(&json!(many)).len(), MAX_HISTORY_LINES);
         assert!(summarize(&json!({"error": "nope"})).is_empty());
         assert!(summarize(&json!([{"type": "movie"}, "junk", 4])).is_empty());
+    }
+
+    #[test]
+    fn a_batch_under_the_search_budget_is_searched_whole() {
+        assert_eq!(searchable(MAX_SEARCHES, 25), 25);
+        assert_eq!(searchable(10, 3), 3);
+    }
+
+    #[test]
+    fn a_batch_that_exactly_fits_the_search_budget_is_searched_whole() {
+        assert_eq!(searchable(30, 30), 30);
+        assert_eq!(searchable(1, 1), 1);
+    }
+
+    #[test]
+    fn a_batch_over_the_search_budget_is_searched_only_as_far_as_it_fits() {
+        assert_eq!(searchable(10, 30), 10);
+        assert_eq!(searchable(1, 2), 1);
+    }
+
+    #[test]
+    fn a_spent_search_budget_searches_nothing() {
+        assert_eq!(searchable(0, 30), 0);
+        assert_eq!(searchable(0, 1), 0);
+    }
+
+    #[test]
+    fn a_title_past_the_budget_is_told_to_submit() {
+        let v = over_budget(&want("Ember Tide", None, "movie"));
+        assert_eq!(v["title"], "Ember Tide");
+        assert!(v["error"].as_str().unwrap().contains("submit_picks"));
     }
 
     #[test]
