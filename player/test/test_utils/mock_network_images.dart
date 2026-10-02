@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 /// A 1x1 transparent PNG used as the canned response for any image request in
-/// widget tests so [CachedNetworkImage] / [NetworkImage] never hit the network.
+/// widget tests so `ArtworkImage` / [NetworkImage] never hit the network.
 final Uint8List _transparentPixelPng = Uint8List.fromList(const <int>[
   0x89,
   0x50,

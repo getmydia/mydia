@@ -1,18 +1,18 @@
 import 'dart:ui';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/theme/colors.dart';
 import '../../core/ui/reduced_motion.dart';
+import 'artwork_image.dart';
 
 /// A shell-level ambient backdrop: a pre-blurred, dimmed copy of the focused
 /// title's artwork that crossfades behind the browse screens.
 ///
 /// Performance (plan R2/R11): the blur is a **pre-blurred image layer**
-/// ([ImageFiltered] over a [CachedNetworkImage]), *not* a live full-screen
+/// ([ImageFiltered] over an [ArtworkImage]), *not* a live full-screen
 /// [BackdropFilter] behind scrolling content. The blurred layer is computed
 /// once and is not recomputed while content scrolls in front of it. The whole
 /// backdrop is wrapped in a [RepaintBoundary] so it repaints independently of
@@ -172,19 +172,18 @@ class _ArtworkLayer extends StatelessWidget {
             sigmaY: blurSigma,
             tileMode: TileMode.decal,
           ),
-          child: CachedNetworkImage(
+          child: ArtworkImage(
             imageUrl: imageUrl,
             fit: BoxFit.cover,
             cacheManager: BackdropCacheManager(),
             // Viewport width rather than a LayoutBuilder, so it matches the
             // precache in _AmbientBackdropState.didUpdateWidget exactly.
-            memCacheWidth:
+            decodeWidth:
                 viewportDecodeWidth(context, sourceWidth: backdropSourceWidth),
-            imageRenderMethodForWeb: artworkWebRenderMethod,
             // No placeholder/error chrome: the constant dark base behind the
             // switcher covers the gap, keeping the scrim color stable.
-            placeholder: (_, __) => const SizedBox.expand(),
-            errorWidget: (_, __, ___) => const SizedBox.expand(),
+            placeholder: (_) => const SizedBox.expand(),
+            errorWidget: (_) => const SizedBox.expand(),
           ),
         ),
         // Dark scrim guaranteeing text contrast over bright artwork. Alpha is

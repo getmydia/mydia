@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +7,7 @@ import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/theme/depth_tokens.dart';
+import '../artwork_image.dart';
 import '../glass_surface.dart';
 import '../shimmer_card.dart';
 import 'chrome_panel.dart';
@@ -304,13 +304,12 @@ class _CardStill extends StatelessWidget {
             // `episode_rail_card.dart` already caches this exact episode
             // still under the same cache manager, so reusing it here is a
             // cache hit rather than a second download.
-            child: CachedNetworkImage(
+            child: ArtworkImage(
                 imageUrl: url,
                 fit: BoxFit.cover,
                 cacheManager: EpisodeThumbnailCacheManager(),
-                placeholder: (_, __) =>
-                    const ShimmerCard(width: 80, height: 45),
-                errorWidget: (_, __, ___) =>
+                placeholder: (_) => const ShimmerCard(width: 80, height: 45),
+                errorWidget: (_) =>
                     ColoredBox(color: Colors.white.withValues(alpha: .06)))),
       );
 }

@@ -388,13 +388,18 @@ asyncValue.when(
 
 ### Cached Images
 
-**Always** use CachedNetworkImage for network images:
+**Always** use `ArtworkImage` for network images, never `CachedNetworkImage`
+directly. It routes every load through `artworkImageProvider`, whose codec
+survives being asked for its frame twice. Without that, artwork turns black on
+Firefox and vanishes on Safari when it scrolls back into view. A test enforces
+it.
 
 ```dart
-CachedNetworkImage(
+ArtworkImage(
   imageUrl: movie.posterUrl,
-  placeholder: (_, __) => const ShimmerCard(),
-  errorWidget: (_, __, ___) => const Icon(Icons.error),
+  cacheManager: PosterCacheManager(),
+  placeholder: (_) => const ShimmerCard(),
+  errorWidget: (_) => const Icon(Icons.error),
 )
 ```
 

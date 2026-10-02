@@ -12,7 +12,6 @@
 // through the normal resume prompt instead of bypassing it, exactly like
 // opening the same episode from its own detail screen would.
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';
+import '../../widgets/artwork_image.dart';
 import '../../widgets/smart_play_button.dart';
 import 'calendar_dates.dart';
 
@@ -187,13 +187,13 @@ class _Poster extends StatelessWidget {
           height: 56,
           child: url == null
               ? const ColoredBox(color: AppColors.surfaceVariant)
-              : CachedNetworkImage(
+              : ArtworkImage(
                   imageUrl: url,
                   fit: BoxFit.cover,
                   cacheManager: PosterCacheManager(),
-                  placeholder: (_, __) =>
+                  placeholder: (_) =>
                       const ColoredBox(color: AppColors.surfaceVariant),
-                  errorWidget: (_, __, ___) =>
+                  errorWidget: (_) =>
                       const ColoredBox(color: AppColors.surfaceVariant),
                 ),
         ),

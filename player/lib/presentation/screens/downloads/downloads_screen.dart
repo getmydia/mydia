@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../widgets/artwork_image.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
@@ -366,13 +366,13 @@ class DownloadsScreen extends ConsumerWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: group.posterUrl != null
-                      ? CachedNetworkImage(
+                      ? ArtworkImage(
                           imageUrl: group.posterUrl!,
                           fit: BoxFit.cover,
                           cacheManager: PosterCacheManager(),
-                          placeholder: (_, __) =>
+                          placeholder: (_) =>
                               Container(color: AppColors.surfaceVariant),
-                          errorWidget: (_, __, ___) => Container(
+                          errorWidget: (_) => Container(
                             color: AppColors.surfaceVariant,
                             child: const Icon(Icons.movie,
                                 color: AppColors.textSecondary),
@@ -1271,13 +1271,13 @@ class DownloadsScreen extends ConsumerWidget {
             width: 90,
             height: 160,
             child: posterUrl != null
-                ? CachedNetworkImage(
+                ? ArtworkImage(
                     imageUrl: posterUrl,
                     fit: BoxFit.cover,
                     cacheManager: PosterCacheManager(),
-                    placeholder: (_, __) =>
+                    placeholder: (_) =>
                         Container(color: AppColors.surfaceVariant),
-                    errorWidget: (_, __, ___) => Container(
+                    errorWidget: (_) => Container(
                       color: AppColors.surfaceVariant,
                       child: const Icon(Icons.movie,
                           color: AppColors.textSecondary),

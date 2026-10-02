@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../widgets/artwork_image.dart';
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/layout/breakpoints.dart';
 import '../../../../core/playback/playback_progress_providers.dart';
@@ -94,13 +94,13 @@ class DownloadedEpisodeCard extends ConsumerWidget {
           children: [
             Positioned.fill(
               child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
-                  ? CachedNetworkImage(
+                  ? ArtworkImage(
                       imageUrl: thumbnailUrl,
                       fit: BoxFit.cover,
                       cacheManager: EpisodeThumbnailCacheManager(),
-                      placeholder: (context, url) =>
+                      placeholder: (context) =>
                           Container(color: AppColors.surfaceVariant),
-                      errorWidget: (context, url, error) => _buildPlaceholder(),
+                      errorWidget: (context) => _buildPlaceholder(),
                     )
                   : _buildPlaceholder(),
             ),

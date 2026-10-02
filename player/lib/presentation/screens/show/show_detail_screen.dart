@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../../widgets/artwork_image.dart';
 import '../../../core/cache/artwork_decode.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
@@ -372,19 +372,18 @@ class ShowDetailScreen extends ConsumerWidget {
         children: [
           // Background image
           if (show.artwork.backdropUrl != null)
-            CachedNetworkImage(
+            ArtworkImage(
               imageUrl: show.artwork.backdropUrl!,
               fit: BoxFit.cover,
               cacheManager: BackdropCacheManager(),
-              memCacheWidth: viewportDecodeWidth(
+              decodeWidth: viewportDecodeWidth(
                 context,
                 sourceWidth: backdropSourceWidth,
               ),
-              imageRenderMethodForWeb: artworkWebRenderMethod,
-              placeholder: (context, url) => Container(
+              placeholder: (context) => Container(
                 color: AppColors.surface,
               ),
-              errorWidget: (context, url, error) => Container(
+              errorWidget: (context) => Container(
                 color: AppColors.surface,
               ),
             )

@@ -32,7 +32,7 @@ Future<void> _pump(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  // The still now goes through CachedNetworkImage (like every other
+  // The still now goes through ArtworkImage (like every other
   // thumbnail in the app), so a real HTTP fetch attempt would otherwise
   // make `pumpAndSettle` time out in a test environment with no network.
   await mockNetworkImages(() => tester.pumpWidget(
@@ -60,7 +60,7 @@ Future<void> _pump(
 
 /// Taps the resting pill open. Deliberately not `pumpAndSettle`: on a
 /// target with a thumbnail, expanding mounts `_CardStill`'s
-/// `CachedNetworkImage`, whose placeholder is a `ShimmerCard` — an
+/// `ArtworkImage`, whose placeholder is a `ShimmerCard` — an
 /// unbounded, repeating animation. Under `flutter test`'s fake-async pump,
 /// the underlying fetch (flutter_cache_manager doing real disk I/O) never
 /// actually resolves, so the shimmer keeps scheduling frames forever and

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/watch_status.dart';
 import '../screens/show/season_episodes_controller.dart';
+import 'artwork_image.dart';
 import 'episode_download_button.dart';
 import 'focus_highlight.dart';
 import 'toast/toaster.dart';
@@ -151,15 +151,14 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
               // Thumbnail image (16:9 fills the card).
               Positioned.fill(
                 child: _episode.thumbnailUrl != null
-                    ? CachedNetworkImage(
+                    ? ArtworkImage(
                         imageUrl: _episode.thumbnailUrl!,
                         fit: BoxFit.cover,
                         cacheManager: EpisodeThumbnailCacheManager(),
-                        placeholder: (context, url) => Container(
+                        placeholder: (context) => Container(
                           color: AppColors.surfaceVariant,
                         ),
-                        errorWidget: (context, url, error) =>
-                            _buildPlaceholder(),
+                        errorWidget: (context) => _buildPlaceholder(),
                       )
                     : _buildPlaceholder(),
               ),
