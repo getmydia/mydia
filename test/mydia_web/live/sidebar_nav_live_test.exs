@@ -256,5 +256,16 @@ defmodule MydiaWeb.SidebarNavLiveTest do
       assert has_element?(view, "#sidebar-user-menu", "Wren Halloway")
       assert has_element?(view, "#sidebar-user-menu span", "WR")
     end
+
+    test "names a user with both a username and a display name by the display name" do
+      user = user_fixture(%{username: "mfenwick", display_name: "Maren Fenwick"})
+      conn = log_in_user(build_conn(), user)
+
+      {:ok, view, _html} = live(conn, ~p"/calendar")
+
+      assert has_element?(view, "#sidebar-user-menu", "Maren Fenwick")
+      assert has_element?(view, "#sidebar-user-menu span", "MA")
+      refute has_element?(view, "#sidebar-user-menu", "mfenwick")
+    end
   end
 end

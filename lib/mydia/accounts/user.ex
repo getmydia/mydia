@@ -165,7 +165,7 @@ defmodule Mydia.Accounts.User do
   end
 
   @doc """
-  The name to show for a user.
+  The name that identifies a user.
 
   Username comes first because it is what media-server account matching keys
   on, so a local account reads exactly as it always has and the fallbacks
@@ -176,12 +176,26 @@ defmodule Mydia.Accounts.User do
   `oidc_sub`, so the last resort is an id prefix. It is ugly, but two
   otherwise-identical accounts have to be distinguishable in the
   account-mapping picker.
+
+  Use `display_label/1` where the user is being addressed by name.
   """
   @spec label(t()) :: String.t()
   def label(%__MODULE__{} = user) do
-    [user.username, user.display_name, user.email]
-    |> Enum.find(&present?/1)
-    |> case do
+    first_present(user, [user.username, user.display_name, user.email])
+  end
+
+  @doc """
+  The name to show where a user is addressed by name: the display name they chose, when they set one.
+
+  Falls back exactly as `label/1` does, so it never returns blank.
+  """
+  @spec display_label(t()) :: String.t()
+  def display_label(%__MODULE__{} = user) do
+    first_present(user, [user.display_name, user.username, user.email])
+  end
+
+  defp first_present(user, candidates) do
+    case Enum.find(candidates, &present?/1) do
       nil -> id_label(user)
       value -> String.trim(value)
     end

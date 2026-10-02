@@ -21,6 +21,7 @@ defmodule Mydia.Media.LibraryListing do
 
   alias Mydia.Accounts.Scope
   alias Mydia.Downloads.Download
+  alias Mydia.Library.FileRanking
   alias Mydia.Library.MediaFile
   alias Mydia.Library.MediaFileEpisode
   alias Mydia.Media
@@ -328,7 +329,21 @@ defmodule Mydia.Media.LibraryListing do
   defp overview(_metadata), do: nil
 
   defp filter_quality(rows, nil), do: rows
-  defp filter_quality(rows, quality), do: Enum.filter(rows, &(quality in &1.resolutions))
+
+  # By height, not by string: the analyzer stores "4K" for a full-width UHD
+  # file and "2160p" for a narrower one, and the release parser adds "UHD".
+  defp filter_quality(rows, quality) do
+    case FileRanking.resolution_pixels(quality) do
+      # An unparseable value is 0, and so is an unparseable stored resolution.
+      0 ->
+        []
+
+      wanted ->
+        Enum.filter(rows, fn row ->
+          Enum.any?(row.resolutions, &(FileRanking.resolution_pixels(&1) == wanted))
+        end)
+    end
+  end
 
   defp filter_progress(rows, nil), do: rows
   defp filter_progress(rows, state), do: Enum.filter(rows, &(&1.status.state == state))
