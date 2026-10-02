@@ -1159,7 +1159,7 @@ void main() {
     });
   });
 
-  group('cast bar disconnect button', () {
+  group('cast bar close button while playing', () {
     const lanternDevice = CastDevice(
       id: 'node-tv',
       name: 'Living Room',
@@ -1167,34 +1167,15 @@ void main() {
       metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'The Lantern Keepers'},
     );
 
-    testWidgets('shown for a Mydia session, not a chromecast one',
-        (tester) async {
-      final harness = _buildManagerHarness();
-      addTearDown(harness.manager.dispose);
-
-      await _pumpWithManager(
-        tester,
-        harness: harness,
-        sessionStream: Stream.value(_session(
-          duration: const Duration(minutes: 44),
-        )),
-      );
-
-      expect(find.byKey(const Key('cast-bar-detach')), findsNothing);
-    });
-
-    testWidgets(
-        'leaves the target playing, clears the target and hides the banner '
-        'for that item', (tester) async {
-      final harness = _buildMydiaManagerHarness();
-      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
-      addTearDown(harness.manager.dispose);
-
+    /// Connects [harness] to [lanternDevice] and pumps the bar over a stream
+    /// that replays the adopted session and then follows the manager's own
+    /// updates, including the null that `detach()` and `stopCast()` publish.
+    Future<ProviderContainer> pumpLantern(
+      WidgetTester tester,
+      _ManagerHarness harness,
+    ) async {
       await harness.manager.connectTo(lanternDevice);
 
-      // `sessionStream` is a plain broadcast stream with no replay, so seed
-      // the adopted session first, then follow the manager's own updates
-      // (including the null that `detach()` publishes).
       final sessionController = StreamController<CastSession?>();
       addTearDown(sessionController.close);
       sessionController.add(harness.manager.currentSession);
@@ -1213,14 +1194,53 @@ void main() {
       );
       container.read(castTargetProvider.notifier).set(lanternDevice);
       await tester.pump();
+      return container;
+    }
 
-      expect(find.byKey(const Key('cast-bar-detach')), findsOneWidget);
+    testWidgets('a chromecast keeps the confirm-and-stop close button',
+        (tester) async {
+      final harness = _buildManagerHarness();
+      addTearDown(harness.manager.dispose);
 
-      await tester.tap(find.byKey(const Key('cast-bar-detach')));
+      await _pumpWithManager(
+        tester,
+        harness: harness,
+        sessionStream: Stream.value(_session(
+          duration: const Duration(minutes: 44),
+        )),
+      );
+
+      expect(find.byKey(const Key('cast-bar-dismiss')), findsNothing,
+          reason: 'detaching ends the stream a Chromecast is playing, so '
+              'there is nothing to dismiss to');
+      expect(find.byKey(const Key('cast-bar-detach')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('cast-bar-stop')));
       await tester.pumpAndSettle();
 
+      expect(find.text('Stop playback?'), findsOneWidget);
+    });
+
+    testWidgets(
+        'on a Mydia target it leaves the target playing, clears the target '
+        'and hides the banner for that item, without asking', (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      final container = await pumpLantern(tester, harness);
+
+      expect(find.byKey(const Key('cast-bar-detach')), findsNothing,
+          reason: 'the close button owns this action now');
+      expect(find.byKey(const Key('cast-bar-dismiss')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('cast-bar-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stop playback?'), findsNothing,
+          reason: 'dismissing interrupts nobody, so it needs no confirm');
       expect(mydiaBackend.stopCallCount, 0,
-          reason: 'Disconnect must never stop playback on the other device');
+          reason: 'closing the bar must never stop the other device');
       expect(mydiaBackend.disconnectCallCount, 1);
       expect(harness.manager.currentSession, isNull);
       expect(container.read(castTargetProvider), isNull,
@@ -1229,8 +1249,51 @@ void main() {
           contains(const AmbientDismissal('node-tv', 'The Lantern Keepers')));
       expect(find.byKey(const Key('cast-bar-ambient-open')), findsNothing,
           reason: 'the Playing on banner for the same item must not pop '
-              'straight back after disconnecting');
+              'straight back after dismissing');
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the Mydia transport stop button confirms, then stops',
+        (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      final container = await pumpLantern(tester, harness);
+
+      await tester.tap(find.byKey(const Key('cast-bar-stop')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stop playback?'), findsOneWidget);
+      expect(mydiaBackend.stopCallCount, 0,
+          reason: 'nothing stops until the dialog is confirmed');
+
+      await tester.tap(find.widgetWithText(TextButton, 'Stop'));
+      await tester.pumpAndSettle();
+
+      expect(mydiaBackend.stopCallCount, 1);
+      expect(harness.manager.currentSession, isNull);
+      expect(container.read(castTargetProvider), isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cancelling the Mydia stop confirm changes nothing',
+        (tester) async {
+      final harness = _buildMydiaManagerHarness();
+      final mydiaBackend = harness.backend as FakeMydiaCastBackend;
+      addTearDown(harness.manager.dispose);
+
+      await pumpLantern(tester, harness);
+
+      await tester.tap(find.byKey(const Key('cast-bar-stop')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(mydiaBackend.stopCallCount, 0);
+      expect(mydiaBackend.disconnectCallCount, 0);
+      expect(harness.manager.currentSession, isNotNull);
+      expect(find.byKey(const Key('cast-bar-dismiss')), findsOneWidget);
     });
   });
 
@@ -1272,7 +1335,7 @@ void main() {
       }
     }
 
-    testWidgets('stop sits in the header row, not the transport row',
+    testWidgets('a chromecast has stop in the header row, not the transport',
         (tester) async {
       await _pump(tester,
           session: _session(duration: const Duration(minutes: 44)));
@@ -1291,6 +1354,74 @@ void main() {
         ),
         findsNothing,
       );
+    });
+
+    testWidgets('a Mydia target has stop in the transport row, not the header',
+        (tester) async {
+      await _pump(
+        tester,
+        session: _session(
+          duration: const Duration(minutes: 44),
+          device: _mydiaDevice,
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('cast-bar-transport')),
+          matching: find.byKey(const Key('cast-bar-stop')),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(CastBarRow),
+          matching: find.byKey(const Key('cast-bar-stop')),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(CastBarRow),
+          matching: find.byKey(const Key('cast-bar-dismiss')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'the full Mydia transport row fits a 360px phone with play/pause '
+        'centered', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await _pump(
+        tester,
+        session: _session(
+          duration: const Duration(minutes: 44),
+          device: _mydiaDevice,
+          subtitles: const [track],
+        ),
+      );
+
+      expect(tester.takeException(), isNull,
+          reason: 'six outer controls plus play/pause must not overflow the '
+              'narrowest phone the app targets');
+      for (final key in [
+        'cast-bar-subtitles',
+        'cast-bar-stop',
+        'cast-bar-rewind',
+        'cast-bar-play-pause',
+        'cast-bar-forward',
+        'cast-bar-pull',
+      ]) {
+        expect(find.byKey(Key(key)), findsOneWidget, reason: key);
+      }
+
+      final row = tester.getRect(find.byKey(const Key('cast-bar-transport')));
+      final play = tester.getRect(find.byKey(const Key('cast-bar-play-pause')));
+      expect(play.center.dx, closeTo(row.center.dx, 0.5));
     });
   });
 
