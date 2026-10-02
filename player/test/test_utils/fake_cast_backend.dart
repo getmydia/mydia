@@ -309,3 +309,28 @@ class FakeMydiaCastBackend extends FakeCastBackend
     return super.pause();
   }
 }
+
+/// A [FakeCastBackend] whose sync state a test flips by hand, for the
+/// [MydiaSyncSource] seam `CastSessionManager` copies onto
+/// `CastSession.isSyncing`.
+class FakeSyncingCastBackend extends FakeCastBackend
+    implements MydiaSyncSource {
+  final _syncStates = StreamController<bool>.broadcast();
+
+  @override
+  bool isSyncing = false;
+
+  @override
+  Stream<bool> get syncingStream => _syncStates.stream;
+
+  void emitSyncing(bool value) {
+    isSyncing = value;
+    _syncStates.add(value);
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _syncStates.close();
+    await super.dispose();
+  }
+}

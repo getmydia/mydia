@@ -547,6 +547,39 @@ void main() {
             'seeking to fraction * -1s');
   });
 
+  testWidgets(
+      'holds the transport controls back while the session is catching up '
+      'with the receiver', (tester) async {
+    await _pump(
+      tester,
+      session: _session(duration: const Duration(minutes: 44))
+          .copyWith(isSyncing: true),
+    );
+
+    expect(find.textContaining('Reconnecting to'), findsOneWidget);
+
+    final slider =
+        tester.widget<Slider>(find.byKey(const Key('cast-bar-scrubber')));
+    expect(slider.onChanged, isNull);
+
+    for (final key in const [
+      Key('cast-bar-play-pause'),
+      Key('cast-bar-rewind'),
+      Key('cast-bar-forward'),
+    ]) {
+      expect(tester.widget<IconButton>(find.byKey(key)).onPressed, isNull,
+          reason: '$key would act on a position that may be minutes old');
+    }
+
+    // Stopping does not depend on what the receiver is doing.
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('cast-bar-stop')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets('renders the stale state with reconnect and stop',
       (tester) async {
     await _pump(

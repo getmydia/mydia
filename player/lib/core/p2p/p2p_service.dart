@@ -517,7 +517,14 @@ class P2pService {
             _currentConnectionType = P2pConnectionType.none;
           }
           _emitStatus();
-          _scheduleAutoReconnect();
+          // Only the dialed server is worth redialing. Another player's
+          // connection comes and goes with remote control, and counting
+          // those against the attempt cap would spend it before the server
+          // link ever dropped.
+          final dialed = _lastDialedEndpointAddr;
+          if (dialed != null && _nodeIdFor(dialed) == peerId) {
+            _scheduleAutoReconnect();
+          }
         } else if (event == 'relay_connected') {
           debugPrint('[P2P] Connected to relay');
           _isRelayConnected = true;

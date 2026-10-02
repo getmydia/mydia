@@ -505,6 +505,13 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
         _dragFraction ?? castProgressFraction(info.position, info.duration);
     final isPlaying = session.playbackState == CastPlaybackState.playing;
 
+    // Everything below that sends a command is held back while the session
+    // is catching up with the receiver: the position and play state on
+    // screen may be minutes old, so a tap would seek relative to the wrong
+    // place or toggle the wrong way. Detach and stop stay live; neither
+    // depends on what the receiver is doing.
+    final syncing = session.isSyncing;
+
     return CastPill(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -512,8 +519,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           CastBarRow(
             leading: CastThumb(imageUrl: info.imageUrl),
             title: info.title,
-            status: 'Casting to ${session.device.name}',
-            dot: CastDot.live,
+            status: syncing
+                ? 'Reconnecting to ${session.device.name}…'
+                : 'Casting to ${session.device.name}',
+            dot: syncing ? CastDot.idle : CastDot.live,
             actions: [
               // Mydia only: its disconnect is local bookkeeping and sends
               // nothing to the target. Whether a Chromecast receiver keeps
@@ -561,10 +570,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                       // Null disables the control outright. Leaving it live
                       // against an unknown duration resolves every drag to
                       // `fraction * -1s`, i.e. the start.
-                      onChanged: durationKnown
+                      onChanged: durationKnown && !syncing
                           ? (v) => setState(() => _dragFraction = v)
                           : null,
-                      onChangeEnd: durationKnown
+                      onChangeEnd: durationKnown && !syncing
                           ? (v) async {
                               final target =
                                   seekTargetForFraction(v, info.duration);
@@ -606,21 +615,24 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                               ? Icons.closed_caption_off
                               : Icons.closed_caption,
                         ),
-                        onPressed: () => _pickSubtitle(session),
+                        onPressed:
+                            syncing ? null : () => _pickSubtitle(session),
                       )),
                 _slot(IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
                   color: AppColors.textPrimary,
                   tooltip: 'Back 10 seconds',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    await manager.seek(clampSeekTarget(
-                      info.position - const Duration(seconds: 10),
-                      info.duration,
-                    ));
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          await manager.seek(clampSeekTarget(
+                            info.position - const Duration(seconds: 10),
+                            info.duration,
+                          ));
+                        },
                 )),
                 IconButton.filled(
                   key: const Key('cast-bar-play-pause'),
@@ -633,29 +645,33 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     foregroundColor: AppColors.onPrimary,
                   ),
                   tooltip: isPlaying ? 'Pause' : 'Play',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    if (isPlaying) {
-                      await manager.pause();
-                    } else {
-                      await manager.play();
-                    }
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          if (isPlaying) {
+                            await manager.pause();
+                          } else {
+                            await manager.play();
+                          }
+                        },
                 ),
                 _slot(IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
                   color: AppColors.textPrimary,
                   tooltip: 'Forward 10 seconds',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    await manager.seek(clampSeekTarget(
-                      info.position + const Duration(seconds: 10),
-                      info.duration,
-                    ));
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          await manager.seek(clampSeekTarget(
+                            info.position + const Duration(seconds: 10),
+                            info.duration,
+                          ));
+                        },
                 )),
                 // Pull: only a Mydia target runs this same app, so only one
                 // can hand playback back to this device at its exact
@@ -668,7 +684,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                         icon: const Icon(Icons.phone_iphone),
                         color: AppColors.textPrimary,
                         tooltip: 'Play on this device',
-                        onPressed: _pullToLocal,
+                        onPressed: syncing ? null : _pullToLocal,
                       )
                     : null),
               ],
