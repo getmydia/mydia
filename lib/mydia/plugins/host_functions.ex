@@ -134,7 +134,7 @@ defmodule Mydia.Plugins.HostFunctions do
         # ── 1.2.0 ──
         "set-watch-state" => {:fn, set_watch_state_import(slug, ctx)},
         # ── 1.3.0 ──
-        "ensure-favorite" => {:fn, ensure_favorite_import(slug)},
+        "ensure-favorite" => {:fn, ensure_favorite_import(slug, ctx)},
         # ── 1.4.0: page functions, acting as the on-http user ──
         "search" => {:fn, page_import(slug, ctx, &PageReads.search/3)},
         "media-add" => {:fn, page_import(slug, ctx, &PageActions.media_add/3)},
@@ -306,20 +306,29 @@ defmodule Mydia.Plugins.HostFunctions do
     end
   end
 
+  # A shelf fill has nobody to approve a change, so the sync writes, which are
+  # gated by grant rather than by handler, are refused there outright.
+  defp refuse_in_fill(%{handler: :fill_shelf}),
+    do: {:error, Error.new(:capability_denied, "writes are not available during a shelf fill")}
+
+  defp refuse_in_fill(_ctx), do: :ok
+
   defp ensure_watched_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_watched(plugin, target, instance: ctx_instance(ctx))
         end
       end)
     end
   end
 
-  defp ensure_favorite_import(slug) do
+  defp ensure_favorite_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           ensure_favorite(plugin, target)
         end
       end)
@@ -329,7 +338,8 @@ defmodule Mydia.Plugins.HostFunctions do
   defp set_watch_state_import(slug, ctx) do
     fn target ->
       typed_result(fn ->
-        with {:ok, plugin} <- Plugins.get_plugin(slug) do
+        with :ok <- refuse_in_fill(ctx),
+             {:ok, plugin} <- Plugins.get_plugin(slug) do
           set_watch_state(plugin, target, instance: ctx_instance(ctx))
         end
       end)
