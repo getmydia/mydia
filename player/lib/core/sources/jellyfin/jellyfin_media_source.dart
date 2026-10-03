@@ -14,7 +14,7 @@ import 'jellyfin_mapping.dart';
 import 'jellyfin_playback_info.dart';
 
 class JellyfinMediaSource extends MediaSource
-    implements WatchedState, Searchable {
+    implements WatchedState, Searchable, ContinueWatching {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -27,12 +27,15 @@ class JellyfinMediaSource extends MediaSource
   final void Function()? _onDispose;
 
   static const _childPage = 200;
+  static const _rowLimit = 20;
+  static const _rowImages = {'EnableImageTypes': 'Primary,Backdrop,Thumb'};
 
   @override
   Set<SourceCapability> get capabilities => const {
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
+        SourceCapability.continueWatching,
       };
 
   @override
@@ -187,6 +190,65 @@ class JellyfinMediaSource extends MediaSource
         '/UserPlayedItems/${ref.externalId}',
         query: _user,
       );
+
+  /// What the viewer has under way, then the next episode of each show they
+  /// follow. Jellyfin keeps the two apart (Resume and Next Up); Plex's own
+  /// row mixes them, so this does too. Resume entries come first because a
+  /// Next Up episode carries no last-played date to interleave by. A Next Up
+  /// episode is left out when its show already has a resume entry.
+  @override
+  Future<List<ItemSummary>> continueWatching() async {
+    // Future.wait rethrows the first failure as-is, so the row sees the
+    // SourceException rather than a wrapper.
+    final bodies = await Future.wait([
+      client.get('/UserItems/Resume', {
+        ..._user,
+        'MediaTypes': 'Video',
+        'Limit': '$_rowLimit',
+        ..._rowImages,
+      }),
+      client.get('/Shows/NextUp', {
+        ..._user,
+        'Limit': '$_rowLimit',
+        'enableResumable': 'false',
+        'enableRewatching': 'false',
+        ..._rowImages,
+      }),
+    ]);
+    final resume = _maps(bodies[0]);
+    final resumingShows = {
+      for (final m in resume)
+        if (m['SeriesId'] case final String show) show,
+    };
+    return [
+      ...resume,
+      ..._maps(bodies[1]).where((m) => !resumingShows.contains(m['SeriesId'])),
+    ]
+        .map((m) => jellyfinSummary(id, m))
+        .whereType<ItemSummary>()
+        .take(_rowLimit)
+        .toList();
+  }
+
+  /// Only a resume entry: Jellyfin has no way to dismiss a Next Up episode.
+  @override
+  bool canRemoveFromContinueWatching(ItemSummary item) =>
+      item.userState.progressSeconds != null;
+
+  /// Clears the resume point, which drops the entry from Resume. Played state
+  /// is left as it was.
+  @override
+  Future<void> removeFromContinueWatching(ItemRef ref) => client.send(
+        'POST',
+        '/UserItems/${ref.externalId}/UserData',
+        query: _user,
+        body: {'PlaybackPositionTicks': 0},
+      );
+
+  static List<Map<String, dynamic>> _maps(Map<String, dynamic> body) => [
+        for (final m in (body['Items'] as List? ?? const []))
+          if (m is Map) m.cast<String, dynamic>(),
+      ];
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {
