@@ -4,6 +4,8 @@
 library;
 
 import '../../../../core/playback/playback_plan.dart';
+import '../../../../core/playback/playback_transport.dart';
+import '../../../../core/player/progress_reporter.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../subtitle_preference.dart';
 
@@ -112,3 +114,64 @@ class PlaybackEpisode {
 /// How a write went. [unavailable] means there was no connection to send
 /// it on, which the screen treats as silently as before.
 enum WriteOutcome { done, failed, unavailable }
+
+/// What the screen may do beyond playing the session's item. A
+/// Plex or Stash session has none of these; Mydia has all.
+enum PlaybackFeature {
+  /// A local file may stand in for the stream, and offline mode applies.
+  downloads,
+
+  /// Hand playback to a cast target.
+  cast,
+
+  /// Refetch Mydia's library views after watching.
+  libraryRefresh,
+
+  /// Link path, stall memory and stats come from Mydia's connection.
+  mydiaConnection,
+}
+
+typedef ScrubThumbnailSource = ({
+  String serverUrl,
+  String token,
+  bool isP2PMode
+});
+
+/// Everything the screen needs to stream, from whichever server.
+class StreamingSetup {
+  const StreamingSetup({
+    required this.memoryKey,
+    required this.progress,
+    required this.createTransport,
+    this.scrubThumbnails,
+  });
+
+  /// What stall and failure memory key on: Mydia's server URL or p2p node,
+  /// or a third-party source's id.
+  final String memoryKey;
+  final ProgressReporter progress;
+  final PlaybackTransport Function({required bool relayed}) createTransport;
+
+  /// Null when the server offers no scrub thumbnails.
+  final ScrubThumbnailSource? scrubThumbnails;
+}
+
+sealed class StreamingPreparation {
+  const StreamingPreparation();
+}
+
+final class StreamingReady extends StreamingPreparation {
+  const StreamingReady(this.setup);
+  final StreamingSetup setup;
+}
+
+/// Streaming cannot start; [message] is shown as the screen's error.
+final class StreamingUnavailable extends StreamingPreparation {
+  const StreamingUnavailable(this.message);
+  final String message;
+}
+
+/// The load moved on while this was preparing.
+final class StreamingSuperseded extends StreamingPreparation {
+  const StreamingSuperseded();
+}

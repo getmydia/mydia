@@ -16,6 +16,8 @@ import 'watch_indicator.dart';
 /// the placeholder, its overlays, and the title beneath.
 class MediaPoster extends StatelessWidget {
   final String? posterUrl;
+  final Map<String, String>? posterHeaders;
+  final String? posterCacheKey;
   final String title;
   final String? subtitle;
   final double? progressPercentage;
@@ -44,6 +46,8 @@ class MediaPoster extends StatelessWidget {
   const MediaPoster({
     super.key,
     this.posterUrl,
+    this.posterHeaders,
+    this.posterCacheKey,
     required this.title,
     this.subtitle,
     this.progressPercentage,
@@ -98,6 +102,8 @@ class MediaPoster extends StatelessWidget {
             Expanded(
               child: PosterFrame(
                 imageUrl: posterUrl,
+                imageHeaders: posterHeaders,
+                imageCacheKey: posterCacheKey,
                 placeholder: _placeholder,
                 loadingPlaceholder: _loadingPlaceholder,
                 overlays: [

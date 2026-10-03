@@ -95,6 +95,8 @@ Map<String, Object?> sanitizeReport(Map<String, Object?> report) {
 /// Applies every free-text rule to [input].
 String sanitizeString(String input) {
   var out = redactHomeDirectories(input);
+  out =
+      out.replaceAllMapped(sourceCredentialPattern, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_url, _rewriteUrl);
   out = out.replaceAllMapped(
     _hostLookup,

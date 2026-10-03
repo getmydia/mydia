@@ -22,6 +22,7 @@ import '../../graphql/schema.graphql.dart';
 import '../player/stream_timeline.dart';
 import '../player/web_session_limits.dart';
 import 'playback_plan.dart';
+import 'playback_transport.dart';
 import 'server_features.dart';
 import 'stream_urls.dart';
 
@@ -111,7 +112,7 @@ Future<void> _awaitFirstAdvance(
   }
 }
 
-class PlaybackController {
+class PlaybackController implements PlaybackTransport {
   PlaybackController({
     required GraphQLClient? Function() client,
     required StreamUrls urls,
@@ -147,19 +148,23 @@ class PlaybackController {
   final _ownedSessions = <String>{};
   final _endingSessions = <String, Future<void>>{};
 
+  @override
   String? get sessionId => _sessionId;
 
   /// A file inside the live HLS session, addressed and authorized the way
   /// its playlist is. Null while no session is live: direct play, or
   /// between one session ending and the next starting.
+  @override
   ResolvedSource? sessionFile(String name) {
     final sessionId = _sessionId;
     return sessionId == null ? null : _urls.hlsFile(sessionId, name);
   }
 
   /// True for the whole of [replaceSource], including while it awaits.
+  @override
   bool get switching => _switching;
 
+  @override
   Future<PlaybackSource> open(
     PlaybackPlan plan, {
     required String fileId,
@@ -434,6 +439,7 @@ class PlaybackController {
   /// the frames still on screen are never cut. If the new source fails to
   /// open or never advances within [firstAdvanceTimeout], its session is
   /// ended, the old one is kept, and the error is rethrown.
+  @override
   Future<PlaybackSource> replaceSource(
     PlaybackPlan plan, {
     required String fileId,
@@ -478,6 +484,7 @@ class PlaybackController {
   /// when its response arrives; it cannot attach or become current.
   ///
   /// Safe to call more than once. A later open starts a fresh lifetime.
+  @override
   Future<void> endSession() async {
     _lifetime.complete();
     _lifetime = Completer<void>();
