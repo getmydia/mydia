@@ -5,7 +5,7 @@
 // `player_screen_test.dart` exists, and its other keyboard shortcuts —
 // space, arrows, F, M, escape — are equally untested today). `PageUp`/
 // `PageDown` is the one case simple enough to extract into a pure function
-// (`handleEpisodeNavKey`, `@visibleForTesting` in `player_screen.dart`) that
+// (`handleEpisodeNavKey`, in `player_key_bindings.dart`) that
 // takes plain booleans and callbacks instead of closing over `State` fields,
 // so it can be tested directly with a synthetic `KeyEvent`.
 
