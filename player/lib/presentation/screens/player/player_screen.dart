@@ -83,18 +83,15 @@ import '../../widgets/video_controls/playback_chrome.dart';
 import '../../widgets/video_controls/skip_segment_button.dart';
 import '../../widgets/video_controls/chrome_panel.dart';
 import '../../widgets/tap_to_play_overlay.dart';
-import '../../widgets/video_controls/up_next_countdown.dart';
 import '../../widgets/video_controls/up_next_policy.dart';
 import '../../widgets/video_controls/up_next_prompt.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
-import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
-import '../../../domain/models/download.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/playback/server_features.dart';
@@ -108,20 +105,25 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/playback/stats/playback_stats.dart';
 import '../../../core/playback/stats/playback_stats_collector.dart';
-import '../../../core/playback/stats/stats_metrics.dart';
 import '../../../core/playback/stats/stats_report.dart';
 import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/update/update_provider.dart';
-import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
 import 'session/mydia_streaming.dart';
 import 'session/playback_session.dart';
+import 'player_key_bindings.dart';
+import 'player_screen_views.dart';
+import 'segment_skipper.dart';
 import 'session/playback_session_types.dart';
+import 'audio_track_detection.dart';
+import 'remote_control_mapping.dart';
 import 'stats_context_builder.dart';
+import 'subtitle_delay_controller.dart';
 import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
+import 'up_next_controller.dart';
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -129,46 +131,16 @@ export '../../../core/player/resume_plan.dart'
         kEndOfMediaThresholdSeconds,
         kWatchedThreshold,
         shouldOfferResume;
+export 'player_key_bindings.dart'
+    show ArrowIntent, BackAction, handleEpisodeNavKey;
+export 'audio_track_detection.dart';
+export 'remote_control_mapping.dart';
+export 'up_next_controller.dart' show bindUpNextCountdownElapsed;
 
 /// How many times a subtitle preference may retake a one-shot a track-list
 /// revision superseded. Three is well past any revision count media_kit
 /// produces in practice; it is a stop, not a budget.
 const int _maxPreferenceApplyRetries = 3;
-
-/// What an arrow key press means in the player.
-///
-/// A remote's D-pad and a keyboard's arrows deliver the same key codes, so one
-/// handler serves both, but they cannot mean the same thing. A keyboard viewer
-/// has a pointer and a volume slider; a remote viewer has neither, and the
-/// only focusable things on screen are the OSD controls, which are not there
-/// while the OSD is hidden.
-enum ArrowIntent {
-  seekBackward,
-  seekForward,
-
-  /// Start or continue a D-pad scrub: the directional-tier answer for left
-  /// and right with the OSD hidden. A remote has no pointer to drag the bar
-  /// with, so the press reveals the OSD and moves a cursor instead of seeking.
-  scrubBackward,
-  scrubForward,
-  volumeUp,
-  volumeDown,
-
-  /// Show the OSD. The directional-tier answer for up and down, which have no
-  /// volume to change: on a television that belongs to the remote and the
-  /// receiver, and binding it means one press changes two volumes.
-  revealChrome,
-
-  /// Let the key fall through to focus traversal, so it walks the OSD's
-  /// controls. Returning this means the handler must report `ignored`.
-  traverse,
-}
-
-/// What a Back press does in the player.
-///
-/// On a remote, Back is the only way out of anything, so it peels one layer
-/// at a time. Everywhere else it leaves the player.
-enum BackAction { cancelScrub, hideChrome, pop }
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
@@ -309,30 +281,12 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required LogicalKeyboardKey key,
     required bool directionalPrimary,
     required bool chromeVisible,
-  }) {
-    if (directionalPrimary && chromeVisible) return ArrowIntent.traverse;
-
-    switch (key) {
-      case LogicalKeyboardKey.arrowLeft:
-        return directionalPrimary
-            ? ArrowIntent.scrubBackward
-            : ArrowIntent.seekBackward;
-      case LogicalKeyboardKey.arrowRight:
-        return directionalPrimary
-            ? ArrowIntent.scrubForward
-            : ArrowIntent.seekForward;
-      case LogicalKeyboardKey.arrowUp:
-        return directionalPrimary
-            ? ArrowIntent.revealChrome
-            : ArrowIntent.volumeUp;
-      case LogicalKeyboardKey.arrowDown:
-        return directionalPrimary
-            ? ArrowIntent.revealChrome
-            : ArrowIntent.volumeDown;
-      default:
-        return ArrowIntent.traverse;
-    }
-  }
+  }) =>
+      arrowIntentFor(
+        key: key,
+        directionalPrimary: directionalPrimary,
+        chromeVisible: chromeVisible,
+      );
 
   /// Resolves a Back press for this input tier and state.
   ///
@@ -344,12 +298,12 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required bool directionalPrimary,
     required bool scrubActive,
     required bool chromeBlocksBack,
-  }) {
-    if (!directionalPrimary) return BackAction.pop;
-    if (scrubActive) return BackAction.cancelScrub;
-    if (chromeBlocksBack) return BackAction.hideChrome;
-    return BackAction.pop;
-  }
+  }) =>
+      backActionFor(
+        directionalPrimary: directionalPrimary,
+        scrubActive: scrubActive,
+        chromeBlocksBack: chromeBlocksBack,
+      );
 }
 
 /// Thrown by [_PlayerScreenState._openPlayerAndStart] when the load it is
@@ -510,20 +464,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   int? _runtimeMinutes;
-  List<PlaybackEpisode>? _seasonEpisodes;
-  int? _currentEpisodeIndex;
-
-  /// The next season's episodes, fetched lazily the first time the viewer
-  /// reaches the end of the current season.
-  List<PlaybackEpisode>? _nextSeasonEpisodes;
-
-  /// Whether the next-season lookup has run, whatever its outcome.
-  ///
-  /// Separate from [_nextSeasonEpisodes] being null, because "fetched and
-  /// there is no next season" and "not fetched yet" must not look the same:
-  /// `_maybeShowUpNext` runs on every position tick, so conflating them
-  /// would refetch a missing season several times a second.
-  bool _nextSeasonResolved = false;
 
   // Track selection state
   /// The subtitle tracks the *server* reported for this file, exactly as
@@ -758,52 +698,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// newer switch leaves it for that switch to consume.
   SubtitleIntent? _subtitleIntentAcrossSwitch;
 
-  /// Stored per-track subtitle offsets from the server, keyed by track ref
-  /// (the same id space `SubtitleTrack.id`/`SubtitleContent` use). Empty
-  /// both before [_loadSubtitleOffsets] has run and after it has failed;
-  /// [_subtitleOffsetsLoaded] is what tells those two apart.
-  Map<String, int> _subtitleOffsets = {};
-
-  /// Whether [_loadSubtitleOffsets] has completed successfully at least
-  /// once for the media file now loaded, even when it found nothing to
-  /// report. `subtitleTrackSettings` does not exist on a server that
-  /// predates this feature, and it is a standalone root query precisely so
-  /// that failure stays contained to it (see the query's own doc comment)
-  /// rather than taking playback down with it.
-  ///
-  /// Gates the sheet's delay row and the `z`/`shift+z` keyboard nudge: with
-  /// this false, an empty [_subtitleOffsets] is indistinguishable from "the
-  /// server genuinely has nothing stored" and cannot be trusted enough to
-  /// nudge relative to, let alone Save over. See [subtitleDelayDisplayMs].
-  bool _subtitleOffsetsLoaded = false;
-
-  /// What the server had already shifted into the body currently loaded.
-  /// Equal to the stored offset for a track fetched over `SubtitleContent`
-  /// (`Delivery.content/3` applies it before returning); zero for an
-  /// mpv-native track mpv read straight out of the container, which the
-  /// server never saw, and for a bitmap sidecar, which it cannot shift. See
-  /// [bakedSubtitleOffsetMs] and [effectiveSubtitleDelayMs].
-  int _bakedSubtitleOffsetMs = 0;
-
-  /// The live, unsaved adjustment from the sheet's steppers or the
-  /// `z`/`shift+z` keys. Reset to zero on every track change by
-  /// [_onSubtitleTrackChanged].
-  ///
-  /// Applies to mpv the same way regardless of track origin -- but for an
-  /// mpv-native track, [_saveSubtitleDelay] refuses to persist it (see
-  /// [canSaveSubtitleDelay]). The asymmetry is real, not an oversight: the
-  /// live delay only needs [_subtitleNudgeMs] and [_bakedSubtitleOffsetMs],
-  /// neither of which cares what id space a track's id lives in, while
-  /// persisting needs a `trackRef` the next session's mpv probe can
-  /// reproduce, which an `mk_`-prefixed id is not.
-  int _subtitleNudgeMs = 0;
-
-  /// Feeds the subtitle sheet's delay row. A `ValueNotifier`, not a plain
-  /// field: the delay row lives inside a modal bottom sheet, a different
-  /// route from this State's own build method, so a `setState` here would
-  /// never reach it. `null` hides the row entirely -- no track selected, or
-  /// the offsets query never succeeded. Disposed in [dispose].
-  final ValueNotifier<int?> _subtitleDelayDisplay = ValueNotifier<int?>(null);
+  /// Offsets, baked shift and live nudge for the selected subtitle. See
+  /// [SubtitleDelayController].
+  late final SubtitleDelayController _subtitleDelay = SubtitleDelayController(
+    selectedTrack: () => _selectedSubtitleTrack,
+    applyDelay: (delayMs) async {
+      final player = _player;
+      if (player == null) return;
+      await applySubtitleDelay(player, delayMs);
+    },
+    saveOffset: ({required trackRef, required offsetMs}) =>
+        _session.saveSubtitleOffset(trackRef: trackRef, offsetMs: offsetMs),
+    canPersist: () => widget.fileId != 'offline' && _session.canWrite,
+    toast: _showToast,
+    mounted: () => mounted,
+    onChanged: () => setState(() {}),
+  );
 
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
@@ -1035,45 +945,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // leaks into the browse/library window behind this one.
   bool _isAlwaysOnTop = false;
 
-  /// Skippable intro/credits segments for the file being played, as reported
-  /// by the server. Empty whenever detection has not run, found nothing, or
-  /// the query failed: an older server has no `segments` field at all, and
-  /// that must degrade to "no skip button", never to a playback error.
-  List<MediaSegment> _segments = const [];
+  /// Skippable segments for the file being played. See [SegmentSkipper].
+  final SegmentSkipper _segmentSkipper = SegmentSkipper();
 
-  /// Once-per-playback record of automatic skips. Reset when the media
-  /// changes, not when a seek restarts the HLS session, so a restart mid-intro
-  /// cannot re-arm a skip the viewer already overrode.
-  final SegmentSkipTracker _skipTracker = SegmentSkipTracker();
-
-  /// Identifies the media [_skipTracker] is currently armed for. See
-  /// [_resetSegmentsIfMediaChanged].
-  String? _skipTrackerMediaKey;
-
-  /// Whether detected segments are skipped without asking. Off unless the
-  /// viewer opted in; loaded once in [initState] and deliberately not watched,
-  /// since flipping it mid-episode is not a case worth a rebuild.
-  bool _autoSkipSegments = false;
-
-  // Auto-play next episode state
-  bool _showUpNext = false;
-  bool _autoPlayCancelled = false;
-
-  /// The resolved next episode, or null when nothing is on offer. Non-null
-  /// implies playable: `UpNextTarget` cannot be built without a file id.
-  UpNextTarget? _upNextTarget;
-
-  UpNextCountdown? _upNextCountdown;
-
-  /// Tracks `player.stream.playing` while the prompt is up, so a pause holds
-  /// the countdown and a resume releases it. Created alongside the countdown
-  /// in [_showUpNextOverlay] and torn down everywhere the countdown is:
-  /// [_cancelAutoPlay], [_playNextEpisode], [_playPreviousEpisode], and
-  /// [dispose]. There is no other `player.stream.playing` listener in this
-  /// file for it to piggyback on — the old countdown polled
-  /// `_player!.state.playing` inside its own tick, which is exactly the
-  /// coupling [UpNextCountdown] was built without.
-  StreamSubscription<bool>? _upNextPlayingSub;
+  /// The season being played and the "Up Next" prompt. See
+  /// [UpNextController].
+  late final UpNextController _upNext = UpNextController(
+    fetchSeason: (season) => _session.seasonEpisodes(season),
+    isDownloaded: (episodeId) async {
+      final manager = await ref.read(downloadManagerProvider.future);
+      return manager.getDownloadedMediaById(episodeId) != null;
+    },
+    navigate: _navigateToEpisode,
+    playingSignal: () {
+      final player = _player;
+      return player == null
+          ? null
+          : (playing: player.state.playing, changes: player.stream.playing);
+    },
+    isEpisode: () => widget.mediaType == 'episode',
+    hasShow: () => widget.showId != null,
+    seasonNumber: () => widget.seasonNumber,
+    isDownloadedSource: () => _isDownloadedSource,
+    mounted: () => mounted,
+    onChanged: () => setState(() {}),
+  );
 
   /// Reports this screen's playback to the macOS Dock menu. Claimed in
   /// [initState] so a newer screen's claim supersedes this one before this
@@ -1293,11 +1189,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _stopVerification();
     if (mounted) {
       setState(() {
-        _resetUpNext();
+        _upNext.reset();
         _isLoading = true;
       });
     } else {
-      _resetUpNext();
+      _upNext.reset();
       _isLoading = true;
     }
 
@@ -1350,7 +1246,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final enabled =
           await ref.read(settingsServiceProvider).getAutoSkipSegments();
       if (!mounted) return;
-      _autoSkipSegments = enabled;
+      _segmentSkipper.autoSkip = enabled;
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read auto-skip preference: $e');
     }
@@ -1567,9 +1463,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _runtimeMinutes = null;
     _totalDuration = null;
     _serverSubtitleTracks = [];
-    _seasonEpisodes = null;
-    _currentEpisodeIndex = null;
-    _resetUpNext();
+    _upNext.clearSeason();
+    _upNext.reset();
   }
 
   Future<void> _initializePlayer() async {
@@ -3122,7 +3017,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// on `SubtitleTrack` precisely so this can fail without taking playback
   /// down with it -- see the query's own doc comment. Every failure here,
   /// including one from a server too old to know the field at all, lands on
-  /// the same answer: no offsets, [_subtitleOffsetsLoaded] stays false, and
+  /// the same answer: no offsets, the controller's loaded flag stays false, and
   /// [_selectedSubtitleTrack]/mpv are never touched by this method.
   ///
   /// Resets both fields at the top, before the request: this runs again on
@@ -3130,235 +3025,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// and a previous file's offsets or its "loaded" flag must never survive
   /// into a new one just because this fetch happened to fail for it.
   ///
-  /// The session reads `networkOnly`, because `_saveSubtitleDelay` sends the
-  /// loaded offset plus the current nudge: a cached value would silently
-  /// overwrite a newer server offset with an older one. See
+  /// The session reads `networkOnly`, because `SubtitleDelayController.save`
+  /// sends the loaded offset plus the current nudge: a cached value would
+  /// silently overwrite a newer server offset with an older one. See
   /// player_screen_subtitle_offsets_cache_test.dart.
   Future<void> _loadSubtitleOffsets(int gen) async {
-    if (mounted) {
-      setState(() {
-        _subtitleOffsets = {};
-        _subtitleOffsetsLoaded = false;
-      });
-    }
+    if (mounted) setState(_subtitleDelay.clear);
 
     final offsets = await _session.subtitleOffsets();
     if (offsets == null) return;
     if (!_isCurrentLoad(gen)) return;
 
     try {
-      setState(() {
-        _subtitleOffsets = offsets;
-        _subtitleOffsetsLoaded = true;
-
-        // Defensive, not expected to fire in the normal flow: this is
-        // awaited inside [_fetchProgressAndEpisodes], which always
-        // completes before any track is auto-selected or picked. If a
-        // track were already selected by the time this resolves, its
-        // baked offset -- assumed zero until now for anything not read
-        // straight from the container -- needs to catch up to what the
-        // server actually shifted into the body it already delivered.
-        final current = _selectedSubtitleTrack;
-        if (current != null && !isMpvNativeSubtitleTrackId(current.id)) {
-          _bakedSubtitleOffsetMs = _subtitleOffsets[current.id] ?? 0;
-        }
-      });
-      await _syncSubtitleDelay();
+      setState(() => _subtitleDelay.setOffsets(offsets));
+      await _subtitleDelay.sync();
     } catch (e) {
       debugPrint('[PlayerScreen] Subtitle offsets unavailable: $e');
     }
   }
 
-  /// Resets the live nudge and recomputes the baked offset for whichever
-  /// track is now selected, then applies the result to mpv and the sheet's
-  /// delay display.
-  ///
-  /// Called from every site that can change [_selectedSubtitleTrack] --
-  /// both success paths of [_showSubtitleSelector], the auto-detected
-  /// default track in [_onTracksChanged], and the remote-control
-  /// `selectTrack` -- so a delay nudged for one track never leaks onto the
-  /// next regardless of which of those paths picked it.
-  ///
-  /// [keepNudge] is for the restore after a source switch: the viewer did
-  /// not change tracks, so a delay they nudged survives, while the baked
-  /// offset is still recomputed for whichever track id the restore landed
-  /// on (the server's copy of a stream and mpv's own differ there).
-  Future<void> _onSubtitleTrackChanged({bool keepNudge = false}) async {
-    final track = _selectedSubtitleTrack;
-    if (!keepNudge) _subtitleNudgeMs = 0;
-    _bakedSubtitleOffsetMs =
-        bakedSubtitleOffsetMs(track: track, offsets: _subtitleOffsets);
-    await _syncSubtitleDelay();
-  }
-
-  /// Applies [effectiveSubtitleDelayMs] to mpv for whichever track is
-  /// currently selected, and refreshes [_subtitleDelayDisplay] alongside
-  /// it -- the two must never drift apart, since the display is the only
-  /// place the viewer can see the number this just sent to mpv.
-  Future<void> _syncSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    final storedOffsetMs = _subtitleOffsets[track?.id] ?? 0;
-
-    if (mounted) {
-      _subtitleDelayDisplay.value = subtitleDelayDisplayMs(
-        trackId: track?.id,
-        offsetsLoaded: _subtitleOffsetsLoaded,
-        storedOffsetMs: storedOffsetMs,
-        nudgeMs: _subtitleNudgeMs,
-      );
-    }
-
-    final player = _player;
-    if (player == null) return;
-
-    await applySubtitleDelay(
-      player,
-      effectiveSubtitleDelayMs(
-        storedOffsetMs: storedOffsetMs,
-        bakedOffsetMs: _bakedSubtitleOffsetMs,
-        nudgeMs: _subtitleNudgeMs,
-      ),
-    );
-  }
-
-  /// Nudges the live subtitle delay by [deltaMs] and applies it immediately.
-  /// Bound to the `z`/`shift+z` keys and the sheet's steppers.
-  ///
-  /// Gated on [_subtitleOffsetsLoaded]: with the offsets query never having
-  /// succeeded, [_subtitleOffsets] cannot be trusted to hold the server's
-  /// real baseline (see that field's dartdoc), so nudging would move mpv
-  /// relative to an unknown starting point and a viewer would have no way
-  /// to tell how far off zero they actually are. No-ops rather than
-  /// nudging partially-informed.
-  Future<void> _nudgeSubtitleDelay(int deltaMs) async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-
-    setState(() => _subtitleNudgeMs += deltaMs);
-    final total = (_subtitleOffsets[track.id] ?? 0) + _subtitleNudgeMs;
-
-    await _syncSubtitleDelay();
-
-    // applySubtitleDelay is a genuine no-op on web -- there is no mpv
-    // sub-delay to set, and the body a web viewer sees always comes
-    // pre-baked from the SubtitleContent query. The nudge is still tracked
-    // and still contributes to what Save persists, but the OSD must not
-    // claim a visible change that has not happened yet.
-    _showToast(
-      subtitleDelayToastMessage(
-        totalMs: total,
-        appliesImmediately: !kIsWeb,
-      ),
-    );
-  }
-
-  /// Discards the live nudge, returning the delay to whatever is actually
-  /// stored for this track (or zero, for a track the server has no
-  /// correction for).
-  Future<void> _resetSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-    if (_subtitleNudgeMs == 0) return;
-
-    setState(() => _subtitleNudgeMs = 0);
-    await _syncSubtitleDelay();
-  }
-
-  /// Persists the current nudge, replacing whatever offset the server had
-  /// stored for this track.
-  ///
-  /// `storedOffsetMs` (via [_subtitleOffsets]) absorbs the nudge and
-  /// `nudgeMs` resets, which leaves [effectiveSubtitleDelayMs] at exactly
-  /// the same value -- see that function's dartdoc. Nothing refetches,
-  /// nothing flickers, and the displayed number does not jump.
-  ///
-  /// The sheet already hides its Save button for an mpv-native track (see
-  /// [canSaveSubtitleDelay]), but this checks again rather than trusting
-  /// that UI gate alone -- the same defensive posture every other guard in
-  /// this method already takes.
-  ///
-  /// On web this only ever persists the offset and updates local state; it
-  /// never evicts or refetches the `SubtitleContent` body already cached in
-  /// [_mediaKitSubtitleTrackMap] for [track], so what the viewer sees does
-  /// not actually change until the track loads again. See
-  /// [subtitleDelaySavedMessage]'s dartdoc for why that gap is closed with
-  /// an honest message rather than a reload.
-  Future<void> _saveSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-    if (!canSaveSubtitleDelay(track.id)) return;
-    if (widget.fileId == 'offline') return;
-
-    if (!_session.canWrite) return;
-
-    final total = (_subtitleOffsets[track.id] ?? 0) + _subtitleNudgeMs;
-
-    final outcome =
-        await _session.saveSubtitleOffset(trackRef: track.id, offsetMs: total);
-    switch (outcome) {
-      case WriteOutcome.unavailable:
-        return;
-      case WriteOutcome.failed:
-        _showToast('Could not save the subtitle delay', kind: ToastKind.error);
-        return;
-      case WriteOutcome.done:
-        break;
-    }
-
-    try {
-      if (!mounted) return;
-
-      // Safe regardless of what is selected now: this is keyed by
-      // `track.id`, the specific track this save was for. Resetting the
-      // live nudge is not -- that only belongs to whichever track is
-      // *currently* selected, so it is skipped entirely if the viewer
-      // picked a different track while this request was in flight. An
-      // unconditional reset here would wipe out a nudge already in
-      // progress for a track this save was never about.
-      setState(
-        () => _subtitleOffsets = {..._subtitleOffsets, track.id: total},
-      );
-      if (_selectedSubtitleTrack?.id == track.id) {
-        setState(() => _subtitleNudgeMs = 0);
-        await _syncSubtitleDelay();
-      }
-
-      // On web this save never touches the SubtitleContent body already
-      // cached in _mediaKitSubtitleTrackMap for this track -- it still has
-      // the old offset baked in, so nothing the viewer sees actually moves
-      // yet. See subtitleDelaySavedMessage's dartdoc for why a refetch was
-      // not built to close that gap.
-      _showToast(
-        subtitleDelaySavedMessage(appliesImmediately: !kIsWeb),
-        kind: ToastKind.success,
-      );
-    } catch (e) {
-      debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
-      _showToast('Could not save the subtitle delay', kind: ToastKind.error);
-    }
-  }
-
   /// Drop the previous media's segments and re-arm the once-per-session skip
-  /// guard, but only when the media actually changed.
-  ///
-  /// The comparison, not the clearing, is the load-bearing half. This runs on
-  /// every [_initializePlayer] call, and a seek past the transcoded end
-  /// restarts the whole session for the *same* file. Resetting unconditionally
-  /// would let auto-skip fire a second time on a segment the viewer had
-  /// deliberately seeked back into, which is precisely what the guard exists
-  /// to prevent.
+  /// guard, but only when the media actually changed. See
+  /// [SegmentSkipper.resetIfMediaChanged].
   ///
   /// The clearing half runs on every file switch: a reused State re-enters
   /// [_initializePlayer] through [_switchToFile].
   void _resetSegmentsIfMediaChanged() {
-    final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
-    if (_skipTrackerMediaKey == mediaKey) return;
-
-    _skipTrackerMediaKey = mediaKey;
-    _segments = const [];
-    _skipTracker.reset();
-    _nextSeasonEpisodes = null;
-    _nextSeasonResolved = false;
+    if (!_segmentSkipper.resetIfMediaChanged(_mediaKey)) return;
+    _upNext.resetNextSeason();
   }
 
   /// Fetch the skippable segments for the file now playing.
@@ -3381,8 +3075,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final segments = await _session.segments();
     if (!_isCurrentLoad(gen)) return;
     if (segments == null) return;
-    _segments = segments;
-    debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
+    _segmentSkipper.setSegments(segments);
+    debugPrint('[PlayerScreen] ${segments.length} skippable segment(s)');
   }
 
   /// Load the viewer's per-show subtitle choice for the file now playing.
@@ -3552,7 +3246,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // a no-op too -- it must be, or a benign track-list revision mid-stream
     // would silently wipe out a nudge the viewer already made.
     if (_selectedSubtitleTrack?.id != previousSubtitleId) {
-      unawaited(_onSubtitleTrackChanged());
+      unawaited(_subtitleDelay.onTrackChanged());
     }
 
     debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
@@ -3650,27 +3344,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (widget.showId == null || seasonNumber == null) return;
     final episodes = await _session.seasonEpisodes(seasonNumber);
     if (episodes == null || !_isCurrentLoad(gen)) return;
-    setState(() {
-      _seasonEpisodes = episodes;
-      _currentEpisodeIndex =
-          _seasonEpisodes?.indexWhere((ep) => ep.id == widget.mediaId);
-    });
+    setState(
+      () => _upNext.setSeason(episodes, currentEpisodeId: widget.mediaId),
+    );
     _publishNowPlaying();
-  }
-
-  Future<void> _fetchNextSeason() async {
-    if (_nextSeasonResolved) return;
-    if (widget.showId == null || widget.seasonNumber == null) {
-      _nextSeasonResolved = true;
-      return;
-    }
-    _nextSeasonResolved = true;
-
-    // No offer is the right failure mode: this runs fired-and-forgotten off
-    // a position tick, with no caller waiting on a result.
-    final episodes = await _session.seasonEpisodes(widget.seasonNumber! + 1);
-    if (episodes == null || !mounted) return;
-    _nextSeasonEpisodes = episodes;
   }
 
   void _onPlaybackProgress() {
@@ -3686,17 +3363,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _playbackAdvanced = true;
     }
 
-    _maybeAutoSkipSegment(player);
+    _segmentSkipper.maybeAutoSkip(
+      _timeline.toReal(player.state.position),
+      seekToReal,
+    );
 
     // Offer the next episode once real credits are known to have started;
     // only a file with no detected credits segment falls back to a fixed
     // window before the real end. See [shouldOfferUpNext].
     if (shouldOfferUpNext(
-      segments: _segments,
+      segments: _segmentSkipper.segments,
       position: _timeline.toReal(player.state.position),
       duration: _timeline.resolveDuration(player.state.duration),
     )) {
-      _maybeShowUpNext();
+      _upNext.onPositionTick();
     }
 
     final isWatched = _progressService?.isWatched(player) == true;
@@ -3797,34 +3477,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
   }
 
-  /// Seek past a detected segment the viewer opted into skipping.
-  ///
-  /// Runs on every position tick, so the once-per-session bookkeeping lives
-  /// inside [SegmentSkipTracker.takeAutoSkip] rather than here: a segment is
-  /// consumed by the same call that reports it, and seeking back into one that
-  /// has already been skipped does nothing.
-  void _maybeAutoSkipSegment(Player player) =>
-      _maybeAutoSkipAt(_timeline.toReal(player.state.position), seekToReal);
-
-  /// The auto-skip decision itself, in real media coordinates.
-  ///
-  /// Shared by local playback and casting because only the two ends differ:
-  /// where a position comes from, and what a seek means. The preference, the
-  /// once-per-session tracker and the segment lookup are one rule, and a
-  /// second copy of it is the thing that would drift.
-  void _maybeAutoSkipAt(
-    Duration position,
-    Future<void> Function(Duration) seek,
-  ) {
-    if (!_autoSkipSegments || _segments.isEmpty) return;
-
-    final target = _skipTracker.takeAutoSkip(_segments, position);
-    if (target == null) return;
-
-    debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');
-    unawaited(seek(target.end));
-  }
-
   /// Seek the receiver, in the same real coordinates [seekToReal] takes.
   ///
   /// `CastSessionManager.seek` owns both the mapping onto receiver coordinates
@@ -3848,251 +3500,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// The segment covering [position], or null when playback is between them.
-  MediaSegment? _segmentAt(Duration position) {
-    for (final segment in _segments) {
-      if (segment.containsPosition(position)) return segment;
-    }
-    return null;
-  }
-
-  /// Show the "Up Next" overlay if conditions are met.
-  void _maybeShowUpNext() {
-    // Don't show if already showing, cancelled, or not an episode
-    if (_showUpNext || _autoPlayCancelled || widget.mediaType != 'episode') {
-      return;
-    }
-
-    // Check if there's a next episode
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
-      return;
-    }
-
-    var target = resolveInSeasonNext(
-      _upNextCandidates(_seasonEpisodes!),
-      _currentEpisodeIndex!,
-    );
-
-    if (target == null) {
-      if (!mayCrossIntoNextSeason(
-        seasonNumber: widget.seasonNumber,
-        currentIndex: _currentEpisodeIndex!,
-        episodeCount: _seasonEpisodes!.length,
-      )) {
-        return;
-      }
-      // End of the season. Offer the next season's premiere, if there is one.
-      if (!_nextSeasonResolved) {
-        unawaited(_fetchNextSeason());
-        return; // The next position tick picks it up.
-      }
-      final nextSeason = _nextSeasonEpisodes;
-      if (nextSeason == null || nextSeason.isEmpty) return;
-      target = resolveSeasonPremiere(_upNextCandidates(nextSeason));
-      if (target == null) return;
-    }
-
-    // Offline/local playback can only ever autoplay into a next episode
-    // that is itself already on disk — the next one existing in the season
-    // is not enough, since there may be no connection to stream or fetch it
-    // when the countdown lands.
-    if (_isDownloadedSource) {
-      unawaited(_maybeShowUpNextForDownloadedNext(target));
-      return;
-    }
-
-    _showUpNextOverlay(target);
-  }
-
-  /// The download-gated half of [_maybeShowUpNext].
-  ///
-  /// Re-checks [_showUpNext]/[_autoPlayCancelled] after the lookup: both can
-  /// change while the (async) download-manager query is in flight, e.g. the
-  /// viewer already dismissed a still-pending offer some other way.
-  Future<void> _maybeShowUpNextForDownloadedNext(UpNextTarget target) async {
-    final DownloadedMedia? downloaded;
-    try {
-      final manager = await ref.read(downloadManagerProvider.future);
-      downloaded = manager.getDownloadedMediaById(target.episodeId);
-    } catch (e) {
-      // Simply not offering Up Next is the right failure mode here: this
-      // runs fired-and-forgotten off a position tick, with no return value
-      // and no caller waiting on it, so there is nothing to propagate an
-      // error to.
-      debugPrint('[PlayerScreen] Could not check next-episode download: $e');
-      return;
-    }
-
-    if (!mounted || downloaded == null) return;
-    if (_showUpNext || _autoPlayCancelled) return;
-
-    _showUpNextOverlay(target);
-  }
-
-  void _showUpNextOverlay(UpNextTarget target) {
-    _upNextCountdown?.dispose();
-    final countdown = UpNextCountdown(
-      onElapsed: bindUpNextCountdownElapsed(_playNextEpisode),
-    );
-    _upNextCountdown = countdown;
-
-    if (!mounted) return;
-    setState(() {
-      _upNextTarget = target;
-      _showUpNext = true;
-    });
-
-    // Playback being paused is its own hold, so a viewer who pauses during
-    // the credits does not come back to a different episode. A live
-    // subscription, not a one-shot check: a pause or resume that happens
-    // while the prompt is already up must reach the countdown too.
-    _upNextPlayingSub?.cancel();
-    final player = _player;
-    if (player != null) {
-      if (!player.state.playing) countdown.hold(UpNextHold.paused);
-      _upNextPlayingSub = player.stream.playing.listen((playing) {
-        playing
-            ? countdown.release(UpNextHold.paused)
-            : countdown.hold(UpNextHold.paused);
-      });
-    }
-    countdown.start();
-  }
-
-  /// Stops the up-next countdown and its play/pause listener.
-  void _stopUpNextTimers() {
-    _upNextCountdown?.cancel();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
-  }
-
-  /// Forgets the up-next prompt entirely, for a file that has not offered it.
-  /// Pure; callers wrap it in `setState` when mounted.
-  void _resetUpNext() {
-    _stopUpNextTimers();
-    _upNextCountdown?.dispose();
-    _upNextCountdown = null;
-    _upNextTarget = null;
-    _showUpNext = false;
-    _autoPlayCancelled = false;
-  }
-
-  /// Cancel the prompt and the countdown, for the rest of this file.
-  void _cancelAutoPlay() {
-    // Synchronous, before any setState: a dismiss that only lands next frame
-    // can lose to a fire scheduled this one.
-    _stopUpNextTimers();
-    if (mounted) {
-      setState(() {
-        _showUpNext = false;
-        _autoPlayCancelled = true;
-      });
-    }
-  }
-
-  /// Play the next episode immediately.
-  ///
-  /// [fromAutoCountdown] is true only when the up-next countdown elapsed on
-  /// its own. Manual transport, keyboard, and remote actions pass false so
-  /// a prior dismiss of auto-play does not block explicit navigation.
-  void _playNextEpisode({bool fromAutoCountdown = false}) {
-    _upNextCountdown?.cancel();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
-
-    // Re-check after the countdown: `_cancelAutoPlay` may have run between
-    // the fire being scheduled and this executing. Manual next is unaffected.
-    if (shouldBlockAutoPlayNext(
-      autoPlayCancelled: _autoPlayCancelled,
-      fromAutoCountdown: fromAutoCountdown,
-    )) {
-      return;
-    }
-
-    final target = _upNextTarget;
-    if (target != null) {
-      _navigateToEpisode(
-        target.episodeId,
-        target.fileId,
-        target.routeTitle,
-        seasonNumber: target.seasonNumber,
-      );
-      return;
-    }
-
-    // Keyboard PageDown and the transport's next button reach this with no
-    // prompt showing, so the in-season lookup still has to happen here.
-    final episodes = _seasonEpisodes;
-    final index = _currentEpisodeIndex;
-    if (episodes == null || index == null) return;
-    final resolved = resolveInSeasonNext(_upNextCandidates(episodes), index);
-    if (resolved == null) return;
-    _navigateToEpisode(
-      resolved.episodeId,
-      resolved.fileId,
-      resolved.routeTitle,
-      seasonNumber: resolved.seasonNumber,
-    );
-  }
-
-  /// Play the previous episode immediately.
-  void _playPreviousEpisode() {
-    _upNextCountdown?.cancel();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
-
-    if (_seasonEpisodes == null || _currentEpisodeIndex == null) {
-      return;
-    }
-
-    final previousIndex = _currentEpisodeIndex! - 1;
-    if (previousIndex < 0) {
-      return;
-    }
-
-    final previousEpisode = _seasonEpisodes![previousIndex];
-    final files = previousEpisode.fileIds;
-    if (files == null || files.isEmpty) {
-      return;
-    }
-
-    final firstFileId = files.first;
-    if (firstFileId == null) {
-      return;
-    }
-
-    final title =
-        'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
-    _navigateToEpisode(
-      previousEpisode.id,
-      firstFileId,
-      title,
-      seasonNumber: previousEpisode.seasonNumber,
-    );
-  }
-
-  /// Adapts the generated season-episode rows to the shape the resolvers in
-  /// `up_next_policy.dart` take. Keeping the resolvers off the GraphQL layer
-  /// is what makes them unit testable without codegen having run.
-  List<UpNextCandidate> _upNextCandidates(
-    List<PlaybackEpisode> episodes,
-  ) {
-    return episodes
-        .map(
-          (episode) => UpNextCandidate(
-            id: episode.id,
-            seasonNumber: episode.seasonNumber,
-            episodeNumber: episode.episodeNumber,
-            title: episode.title ?? 'Episode ${episode.episodeNumber}',
-            fileIds: (episode.fileIds ?? const <String?>[])
-                .whereType<String>()
-                .toList(),
-            thumbnailUrl: episode.thumbnailUrl,
-          ),
-        )
-        .toList();
-  }
-
   Future<void> _navigateToEpisode(
     String episodeId,
     String fileId,
@@ -4107,8 +3514,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `seasonNumber` is the *target's*, not `widget.seasonNumber`. Passing the
     // current screen's season would tell this same PlayerScreen, reloading
     // for the next file, it is in the season it just left, so its
-    // `_fetchSeasonEpisodes` would load the wrong list, `_currentEpisodeIndex`
-    // would resolve to -1, and up-next would be dead for that entire season.
+    // `_fetchSeasonEpisodes` would load the wrong list, the controller's
+    // current index would resolve to -1, and up-next would be dead for that
+    // entire season.
     context.go(
       '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
     );
@@ -4194,9 +3602,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     // A viewer who scrubs back into the episode is plainly not finished with
     // it. Free to read here, since every seek already routes through this.
-    if (_showUpNext) {
+    if (_upNext.showing) {
       final current = _timeline.toReal(player.state.position);
-      if (clamped < current) _cancelAutoPlay();
+      if (clamped < current) _upNext.cancel();
     }
 
     final local = _timeline.toPlayer(clamped);
@@ -4361,11 +3769,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _selectedSubtitleTrack,
       onSearch: _searchSubtitles,
       onDownload: _downloadSubtitle,
-      subtitleDelayMs: _subtitleDelayDisplay,
+      subtitleDelayMs: _subtitleDelay.display,
       canSaveDelay: canSaveSubtitleDelay(_selectedSubtitleTrack?.id),
-      onNudgeSubtitleDelay: _nudgeSubtitleDelay,
-      onResetSubtitleDelay: _resetSubtitleDelay,
-      onSaveSubtitleDelay: _saveSubtitleDelay,
+      onNudgeSubtitleDelay: _subtitleDelay.nudge,
+      onResetSubtitleDelay: _subtitleDelay.resetNudge,
+      onSaveSubtitleDelay: _subtitleDelay.save,
     );
 
     // A dismissed sheet (barrier tap, back gesture) must leave every
@@ -4437,8 +3845,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `setSubtitleTrack` awaits -- they can *throw* rather than return, and
   /// not every caller awaits this; see the comment on the `try` below.
   ///
-  /// [keepNudge] passes through to [_onSubtitleTrackChanged]; only the
-  /// restore after a source switch sets it.
+  /// [keepNudge] passes through to `SubtitleDelayController.onTrackChanged`;
+  /// only the restore after a source switch sets it.
   ///
   /// The returned generation equals [_subtitleSelectionGeneration] afterwards
   /// exactly when nothing superseded this call, which is how
@@ -4501,7 +3909,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         }
         setState(() => _selectedSubtitleTrack = null);
         _showSubtitleCues(enabled: false);
-        await _onSubtitleTrackChanged(keepNudge: keepNudge);
+        await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
         debugPrint('[PlayerScreen] Subtitles turned off');
         return generation;
       }
@@ -4606,7 +4014,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
       setState(() => _selectedSubtitleTrack = selected);
       _showSubtitleCues(enabled: true);
-      await _onSubtitleTrackChanged(keepNudge: keepNudge);
+      await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
       debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
     } finally {
       _resetPendingSubtitleSelection(generation);
@@ -5158,7 +4566,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_chromeFocusNode.hasFocus) _focusNode.requestFocus();
   }
 
-  /// Handle keyboard shortcuts (desktop only)
+  /// Handle keyboard shortcuts and remote keys. The decision is
+  /// [resolvePlayerKey]'s; this only reads the screen and executes it.
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final player = _player;
     if (player == null) {
@@ -5169,28 +4578,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return KeyEventResult.ignored;
     }
 
-    _upNextCountdown?.noteInput();
+    _upNext.noteInput();
 
-    // Arrow keys mean different things depending on the input tier and
-    // whether the OSD is on screen. See `resolveArrowIntent`'s own dartdoc.
-    final arrow = PlayerScreen.resolveArrowIntent(
-      key: event.logicalKey,
-      directionalPrimary: InputCapabilities.directionalPrimary,
-      chromeVisible: _chromeVisibility.visible,
+    final command = resolvePlayerKey(
+      event,
+      PlayerKeyContext(
+        directionalPrimary: InputCapabilities.directionalPrimary,
+        chromeVisible: _chromeVisibility.visible,
+        chromeHasFocus: _chromeFocusNode.hasFocus,
+        hasNext: _upNext.hasNext,
+        hasPrevious: _upNext.hasPrevious,
+        upNextShowing: _upNext.showing,
+        fullscreenAvailable: _fullscreen.available.value,
+        isFullscreen: _fullscreen.isFullscreen.value,
+        isDesktop: PlatformFeatures.isDesktop,
+        shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+        volume: player.state.volume,
+      ),
     );
+    if (command == null) return KeyEventResult.ignored;
+    if (command is KeyEpisodeNav) {
+      return handleEpisodeNavKey(
+        event,
+        hasPreviousEpisode: _upNext.hasPrevious,
+        hasNextEpisode: _upNext.hasNext,
+        onPreviousEpisode: _upNext.playPrevious,
+        onNextEpisode: _upNext.playNext,
+      );
+    }
+    _runKeyCommand(player, command);
+    return KeyEventResult.handled;
+  }
 
-    switch (arrow) {
-      case ArrowIntent.seekBackward:
-        _skipBy(const Duration(seconds: -10));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.seekForward:
-        _skipBy(const Duration(seconds: 10));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.scrubBackward:
-      case ArrowIntent.scrubForward:
-        final forward = arrow == ArrowIntent.scrubForward;
+  void _runKeyCommand(Player player, PlayerKeyCommand command) {
+    switch (command) {
+      case KeySeekBy(:final offset):
+        _skipBy(offset);
+      case KeyScrub(:final forward):
         final started = _scrub.step(
           forward ? ScrubDirection.forward : ScrubDirection.backward,
           isRepeat: false,
@@ -5202,169 +4626,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Unknown runtime: a cursor has nothing to be a fraction of.
           _skipBy(Duration(seconds: forward ? 10 : -10));
         }
-        return KeyEventResult.handled;
-
-      case ArrowIntent.volumeUp:
-        player.setVolume((player.state.volume + 10.0).clamp(0.0, 100.0));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.volumeDown:
-        player.setVolume((player.state.volume - 10.0).clamp(0.0, 100.0));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.revealChrome:
+      case KeySetVolume(:final volume):
+        player.setVolume(volume);
+      case KeyRevealChrome():
         _chromeVisibility.show();
         _osdPlayPauseFocus.requestFocus();
-        return KeyEventResult.handled;
-
-      case ArrowIntent.traverse:
-        // Falls through to the switch below, which handles the non-arrow
-        // keys. An arrow reaching here is deliberately left unhandled so
-        // focus traversal moves between the OSD's controls.
-        break;
-    }
-
-    switch (event.logicalKey) {
-      case LogicalKeyboardKey.space:
-        // Play/Pause
+      case KeyTogglePlay(:final revealChrome):
         player.playOrPause();
-        return KeyEventResult.handled;
-
-      // A remote's centre press. With the OSD hidden there is no focused
-      // control to receive it — the controls' own FocusHighlight is what
-      // handles select/enter normally — so OK would otherwise do nothing at
-      // all. Revealing and focusing is the same move the arrow keys make.
-      //
-      // Gated on the directional tier because the key handler also runs on
-      // desktop and web (`wantsKeyHandling` is true there via
-      // `supportsKeyboardShortcuts`), where Enter previously fell through to
-      // `ignored` and did nothing. A keyboard user pressing Enter over a
-      // hidden OSD has not asked for the OSD.
-      case LogicalKeyboardKey.select:
-      case LogicalKeyboardKey.enter:
-      case LogicalKeyboardKey.gameButtonA:
-        if (!InputCapabilities.directionalPrimary) {
-          return KeyEventResult.ignored;
-        }
-        if (_chromeFocusNode.hasFocus) return KeyEventResult.ignored;
-        _chromeVisibility.show();
-        _osdPlayPauseFocus.requestFocus();
-        return KeyEventResult.handled;
-
-      // A remote's transport buttons. The Chromecast remote's play/pause is
-      // the one that matters here; the rest arrive from fuller remotes and
-      // from desktop keyboards with a media row, which get them for free.
-      case LogicalKeyboardKey.mediaPlayPause:
-        player.playOrPause();
-        _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaPlay:
+        if (revealChrome) _chromeVisibility.show();
+      case KeyPlay():
         player.play();
         _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaPause:
+      case KeyPause():
         player.pause();
         _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaFastForward:
-        final position = _timeline.toReal(player.state.position);
-        final duration = _timeline.resolveDuration(player.state.duration);
-        final target = position + const Duration(seconds: 30);
-        seekToReal(target > duration ? duration : target);
-        _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaRewind:
-        final position = _timeline.toReal(player.state.position);
-        final target = position - const Duration(seconds: 30);
-        seekToReal(target < Duration.zero ? Duration.zero : target);
-        _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaTrackNext:
-        if (!_hasNextEpisode) return KeyEventResult.ignored;
-        _playNextEpisode();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaTrackPrevious:
-        if (!_hasPreviousEpisode) return KeyEventResult.ignored;
-        _playPreviousEpisode();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyF:
-      case LogicalKeyboardKey.f11:
-        // Gated on the same signal as the button, so the two cannot disagree
-        // about whether fullscreen exists. Claiming the key while doing nothing
-        // would swallow it from anything else that wants it.
-        if (!_fullscreen.available.value) return KeyEventResult.ignored;
+      case KeyMediaSkip(:final offset):
+        // The arrows' skip, longer. Clamping against an unknown (zero)
+        // runtime sent fast-forward back to the start; _skipBy does not.
+        _skipBy(offset);
+      case KeyNextEpisode():
+        _upNext.playNext();
+      case KeyPreviousEpisode():
+        _upNext.playPrevious();
+      case KeyEpisodeNav():
+        // Answered by _handleKeyEvent before reaching here.
+        break;
+      case KeyToggleFullscreen():
         _fullscreen.toggle();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyT:
-        if (!PlatformFeatures.isDesktop) return KeyEventResult.ignored;
+      case KeyExitFullscreen():
+        _fullscreen.exit();
+      case KeyToggleAlwaysOnTop():
         _toggleAlwaysOnTop();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyM:
-        // Toggle mute
-        if (player.state.volume > 0) {
-          player.setVolume(0.0);
-        } else {
-          player.setVolume(100.0);
-        }
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyZ:
-        // mpv's own subtitle-delay binding: z earlier, shift+z later. A
-        // no-op with no track selected or the offsets query never having
-        // succeeded -- see [_nudgeSubtitleDelay].
-        if (HardwareKeyboard.instance.isShiftPressed) {
-          _nudgeSubtitleDelay(100);
-        } else {
-          _nudgeSubtitleDelay(-100);
-        }
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.escape:
-        // The prompt takes the first branch: while it is up, Escape means
-        // "not this", not "leave fullscreen". This case already returned
-        // `handled` unconditionally, so nothing downstream changes.
-        if (_showUpNext) {
-          _cancelAutoPlay();
-          return KeyEventResult.handled;
-        }
-        if (_fullscreen.isFullscreen.value) {
-          _fullscreen.exit();
-        }
-        return KeyEventResult.handled;
-
-      // Previous/next episode. This is the only reachable path to episode
-      // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
-      // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
-      // only (see `TransportSurface.compact`), and that gate is on viewport
-      // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
-      // web browser window loses the in-bar buttons too, with no
-      // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
-      // to fall back on. This actually covers web now that
-      // `PlatformFeatures.supportsKeyboardShortcuts` includes it (see that
-      // getter's own dartdoc) — previously this whole `Focus`/`onKeyEvent`
-      // wrapper was desktop-only, so a narrowed *web* window had no
-      // fallback at all, keyboard or otherwise.
-      case LogicalKeyboardKey.pageUp:
-      case LogicalKeyboardKey.pageDown:
-        return handleEpisodeNavKey(
-          event,
-          hasPreviousEpisode: _hasPreviousEpisode,
-          hasNextEpisode: _hasNextEpisode,
-          onPreviousEpisode: _playPreviousEpisode,
-          onNextEpisode: _playNextEpisode,
-        );
-
-      default:
-        return KeyEventResult.ignored;
+      case KeyNudgeSubtitle(:final deltaMs):
+        _subtitleDelay.nudge(deltaMs);
+      case KeyCancelUpNext():
+        _upNext.cancel();
+      case KeyConsumed():
+        break;
     }
   }
 
@@ -5544,10 +4842,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `_disposePlayer`) already logged the one summary line for this timeline.
     _playTimeline?.logOnce();
 
-    // Cancel auto-play countdown
-    _upNextCountdown?.dispose();
-    _upNextPlayingSub?.cancel();
-    _upNextPlayingSub = null;
+    _upNext.dispose();
 
     // Stop progress tracking
     _progressService?.stopSync();
@@ -5573,7 +4868,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _chromeFocusNode.dispose();
     _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
-    _subtitleDelayDisplay.dispose();
+    _subtitleDelay.dispose();
     for (final path in _imageSidecarPaths) {
       unawaited(discardImageSidecar(path));
     }
@@ -5586,7 +4881,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Forwards each command to the media_kit `Player` this screen already
   // owns. Nothing here duplicates playback logic: `seek` reuses `seekToReal`
   // (the same entry point the keyboard and gesture controls use), and
-  // episode stepping reuses `_playNextEpisode`/`_playPreviousEpisode`. Track
+  // episode stepping reuses `UpNextController.playNext`/`playPrevious`. Track
   // selection is the one place this does less than the on-screen pickers —
   // it applies a track by id directly and skips their loading-toast and
   // remembered-language-preference side effects, which are UI concerns a
@@ -5659,9 +4954,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<void> stepEpisode(EpisodeStep step) async {
     switch (step) {
       case EpisodeStep.next:
-        _playNextEpisode();
+        _upNext.playNext();
       case EpisodeStep.previous:
-        _playPreviousEpisode();
+        _upNext.playPrevious();
     }
   }
 
@@ -5712,7 +5007,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // episode with no adjacent episode in this season, has nothing for
         // Next/Previous to do, and claiming the capability anyway would show
         // a controller a button that silently does nothing.
-        nextPrevious: _hasNextEpisode || _hasPreviousEpisode,
+        nextPrevious: _upNext.hasNext || _upNext.hasPrevious,
       ),
       sequence: BigInt.from(sequence),
     );
@@ -5730,7 +5025,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       NowPlaying(
         title: widget.title ?? 'Untitled',
         isPlaying: _player?.state.playing ?? false,
-        hasNext: _hasNextEpisode,
+        hasNext: _upNext.hasNext,
       ),
     );
   }
@@ -5765,7 +5060,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // `AdaptationPolicy` at all, so nothing it observes is wrong while
       // casting, only pointless. `_buildBody`'s `Stack` (where the panel
       // lives) is not built while `isCastingProvider` is true -- `build`
-      // swaps to `_buildCastPlaceholder` first -- so the panel is already
+      // swaps to `CastPlaceholderView` first -- so the panel is already
       // invisible without this. Invisible is not inactive: without also
       // stopping the collector here, its `Timer.periodic` keeps sampling
       // mpv once a second against a player that is not decoding anything,
@@ -5790,7 +5085,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final session = next.value;
       final position = session?.mediaInfo?.position;
       if (session == null || position == null || session.isStale) return;
-      _maybeAutoSkipAt(position, _castSeekToReal);
+      _segmentSkipper.maybeAutoSkip(position, _castSeekToReal);
     });
 
     // Flipping the switch while a file is open must start or stop the
@@ -5828,7 +5123,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final isCasting = ref.watch(isCastingProvider);
     final castSession = ref.watch(castSessionProvider).value;
     Widget body = _castSupported && isCasting && castSession != null
-        ? _buildCastPlaceholder(castSession)
+        ? CastPlaceholderView(
+            session: castSession,
+            title: widget.title ?? 'Untitled',
+            segmentAt: _segmentSkipper.segmentAt,
+            onSkip: (segment) => _castSeekToReal(segment.end),
+          )
         : _buildBody();
 
     // Wrap with the key handler wherever a physical keyboard exists (native
@@ -5859,7 +5159,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // mounts, so a bare `!visible` check swallows every back press for as
     // long as there is no chrome to dismiss at all: the loading spinner
     // before the OSD ever mounts, the error screen, and the cast placeholder
-    // (`_buildCastPlaceholder`, which swaps in for `_buildBody()` above and
+    // (`CastPlaceholderView`, which swaps in for `_buildBody()` above and
     // never builds one either). None of those has anything on screen for a
     // back press to dismiss, and there is no other way out of them on a
     // remote, so back has to pass straight through in all three.
@@ -6017,31 +5317,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return _withCastAffordance(
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(
-                color: Colors.red,
-              ),
-              if (_loadingMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _loadingMessage!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
+      return _withCastAffordance(PlayerLoadingView(message: _loadingMessage));
     }
 
     if (_error != null) {
-      return _withCastAffordance(_buildError());
+      return _withCastAffordance(
+        PlayerErrorView(message: _error!, onRetry: _initializePlayer),
+      );
     }
 
     if (_videoController == null) {
@@ -6071,13 +5353,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           scrub: InputCapabilities.directionalPrimary ? _scrub : null,
           scrubberFocusNode: _scrubberFocus,
           scrubThumbnails: _scrubThumbnails,
-          onBack: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
+          onBack: () => popOrGoHome(context),
           // The chrome's own cast pill. Null on a build that cannot cast at
           // all, which drops the pill rather than drawing an empty one.
           castAction: _castSupported ? castChromeActionFor(ref) : null,
@@ -6100,9 +5376,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onFullscreenTap:
               _fullscreen.available.value ? _fullscreen.toggle : null,
           onAlwaysOnTopTap: _toggleAlwaysOnTop,
-          onPreviousEpisode: _hasPreviousEpisode ? _playPreviousEpisode : null,
-          onNextEpisode: _hasNextEpisode ? _playNextEpisode : null,
-          onActivity: () => _upNextCountdown?.noteInput(),
+          onPreviousEpisode: _upNext.hasPrevious ? _upNext.playPrevious : null,
+          onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
+          onActivity: _upNext.noteInput,
           isFullscreen: _fullscreen.isFullscreen.value,
           isAlwaysOnTop: _isAlwaysOnTop,
           audioTrackCount: _audioTracks.length,
@@ -6137,7 +5413,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // Skip Intro / Skip Credits. Driven by its own position stream rather
         // than a setState per tick, and stood down while the up-next overlay
         // is showing so the two do not stack in the same bottom-right corner.
-        if (player != null && _segments.isNotEmpty && !_showUpNext)
+        if (player != null &&
+            _segmentSkipper.segments.isNotEmpty &&
+            !_upNext.showing)
           Positioned.fill(
             child: StreamBuilder<Duration>(
               stream: player.stream.position,
@@ -6145,7 +5423,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               builder: (context, snapshot) {
                 final position =
                     _timeline.toReal(snapshot.data ?? Duration.zero);
-                final segment = _segmentAt(position);
+                final segment = _segmentSkipper.segmentAt(position);
                 if (segment == null) return const SizedBox.shrink();
 
                 return SkipSegmentButton(
@@ -6159,17 +5437,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ),
           ),
         // Up Next. Always interactive, independent of chrome visibility.
-        if (_showUpNext && _upNextTarget != null && _upNextCountdown != null)
+        if (_upNext.showing &&
+            _upNext.target != null &&
+            _upNext.countdown != null)
           Positioned.fill(
             child: UpNextPrompt(
-              target: _upNextTarget!,
-              countdown: _upNextCountdown!,
+              target: _upNext.target!,
+              countdown: _upNext.countdown!,
               metrics: panelMetrics,
-              onPlayNow: _playNextEpisode,
-              onDismiss: _cancelAutoPlay,
-              onEngagedChanged: (engaged) => engaged
-                  ? _upNextCountdown?.hold(UpNextHold.engaged)
-                  : _upNextCountdown?.release(UpNextHold.engaged),
+              onPlayNow: _upNext.playNext,
+              onDismiss: _upNext.cancel,
+              onEngagedChanged: _upNext.setEngaged,
             ),
           ),
         // Last in the stack, so the tap that starts playback reaches this and
@@ -6181,67 +5459,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // `StatsMetrics.resolve` returns null on a viewport too short to
         // hold even the compact panel, which is when drawing nothing beats
         // drawing over the scrubber.
-        if (_statsCollector != null) _buildStatsPanel(),
-      ],
-    );
-  }
-
-  /// Whether a previous episode exists in the current season's episode list.
-  bool get _hasPreviousEpisode =>
-      _seasonEpisodes != null &&
-      _currentEpisodeIndex != null &&
-      _currentEpisodeIndex! > 0;
-
-  /// Whether a next episode exists in the current season's episode list.
-  bool get _hasNextEpisode =>
-      _seasonEpisodes != null &&
-      _currentEpisodeIndex != null &&
-      _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
-
-  Widget _buildStatsPanel() {
-    final collector = _statsCollector;
-    if (collector == null) return const SizedBox.shrink();
-
-    final metrics = StatsMetrics.resolve(
-      viewport: MediaQuery.sizeOf(context),
-      directionalPrimary: InputCapabilities.directionalPrimary,
-    );
-    if (metrics == null) return const SizedBox.shrink();
-
-    return Positioned.fill(
-      child: SafeArea(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Padding(
-            padding: EdgeInsets.only(
-              top: metrics.top,
-              left: metrics.gutter,
-            ),
-            child: ValueListenableBuilder<StatsSample?>(
-              valueListenable: collector.samples,
-              builder: (context, sample, _) {
-                if (sample == null) return const SizedBox.shrink();
-                final statsContext = _statsContext();
-                return StatsPanel(
-                  sample: sample,
-                  context: statsContext,
-                  metrics: metrics,
-                  onCopy: metrics.showButtons
-                      ? () => _copyStats(sample, statsContext)
-                      : null,
-                  onClose: metrics.showButtons
-                      ? () => unawaited(
-                            ref
-                                .read(statsOverlayEnabledProvider.notifier)
-                                .set(false),
-                          )
-                      : null,
-                );
-              },
+        if (_statsCollector case final collector?)
+          PlayerStatsPanel(
+            collector: collector,
+            statsContext: _statsContext,
+            onCopy: _copyStats,
+            onClose: () => unawaited(
+              ref.read(statsOverlayEnabledProvider.notifier).set(false),
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
 
@@ -6289,9 +5516,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       lastFallback: _lastFallback,
       knownFailures: _planInputs?.knownFailures ?? const {},
       sourceHeight: _planInputs?.sourceHeight,
-      sourceCodec: _sourceCodec(_planInputs),
+      sourceCodec: sourceCodecOf(_planInputs),
       sourceBitrateKbps: _planInputs?.fileBitrateKbps,
-      sourceContainer: _sourceContainer(_planInputs),
+      sourceContainer: sourceContainerOf(_planInputs),
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
       linkLabel: status == null
@@ -6302,48 +5529,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
     );
-  }
-
-  /// The first candidate's video codec, or null when there is no plan or
-  /// no candidate names one.
-  ///
-  /// A plain loop rather than `candidates.map((c) => c.videoCodec)
-  /// .firstWhere((c) => c != null, orElse: () => null)`: that one-liner
-  /// does typecheck and behave correctly (both "no match" and "found
-  /// null" collapse to the same `orElse: () => null`), but it reads as
-  /// more clever than the job needs.
-  String? _sourceCodec(PlanInputs? inputs) {
-    if (inputs == null) return null;
-    for (final candidate in inputs.candidates) {
-      if (candidate.videoCodec != null) return candidate.videoCodec;
-    }
-    return null;
-  }
-
-  /// The container implied by the first candidate's MIME type, matching
-  /// [_sourceCodec]'s "first candidate describes the source file" reading
-  /// (the same one `FileShape.fromCandidates` relies on for the failure
-  /// memory's key).
-  ///
-  /// The base type before any `;` is one of the fixed set
-  /// `CodecString.build_mime_type/3` emits server-side
-  /// (`lib/mydia/streaming/codec_string.ex`), so this mirrors that mapping
-  /// rather than inventing one. `video/mp4` covers three source extensions
-  /// there (mp4, m4v, mov); the candidate does not say which one the file
-  /// actually was, so all three read as "mp4". Anything unrecognised (or
-  /// no plan at all) is null, which the Source row already omits
-  /// gracefully.
-  String? _sourceContainer(PlanInputs? inputs) {
-    if (inputs == null || inputs.candidates.isEmpty) return null;
-    final baseType = inputs.candidates.first.mime.split(';').first.trim();
-    return switch (baseType) {
-      'video/mp4' => 'mp4',
-      'video/x-matroska' => 'mkv',
-      'video/webm' => 'webm',
-      'video/mp2t' => 'ts',
-      'video/x-msvideo' => 'avi',
-      _ => null,
-    };
   }
 
   Future<void> _copyStats(StatsSample sample, StatsContext stats) async {
@@ -6362,55 +5547,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     _showToast('Stats copied', kind: ToastKind.success);
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to load video',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              _error!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[400],
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _initializePlayer,
-            child: const Text('Retry'),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            child: const Text('Go Back'),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Show the cast device picker dialog, then hand the selected device to
@@ -6483,125 +5619,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// What the player screen shows while the media is on a receiver.
-  ///
-  /// Deliberately inert: every control lives in `CastMiniController`, which is
-  /// mounted over this screen by `app.dart`. Duplicating them here is the
-  /// confusion this replaced — two surfaces showing the same title, device,
-  /// play/pause and stop, with the bar clipping the remote's stop button.
-  ///
-  /// [session] rather than just the device: `isCastingProvider` stays true for
-  /// a [CastSession] that has gone stale (its `mediaInfo` survives the drop —
-  /// see `CastSession.copyWith`), and this is the app's single largest
-  /// `Icons.cast_connected` glyph. Rendering it over a connection that no
-  /// longer exists is exactly the false "connected" claim this feature exists
-  /// to eliminate, so a stale session gets the same outline glyph and "Lost
-  /// connection" wording as `CastMiniController`'s stale row, not a claim of
-  /// a live cast.
-  Widget _buildCastPlaceholder(CastSession session) {
-    final device = session.device;
-    final isStale = session.isStale;
-
-    // The one control this screen does own while casting. It is not the
-    // duplication the doc comment above warns about: `CastMiniController`
-    // has no skip, so there is no second copy to disagree with, and the
-    // alternative is the feature simply not existing on a TV.
-    //
-    // Withheld over a stale session for the reason the glyph goes outline —
-    // the receiver is gone, and a control that silently does nothing is that
-    // same false "connected" claim wearing a different hat.
-    //
-    // Withheld while syncing too, like the bar's own controls: the position
-    // may be minutes old, so the segment it falls in may not be the one the
-    // receiver is playing.
-    final castPosition = session.mediaInfo?.position ?? Duration.zero;
-    final skipSegment =
-        isStale || session.isSyncing ? null : _segmentAt(castPosition);
-    final panelMetrics = PanelMetrics.resolve(
-      width: MediaQuery.sizeOf(context).width,
-      touchPrimary: InputCapabilities.touchPrimary,
-    );
-
-    return Stack(
-      children: [
-        Center(
-          child: Padding(
-            // Bottom inset keeps the text clear of the mini bar.
-            padding: const EdgeInsets.only(
-              left: 32,
-              right: 32,
-              top: 32,
-              bottom: 120,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isStale ? Icons.cast_outlined : Icons.cast_connected,
-                  size: 96,
-                  color: isStale ? Colors.grey : Colors.blue,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  isStale
-                      ? 'Lost connection to ${device.name}'
-                      : 'Playing on ${device.name}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.title ?? 'Untitled',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
-        // `Positioned.fill` for the same reason the local path uses it: the
-        // button aligns itself bottom-right, which needs the Stack's full
-        // constraints rather than the loose ones a bare child would get.
-        if (skipSegment != null)
-          Positioned.fill(
-            child: SkipSegmentButton(
-              key: ValueKey(skipSegment.key),
-              segment: skipSegment,
-              position: castPosition,
-              onSkip: (target) => _castSeekToReal(target.end),
-              metrics: panelMetrics,
-            ),
-          ),
-        Positioned(
-          top: 8,
-          left: 8,
-          child: SafeArea(
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/');
-                }
-              },
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   /// The item's runtime, from the most trustworthy source available.
   ///
   /// A Chromecast reports `duration: -1` for a Mydia HLS session, because the
@@ -6616,141 +5633,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 }
 
-/// Pure `PageUp`/`PageDown` episode-navigation key handling, extracted from
-/// `_PlayerScreenState._handleKeyEvent` so it can be unit-tested directly.
-///
-/// `_handleKeyEvent`'s other cases (`space`, arrows, `keyF`, `keyM`,
-/// `escape`) all reach directly into a real media_kit [Player] or call
-/// `setState`/native fullscreen APIs, and `PlayerScreen` itself is a
-/// `ConsumerStatefulWidget` that creates its own real [Player] and depends on
-/// Riverpod/GraphQL providers with no existing test harness — pumping the
-/// full screen to test one `switch` case is impractical. This case is the
-/// one exception: it only needs two booleans and two callbacks, so it is
-/// pulled out as a free function that takes those as parameters instead of
-/// closing over `State` fields, making it directly testable with a
-/// synthetic [KeyEvent] and no widget tree at all.
-///
-/// Mirrors exactly what the in-bar previous/next-episode buttons do
-/// (`TransportSurface`'s `onPreviousEpisode`/`onNextEpisode`, gated the same
-/// way by [hasPreviousEpisode]/[hasNextEpisode]) — this key handler is a
-/// fallback for when those buttons aren't reachable (see the call site's own
-/// comment), not a separate, independently-gated feature.
-@visibleForTesting
-KeyEventResult handleEpisodeNavKey(
-  KeyEvent event, {
-  required bool hasPreviousEpisode,
-  required bool hasNextEpisode,
-  required VoidCallback onPreviousEpisode,
-  required VoidCallback onNextEpisode,
-}) {
-  if (event is! KeyDownEvent) {
-    return KeyEventResult.ignored;
-  }
-
-  switch (event.logicalKey) {
-    case LogicalKeyboardKey.pageUp:
-      if (hasPreviousEpisode) {
-        onPreviousEpisode();
-      }
-      return KeyEventResult.handled;
-
-    case LogicalKeyboardKey.pageDown:
-      if (hasNextEpisode) {
-        onNextEpisode();
-      }
-      return KeyEventResult.handled;
-
-    default:
-      return KeyEventResult.ignored;
-  }
-}
-
-/// The countdown's `onElapsed` callback, bound so a fire is always marked
-/// as automatic.
-///
-/// A tear-off of `_playNextEpisode` would pass `fromAutoCountdown: false`
-/// (the default), which is exactly the regression this helper exists to
-/// prevent: after a dismiss, an elapsed countdown would navigate. Tests
-/// pin this binding independently of mounting `PlayerScreen`.
-@visibleForTesting
-VoidCallback bindUpNextCountdownElapsed(
-  void Function({bool fromAutoCountdown}) playNext,
-) =>
-    () => playNext(fromAutoCountdown: true);
-
-/// media_kit's current audio track list mapped onto the app's own model,
-/// together with the reverse lookup needed to hand a chosen track back to
-/// media_kit.
-@visibleForTesting
-class AudioTrackDetection {
-  const AudioTrackDetection({required this.tracks, required this.byId});
-
-  /// Selectable tracks, in the order media_kit reports them. Never contains
-  /// the `auto`/`no` sentinels.
-  final List<app_models_audio.AudioTrack> tracks;
-
-  /// [app_models_audio.AudioTrack.id] to the media_kit track it came from.
-  /// `_showAudioSelector` passes the resolved value to `setAudioTrack`, so a
-  /// missing entry silently no-ops the user's choice.
-  final Map<String, AudioTrack> byId;
-}
-
-/// Maps media_kit's audio tracks onto the app's model.
-///
-/// Extracted as a free function so the mapping can be unit-tested without a
-/// live `Player` — see [shouldRestartForSeek]'s dartdoc for why one cannot be
-/// constructed under `flutter test`.
-///
-/// Which track counts as the default comes from media_kit's own `isDefault`
-/// flag, which carries the container's disposition. Position is only the
-/// fallback, for files that flag nothing: a dual-language release can order
-/// its tracks one way and flag another, and picking by position alone
-/// mislabels those.
-@visibleForTesting
-AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
-  final tracks = <app_models_audio.AudioTrack>[];
-  final byId = <String, AudioTrack>{};
-
-  for (final mkTrack in mkTracks) {
-    // Skip the "auto" and "no" sentinel tracks
-    if (mkTrack == AudioTrack.auto() || mkTrack == AudioTrack.no()) continue;
-
-    tracks.add(
-      app_models_audio.AudioTrack(
-        id: mkTrack.id,
-        language: mkTrack.language ?? 'und',
-        title: mkTrack.title,
-        isDefault: mkTrack.isDefault ?? false,
-      ),
-    );
-    byId[mkTrack.id] = mkTrack;
-  }
-
-  if (tracks.isNotEmpty && !tracks.any((t) => t.isDefault)) {
-    final first = tracks.first;
-    tracks[0] = app_models_audio.AudioTrack(
-      id: first.id,
-      language: first.language,
-      title: first.title,
-      isDefault: true,
-    );
-  }
-
-  return AudioTrackDetection(tracks: tracks, byId: byId);
-}
-
-/// Reports media_kit's track list every time it is revised.
-///
-/// mpv discovers tracks asynchronously while it probes the file, and revises
-/// the list afterwards, so sampling it once at a fixed moment after `open()`
-/// races the probe. On a slow enough source the sample lands before any
-/// track exists and the selectors are left permanently empty. Driving
-/// detection off the stream instead means a late arrival still reaches the
-/// UI.
-///
-/// `player.stream.tracks` is a plain broadcast stream with no replay, so
-/// callers must subscribe before opening the media and still run a detection
-/// pass afterwards to cover anything emitted in between.
 /// A picked subtitle track made loadable, or null with the line to show the
 /// viewer instead. See `_resolveMediaKitSubtitleTrack`.
 typedef _ResolvedSubtitle = ({SubtitleTrack? track, String failureMessage});
@@ -6770,118 +5652,3 @@ typedef _QueuedSubtitlePreference = ({
   String fileId,
   int generation,
 });
-
-@visibleForTesting
-StreamSubscription<Tracks> watchTracks(
-  Stream<Tracks> tracks,
-  void Function(Tracks tracks) onTracks,
-) {
-  return tracks.listen(onTracks);
-}
-
-/// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
-/// by [_PlayerScreenState.setVolume]. Clamps out-of-range input rather than
-/// trusting the caller — a remote peer, not this app, decides what crosses
-/// the wire.
-///
-/// Extracted as a free function, alongside its inverse
-/// [playerVolumeToRemoteControlVolume] and [remoteControlMuteVolume], so the
-/// 0-1/0-100 conversion `_PlayerScreenState`'s `RemotePlayerBinding`
-/// implementation depends on is directly unit-tested rather than only
-/// exercised indirectly through `RemoteTargetController`'s own tests, which
-/// drive a hand-written fake binding and never reach this arithmetic. See
-/// [shouldRestartForSeek]'s dartdoc for why a real `Player` cannot stand in
-/// for it under `flutter test` instead.
-@visibleForTesting
-double remoteControlVolumeToPlayerVolume(double level) =>
-    level.clamp(0.0, 1.0) * 100;
-
-/// The inverse of [remoteControlVolumeToPlayerVolume], for reporting the
-/// current volume back out through [_PlayerScreenState.describe].
-@visibleForTesting
-double playerVolumeToRemoteControlVolume(double playerVolume) =>
-    playerVolume / 100;
-
-/// media_kit has no separate mute flag on this screen, only volume: muting
-/// snaps it to 0 and unmuting snaps it to full, mirroring
-/// `_handleKeyEvent`'s existing `keyM` case exactly rather than restoring
-/// whatever was set before muting, which would need new state this screen
-/// does not keep.
-@visibleForTesting
-double remoteControlMuteVolume(bool muted) => muted ? 0.0 : 100.0;
-
-/// Whether [_PlayerScreenState.describe] should report the player as muted.
-/// Paired with [remoteControlMuteVolume] rather than a tracked mute flag:
-/// muted is exactly "volume is 0" (including when there is no player at
-/// all, since `null == 0` is false).
-@visibleForTesting
-bool isPlayerVolumeMuted(double? playerVolume) => playerVolume == 0;
-
-/// Finds the element of [tracks] whose [idOf] equals [id], or null when
-/// nothing matches — the case every `selectTrack` branch in
-/// [_PlayerScreenState] must silently no-op for rather than throw, since
-/// `id` names a track a *remote peer* chose, which this screen never
-/// validated before it arrived.
-@visibleForTesting
-T? findTrackById<T>(
-  List<T> tracks,
-  String id, {
-  required String Function(T track) idOf,
-}) =>
-    tracks.where((track) => idOf(track) == id).firstOrNull;
-
-/// Maps [_PlayerScreenState]'s own loading/error flags and the `Player`'s
-/// state onto the wire's [FlutterPlaybackState], for
-/// [_PlayerScreenState.describe] by way of
-/// [_PlayerScreenState._remoteControlPlaybackState].
-///
-/// Order is significant, checked in this priority: [hasError] wins over
-/// everything else — a player still decoding through a stream error is not
-/// meaningfully "playing". [isLoading]/`!hasPlayer` come next because this
-/// screen's own `_isLoading`/`_error` fields describe *screen* phases where
-/// `Player.state` may not exist yet or may be stale from a session this
-/// screen already tore down, so they are trusted ahead of whatever the
-/// `Player` itself reports. [buffering] and [completed] are checked before
-/// [playing] because media_kit can report `playing: true` while buffering,
-/// and after the file has already ended.
-@visibleForTesting
-FlutterPlaybackState remoteControlPlaybackState({
-  required bool hasError,
-  required bool isLoading,
-  required bool hasPlayer,
-  required bool buffering,
-  required bool completed,
-  required bool playing,
-}) {
-  if (hasError) return FlutterPlaybackState.error;
-  if (isLoading || !hasPlayer) return FlutterPlaybackState.loading;
-  if (buffering) return FlutterPlaybackState.buffering;
-  if (completed) return FlutterPlaybackState.ended;
-  return playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused;
-}
-
-/// Casts to a remote target, stopping local playback only once the receiver
-/// has confirmed the load — never before, and never at all if it refuses.
-///
-/// This ordering is what makes "Push" (spec term: capture position and
-/// track selections, `Hello`, `LoadContent`, only then stop locally)
-/// non-destructive. An unreachable receiver or a rejected codec must never
-/// cost the viewer their place in a film: when [startCast] throws, [stopLocal]
-/// simply never runs, and whatever [_PlayerScreenState._player] was doing
-/// keeps doing it. The caller's own `catch` (see `_showCastDevicePicker`) is
-/// what turns that exception into a toast instead of a crash.
-///
-/// Extracted as a free function for the same reason as [applyQualityChoice]
-/// and [shouldRestartForSeek]: proving this ordering under `flutter test`
-/// needs to observe whether local playback kept running, and this suite can
-/// never construct a real, playing media_kit `Player` to observe that
-/// against (see [shouldRestartForSeek]'s dartdoc) — so the ordering itself
-/// is what gets pinned instead, independent of any real player.
-@visibleForTesting
-Future<void> pushToRemoteTarget({
-  required Future<void> Function() startCast,
-  required Future<void> Function() stopLocal,
-}) async {
-  await startCast();
-  await stopLocal();
-}

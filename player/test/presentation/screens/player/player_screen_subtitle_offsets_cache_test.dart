@@ -3,11 +3,11 @@
 // `GraphQLClient.query` defaults to `FetchPolicy.cacheFirst`, and these
 // clients sit on a persistent `HiveStore` in the real app. Without an
 // explicit `FetchPolicy.networkOnly` on this query, a viewer who already
-// played this file would have `_subtitleOffsets` populated from whatever
-// offset was cached the last time this file loaded -- not what the server
-// actually has on file now. `_saveSubtitleDelay` then sends that stale
-// baseline plus the current nudge, silently overwriting a newer server
-// offset with an older one.
+// played this file would have the stored subtitle offsets populated from
+// whatever offset was cached the last time this file loaded -- not what the
+// server actually has on file now. `SubtitleDelayController.save` then sends
+// that stale baseline plus the current nudge, silently overwriting a newer
+// server offset with an older one.
 //
 // Mirrors `player_screen_stale_candidates_test.dart`'s second test: asserting
 // on the transport, not just the outcome, is what catches a regression back

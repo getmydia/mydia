@@ -11,7 +11,7 @@ void main() {
         countdown.start();
         async.elapse(const Duration(seconds: 4));
 
-        // What `_handleKeyEvent`'s escape branch calls.
+        // What `resolvePlayerKey`'s escape branch asks `_runKeyCommand` to do.
         countdown.cancel();
         async.elapse(const Duration(seconds: 60));
 
