@@ -44,6 +44,7 @@ defmodule Mydia.Plugins.Index do
 
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Index.CatalogItem
   alias Mydia.Plugins.Index.Entry
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Net.Gate
@@ -83,16 +84,18 @@ defmodule Mydia.Plugins.Index do
   end
 
   @doc """
-  Fetches every source and returns the plugins not in `installed_slugs`.
+  Fetches every source and returns each listed plugin as a `CatalogItem`,
+  classified against `installed`: anything carrying `:slug`, `:version` and
+  `:source_url`, normally the admin page's installed rows.
 
   A failing source records the first error message but does not discard the
   entries of sources that answered. `opts` accepts `:sources` (overrides
   `sources/0`); the rest is passed to `fetch_catalog/2`.
   """
-  @spec browse(Enumerable.t(), keyword()) :: BrowseResult.t()
-  def browse(installed_slugs, opts \\ []) do
+  @spec browse([map()], keyword()) :: BrowseResult.t()
+  def browse(installed, opts \\ []) do
     {sources, fetch_opts} = Keyword.pop_lazy(opts, :sources, &sources/0)
-    installed = MapSet.new(installed_slugs)
+    installed_by_slug = Map.new(installed, &{&1.slug, &1})
 
     {entries, error} =
       Enum.reduce(sources, {[], nil}, fn source, {acc, err} ->
@@ -102,11 +105,9 @@ defmodule Mydia.Plugins.Index do
         end
       end)
 
-    catalog = Enum.reject(entries, &MapSet.member?(installed, &1.slug))
-
     %BrowseResult{
-      catalog: catalog,
-      status: browse_status(entries, catalog),
+      catalog: Enum.map(entries, &catalog_item(&1, Map.get(installed_by_slug, &1.slug))),
+      status: browse_status(entries),
       error: error,
       source_count: length(sources)
     }
@@ -147,6 +148,21 @@ defmodule Mydia.Plugins.Index do
          :integrity_mismatch,
          "package hash #{actual} does not match declared #{expected}"
        )}
+    end
+  end
+
+  @doc """
+  True when `candidate` is a newer version than `current`, which counts as
+  oldest when `nil`. Uses semver when both parse, falling back to string
+  comparison.
+  """
+  @spec version_newer?(String.t(), String.t() | nil) :: boolean()
+  def version_newer?(_candidate, nil), do: true
+
+  def version_newer?(candidate, current) do
+    case {Version.parse(candidate), Version.parse(current)} do
+      {{:ok, c}, {:ok, cur}} -> Version.compare(c, cur) == :gt
+      _ -> candidate != current and candidate > current
     end
   end
 
@@ -227,9 +243,34 @@ defmodule Mydia.Plugins.Index do
 
   # ── Helpers ───────────────────────────────────────────────────────────────
 
-  defp browse_status([], _catalog), do: :empty
-  defp browse_status(_entries, []), do: :all_installed
-  defp browse_status(_entries, _catalog), do: :available
+  defp browse_status([]), do: :empty
+  defp browse_status(_entries), do: :available
+
+  defp catalog_item(entry, nil), do: %CatalogItem{entry: entry, state: :not_installed}
+
+  defp catalog_item(entry, installed) do
+    %CatalogItem{
+      entry: entry,
+      state: install_state(entry, installed),
+      installed_version: installed.version
+    }
+  end
+
+  # A store version usually lives at a new, versioned package URL, so "installed
+  # from an index" is anything that is neither bundled nor sideloaded.
+  defp install_state(_entry, %{source_url: "bundled"}), do: :bundled
+
+  defp install_state(entry, %{source_url: source_url, version: version}) do
+    cond do
+      sideloaded?(source_url) -> :replace
+      entry.version == version -> :installed
+      version_newer?(entry.version, version) -> :update
+      true -> :replace
+    end
+  end
+
+  defp sideloaded?("file://" <> _), do: true
+  defp sideloaded?(_source_url), do: false
 
   defp describe_error(%{__exception__: true} = error), do: Exception.message(error)
   defp describe_error(other), do: inspect(other)

@@ -7,6 +7,9 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
   alias Mydia.Accounts
   alias Mydia.Plugins.Host
+  alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Index.CatalogItem
+  alias Mydia.Plugins.Index.Entry
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
   alias MydiaWeb.AdminPluginsLive.Components
@@ -204,19 +207,19 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "store browsing" do
-    test "an empty store says so instead of rendering nothing", %{conn: conn} do
+    test "an empty store opens the modal and says so", %{conn: conn} do
       put_plugin_sources("")
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#catalog-empty")
-      refute has_element?(view, "#plugin-catalog")
-      refute has_element?(view, "#browse-error")
+      assert has_element?(view, "#store-modal #catalog-empty")
+      refute has_element?(view, "#store-modal #plugin-catalog")
+      refute has_element?(view, "#store-modal #browse-error")
     end
 
-    test "a failing source shows the error", %{conn: conn} do
+    test "a failing source opens the modal with the error", %{conn: conn} do
       # Non-https fails in require_https/2 before any network I/O.
       put_plugin_sources("http://insecure.test/index.json")
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
@@ -224,8 +227,102 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#browse-error")
-      refute has_element?(view, "#catalog-empty")
+      assert has_element?(view, "#store-modal #browse-error")
+      refute has_element?(view, "#store-modal #catalog-empty")
+    end
+
+    test "Close dismisses the store", %{conn: conn} do
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+      view |> element("#close-store") |> render_click()
+
+      refute has_element?(view, "#store-modal")
+    end
+
+    test "an approval hides the store, and declining brings it back", %{conn: conn} do
+      seed_plugin("webhook-notifier", "Webhook Notifier", enabled: false)
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+      view |> element("#approve-webhook-notifier") |> render_click()
+
+      assert has_element?(view, "#approval-modal")
+      refute has_element?(view, "#store-modal")
+
+      view |> element("#decline-approval") |> render_click()
+      assert has_element?(view, "#store-modal")
+    end
+
+    test "the store modal shows a spinner before results arrive" do
+      doc =
+        render_component(&Components.store_modal/1, browse: nil)
+        |> LazyHTML.from_fragment()
+
+      refute doc |> LazyHTML.query("#store-loading") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#plugin-catalog") |> Enum.empty?()
+    end
+
+    test "each catalog row offers the action its install state allows" do
+      entry = fn slug, version ->
+        %Entry{
+          slug: slug,
+          name: slug,
+          version: version,
+          package_url: "https://cdn.test/#{slug}.wasm",
+          integrity: "sha256:ab",
+          manifest: nil
+        }
+      end
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [
+          %CatalogItem{entry: entry.("fresh", "1.0.0"), state: :not_installed},
+          %CatalogItem{
+            entry: entry.("current", "1.0.0"),
+            state: :installed,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("stale", "1.1.0"),
+            state: :update,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("sideloaded", "1.0.0"),
+            state: :replace,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("builtin", "1.0.0"),
+            state: :bundled,
+            installed_version: "1.0.0"
+          }
+        ]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
+
+      text = fn selector ->
+        doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
+      end
+
+      assert text.("#install-fresh") == "Install"
+      assert text.("#install-stale") == "Update to v1.1.0"
+      assert text.("#install-sideloaded") == "Install store version"
+      assert text.("#catalog-state-current") == "Installed"
+      assert text.("#catalog-state-builtin") == "Bundled"
+      assert doc |> LazyHTML.query("#install-current") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#install-builtin") |> Enum.empty?()
+      assert text.("#catalog-row-stale") =~ "(installed v1.0.0)"
     end
 
     test "the button is disabled while a browse is in flight" do
