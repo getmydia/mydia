@@ -57,19 +57,59 @@ defmodule Mydia.Jobs.ContentRatingFetchTest do
     refute_received {:relay_hit, _, _}
   end
 
-  test "skips rows with no TMDB id and survives a relay error", %{bypass: bypass} do
+  test "a relay error fails the job so Oban retries, and leaves the row unrated", %{
+    bypass: bypass
+  } do
     id = unique_provider_id()
     Bypass.stub(bypass, "GET", "/tmdb/movies/#{id}", &Plug.Conn.resp(&1, 500, "boom"))
-    insert(:media_item, type: "movie", tmdb_id: id, metadata: %{title: "Broken Feed"})
+    broken = insert(:media_item, type: "movie", tmdb_id: id, metadata: %{title: "Broken Feed"})
 
-    insert(:media_item,
-      type: "tv_show",
-      tmdb_id: nil,
-      tvdb_id: unique_provider_id(),
-      metadata: %{title: "No Cross Ref"}
-    )
+    no_ref =
+      insert(:media_item,
+        type: "tv_show",
+        tmdb_id: nil,
+        tvdb_id: unique_provider_id(),
+        metadata: %{title: "No Cross Ref"}
+      )
+
+    ok_id = unique_provider_id()
+    stub_tmdb_movie(bypass, ok_id, certification: "PG", test_pid: self())
+    fine = insert(:media_item, type: "movie", tmdb_id: ok_id, metadata: %{title: "Fine Feed"})
+
+    result = ExUnit.CaptureLog.with_log(fn -> run() end) |> elem(0)
+
+    assert {:error, {:relay_errors, 1}} = result
+    scope = Scope.unrestricted()
+    assert Media.get_media_item!(scope, broken.id).content_rating_age == nil
+    assert Media.get_media_item!(scope, no_ref.id).content_rating_age == nil
+    # The walk finished: the healthy row was still filled.
+    assert Media.get_media_item!(scope, fine.id).content_rating_age == 8
+    refute_received {:relay_hit, "/tmdb/tv/shows/" <> _, _}
+  end
+
+  test "a TMDB answer with no certification is not an error", %{bypass: bypass} do
+    id = unique_provider_id()
+    stub_tmdb_movie(bypass, id, test_pid: self())
+    item = insert(:media_item, type: "movie", tmdb_id: id, metadata: %{title: "Unrated Dusk"})
 
     assert :ok = run()
+    assert_received {:relay_hit, _, _}
+    assert Media.get_media_item!(Scope.unrestricted(), item.id).content_rating_age == nil
+  end
+
+  test "walks past the first batch", %{bypass: bypass} do
+    items =
+      for n <- 1..5 do
+        id = unique_provider_id()
+        stub_tmdb_movie(bypass, id, certification: "R")
+        insert(:media_item, type: "movie", tmdb_id: id, metadata: %{title: "Batch Fixture #{n}"})
+      end
+
+    assert :ok =
+             ContentRatingFetch.perform(%Oban.Job{args: %{"delay_ms" => 0, "batch_size" => 2}})
+
+    scope = Scope.unrestricted()
+    assert Enum.all?(items, &(Media.get_media_item!(scope, &1.id).content_rating_age == 17))
   end
 
   test "is idempotent", %{bypass: bypass} do
