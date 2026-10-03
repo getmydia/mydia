@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/stash/stash_client.dart';
@@ -164,5 +165,39 @@ void main() {
 
   test('checkStatus passes on OK', () async {
     await build().source.client.checkStatus();
+  });
+
+  test('declares Continue Watching and no hubs', () {
+    final source = build().source;
+    expect(source.capabilities, contains(SourceCapability.continueWatching));
+    expect(source.as<HomeHubs>(), isNull);
+  });
+
+  test('Continue Watching asks for resumable scenes, last played first',
+      () async {
+    final b = build();
+    final items = await b.source.continueWatching();
+    final (name, vars) = b.server.operations.last;
+    expect(name, 'FindScenes');
+    expect(vars['filter'], {
+      'page': 1,
+      'per_page': 20,
+      'sort': 'last_played_at',
+      'direction': 'DESC',
+    });
+    expect(vars['scene_filter'], {
+      'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+    });
+    expect(items.map((i) => i.ref.externalId), ['4', '2']);
+    expect(items.first.userState.progressSeconds, 120);
+  });
+
+  test('remove clears the resume point', () async {
+    final b = build();
+    await b.source.removeFromContinueWatching(
+        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'));
+    final (name, vars) = b.server.operations.last;
+    expect(name, 'SaveActivity');
+    expect(vars, {'id': '2', 'resume_time': 0});
   });
 }
