@@ -93,10 +93,6 @@ import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
-import '../../../graphql/schema.graphql.dart';
-import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
-import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
-import '../../../graphql/mutations/set_subtitle_offset.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/playback/server_features.dart';
@@ -3321,30 +3317,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!canSaveSubtitleDelay(track.id)) return;
     if (widget.fileId == 'offline') return;
 
-    final graphqlClient = _graphqlClient;
-    if (graphqlClient == null) return;
+    if (!_session.canWrite) return;
 
     final total = (_subtitleOffsets[track.id] ?? 0) + _subtitleNudgeMs;
 
-    try {
-      final result = await graphqlClient.mutate(
-        MutationOptions(
-          document: documentNodeMutationSetSubtitleOffset,
-          variables: Variables$Mutation$SetSubtitleOffset(
-            mediaFileId: widget.fileId,
-            trackRef: track.id,
-            offsetMs: total,
-          ).toJson(),
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Could not save subtitle delay: ${result.exception}');
+    final outcome =
+        await _session.saveSubtitleOffset(trackRef: track.id, offsetMs: total);
+    switch (outcome) {
+      case WriteOutcome.unavailable:
+        return;
+      case WriteOutcome.failed:
         _showToast('Could not save the subtitle delay', kind: ToastKind.error);
         return;
-      }
+      case WriteOutcome.done:
+        break;
+    }
 
+    try {
       if (!mounted) return;
 
       // Safe regardless of what is selected now: this is keyed by
@@ -4912,43 +4901,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (language.isEmpty || language == 'und') return;
     if (widget.fileId == 'offline') return;
 
-    final graphqlClient = _graphqlClient;
-    if (graphqlClient == null) return;
+    final updated = await _session.rememberAudioLanguage(language);
 
-    try {
-      final result = await graphqlClient.mutate(
-        MutationOptions(
-          document: documentNodeMutationSetAudioLanguagePreference,
-          variables: Variables$Mutation$SetAudioLanguagePreference(
-            fileId: widget.fileId,
-            language: language,
-          ).toJson(),
-        ),
-      );
-
-      if (result.hasException) {
-        // A server too old to know this mutation answers with a GraphQL
-        // validation error. That is a version gap, not a fault, and it stays
-        // silent for the viewer: the track they picked has already changed.
-        debugPrint(
-            '[PlayerScreen] Could not remember audio language: ${result.exception}');
-        return;
-      }
-
-      // Kept for the next media this State opens if it is reused (a `go`
-      // between two declarative player locations), where `initState` does not
-      // run again and the fresh Player built there reads this field. A pushed
-      // player gets a new State instead; see
-      // `test/core/router/player_route_handoff_test.dart`.
-      final data = result.data?['setAudioLanguagePreference'];
-      final updated = data?['preferredAudioLanguages'];
-      if (updated is List) {
-        _preferredAudioLanguages = updated.cast<String>();
-      }
-
-      debugPrint('[PlayerScreen] Remembered audio language: $language');
-    } catch (e) {
-      debugPrint('[PlayerScreen] Could not remember audio language: $e');
+    // Kept for the next media this State opens if it is reused (a `go`
+    // between two declarative player locations), where `initState` does not
+    // run again and the fresh Player built there reads this field. A pushed
+    // player gets a new State instead; see
+    // `test/core/router/player_route_handoff_test.dart`.
+    if (updated != null) {
+      _preferredAudioLanguages = updated;
     }
   }
 
@@ -5051,8 +5012,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (queued.fileId == 'offline') return;
 
-    final graphqlClient = _graphqlClient;
-    if (graphqlClient == null) return;
+    if (!_session.canWrite) return;
 
     final resolved =
         track == null ? null : await _serverSideSubtitleTrack(track);
@@ -5073,35 +5033,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
 
-    try {
-      final result = await graphqlClient.mutate(
-        MutationOptions(
-          document: documentNodeMutationSetSubtitlePreference,
-          variables: Variables$Mutation$SetSubtitlePreference(
-            // The captured file, never a fresh read of `widget.fileId`: by
-            // now this screen can be showing a different one.
-            fileId: queued.fileId,
-            mode: resolved == null
-                ? Enum$SubtitlePreferenceMode.OFF
-                : Enum$SubtitlePreferenceMode.TRACK,
-            language: resolved?.language,
-            forced: resolved?.forced,
-            hearingImpaired: resolved?.hearingImpaired,
-            trackTitle: resolved?.title,
-          ).toJson(),
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Could not remember subtitle preference: ${result.exception}');
-        return;
-      }
-
-      debugPrint('[PlayerScreen] Remembered subtitle preference');
-    } catch (e) {
-      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
-    }
+    await _session.writeSubtitlePreference(
+      // The captured file, never a fresh read of `widget.fileId`: by now
+      // this screen can be showing a different one.
+      fileId: queued.fileId,
+      resolved: resolved,
+    );
   }
 
   /// [track] as the server knows it, or null when it cannot be translated.

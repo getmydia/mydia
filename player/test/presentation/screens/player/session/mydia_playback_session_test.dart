@@ -324,6 +324,99 @@ void main() {
     });
   });
 
+  group('saveSubtitleOffset', () {
+    test('sends the file, track and offset', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Mutation',
+            'setSubtitleOffset': {
+              '__typename': 'SubtitleTrackSetting',
+              'trackRef': '3',
+              'offsetMs': 400,
+            },
+          });
+      final outcome =
+          await _session(link).saveSubtitleOffset(trackRef: '3', offsetMs: 400);
+      expect(outcome, WriteOutcome.done);
+      expect(link.requests.single.variables,
+          {'mediaFileId': 'file-1', 'trackRef': '3', 'offsetMs': 400});
+    });
+
+    test('fails on a GraphQL error', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('boom'));
+      expect(
+        await _session(link).saveSubtitleOffset(trackRef: '3', offsetMs: 1),
+        WriteOutcome.failed,
+      );
+    });
+
+    test('is unavailable without a client', () async {
+      final link = StubLink((_, __) => {'__typename': 'Mutation'});
+      final session = _session(link, hasClient: false);
+      expect(session.canWrite, isFalse);
+      expect(
+        await session.saveSubtitleOffset(trackRef: '3', offsetMs: 1),
+        WriteOutcome.unavailable,
+      );
+      expect(link.requests, isEmpty);
+    });
+  });
+
+  group('rememberAudioLanguage', () {
+    test('returns the updated preference list', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Mutation',
+            'setAudioLanguagePreference': {
+              '__typename': 'AudioLanguagePreference',
+              'mediaItemId': 'movie-1',
+              'language': 'jpn',
+              'preferredAudioLanguages': ['jpn', 'eng'],
+            },
+          });
+      expect(await _session(link).rememberAudioLanguage('jpn'), ['jpn', 'eng']);
+      expect(link.requests.single.variables,
+          {'fileId': 'file-1', 'language': 'jpn'});
+    });
+
+    test('is null on a GraphQL error', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('old server'));
+      expect(await _session(link).rememberAudioLanguage('jpn'), isNull);
+    });
+
+    test('is null without a client', () async {
+      final link = StubLink((_, __) => {'__typename': 'Mutation'});
+      expect(
+        await _session(link, hasClient: false).rememberAudioLanguage('jpn'),
+        isNull,
+      );
+      expect(link.requests, isEmpty);
+    });
+  });
+
+  group('writeSubtitlePreference', () {
+    test('writes OFF for no track', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Mutation',
+            'setSubtitlePreference': {
+              '__typename': 'SubtitlePreferenceResult',
+              'mediaItemId': 'movie-1',
+              'preference': null,
+            },
+          });
+      await _session(link)
+          .writeSubtitlePreference(fileId: 'file-7', resolved: null);
+      final vars = link.requests.single.variables;
+      expect(vars['fileId'], 'file-7');
+      expect(vars['mode'], 'OFF');
+    });
+
+    test('does not throw on a GraphQL error', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('boom'));
+      await _session(link)
+          .writeSubtitlePreference(fileId: 'file-7', resolved: null);
+      expect(link.requests, hasLength(1));
+    });
+  });
+
   group('downloadSubtitle', () {
     test('refuses the offline sentinel', () async {
       final link = StubLink((_, __) => {'__typename': 'Mutation'});

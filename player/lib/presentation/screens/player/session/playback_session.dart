@@ -37,4 +37,22 @@ abstract interface class PlaybackSession {
 
   /// The track's body, or null on any failure. Never throws.
   Future<String?> subtitleContent(String trackId);
+
+  /// Whether a write could be sent right now.
+  bool get canWrite;
+
+  Future<WriteOutcome> saveSubtitleOffset({
+    required String trackRef,
+    required int offsetMs,
+  });
+
+  /// The server's updated list, or null. Never throws.
+  Future<List<String>?> rememberAudioLanguage(String language);
+
+  /// [fileId] is the file captured when the pick was queued, never the one
+  /// playing now. Null [resolved] stores "Off". Never throws.
+  Future<void> writeSubtitlePreference({
+    required String fileId,
+    required SubtitleTrack? resolved,
+  });
 }

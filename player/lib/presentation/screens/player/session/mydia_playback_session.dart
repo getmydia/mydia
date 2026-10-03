@@ -13,6 +13,10 @@ import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../../graphql/mutations/download_subtitle.graphql.dart';
+import '../../../../graphql/mutations/set_audio_language_preference.graphql.dart';
+import '../../../../graphql/mutations/set_subtitle_offset.graphql.dart';
+import '../../../../graphql/mutations/set_subtitle_preference.graphql.dart';
+import '../../../../graphql/schema.graphql.dart';
 import '../../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../../graphql/queries/media_segments.graphql.dart';
 import '../../../../graphql/queries/movie_detail.graphql.dart';
@@ -43,6 +47,105 @@ class MydiaPlaybackSession implements PlaybackSession {
   /// Waits for the client provider, for calls the screen made that way.
   final Future<GraphQLClient> Function() _awaitClient;
   final PlaybackTarget Function() _target;
+
+  @override
+  bool get canWrite => _client() != null;
+
+  @override
+  Future<WriteOutcome> saveSubtitleOffset({
+    required String trackRef,
+    required int offsetMs,
+  }) async {
+    final client = _client();
+    if (client == null) return WriteOutcome.unavailable;
+    try {
+      final result = await client.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetSubtitleOffset,
+          variables: Variables$Mutation$SetSubtitleOffset(
+            mediaFileId: _target().fileId,
+            trackRef: trackRef,
+            offsetMs: offsetMs,
+          ).toJson(),
+        ),
+      );
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Could not save subtitle delay: ${result.exception}');
+        return WriteOutcome.failed;
+      }
+      return WriteOutcome.done;
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
+      return WriteOutcome.failed;
+    }
+  }
+
+  @override
+  Future<List<String>?> rememberAudioLanguage(String language) async {
+    final client = _client();
+    if (client == null) return null;
+    try {
+      final result = await client.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetAudioLanguagePreference,
+          variables: Variables$Mutation$SetAudioLanguagePreference(
+            fileId: _target().fileId,
+            language: language,
+          ).toJson(),
+        ),
+      );
+      if (result.hasException) {
+        // A server too old to know this mutation answers with a GraphQL
+        // validation error. That is a version gap, not a fault, and it stays
+        // silent for the viewer: the track they picked has already changed.
+        debugPrint('[PlayerScreen] Could not remember audio language: '
+            '${result.exception}');
+        return null;
+      }
+      final data = result.data?['setAudioLanguagePreference'];
+      final updated = data?['preferredAudioLanguages'];
+      debugPrint('[PlayerScreen] Remembered audio language: $language');
+      return updated is List ? updated.cast<String>() : null;
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember audio language: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<void> writeSubtitlePreference({
+    required String fileId,
+    required SubtitleTrack? resolved,
+  }) async {
+    final client = _client();
+    if (client == null) return;
+    try {
+      final result = await client.mutate(
+        MutationOptions(
+          document: documentNodeMutationSetSubtitlePreference,
+          variables: Variables$Mutation$SetSubtitlePreference(
+            fileId: fileId,
+            mode: resolved == null
+                ? Enum$SubtitlePreferenceMode.OFF
+                : Enum$SubtitlePreferenceMode.TRACK,
+            language: resolved?.language,
+            forced: resolved?.forced,
+            hearingImpaired: resolved?.hearingImpaired,
+            trackTitle: resolved?.title,
+          ).toJson(),
+        ),
+      );
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] Could not remember subtitle preference: '
+            '${result.exception}');
+        return;
+      }
+      debugPrint('[PlayerScreen] Remembered subtitle preference');
+    } catch (e) {
+      debugPrint('[PlayerScreen] Could not remember subtitle preference: $e');
+    }
+  }
 
   GraphQLClient _requireClient() =>
       _client() ?? (throw StateError('no GraphQL client is available'));

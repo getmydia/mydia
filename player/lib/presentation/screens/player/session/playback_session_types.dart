@@ -108,3 +108,7 @@ class PlaybackEpisode {
   final List<String?>? fileIds;
   final String? thumbnailUrl;
 }
+
+/// How a write went. [unavailable] means there was no connection to send
+/// it on, which the screen treats as silently as before.
+enum WriteOutcome { done, failed, unavailable }
