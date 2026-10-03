@@ -15,6 +15,17 @@ import '../../../../domain/sources/source_error.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
+/// The MIME type the player expects for a file in [container].
+String containerMime(String? container) => switch (container) {
+      'mkv' => 'video/x-matroska',
+      'mp4' || 'm4v' || 'mov' => 'video/mp4',
+      'avi' => 'video/x-msvideo',
+      'ts' || 'mpegts' => 'video/mp2t',
+      'webm' => 'video/webm',
+      null => 'video/mp4',
+      final other => 'video/$other',
+    };
+
 abstract class SourcePlaybackSession implements PlaybackSession {
   SourcePlaybackSession({
     required this.source,

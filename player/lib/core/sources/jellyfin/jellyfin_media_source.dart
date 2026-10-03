@@ -11,6 +11,7 @@ import '../media_source.dart';
 import '../source.dart';
 import 'jellyfin_client.dart';
 import 'jellyfin_mapping.dart';
+import 'jellyfin_playback_info.dart';
 
 class JellyfinMediaSource extends MediaSource
     implements WatchedState, Searchable {
@@ -45,6 +46,24 @@ class JellyfinMediaSource extends MediaSource
   T? as<T extends Object>() => this is T ? this as T : null;
 
   Map<String, String> get _user => {'userId': client.userId};
+
+  Future<JellyfinPlaybackInfo> playbackInfo(
+    String itemId, {
+    required String mediaSourceId,
+    required Map<String, dynamic> deviceProfile,
+  }) async =>
+      JellyfinPlaybackInfo.fromJson(await client.post(
+        '/Items/$itemId/PlaybackInfo',
+        query: _user,
+        body: {
+          'DeviceProfile': deviceProfile,
+          'MediaSourceId': mediaSourceId,
+          'AutoOpenLiveStream': false,
+          'EnableDirectPlay': true,
+          'EnableDirectStream': true,
+          'EnableTranscoding': true,
+        },
+      ));
 
   /// Library kinds by id, so paging does not re-fetch `/UserViews` on every
   /// page. Filled by [libraries].
