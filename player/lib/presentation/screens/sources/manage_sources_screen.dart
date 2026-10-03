@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../widgets/toast/toaster.dart';
@@ -19,7 +20,7 @@ class ManageSourcesScreen extends ConsumerWidget {
     final records = ref.watch(sourceRecordsProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Plex and Stash servers'),
+        title: const Text('Other servers'),
         actions: [
           TextButton.icon(
             key: const Key('manage-add'),
@@ -95,7 +96,14 @@ class _AccountCard extends ConsumerWidget {
           children: [
             Text(account.displayName,
                 style: Theme.of(context).textTheme.titleMedium),
-            Text(account.kind.name == 'plex' ? 'Plex account' : 'Stash server',
+            Text(
+                switch (account.kind) {
+                  SourceKind.plex => 'Plex account',
+                  SourceKind.stash => 'Stash server',
+                  SourceKind.jellyfin => 'Jellyfin user',
+                  // The Mydia login is not stored as a source account.
+                  SourceKind.mydia => 'Mydia account',
+                },
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
             for (final server in record.servers)
@@ -117,9 +125,13 @@ class _AccountCard extends ConsumerWidget {
                       '/sources/add/${account.kind.name}?account=${account.id}'),
                   child: Text(account.needsReauth
                       ? 'Sign in again'
-                      : (account.kind.name == 'plex'
-                          ? 'Sign in again or choose servers'
-                          : 'Change address or key')),
+                      : switch (account.kind) {
+                          SourceKind.plex => 'Sign in again or choose servers',
+                          SourceKind.jellyfin => 'Change address or sign in',
+                          SourceKind.stash ||
+                          SourceKind.mydia =>
+                            'Change address or key',
+                        }),
                 ),
                 TextButton(
                   key: Key('manage-remove-${account.id}'),
@@ -149,7 +161,7 @@ class SourcesSettingsSection extends StatelessWidget {
         SettingsRow.navigation(
           key: const Key('manage-sources-row'),
           icon: Icons.dns_rounded,
-          title: 'Plex and Stash',
+          title: 'Plex, Jellyfin and Stash',
           subtitle: 'Add or remove servers',
           onTap: () => context.push('/sources/manage'),
         ),
