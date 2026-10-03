@@ -173,4 +173,24 @@ void main() {
           SourceConnectionStatus.unreachable);
     });
   });
+
+  group('sourceRootRedirect', () {
+    test('sends the legacy Mydia source to the existing home', () {
+      expect(sourceRootRedirect('mydia', [Source.legacyMydia()]), '/');
+    });
+
+    test('sends an unknown source home', () {
+      expect(sourceRootRedirect('nope', [Source.legacyMydia()]), '/');
+    });
+
+    test('sends a third-party source home until its screens exist', () {
+      expect(
+        sourceRootRedirect(
+          _plexSource.id.value,
+          [Source.legacyMydia(), _plexSource],
+        ),
+        '/',
+      );
+    });
+  });
 }
