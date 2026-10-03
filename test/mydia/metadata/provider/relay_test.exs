@@ -518,6 +518,22 @@ defmodule Mydia.Metadata.Provider.RelayTest do
         |> Plug.Conn.resp(200, Jason.encode!(body))
       end)
 
+      # The TMDB rating fallback queries the TMDB endpoint when TVDB has no rating
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/1399", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        body = %{
+          "id" => 1399,
+          "name" => "Game of Thrones",
+          "credits" => %{"cast" => [], "crew" => []},
+          "content_ratings" => %{"results" => [%{"iso_3166_1" => "US", "rating" => "TV-MA"}]}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
       assert {:ok, metadata} =
                Relay.fetch_by_ref(relay_config(bypass), {:tvdb, tvdb_id}, media_type: :tv_show)
 

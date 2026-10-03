@@ -38,7 +38,7 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
   end
 
   describe "tier 1: TVDB's own trailers" do
-    test "uses TVDB trailers and never requests TMDB", ctx do
+    test "uses TVDB trailers and never requests TMDB for videos", ctx do
       stub_tvdb(ctx, %{
         "trailers" => [tvdb_trailer("https://www.youtube.com/watch?v=TVDBKEY1")],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -55,7 +55,9 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       assert video.site == "YouTube"
       assert video.type == "Trailer"
 
-      # Tier 1 short-circuits: the cross-reference exists but must not be used.
+      # Tier 1 short-circuits the video fallback, but the rating fallback may
+      # still make a TMDB request when TVDB carries no ratings.
+      assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end
   end
@@ -95,6 +97,9 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
         assert [%Video{key: "TMDBKEY1"}] = metadata.videos
       end
 
+      # The video fallback and rating fallback each make one TMDB request on
+      # the first fetch; both are memoized.
+      assert_receive {:relay_request, :tmdb}, 100
       assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end
@@ -114,6 +119,9 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
         assert metadata.videos == []
       end
 
+      # The video fallback and rating fallback each make one TMDB request on
+      # the first fetch; both are memoized.
+      assert_receive {:relay_request, :tmdb}, 100
       assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end

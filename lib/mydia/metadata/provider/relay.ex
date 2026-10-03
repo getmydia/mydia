@@ -354,7 +354,8 @@ defmodule Mydia.Metadata.Provider.Relay do
         metadata = %{
           metadata
           | provider: :tvdb,
-            videos: resolve_tvdb_videos(config, data, preferred, language)
+            videos: resolve_tvdb_videos(config, data, preferred, language),
+            content_rating: metadata.content_rating || tmdb_rating_for_tvdb(config, data)
         }
 
         {:ok, metadata}
@@ -438,6 +439,32 @@ defmodule Mydia.Metadata.Provider.Relay do
         )
 
         {:ok, []}
+    end
+  end
+
+  # TVDB's contentRatings is empty for most series (73% of the TV shows on one
+  # production install had no rating), and an access restriction hides an
+  # unrated title. The TMDB cross-reference in `remoteIds` usually has one.
+  # Cached for a day like the trailer fallback; a failure degrades to nil and
+  # is not cached, so it is retried on the next fetch.
+  defp tmdb_rating_for_tvdb(config, data) do
+    with tmdb_id when is_binary(tmdb_id) <- tmdb_id_from_remote_ids(data["remoteIds"]),
+         {:ok, rating} <-
+           Cache.fetch(
+             "tvdb_tmdb_rating:#{tmdb_id}",
+             fn -> request_tmdb_rating(config, tmdb_id) end,
+             ttl: :timer.hours(24)
+           ) do
+      rating
+    else
+      _ -> nil
+    end
+  end
+
+  defp request_tmdb_rating(config, tmdb_id) do
+    case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: []) do
+      {:ok, %MediaMetadata{content_rating: rating}} -> {:ok, rating}
+      {:error, _} = error -> error
     end
   end
 
