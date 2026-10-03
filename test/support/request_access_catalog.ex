@@ -162,24 +162,21 @@ defmodule Mydia.RequestAccessCatalog do
   because the button renders disabled for a title already requested; this is
   what a page that went stale before another guest's request would send.
   """
-  def click_request(who, %Title{} = title) do
-    {:ok, view, _html} = live(who.conn, discover_path(title))
-
-    render_hook(view, "request_media", %{
-      "ref" => "tmdb:#{title.tmdb_id}",
-      "media_type" => to_string(title.type)
-    })
-
-    # Sync with the LiveView so the handle_info that submits has run.
-    _ = render(view)
-    view
-  end
+  def click_request(who, %Title{} = title), do: send_request_event(who, title)
 
   @doc """
   Sends `request_media` for a title with no visible button, as a forged
   client event would, and asserts that no request was created.
   """
   def forge_request(who, %Title{} = title) do
+    _view = send_request_event(who, title)
+    refute find_request(title, who.user.id), "forged request for #{title.name} was stored"
+    :ok
+  end
+
+  # Mounts Discover, sends the Request event and syncs with the LiveView so
+  # the handle_info that submits has run. Returns the view.
+  defp send_request_event(who, %Title{} = title) do
     {:ok, view, _html} = live(who.conn, discover_path(title))
 
     render_hook(view, "request_media", %{
@@ -188,8 +185,7 @@ defmodule Mydia.RequestAccessCatalog do
     })
 
     _ = render(view)
-    refute find_request(title, who.user.id), "forged request for #{title.name} was stored"
-    :ok
+    view
   end
 
   @doc """

@@ -10,6 +10,9 @@ defmodule MydiaWeb.RequestAccess.RejectAndUnratedTest do
   import Phoenix.LiveViewTest
   import Mydia.RequestAccessCatalog
 
+  alias Mydia.Media.MediaRequest
+  alias Mydia.Repo
+
   setup %{conn: conn} do
     world = seed!()
     %{world: world, t: world.titles, cast: cast!(conn)}
@@ -66,11 +69,14 @@ defmodule MydiaWeb.RequestAccess.RejectAndUnratedTest do
     )
     |> render_click()
 
-    assert wait_until(fn ->
-             Mydia.Repo.get_by(Mydia.Media.MediaRequest,
-               tmdb_id: t.pg13_movie.tmdb_id,
-               status: "pending"
-             )
-           end)
+    pending =
+      wait_until(fn ->
+        Repo.get_by(MediaRequest, tmdb_id: t.pg13_movie.tmdb_id, status: "pending")
+      end)
+
+    assert pending
+    assert pending.requester_id == cast.teen.user.id
+    refute pending.id == request.id
+    assert Repo.get!(MediaRequest, request.id).status == "rejected"
   end
 end
