@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -364,9 +365,29 @@ class _NativeDownloadService implements DownloadService {
           _emit(errorTask);
         }
       } else if (task.downloadUrl != null) {
-        _startDownloadTask(pendingTask);
+        _runInBackground(
+          _startDownloadTask(pendingTask),
+          'download ${pendingTask.id}',
+        );
       }
     }
+  }
+
+  /// Runs a long-lived task without blocking the caller. Each of these methods
+  /// lasts as long as its transfer, so awaiting one would stop the queue loop
+  /// and the start methods from returning. They handle their own failures, so
+  /// this only keeps a failure in their error path from becoming an unhandled
+  /// async error.
+  void _runInBackground(Future<void> task, String what) {
+    // Hand failures to the zone that started the work, exactly where an
+    // unawaited future's error used to land. In the app that is the
+    // `runZonedGuarded` handler in main.dart, which logs it and files a crash
+    // report with the stack trace.
+    final zone = Zone.current;
+    unawaited(task.catchError((Object e, StackTrace s) {
+      debugPrint('[DownloadService] $what failed: $e');
+      zone.handleUncaughtError(e, s);
+    }));
   }
 
   @override
@@ -774,7 +795,7 @@ class _NativeDownloadService implements DownloadService {
     _emit(task);
 
     if (!shouldQueue) {
-      _startDownloadTask(task);
+      _runInBackground(_startDownloadTask(task), 'download ${task.id}');
     }
 
     return task;
@@ -908,10 +929,13 @@ class _NativeDownloadService implements DownloadService {
     }
 
     // Start the progressive download process
-    _startProgressiveDownloadTask(
-      task,
-      getDownloadUrl: getDownloadUrl,
-      getJobStatus: getJobStatus,
+    _runInBackground(
+      _startProgressiveDownloadTask(
+        task,
+        getDownloadUrl: getDownloadUrl,
+        getJobStatus: getJobStatus,
+      ),
+      'progressive download ${task.id}',
     );
 
     return task;
@@ -962,7 +986,7 @@ class _NativeDownloadService implements DownloadService {
       while (!transcodeComplete && !cancelToken.isCancelled) {
         if (_pausedTasks[task.id] == true) {
           // Paused, wait and check again
-          await Future.delayed(const Duration(seconds: 1));
+          await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
 
@@ -992,7 +1016,7 @@ class _NativeDownloadService implements DownloadService {
           break;
         }
 
-        await Future.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(seconds: 2));
       }
 
       // Check if cancelled - cleanup is handled by cancelDownload
@@ -1037,7 +1061,7 @@ class _NativeDownloadService implements DownloadService {
           );
           await _database!.saveTask(updatedTask);
           _emit(updatedTask);
-          await Future.delayed(const Duration(seconds: 1));
+          await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
 
@@ -1116,10 +1140,10 @@ class _NativeDownloadService implements DownloadService {
             downloadComplete = true;
           } else if (!transcodeComplete) {
             // Still transcoding, wait a bit then check for more data
-            await Future.delayed(const Duration(seconds: 2));
+            await Future<void>.delayed(const Duration(seconds: 2));
           } else if (response.statusCode == 206) {
             // Partial content received, continue downloading
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future<void>.delayed(const Duration(milliseconds: 500));
           }
         } on DioException catch (e) {
           if (e.type == DioExceptionType.cancel) {
@@ -1131,7 +1155,8 @@ class _NativeDownloadService implements DownloadService {
           // so the recovery sweep can decide what to do.
           if (!transcodeComplete) {
             transientRetries++;
-            await Future.delayed(Duration(seconds: 1 << transientRetries));
+            await Future<void>.delayed(
+                Duration(seconds: 1 << transientRetries));
             if (transientRetries >= maxTransientRetries) {
               final interrupted = updatedTask.copyWith(
                 status: 'interrupted',
@@ -1145,7 +1170,7 @@ class _NativeDownloadService implements DownloadService {
               _cancelTokens.remove(task.id);
               _pausedTasks.remove(task.id);
               _speedTracker.clearTask(task.id);
-              _processQueue();
+              _runInBackground(_processQueue(), 'process queue');
               return;
             }
             continue;
@@ -1186,7 +1211,7 @@ class _NativeDownloadService implements DownloadService {
       _speedTracker.clearTask(task.id);
 
       // Process queue to start next download
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     } on _DeadJobException catch (e) {
       final failed = updatedTask.copyWith(
         status: 'failed',
@@ -1199,7 +1224,7 @@ class _NativeDownloadService implements DownloadService {
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
       _speedTracker.clearTask(task.id);
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     } on DioException catch (e) {
       // If cancelled, cleanup is handled by cancelDownload
       if (e.type == DioExceptionType.cancel) {
@@ -1214,7 +1239,7 @@ class _NativeDownloadService implements DownloadService {
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
       _speedTracker.clearTask(task.id);
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     } catch (e) {
       final errorTask = updatedTask.copyWith(
         status: 'failed',
@@ -1226,7 +1251,7 @@ class _NativeDownloadService implements DownloadService {
       _pausedTasks.remove(task.id);
       _cancelJobCallbacks.remove(task.id);
       _speedTracker.clearTask(task.id);
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     }
   }
 
@@ -1337,7 +1362,7 @@ class _NativeDownloadService implements DownloadService {
       _speedTracker.clearTask(task.id);
 
       // Process queue to start next download
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         // The token was cancelled, but this loop does not get to decide what
@@ -1366,7 +1391,7 @@ class _NativeDownloadService implements DownloadService {
       _speedTracker.clearTask(task.id);
 
       // Process queue even on failure/cancel
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     } catch (e) {
       final errorTask = task.copyWith(
         status: 'failed',
@@ -1378,7 +1403,7 @@ class _NativeDownloadService implements DownloadService {
       _speedTracker.clearTask(task.id);
 
       // Process queue even on error
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     }
   }
 
@@ -1514,7 +1539,7 @@ class _NativeDownloadService implements DownloadService {
 
     // 6. Process queue to start next download
     if (processQueue) {
-      _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     }
   }
 

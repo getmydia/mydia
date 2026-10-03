@@ -176,11 +176,11 @@ Future<void> showMediaContextMenu(
       onPlay();
     case MediaContextAction.goToShow:
       final showId = target.showId;
-      if (showId != null) context.push('/show/$showId');
+      if (showId != null) await context.push<void>('/show/$showId');
     case MediaContextAction.episodeDetails:
-      context.push('/episode/${target.id}');
+      await context.push<void>('/episode/${target.id}');
     case MediaContextAction.movieDetails:
-      context.push('/movie/${target.id}');
+      await context.push<void>('/movie/${target.id}');
     case MediaContextAction.removeFromContinueWatching:
       onRemoveFromContinueWatching?.call();
   }

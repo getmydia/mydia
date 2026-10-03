@@ -97,12 +97,12 @@ void main() {
 
   group('HivePlaybackProgressStore', () {
     late Directory tempDir;
-    late Box<Map> box;
+    late Box<Map<dynamic, dynamic>> box;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('playback_store_test');
       Hive.init(tempDir.path);
-      box = await Hive.openBox<Map>('playback_progress_test');
+      box = await Hive.openBox<Map<dynamic, dynamic>>('playback_progress_test');
     });
 
     tearDown(() async {

@@ -14,7 +14,7 @@ class _GatedSource extends FakeMediaSource {
   _GatedSource() : super(movieCount: 130);
 
   final gate = Completer<void>();
-  Object? followUpError;
+  Error? followUpError;
 
   @override
   Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,

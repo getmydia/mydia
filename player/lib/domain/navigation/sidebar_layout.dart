@@ -156,10 +156,9 @@ class SidebarLayout {
   /// [oldIndex] and [newIndex] index [reconcileForEditing]'s output, and the
   /// middle list here is built from that same call so the two cannot drift.
   ///
-  /// `ReorderableListView` reports [newIndex] as a position in the list
-  /// *before* the dragged row is removed, so it is decremented when it sits
-  /// past [oldIndex]. Dropping that adjustment is an off-by-one that appears
-  /// only on downward drags.
+  /// [newIndex] is the row's final position, as `ReorderableListView`
+  /// reports it through `onReorderItem`: already adjusted for the removal of
+  /// the dragged row, so no further arithmetic is needed here.
   ///
   /// Anchors are reassembled around the result rather than carried through the
   /// move. Their relative order does not matter here because [reconcile] sorts
@@ -188,11 +187,8 @@ class SidebarLayout {
       }
     }
 
-    var target = newIndex;
-    if (target > oldIndex) target -= 1;
-
     final moved = middle.removeAt(oldIndex);
-    middle.insert(target, moved);
+    middle.insert(newIndex, moved);
 
     return [...leading, ...middle, ...trailing];
   }

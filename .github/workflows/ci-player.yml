@@ -171,6 +171,12 @@ jobs:
         if: needs.changes.outputs.player == 'true'
         run: flutter pub run build_runner build
 
+      - name: Analyze
+        # Zero issues, infos included. The pre-commit hook enforces the same
+        # bar, but it only runs inside devenv.
+        if: needs.changes.outputs.player == 'true'
+        run: dart analyze --fatal-infos
+
       - name: Run tests
         # --concurrency=1: the default concurrency silently drops 2-4 test
         # files while still exiting 0, so this is load-bearing, not cosmetic.

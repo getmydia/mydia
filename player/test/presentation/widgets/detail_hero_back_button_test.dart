@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -21,7 +23,8 @@ void main() {
       (tester) async {
     final router = _router('/shelf');
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    router.push('/detail');
+    // Completes when the route pops, which the test never waits for.
+    unawaited(router.push<void>('/detail'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(DetailHeroBackButton));

@@ -7,6 +7,19 @@ import 'package:player/core/playback/health_sample.dart';
 import 'package:player/core/playback/playback_monitor.dart';
 
 class _Signals {
+  _Signals() {
+    addTearDown(close);
+  }
+
+  Future<void> close() => Future.wait([
+        position.close(),
+        buffer.close(),
+        buffering.close(),
+        playing.close(),
+        error.close(),
+        track.close(),
+      ]);
+
   final position = StreamController<Duration>.broadcast();
   final buffer = StreamController<Duration>.broadcast();
   final buffering = StreamController<bool>.broadcast();

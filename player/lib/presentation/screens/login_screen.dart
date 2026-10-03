@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -148,9 +150,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     // Reinitialize P2P with new relay URL
     final effectiveUrl = newUrl.isEmpty ? null : newUrl;
-    ref.read(p2pStatusNotifierProvider.notifier).reinitializeWithRelayUrl(
-          effectiveUrl == defaultRelayUrl ? null : effectiveUrl,
-        );
+    // Not awaited: re-resolving relays takes seconds and the toast below
+    // should not wait for it. The notifier catches and logs its own failures.
+    unawaited(
+      ref.read(p2pStatusNotifierProvider.notifier).reinitializeWithRelayUrl(
+            effectiveUrl == defaultRelayUrl ? null : effectiveUrl,
+          ),
+    );
 
     if (mounted) {
       showToast(
@@ -1500,7 +1506,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         .toUpperCase();
                     _claimCodeController.text = cleanText;
                     if (cleanText.length >= 6) {
-                      _handleClaimCodeSubmit();
+                      await _handleClaimCodeSubmit();
                     }
                   }
                 },

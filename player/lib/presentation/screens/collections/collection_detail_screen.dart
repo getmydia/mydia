@@ -274,7 +274,8 @@ class CollectionDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGridView(BuildContext context, List items, double topPadding) {
+  Widget _buildGridView(
+      BuildContext context, List<RecentlyAddedItem> items, double topPadding) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);

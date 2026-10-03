@@ -105,7 +105,7 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// `_castToTargetIfSet` falls through to local playback on failure without
   /// clearing the chosen device (`castTargetProvider` stays set so the bar
   /// can offer a reconnect).
-  Object? startCastError;
+  Exception? startCastError;
 
   /// Every real-media position `seek` has been asked for, in order.
   ///
@@ -118,7 +118,7 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// When set, `seek` throws it. A receiver that has gone away mid-playback is
   /// a routine state, not a hypothetical: the target is reachable over the
   /// network right up until it is not.
-  Object? seekError;
+  Error? seekError;
 
   @override
   Future<void> startCast({
@@ -164,10 +164,10 @@ class FakeSettingsService extends Fake implements SettingsService {
   /// When set, reads throw it. `flutter_secure_storage` needs a keyring on
   /// Linux desktop, so an unreadable preference is a real state, not a
   /// hypothetical one.
-  final Object? readError;
+  final Error? readError;
 
   /// When set, writes throw it.
-  final Object? writeError;
+  final Error? writeError;
 
   /// How many times the screen has asked storage for the default rung.
   /// Storage seeds the rung once per playback; the in-memory value carries
@@ -833,6 +833,6 @@ Future<void> pumpUntilReal(
   final deadline = DateTime.now().add(ceiling);
   while (!condition() && DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 20));
-    await Future.delayed(const Duration(milliseconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }

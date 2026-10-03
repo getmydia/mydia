@@ -29,8 +29,8 @@ void main() {
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
-      child: MaterialApp(
-          builder: toastLayerBuilder, home: const ManageSourcesScreen()),
+      child: const MaterialApp(
+          builder: toastLayerBuilder, home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('quill'), findsOneWidget);

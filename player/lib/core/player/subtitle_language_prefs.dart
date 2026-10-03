@@ -68,9 +68,9 @@ class SubtitleLanguagePrefs {
     }
   }
 
-  static Future<Box<List>> _box() async {
-    if (Hive.isBoxOpen(boxName)) return Hive.box<List>(boxName);
+  static Future<Box<List<dynamic>>> _box() async {
+    if (Hive.isBoxOpen(boxName)) return Hive.box<List<dynamic>>(boxName);
     await initAppHive();
-    return Hive.openBox<List>(boxName);
+    return Hive.openBox<List<dynamic>>(boxName);
   }
 }

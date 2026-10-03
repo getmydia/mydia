@@ -21,7 +21,7 @@ class HiveWindowGeometryStore implements WindowGeometryStore {
   /// There is exactly one window, so exactly one key.
   static const _key = 'main';
 
-  final Box<Map> _box;
+  final Box<Map<dynamic, dynamic>> _box;
 
   const HiveWindowGeometryStore(this._box);
 

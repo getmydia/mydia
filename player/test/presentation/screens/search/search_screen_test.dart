@@ -62,7 +62,7 @@ void main() {
     double? contentWidth,
   }) {
     client = MockGraphQLClient();
-    when(client.query(any)).thenAnswer(
+    when(client.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,
@@ -151,7 +151,7 @@ void main() {
     });
 
     expect(find.widgetWithText(TextField, 'alien'), findsOneWidget);
-    verify(client.query(any)).called(1);
+    verify(client.query<Object?>(any)).called(1);
   });
 
   testWidgets('the type parameter pre-applies a section filter',
@@ -181,7 +181,7 @@ void main() {
     // query() call — from either pump — lands on one mock we can inspect
     // together at the end.
     final sameClient = MockGraphQLClient();
-    when(sameClient.query(any)).thenAnswer(
+    when(sameClient.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,
@@ -237,8 +237,9 @@ void main() {
       {SearchResultType.episode},
     );
 
-    final captured =
-        verify(sameClient.query(captureAny)).captured.cast<QueryOptions>();
+    final captured = verify(sameClient.query<Object?>(captureAny))
+        .captured
+        .cast<QueryOptions>();
     expect(captured, hasLength(2));
     expect(captured.last.variables['query'], 'predator');
     expect(captured.last.variables['types'], ['EPISODE']);
@@ -253,7 +254,7 @@ void main() {
     // null, and the fix must land on a consistent state rather than only
     // deselecting the filter chips while stale text/results linger.
     final sameClient = MockGraphQLClient();
-    when(sameClient.query(any)).thenAnswer(
+    when(sameClient.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,
@@ -325,7 +326,7 @@ void main() {
   testWidgets('resets the ambient backdrop to the static fallback',
       (tester) async {
     final backdropClient = MockGraphQLClient();
-    when(backdropClient.query(any)).thenAnswer(
+    when(backdropClient.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,

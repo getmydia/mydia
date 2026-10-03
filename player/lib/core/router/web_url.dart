@@ -1,21 +1,22 @@
-// Web-specific URL handling using dart:html and dart:js
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:js' as js;
+// Web-specific URL handling using package:web and dart:js_interop
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
+
+import 'package:web/web.dart' as web;
 
 /// Gets the initial route from the browser's URL hash.
 /// Returns the hash without the leading '#', or '/' if no hash is present.
 ///
 /// Phoenix injects `window.mydiaInitialHash` before Flutter loads to capture
-/// the hash before any potential timing issues with dart:html's window.location.
+/// the hash before any potential timing issues with window.location.
 String getInitialRoute() {
   // First, try to read the hash that Phoenix captured before Flutter loaded
-  final phoenixHash = js.context['mydiaInitialHash'] as String?;
+  final phoenixHash =
+      globalContext.getProperty<JSString?>('mydiaInitialHash'.toJS)?.toDart;
 
   // Also try direct access as fallback
-  final hash = html.window.location.hash;
-  final href = html.window.location.href;
+  final hash = web.window.location.hash;
+  final href = web.window.location.href;
 
   // Use Phoenix-captured hash first, then fallback to direct access
   String effectiveHash = '';

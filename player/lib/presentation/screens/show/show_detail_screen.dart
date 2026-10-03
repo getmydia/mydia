@@ -782,7 +782,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
   /// Status chip only. Content rating and genres live in the hero's tag row
   /// now — repeating them here rendered each one twice on the page.
-  Widget _buildMetadata(BuildContext context, show) {
+  Widget _buildMetadata(BuildContext context, ShowDetail show) {
     final items = <Widget>[];
 
     if (show.statusDisplay.isNotEmpty) {
@@ -826,7 +826,7 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildOverview(BuildContext context, show) {
+  Widget _buildOverview(BuildContext context, ShowDetail show) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(

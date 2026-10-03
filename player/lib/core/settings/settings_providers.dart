@@ -6,7 +6,6 @@
 /// overrides a test would have to keep in step.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'settings_service.dart';

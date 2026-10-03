@@ -2,7 +2,7 @@
 ///
 /// This service orchestrates the complete device pairing flow using
 /// iroh-based P2P networking with relay-based discovery.
-library pairing_service;
+library;
 
 import 'dart:async';
 import 'dart:convert';

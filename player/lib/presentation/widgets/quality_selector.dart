@@ -71,12 +71,12 @@ class QualitySelectorSheet extends StatelessWidget {
 
     if (file.bitrate != null) {
       final bitrateMbps = (file.bitrate! / 1000000).toStringAsFixed(1);
-      details.add('${bitrateMbps} Mbps');
+      details.add('$bitrateMbps Mbps');
     }
 
     if (file.size != null) {
       final sizeGB = (file.size! / 1073741824).toStringAsFixed(2);
-      details.add('${sizeGB} GB');
+      details.add('$sizeGB GB');
     }
 
     if (file.directPlaySupported) {
@@ -87,7 +87,7 @@ class QualitySelectorSheet extends StatelessWidget {
 
     return Text(
       details.join(' • '),
-      style: TextStyle(
+      style: const TextStyle(
         color: AppColors.textSecondary,
         fontSize: 12,
       ),

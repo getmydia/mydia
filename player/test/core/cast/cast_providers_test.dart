@@ -241,7 +241,7 @@ void main() {
       // token refresh mutation shares this stub and tolerates the extra key:
       // it reads only `refreshMediaToken`, and a null there is a benign
       // "refresh failed" that leaves the stored token in place.
-      when(client.mutate(any)).thenAnswer(
+      when(client.mutate<Object?>(any)).thenAnswer(
         (_) async => QueryResult(
           source: QueryResultSource.network,
           data: const {
@@ -318,7 +318,7 @@ void main() {
 
       // ensureValidToken saw an imminent expiry and called the refresh
       // mutation; without that call an idle app hands out a dead token.
-      verify(client.mutate(any)).called(greaterThanOrEqualTo(1));
+      verify(client.mutate<Object?>(any)).called(greaterThanOrEqualTo(1));
     });
 
     test(

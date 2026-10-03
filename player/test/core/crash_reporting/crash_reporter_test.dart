@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' show PlatformDispatcher;
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';

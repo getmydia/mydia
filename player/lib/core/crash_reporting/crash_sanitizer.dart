@@ -69,8 +69,9 @@ Map<String, Object?> sanitizeReport(Map<String, Object?> report) {
   final out = Map<String, Object?>.of(report);
 
   final message = out['error_message'];
-  if (message is String)
+  if (message is String) {
     out['error_message'] = _truncate(sanitizeString(message));
+  }
 
   final frames = out['stacktrace'];
   if (frames is List) {

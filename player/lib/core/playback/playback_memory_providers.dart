@@ -25,12 +25,12 @@ bool isBoxCorruptionError(Object error) {
 
 /// Opens [boxName], deleting the corrupt file and recreating a fresh box if
 /// [Hive.openBox] fails due to corruption (e.g. from an unknown type ID or truncated file).
-Future<Box<Map>> openPlaybackMemoryBox({
+Future<Box<Map<dynamic, dynamic>>> openPlaybackMemoryBox({
   String boxName = HivePlaybackMemory.boxName,
   String? path,
 }) async {
   try {
-    return await Hive.openBox<Map>(boxName, path: path);
+    return await Hive.openBox<Map<dynamic, dynamic>>(boxName, path: path);
   } catch (e) {
     if (!isBoxCorruptionError(e)) {
       rethrow;
@@ -41,7 +41,7 @@ Future<Box<Map>> openPlaybackMemoryBox({
     );
     try {
       await Hive.deleteBoxFromDisk(boxName, path: path);
-      return await Hive.openBox<Map>(boxName, path: path);
+      return await Hive.openBox<Map<dynamic, dynamic>>(boxName, path: path);
     } catch (retryError) {
       debugPrint(
         '[PlaybackMemory] Recreating box "$boxName" failed: $retryError',
@@ -52,7 +52,8 @@ Future<Box<Map>> openPlaybackMemoryBox({
 }
 
 /// The persistent box backing [playbackMemoryProvider].
-final playbackMemoryBoxProvider = FutureProvider<Box<Map>>((ref) async {
+final playbackMemoryBoxProvider =
+    FutureProvider<Box<Map<dynamic, dynamic>>>((ref) async {
   return openPlaybackMemoryBox();
 });
 

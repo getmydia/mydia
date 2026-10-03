@@ -501,7 +501,7 @@ in
     dart-analyze = {
       enable = true;
       name = "dart analyze";
-      entry = "dart analyze --fatal-warnings";
+      entry = "dart analyze --fatal-infos";
       files = "\\.dart$";
       excludes = [ "\\.(g|freezed)\\.dart$" ];
       pass_filenames = false;

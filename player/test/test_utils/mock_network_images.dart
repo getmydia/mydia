@@ -172,7 +172,7 @@ class _MockHttpClientRequest implements HttpClientRequest {
 
   @override
   Future<void> addStream(Stream<List<int>> stream) async {
-    await stream.drain();
+    await stream.drain<void>();
   }
 
   @override

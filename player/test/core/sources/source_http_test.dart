@@ -40,8 +40,8 @@ void main() {
   test('a status in passThrough is returned, others still fail', () async {
     final http_ = SourceHttp(
         client: MockClient((_) async => http.Response('{"errors":[]}', 422)));
-    expect(
-        await http_.json('GET', url, passThrough: const {422}), {'errors': []});
+    expect(await http_.json('GET', url, passThrough: const {422}),
+        {'errors': <Object?>[]});
     await expectLater(
         http_.json('GET', url), failsWith(SourceErrorKind.server));
     await expectLater(http_.json('GET', url, passThrough: const {400}),

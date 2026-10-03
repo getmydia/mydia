@@ -32,7 +32,7 @@ class DownloadSpeedTracker {
     list.removeWhere((s) => s.time.isBefore(cutoff));
 
     debugPrint(
-        '[SpeedTracker] recordProgress($taskId): ${cumulativeBytes} bytes, ${list.length} samples');
+        '[SpeedTracker] recordProgress($taskId): $cumulativeBytes bytes, ${list.length} samples');
   }
 
   /// Returns bytes per second for [taskId], or 0 if insufficient data.

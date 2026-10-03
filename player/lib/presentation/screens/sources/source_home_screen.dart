@@ -8,6 +8,7 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/app_shell.dart';
 import '../../widgets/horizontal_rail.dart';
@@ -117,7 +118,7 @@ class _LibraryRow extends ConsumerWidget {
     final preview = ref.watch(sourceLibraryPreviewProvider(library.ref));
     final items = switch (preview) {
       AsyncData(:final value) => value,
-      _ => const [],
+      _ => const <ItemSummary>[],
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

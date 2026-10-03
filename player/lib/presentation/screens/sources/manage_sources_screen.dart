@@ -73,7 +73,7 @@ class _AccountCard extends ConsumerWidget {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
     final toaster = Toaster.of(context);
     try {
       await ref

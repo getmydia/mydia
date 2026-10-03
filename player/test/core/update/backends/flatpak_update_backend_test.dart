@@ -12,7 +12,7 @@ class _FakePortal implements FlatpakPortal {
   _FakePortal({this.progress = const [], this.failStartWith});
 
   final List<FlatpakProgress> progress;
-  final Object? failStartWith;
+  final Exception? failStartWith;
 
   final available = StreamController<FlatpakCommits>.broadcast();
   Object? updateError;
