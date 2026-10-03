@@ -683,6 +683,8 @@ defmodule Mydia.P2p.Server do
           "p2p_metrics_elixir: auth_complete auth_ms=#{auth_ms} session=#{req.session_id} path=#{req.path}"
         )
 
+        scope = Scope.for_user(user)
+
         cond do
           String.starts_with?(req.session_id, "direct:") ->
             file_id = String.replace_prefix(req.session_id, "direct:", "")
@@ -690,7 +692,7 @@ defmodule Mydia.P2p.Server do
 
           String.starts_with?(req.session_id, "download:") ->
             job_id = String.replace_prefix(req.session_id, "download:", "")
-            handle_download_stream(resource, stream_id, job_id, req)
+            handle_download_stream(resource, stream_id, job_id, scope, req)
 
           true ->
             handle_hls_session_stream(resource, stream_id, user, req)
@@ -781,8 +783,8 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp handle_download_stream(resource, stream_id, job_id, req) do
-    case lookup_transcode_job(job_id) do
+  defp handle_download_stream(resource, stream_id, job_id, scope, req) do
+    case lookup_transcode_job(scope, job_id) do
       {:ok, job} ->
         stream_hls_file(resource, stream_id, job.output_path, req)
 
@@ -1306,17 +1308,16 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp lookup_transcode_job(job_id) do
-    alias Mydia.Downloads.TranscodeJob
-    alias Mydia.Repo
-
-    # Look up the transcode job by ID
-    case Repo.get(TranscodeJob, job_id) do
-      nil ->
+  @doc false
+  # Public for its test: the stream path that calls it needs a live iroh
+  # connection to drive. A job for a title outside the caller's scope reads as
+  # not found, the same as a job that does not exist.
+  def lookup_transcode_job(%Scope{} = scope, job_id) do
+    case Mydia.Downloads.DownloadService.get_job(scope, job_id) do
+      {:error, :job_not_found} ->
         {:error, :not_found}
 
-      job ->
-        # Check if the job is ready (transcoding complete)
+      {:ok, job} ->
         if (job.status == "ready" and job.output_path) && File.exists?(job.output_path) do
           {:ok, job}
         else

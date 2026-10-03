@@ -155,7 +155,7 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
   end
 
-  describe "get_job_status/1" do
+  describe "get_job_status/2" do
     setup do
       library = insert(:library_path, type: :movies, path: "/movies")
       media_item = insert(:media_item, type: "movie")
@@ -175,7 +175,7 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "returns status for existing job", %{job: job} do
-      assert {:ok, job_info} = DownloadService.get_job_status(job.id)
+      assert {:ok, job_info} = DownloadService.get_job_status(Scope.unrestricted(), job.id)
 
       assert job_info.job_id == job.id
       assert job_info.status == "pending"
@@ -185,18 +185,19 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     test "returns updated progress after update", %{job: job} do
       Downloads.update_job_progress(job, 0.5)
 
-      assert {:ok, job_info} = DownloadService.get_job_status(job.id)
+      assert {:ok, job_info} = DownloadService.get_job_status(Scope.unrestricted(), job.id)
 
       assert job_info.status == "transcoding"
       assert job_info.progress == 0.5
     end
 
     test "returns error for non-existent job" do
-      assert {:error, :job_not_found} = DownloadService.get_job_status(Ecto.UUID.generate())
+      assert {:error, :job_not_found} =
+               DownloadService.get_job_status(Scope.unrestricted(), Ecto.UUID.generate())
     end
   end
 
-  describe "cancel_job/1" do
+  describe "cancel_job/2" do
     setup do
       library = insert(:library_path, type: :movies, path: "/movies")
       media_item = insert(:media_item, type: "movie")
@@ -216,18 +217,20 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "cancels an existing job", %{job: job} do
-      assert {:ok, :cancelled} = DownloadService.cancel_job(job.id)
+      assert {:ok, :cancelled} = DownloadService.cancel_job(Scope.unrestricted(), job.id)
 
       # Job should no longer exist
-      assert {:error, :job_not_found} = DownloadService.get_job_status(job.id)
+      assert {:error, :job_not_found} =
+               DownloadService.get_job_status(Scope.unrestricted(), job.id)
     end
 
     test "returns error for non-existent job" do
-      assert {:error, :job_not_found} = DownloadService.cancel_job(Ecto.UUID.generate())
+      assert {:error, :job_not_found} =
+               DownloadService.cancel_job(Scope.unrestricted(), Ecto.UUID.generate())
     end
   end
 
-  describe "get_job/1" do
+  describe "get_job/2" do
     setup do
       library = insert(:library_path, type: :movies, path: "/movies")
       media_item = insert(:media_item, type: "movie")
@@ -247,12 +250,13 @@ defmodule Mydia.Downloads.DownloadServiceTest do
     end
 
     test "returns job for existing id", %{job: job} do
-      assert {:ok, fetched_job} = DownloadService.get_job(job.id)
+      assert {:ok, fetched_job} = DownloadService.get_job(Scope.unrestricted(), job.id)
       assert fetched_job.id == job.id
     end
 
     test "returns error for non-existent job" do
-      assert {:error, :job_not_found} = DownloadService.get_job(Ecto.UUID.generate())
+      assert {:error, :job_not_found} =
+               DownloadService.get_job(Scope.unrestricted(), Ecto.UUID.generate())
     end
   end
 
@@ -336,6 +340,28 @@ defmodule Mydia.Downloads.DownloadServiceTest do
 
     test "defaults to 720p for unknown values" do
       assert DownloadService.resolution_to_atom("unknown") == :p720
+    end
+  end
+
+  describe "job lookups under an access restriction" do
+    setup do
+      movie = Mydia.MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+      media_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+      {:ok, job} = Downloads.get_or_create_job(media_file.id, "720p")
+
+      user =
+        Mydia.AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      %{job: job, scope: Scope.for_user(user)}
+    end
+
+    test "a hidden title's job reads as not found everywhere", %{job: job, scope: scope} do
+      assert {:error, :job_not_found} = DownloadService.get_job_status(scope, job.id)
+      assert {:error, :job_not_found} = DownloadService.get_job(scope, job.id)
+      assert {:error, :job_not_found} = DownloadService.cancel_job(scope, job.id)
+
+      assert {:ok, _} = DownloadService.get_job(Scope.unrestricted(), job.id),
+             "cancel must not have run for the restricted caller"
     end
   end
 end

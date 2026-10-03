@@ -88,7 +88,7 @@ defmodule MydiaWeb.Api.DownloadController do
     }
   """
   def job_status(conn, %{"job_id" => job_id}) do
-    case DownloadService.get_job_status(job_id) do
+    case DownloadService.get_job_status(conn.assigns.current_scope, job_id) do
       {:ok, job_info} ->
         conn
         |> put_status(:ok)
@@ -116,7 +116,7 @@ defmodule MydiaWeb.Api.DownloadController do
     {"status": "cancelled"}
   """
   def cancel_job(conn, %{"job_id" => job_id}) do
-    case DownloadService.cancel_job(job_id) do
+    case DownloadService.cancel_job(conn.assigns.current_scope, job_id) do
       {:ok, :cancelled} ->
         conn
         |> put_status(:ok)
@@ -137,7 +137,7 @@ defmodule MydiaWeb.Api.DownloadController do
   Supports progressive download for files that are still being transcoded.
   """
   def download_file(conn, %{"job_id" => job_id}) do
-    case DownloadService.get_job(job_id) do
+    case DownloadService.get_job(conn.assigns.current_scope, job_id) do
       {:error, :job_not_found} ->
         conn
         |> put_status(:not_found)

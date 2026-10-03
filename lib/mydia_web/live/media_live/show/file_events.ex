@@ -512,7 +512,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
   end
 
   def cancel_transcode(%{"job-id" => job_id}, socket) do
-    case Downloads.DownloadService.cancel_job(job_id) do
+    case Downloads.DownloadService.cancel_job(socket.assigns.current_scope, job_id) do
       {:ok, :cancelled} ->
         media_item = socket.assigns.media_item
 
