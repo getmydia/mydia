@@ -5,7 +5,10 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
+import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../presentation/screens/sources/source_item_screen.dart';
+import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
@@ -313,6 +316,26 @@ GoRouter appRouter(Ref ref) {
                 sourceId: SourceId(state.pathParameters['sourceId']!),
                 id: state.pathParameters['libraryId']!,
               ),
+            ),
+          ),
+          GoRoute(
+            path: '/s/:sourceId/item/:kind/:itemId',
+            name: 'source_item',
+            builder: (context, state) => SourceItemScreen(
+              item: ItemRef(
+                sourceId: SourceId(state.pathParameters['sourceId']!),
+                kind:
+                    ItemKind.values.asNameMap()[state.pathParameters['kind']] ??
+                        ItemKind.movie,
+                externalId: state.pathParameters['itemId']!,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/s/:sourceId/search',
+            name: 'source_search',
+            builder: (context, state) => SourceSearchScreen(
+              sourceId: SourceId(state.pathParameters['sourceId']!),
             ),
           ),
           GoRoute(
