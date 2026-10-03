@@ -74,7 +74,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
      socket
      |> assign(:password_mode, mode)
      |> assign(:show_password, false)
-     |> assign_create_form()}
+     |> assign_create_form(socket.assigns.create_form.params)}
   end
 
   def handle_event("toggle_show_password", _params, socket) do
@@ -82,7 +82,11 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   end
 
   def handle_event("validate_create", %{"create" => create_params}, socket) do
-    changeset = validate_create(create_params, socket.assigns.password_mode)
+    changeset =
+      create_params
+      |> validate_create(socket.assigns.password_mode)
+      |> Map.put(:action, :validate)
+
     {:noreply, assign(socket, :create_form, to_form(changeset, as: :create))}
   end
 
@@ -148,7 +152,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
       {:noreply,
        socket
        |> put_flash(:error, "Please fix the errors below")
-       |> assign(:create_form, to_form(changeset, as: :create))}
+       |> assign(:create_form, to_form(Map.put(changeset, :action, :insert), as: :create))}
     end
   end
 
@@ -481,7 +485,7 @@ defmodule MydiaWeb.AdminUsersLive.Index do
     assign(socket, :users, users_with_stats)
   end
 
-  defp assign_create_form(socket) do
+  defp assign_create_form(socket, params \\ %{}) do
     types =
       case socket.assigns.password_mode do
         "manual" ->
@@ -501,24 +505,10 @@ defmodule MydiaWeb.AdminUsersLive.Index do
           }
       end
 
+    # Passwords are deliberately not carried across a mode switch.
     data =
-      case socket.assigns.password_mode do
-        "manual" ->
-          %{
-            username: "",
-            email: "",
-            role: "guest",
-            password: "",
-            password_confirmation: ""
-          }
-
-        "auto" ->
-          %{
-            username: "",
-            email: "",
-            role: "guest"
-          }
-      end
+      %{"username" => "", "email" => "", "role" => "guest"}
+      |> Map.merge(Map.take(params, ["username", "email", "role"]))
 
     changeset =
       {%{}, types}

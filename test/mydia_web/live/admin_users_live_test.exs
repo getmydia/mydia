@@ -91,4 +91,72 @@ defmodule MydiaWeb.AdminUsersLiveTest do
     refute Mydia.Accounts.has_passkeys?(user)
     refute has_element?(view, "#passkey-badge-#{user.id}")
   end
+
+  describe "create local user form" do
+    defp open_create(view) do
+      view |> element(~s{button[phx-click="open_create_modal"]}) |> render_click()
+      view
+    end
+
+    defp switch_create_mode(view, mode) do
+      view
+      |> element(~s{button[phx-click="toggle_password_mode"][phx-value-mode="#{mode}"]})
+      |> render_click()
+
+      view
+    end
+
+    test "a short manual password marks the password field", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      view |> open_create() |> switch_create_mode("manual")
+
+      view
+      |> form("#create-user-form",
+        create: %{
+          username: "casey",
+          email: "casey@example.com",
+          role: "guest",
+          password: "abcd",
+          password_confirmation: "abcd"
+        }
+      )
+      |> render_submit()
+
+      assert has_element?(
+               view,
+               ~s{#create-user-form input[name="create[password]"].input-error}
+             )
+
+      assert has_element?(view, "#create-user-form", "must be at least 8 characters")
+      refute Mydia.Accounts.get_user_by_username("casey")
+    end
+
+    test "switching to manual keeps what was typed", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      open_create(view)
+
+      view
+      |> form("#create-user-form",
+        create: %{username: "casey", email: "casey@example.com", role: "user"}
+      )
+      |> render_change()
+
+      switch_create_mode(view, "manual")
+
+      assert has_element?(
+               view,
+               ~s{#create-user-form input[name="create[username]"][value="casey"]}
+             )
+
+      assert has_element?(
+               view,
+               ~s{#create-user-form input[name="create[email]"][value="casey@example.com"]}
+             )
+
+      assert has_element?(
+               view,
+               ~s{#create-user-form select[name="create[role]"] option[value="user"][selected]}
+             )
+    end
+  end
 end
