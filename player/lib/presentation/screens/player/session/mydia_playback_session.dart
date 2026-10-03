@@ -8,6 +8,10 @@ import 'package:flutter/foundation.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../../core/playback/candidates_from_graphql.dart';
+import '../../../../core/playback/playback_controller.dart';
+import '../../../../core/playback/stream_urls.dart';
+import '../../../../core/player/progress_reporter.dart';
+import '../../../../core/player/progress_service.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
@@ -26,9 +30,10 @@ import '../../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
-import '../../../widgets/subtitle_track_selector.dart';
+import '../../../../domain/models/subtitle_search_outcome.dart';
 import '../subtitle_content_query.dart';
 import '../subtitle_preference.dart';
+import 'mydia_streaming.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
@@ -37,9 +42,13 @@ class MydiaPlaybackSession implements PlaybackSession {
     required GraphQLClient? Function() client,
     required Future<GraphQLClient> Function() awaitClient,
     required PlaybackTarget Function() target,
+    MydiaStreamingDeps? streaming,
   })  : _client = client,
         _awaitClient = awaitClient,
-        _target = target;
+        _target = target,
+        _streaming = streaming;
+
+  final MydiaStreamingDeps? _streaming;
 
   /// The screen's current client, null until the provider first resolves.
   final GraphQLClient? Function() _client;
@@ -50,6 +59,90 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   bool get canWrite => _client() != null;
+
+  @override
+  Set<PlaybackFeature> get features => PlaybackFeature.values.toSet();
+
+  @override
+  Future<ProgressReporter> openProgress() async {
+    final deps = _streaming;
+    if (deps == null) {
+      throw StateError('MydiaPlaybackSession was built without streaming');
+    }
+    final client = await _awaitClient();
+    deps.adoptClient(client);
+    return ProgressService(client);
+  }
+
+  /// The streaming branch of the player screen's `_initializePlayer`, moved
+  /// unchanged: client, URL and token, the p2p proxy, then the transport.
+  @override
+  Future<StreamingPreparation> prepareStreaming({
+    required Object owner,
+    required void Function(String message) onProgress,
+    required bool Function() isCurrent,
+  }) async {
+    final deps = _streaming;
+    if (deps == null) {
+      throw StateError('MydiaPlaybackSession was built without streaming');
+    }
+    final graphqlClient = await _awaitClient();
+    if (!isCurrent()) return const StreamingSuperseded();
+    // Captured now rather than left to the screen's provider listener: a
+    // dispose inside this window must still see the client that started a
+    // session, or the HLS session leaks until its inactivity timeout.
+    deps.adoptClient(graphqlClient);
+
+    final serverUrl = await deps.serverUrl();
+    final token = await deps.authToken();
+    if (!isCurrent()) return const StreamingSuperseded();
+    if (serverUrl == null || token == null) {
+      return const StreamingUnavailable(
+          'Server URL or authentication token not available');
+    }
+
+    final connectionState = deps.connection();
+    final isP2PMode = connectionState.isP2PMode;
+    if (isP2PMode) {
+      final serverNodeAddr = connectionState.serverNodeAddr;
+      if (serverNodeAddr == null) {
+        throw Exception('Server node address not available for P2P connection');
+      }
+      onProgress('Connecting via P2P...');
+      final proxy = deps.mediaProxy();
+      // Held against the screen's State, released at its dispose. A re-run
+      // re-targets the proxy without stacking holds.
+      await proxy.start(
+        owner: owner,
+        targetPeer: serverNodeAddr,
+        authToken: token,
+      );
+      if (!isCurrent()) return const StreamingSuperseded();
+      debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
+    }
+
+    return StreamingReady(StreamingSetup(
+      memoryKey: isP2PMode ? connectionState.serverNodeAddr! : serverUrl,
+      progress: ProgressService(graphqlClient),
+      scrubThumbnails: (
+        serverUrl: serverUrl,
+        token: token,
+        isP2PMode: isP2PMode
+      ),
+      createTransport: ({required bool relayed}) => PlaybackController(
+        client: _client,
+        urls: isP2PMode
+            ? ProxyStreamUrls(deps.mediaProxy())
+            : HttpStreamUrls(
+                serverUrl: serverUrl,
+                bearerToken: token,
+                mediaToken: deps.mediaToken,
+              ),
+        features: deps.serverFeatures(),
+        relayed: relayed,
+      ),
+    ));
+  }
 
   @override
   Future<WriteOutcome> saveSubtitleOffset({

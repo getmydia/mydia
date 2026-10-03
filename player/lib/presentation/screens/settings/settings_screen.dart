@@ -24,6 +24,7 @@ import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
@@ -117,6 +118,8 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 18),
                       _ManageSection(connection: summary),
+                      const SizedBox(height: 18),
+                      const SourcesSettingsSection(),
                       const SizedBox(height: 18),
                       _AccountSection(
                         onSignOut: () => _handleSignOut(context, ref),

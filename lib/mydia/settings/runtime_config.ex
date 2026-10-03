@@ -603,6 +603,7 @@ defmodule Mydia.Settings.RuntimeConfig do
     %LibraryPath{
       id: build_runtime_id(:library_path, path),
       path: path,
+      name: Map.get(map, :name),
       type: Map.get(map, :type),
       monitored: Map.get(map, :monitored, true),
       scan_interval: Map.get(map, :scan_interval),

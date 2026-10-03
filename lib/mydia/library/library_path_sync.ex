@@ -193,6 +193,11 @@ defmodule Mydia.Library.LibraryPathSync do
         Map.put(attrs, :scan_interval, runtime_path.scan_interval)
       end
 
+    # Same layering as scan_interval: an unset LIBRARY_PATH_<N>_NAME arrives
+    # as nil and must not clear a name stored in the database.
+    attrs =
+      if is_nil(runtime_path.name), do: attrs, else: Map.put(attrs, :name, runtime_path.name)
+
     if existing do
       existing |> LibraryPath.changeset(attrs) |> Repo.update()
     else

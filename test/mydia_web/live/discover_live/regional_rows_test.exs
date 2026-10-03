@@ -349,7 +349,8 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
           regional_rows: %{},
           selected_genres: [],
           selected_language: nil,
-          selected_year: nil,
+          year_from: nil,
+          year_to: nil,
           min_rating: nil,
           sort_by: "primary_release_date.desc",
           current_scope: %Mydia.Accounts.Scope{

@@ -54,6 +54,12 @@ class PosterFrame extends ConsumerStatefulWidget {
   /// Artwork URL. Null, empty, or a load failure renders [placeholder].
   final String? imageUrl;
 
+  /// Sent with the artwork request. Carries a third-party credential.
+  final Map<String, String>? imageHeaders;
+
+  /// See `ArtworkImage.cacheKey`.
+  final String? imageCacheKey;
+
   /// Rendered when there is no artwork, and on load failure. Callers supply
   /// their own icon and ground so each surface stays recognisable.
   final Widget placeholder;
@@ -79,6 +85,8 @@ class PosterFrame extends ConsumerStatefulWidget {
   const PosterFrame({
     super.key,
     this.imageUrl,
+    this.imageHeaders,
+    this.imageCacheKey,
     required this.placeholder,
     this.loadingPlaceholder,
     this.overlays = const <Widget>[],
@@ -114,6 +122,10 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     return url != null && url.isNotEmpty;
   }
 
+  /// The ambient backdrop loads its artwork without headers, so artwork that
+  /// needs them (a third-party credential) can never be published to it.
+  bool get _canPublishBackdrop => _hasArtwork && widget.imageHeaders == null;
+
   @override
   void initState() {
     super.initState();
@@ -124,7 +136,7 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     setState(() => _isHovered = true);
     // Drive the ambient backdrop to this poster's artwork so the real-blur
     // chrome tints with it (R5/R9). Skipped when there is no artwork.
-    if (_hasArtwork) {
+    if (_canPublishBackdrop) {
       publishBackdropHover(
         ref,
         BackdropSource(imageUrl: widget.imageUrl, id: widget.imageUrl),
@@ -145,7 +157,7 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     // nor onExit. Without this, the backdrop would stay pinned to whichever
     // poster last triggered a real hover event.
     if (_isHovered && widget.imageUrl != oldWidget.imageUrl) {
-      final hasArtwork = _hasArtwork;
+      final hasArtwork = _canPublishBackdrop;
       final url = widget.imageUrl;
       // What this instance previously had published, in case the no-artwork
       // branch below needs to retract exactly that (and nothing fresher).
@@ -253,6 +265,8 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
                 LayoutBuilder(
                   builder: (context, constraints) => ArtworkImage(
                     imageUrl: url,
+                    headers: widget.imageHeaders,
+                    cacheKey: widget.imageCacheKey,
                     fit: BoxFit.cover,
                     cacheManager: PosterCacheManager(),
                     decodeWidth: artworkDecodeWidth(

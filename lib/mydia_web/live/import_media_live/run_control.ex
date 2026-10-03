@@ -8,6 +8,8 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Settings.LibraryPath
+
   attr :library_path, :map, default: nil
   attr :active_run, :map, default: nil
   attr :outcome_run, :map, default: nil
@@ -35,8 +37,8 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
               <span class="loading loading-spinner loading-md" />
             </div>
             <h2 class="text-2xl font-bold">Scanning library</h2>
-            <p class="text-sm text-base-content/60 mt-1 font-mono truncate">
-              {@library_path.path}
+            <p class="text-sm text-base-content/60 mt-1 truncate" title={@library_path.path}>
+              {LibraryPath.display_name(@library_path)}
             </p>
           </div>
           <.run_progress run={@active_run} />
@@ -65,7 +67,9 @@ defmodule MydiaWeb.ImportMediaLive.RunControl do
 
       <div class="flex-1 min-w-0">
         <h2 class="text-lg font-bold">Scan this library</h2>
-        <p class="text-xs text-base-content/60 mt-1 font-mono truncate">{@library_path.path}</p>
+        <p class="text-xs text-base-content/60 mt-1 truncate" title={@library_path.path}>
+          {LibraryPath.display_name(@library_path)}
+        </p>
       </div>
 
       <label class="flex items-center gap-3 cursor-pointer rounded-xl border border-base-200 bg-base-200/40 px-3.5 py-2.5 hover:bg-base-200 transition-colors">

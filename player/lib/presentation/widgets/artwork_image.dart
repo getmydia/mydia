@@ -22,6 +22,7 @@ class ArtworkImage extends StatelessWidget {
     this.cacheManager,
     this.decodeWidth,
     this.headers,
+    this.cacheKey,
     this.fit,
     this.alignment = Alignment.center,
     this.width,
@@ -42,6 +43,10 @@ class ArtworkImage extends StatelessWidget {
   final int? decodeWidth;
 
   final Map<String, String>? headers;
+
+  /// Disk-cache identity when the URL is not stable, such as a URL built
+  /// against whichever server connection is current.
+  final String? cacheKey;
   final BoxFit? fit;
   final Alignment alignment;
   final double? width;
@@ -65,6 +70,7 @@ class ArtworkImage extends StatelessWidget {
         cacheManager: cacheManager,
         decodeWidth: decodeWidth,
         headers: headers,
+        cacheKey: cacheKey,
       ),
       // OctoImage does not fade without a placeholder, so there is always one.
       placeholderBuilder: placeholder ?? (_) => Container(),

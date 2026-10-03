@@ -8,6 +8,8 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
 
   use MydiaWeb, :html
 
+  alias Mydia.Settings.LibraryPath
+
   @doc """
   Renders the resolved target library.
 
@@ -74,7 +76,7 @@ defmodule MydiaWeb.MediaLive.Show.LibraryComponents do
       <div class="text-xs text-base-content/50">Library</div>
       <div class="text-sm font-medium truncate">
         <%= if @target_library do %>
-          {Path.basename(@target_library.path)}
+          {LibraryPath.display_name(@target_library)}
           <span class="text-xs font-normal text-base-content/50">
             {reason_label(@target_reason)}
           </span>

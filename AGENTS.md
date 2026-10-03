@@ -368,6 +368,7 @@ Read the relevant one before working in that area:
 | `native/README.md`, `plugins/README.md` | NIF crates, p2p, wasip2 guests, the host-vs-plugin ownership rule |
 | `.github/ci.md`, `.github/ci-flakes.md` | CI mechanics, releases, the flake catalogue |
 | `player/docs/` | player workflow, testing, Riverpod, packaging |
+| `player/lib/core/sources/README.md` | Plex and Stash sources: storage, connection race, credentials, playback seam |
 
 ### Phoenix v1.8 guidelines
 

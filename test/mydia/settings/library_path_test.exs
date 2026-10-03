@@ -120,4 +120,90 @@ defmodule Mydia.Settings.LibraryPathTest do
       assert Ecto.Changeset.get_field(changeset, :scan_interval) == nil
     end
   end
+
+  describe "name" do
+    test "trims the name" do
+      cs = LibraryPath.changeset(%LibraryPath{}, %{path: "/m", type: :movies, name: "  Kids  "})
+      assert cs.valid?
+      assert Ecto.Changeset.get_change(cs, :name) == "Kids"
+    end
+
+    test "stores a blank name as nil" do
+      cs =
+        LibraryPath.changeset(%LibraryPath{name: "Old"}, %{path: "/m", type: :movies, name: "   "})
+
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :name) == nil
+    end
+
+    test "rejects a name longer than 60 characters" do
+      cs =
+        LibraryPath.changeset(%LibraryPath{}, %{
+          path: "/m",
+          type: :movies,
+          name: String.duplicate("a", 61)
+        })
+
+      refute cs.valid?
+      assert {_, opts} = cs.errors[:name]
+      assert opts[:count] == 60
+    end
+  end
+
+  describe "display_names/1" do
+    test "leaves unique labels alone" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk1/Shows", name: "Kids"}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{"a" => "Films", "b" => "Kids"}
+    end
+
+    test "adds the path to labels that collide" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk2/Films", name: nil},
+        %LibraryPath{id: "c", path: "/disk1/Shows", name: nil}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{
+               "a" => "Films (/disk1/Films)",
+               "b" => "Films (/disk2/Films)",
+               "c" => "Shows"
+             }
+    end
+
+    test "a name that matches another library's folder name also disambiguates" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk2/Other", name: "Films"}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{
+               "a" => "Films (/disk1/Films)",
+               "b" => "Films (/disk2/Other)"
+             }
+    end
+  end
+
+  describe "display_name/1" do
+    test "prefers the name" do
+      assert LibraryPath.display_name(%LibraryPath{path: "/media/second_library", name: "Kids"}) ==
+               "Kids"
+    end
+
+    test "falls back to the folder name, never the full path" do
+      assert LibraryPath.display_name(%LibraryPath{path: "/media/second_library", name: nil}) ==
+               "second_library"
+    end
+
+    test "ignores a trailing slash" do
+      assert LibraryPath.display_name(%{path: "/media/anime/"}) == "anime"
+    end
+
+    test "falls back to the path when it has no basename" do
+      assert LibraryPath.display_name(%{path: "/", name: nil}) == "/"
+    end
+  end
 end

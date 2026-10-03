@@ -108,14 +108,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
       selected_language = params["language"]
-      selected_year = parse_year_param(params["year"])
+
+      {year_from, year_to} =
+        order_years(parse_year_param(params["year_from"]), parse_year_param(params["year_to"]))
+
       min_rating = parse_rating_param(params["rating"])
       page = parse_page_param(params["page"])
 
       # Determine if filters are active or discover mode is explicitly selected
       filters_active? =
         selected_genres != [] or selected_language != nil or
-          selected_year != nil or min_rating != nil
+          year_from != nil or year_to != nil or min_rating != nil
 
       # The home tab needs a saved country. Without one (an old link, or the
       # tab was just removed) it falls back the same way an unknown category
@@ -144,7 +147,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:search_mode, search_mode)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
-        |> assign(:selected_year, selected_year)
+        |> assign(:year_from, year_from)
+        |> assign(:year_to, year_to)
         |> assign(:min_rating, min_rating)
         |> assign(:page, page)
         |> assign(:items, [])
@@ -228,7 +232,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
        |> assign(:selected_language, nil)
-       |> assign(:selected_year, nil)
+       |> assign(:year_from, nil)
+       |> assign(:year_to, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")}
     end
@@ -272,7 +277,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
       build_url_params(socket.assigns,
         genre: params["genre"],
         language: params["language"],
-        year: params["year"],
+        year_from: params["year_from"],
+        year_to: params["year_to"],
         rating: params["rating"],
         sort: params["sort"]
       )
@@ -1217,11 +1223,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
       end
 
     opts =
-      if assigns.selected_year do
-        Keyword.put(opts, :year, assigns.selected_year)
-      else
-        opts
-      end
+      if assigns.year_from,
+        do: Keyword.put(opts, :release_date_gte, "#{assigns.year_from}-01-01"),
+        else: opts
+
+    opts =
+      if assigns.year_to,
+        do: Keyword.put(opts, :release_date_lte, "#{assigns.year_to}-12-31"),
+        else: opts
 
     opts =
       if assigns.min_rating do
@@ -1230,8 +1239,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
-    Keyword.merge(base, Keyword.put(opts, :sort_by, assigns.sort_by))
+    base
+    |> Keyword.merge(Keyword.put(opts, :sort_by, assigns.sort_by), fn
+      key, source, user when key in [:release_date_gte, :release_date_lte] ->
+        narrow_release_bound(key, source, user)
+
+      _key, _source, user ->
+        user
+    end)
   end
+
+  # A year range narrows a regional source's release window, never widens it.
+  # Dates are ISO `YYYY-MM-DD`, so string order is date order.
+  defp narrow_release_bound(:release_date_gte, source, user), do: max(source, user)
+  defp narrow_release_bound(:release_date_lte, source, user), do: min(source, user)
 
   defp build_url_params(assigns, overrides) do
     params = %{"type" => to_string(assigns.media_type)}
@@ -1273,8 +1294,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if language && language != "", do: Map.put(params, "language", language), else: params
 
-    year = Keyword.get(overrides, :year, assigns.selected_year)
-    params = if year && year != "", do: Map.put(params, "year", to_string(year)), else: params
+    params =
+      Enum.reduce([:year_from, :year_to], params, fn key, acc ->
+        case Keyword.get(overrides, key, Map.get(assigns, key)) do
+          value when value in [nil, ""] -> acc
+          value -> Map.put(acc, to_string(key), to_string(value))
+        end
+      end)
 
     rating = Keyword.get(overrides, :rating, assigns.min_rating)
 
@@ -1325,10 +1351,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp parse_year_param(year_string) do
     case Integer.parse(year_string) do
-      {year, ""} when year > 1900 and year < 2100 -> year
+      {year, ""} when year >= 1900 and year < 2100 -> year
       _ -> nil
     end
   end
+
+  # A reversed range is almost always a slip, so it is read as the range the
+  # user meant rather than one that matches nothing.
+  defp order_years(from, to) when is_integer(from) and is_integer(to) and from > to,
+    do: {to, from}
+
+  defp order_years(from, to), do: {from, to}
 
   defp parse_rating_param(nil), do: nil
   defp parse_rating_param(""), do: nil

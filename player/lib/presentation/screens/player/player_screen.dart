@@ -22,6 +22,7 @@ import '../../../core/player/hls_engine.dart';
 import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
+import '../../../core/player/progress_reporter.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
 import '../../../core/player/image_subtitle_sidecar.dart';
@@ -55,6 +56,7 @@ import '../../../core/playback/quality_choice.dart';
 import '../../../core/playback/seek_decision.dart';
 import '../../../core/playback/source_switch_gate.dart';
 import '../../../core/playback/playback_controller.dart';
+import '../../../core/playback/playback_transport.dart';
 import '../../../core/playback/link_path.dart';
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
@@ -93,7 +95,6 @@ import '../../../domain/models/cast_device.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/playback/server_features.dart';
-import '../../../core/playback/stream_urls.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
@@ -109,6 +110,7 @@ import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/update/update_provider.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
+import 'session/mydia_streaming.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
 import 'player_screen_views.dart';
@@ -166,6 +168,11 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// Creates the playback engine. Reused across native source switches.
   final Player Function()? createPlayer;
 
+  /// The server conversation for this playback. Null builds the Mydia
+  /// session from the route, as every Mydia caller does; a Plex or Stash
+  /// route passes its own.
+  final PlaybackSession? session;
+
   /// Creates the window sizer. Null uses [createPlayerWindowSizer]; tests
   /// pass a recording fake to see whether the window was re-attached.
   @visibleForTesting
@@ -184,6 +191,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.subtitleTrack,
     this.autoplay = true,
     this.createPlayer,
+    this.session,
     this.createWindowSizer,
   });
 
@@ -313,7 +321,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
-  ProgressService? _progressService;
+  ProgressReporter? _progressService;
 
   /// Play-to-first-frame marks for this screen's current load. Replaced on
   /// every `_initializePlayer` run, so a source restart times itself.
@@ -728,7 +736,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Owns the streaming session for the source now playing. Rebuilt on every
   /// online initialization, since the connection mode it needs can change
   /// between them; the previous one's session is ended first.
-  PlaybackController? _playback;
+  PlaybackTransport? _playback;
   PlaybackMonitor? _monitor;
   AdaptationPolicy? _policy;
   StreamSubscription<HealthSample>? _healthSubscription;
@@ -1042,17 +1050,32 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
-    _session = MydiaPlaybackSession(
-      client: () => _graphqlClient,
-      awaitClient: () => ref.read(asyncGraphqlClientProvider.future),
-      target: () => PlaybackTarget(
-        mediaType: widget.mediaType,
-        mediaId: widget.mediaId,
-        fileId: widget.fileId,
-        showId: widget.showId,
-        seasonNumber: widget.seasonNumber,
-      ),
-    );
+    _session = widget.session ??
+        MydiaPlaybackSession(
+          client: () => _graphqlClient,
+          awaitClient: () => ref.read(asyncGraphqlClientProvider.future),
+          target: () => PlaybackTarget(
+            mediaType: widget.mediaType,
+            mediaId: widget.mediaId,
+            fileId: widget.fileId,
+            showId: widget.showId,
+            seasonNumber: widget.seasonNumber,
+          ),
+          streaming: MydiaStreamingDeps(
+            serverUrl: () => ref.read(serverUrlProvider.future),
+            authToken: () => ref.read(authTokenProvider.future),
+            connection: () => ref.read(conn.connectionProvider),
+            mediaProxy: () => ref.read(mediaProxyProvider),
+            mediaToken: () async {
+              final service =
+                  await ref.read(asyncMediaTokenServiceProvider.future);
+              await service.ensureValidToken();
+              return service.getToken();
+            },
+            serverFeatures: () => ref.read(serverFeaturesProvider),
+            adoptClient: (client) => _graphqlClient = client,
+          ),
+        );
 
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
@@ -1321,6 +1344,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     required String fileId,
     int? loadGeneration,
   }) async {
+    if (!_session.features.contains(PlaybackFeature.cast)) return false;
     final target = ref.read(castTargetProvider);
     if (target == null) return false;
 
@@ -1464,16 +1488,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       // Check if we're in offline mode
       final authState = ref.read(authStateProvider);
-      final isOfflineMode = authState.maybeWhen(
-        data: (status) => status == AuthStatus.offlineMode,
-        orElse: () => false,
-      );
+      final playsDownloads =
+          _session.features.contains(PlaybackFeature.downloads);
+      final isOfflineMode = playsDownloads &&
+          authState.maybeWhen(
+            data: (status) => status == AuthStatus.offlineMode,
+            orElse: () => false,
+          );
 
       // Check for downloaded content first (before any network operations)
-      final downloadManager = await ref.read(downloadManagerProvider.future);
+      // Only Mydia has downloads. A Plex or Stash id can collide with a
+      // Mydia download's id, so it is never looked up.
+      final downloadedMedia = playsDownloads
+          ? (await ref.read(downloadManagerProvider.future))
+              .getDownloadedMediaById(widget.mediaId)
+          : null;
       if (!_isCurrentLoad(gen)) return;
-      final downloadedMedia =
-          downloadManager.getDownloadedMediaById(widget.mediaId);
 
       // In offline mode, only downloaded content can be played
       if (isOfflineMode) {
@@ -1569,11 +1599,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Try to initialize progress sync (optional - local playback
           // works even if server is unreachable)
           try {
-            final graphqlClient =
-                await ref.read(asyncGraphqlClientProvider.future);
+            final progress = await _session.openProgress();
             if (!_isCurrentLoad(gen)) return;
-            _graphqlClient = graphqlClient;
-            _progressService = ProgressService(graphqlClient);
+            _progressService = progress;
             await _fetchProgressAndEpisodes(gen);
             if (!_isCurrentLoad(gen)) return;
           } catch (e) {
@@ -1646,70 +1674,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         debugPrint('Downloaded file not found, falling back to streaming');
       }
 
-      // Online mode - initialize network services
-      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
+      // Online mode: the session sets up its own transport and progress.
+      final preparation = await _session.prepareStreaming(
+        owner: this,
+        onProgress: _setLoadingMessage,
+        isCurrent: () => _isCurrentLoad(gen),
+      );
       if (!_isCurrentLoad(gen)) return;
-
-      // Capture it directly rather than relying on the `ref.listenManual` in
-      // `initState` to have fired by now. That listener is the right mechanism
-      // for keeping the field fresh across a reconnect, but it only populates
-      // it once the provider resolves, and this await resolves on the same
-      // transition — the ordering between the two is a Riverpod internal. If
-      // the screen were disposed inside that window we would have started a
-      // session with a client `_terminateHlsSession()` could not see, and the
-      // HLS session would leak until its inactivity timeout.
-      _graphqlClient = graphqlClient;
-
-      // Get server URL and token
-      final serverUrl = await ref.read(serverUrlProvider.future);
-      final token = await ref.read(authTokenProvider.future);
-      if (!_isCurrentLoad(gen)) return;
-
-      if (serverUrl == null || token == null) {
-        if (mounted) {
-          setState(() {
-            _error = 'Server URL or authentication token not available';
-            _isLoading = false;
-          });
-        }
-        return;
+      final StreamingSetup setup;
+      switch (preparation) {
+        case StreamingSuperseded():
+          return;
+        case StreamingUnavailable(:final message):
+          if (mounted) {
+            setState(() {
+              _error = message;
+              _isLoading = false;
+            });
+          }
+          return;
+        case StreamingReady(setup: final ready):
+          setup = ready;
       }
-
-      // Check connection mode
-      final connectionState = ref.read(conn.connectionProvider);
-      final isP2PMode = connectionState.isP2PMode;
-
-      // Start local proxy if P2P
-      if (isP2PMode) {
-        final serverNodeAddr = connectionState.serverNodeAddr;
-        if (serverNodeAddr == null) {
-          throw Exception(
-              'Server node address not available for P2P connection');
-        }
-
-        if (mounted) {
-          setState(() {
-            _loadingMessage = 'Connecting via P2P...';
-          });
-        }
-
-        final proxy = ref.read(mediaProxyProvider);
-        // Held against this State, and released by [_terminateHlsSession] at
-        // dispose. This method re-runs within one screen's life (a session
-        // restart past the transcoded end, a cast rebind); the hold is per
-        // owner, so those re-runs re-target the proxy without stacking up a
-        // debt that a single stop could not settle.
-        await proxy.start(
-          owner: this,
-          targetPeer: serverNodeAddr,
-          authToken: token,
-        );
-        if (!_isCurrentLoad(gen)) return;
-        debugPrint('[PlayerScreen] Media proxy serving at ${proxy.baseUrl}');
-      }
-
-      // Initialize progress service
-      _progressService = ProgressService(graphqlClient);
+      _progressService = setup.progress;
 
       // Ask about the *file* the user picked. Keying this on mediaId left
       // the server to pick one of the item's files with no way to express the
@@ -1806,18 +1793,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       final memory = await _openPlaybackMemory();
       if (!_isCurrentLoad(gen)) return;
-      // The p2p branch threw above if the node address was missing, so the
-      // cast is safe there; HTTP keys by URL.
-      final serverKey = isP2PMode ? connectionState.serverNodeAddr! : serverUrl;
+      // Mydia keys stall and failure memory by server URL or p2p node; a
+      // Plex or Stash session by its source id.
+      final serverKey = setup.memoryKey;
       _memory = memory;
       _serverKey = serverKey;
       _playFileId = playFileId;
-      _attachScrubThumbnails(
-        serverUrl: serverUrl,
-        token: token,
-        fileId: playFileId,
-        isP2PMode: isP2PMode,
-      );
+      final thumbnails = setup.scrubThumbnails;
+      if (thumbnails != null) {
+        _attachScrubThumbnails(
+          serverUrl: thumbnails.serverUrl,
+          token: thumbnails.token,
+          fileId: playFileId,
+          isP2PMode: thumbnails.isP2PMode,
+        );
+      } else {
+        _scrubThumbnails?.dispose();
+        _scrubThumbnails = null;
+      }
       // After an await: `ref` is only safe while mounted.
       final linkPath = mounted ? _currentLinkPath() : null;
 
@@ -1901,32 +1894,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         }
       }
 
-      final StreamUrls urls;
-      if (isP2PMode) {
-        urls = ProxyStreamUrls(_mediaProxy);
-      } else {
-        urls = HttpStreamUrls(
-          serverUrl: serverUrl,
-          bearerToken: token,
-          mediaToken: () async {
-            final service =
-                await ref.read(asyncMediaTokenServiceProvider.future);
-            await service.ensureValidToken();
-            return service.getToken();
-          },
-        );
-      }
-
       // A previous controller's session, from a cast stop or a proxy
       // handoff re-running this method, is ended before it is dropped.
       await _playback?.endSession();
       if (!_isCurrentLoad(gen)) return;
-      final playback = PlaybackController(
-        client: () => _graphqlClient,
-        urls: urls,
-        features: ref.read(serverFeaturesProvider),
-        relayed: _relayed,
-      );
+      final playback = setup.createTransport(relayed: _relayed);
       _playback = playback;
 
       final source = await playback.open(
@@ -2931,13 +2903,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     // Start progress tracking
-    if (_progressService != null) {
-      _progressService!.timeline = _timeline;
-      if (widget.mediaType == 'movie') {
-        _progressService!.startMovieSync(player, widget.mediaId);
-      } else if (widget.mediaType == 'episode') {
-        _progressService!.startEpisodeSync(player, widget.mediaId);
-      }
+    final progress = _progressService;
+    if (progress != null) {
+      progress.timeline = _timeline;
+      progress.start(player,
+          mediaType: widget.mediaType, mediaId: widget.mediaId);
     }
 
     // Listen for playback completion
@@ -3584,7 +3554,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // what left every downloaded-while-online record permanently unsynced,
       // queued behind a flush that would one day replay them over newer
       // server progress.
-      if (progressService != null) {
+      if (progressService is ProgressService) {
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
@@ -3609,11 +3579,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (progressService == null) return;
 
-    if (mediaType == 'movie') {
-      await progressService.saveMovieProgress(player, mediaId);
-    } else if (mediaType == 'episode') {
-      await progressService.saveEpisodeProgress(player, mediaId);
-    }
+    await progressService.save(player, mediaType: mediaType, mediaId: mediaId);
   }
 
   /// Seeks to a real media position, restarting the stream if necessary.
@@ -3730,6 +3696,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// from the 10-second progress sync: that would refetch Home hundreds of
   /// times per movie over what may be a p2p relay.
   void _invalidateAfterPlayback() {
+    if (!_session.features.contains(PlaybackFeature.libraryRefresh)) return;
     _invalidator.invalidate(
       InvalidationRules.playbackFinished(
         mediaType: widget.mediaType,
@@ -5161,7 +5128,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final isCasting = ref.watch(isCastingProvider);
     final castSession = ref.watch(castSessionProvider).value;
-    Widget body = isCasting && castSession != null
+    Widget body = _castSupported && isCasting && castSession != null
         ? CastPlaceholderView(
             session: castSession,
             title: widget.title ?? 'Untitled',
@@ -5346,7 +5313,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         PlayerTopBarSlot(
           child: ChromeTopBar(
             showBack: false,
-            castAction: castChromeActionFor(ref),
+            castAction: _castSupported ? castChromeActionFor(ref) : null,
             onCastTap: _showCastDevicePicker,
           ),
         ),
@@ -5395,7 +5362,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onBack: () => popOrGoHome(context),
           // The chrome's own cast pill. Null on a build that cannot cast at
           // all, which drops the pill rather than drawing an empty one.
-          castAction: castChromeActionFor(ref),
+          castAction: _castSupported ? castChromeActionFor(ref) : null,
           onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
@@ -5518,6 +5485,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Plain HTTP returns before reading the p2p status, so an HTTP session
   /// never builds the p2p providers just to learn it is not using them.
   LinkPath? _currentLinkPath() {
+    if (!_session.features.contains(PlaybackFeature.mydiaConnection)) {
+      return LinkPath.http;
+    }
     if (!ref.read(conn.connectionProvider).isP2PMode) return LinkPath.http;
     return linkPathFor(
       isP2P: true,
@@ -5525,14 +5495,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  /// Whether this session can hand playback to a cast device.
+  bool get _castSupported => _session.features.contains(PlaybackFeature.cast);
+
   StatsContext _statsContext() {
     final player = _player;
-    final status = ref.read(p2pStatusNotifierProvider);
-    final isP2P = ref.read(conn.connectionProvider).isP2PMode;
+    // A session without a Mydia connection is plain HTTP: do not read the
+    // p2p providers just to describe a link it is not using.
+    final usesMydia =
+        _session.features.contains(PlaybackFeature.mydiaConnection);
+    final status = usesMydia ? ref.read(p2pStatusNotifierProvider) : null;
+    final isP2P = usesMydia && ref.read(conn.connectionProvider).isP2PMode;
     final summary = ConnectionSummary.from(
       isP2P: isP2P,
-      type: status.peerConnectionType,
-      isInitialized: status.isInitialized,
+      type: status?.peerConnectionType ?? P2pConnectionType.none,
+      isInitialized: status?.isInitialized ?? false,
     );
     return buildStatsContext(
       plan: _plan,
@@ -5550,9 +5527,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       sourceContainer: sourceContainerOf(_planInputs),
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
-      linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
-          '${status.connectedPeersCount == 1 ? '' : 's'}',
-      linkHealthy: !status.isRelayConnected,
+      linkLabel: status == null
+          ? summary.label
+          : '${summary.label} - ${status.connectedPeersCount} peer'
+              '${status.connectedPeersCount == 1 ? '' : 's'}',
+      linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
     );
@@ -5579,6 +5558,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Show the cast device picker dialog, then hand the selected device to
   /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
+    if (!_castSupported) return;
     final device = await showCastDevicePicker(context);
     if (device == null || !mounted) return;
 

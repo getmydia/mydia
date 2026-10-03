@@ -200,6 +200,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
     socket
     |> assign(:library_options, options)
+    |> assign(:library_labels, LibraryPath.display_names(options))
     |> assign(:filter_library, if(keep?, do: selected))
   end
 

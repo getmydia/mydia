@@ -174,6 +174,9 @@ List<_Document> _collectDocuments() {
         path.endsWith('.freezed.dart')) {
       continue;
     }
+    // Stash's own GraphQL schema, sent to a Stash server, never Mydia's.
+    // These documents cannot conform to Mydia's schema by design.
+    if (path.contains('lib/core/sources/stash/')) continue;
 
     for (final match in _tripleQuoted.allMatches(entity.readAsStringSync())) {
       final isRaw = match.group(1) == 'r';

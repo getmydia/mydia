@@ -8,6 +8,7 @@ import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
 import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
+import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
@@ -175,6 +176,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Network changes make every Plex and Stash connection look again.
+    ref.read(networkChangeRefreshProvider);
     _remoteIntentsSubscription = ref
         .read(remoteTargetControllerProvider)
         .intents
@@ -458,6 +461,11 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref
+          .read(connectionRefreshBusProvider)
+          .ping(ConnectionRefreshReason.resume);
+    }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.
     if (state == AppLifecycleState.paused ||
