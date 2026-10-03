@@ -117,6 +117,7 @@ import 'session/playback_session_types.dart';
 import 'audio_track_detection.dart';
 import 'remote_control_mapping.dart';
 import 'stats_context_builder.dart';
+import 'subtitle_delay_controller.dart';
 import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
@@ -689,52 +690,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// newer switch leaves it for that switch to consume.
   SubtitleIntent? _subtitleIntentAcrossSwitch;
 
-  /// Stored per-track subtitle offsets from the server, keyed by track ref
-  /// (the same id space `SubtitleTrack.id`/`SubtitleContent` use). Empty
-  /// both before [_loadSubtitleOffsets] has run and after it has failed;
-  /// [_subtitleOffsetsLoaded] is what tells those two apart.
-  Map<String, int> _subtitleOffsets = {};
-
-  /// Whether [_loadSubtitleOffsets] has completed successfully at least
-  /// once for the media file now loaded, even when it found nothing to
-  /// report. `subtitleTrackSettings` does not exist on a server that
-  /// predates this feature, and it is a standalone root query precisely so
-  /// that failure stays contained to it (see the query's own doc comment)
-  /// rather than taking playback down with it.
-  ///
-  /// Gates the sheet's delay row and the `z`/`shift+z` keyboard nudge: with
-  /// this false, an empty [_subtitleOffsets] is indistinguishable from "the
-  /// server genuinely has nothing stored" and cannot be trusted enough to
-  /// nudge relative to, let alone Save over. See [subtitleDelayDisplayMs].
-  bool _subtitleOffsetsLoaded = false;
-
-  /// What the server had already shifted into the body currently loaded.
-  /// Equal to the stored offset for a track fetched over `SubtitleContent`
-  /// (`Delivery.content/3` applies it before returning); zero for an
-  /// mpv-native track mpv read straight out of the container, which the
-  /// server never saw, and for a bitmap sidecar, which it cannot shift. See
-  /// [bakedSubtitleOffsetMs] and [effectiveSubtitleDelayMs].
-  int _bakedSubtitleOffsetMs = 0;
-
-  /// The live, unsaved adjustment from the sheet's steppers or the
-  /// `z`/`shift+z` keys. Reset to zero on every track change by
-  /// [_onSubtitleTrackChanged].
-  ///
-  /// Applies to mpv the same way regardless of track origin -- but for an
-  /// mpv-native track, [_saveSubtitleDelay] refuses to persist it (see
-  /// [canSaveSubtitleDelay]). The asymmetry is real, not an oversight: the
-  /// live delay only needs [_subtitleNudgeMs] and [_bakedSubtitleOffsetMs],
-  /// neither of which cares what id space a track's id lives in, while
-  /// persisting needs a `trackRef` the next session's mpv probe can
-  /// reproduce, which an `mk_`-prefixed id is not.
-  int _subtitleNudgeMs = 0;
-
-  /// Feeds the subtitle sheet's delay row. A `ValueNotifier`, not a plain
-  /// field: the delay row lives inside a modal bottom sheet, a different
-  /// route from this State's own build method, so a `setState` here would
-  /// never reach it. `null` hides the row entirely -- no track selected, or
-  /// the offsets query never succeeded. Disposed in [dispose].
-  final ValueNotifier<int?> _subtitleDelayDisplay = ValueNotifier<int?>(null);
+  /// Offsets, baked shift and live nudge for the selected subtitle. See
+  /// [SubtitleDelayController].
+  late final SubtitleDelayController _subtitleDelay = SubtitleDelayController(
+    selectedTrack: () => _selectedSubtitleTrack,
+    applyDelay: (delayMs) async {
+      final player = _player;
+      if (player == null) return;
+      await applySubtitleDelay(player, delayMs);
+    },
+    saveOffset: ({required trackRef, required offsetMs}) =>
+        _session.saveSubtitleOffset(trackRef: trackRef, offsetMs: offsetMs),
+    canPersist: () => widget.fileId != 'offline' && _session.canWrite,
+    toast: _showToast,
+    mounted: () => mounted,
+    onChanged: () => setState(() {}),
+  );
 
   // Mapping from app model track IDs to media_kit track objects
   Map<String, AudioTrack> _mediaKitAudioTrackMap = {};
@@ -3076,7 +3047,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// on `SubtitleTrack` precisely so this can fail without taking playback
   /// down with it -- see the query's own doc comment. Every failure here,
   /// including one from a server too old to know the field at all, lands on
-  /// the same answer: no offsets, [_subtitleOffsetsLoaded] stays false, and
+  /// the same answer: no offsets, the controller's loaded flag stays false, and
   /// [_selectedSubtitleTrack]/mpv are never touched by this method.
   ///
   /// Resets both fields at the top, before the request: this runs again on
@@ -3084,211 +3055,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// and a previous file's offsets or its "loaded" flag must never survive
   /// into a new one just because this fetch happened to fail for it.
   ///
-  /// The session reads `networkOnly`, because `_saveSubtitleDelay` sends the
-  /// loaded offset plus the current nudge: a cached value would silently
-  /// overwrite a newer server offset with an older one. See
+  /// The session reads `networkOnly`, because `SubtitleDelayController.save`
+  /// sends the loaded offset plus the current nudge: a cached value would
+  /// silently overwrite a newer server offset with an older one. See
   /// player_screen_subtitle_offsets_cache_test.dart.
   Future<void> _loadSubtitleOffsets(int gen) async {
-    if (mounted) {
-      setState(() {
-        _subtitleOffsets = {};
-        _subtitleOffsetsLoaded = false;
-      });
-    }
+    if (mounted) setState(_subtitleDelay.clear);
 
     final offsets = await _session.subtitleOffsets();
     if (offsets == null) return;
     if (!_isCurrentLoad(gen)) return;
 
     try {
-      setState(() {
-        _subtitleOffsets = offsets;
-        _subtitleOffsetsLoaded = true;
-
-        // Defensive, not expected to fire in the normal flow: this is
-        // awaited inside [_fetchProgressAndEpisodes], which always
-        // completes before any track is auto-selected or picked. If a
-        // track were already selected by the time this resolves, its
-        // baked offset -- assumed zero until now for anything not read
-        // straight from the container -- needs to catch up to what the
-        // server actually shifted into the body it already delivered.
-        final current = _selectedSubtitleTrack;
-        if (current != null && !isMpvNativeSubtitleTrackId(current.id)) {
-          _bakedSubtitleOffsetMs = _subtitleOffsets[current.id] ?? 0;
-        }
-      });
-      await _syncSubtitleDelay();
+      setState(() => _subtitleDelay.setOffsets(offsets));
+      await _subtitleDelay.sync();
     } catch (e) {
       debugPrint('[PlayerScreen] Subtitle offsets unavailable: $e');
-    }
-  }
-
-  /// Resets the live nudge and recomputes the baked offset for whichever
-  /// track is now selected, then applies the result to mpv and the sheet's
-  /// delay display.
-  ///
-  /// Called from every site that can change [_selectedSubtitleTrack] --
-  /// both success paths of [_showSubtitleSelector], the auto-detected
-  /// default track in [_onTracksChanged], and the remote-control
-  /// `selectTrack` -- so a delay nudged for one track never leaks onto the
-  /// next regardless of which of those paths picked it.
-  ///
-  /// [keepNudge] is for the restore after a source switch: the viewer did
-  /// not change tracks, so a delay they nudged survives, while the baked
-  /// offset is still recomputed for whichever track id the restore landed
-  /// on (the server's copy of a stream and mpv's own differ there).
-  Future<void> _onSubtitleTrackChanged({bool keepNudge = false}) async {
-    final track = _selectedSubtitleTrack;
-    if (!keepNudge) _subtitleNudgeMs = 0;
-    _bakedSubtitleOffsetMs =
-        bakedSubtitleOffsetMs(track: track, offsets: _subtitleOffsets);
-    await _syncSubtitleDelay();
-  }
-
-  /// Applies [effectiveSubtitleDelayMs] to mpv for whichever track is
-  /// currently selected, and refreshes [_subtitleDelayDisplay] alongside
-  /// it -- the two must never drift apart, since the display is the only
-  /// place the viewer can see the number this just sent to mpv.
-  Future<void> _syncSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    final storedOffsetMs = _subtitleOffsets[track?.id] ?? 0;
-
-    if (mounted) {
-      _subtitleDelayDisplay.value = subtitleDelayDisplayMs(
-        trackId: track?.id,
-        offsetsLoaded: _subtitleOffsetsLoaded,
-        storedOffsetMs: storedOffsetMs,
-        nudgeMs: _subtitleNudgeMs,
-      );
-    }
-
-    final player = _player;
-    if (player == null) return;
-
-    await applySubtitleDelay(
-      player,
-      effectiveSubtitleDelayMs(
-        storedOffsetMs: storedOffsetMs,
-        bakedOffsetMs: _bakedSubtitleOffsetMs,
-        nudgeMs: _subtitleNudgeMs,
-      ),
-    );
-  }
-
-  /// Nudges the live subtitle delay by [deltaMs] and applies it immediately.
-  /// Bound to the `z`/`shift+z` keys and the sheet's steppers.
-  ///
-  /// Gated on [_subtitleOffsetsLoaded]: with the offsets query never having
-  /// succeeded, [_subtitleOffsets] cannot be trusted to hold the server's
-  /// real baseline (see that field's dartdoc), so nudging would move mpv
-  /// relative to an unknown starting point and a viewer would have no way
-  /// to tell how far off zero they actually are. No-ops rather than
-  /// nudging partially-informed.
-  Future<void> _nudgeSubtitleDelay(int deltaMs) async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-
-    setState(() => _subtitleNudgeMs += deltaMs);
-    final total = (_subtitleOffsets[track.id] ?? 0) + _subtitleNudgeMs;
-
-    await _syncSubtitleDelay();
-
-    // applySubtitleDelay is a genuine no-op on web -- there is no mpv
-    // sub-delay to set, and the body a web viewer sees always comes
-    // pre-baked from the SubtitleContent query. The nudge is still tracked
-    // and still contributes to what Save persists, but the OSD must not
-    // claim a visible change that has not happened yet.
-    _showToast(
-      subtitleDelayToastMessage(
-        totalMs: total,
-        appliesImmediately: !kIsWeb,
-      ),
-    );
-  }
-
-  /// Discards the live nudge, returning the delay to whatever is actually
-  /// stored for this track (or zero, for a track the server has no
-  /// correction for).
-  Future<void> _resetSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-    if (_subtitleNudgeMs == 0) return;
-
-    setState(() => _subtitleNudgeMs = 0);
-    await _syncSubtitleDelay();
-  }
-
-  /// Persists the current nudge, replacing whatever offset the server had
-  /// stored for this track.
-  ///
-  /// `storedOffsetMs` (via [_subtitleOffsets]) absorbs the nudge and
-  /// `nudgeMs` resets, which leaves [effectiveSubtitleDelayMs] at exactly
-  /// the same value -- see that function's dartdoc. Nothing refetches,
-  /// nothing flickers, and the displayed number does not jump.
-  ///
-  /// The sheet already hides its Save button for an mpv-native track (see
-  /// [canSaveSubtitleDelay]), but this checks again rather than trusting
-  /// that UI gate alone -- the same defensive posture every other guard in
-  /// this method already takes.
-  ///
-  /// On web this only ever persists the offset and updates local state; it
-  /// never evicts or refetches the `SubtitleContent` body already cached in
-  /// [_mediaKitSubtitleTrackMap] for [track], so what the viewer sees does
-  /// not actually change until the track loads again. See
-  /// [subtitleDelaySavedMessage]'s dartdoc for why that gap is closed with
-  /// an honest message rather than a reload.
-  Future<void> _saveSubtitleDelay() async {
-    final track = _selectedSubtitleTrack;
-    if (track == null || !_subtitleOffsetsLoaded) return;
-    if (!canSaveSubtitleDelay(track.id)) return;
-    if (widget.fileId == 'offline') return;
-
-    if (!_session.canWrite) return;
-
-    final total = (_subtitleOffsets[track.id] ?? 0) + _subtitleNudgeMs;
-
-    final outcome =
-        await _session.saveSubtitleOffset(trackRef: track.id, offsetMs: total);
-    switch (outcome) {
-      case WriteOutcome.unavailable:
-        return;
-      case WriteOutcome.failed:
-        _showToast('Could not save the subtitle delay', kind: ToastKind.error);
-        return;
-      case WriteOutcome.done:
-        break;
-    }
-
-    try {
-      if (!mounted) return;
-
-      // Safe regardless of what is selected now: this is keyed by
-      // `track.id`, the specific track this save was for. Resetting the
-      // live nudge is not -- that only belongs to whichever track is
-      // *currently* selected, so it is skipped entirely if the viewer
-      // picked a different track while this request was in flight. An
-      // unconditional reset here would wipe out a nudge already in
-      // progress for a track this save was never about.
-      setState(
-        () => _subtitleOffsets = {..._subtitleOffsets, track.id: total},
-      );
-      if (_selectedSubtitleTrack?.id == track.id) {
-        setState(() => _subtitleNudgeMs = 0);
-        await _syncSubtitleDelay();
-      }
-
-      // On web this save never touches the SubtitleContent body already
-      // cached in _mediaKitSubtitleTrackMap for this track -- it still has
-      // the old offset baked in, so nothing the viewer sees actually moves
-      // yet. See subtitleDelaySavedMessage's dartdoc for why a refetch was
-      // not built to close that gap.
-      _showToast(
-        subtitleDelaySavedMessage(appliesImmediately: !kIsWeb),
-        kind: ToastKind.success,
-      );
-    } catch (e) {
-      debugPrint('[PlayerScreen] Could not save subtitle delay: $e');
-      _showToast('Could not save the subtitle delay', kind: ToastKind.error);
     }
   }
 
@@ -3494,7 +3276,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // a no-op too -- it must be, or a benign track-list revision mid-stream
     // would silently wipe out a nudge the viewer already made.
     if (_selectedSubtitleTrack?.id != previousSubtitleId) {
-      unawaited(_onSubtitleTrackChanged());
+      unawaited(_subtitleDelay.onTrackChanged());
     }
 
     debugPrint('[PlayerScreen] Detected ${_audioTracks.length} audio tracks, '
@@ -4019,11 +3801,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _selectedSubtitleTrack,
       onSearch: _searchSubtitles,
       onDownload: _downloadSubtitle,
-      subtitleDelayMs: _subtitleDelayDisplay,
+      subtitleDelayMs: _subtitleDelay.display,
       canSaveDelay: canSaveSubtitleDelay(_selectedSubtitleTrack?.id),
-      onNudgeSubtitleDelay: _nudgeSubtitleDelay,
-      onResetSubtitleDelay: _resetSubtitleDelay,
-      onSaveSubtitleDelay: _saveSubtitleDelay,
+      onNudgeSubtitleDelay: _subtitleDelay.nudge,
+      onResetSubtitleDelay: _subtitleDelay.resetNudge,
+      onSaveSubtitleDelay: _subtitleDelay.save,
     );
 
     // A dismissed sheet (barrier tap, back gesture) must leave every
@@ -4095,8 +3877,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `setSubtitleTrack` awaits -- they can *throw* rather than return, and
   /// not every caller awaits this; see the comment on the `try` below.
   ///
-  /// [keepNudge] passes through to [_onSubtitleTrackChanged]; only the
-  /// restore after a source switch sets it.
+  /// [keepNudge] passes through to `SubtitleDelayController.onTrackChanged`;
+  /// only the restore after a source switch sets it.
   ///
   /// The returned generation equals [_subtitleSelectionGeneration] afterwards
   /// exactly when nothing superseded this call, which is how
@@ -4159,7 +3941,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         }
         setState(() => _selectedSubtitleTrack = null);
         _showSubtitleCues(enabled: false);
-        await _onSubtitleTrackChanged(keepNudge: keepNudge);
+        await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
         debugPrint('[PlayerScreen] Subtitles turned off');
         return generation;
       }
@@ -4264,7 +4046,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
       setState(() => _selectedSubtitleTrack = selected);
       _showSubtitleCues(enabled: true);
-      await _onSubtitleTrackChanged(keepNudge: keepNudge);
+      await _subtitleDelay.onTrackChanged(keepNudge: keepNudge);
       debugPrint('[PlayerScreen] Set subtitle track: ${selected.displayName}');
     } finally {
       _resetPendingSubtitleSelection(generation);
@@ -4914,7 +4696,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       case KeyToggleAlwaysOnTop():
         _toggleAlwaysOnTop();
       case KeyNudgeSubtitle(:final deltaMs):
-        _nudgeSubtitleDelay(deltaMs);
+        _subtitleDelay.nudge(deltaMs);
       case KeyCancelUpNext():
         _upNext.cancel();
       case KeyConsumed():
@@ -5124,7 +4906,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _chromeFocusNode.dispose();
     _chromeVisibility.removeListener(_onChromeVisibilityChanged);
     _chromeVisibility.dispose();
-    _subtitleDelayDisplay.dispose();
+    _subtitleDelay.dispose();
     for (final path in _imageSidecarPaths) {
       unawaited(discardImageSidecar(path));
     }

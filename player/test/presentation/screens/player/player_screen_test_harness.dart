@@ -538,8 +538,8 @@ Map<String, dynamic> movieSegmentsResponse({
 /// `_fetchProgressAndEpisodes` fires this concurrently with the other
 /// pre-play queries -- see `movieSegmentsResponse`'s dartdoc for why an
 /// ordered `StubLink.responses` script can no longer carry it in a fixed
-/// slot. An empty list here leaves `_subtitleOffsetsLoaded` true and
-/// `_subtitleOffsets` empty, so nothing downstream (mpv's sub-delay, the
+/// slot. An empty list here leaves the controller's loaded flag true and
+/// its stored offsets empty, so nothing downstream (mpv's sub-delay, the
 /// sheet's delay row) departs from zero.
 Map<String, dynamic> subtitleTrackSettingsResponse({
   List<Map<String, dynamic>> settings = const [],

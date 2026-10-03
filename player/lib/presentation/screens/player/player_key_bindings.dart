@@ -297,7 +297,7 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
     case LogicalKeyboardKey.keyZ:
       // mpv's own subtitle-delay binding: z earlier, shift+z later. A
       // no-op with no track selected or the offsets query never having
-      // succeeded -- see `_nudgeSubtitleDelay`.
+      // succeeded -- see `SubtitleDelayController.nudge`.
       return KeyNudgeSubtitle(context.shiftPressed ? 100 : -100);
 
     case LogicalKeyboardKey.escape:
