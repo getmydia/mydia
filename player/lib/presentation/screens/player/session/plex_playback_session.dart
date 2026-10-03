@@ -166,6 +166,7 @@ class PlexStreamResolver implements StreamResolver {
             'maxVideoBitrate': '$kbps',
           if (height != null)
             'videoResolution': '${(height * 16 / 9).round()}x$height',
+          // Plex reads X-Plex-* parameters from the query as well as headers.
           'X-Plex-Client-Profile-Extra': plexProfileExtra(profile),
         };
         final decision = await client.container(

@@ -30,7 +30,17 @@ abstract class SourcePlaybackSession implements PlaybackSession {
 
   Future<ItemDetail>? _detail;
 
-  Future<ItemDetail> loadDetail() => _detail ??= source.item(item);
+  Future<ItemDetail> loadDetail() {
+    final cached = _detail;
+    if (cached != null) return cached;
+    final fresh = source.item(item);
+    _detail = fresh;
+    // A failure is not cached: a later call retries.
+    fresh.then<void>((_) {}, onError: (Object _) {
+      if (identical(_detail, fresh)) _detail = null;
+    });
+    return fresh;
+  }
 
   Future<(ItemDetail, MediaVersion?)> _version() async {
     final detail = await loadDetail();

@@ -1,6 +1,6 @@
 /// Progress for servers that take a position report and a watched mark as
 /// separate calls: Plex's timeline and scrobble, Stash's activity and play
-/// count. Reports every ten seconds, on every play or pause, and on demand;
+/// count. Reports every ten seconds, on every play, pause or seek, and on demand;
 /// marks watched once, at the threshold `ProgressService` uses for Mydia.
 library;
 
@@ -23,9 +23,15 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
 
   Timer? _timer;
   StreamSubscription<bool>? _playing;
+  StreamSubscription<Duration>? _positions;
+  Duration? _lastPosition;
   ({int positionSeconds, int durationSeconds})? _last;
   bool _watchedSent = false;
   bool _stopped = false;
+  bool _disposed = false;
+
+  /// A position change larger than this is a seek, not playback.
+  static const _seekJump = Duration(seconds: 3);
 
   @override
   void start(Player player,
@@ -33,6 +39,14 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
     stopSync();
     _timer = Timer.periodic(interval, (_) => unawaited(_report(player)));
     _playing = player.stream.playing.listen((_) => unawaited(_report(player)));
+    _lastPosition = null;
+    _positions = player.stream.position.listen((position) {
+      final previous = _lastPosition;
+      _lastPosition = position;
+      if (previous != null && (position - previous).abs() > _seekJump) {
+        unawaited(_report(player));
+      }
+    });
   }
 
   @override
@@ -53,12 +67,15 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
     _timer = null;
     unawaited(_playing?.cancel());
     _playing = null;
+    unawaited(_positions?.cancel());
+    _positions = null;
   }
 
   /// Sends "stopped" at the last reported position: by now the player may
   /// already be gone.
   @override
   void dispose() {
+    _disposed = true;
     stopSync();
     final last = _last;
     if (last == null || _stopped) return;
@@ -72,14 +89,14 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
   Future<void> _report(Player player) async {
     final sync = ProgressService.resolveSync(
         player.state.position, player.state.duration, timeline);
-    if (sync == null) return;
+    if (sync == null || _disposed) return;
     _last = sync;
     await _guard(() => sendProgress(
           positionSeconds: sync.positionSeconds,
           durationSeconds: sync.durationSeconds,
           paused: !player.state.playing,
         ));
-    if (!_watchedSent && isWatched(player)) {
+    if (!_disposed && !_watchedSent && isWatched(player)) {
       _watchedSent = true;
       await _guard(sendWatched);
     }

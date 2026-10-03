@@ -81,4 +81,32 @@ void main() {
     await transport.endSession();
     expect(resolver.ended, ['s1']);
   });
+
+  test('ending while open awaits the resolver ends the new session', () async {
+    final gate = Completer<ResolvedStream>();
+    final resolver = _GatedResolver(gate.future);
+    final transport = SimplePlaybackTransport(resolver: resolver);
+    final opening = transport.open(_hls, fileId: 'f', startAt: Duration.zero);
+    final outcome = expectLater(opening, throwsStateError);
+    await Future<void>.delayed(Duration.zero);
+    await transport.endSession();
+    gate.complete(const ResolvedStream(url: 'u', headers: {}, sessionId: 'g1'));
+    await outcome;
+    expect(resolver.ended, ['g1']);
+    expect(transport.sessionId, isNull);
+  });
+}
+
+class _GatedResolver implements StreamResolver {
+  _GatedResolver(this._result);
+  final Future<ResolvedStream> _result;
+  final ended = <String>[];
+
+  @override
+  Future<ResolvedStream> resolve(PlaybackPlan plan,
+          {required String fileId, required Duration startAt}) =>
+      _result;
+
+  @override
+  Future<void> end(String sessionId) async => ended.add(sessionId);
 }

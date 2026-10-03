@@ -140,4 +140,12 @@ void main() {
     await reporter.sendWatched();
     expect(o.server.requests.last.url.path, '/:/scrobble');
   });
+
+  test('a failed detail load is retried on the next call', () async {
+    final o = open();
+    o.server.status = 500;
+    expect(await o.session.detail(), isNull);
+    o.server.status = null;
+    expect(await o.session.detail(), isNotNull);
+  });
 }
