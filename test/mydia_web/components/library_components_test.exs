@@ -35,6 +35,21 @@ defmodule MydiaWeb.LibraryComponentsTest do
       assert LazyHTML.attribute(caret, "phx-value-media_type") == ["movie"]
       assert LazyHTML.attribute(caret, "phx-value-title") == ["The Kestrel Protocol"]
     end
+
+    test "is small by default and full size when asked" do
+      class_of = fn assigns ->
+        render_button(assigns)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s([data-test="add-config-caret"]))
+        |> LazyHTML.attribute("class")
+        |> hd()
+      end
+
+      base = %{ref: "tmdb:551", media_type: "movie", title: "The Kestrel Protocol"}
+
+      assert class_of.(base) =~ "btn-sm"
+      refute class_of.(Map.put(base, :size, "md")) =~ "btn-sm"
+    end
   end
 
   describe "view_mode_toggle/1" do

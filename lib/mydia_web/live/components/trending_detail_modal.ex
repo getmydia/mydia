@@ -19,7 +19,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         config_open={false}
       />
 
-  The box is a flex column: a fixed header, then one scrolling child. Any new
+  The box is a flex column: a header that grows to fit its title, badges and actions (minimum backdrop height), then one scrolling child. Any new
   content belongs inside `#trending-detail-modal-body`, not as a sibling of it,
   or it will sit outside the scroll region and be unreachable. There is no
   footer; all actions live in the header's `#trending-detail-modal-actions`
@@ -80,19 +80,26 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
     >
       <%= if @open do %>
         <div class="modal-box max-w-5xl w-11/12 max-h-[90vh] p-0 flex flex-col overflow-hidden">
-          <%!-- Header with backdrop --%>
-          <div class="relative h-48 md:h-64 bg-base-300 shrink-0">
-            <%= if backdrop_path(@item, @metadata) do %>
-              <img
-                src={ImageUrl.backdrop_url(backdrop_path(@item, @metadata), "w1280")}
-                alt=""
-                class="w-full h-full object-cover"
-              />
-              <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/50 to-transparent">
-              </div>
-            <% else %>
-              <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
-            <% end %>
+          <%!-- Header with backdrop. min-h, not h: the title block is in normal
+               flow so a long badge row grows the header instead of being pushed
+               up and clipped by the box's overflow-hidden (#1008). --%>
+          <div
+            id="trending-detail-modal-header"
+            class="relative min-h-48 md:min-h-64 bg-base-300 shrink-0"
+          >
+            <div class="absolute inset-0">
+              <%= if backdrop_path(@item, @metadata) do %>
+                <img
+                  src={ImageUrl.backdrop_url(backdrop_path(@item, @metadata), "w1280")}
+                  alt=""
+                  class="w-full h-full object-cover"
+                />
+                <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/50 to-transparent">
+                </div>
+              <% else %>
+                <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
+              <% end %>
+            </div>
 
             <%!-- Close button. Icon-only and always present regardless of what
                  a caller's :actions slot puts beside it in the header, so
@@ -105,8 +112,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <.icon name="hero-x-mark" class="w-5 h-5" />
             </button>
 
-            <%!-- Title overlay --%>
-            <div class="absolute bottom-0 left-0 right-0 p-4 md:p-6">
+            <%!-- Title block. pt-14 keeps the badges clear of the close button
+                 once the header grows past its minimum. --%>
+            <div class="relative flex flex-col justify-end min-h-48 md:min-h-64 p-4 md:p-6 pt-14">
               <div class="flex flex-wrap items-end gap-4">
                 <%= if poster_path(@item, @metadata) do %>
                   <img
@@ -116,7 +124,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   />
                 <% end %>
                 <div class="flex-1">
-                  <h2 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                  <h2 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg pr-10">
                     {title(@item, @metadata)}
                   </h2>
                   <div class="flex flex-wrap items-center gap-2 mt-1">
@@ -165,7 +173,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                 </div>
                 <div
                   id="trending-detail-modal-actions"
-                  class="flex flex-wrap items-center gap-2 shrink-0"
+                  class="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto"
                 >
                   <%= if @actions != [] do %>
                     {render_slot(@actions)}
@@ -205,14 +213,18 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                               phx-click={@add_event}
                               phx-value-ref={@item_ref}
                               phx-value-media_type={media_type_string(@item)}
+                              aria-label="Add to Library"
                               class="btn btn-primary join-item"
                             >
-                              <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                              <.icon name="hero-plus" class="w-4 h-4" />
+                              <span class="sm:hidden">Add</span>
+                              <span class="hidden sm:inline">Add to Library</span>
                             </button>
                             <.library_picker_button
                               ref={@item_ref}
                               media_type={media_type_string(@item)}
                               title={@item.title}
+                              size="md"
                             />
                           </div>
                       <% end %>
