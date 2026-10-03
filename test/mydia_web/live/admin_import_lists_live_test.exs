@@ -60,6 +60,35 @@ defmodule MydiaWeb.AdminImportListsLiveTest do
                "downloaded automatically"
              )
     end
+
+    test "unchecking Enabled, Auto-add and Monitored persists false", %{conn: conn} do
+      {:ok, list} =
+        Mydia.ImportLists.create_import_list(%{
+          name: "Toggle List #{System.unique_integer([:positive])}",
+          type: "tmdb_trending",
+          media_type: "movie",
+          enabled: true,
+          auto_add: true,
+          monitored: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/import-lists")
+
+      view
+      |> element(~s{button[phx-click="edit_list"][phx-value-id="#{list.id}"]})
+      |> render_click()
+
+      view
+      |> form("#import-list-form",
+        import_list: %{"enabled" => "false", "auto_add" => "false", "monitored" => "false"}
+      )
+      |> render_submit()
+
+      saved = Mydia.Repo.get!(Mydia.ImportLists.ImportList, list.id)
+      refute saved.enabled
+      refute saved.auto_add
+      refute saved.monitored
+    end
   end
 
   describe "with Import Lists disabled" do
