@@ -4,6 +4,7 @@
 /// not rewritten. Plex and Stash implement the same members later.
 library;
 
+import '../../../../core/player/progress_reporter.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
@@ -54,5 +55,22 @@ abstract interface class PlaybackSession {
   Future<void> writeSubtitlePreference({
     required String fileId,
     required SubtitleTrack? resolved,
+  });
+
+  /// What the screen may do beyond playing; see [PlaybackFeature].
+  Set<PlaybackFeature> get features;
+
+  /// Progress for a file already on this device. Only a session with
+  /// [PlaybackFeature.downloads] is asked.
+  Future<ProgressReporter> openProgress();
+
+  /// Sets up the stream's transport, progress and memory key. [owner] holds
+  /// any shared resource (Mydia's p2p proxy) until the screen releases it;
+  /// [isCurrent] lets a superseded load stop early. May throw; the screen
+  /// shows the error.
+  Future<StreamingPreparation> prepareStreaming({
+    required Object owner,
+    required void Function(String message) onProgress,
+    required bool Function() isCurrent,
   });
 }
