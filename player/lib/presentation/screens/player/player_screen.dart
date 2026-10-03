@@ -86,7 +86,6 @@ import '../../widgets/video_controls/up_next_policy.dart';
 import '../../widgets/video_controls/up_next_prompt.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../../domain/models/audio_track.dart' as app_models_audio;
-import '../../../domain/models/media_segment.dart';
 import '../../../domain/models/quality_delivery_subtitle.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_candidate.dart';
@@ -115,6 +114,7 @@ import 'session/mydia_playback_session.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
 import 'player_screen_views.dart';
+import 'segment_skipper.dart';
 import 'session/playback_session_types.dart';
 import 'audio_track_detection.dart';
 import 'remote_control_mapping.dart';
@@ -980,25 +980,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // leaks into the browse/library window behind this one.
   bool _isAlwaysOnTop = false;
 
-  /// Skippable intro/credits segments for the file being played, as reported
-  /// by the server. Empty whenever detection has not run, found nothing, or
-  /// the query failed: an older server has no `segments` field at all, and
-  /// that must degrade to "no skip button", never to a playback error.
-  List<MediaSegment> _segments = const [];
-
-  /// Once-per-playback record of automatic skips. Reset when the media
-  /// changes, not when a seek restarts the HLS session, so a restart mid-intro
-  /// cannot re-arm a skip the viewer already overrode.
-  final SegmentSkipTracker _skipTracker = SegmentSkipTracker();
-
-  /// Identifies the media [_skipTracker] is currently armed for. See
-  /// [_resetSegmentsIfMediaChanged].
-  String? _skipTrackerMediaKey;
-
-  /// Whether detected segments are skipped without asking. Off unless the
-  /// viewer opted in; loaded once in [initState] and deliberately not watched,
-  /// since flipping it mid-episode is not a case worth a rebuild.
-  bool _autoSkipSegments = false;
+  /// Skippable segments for the file being played. See [SegmentSkipper].
+  final SegmentSkipper _segmentSkipper = SegmentSkipper();
 
   // Auto-play next episode state
   bool _showUpNext = false;
@@ -1280,7 +1263,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final enabled =
           await ref.read(settingsServiceProvider).getAutoSkipSegments();
       if (!mounted) return;
-      _autoSkipSegments = enabled;
+      _segmentSkipper.autoSkip = enabled;
     } catch (e) {
       debugPrint('[PlayerScreen] Could not read auto-skip preference: $e');
     }
@@ -3322,24 +3305,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// Drop the previous media's segments and re-arm the once-per-session skip
-  /// guard, but only when the media actually changed.
-  ///
-  /// The comparison, not the clearing, is the load-bearing half. This runs on
-  /// every [_initializePlayer] call, and a seek past the transcoded end
-  /// restarts the whole session for the *same* file. Resetting unconditionally
-  /// would let auto-skip fire a second time on a segment the viewer had
-  /// deliberately seeked back into, which is precisely what the guard exists
-  /// to prevent.
+  /// guard, but only when the media actually changed. See
+  /// [SegmentSkipper.resetIfMediaChanged].
   ///
   /// The clearing half runs on every file switch: a reused State re-enters
   /// [_initializePlayer] through [_switchToFile].
   void _resetSegmentsIfMediaChanged() {
-    final mediaKey = '${widget.mediaType}:${widget.mediaId}:${widget.fileId}';
-    if (_skipTrackerMediaKey == mediaKey) return;
-
-    _skipTrackerMediaKey = mediaKey;
-    _segments = const [];
-    _skipTracker.reset();
+    if (!_segmentSkipper.resetIfMediaChanged(_mediaKey)) return;
     _nextSeasonEpisodes = null;
     _nextSeasonResolved = false;
   }
@@ -3364,8 +3336,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final segments = await _session.segments();
     if (!_isCurrentLoad(gen)) return;
     if (segments == null) return;
-    _segments = segments;
-    debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
+    _segmentSkipper.setSegments(segments);
+    debugPrint('[PlayerScreen] ${segments.length} skippable segment(s)');
   }
 
   /// Load the viewer's per-show subtitle choice for the file now playing.
@@ -3669,13 +3641,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _playbackAdvanced = true;
     }
 
-    _maybeAutoSkipSegment(player);
+    _segmentSkipper.maybeAutoSkip(
+      _timeline.toReal(player.state.position),
+      seekToReal,
+    );
 
     // Offer the next episode once real credits are known to have started;
     // only a file with no detected credits segment falls back to a fixed
     // window before the real end. See [shouldOfferUpNext].
     if (shouldOfferUpNext(
-      segments: _segments,
+      segments: _segmentSkipper.segments,
       position: _timeline.toReal(player.state.position),
       duration: _timeline.resolveDuration(player.state.duration),
     )) {
@@ -3780,34 +3755,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
   }
 
-  /// Seek past a detected segment the viewer opted into skipping.
-  ///
-  /// Runs on every position tick, so the once-per-session bookkeeping lives
-  /// inside [SegmentSkipTracker.takeAutoSkip] rather than here: a segment is
-  /// consumed by the same call that reports it, and seeking back into one that
-  /// has already been skipped does nothing.
-  void _maybeAutoSkipSegment(Player player) =>
-      _maybeAutoSkipAt(_timeline.toReal(player.state.position), seekToReal);
-
-  /// The auto-skip decision itself, in real media coordinates.
-  ///
-  /// Shared by local playback and casting because only the two ends differ:
-  /// where a position comes from, and what a seek means. The preference, the
-  /// once-per-session tracker and the segment lookup are one rule, and a
-  /// second copy of it is the thing that would drift.
-  void _maybeAutoSkipAt(
-    Duration position,
-    Future<void> Function(Duration) seek,
-  ) {
-    if (!_autoSkipSegments || _segments.isEmpty) return;
-
-    final target = _skipTracker.takeAutoSkip(_segments, position);
-    if (target == null) return;
-
-    debugPrint('[PlayerScreen] Auto-skipping to ${target.end}');
-    unawaited(seek(target.end));
-  }
-
   /// Seek the receiver, in the same real coordinates [seekToReal] takes.
   ///
   /// `CastSessionManager.seek` owns both the mapping onto receiver coordinates
@@ -3829,14 +3776,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     } catch (e) {
       debugPrint('[PlayerScreen] Cast skip to $target failed: $e');
     }
-  }
-
-  /// The segment covering [position], or null when playback is between them.
-  MediaSegment? _segmentAt(Duration position) {
-    for (final segment in _segments) {
-      if (segment.containsPosition(position)) return segment;
-    }
-    return null;
   }
 
   /// Show the "Up Next" overlay if conditions are met.
@@ -5672,7 +5611,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final session = next.value;
       final position = session?.mediaInfo?.position;
       if (session == null || position == null || session.isStale) return;
-      _maybeAutoSkipAt(position, _castSeekToReal);
+      _segmentSkipper.maybeAutoSkip(position, _castSeekToReal);
     });
 
     // Flipping the switch while a file is open must start or stop the
@@ -5713,7 +5652,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ? CastPlaceholderView(
             session: castSession,
             title: widget.title ?? 'Untitled',
-            segmentAt: _segmentAt,
+            segmentAt: _segmentSkipper.segmentAt,
             onSkip: (segment) => _castSeekToReal(segment.end),
           )
         : _buildBody();
@@ -6000,7 +5939,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // Skip Intro / Skip Credits. Driven by its own position stream rather
         // than a setState per tick, and stood down while the up-next overlay
         // is showing so the two do not stack in the same bottom-right corner.
-        if (player != null && _segments.isNotEmpty && !_showUpNext)
+        if (player != null &&
+            _segmentSkipper.segments.isNotEmpty &&
+            !_showUpNext)
           Positioned.fill(
             child: StreamBuilder<Duration>(
               stream: player.stream.position,
@@ -6008,7 +5949,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               builder: (context, snapshot) {
                 final position =
                     _timeline.toReal(snapshot.data ?? Duration.zero);
-                final segment = _segmentAt(position);
+                final segment = _segmentSkipper.segmentAt(position);
                 if (segment == null) return const SizedBox.shrink();
 
                 return SkipSegmentButton(
