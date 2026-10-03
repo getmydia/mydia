@@ -54,8 +54,9 @@ enum InstallEnvironment {
     // `WindowsUpdater.canUpdateInPlace` has always accepted.
     if (!isLinux) return InstallEnvironment.inPlace;
 
-    if (flatpakId != null && flatpakId.isNotEmpty)
+    if (flatpakId != null && flatpakId.isNotEmpty) {
       return InstallEnvironment.flatpak;
+    }
     if (flatpakInfoExists) return InstallEnvironment.flatpak;
 
     return installDirWritable

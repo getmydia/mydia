@@ -16,7 +16,7 @@ void main() {
   });
 
   test('a Flatpak remote update names no version', () {
-    final update = FlatpakRemoteUpdate(
+    final update = const FlatpakRemoteUpdate(
       releaseNotesUrl: 'https://github.com/getmydia/mydia/releases/latest',
     );
 
@@ -25,7 +25,7 @@ void main() {
   });
 
   test('an already-installed Flatpak update is awaiting a restart', () {
-    final update = FlatpakRemoteUpdate(
+    final update = const FlatpakRemoteUpdate(
       releaseNotesUrl: 'https://github.com/getmydia/mydia/releases/latest',
       installedAwaitingRestart: true,
     );

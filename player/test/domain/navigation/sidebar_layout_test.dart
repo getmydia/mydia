@@ -277,16 +277,15 @@ void main() {
       expect(newMiddle.first, 'movies');
     });
 
-    test('moves a row downward, applying the pre-removal index adjustment', () {
-      // ReorderableListView reports newIndex against the list BEFORE the
-      // dragged row is removed. Without the decrement this lands one slot too
-      // early, which only shows on downward drags.
+    test('moves a row downward to the final index it is given', () {
+      // onReorderItem reports newIndex against the list AFTER the dragged row
+      // is removed, so it is the row's final position as is.
       final layout = SidebarLayout.defaults;
       final middle = middleOf(layout);
 
       final order = layout.orderAfterReorder(
         oldIndex: 0,
-        newIndex: 3,
+        newIndex: 2,
         downloadSupported: true,
       );
 

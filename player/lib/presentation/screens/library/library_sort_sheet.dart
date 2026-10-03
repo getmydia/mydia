@@ -47,7 +47,7 @@ class LibrarySortSheet extends StatelessWidget {
                   key: const Key('sort-direction-toggle'),
                   onPressed: directionEnabled
                       ? () => Navigator.of(context).pop(
-                            LibrarySortSelection.toggleDirection(),
+                            const LibrarySortSelection.toggleDirection(),
                           )
                       : null,
                   icon: Icon(

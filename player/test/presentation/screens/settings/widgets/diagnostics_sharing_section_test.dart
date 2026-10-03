@@ -81,9 +81,9 @@ Future<_FakeDiagnostics> _pump(
         logUploaderProvider
             .overrideWithValue(canShareLogs ? _uploader() : null),
       ],
-      child: MaterialApp(
+      child: const MaterialApp(
         builder: toastLayerBuilder,
-        home: const Scaffold(
+        home: Scaffold(
           body: SingleChildScrollView(child: DiagnosticsSharingSection()),
         ),
       ),
@@ -230,9 +230,9 @@ void main() {
           diagnosticsProvider.overrideWith(() => pending),
           logUploaderProvider.overrideWithValue(_uploader()),
         ],
-        child: MaterialApp(
+        child: const MaterialApp(
           builder: toastLayerBuilder,
-          home: const Scaffold(
+          home: Scaffold(
             body: SingleChildScrollView(child: DiagnosticsSharingSection()),
           ),
         ),

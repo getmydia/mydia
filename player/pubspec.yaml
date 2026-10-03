@@ -31,7 +31,10 @@ dependencies:
   flutter_riverpod: ^3.3.2
   riverpod_annotation: ^4.0.0
   go_router: ^18.0.1
+  gql: ^1.0.1
+  graphql: ^5.2.4
   graphql_flutter: ^5.1.0
+  meta: ^1.19.0
   # >=10.3.1 pulls flutter_secure_storage_darwin >=0.3.2. Earlier darwin builds
   # read the macOS option under the wrong key ("useDataProtectionKeyChain"), so
   # usesDataProtectionKeychain was ignored and every keychain call failed with
@@ -84,6 +87,7 @@ dependencies:
   # areas to decide whether a saved rect is still reachable.
   screen_retriever: ^0.2.2
 
+  collection: any
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -99,6 +103,7 @@ dev_dependencies:
   # pins the same resolved version and only stops the analyzer flagging every
   # importer with depend_on_referenced_packages.
   fake_async: ^1.3.3
+  file: ^7.0.1
   flutter_launcher_icons: ^0.14.3
   hive_ce_generator: ^1.10.0
   freezed: ^3.2.6-dev.1

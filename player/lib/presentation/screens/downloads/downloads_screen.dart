@@ -520,7 +520,7 @@ class DownloadsScreen extends ConsumerWidget {
                     activeTask.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 10,
                     ),
@@ -578,7 +578,7 @@ class DownloadsScreen extends ConsumerWidget {
                             parts.join(' \u00B7 '),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 10,
                             ),
@@ -595,7 +595,7 @@ class DownloadsScreen extends ConsumerWidget {
                         ? '${group.downloads.length} episode${group.downloads.length == 1 ? '' : 's'}'
                         : group.downloads.first.fileSizeDisplay,
                     maxLines: 1,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 10,
                     ),
@@ -1314,8 +1314,8 @@ class DownloadsScreen extends ConsumerWidget {
                           task.error ?? 'Download failed',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              TextStyle(color: AppColors.error, fontSize: 12),
+                          style: const TextStyle(
+                              color: AppColors.error, fontSize: 12),
                         ),
                       ),
                     ],
@@ -1452,6 +1452,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
 
   Future<void> _cleanupNow() async {
     final cleanupService = await ref.read(storageCleanupServiceProvider.future);
+    if (!mounted) return;
     final totalCleanable = cleanupService.getTotalCleanableBytes();
 
     if (totalCleanable == 0) {
@@ -1568,7 +1569,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                         Text(_formatLimit(limit)),
                         if (isCurrentlyUsed) ...[
                           const SizedBox(width: 8),
-                          Text(
+                          const Text(
                             '(Full)',
                             style: TextStyle(
                               color: AppColors.error,
@@ -1638,7 +1639,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
               Switch(
                 value: _autoStartQueued,
                 onChanged: (value) => setState(() => _autoStartQueued = value),
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
               ),
             ],
           ),
@@ -1660,7 +1661,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                 value: _autoCleanupEnabled,
                 onChanged: (value) =>
                     setState(() => _autoCleanupEnabled = value),
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
               ),
             ],
           ),
@@ -1709,7 +1710,7 @@ class _StorageSettingsSheetState extends ConsumerState<_StorageSettingsSheet> {
                   onPressed: _cleanupNow,
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: AppColors.error),
+                    side: const BorderSide(color: AppColors.error),
                     foregroundColor: AppColors.error,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),

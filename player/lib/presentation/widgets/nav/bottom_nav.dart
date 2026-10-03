@@ -52,7 +52,7 @@ class BottomNav extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     if (showBackToMydia)
-                      NavItem(
+                      const NavItem(
                         icon: Icons.arrow_back_rounded,
                         selectedIcon: Icons.arrow_back_rounded,
                         label: 'Mydia',

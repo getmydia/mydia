@@ -56,9 +56,9 @@ void main() {
       (tester) async {
     await _pump(
       tester,
-      Stack(children: [
-        const SizedBox.expand(key: _body),
-        const ToastObstruction(
+      const Stack(children: [
+        SizedBox.expand(key: _body),
+        ToastObstruction(
           edge: ToastEdge.left,
           child: SizedBox(width: 1400, height: 900),
         ),

@@ -14,6 +14,7 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.graphql.dart"
+    - "lib/native/frb_generated*.dart"
     - "rust_builder/cargokit/**"
     - build/**
     - android/**

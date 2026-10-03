@@ -28,22 +28,22 @@ void main() {
 
   test('canInstall reports what the host says', () async {
     response = true;
-    expect(await AndroidInstaller().canInstall(), isTrue);
+    expect(await const AndroidInstaller().canInstall(), isTrue);
     expect(calls.single.method, 'canInstall');
   });
 
   test('canInstall is false when the host says so', () async {
     response = false;
-    expect(await AndroidInstaller().canInstall(), isFalse);
+    expect(await const AndroidInstaller().canInstall(), isFalse);
   });
 
   test('canInstall is false when the host is not there', () async {
     error = MissingPluginException();
-    expect(await AndroidInstaller().canInstall(), isFalse);
+    expect(await const AndroidInstaller().canInstall(), isFalse);
   });
 
   test('install sends the path', () async {
-    await AndroidInstaller().install('/tmp/mydia.apk');
+    await const AndroidInstaller().install('/tmp/mydia.apk');
     expect(calls.single.method, 'install');
     expect(calls.single.arguments, {'path': '/tmp/mydia.apk'});
   });
@@ -51,7 +51,7 @@ void main() {
   test('a denied permission surfaces as its own exception', () async {
     error = PlatformException(code: 'permission_denied', message: 'no');
     expect(
-      () => AndroidInstaller().install('/tmp/mydia.apk'),
+      () => const AndroidInstaller().install('/tmp/mydia.apk'),
       throwsA(isA<InstallerPermissionDenied>()),
     );
   });
@@ -59,7 +59,7 @@ void main() {
   test('a missing host surfaces as its own exception', () async {
     error = MissingPluginException();
     expect(
-      () => AndroidInstaller().install('/tmp/mydia.apk'),
+      () => const AndroidInstaller().install('/tmp/mydia.apk'),
       throwsA(isA<InstallerUnavailable>()),
     );
   });
@@ -67,7 +67,7 @@ void main() {
   test('any other host failure keeps its message', () async {
     error = PlatformException(code: 'install_failed', message: 'session died');
     expect(
-      () => AndroidInstaller().install('/tmp/mydia.apk'),
+      () => const AndroidInstaller().install('/tmp/mydia.apk'),
       throwsA(predicate((e) => e.toString().contains('session died'))),
     );
   });
