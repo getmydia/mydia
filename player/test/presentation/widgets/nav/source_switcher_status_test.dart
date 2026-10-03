@@ -32,7 +32,72 @@ Future<List<String>> pump(
   return navigations;
 }
 
+Source _source(String account, String server, {bool presence = true}) => Source(
+      account: ProviderAccount(
+        id: account,
+        kind: SourceKind.plex,
+        displayName: 'name-$account',
+        storageNamespace: 'source/$account',
+        activeProfileId: 'owner',
+      ),
+      profile: SourceProfile(
+          id: 'owner', accountId: account, name: 'Quill', isOwner: true),
+      server: SourceServer(
+          id: server,
+          accountId: account,
+          profileId: 'owner',
+          name: 'Server $server',
+          presence: presence),
+    );
+
+Future<void> _pumpMany(WidgetTester tester, List<Source> sources) async {
+  await tester.pumpWidget(ProviderScope(
+    overrides: [
+      authStateProvider.overrideWith(_Authenticated.new),
+      thirdPartySourcesProvider.overrideWithValue(sources),
+      for (final s in sources)
+        mediaSourceProvider(s.id).overrideWithValue(FakeMediaSource()),
+    ],
+    child: MaterialApp(
+      home: Scaffold(body: SourceSwitcher(onNavigate: (_) {})),
+    ),
+  ));
+  await tester.pump();
+}
+
 void main() {
+  testWidgets('groups servers under one caption per account', (tester) async {
+    await _pumpMany(tester, [
+      _source('acc1', 'aa11'),
+      _source('acc2', 'bb22'),
+      _source('acc1', 'cc33'),
+    ]);
+    expect(find.byKey(const ValueKey('source-switcher-account-acc1')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('source-switcher-account-acc2')),
+        findsOneWidget);
+    expect(find.text('name-acc1'), findsOneWidget);
+    // Both acc1 servers sit before acc2's caption.
+    final acc2Top = tester
+        .getTopLeft(find.byKey(const ValueKey('source-switcher-account-acc2')))
+        .dy;
+    for (final id in ['acc1:owner:aa11', 'acc1:owner:cc33']) {
+      expect(tester.getTopLeft(find.byKey(ValueKey('source-switcher-$id'))).dy,
+          lessThan(acc2Top));
+    }
+  });
+
+  testWidgets('a server that is offline is dimmed even while local',
+      (tester) async {
+    await _pumpMany(tester, [_source('acc1', 'aa11', presence: false)]);
+    final opacity = tester.widget<Opacity>(find
+        .ancestor(
+            of: find.byKey(const ValueKey('source-switcher-acc1:owner:aa11')),
+            matching: find.byType(Opacity))
+        .first);
+    expect(opacity.opacity, lessThan(1));
+  });
+
   testWidgets('offers add and manage once there is a choice', (tester) async {
     final navigations = await pump(tester, fakeSource, FakeMediaSource());
     await tester.tap(find.byKey(const ValueKey('source-switcher-add')));

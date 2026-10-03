@@ -19,7 +19,14 @@ String? sourceIdFromLocation(String location) {
   final rest = location.substring(3);
   final end = rest.indexOf('/');
   final id = end == -1 ? rest : rest.substring(0, end);
-  return id.isEmpty ? null : Uri.decodeComponent(id);
+  try {
+    return id.isEmpty ? null : Uri.decodeComponent(id);
+  } on FormatException {
+    return null;
+  } on ArgumentError {
+    // A truncated escape such as `%E0%A4%A` throws this, not FormatException.
+    return null;
+  }
 }
 
 class SourceNavList extends ConsumerWidget {

@@ -73,9 +73,16 @@ class _AccountCard extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref
-        .read(sourceRecordsProvider.notifier)
-        .removeAccount(record.account.id);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(sourceRecordsProvider.notifier)
+          .removeAccount(record.account.id);
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not remove this account.')),
+      );
+    }
   }
 
   @override

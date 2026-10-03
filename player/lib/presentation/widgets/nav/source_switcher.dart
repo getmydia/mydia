@@ -27,12 +27,16 @@ class SourceSwitcher extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final source in sources)
-            _SourceRow(
-              source: source,
-              isSelected: source.id == active,
-              onNavigate: onNavigate,
-            ),
+          for (final group in _groupByAccount(sources)) ...[
+            if (group.first.kind != SourceKind.mydia)
+              _AccountCaption(account: group.first.account),
+            for (final source in group)
+              _SourceRow(
+                source: source,
+                isSelected: source.id == active,
+                onNavigate: onNavigate,
+              ),
+          ],
           if (!kIsWeb) ...[
             SidebarRow(
               key: const ValueKey('source-switcher-add'),
@@ -56,11 +60,43 @@ class SourceSwitcher extends ConsumerWidget {
     );
   }
 
+  /// Sources grouped by account, in the order each account first appears.
+  static List<List<Source>> _groupByAccount(List<Source> sources) {
+    final groups = <String, List<Source>>{};
+    for (final source in sources) {
+      groups.putIfAbsent(source.account.id, () => []).add(source);
+    }
+    return groups.values.toList();
+  }
+
   static IconData _iconFor(SourceKind kind) => switch (kind) {
         SourceKind.mydia => Icons.dns_rounded,
         SourceKind.plex => Icons.live_tv_rounded,
         SourceKind.stash => Icons.video_library_rounded,
       };
+}
+
+class _AccountCaption extends StatelessWidget {
+  const _AccountCaption({required this.account});
+
+  final ProviderAccount account;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      key: ValueKey('source-switcher-account-${account.id}'),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      child: Text(
+        account.displayName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: AppColors.textSecondary),
+      ),
+    );
+  }
 }
 
 class _SourceRow extends ConsumerWidget {

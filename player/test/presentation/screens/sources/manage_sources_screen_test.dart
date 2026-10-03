@@ -19,13 +19,14 @@ class _Authenticated extends AuthStateNotifier {
 void main() {
   testWidgets('removes an account after confirming', (tester) async {
     final store = InMemorySourceStore();
+    final storage = MockAuthStorage();
+    await storage.write('source/acc1/account_token', 'tok');
     await store.putAccount(plexRecord());
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
-        sourceSecretsProvider
-            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
       child: const MaterialApp(home: ManageSourcesScreen()),
     ));
@@ -39,5 +40,6 @@ void main() {
     await tester.pumpAndSettle();
     expect((await store.load()).accounts, isEmpty);
     expect(find.text('quill'), findsNothing);
+    expect(await storage.read('source/acc1/account_token'), isNull);
   });
 }
