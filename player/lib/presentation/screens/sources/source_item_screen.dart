@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
+import '../../../domain/sources/source_error.dart';
 import '../../widgets/source_artwork.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
@@ -21,6 +22,15 @@ String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
       'title': detail.summary.title,
     },
   ).toString();
+}
+
+/// Progress or watched state changed: this item, its siblings in a season
+/// list, and the home rows and grids that show it are all stale.
+void _invalidateAfterWrite(WidgetRef ref, ItemRef item) {
+  ref.invalidate(sourceItemProvider(item));
+  ref.invalidate(sourceChildrenProvider);
+  ref.invalidate(sourceLibraryPreviewProvider);
+  ref.invalidate(libraryBrowseProvider);
 }
 
 bool _playable(ItemKind kind) =>
@@ -110,8 +120,9 @@ class _Body extends ConsumerWidget {
                 autofocus: true,
                 onPressed: () async {
                   await context.push(sourcePlayerLocation(detail, version));
+                  if (!context.mounted) return;
                   // Progress changed while playing.
-                  ref.invalidate(sourceItemProvider(item));
+                  _invalidateAfterWrite(ref, item);
                 },
                 icon: const Icon(Icons.play_arrow),
                 label: Text(resume ? 'Resume' : 'Play'),
@@ -120,8 +131,20 @@ class _Body extends ConsumerWidget {
               OutlinedButton.icon(
                 key: const Key('source-item-watched'),
                 onPressed: () async {
-                  await watched.setWatched(item, !summary.userState.watched);
-                  ref.invalidate(sourceItemProvider(item));
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await watched.setWatched(item, !summary.userState.watched);
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    messenger.showSnackBar(SnackBar(
+                      content: Text(e is SourceException
+                          ? e.viewerMessage
+                          : 'Could not update watched state.'),
+                    ));
+                    return;
+                  }
+                  if (!context.mounted) return;
+                  _invalidateAfterWrite(ref, item);
                 },
                 icon: Icon(summary.userState.watched
                     ? Icons.check_circle

@@ -22,6 +22,7 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
   static const _debounce = Duration(milliseconds: 400);
   Timer? _timer;
   int _request = 0;
+  String _lastQuery = '';
 
   @override
   AsyncValue<List<ItemSummary>>? build() {
@@ -31,12 +32,21 @@ class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
 
   void query(String text) {
     _timer?.cancel();
+    // Any newer input outdates a search still in flight.
+    _request++;
     final trimmed = text.trim();
+    _lastQuery = trimmed;
     if (trimmed.isEmpty) {
       state = null;
       return;
     }
     _timer = Timer(_debounce, () => _run(trimmed));
+  }
+
+  /// Runs the last query again, for the error view's retry.
+  void retry() {
+    final text = _lastQuery;
+    if (text.isNotEmpty) _run(text);
   }
 
   Future<void> _run(String text) async {
@@ -66,6 +76,19 @@ class SourceSearchScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final results = ref.watch(sourceSearchProvider(sourceId));
+    final searchable =
+        ref.watch(mediaSourceProvider(sourceId))?.as<Searchable>() != null;
+    if (!searchable) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(
+          child: Text(
+            'This server does not support search.',
+            key: Key('source-search-unsupported'),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: TextField(
@@ -90,7 +113,7 @@ class SourceSearchScreen extends ConsumerWidget {
           ),
         AsyncError(:final error) => SourceErrorView(
             error: error,
-            onRetry: () => ref.invalidate(sourceSearchProvider(sourceId)),
+            onRetry: ref.read(sourceSearchProvider(sourceId).notifier).retry,
           ),
         _ => const Center(child: CircularProgressIndicator()),
       },

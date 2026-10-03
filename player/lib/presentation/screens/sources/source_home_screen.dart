@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/library.dart';
@@ -30,7 +31,9 @@ class SourceHomeScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 16),
               children: [
                 _Header(
-                    title: source?.displayName ?? 'Server', sourceId: sourceId),
+                    title: source?.displayName ?? 'Server',
+                    sourceId: sourceId,
+                    searchable: source?.as<Searchable>() != null),
                 for (final library in value) _LibraryRow(library: library),
               ],
             ),
@@ -47,8 +50,13 @@ class SourceHomeScreen extends ConsumerWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.title, required this.sourceId});
+  const _Header({
+    required this.title,
+    required this.sourceId,
+    required this.searchable,
+  });
 
+  final bool searchable;
   final String title;
   final SourceId sourceId;
 
@@ -71,11 +79,12 @@ class _Header extends StatelessWidget {
             child:
                 Text(title, style: Theme.of(context).textTheme.headlineSmall),
           ),
-          IconButton(
-            key: const Key('source-open-search'),
-            icon: const Icon(Icons.search),
-            onPressed: () => context.push('/s/${sourceId.value}/search'),
-          ),
+          if (searchable)
+            IconButton(
+              key: const Key('source-open-search'),
+              icon: const Icon(Icons.search),
+              onPressed: () => context.push('/s/${sourceId.value}/search'),
+            ),
         ],
       ),
     );

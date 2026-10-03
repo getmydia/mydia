@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -37,7 +39,44 @@ Future<List<String>> pumpItem(
   return pushed;
 }
 
+class _NoWatchedSource extends FakeMediaSource {
+  @override
+  Set<SourceCapability> get capabilities => const {};
+
+  @override
+  T? as<T extends Object>() => null;
+}
+
+class _FailingWatchedSource extends FakeMediaSource {
+  @override
+  Future<void> setWatched(ItemRef ref, bool watched) async =>
+      throw const SourceException.unreachable();
+}
+
 void main() {
+  testWidgets('no watched toggle without WatchedState', (tester) async {
+    await pumpItem(
+        tester,
+        _NoWatchedSource(),
+        const ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3'));
+    expect(find.byKey(const Key('source-item-play')), findsOneWidget);
+    expect(find.byKey(const Key('source-item-watched')), findsNothing);
+  });
+
+  testWidgets('a failing setWatched shows a snackbar', (tester) async {
+    await pumpItem(
+        tester,
+        _FailingWatchedSource(),
+        const ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3'));
+    await tester.tap(find.byKey(const Key('source-item-watched')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text(const SourceException.unreachable().viewerMessage),
+        findsOneWidget);
+  });
+
   const movie =
       ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3');
 
