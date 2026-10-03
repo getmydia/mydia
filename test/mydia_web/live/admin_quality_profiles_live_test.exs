@@ -263,4 +263,41 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       assert updated.quality_standards[:excluded_sources] == []
     end
   end
+
+  describe "Require HDR toggle" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "HDR-#{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["2160p"], require_hdr: true}
+        })
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      {:ok, view, _html} = live(conn, ~p"/admin/quality")
+
+      %{view: view, profile: profile}
+    end
+
+    test "unchecking Require HDR persists false", %{view: view, profile: profile} do
+      view
+      |> element(~s{button[phx-click="edit_quality_profile"][phx-value-id="#{profile.id}"]})
+      |> render_click()
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{"quality_standards" => %{"require_hdr" => "false"}}
+      )
+      |> render_submit()
+
+      updated = Settings.get_quality_profile!(profile.id)
+      assert updated.quality_standards[:require_hdr] == false
+    end
+  end
 end

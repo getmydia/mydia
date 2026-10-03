@@ -349,6 +349,29 @@ defmodule MydiaWeb.AdminIndexersLiveTest do
       assert saved.connection_settings["timeout"] == 60_000
     end
 
+    test "unchecking Enabled disables the indexer (#1001)", %{conn: conn} do
+      {:ok, indexer} =
+        Settings.create_indexer_config(%{
+          name: "Toggle Indexer #{System.unique_integer([:positive])}",
+          type: :prowlarr,
+          base_url: "http://localhost:9696",
+          api_key: "test-api-key",
+          enabled: true
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/indexers")
+
+      view
+      |> element(~s{button[phx-click="edit_indexer"][phx-value-id="#{indexer.id}"]})
+      |> render_click()
+
+      view
+      |> form("#indexer-form", indexer_config: %{"enabled" => "false"})
+      |> render_submit()
+
+      refute Settings.get_indexer_config!(indexer.id).enabled
+    end
+
     @tag :skip
     test "test connection succeeds with valid prowlarr server", %{view: view} do
       bypass = Bypass.open()
