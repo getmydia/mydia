@@ -140,7 +140,8 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
           category: :discover,
           selected_genres: [],
           selected_language: nil,
-          selected_year: year,
+          year_from: year,
+          year_to: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
           current_scope: scope

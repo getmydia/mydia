@@ -37,6 +37,33 @@ defmodule MydiaWeb.DiscoverLive.IndexTest do
     %{conn: log_in_user(conn, user)}
   end
 
+  test "a reversed year range is swapped", %{conn: conn} do
+    # The range fetch is not warmed, so stub the relay rather than let the
+    # connected mount reach the network.
+    bypass = Bypass.open()
+    previous = Application.get_env(:mydia, :metadata_relay_url)
+    Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+    on_exit(fn ->
+      case previous do
+        nil -> Application.delete_env(:mydia, :metadata_relay_url)
+        value -> Application.put_env(:mydia, :metadata_relay_url, value)
+      end
+    end)
+
+    Bypass.stub(bypass, "GET", "/tmdb/movies/discover", fn conn ->
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"results" => [], "total_pages" => 1}))
+    end)
+
+    {:ok, view, _html} =
+      live(conn, ~p"/discover?category=discover&year_from=2010&year_to=2000")
+
+    assert has_element?(view, "#discover-year-from option[value='2000'][selected]")
+    assert has_element?(view, "#discover-year-to option[value='2010'][selected]")
+  end
+
   test "the media-type control defaults to Movies selected", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/discover")
 
