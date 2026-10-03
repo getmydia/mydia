@@ -252,7 +252,11 @@ defmodule MydiaWeb.AdminUsersLive.Index do
   end
 
   def handle_event("validate_reset_password", %{"reset_password" => reset_params}, socket) do
-    changeset = validate_reset_password(reset_params)
+    changeset =
+      reset_params
+      |> validate_reset_password()
+      |> Map.put(:action, :validate)
+
     {:noreply, assign(socket, :reset_password_form, to_form(changeset, as: :reset_password))}
   end
 
@@ -275,9 +279,9 @@ defmodule MydiaWeb.AdminUsersLive.Index do
 
         "auto" ->
           password = generate_password()
-          # Create a valid changeset for auto mode (no validation needed)
-          changeset = validate_reset_password(%{})
-          {password, password, changeset}
+          # Nothing user-entered to validate. validate_reset_password/1 requires
+          # both password fields, so routing auto mode through it always failed.
+          {password, password, Ecto.Changeset.change({%{}, %{}})}
       end
 
     if changeset.valid? do
@@ -305,7 +309,10 @@ defmodule MydiaWeb.AdminUsersLive.Index do
       {:noreply,
        socket
        |> put_flash(:error, "Please fix the errors below")
-       |> assign(:reset_password_form, to_form(changeset, as: :reset_password))}
+       |> assign(
+         :reset_password_form,
+         to_form(Map.put(changeset, :action, :insert), as: :reset_password)
+       )}
     end
   end
 

@@ -597,7 +597,10 @@
                     type={if(@show_password_reset, do: "text", else: "password")}
                     name="reset_password[password]"
                     value={@reset_password_form[:password].value}
-                    class="input input-bordered w-full pr-10"
+                    class={[
+                      "input input-bordered w-full pr-10",
+                      @reset_password_form[:password].errors != [] && "input-error"
+                    ]}
                     placeholder="Enter new password (min 8 characters)"
                     required
                   />
@@ -633,7 +636,10 @@
                     type={if(@show_password_reset, do: "text", else: "password")}
                     name="reset_password[password_confirmation]"
                     value={@reset_password_form[:password_confirmation].value}
-                    class="input input-bordered w-full pr-10"
+                    class={[
+                      "input input-bordered w-full pr-10",
+                      @reset_password_form[:password_confirmation].errors != [] && "input-error"
+                    ]}
                     placeholder="Re-enter new password"
                     required
                   />

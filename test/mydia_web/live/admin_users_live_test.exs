@@ -159,4 +159,54 @@ defmodule MydiaWeb.AdminUsersLiveTest do
              )
     end
   end
+
+  describe "reset password modal" do
+    setup do
+      %{target: user_fixture(%{username: "morgan"})}
+    end
+
+    defp open_reset(view, user) do
+      view
+      |> element(~s{button[phx-click="open_reset_password_modal"][phx-value-id="#{user.id}"]})
+      |> render_click()
+
+      view
+    end
+
+    test "auto-generate actually resets the password", %{conn: conn, target: target} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      open_reset(view, target)
+
+      view
+      |> element(~s{button[phx-click="submit_reset_password"]})
+      |> render_click()
+
+      refute Mydia.Accounts.verify_password(
+               Mydia.Accounts.get_user!(target.id),
+               "securepassword123"
+             )
+    end
+
+    test "a short manual password marks the password field", %{conn: conn, target: target} do
+      {:ok, view, _html} = live(conn, ~p"/admin/users")
+      open_reset(view, target)
+
+      view
+      |> element(~s{button[phx-click="toggle_password_mode_reset"][phx-value-mode="manual"]})
+      |> render_click()
+
+      view
+      |> form("#reset-password-form",
+        reset_password: %{password: "abcd", password_confirmation: "abcd"}
+      )
+      |> render_submit()
+
+      assert has_element?(
+               view,
+               ~s{#reset-password-form input[name="reset_password[password]"].input-error}
+             )
+
+      assert has_element?(view, "#reset-password-form", "must be at least 8 characters")
+    end
+  end
 end
