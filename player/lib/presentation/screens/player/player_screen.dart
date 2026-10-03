@@ -45,7 +45,8 @@ import '../../../core/player/input_capabilities.dart';
 import '../../../core/player/platform_features.dart';
 import '../../../core/player/playback_error.dart';
 import '../../../core/player/stream_timeline.dart';
-import '../../../core/playback/candidates_from_graphql.dart';
+import '../../../core/playback/candidates_from_graphql.dart'
+    show kbpsFromBitsPerSecond;
 import '../../../core/playback/adaptation_policy.dart';
 import '../../../core/playback/frame_stats_sampler.dart';
 import '../../../core/playback/health_sample.dart';
@@ -100,7 +101,6 @@ import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
-import '../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../graphql/queries/subtitle_track_settings.graphql.dart';
@@ -127,6 +127,8 @@ import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
+import 'session/mydia_playback_session.dart';
+import 'session/playback_session_types.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_content_query.dart';
 import 'subtitle_preference.dart';
@@ -427,6 +429,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// [_terminateHlsSession] treats a still-null client the same as any
   /// other best-effort failure (already caught and logged there).
   GraphQLClient? _graphqlClient;
+
+  /// Every GraphQL data call this screen makes goes through here.
+  late final MydiaPlaybackSession _session;
 
   /// Set once the 90% watched threshold is first crossed, so the invalidation
   /// fires once per playback rather than on every position tick.
@@ -1158,6 +1163,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
+    _session = MydiaPlaybackSession(
+      client: () => _graphqlClient,
+      awaitClient: () => ref.read(asyncGraphqlClientProvider.future),
+      target: () => PlaybackTarget(
+        mediaType: widget.mediaType,
+        mediaId: widget.mediaId,
+        fileId: widget.fileId,
+        showId: widget.showId,
+        seasonNumber: widget.seasonNumber,
+      ),
+    );
 
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
@@ -1405,7 +1421,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// streaming-candidates fetch pass `widget.fileId` (there is no other id
   /// yet); the caller after it must pass `playFileId` instead, so a self-heal
   /// that swaps in the server-ranked file for local playback (see
-  /// [_fetchStreamingCandidates]) reaches the receiver too, rather than
+  /// [MydiaPlaybackSession.candidates]) reaches the receiver too, rather than
   /// sending it the id the server just rejected.
   ///
   /// [loadGeneration] is the caller's own `gen` (like
@@ -1678,6 +1694,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             final graphqlClient =
                 await ref.read(asyncGraphqlClientProvider.future);
             if (!_isCurrentLoad(gen)) return;
+            _graphqlClient = graphqlClient;
             _progressService = ProgressService(graphqlClient);
             await _fetchProgressAndEpisodes(graphqlClient, gen);
             if (!_isCurrentLoad(gen)) return;
@@ -1825,14 +1842,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // still carrying that sentinel instead of a real file id. There is no
       // file to ask about, so ask about the media item and let the server rank.
       final byFile = widget.fileId != 'offline';
-      final mediaContentType =
-          widget.mediaType == 'movie' ? 'movie' : 'episode';
       // Started now and awaited below: it shares nothing with the queries in
       // `_fetchProgressAndEpisodes`, and never throws (it catches everything).
-      final candidatesFuture = _fetchStreamingCandidates(
-        graphqlClient,
-        byFile ? 'file' : mediaContentType,
-        byFile ? widget.fileId : widget.mediaId,
+      final candidatesFuture = _session.candidates(
+        byFile ? CandidateScope.file : CandidateScope.item,
       );
 
       // Fetch saved progress and episode list for TV shows
@@ -1866,15 +1879,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       var usesServerRankedFile = !byFile;
       if (byFile && candidatesFetch.serverRejected) {
         usesServerRankedFile = true;
-        candidatesFetch = await _fetchStreamingCandidates(
-          graphqlClient,
-          mediaContentType,
-          widget.mediaId,
-        );
+        candidatesFetch = await _session.candidates(CandidateScope.item);
         if (!_isCurrentLoad(gen)) return;
       }
 
-      final candidatesResult = candidatesFetch.candidates;
+      final offer = candidatesFetch.offer;
 
       // Held for _openPlayerAndStart, which builds the media_kit Player and
       // has to set mpv's alang before opening the media.
@@ -1888,8 +1897,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // (a `go` between two declarative player locations; a pushed player
       // gets a new State instead, see
       // `test/core/router/player_route_handoff_test.dart`).
-      final serverPreference =
-          candidatesResult?.metadata.preferredAudioLanguages;
+      final serverPreference = offer?.preferredAudioLanguages;
       if (serverPreference != null) {
         _preferredAudioLanguages = serverPreference;
       }
@@ -1909,13 +1917,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // throw-into-the-surrounding-catch convention used above for the
       // missing P2P server address.
       final playFileId = usesServerRankedFile
-          ? candidatesResult?.fileId ??
+          ? offer?.fileId ??
               (throw Exception(
                   'Could not reach the server to find a playable file for '
                   'this title. Check your connection and try again.'))
           : widget.fileId;
 
-      await _resolveQualityForFile(candidatesResult, gen);
+      await _resolveQualityForFile(offer, gen);
       if (!_isCurrentLoad(gen)) return;
 
       final memory = await _openPlaybackMemory();
@@ -1936,13 +1944,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final linkPath = mounted ? _currentLinkPath() : null;
 
       final inputs = PlanInputs(
-        candidates: candidateStrategiesFrom(candidatesResult?.candidates),
+        candidates: offer?.candidates ?? const [],
         isWeb: kIsWeb,
         typeSupported: CodecSupport.isTypeSupported,
         choice: QualityChoice.fromRung(_selectedQuality),
-        sourceHeight: candidatesResult?.metadata.height,
-        fileBitrateKbps:
-            kbpsFromBitsPerSecond(candidatesResult?.metadata.bitrate),
+        sourceHeight: offer?.height,
+        fileBitrateKbps: kbpsFromBitsPerSecond(offer?.bitrateBps),
         recentStall: linkPath == null
             ? null
             : memory?.recentStall(serverKey, linkPath, now: DateTime.now()),
@@ -1969,7 +1976,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // The saved progress record ranks below server metadata deliberately: it
       // may itself have been written against a partial duration by an older
       // build.
-      _totalDuration = _resolveRealDuration(candidatesResult);
+      _totalDuration = _resolveRealDuration(offer);
 
       // Publish the duration to the timeline as soon as we know it. Casting can
       // short-circuit playback below, before any streaming session exists, and
@@ -2097,10 +2104,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   /// The real runtime, from the most trustworthy source available.
-  Duration? _resolveRealDuration(
-    Query$StreamingCandidates$streamingCandidates? candidatesResult,
-  ) {
-    final fromCandidates = candidatesResult?.metadata.duration;
+  Duration? _resolveRealDuration(PlaybackOffer? offer) {
+    final fromCandidates = offer?.durationSeconds;
     if (fromCandidates != null && fromCandidates > 0) {
       return Duration(milliseconds: (fromCandidates * 1000).round());
     }
@@ -2131,13 +2136,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// on the only path carrying the viewer's choice: a swallowed write failure
   /// would make the restart negotiate the rung they just replaced, and the
   /// label would revert in front of them. See [_settledQuality].
-  Future<void> _resolveQualityForFile(
-    Query$StreamingCandidates$streamingCandidates? candidatesResult,
-    int gen,
-  ) async {
-    _qualityLadder = deriveQualityLadder(
-      sourceHeight: candidatesResult?.metadata.height,
-    );
+  Future<void> _resolveQualityForFile(PlaybackOffer? offer, int gen) async {
+    _qualityLadder = deriveQualityLadder(sourceHeight: offer?.height);
 
     final requested = _settledQuality ?? await _storedDefaultQuality();
     if (!_isCurrentLoad(gen)) return;
@@ -3119,84 +3119,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     return null;
   }
 
-  /// Fetch streaming candidates from the server via GraphQL.
-  ///
-  /// `networkOnly` is load-bearing. The primary call here is keyed by the
-  /// specific file the user selected (`('file', widget.fileId)`), not by
-  /// content id. When the server rejects that file id — e.g. because a
-  /// quality upgrade trashed it (`Mydia.Upgrades.apply_upgrade/4`) — the
-  /// caller in [_initializePlayer] re-asks by media item and plays whatever
-  /// the server ranks instead (`playFileId`). That self-heal only works if
-  /// the rejection is actually visible: a warm cache entry for
-  /// `('file', id)` recorded before the file was trashed still holds a
-  /// *successful* response, with no `graphqlErrors`, because the request
-  /// that produced it really did succeed at the time. Serving that cached
-  /// hit would make `result.hasException` false, so `serverRejected` below
-  /// would never be true, and the self-heal would silently never fire — the
-  /// exact bug this whole mechanism exists to avoid. `networkOnly` is what
-  /// forces a live request every time, so a rejection is always observable.
-  /// That is the load-bearing reason, not merely keeping a stale `fileId`
-  /// out of the direct-play URL: on the fallback paths (the offline
-  /// sentinel, and this self-heal) the id used for playback comes from this
-  /// response rather than from the route regardless, so a stale cached
-  /// response there would feed a dead file straight into playback either way.
-  ///
-  /// `cacheAndNetwork` is not the fix: on a one-shot `client.query()` it
-  /// returns the cached result and discards the network one, which is the same
-  /// defect `core/graphql/watch/query_watcher.dart` documents. Nothing is lost
-  /// by going to the network here — the offline branch returns long before this
-  /// runs, and every remaining path needs the server to serve a single byte.
-  ///
-  /// `serverRejected` distinguishes *why* a call failed, so the caller can
-  /// decide whether it is safe to retry against a different id.
-  /// `streaming_resolver.ex`'s `streaming_candidates/3` answers an unknown
-  /// id with a GraphQL error (e.g. "file not found") rather than throwing —
-  /// the server understood the request and gave a real answer, so
-  /// `result.exception` carries non-empty `graphqlErrors` and a null
-  /// `linkException`. A transport failure (unreachable server, timeout,
-  /// socket error) looks the opposite: no `graphqlErrors`, a non-null
-  /// `linkException`. Only the former means "this id doesn't exist"; the
-  /// latter means "we don't know", and must not be treated the same way by
-  /// callers that would otherwise retry with a different id.
-  Future<
-      ({
-        Query$StreamingCandidates$streamingCandidates? candidates,
-        bool serverRejected,
-      })> _fetchStreamingCandidates(
-    GraphQLClient graphqlClient,
-    String contentType,
-    String id,
-  ) async {
-    try {
-      final result = await graphqlClient.query(
-        QueryOptions(
-          document: documentNodeQueryStreamingCandidates,
-          variables: Variables$Query$StreamingCandidates(
-            contentType: contentType,
-            id: id,
-          ).toJson(),
-          fetchPolicy: FetchPolicy.networkOnly,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Failed to fetch candidates: ${result.exception}');
-        final exception = result.exception;
-        final serverRejected = exception != null &&
-            exception.graphqlErrors.isNotEmpty &&
-            exception.linkException == null;
-        return (candidates: null, serverRejected: serverRejected);
-      }
-
-      final data = Query$StreamingCandidates.fromJson(result.data!);
-      return (candidates: data.streamingCandidates, serverRejected: false);
-    } catch (e) {
-      debugPrint('[PlayerScreen] Error fetching streaming candidates: $e');
-      return (candidates: null, serverRejected: false);
-    }
-  }
-
   /// Fetches the movie or episode detail document: saved progress, runtime,
   /// and the subtitle tracks extracted from its files.
   Future<void> _fetchDetail(GraphQLClient client, int gen) async {
@@ -3536,7 +3458,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // one instead) this is comparing against the id the server just
     // rejected. No file matches, so external subtitles are silently
     // dropped for that playback. Intentional for now — see
-    // [_fetchStreamingCandidates] for the self-heal itself.
+    // [MydiaPlaybackSession.candidates] for the self-heal itself.
     for (final file in files) {
       if (file == null) continue;
       if (file.id == widget.fileId) {
@@ -3624,7 +3546,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // path in [_initializePlayer] (server rejected the selected file and
       // re-ranked one instead) this looks up segments for the id the server
       // just rejected and finds none. Skip markers are silently dropped for
-      // that playback. Intentional for now — see [_fetchStreamingCandidates]
+      // that playback. Intentional for now — see [MydiaPlaybackSession.candidates]
       // for the self-heal itself.
       _segments = MediaSegment.forFile(
         result.data,
