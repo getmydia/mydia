@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -180,4 +181,80 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
 
   @override
   void dispose() => _status.dispose();
+}
+
+const fakeResumingEpisode = ItemSummary(
+  ref:
+      ItemRef(sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e2'),
+  title: 'Invented Episode 2',
+  subtitle: 'S1 · E2',
+  showTitle: 'Invented Series',
+  index: 2,
+  parentIndex: 1,
+  durationSeconds: 1800,
+  userState: UserState(progressSeconds: 600),
+);
+
+/// A source with Continue Watching. Removing drops the item from
+/// [resuming], as the server would.
+class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
+  FakeResumingSource({List<ItemSummary>? resuming})
+      : resuming =
+            resuming ?? [fakeResumingEpisode, fakeMovie(3, progress: 1200)];
+
+  List<ItemSummary> resuming;
+  SourceException? continueError;
+  SourceException? removeError;
+  int continueCalls = 0;
+  final removed = <ItemRef>[];
+
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.continueWatching};
+
+  @override
+  Future<List<ItemSummary>> continueWatching() async {
+    continueCalls++;
+    if (continueError case final e?) throw e;
+    return resuming;
+  }
+
+  @override
+  Future<void> removeFromContinueWatching(ItemRef ref) async {
+    if (removeError case final e?) throw e;
+    removed.add(ref);
+    resuming = [
+      for (final item in resuming)
+        if (item.ref != ref) item,
+    ];
+  }
+}
+
+/// A source with Continue Watching and server hubs, as Plex has.
+class FakeHubSource extends FakeResumingSource implements HomeHubs {
+  FakeHubSource({super.resuming});
+
+  SourceException? hubsError;
+
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.hubs};
+
+  @override
+  Future<List<Hub>> hubs() async {
+    if (hubsError case final e?) throw e;
+    return [
+      Hub(
+        id: 'home.movies.recent',
+        title: 'Recently Added in Films',
+        items: [fakeMovie(5), fakeMovie(6)],
+        library: FakeMediaSource.movies,
+      ),
+      Hub(
+        id: 'home.mixed.released',
+        title: 'Recently Released',
+        items: [fakeMovie(7), fakeShow],
+      ),
+    ];
+  }
 }
