@@ -259,6 +259,19 @@ defmodule Mydia.MetadataCacheHelpers do
   end
 
   @doc """
+  Seeds an empty TMDB rating fallback for a TVDB series whose remoteIds name
+  `tmdb_id`, so fetching that series makes no extra `/tmdb/tv/shows/:id` call.
+
+  Needed by tests that pin the TMDB route with `Bypass.expect_once`.
+  """
+  def warm_tvdb_rating_fallback(tmdb_id) do
+    key = "tvdb_tmdb_rating:#{tmdb_id}"
+    Cache.put(key, nil, ttl: :timer.minutes(30))
+    on_exit(fn -> Cache.delete(key) end)
+    :ok
+  end
+
+  @doc """
   Populates the movie search cache for `query` with `results`.
 
   `results` are raw TMDB result maps with string keys, matching

@@ -156,8 +156,17 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
 
       # No genre_ids set, so it classifies as plain "movie" -- out of bounds
-      # for a cartoon_movie-only scope.
-      results = [result(%{provider_id: to_string(System.unique_integer([:positive]))})]
+      # for a cartoon_movie-only scope. With no signals on the hit, the filter
+      # looks it up, so serve that from cache.
+      id = Mydia.MetadataCacheHelpers.unique_provider_id()
+
+      Mydia.MetadataCacheHelpers.warm_remote_signals(
+        {:tmdb, id},
+        :movie,
+        %Mydia.Media.RemoteSignals{category: "movie"}
+      )
+
+      results = [result(%{provider_id: to_string(id)})]
 
       socket = stub_socket(%{media_item: current, current_scope: scope})
 
