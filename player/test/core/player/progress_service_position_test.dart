@@ -15,7 +15,7 @@ void main() {
   setUp(() {
     client = MockGraphQLClient();
     service = ProgressService(client);
-    when(client.mutate(any)).thenAnswer(
+    when(client.mutate<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         source: QueryResultSource.network,
         data: const {},
@@ -32,13 +32,13 @@ void main() {
         const Duration(seconds: 120),
       );
 
-      verify(client.mutate(any)).called(1);
+      verify(client.mutate<Object?>(any)).called(1);
     });
 
     test('skips the mutation when duration is zero', () async {
       await service.syncMoviePosition('movie-1', Duration.zero, Duration.zero);
 
-      verifyNever(client.mutate(any));
+      verifyNever(client.mutate<Object?>(any));
     });
 
     test('skips the mutation when position exceeds duration', () async {
@@ -48,7 +48,7 @@ void main() {
         const Duration(seconds: 120),
       );
 
-      verifyNever(client.mutate(any));
+      verifyNever(client.mutate<Object?>(any));
     });
   });
 
@@ -60,7 +60,7 @@ void main() {
         const Duration(seconds: 120),
       );
 
-      verify(client.mutate(any)).called(1);
+      verify(client.mutate<Object?>(any)).called(1);
     });
   });
 

@@ -2076,7 +2076,7 @@ void main() {
       // The immersive player, in production: the shell stays mounted
       // underneath but is no longer the current route.
       final navigator = Navigator.of(tester.element(find.byKey(sidebarKey)));
-      navigator.push(MaterialPageRoute(
+      navigator.push(MaterialPageRoute<void>(
         builder: (_) => const Scaffold(body: SizedBox.expand()),
       ));
       await tester.pumpAndSettle();
@@ -2102,7 +2102,7 @@ void main() {
       // `CastBarLayer` sits above this Navigator entirely, so the ambient bar
       // stays visible; only the dock's own reported height should drop.
       final navigator = Navigator.of(tester.element(find.byKey(dockKey)));
-      navigator.push(MaterialPageRoute(
+      navigator.push(MaterialPageRoute<void>(
         builder: (_) => const Scaffold(body: SizedBox.expand()),
       ));
       await tester.pumpAndSettle();

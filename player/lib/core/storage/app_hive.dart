@@ -13,6 +13,11 @@
 /// under `$XDG_DATA_HOME` on Linux, and the app's private support directory on
 /// Android and iOS. [initAppHive] moves an existing install's boxes there on
 /// first launch; see `hive_box_migration.dart`.
+///
+/// Boxes of plain maps and lists are typed `Box<Map<dynamic, dynamic>>` and
+/// `Box<List<dynamic>>`, spelled out in full. Hive asserts in debug builds
+/// that a box's type argument prints as exactly that, so `Map<Object?, Object?>`
+/// is rejected at `openBox` even though it is the same type.
 library;
 
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;

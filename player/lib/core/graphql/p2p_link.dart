@@ -212,7 +212,7 @@ class P2pGraphQLLink extends Link {
           'retrying in ${backoff.inSeconds}s: $e',
         );
 
-        await Future.delayed(backoff);
+        await Future<void>.delayed(backoff);
 
         // Try to re-establish the connection before retrying
         try {

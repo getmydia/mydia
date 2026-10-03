@@ -202,7 +202,7 @@ class StreamingTestHelper {
         // Connection errors are expected while stream initializes
       }
 
-      await Future.delayed(retryDelay);
+      await Future<void>.delayed(retryDelay);
     }
 
     return false;
@@ -250,7 +250,7 @@ class StreamingTestHelper {
         // Connection errors are expected while stream initializes
       }
 
-      await Future.delayed(retryDelay);
+      await Future<void>.delayed(retryDelay);
     }
 
     return false;
@@ -300,7 +300,7 @@ class StreamingTestHelper {
         return true;
       }
 
-      await Future.delayed(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(seconds: 1));
     }
 
     return false;

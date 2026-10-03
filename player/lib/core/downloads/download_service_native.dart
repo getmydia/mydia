@@ -962,7 +962,7 @@ class _NativeDownloadService implements DownloadService {
       while (!transcodeComplete && !cancelToken.isCancelled) {
         if (_pausedTasks[task.id] == true) {
           // Paused, wait and check again
-          await Future.delayed(const Duration(seconds: 1));
+          await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
 
@@ -992,7 +992,7 @@ class _NativeDownloadService implements DownloadService {
           break;
         }
 
-        await Future.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(seconds: 2));
       }
 
       // Check if cancelled - cleanup is handled by cancelDownload
@@ -1037,7 +1037,7 @@ class _NativeDownloadService implements DownloadService {
           );
           await _database!.saveTask(updatedTask);
           _emit(updatedTask);
-          await Future.delayed(const Duration(seconds: 1));
+          await Future<void>.delayed(const Duration(seconds: 1));
           continue;
         }
 
@@ -1116,10 +1116,10 @@ class _NativeDownloadService implements DownloadService {
             downloadComplete = true;
           } else if (!transcodeComplete) {
             // Still transcoding, wait a bit then check for more data
-            await Future.delayed(const Duration(seconds: 2));
+            await Future<void>.delayed(const Duration(seconds: 2));
           } else if (response.statusCode == 206) {
             // Partial content received, continue downloading
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future<void>.delayed(const Duration(milliseconds: 500));
           }
         } on DioException catch (e) {
           if (e.type == DioExceptionType.cancel) {
@@ -1131,7 +1131,8 @@ class _NativeDownloadService implements DownloadService {
           // so the recovery sweep can decide what to do.
           if (!transcodeComplete) {
             transientRetries++;
-            await Future.delayed(Duration(seconds: 1 << transientRetries));
+            await Future<void>.delayed(
+                Duration(seconds: 1 << transientRetries));
             if (transientRetries >= maxTransientRetries) {
               final interrupted = updatedTask.copyWith(
                 status: 'interrupted',

@@ -333,7 +333,7 @@ class DownloadsScreen extends ConsumerWidget {
       onTap: () async {
         if (group.type == GroupType.series) {
           Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (context) => SeriesDownloadsScreen(
                 showId: group.id,
                 showTitle: group.title,
@@ -614,7 +614,7 @@ class DownloadsScreen extends ConsumerWidget {
 
     if (!context.mounted) return;
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
@@ -643,7 +643,7 @@ class DownloadsScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, DownloadGroup group) {
     final isActive = group.activeTasks.isNotEmpty;
 
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
@@ -745,7 +745,7 @@ class DownloadsScreen extends ConsumerWidget {
                   onTap: () {
                     Navigator.pop(sheetContext);
                     Navigator.of(context).push(
-                      MaterialPageRoute(
+                      MaterialPageRoute<void>(
                         builder: (context) => SeriesDownloadsScreen(
                           showId: group.id,
                           showTitle: group.title,
@@ -1181,7 +1181,7 @@ class DownloadsScreen extends ConsumerWidget {
 
   void _showStorageSettings(
       BuildContext context, WidgetRef ref, StorageQuotaStatus status) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,

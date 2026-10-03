@@ -315,7 +315,7 @@ void main() {
         );
 
         Object? caught;
-        unawaited(backend.connect(_connectedDevice).catchError((e) {
+        unawaited(backend.connect(_connectedDevice).catchError((Object e) {
           caught = e;
         }));
         async.flushMicrotasks();

@@ -34,7 +34,7 @@ void main() {
 
   test('search parses grouped sections', () async {
     final container = makeContainer();
-    when(client.query(any)).thenAnswer(
+    when(client.query<Object?>(any)).thenAnswer(
       (_) async => _searchResult(const {
         'totalCount': 2,
         'sections': [
@@ -71,8 +71,9 @@ void main() {
 
   test('sends the selected types as API values', () async {
     final container = makeContainer();
-    when(client.query(any)).thenAnswer(
-      (_) async => _searchResult(const {'totalCount': 0, 'sections': []}),
+    when(client.query<Object?>(any)).thenAnswer(
+      (_) async =>
+          _searchResult(const {'totalCount': 0, 'sections': <Object?>[]}),
     );
 
     final notifier = container.read(searchControllerProvider.notifier);
@@ -80,23 +81,24 @@ void main() {
     notifier.toggleType(SearchResultType.collection);
     await notifier.search();
 
-    final captured =
-        verify(client.query(captureAny)).captured.single as QueryOptions;
+    final captured = verify(client.query<Object?>(captureAny)).captured.single
+        as QueryOptions;
     expect(captured.variables['types'], ['COLLECTION']);
   });
 
   test('omits the types variable when no filter is selected', () async {
     final container = makeContainer();
-    when(client.query(any)).thenAnswer(
-      (_) async => _searchResult(const {'totalCount': 0, 'sections': []}),
+    when(client.query<Object?>(any)).thenAnswer(
+      (_) async =>
+          _searchResult(const {'totalCount': 0, 'sections': <Object?>[]}),
     );
 
     final notifier = container.read(searchControllerProvider.notifier);
     notifier.updateQuery('alien');
     await notifier.search();
 
-    final captured =
-        verify(client.query(captureAny)).captured.single as QueryOptions;
+    final captured = verify(client.query<Object?>(captureAny)).captured.single
+        as QueryOptions;
     expect(captured.variables.containsKey('types'), isFalse);
   });
 
@@ -108,7 +110,7 @@ void main() {
     await notifier.search();
 
     expect(container.read(searchControllerProvider).results, isNull);
-    verifyNever(client.query(any));
+    verifyNever(client.query<Object?>(any));
   });
 
   test('setTypes replaces the whole filter set', () {
@@ -126,7 +128,7 @@ void main() {
 
   test('a GraphQL exception lands in the error state', () async {
     final container = makeContainer();
-    when(client.query(any)).thenAnswer(
+    when(client.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,
@@ -150,7 +152,7 @@ void main() {
       'a schema-mismatch GraphQL error renders a legible upgrade message, '
       'not the raw exception', () async {
     final container = makeContainer();
-    when(client.query(any)).thenAnswer(
+    when(client.query<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         options: QueryOptions(document: gql('query { x }')),
         source: QueryResultSource.network,
@@ -209,7 +211,7 @@ void main() {
     final earlier = Completer<QueryResult>();
     final newer = Completer<QueryResult>();
     var calls = 0;
-    when(client.query(any)).thenAnswer((_) {
+    when(client.query<Object?>(any)).thenAnswer((_) {
       calls++;
       return calls == 1 ? earlier.future : newer.future;
     });
@@ -264,7 +266,7 @@ void main() {
   test('an in-flight response is dropped after clear', () async {
     final container = makeContainer();
     final pending = Completer<QueryResult>();
-    when(client.query(any)).thenAnswer((_) => pending.future);
+    when(client.query<Object?>(any)).thenAnswer((_) => pending.future);
 
     final notifier = container.read(searchControllerProvider.notifier);
     notifier.updateQuery('alien');

@@ -833,6 +833,6 @@ Future<void> pumpUntilReal(
   final deadline = DateTime.now().add(ceiling);
   while (!condition() && DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 20));
-    await Future.delayed(const Duration(milliseconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
