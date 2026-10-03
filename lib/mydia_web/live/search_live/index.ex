@@ -1324,7 +1324,9 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  defp search_and_fetch_metadata(scope, parsed) do
+  @doc false
+  # Public only so the restricted auto-match branches can be pinned in tests.
+  def search_and_fetch_metadata(scope, parsed) do
     # Use the default metadata relay configuration
     config = Metadata.default_relay_config()
 
@@ -1341,26 +1343,26 @@ defmodule MydiaWeb.SearchLive.Index do
     search_opts = if parsed.year, do: [{:year, parsed.year} | search_opts], else: search_opts
 
     # A restricted account must not match a release to a title outside its
-    # limits, so an out-of-bounds hit is as good as no hit.
+    # limits. The branch is chosen on the raw hit count, though: a release
+    # that was ambiguous stays ambiguous, so the account confirms the pick
+    # instead of having the one survivor linked automatically.
     search_result =
       with {:ok, matches} <- Metadata.search(config, parsed.title, search_opts) do
-        {:ok, RemoteFilter.filter(matches, scope)}
+        {:ok, length(matches), RemoteFilter.filter(matches, scope)}
       end
 
     case search_result do
-      {:ok, []} ->
+      {:ok, _raw_count, []} ->
         Logger.warning("No metadata matches found for: #{parsed.title}")
         {:error, :no_metadata_match}
 
-      {:ok, [single_match]} ->
+      {:ok, 1, [single_match]} ->
         # Only one match, fetch it directly
-        Logger.info(
-          "Found single metadata match: #{single_match["title"] || single_match["name"]}"
-        )
+        Logger.info("Found single metadata match: #{single_match.title || single_match.name}")
 
         fetch_full_metadata(config, single_match, media_type)
 
-      {:ok, matches} when length(matches) > 1 ->
+      {:ok, _raw_count, matches} ->
         # Multiple matches, return them for disambiguation
         Logger.info("Found #{length(matches)} metadata matches, requires disambiguation")
         {:ok, {:multiple_matches, matches, media_type}}

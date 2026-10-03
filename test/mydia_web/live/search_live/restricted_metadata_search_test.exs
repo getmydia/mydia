@@ -35,6 +35,9 @@ defmodule MydiaWeb.SearchLive.RestrictedMetadataSearchTest do
     render_hook(view, "manual_search_submit", %{"search_query" => "Stub"})
     render_async(view)
 
+    # Read from the assigns: the manual-search modal renders its matches only
+    # while open, and only a failed release add opens it, so there is no
+    # markup to assert on from a bare /search mount.
     view.pid
     |> :sys.get_state()
     |> Map.fetch!(:socket)
