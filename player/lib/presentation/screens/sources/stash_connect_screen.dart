@@ -23,10 +23,15 @@ Uri? parseStashUrl(String text) {
   final uri = Uri.tryParse(withScheme);
   if (uri == null || uri.host.isEmpty) return null;
   if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  // A reverse proxy may mount Stash under a subpath, so the path stays.
+  final path = uri.path.endsWith('/')
+      ? uri.path.substring(0, uri.path.length - 1)
+      : uri.path;
   return Uri(
     scheme: uri.scheme,
     host: uri.host,
     port: uri.hasPort ? uri.port : null,
+    path: path.isEmpty ? null : path,
   );
 }
 
@@ -125,6 +130,12 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
       return;
     }
     final key = _key.text.trim();
+    if (uri.scheme == 'http' && key.isNotEmpty && !isPrivateHost(uri.host)) {
+      setState(() => _error =
+          'Use https:// for a Stash server outside your network, so the API '
+              'key is not sent in the clear.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -149,6 +160,10 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
           ? 'Stash rejected that API key. Copy it from Stash under '
               'Settings, Security.'
           : e.viewerMessage);
+    } catch (_) {
+      // Secure storage or the record store failed after the server answered.
+      if (!mounted) return;
+      setState(() => _error = 'Could not save this server on this device.');
     } finally {
       connection.dispose();
       if (mounted) setState(() => _busy = false);

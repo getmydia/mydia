@@ -9,6 +9,17 @@ import '../connection/source_connection.dart';
 import '../source_http.dart';
 import 'stash_documents.dart';
 
+/// [path] (with its query, if any) under [base], keeping any subpath the
+/// server is mounted at behind a reverse proxy. `Uri.resolve` would drop it
+/// for a path that starts with `/`.
+Uri stashUnder(Uri base, String path) {
+  final prefix = base.path.endsWith('/')
+      ? base.path.substring(0, base.path.length - 1)
+      : base.path;
+  final relative = path.startsWith('/') ? path : '/$path';
+  return Uri.parse('${base.scheme}://${base.authority}$prefix$relative');
+}
+
 class StashClient {
   StashClient({
     required this.connection,
@@ -29,7 +40,8 @@ class StashClient {
     return {if (key != null && key.isNotEmpty) 'ApiKey': key};
   }
 
-  Future<Uri> url(String path) async => (await connection.base()).resolve(path);
+  Future<Uri> url(String path) async =>
+      stashUnder(await connection.base(), path);
 
   Future<Map<String, dynamic>> query(
     String document, [
@@ -39,7 +51,7 @@ class StashClient {
     // JSON `errors` body, so those statuses are decoded, not thrown.
     final response = await _guard((base) async => _http.send(
           'POST',
-          base.resolve('/graphql'),
+          stashUnder(base, '/graphql'),
           headers: {'Accept': 'application/json', ...await headers()},
           body: {'query': document, 'variables': variables},
           passThrough: const {400, 422},
@@ -80,7 +92,7 @@ class StashClient {
   }
 
   Future<String> text(String path) => _guard((base) async {
-        final response = await _http.send('GET', base.resolve(path),
+        final response = await _http.send('GET', stashUnder(base, path),
             headers: await headers());
         return utf8.decode(response.bodyBytes);
       });
@@ -118,7 +130,7 @@ Future<bool> stashProbe(
   try {
     await http.send(
       'POST',
-      base.resolve('/graphql'),
+      stashUnder(base, '/graphql'),
       headers: {if (key != null && key.isNotEmpty) 'ApiKey': key},
       body: {'query': stashSystemStatus},
       timeout: const Duration(seconds: 5),

@@ -58,11 +58,22 @@ void main() {
       'localhost',
       'nas.local',
       '::1',
-      'fd12:3456::1'
+      'fd12:3456::1',
+      '100.64.0.1',
+      '100.101.102.103',
+      '100.127.255.254',
+      'nas.tail1234.ts.net',
     ]) {
       expect(isPrivateHost(host), isTrue, reason: host);
     }
-    for (final host in ['172.32.0.1', '8.8.8.8', 'stash.example.test']) {
+    for (final host in [
+      '172.32.0.1',
+      '8.8.8.8',
+      'stash.example.test',
+      '100.63.255.255',
+      '100.128.0.1',
+      'ts.net.example.test',
+    ]) {
       expect(isPrivateHost(host), isFalse, reason: host);
     }
   });

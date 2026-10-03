@@ -88,24 +88,41 @@ class StashStreamResolver implements StreamResolver {
 }
 
 class StashProgressReporter extends PeriodicProgressReporter {
-  StashProgressReporter({required this.client, required this.sceneId});
+  StashProgressReporter({
+    required this.client,
+    required this.sceneId,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
 
   final StashClient client;
   final String sceneId;
+  final DateTime Function() _clock;
+
+  DateTime? _lastReportAt;
+  bool _lastPaused = true;
 
   @override
   Future<void> sendProgress({
     required int positionSeconds,
     required int durationSeconds,
     required bool paused,
-  }) =>
-      client.query(stashSaveActivity, {
-        'id': sceneId,
-        'resume_time': positionSeconds.toDouble(),
-        // Seconds watched since the last report, which is what Stash sums
-        // into its play duration.
-        'playDuration': paused ? 0.0 : interval.inSeconds.toDouble(),
-      });
+  }) {
+    // Reports also fire on play, pause, seek and save, so the span since the
+    // previous report is what was watched, and only when playback was
+    // running through it. Stash sums this into its play duration.
+    final now = _clock();
+    final previous = _lastReportAt;
+    final watched = previous != null && !_lastPaused
+        ? now.difference(previous).inMilliseconds / 1000
+        : 0.0;
+    _lastReportAt = now;
+    _lastPaused = paused;
+    return client.query(stashSaveActivity, {
+      'id': sceneId,
+      'resume_time': positionSeconds.toDouble(),
+      'playDuration': watched,
+    });
+  }
 
   @override
   Future<void> sendWatched() => client.query(stashAddPlay, {'id': sceneId});

@@ -24,6 +24,28 @@ void main() {
     );
   }
 
+  test('play duration is the playing time since the previous report', () async {
+    var now = DateTime(2026, 1, 1, 12);
+    final b = build();
+    final reporter = StashProgressReporter(
+        client: b.source.client, sceneId: '2', clock: () => now);
+    Future<double> report({required bool paused}) async {
+      await reporter.sendProgress(
+          positionSeconds: 10, durationSeconds: 1200, paused: paused);
+      return b.server.operations.last.$2['playDuration'] as double;
+    }
+
+    expect(await report(paused: false), 0.0); // first report
+    now = now.add(const Duration(seconds: 10));
+    expect(await report(paused: false), 10.0); // periodic tick
+    now = now.add(const Duration(seconds: 4));
+    expect(await report(paused: true), 4.0); // pause: playing until now
+    now = now.add(const Duration(seconds: 30));
+    expect(await report(paused: false), 0.0); // resume: paused through it
+    now = now.add(const Duration(seconds: 2));
+    expect(await report(paused: false), 2.0); // seek while playing
+  });
+
   test('maps heights to Stash resolutions', () {
     expect(stashResolutionFor(null), 'ORIGINAL');
     expect(stashResolutionFor(240), 'LOW');

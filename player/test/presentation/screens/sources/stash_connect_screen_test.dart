@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/source_factories.dart';
@@ -17,6 +20,12 @@ import '../../../test_utils/mock_auth_storage.dart';
 class _Unauthenticated extends AuthStateNotifier {
   @override
   AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
+}
+
+class _FailingStore extends InMemorySourceStore {
+  @override
+  Future<void> putAccount(SourceAccountRecord record) =>
+      throw StateError('disk full');
 }
 
 void main() {
@@ -70,6 +79,93 @@ void main() {
         FakeStashServer.apiKey);
     expect(find.textContaining('opened ${record.account.id}:owner:main'),
         findsOneWidget);
+  });
+
+  test('keeps a reverse-proxy subpath', () {
+    expect(parseStashUrl('https://host.example.test/stash/').toString(),
+        'https://host.example.test/stash');
+    expect(parseStashUrl('host.example.test:9999/a/b').toString(),
+        'http://host.example.test:9999/a/b');
+  });
+
+  group('the API key and plain HTTP', () {
+    const refusal = 'Use https:// for a Stash server outside your network';
+
+    // A server that answers 401 and counts requests, so "was not refused"
+    // is "the request went out".
+    Future<int> submit(WidgetTester tester, String url, String key) async {
+      var requests = 0;
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          authStateProvider.overrideWith(_Unauthenticated.new),
+          sourceStoreProvider
+              .overrideWith((ref) async => InMemorySourceStore()),
+          sourceSecretsProvider
+              .overrideWithValue(SourceSecrets(MockAuthStorage())),
+          sourceHttpProvider
+              .overrideWithValue(SourceHttp(client: MockClient((_) async {
+            requests++;
+            return http.Response('', 401);
+          }))),
+        ],
+        child: const MaterialApp(home: StashConnectScreen()),
+      ));
+      await tester.enterText(find.byKey(const Key('stash-url-field')), url);
+      await tester.enterText(find.byKey(const Key('stash-key-field')), key);
+      await tester.tap(find.byKey(const Key('stash-connect-button')));
+      await tester.pumpAndSettle();
+      return requests;
+    }
+
+    testWidgets('refuses a key over http to a host outside the network',
+        (tester) async {
+      final requests = await submit(tester, 'http://stash.example.test', 'k');
+      expect(requests, 0);
+      expect(find.textContaining(refusal), findsOneWidget);
+    });
+
+    for (final url in [
+      'http://192.168.1.20:9999',
+      'http://100.101.102.103:9999',
+      'http://nas.tail1234.ts.net:9999',
+      'https://stash.example.test',
+    ]) {
+      testWidgets('lets a key go to $url', (tester) async {
+        final requests = await submit(tester, url, 'k');
+        expect(requests, greaterThan(0));
+        expect(find.textContaining(refusal), findsNothing);
+      });
+    }
+
+    testWidgets('does not refuse http without a key', (tester) async {
+      final requests = await submit(tester, 'http://stash.example.test', '');
+      expect(requests, greaterThan(0));
+      expect(find.textContaining(refusal), findsNothing);
+    });
+  });
+
+  testWidgets('says so when the server cannot be saved on this device',
+      (tester) async {
+    final server = FakeStashServer();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => _FailingStore()),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
+      ],
+      child: const MaterialApp(home: StashConnectScreen()),
+    ));
+    await tester.enterText(
+        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+    await tester.enterText(
+        find.byKey(const Key('stash-key-field')), FakeStashServer.apiKey);
+    await tester.tap(find.byKey(const Key('stash-connect-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save this server on this device.'),
+        findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('a rejected key says where to find the right one',

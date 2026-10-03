@@ -97,10 +97,16 @@ class SingleConnection implements SourceConnection {
 }
 
 /// Whether [host] is on this network: RFC 1918, loopback, link-local,
-/// unique-local IPv6, or an mDNS name.
+/// unique-local IPv6, an mDNS name, or Tailscale (CGNAT 100.64.0.0/10 and
+/// `.ts.net` names, whose traffic is encrypted end to end).
 bool isPrivateHost(String host) {
   final h = host.toLowerCase();
-  if (h == 'localhost' || h.endsWith('.local') || h == '::1') return true;
+  if (h == 'localhost' ||
+      h.endsWith('.local') ||
+      h.endsWith('.ts.net') ||
+      h == '::1') {
+    return true;
+  }
   if (h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80:')) {
     return h.contains(':');
   }
@@ -113,5 +119,6 @@ bool isPrivateHost(String host) {
       a == 127 ||
       (a == 172 && b >= 16 && b <= 31) ||
       (a == 192 && b == 168) ||
-      (a == 169 && b == 254);
+      (a == 169 && b == 254) ||
+      (a == 100 && b >= 64 && b <= 127);
 }
