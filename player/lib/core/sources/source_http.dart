@@ -25,6 +25,7 @@ class SourceHttp {
     Map<String, String> headers = const {},
     Object? body,
     Duration timeout = defaultTimeout,
+    Set<int> passThrough = const {},
   }) async {
     final request = http.Request(method, url)..headers.addAll(headers);
     if (body != null) {
@@ -46,7 +47,9 @@ class SourceHttp {
       throw const SourceException.unreachable();
     }
     final code = response.statusCode;
-    if (code >= 200 && code < 300) return response;
+    if (code >= 200 && code < 300 || passThrough.contains(code)) {
+      return response;
+    }
     if (code == 401 || code == 403) throw const SourceException.unauthorized();
     if (code == 404) throw const SourceException.notFound();
     throw SourceException.server('The server answered HTTP $code.');
@@ -58,11 +61,13 @@ class SourceHttp {
     Map<String, String> headers = const {},
     Object? body,
     Duration timeout = defaultTimeout,
+    Set<int> passThrough = const {},
   }) async {
     final response = await send(method, url,
         headers: {'Accept': 'application/json', ...headers},
         body: body,
-        timeout: timeout);
+        timeout: timeout,
+        passThrough: passThrough);
     try {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {

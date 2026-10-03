@@ -35,16 +35,34 @@ class StashClient {
     String document, [
     Map<String, dynamic> variables = const {},
   ]) async {
-    final json = await _guard((base) async => _http.json(
+    // gqlgen answers a query that fails validation with 400 or 422 and a
+    // JSON `errors` body, so those statuses are decoded, not thrown.
+    final response = await _guard((base) async => _http.send(
           'POST',
           base.resolve('/graphql'),
-          headers: await headers(),
+          headers: {'Accept': 'application/json', ...await headers()},
           body: {'query': document, 'variables': variables},
+          passThrough: const {400, 422},
         ));
+    final ok = response.statusCode >= 200 && response.statusCode < 300;
+    Object? json;
+    try {
+      json = jsonDecode(utf8.decode(response.bodyBytes));
+    } on FormatException {
+      throw ok
+          ? const SourceException.server(
+              'The server sent a response this app cannot read.')
+          : SourceException.server(
+              'Stash answered HTTP ${response.statusCode}.');
+    }
+    final errors = json is Map ? json['errors'] : null;
+    if (!ok && !(errors is List && errors.isNotEmpty)) {
+      throw SourceException.server(
+          'Stash answered HTTP ${response.statusCode}.');
+    }
     if (json is! Map) {
       throw const SourceException.server('Stash sent an unexpected reply.');
     }
-    final errors = json['errors'];
     if (errors is List && errors.isNotEmpty) {
       final message =
           (errors.first is Map ? (errors.first as Map)['message'] : null)

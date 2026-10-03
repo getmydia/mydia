@@ -77,11 +77,12 @@ class FakeStashServer {
     operations.add((name, variables));
     final error = graphqlError;
     if (error != null) {
+      // gqlgen answers a failed validation with 422, not 200.
       return _json({
         'errors': [
           {'message': error}
         ]
-      });
+      }, 422);
     }
     switch (name) {
       case 'SystemStatus':
@@ -152,9 +153,9 @@ class FakeStashServer {
     });
   });
 
-  static http.Response _json(Object body) => http.Response(
+  static http.Response _json(Object body, [int status = 200]) => http.Response(
         jsonEncode(body),
-        200,
+        status,
         headers: {'content-type': 'application/json; charset=utf-8'},
       );
 }
