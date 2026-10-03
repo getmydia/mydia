@@ -683,12 +683,18 @@ defmodule Mydia.Plugins do
   full declared capability set. Passing `grants: %{}` installs the plugin
   **inactive** (deny-by-default) — nothing runs until `approve/2`. Extra `opts`
   (`:allow_private`, `:resolver`) are forwarded to the gate for tests.
+
+  Installing over an existing sideloaded or index install replaces its bytes,
+  manifest and grant and restarts it on the new build, which is how the store
+  replaces a sideload or applies an update. A bundled slug is refused.
   """
   @spec install(Index.Entry.t(), keyword()) :: {:ok, Plugin.t() | :inactive} | {:error, Error.t()}
   def install(%Index.Entry{} = entry, opts \\ []) do
     grants = Keyword.get(opts, :grants, entry.manifest.capabilities)
 
-    with {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
+    with :ok <- refuse_bundled(entry.slug),
+         {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
+         :ok <- deactivate(entry.slug),
          {:ok, config} <- persist_install(entry, wasm, hash, grants) do
       config |> with_declared_settings() |> finish_activation()
     end

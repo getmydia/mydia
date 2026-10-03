@@ -84,6 +84,60 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "install/2 and approve/2 (AE1, R7, deny-by-default)" do
+    test "installing a store build over a sideload replaces it", %{bypass: bypass} do
+      wasm = guest_wasm()
+      sideload = manifest!()
+
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "file:///home/op/webhook-notifier.wasm",
+          manifest: Plugins.manifest_to_map(sideload),
+          wasm_module: wasm,
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      assert {:ok, _} = Plugins.approve("webhook-notifier")
+      [{old_pool, _}] = Elixir.Registry.lookup(Mydia.Plugins.PoolRegistry, "webhook-notifier")
+
+      serve_package(bypass, wasm)
+      store = manifest!(%{"version" => "1.1.0"})
+      assert {:ok, _} = Plugins.install(entry(bypass, store, wasm), gate_opts())
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.version == "1.1.0"
+      assert config.source_url == "http://allowed.test:#{bypass.port}/pkg.wasm"
+
+      # The sideload's pool is stopped and a fresh one serves the store build.
+      assert [{new_pool, _}] =
+               Elixir.Registry.lookup(Mydia.Plugins.PoolRegistry, "webhook-notifier")
+
+      refute new_pool == old_pool
+    end
+
+    test "refuses to replace a bundled plugin from the store", %{bypass: bypass} do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "bundled",
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:error, %{type: :invalid_config}} =
+               Plugins.install(entry(bypass, manifest!(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").source_url == "bundled"
+    end
+
     test "installing without grants does not activate; approving then activates with exactly the declared grants",
          %{bypass: bypass} do
       wasm = guest_wasm()
