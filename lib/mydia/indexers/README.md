@@ -101,3 +101,27 @@ A new `quality_standards` key must be classified in `ProfileLimits`.
 every limit in all three places (automatic removal, manual listing, file
 violation). Changing a limit to a preference means changing that test, not
 just the ranker.
+
+## Grab delay
+
+`grab_delay_hours` on a quality profile is neither a limit nor a preference: it
+decides when an automatic search grabs, not what. `Mydia.Indexers.GrabDelay`
+runs on the ranked list at all four automatic grab sites (movie, movie
+upgrade, episode, season pack) and answers grab now or wait until a time.
+
+The clock is the oldest `published_at` among the releases left after limits,
+blacklist, identity and the upgrade candidate filter. A newer upload never
+resets it, and a backlog item grabs at once because its releases are old.
+A release without a date counts as old.
+
+A best release that already scores at or above `upgrade_until_score` grabs at
+once. That comparison uses the file-scale score from
+`SearchScorer.score_quality/3`, the scale the upgrade cutoff is defined on, not
+the ranker's total, which adds seeders and title match.
+
+A wait records no backoff. `Mydia.Jobs.SearchDeferral` logs `search.deferred`
+and schedules a re-check for that episode, season or movie (or the same
+upgrade) a minute after the delay ends, since upgrades otherwise only run
+nightly. Searches a person starts carry `bypass_delay` and never wait; cron,
+the upgrade sweep, failed-download replacement searches and the re-check
+itself never set it. Manual search ignores the delay entirely.
