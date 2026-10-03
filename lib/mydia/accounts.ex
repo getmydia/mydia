@@ -416,7 +416,24 @@ defmodule Mydia.Accounts do
     |> Repo.insert_or_update()
     |> tap(&mark_restrictions_present/1)
     |> tap(&reset_shelves_after(&1, user_id))
+    |> tap(&broadcast_restriction_change(&1, user_id))
   end
+
+  @doc "PubSub topic carrying `:access_restriction_changed` for one user."
+  @spec access_restriction_topic(term()) :: String.t()
+  def access_restriction_topic(user_id), do: "access_restrictions:#{user_id}"
+
+  # Open LiveViews hold the scope they mounted with. This tells them to
+  # rebuild it, so a new limit applies without the user reloading.
+  defp broadcast_restriction_change({:ok, _}, user_id) do
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      access_restriction_topic(user_id),
+      :access_restriction_changed
+    )
+  end
+
+  defp broadcast_restriction_change(_error, _user_id), do: :ok
 
   # Shelf picks are checked against restrictions when they are filled, so a
   # change has to drop the stored ones or they would show until the next refill.
@@ -434,7 +451,9 @@ defmodule Mydia.Accounts do
 
       restriction ->
         Repo.delete!(restriction)
-        Shelves.reset_for_user(user_id)
+        result = Shelves.reset_for_user(user_id)
+        broadcast_restriction_change({:ok, nil}, user_id)
+        result
     end
   end
 
