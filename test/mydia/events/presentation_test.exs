@@ -702,6 +702,18 @@ defmodule Mydia.Events.PresentationTest do
              ) == "Arrival, 7 rejected"
     end
 
+    test "deferred says when the grab will happen" do
+      grab_after =
+        DateTime.utc_now() |> DateTime.add(3 * 86_400 + 3600, :second) |> DateTime.to_iso8601()
+
+      assert Presentation.detail(
+               event(
+                 type: "search.deferred",
+                 metadata: %{"title" => "Glass Harbor", "grab_after" => grab_after}
+               )
+             ) == "Glass Harbor, waiting for better releases, grab in 3 days"
+    end
+
     test "error carries the error message" do
       assert Presentation.detail(
                event(
