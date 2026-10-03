@@ -2128,6 +2128,210 @@ defmodule Mydia.Jobs.TVShowSearchTest do
     end
   end
 
+  describe "grab delay" do
+    defp delayed_show do
+      profile =
+        quality_profile_fixture(%{
+          name: "Delayed TV #{System.unique_integer([:positive])}",
+          grab_delay_hours: 24,
+          upgrade_until_score: 100,
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      media_item_fixture(%{
+        type: "tv_show",
+        title: "Lantern Vale",
+        quality_profile_id: profile.id
+      })
+    end
+
+    defp published(hours_old) do
+      DateTime.utc_now() |> DateTime.add(-hours_old * 3600, :second) |> DateTime.to_iso8601()
+    end
+
+    defp tv_search_jobs do
+      Repo.all(Oban.Job) |> Enum.filter(&(&1.worker == "Mydia.Jobs.TVShowSearch"))
+    end
+
+    test "holds a fresh episode release and re-checks that episode", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.tv_episode_result(%{title: "Lantern.Vale", season: 1, episode: 1})
+          |> Map.put(:published_at, published(1))
+        ]
+      )
+
+      show = delayed_show()
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: Date.utc_today()
+        })
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => episode.id})
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert [job] = tv_search_jobs()
+      assert job.args == %{"mode" => "specific", "episode_id" => episode.id}
+      assert job.state == "scheduled"
+    end
+
+    test "grabs an episode release older than the delay", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.tv_episode_result(%{title: "Lantern.Vale", season: 1, episode: 1})
+          |> Map.put(:published_at, published(30))
+        ]
+      )
+
+      show = delayed_show()
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: Date.utc_today()
+        })
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "specific", "episode_id" => episode.id})
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+      assert tv_search_jobs() == []
+    end
+
+    test "a user-started episode search skips the delay", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.tv_episode_result(%{title: "Lantern.Vale", season: 1, episode: 1})
+          |> Map.put(:published_at, published(1))
+        ]
+      )
+
+      show = delayed_show()
+
+      episode =
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: 1,
+          air_date: Date.utc_today()
+        })
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "specific",
+                 "episode_id" => episode.id,
+                 "bypass_delay" => true
+               })
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+    end
+
+    test "a delayed season pack does not fall back to episodes and re-checks the season", %{
+      bypass: bypass
+    } do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.season_pack_result(%{title: "Lantern.Vale", season: 1})
+          |> Map.put(:published_at, published(1))
+        ]
+      )
+
+      show = delayed_show()
+
+      for n <- 1..3 do
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: n,
+          # Season mode only loads episodes that have already aired.
+          air_date: ~D[2020-01-01]
+        })
+      end
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "season",
+                 "media_item_id" => show.id,
+                 "season_number" => 1
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      assert [job] = tv_search_jobs()
+
+      assert job.args == %{
+               "mode" => "season",
+               "media_item_id" => show.id,
+               "season_number" => 1
+             }
+    end
+
+    test "Args.parse propagates bypass_delay in every mode" do
+      for raw <- [
+            %{"mode" => "specific", "episode_id" => "e"},
+            %{"mode" => "season", "media_item_id" => "m", "season_number" => 1},
+            %{"mode" => "show", "media_item_id" => "m"},
+            %{"mode" => "all_monitored"}
+          ] do
+        assert TVShowSearch.Args.parse(Map.put(raw, "bypass_delay", true)).bypass_delay
+        refute TVShowSearch.Args.parse(raw).bypass_delay
+      end
+    end
+  end
+
+  describe "grab delay on episode upgrades" do
+    test "an episode upgrade waits and re-checks in upgrade mode", %{
+      library_path: library_path,
+      bypass: bypass
+    } do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.tv_episode_result(%{title: "Breaking Bad", season: 1, episode: 1})
+          |> Map.put(
+            :published_at,
+            DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.to_iso8601()
+          )
+        ]
+      )
+
+      {episode, media_file} =
+        upgrade_episode_target(library_path,
+          profile: %{
+            name: "Delayed episode upgrade #{System.unique_integer([:positive])}",
+            quality_standards: %{preferred_resolutions: ["1080p"]},
+            min_upgrade_margin: 0,
+            upgrade_until_score: 100,
+            grab_delay_hours: 24
+          }
+        )
+
+      assert :ok =
+               perform_job(TVShowSearch, %{
+                 "mode" => "upgrade_episode",
+                 "episode_id" => episode.id,
+                 "media_file_id" => media_file.id,
+                 "reasons" => ["quality"]
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      assert [job] =
+               Repo.all(Oban.Job) |> Enum.filter(&(&1.worker == "Mydia.Jobs.TVShowSearch"))
+
+      assert job.args == %{
+               "mode" => "upgrade_episode",
+               "episode_id" => episode.id,
+               "media_file_id" => media_file.id,
+               "reasons" => ["quality"]
+             }
+    end
+  end
+
   # Overrides only the :downloads embed of the layered runtime config
   # (Mydia.Config.get().downloads), leaving the rest of the resolved config
   # (indexers, media, and so on) exactly as this suite's setup left it.

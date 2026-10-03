@@ -58,7 +58,9 @@ defmodule Mydia.Jobs.TVShowSearch do
   alias Mydia.Downloads.{Blacklists, Download, Queue}
   alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
   alias Mydia.Indexers.QualityProfileResolver
+  alias Mydia.Indexers.GrabDelay
   alias Mydia.Indexers.ReleaseRanker
+  alias Mydia.Jobs.SearchDeferral
   alias Mydia.Indexers.Structs.SearchResultMetadata
   alias Mydia.Library
   alias Mydia.Media.{MediaItem, Episode}
@@ -82,7 +84,8 @@ defmodule Mydia.Jobs.TVShowSearch do
       :size_range,
       :blocked_tags,
       :preferred_tags,
-      :reasons
+      :reasons,
+      bypass_delay: false
     ]
 
     @type t :: %__MODULE__{
@@ -95,10 +98,18 @@ defmodule Mydia.Jobs.TVShowSearch do
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
             preferred_tags: [String.t()] | nil,
-            reasons: [:quality | :language] | nil
+            reasons: [:quality | :language] | nil,
+            bypass_delay: boolean()
           }
 
-    def parse(%{"mode" => "specific", "episode_id" => episode_id} = raw) do
+    # Set only by searches the user started (Search buttons, search on add,
+    # GraphQL); they skip the profile's grab delay. "show" and "all_monitored"
+    # pass this struct down to each episode and season search they fan out to.
+    def parse(raw) do
+      %{do_parse(raw) | bypass_delay: Map.get(raw, "bypass_delay") == true}
+    end
+
+    defp do_parse(%{"mode" => "specific", "episode_id" => episode_id} = raw) do
       %__MODULE__{
         mode: "specific",
         episode_id: episode_id,
@@ -109,13 +120,13 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(
-          %{
-            "mode" => "season",
-            "media_item_id" => media_item_id,
-            "season_number" => season_number
-          } = raw
-        ) do
+    defp do_parse(
+           %{
+             "mode" => "season",
+             "media_item_id" => media_item_id,
+             "season_number" => season_number
+           } = raw
+         ) do
       %__MODULE__{
         mode: "season",
         media_item_id: media_item_id,
@@ -127,7 +138,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(%{"mode" => "show", "media_item_id" => media_item_id} = raw) do
+    defp do_parse(%{"mode" => "show", "media_item_id" => media_item_id} = raw) do
       %__MODULE__{
         mode: "show",
         media_item_id: media_item_id,
@@ -138,7 +149,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(%{"mode" => "all_monitored"} = raw) do
+    defp do_parse(%{"mode" => "all_monitored"} = raw) do
       %__MODULE__{
         mode: "all_monitored",
         min_seeders: Map.get(raw, "min_seeders"),
@@ -148,13 +159,13 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(
-          %{
-            "mode" => "upgrade_episode",
-            "episode_id" => episode_id,
-            "media_file_id" => media_file_id
-          } = raw
-        ) do
+    defp do_parse(
+           %{
+             "mode" => "upgrade_episode",
+             "episode_id" => episode_id,
+             "media_file_id" => media_file_id
+           } = raw
+         ) do
       %__MODULE__{
         mode: "upgrade_episode",
         episode_id: episode_id,
@@ -167,14 +178,14 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(
-          %{
-            "mode" => "upgrade_season",
-            "media_item_id" => media_item_id,
-            "season_number" => season_number,
-            "media_file_id" => media_file_id
-          } = raw
-        ) do
+    defp do_parse(
+           %{
+             "mode" => "upgrade_season",
+             "media_item_id" => media_item_id,
+             "season_number" => season_number,
+             "media_file_id" => media_file_id
+           } = raw
+         ) do
       %__MODULE__{
         mode: "upgrade_season",
         media_item_id: media_item_id,
@@ -188,7 +199,7 @@ defmodule Mydia.Jobs.TVShowSearch do
       }
     end
 
-    def parse(%{"mode" => mode}) do
+    defp do_parse(%{"mode" => mode}) do
       %__MODULE__{mode: mode}
     end
   end
@@ -1108,8 +1119,8 @@ defmodule Mydia.Jobs.TVShowSearch do
     ranking_opts = build_ranking_options_for_season(media_item, season_number, episodes, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["season"])
 
-    case ReleaseRanker.select_best_result(candidates, ranking_opts) do
-      nil ->
+    case select_release(candidates, ranking_opts, args) do
+      :none ->
         Logger.warning(
           "No suitable season pack after ranking",
           media_item_id: media_item.id,
@@ -1136,7 +1147,26 @@ defmodule Mydia.Jobs.TVShowSearch do
         # Return :no_results to signal fallback needed
         :no_results
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        Logger.info("Holding season pack grab until the grab delay passes",
+          media_item_id: media_item.id,
+          title: media_item.title,
+          season_number: season_number,
+          result_title: best.result.title,
+          grab_after: until
+        )
+
+        # :ok, not :no_results: :no_results makes the caller fall back to
+        # individual episodes, which would grab exactly what the delay holds.
+        SearchDeferral.defer(
+          __MODULE__,
+          season_recheck_args(media_item, season_number, args),
+          until,
+          media_item,
+          Map.put(deferral_metadata(best, query, length(results)), "season_number", season_number)
+        )
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best season pack",
           media_item_id: media_item.id,
           title: media_item.title,
@@ -1391,8 +1421,8 @@ defmodule Mydia.Jobs.TVShowSearch do
     ranking_opts = build_ranking_options(episode, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["episode"])
 
-    case ReleaseRanker.select_best_result(results, ranking_opts) do
-      nil ->
+    case select_release(results, ranking_opts, args) do
+      :none ->
         Logger.warning("No suitable results after ranking for episode",
           episode_id: episode.id,
           show: episode.media_item.title,
@@ -1417,7 +1447,26 @@ defmodule Mydia.Jobs.TVShowSearch do
 
         :ok
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        Logger.info("Holding automatic grab for episode until the grab delay passes",
+          episode_id: episode.id,
+          show: episode.media_item.title,
+          season: episode.season_number,
+          episode: episode.episode_number,
+          result_title: best.result.title,
+          grab_after: until
+        )
+
+        SearchDeferral.defer(
+          __MODULE__,
+          episode_recheck_args(episode, args),
+          until,
+          episode.media_item,
+          deferral_metadata(best, query, length(results)),
+          episode: episode
+        )
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best result for episode",
           episode_id: episode.id,
           show: episode.media_item.title,
@@ -1516,6 +1565,49 @@ defmodule Mydia.Jobs.TVShowSearch do
       blocked_tags: merged_blocked_tags(args.blocked_tags),
       preferred_tags: args.preferred_tags
     })
+  end
+
+  defp select_release(candidates, ranking_opts, %Args{} = args) do
+    candidates
+    |> ReleaseRanker.rank_all(ranking_opts)
+    |> GrabDelay.select(ranking_opts, DateTime.utc_now(), bypass: args.bypass_delay)
+  end
+
+  # The re-check targets the unit that waited: an upgrade re-checks as that
+  # upgrade; a show or all_monitored pass narrows to the one episode or season.
+  defp episode_recheck_args(episode, %Args{mode: "upgrade_episode"} = args) do
+    %{
+      "mode" => "upgrade_episode",
+      "episode_id" => episode.id,
+      "media_file_id" => args.media_file_id,
+      "reasons" => Reasons.encode(args.reasons)
+    }
+  end
+
+  defp episode_recheck_args(episode, _args),
+    do: %{"mode" => "specific", "episode_id" => episode.id}
+
+  defp season_recheck_args(media_item, season_number, %Args{mode: "upgrade_season"} = args) do
+    %{
+      "mode" => "upgrade_season",
+      "media_item_id" => media_item.id,
+      "season_number" => season_number,
+      "media_file_id" => args.media_file_id,
+      "reasons" => Reasons.encode(args.reasons)
+    }
+  end
+
+  defp season_recheck_args(media_item, season_number, _args) do
+    %{"mode" => "season", "media_item_id" => media_item.id, "season_number" => season_number}
+  end
+
+  defp deferral_metadata(%{result: best, score: score}, query, results_count) do
+    %{
+      "query" => query,
+      "results_count" => results_count,
+      "selected_release" => best.title,
+      "score" => score
+    }
   end
 
   ## Private Functions - Download Initiation
