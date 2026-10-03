@@ -51,20 +51,24 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
   alias MydiaWeb.PluginSetupLive.Modal
   alias MydiaWeb.PluginSetupLive.ModalTest.HostLive
 
+  # Every step calls into the wasm fixture plugin; the 100ms default
+  # render_async budget times out under CI load (Postgres job, 2026-10-03).
+  @async_timeout 5_000
+
   setup do
     %{slug: PluginV15Helpers.start_v15_fixture!()}
   end
 
   defp poll(view) do
     Phoenix.LiveView.send_update(view.pid, Modal, id: "plugin-setup", poll: true)
-    render_async(view)
+    render_async(view, @async_timeout)
   end
 
   test "walks sign-in, server choice and account mapping to done", %{conn: conn, slug: slug} do
     user = user_fixture(%{username: "setup_alice"})
 
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#setup-external-auth[phx-hook=ExternalAuthPopup]")
 
@@ -78,7 +82,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     poll(view)
 
     view |> element("#setup-option-server-a") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#setup-mapping-form")
     assert has_element?(view, "#setup-mapping-acct-1")
@@ -87,7 +91,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     |> form("#setup-mapping-form", mapping: %{"acct-1" => user.id, "acct-2" => ""})
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#setup-done", "Linked 1 accounts")
 
     view |> element("#setup-close") |> render_click()
@@ -102,12 +106,12 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     {:ok, view, _html} =
       live_isolated(conn, HostLive, session: %{"slug" => slug, "step" => "manual-start"})
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#setup-form input[name='setup[url]'][type=url]")
     assert has_element?(view, "#setup-form input[name='setup[token]'][type=password]")
 
     view |> form("#setup-form", setup: %{"url" => "", "token" => ""}) |> render_submit()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#plugin-setup-error", "Server URL is required.")
 
@@ -115,7 +119,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     |> form("#setup-form", setup: %{"url" => "http://10.0.0.9:32400", "token" => "tok"})
     |> render_submit()
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#setup-done", "Manual http://10.0.0.9:32400")
   end
 
@@ -124,7 +128,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     slug: slug
   } do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
-    render_async(view)
+    render_async(view, @async_timeout)
     poll(view)
     poll(view)
 
@@ -142,7 +146,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     {:ok, _} = Mydia.Settings.update_plugin_config(config, %{name: String.duplicate("n", 300)})
 
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#plugin-setup-error", "Setup could not start: name")
     refute has_element?(view, "#plugin-setup-error", "Ecto")
@@ -151,7 +155,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
 
   test "cancel deletes the draft instance and tells the parent", %{conn: conn, slug: slug} do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
-    render_async(view)
+    render_async(view, @async_timeout)
     [draft] = Repo.all(Instance)
 
     view |> element("#setup-cancel") |> render_click()
@@ -169,7 +173,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     # Sent while the initial Setup call may still be running; either ordering
     # must end cancelled with the draft removed.
     view |> element("#setup-cancel") |> render_click()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#setup-closed-status", "cancelled")
     assert Repo.all(Instance) == []
@@ -179,10 +183,10 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     {:ok, view, _html} =
       live_isolated(conn, HostLive, session: %{"slug" => slug, "step" => "manual-start"})
 
-    render_async(view)
+    render_async(view, @async_timeout)
 
     view |> form("#setup-form", setup: %{"url" => "", "token" => "keepme"}) |> render_submit()
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#plugin-setup-error", "Server URL is required.")
     assert has_element?(view, "#setup-form input[name='setup[token]'][value=keepme]")
@@ -193,7 +197,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
     {:ok, view, _html} =
       live_isolated(conn, HostLive, session: %{"slug" => slug, "step" => "fail"})
 
-    render_async(view)
+    render_async(view, @async_timeout)
 
     assert has_element?(view, "#plugin-setup #plugin-setup-error", "fixture failure")
     assert has_element?(view, "#setup-cancel")
@@ -223,7 +227,7 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
         session: %{"slug" => slug, "instance_id" => instance.id, "step" => "manual-start"}
       )
 
-    render_async(view)
+    render_async(view, @async_timeout)
     assert has_element?(view, "#setup-form")
 
     view |> element("#setup-cancel") |> render_click()
@@ -232,10 +236,10 @@ defmodule MydiaWeb.PluginSetupLive.ModalTest do
 
   test "closing the popup triggers an immediate poll", %{conn: conn, slug: slug} do
     {:ok, view, _html} = live_isolated(conn, HostLive, session: %{"slug" => slug})
-    render_async(view)
+    render_async(view, @async_timeout)
 
     view |> element("#setup-external-auth") |> render_hook("popup_closed", %{})
-    render_async(view)
+    render_async(view, @async_timeout)
     poll(view)
 
     assert has_element?(view, "#setup-option-server-b")
