@@ -15,6 +15,8 @@ import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
+import '../../../core/sources/source.dart';
+import 'source_nav_list.dart';
 import 'source_switcher.dart';
 
 /// Shared sidebar navigation content used by both the desktop sidebar and the
@@ -132,6 +134,7 @@ class SidebarContent extends ConsumerWidget {
     );
 
     final hasBackWidget = backToMydiaWidget != null;
+    final thirdPartyId = sourceIdFromLocation(location);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,81 +190,90 @@ class SidebarContent extends ConsumerWidget {
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
             onReset: () => _confirmReset(context, ref),
           ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Column(
-              children: [
-                for (final destination in leading) ...[
-                  _buildRow(
-                    ref: ref,
-                    context: context,
-                    destination: destination,
-                    selected: selected,
-                    focusRowId: focusRowId,
-                    isEditing: editing,
-                  ),
-                  const SizedBox(height: 2),
-                ],
-                Expanded(
-                  child: SidebarMiddleList(
-                    editing: editing,
-                    rows: editRows,
-                    buildRow: (row, {editingTrailing}) => _buildRow(
+        if (thirdPartyId != null)
+          Expanded(
+            child: SourceNavList(
+              sourceId: SourceId(thirdPartyId),
+              location: location,
+              onNavigate: onNavigate,
+            ),
+          )
+        else
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                children: [
+                  for (final destination in leading) ...[
+                    _buildRow(
                       ref: ref,
                       context: context,
-                      destination: row.destination,
+                      destination: destination,
                       selected: selected,
                       focusRowId: focusRowId,
                       isEditing: editing,
-                      isHidden: row.hidden,
-                      editingTrailing: editingTrailing,
                     ),
-                    onReorder: (oldIndex, newIndex) => _onReorder(
-                      ref: ref,
-                      oldIndex: oldIndex,
-                      newIndex: newIndex,
+                    const SizedBox(height: 2),
+                  ],
+                  Expanded(
+                    child: SidebarMiddleList(
+                      editing: editing,
+                      rows: editRows,
+                      buildRow: (row, {editingTrailing}) => _buildRow(
+                        ref: ref,
+                        context: context,
+                        destination: row.destination,
+                        selected: selected,
+                        focusRowId: focusRowId,
+                        isEditing: editing,
+                        isHidden: row.hidden,
+                        editingTrailing: editingTrailing,
+                      ),
+                      onReorder: (oldIndex, newIndex) => _onReorder(
+                        ref: ref,
+                        oldIndex: oldIndex,
+                        newIndex: newIndex,
+                      ),
+                      onRestore: (id) =>
+                          ref.read(sidebarLayoutControllerProvider).unhide(id),
                     ),
-                    onRestore: (id) =>
-                        ref.read(sidebarLayoutControllerProvider).unhide(id),
                   ),
-                ),
-                if (!editing)
-                  SidebarRow(
-                    icon: Icons.add_rounded,
-                    selectedIcon: Icons.add_rounded,
-                    label: '+ New filter',
-                    isSelected: false,
-                    onTap: () => showFilterEditor(
+                  if (!editing)
+                    SidebarRow(
+                      icon: Icons.add_rounded,
+                      selectedIcon: Icons.add_rounded,
+                      label: '+ New filter',
+                      isSelected: false,
+                      onTap: () => showFilterEditor(
+                        context: context,
+                        ref: ref,
+                        initialFilter: MediaFilter.allMovies,
+                      ),
+                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Divider(
+                      height: 1,
+                      color: AppColors.divider.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final destination in trailing) ...[
+                    _buildRow(
+                      ref: ref,
                       context: context,
-                      ref: ref,
-                      initialFilter: MediaFilter.allMovies,
+                      destination: destination,
+                      selected: selected,
+                      focusRowId: focusRowId,
+                      isEditing: editing,
                     ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Divider(
-                    height: 1,
-                    color: AppColors.divider.withValues(alpha: 0.15),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final destination in trailing) ...[
-                  _buildRow(
-                    ref: ref,
-                    context: context,
-                    destination: destination,
-                    selected: selected,
-                    focusRowId: focusRowId,
-                    isEditing: editing,
-                  ),
-                  const SizedBox(height: 2),
+                    const SizedBox(height: 2),
+                  ],
+                  const SizedBox(height: 16),
                 ],
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
           ),
-        ),
       ],
     );
   }

@@ -488,15 +488,19 @@ class _AppShellState extends ConsumerState<AppShell>
             ),
           ],
         ),
-        bottomNavigationBar: AppShell.dockChrome(
-          drawerOpen: _drawerOpen,
-          child: BottomNav(
-            location: location,
-            onNavigate: _navigateTo,
-            isOffline: isOffline,
-            showBackToMydia: showBackToMydia,
-          ),
-        ),
+        // The bottom bar holds Mydia's destinations; a Plex or Stash screen
+        // uses the drawer, which holds that source's.
+        bottomNavigationBar: location.startsWith('/s/')
+            ? null
+            : AppShell.dockChrome(
+                drawerOpen: _drawerOpen,
+                child: BottomNav(
+                  location: location,
+                  onNavigate: _navigateTo,
+                  isOffline: isOffline,
+                  showBackToMydia: showBackToMydia,
+                ),
+              ),
       ),
     );
   }

@@ -14,6 +14,7 @@ import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
@@ -222,6 +223,13 @@ GoRouter appRouter(Ref ref) {
         builder: (context, state) => StashConnectScreen(
           reauthAccountId: state.uri.queryParameters['account'],
         ),
+      ),
+
+      GoRoute(
+        path: '/sources/manage',
+        name: 'manage_sources',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const ManageSourcesScreen(),
       ),
 
       // Shell route for main app with bottom navigation
