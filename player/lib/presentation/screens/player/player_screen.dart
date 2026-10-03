@@ -4641,15 +4641,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         player.pause();
         _chromeVisibility.show();
       case KeyMediaSkip(:final offset):
-        final position = _timeline.toReal(player.state.position);
-        final target = position + offset;
-        if (offset.isNegative) {
-          seekToReal(target < Duration.zero ? Duration.zero : target);
-        } else {
-          final duration = _timeline.resolveDuration(player.state.duration);
-          seekToReal(target > duration ? duration : target);
-        }
-        _chromeVisibility.show();
+        // The arrows' skip, longer. Clamping against an unknown (zero)
+        // runtime sent fast-forward back to the start; _skipBy does not.
+        _skipBy(offset);
       case KeyNextEpisode():
         _upNext.playNext();
       case KeyPreviousEpisode():
