@@ -53,6 +53,19 @@ bool autoplayBlocked(String raw) {
   return _autoplayRefusals.any(lower.contains);
 }
 
+/// mpv's wording when no audio output opens (no sound server reachable, a
+/// sandbox without the audio socket, a sink that vanished).
+const String _noAudioOutput = 'audio device -> no sound';
+
+/// Whether [raw] is mpv saying it has no audio output.
+///
+/// mpv carries on with the video and reports this on the error stream, so it
+/// must not count as a fault. Read as one, it sent every direct play on such
+/// a machine to a transcode and remembered the file's codec and resolution as
+/// one this device cannot decode.
+bool audioOutputUnavailable(String raw) =>
+    raw.toLowerCase().contains(_noAudioOutput);
+
 /// A viewer-facing sentence for a raw media_kit error string.
 ///
 /// Falls through to the raw text for anything unrecognised. Showing an ugly

@@ -100,4 +100,20 @@ void main() {
       expect(autoplayBlocked(''), isFalse);
     });
   });
+
+  group('audioOutputUnavailable', () {
+    test("matches mpv's no-audio-device message", () {
+      expect(
+        audioOutputUnavailable(
+            'Could not open/initialize audio device -> no sound.'),
+        isTrue,
+      );
+    });
+
+    test('leaves real failures alone', () {
+      expect(
+          audioOutputUnavailable('Failed to open http://x/stream.'), isFalse);
+      expect(audioOutputUnavailable('Audio device init failed'), isFalse);
+    });
+  });
 }
