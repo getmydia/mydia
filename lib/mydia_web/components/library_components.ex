@@ -337,12 +337,17 @@ defmodule MydiaWeb.LibraryComponents do
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
 
+  attr :size, :string,
+    default: "sm",
+    values: ~w(sm md),
+    doc: "Match the button it is joined to. Cards use sm, the preview modal md."
+
   def library_picker_button(assigns) do
     ~H"""
     <button
       type="button"
       data-test="add-config-caret"
-      class="btn btn-primary btn-sm join-item px-2"
+      class={["btn btn-primary join-item px-2", @size == "sm" && "btn-sm"]}
       title="Configure before adding"
       phx-click="open_add_config"
       phx-value-ref={@ref}
