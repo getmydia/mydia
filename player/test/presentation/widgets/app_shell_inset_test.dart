@@ -26,8 +26,7 @@ void main() {
     const mac = WindowChromeInsets(height: 40, leading: 80, trailing: 0);
     expect(AppShell.contentInsets(mac).leading, 0);
 
-    final linux =
-        const WindowChromeInsets(height: 36, leading: 0, trailing: 110);
+    const linux = WindowChromeInsets(height: 36, leading: 0, trailing: 110);
     expect(AppShell.contentInsets(linux), linux);
   });
 
