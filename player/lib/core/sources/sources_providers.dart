@@ -226,7 +226,10 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   final MediaSource media = switch (source.kind) {
     SourceKind.mydia =>
       MydiaSource(source: source, auth: ref.watch(authStateProvider)),
-    SourceKind.plex || SourceKind.stash => buildThirdPartySource(ref, source),
+    SourceKind.plex ||
+    SourceKind.stash ||
+    SourceKind.jellyfin =>
+      buildThirdPartySource(ref, source),
   };
   ref.onDispose(media.dispose);
   return media;

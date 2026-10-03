@@ -30,6 +30,7 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
     switch (source.kind) {
       SourceKind.plex => _plex(ref, source),
       SourceKind.stash => _stash(ref, source),
+      SourceKind.jellyfin => throw UnimplementedError('built in Task 4'),
       SourceKind.mydia => throw ArgumentError.value(
           source.kind, 'kind', 'Mydia has its own adapter'),
     };
