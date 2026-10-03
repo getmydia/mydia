@@ -25,7 +25,7 @@ class AudioTrackDetection {
 /// Maps media_kit's audio tracks onto the app's model.
 ///
 /// Extracted as a free function so the mapping can be unit-tested without a
-/// live `Player` — see `shouldRestartForSeek`'s dartdoc for why one cannot be
+/// live `Player`, see `shouldRestartForSeek`'s dartdoc for why one cannot be
 /// constructed under `flutter test`.
 ///
 /// Which track counts as the default comes from media_kit's own `isDefault`

@@ -751,7 +751,7 @@ ProviderContainer buildPlayerScreenContainer({
     }),
     // Null by default: no receiver, so `isCastingProvider` stays false and the
     // screen builds its local body. Pass a stream to stand in for a live cast,
-    // which is the only way to reach `CastPlaceholderView` — the real
+    // which is the only way to reach `CastPlaceholderView`: the real
     // provider derives from `CastSessionManager`, and the fake above has no
     // session machinery to drive it.
     castSessionProvider

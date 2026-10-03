@@ -245,8 +245,8 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
       return const KeyTogglePlay();
 
     // A remote's centre press. With the OSD hidden there is no focused
-    // control to receive it — the controls' own FocusHighlight is what
-    // handles select/enter normally — so OK would otherwise do nothing at
+    // control to receive it (the controls' own FocusHighlight is what
+    // handles select/enter normally), so OK would otherwise do nothing at
     // all. Revealing and focusing is the same move the arrow keys make.
     //
     // Gated on the directional tier because the key handler also runs on
@@ -312,12 +312,12 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
     // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
     // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
     // only (see `TransportSurface.compact`), and that gate is on viewport
-    // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
+    // *width*, not `PlatformFeatures.isMobile`, so a narrowed desktop or
     // web browser window loses the in-bar buttons too, with no
     // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
     // to fall back on. This actually covers web now that
     // `PlatformFeatures.supportsKeyboardShortcuts` includes it (see that
-    // getter's own dartdoc) — previously this whole `Focus`/`onKeyEvent`
+    // getter's own dartdoc): previously this whole `Focus`/`onKeyEvent`
     // wrapper was desktop-only, so a narrowed *web* window had no
     // fallback at all, keyboard or otherwise.
     case LogicalKeyboardKey.pageUp:
@@ -341,7 +341,7 @@ PlayerKeyCommand? resolvePlayerKey(KeyEvent event, PlayerKeyContext context) {
 ///
 /// Mirrors exactly what the in-bar previous/next-episode buttons do
 /// (`TransportSurface`'s `onPreviousEpisode`/`onNextEpisode`, gated the same
-/// way by [hasPreviousEpisode]/[hasNextEpisode]) — this key handler is a
+/// way by [hasPreviousEpisode]/[hasNextEpisode]), this key handler is a
 /// fallback for when those buttons aren't reachable (see the call site's own
 /// comment), not a separate, independently-gated feature.
 KeyEventResult handleEpisodeNavKey(

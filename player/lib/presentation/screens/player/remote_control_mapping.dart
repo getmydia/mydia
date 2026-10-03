@@ -2,7 +2,7 @@ import '../../../native/lib.dart' show FlutterPlaybackState;
 
 /// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
 /// by `_PlayerScreenState.setVolume`. Clamps out-of-range input rather than
-/// trusting the caller — a remote peer, not this app, decides what crosses
+/// trusting the caller: a remote peer, not this app, decides what crosses
 /// the wire.
 ///
 /// Extracted as a free function, alongside its inverse
@@ -35,7 +35,7 @@ double remoteControlMuteVolume(bool muted) => muted ? 0.0 : 100.0;
 bool isPlayerVolumeMuted(double? playerVolume) => playerVolume == 0;
 
 /// Finds the element of [tracks] whose [idOf] equals [id], or null when
-/// nothing matches — the case every `selectTrack` branch in
+/// nothing matches: the case every `selectTrack` branch in
 /// `_PlayerScreenState` must silently no-op for rather than throw, since
 /// `id` names a track a *remote peer* chose, which this screen never
 /// validated before it arrived.
@@ -52,7 +52,7 @@ T? findTrackById<T>(
 /// `_PlayerScreenState._remoteControlPlaybackState`.
 ///
 /// Order is significant, checked in this priority: [hasError] wins over
-/// everything else — a player still decoding through a stream error is not
+/// everything else: a player still decoding through a stream error is not
 /// meaningfully "playing". [isLoading]/`!hasPlayer` come next because this
 /// screen's own `_isLoading`/`_error` fields describe *screen* phases where
 /// `Player.state` may not exist yet or may be stale from a session this
@@ -76,7 +76,7 @@ FlutterPlaybackState remoteControlPlaybackState({
 }
 
 /// Casts to a remote target, stopping local playback only once the receiver
-/// has confirmed the load — never before, and never at all if it refuses.
+/// has confirmed the load, never before, and never at all if it refuses.
 ///
 /// This ordering is what makes "Push" (spec term: capture position and
 /// track selections, `Hello`, `LoadContent`, only then stop locally)
@@ -90,7 +90,7 @@ FlutterPlaybackState remoteControlPlaybackState({
 /// and `shouldRestartForSeek`: proving this ordering under `flutter test`
 /// needs to observe whether local playback kept running, and this suite can
 /// never construct a real, playing media_kit `Player` to observe that
-/// against (see `shouldRestartForSeek`'s dartdoc) — so the ordering itself
+/// against (see `shouldRestartForSeek`'s dartdoc), so the ordering itself
 /// is what gets pinned instead, independent of any real player.
 Future<void> pushToRemoteTarget({
   required Future<void> Function() startCast,

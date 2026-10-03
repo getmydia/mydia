@@ -81,7 +81,7 @@ class UpNextController {
   /// holds the countdown and a resume releases it. Created alongside the
   /// countdown in [_show] and torn down everywhere the countdown is:
   /// [cancel], [playNext], [playPrevious], and [dispose]. There is no other
-  /// playing-stream listener in the screen for it to piggyback on — the old
+  /// playing-stream listener in the screen for it to piggyback on: the old
   /// countdown polled the player's playing state inside its own tick, which
   /// is exactly the coupling [UpNextCountdown] was built without.
   StreamSubscription<bool>? _playingSub;
@@ -159,7 +159,7 @@ class UpNextController {
     }
 
     // Offline/local playback can only ever autoplay into a next episode
-    // that is itself already on disk — the next one existing in the season
+    // that is itself already on disk: the next one existing in the season
     // is not enough, since there may be no connection to stream or fetch it
     // when the countdown lands.
     if (isDownloadedSource()) {

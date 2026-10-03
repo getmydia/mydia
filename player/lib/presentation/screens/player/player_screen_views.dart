@@ -112,11 +112,11 @@ class PlayerErrorView extends StatelessWidget {
 ///
 /// Deliberately inert: every control lives in `CastMiniController`, which is
 /// mounted over this screen by `app.dart`. Duplicating them here is the
-/// confusion this replaced — two surfaces showing the same title, device,
+/// confusion this replaced: two surfaces showing the same title, device,
 /// play/pause and stop, with the bar clipping the remote's stop button.
 ///
 /// [session] rather than just the device: `isCastingProvider` stays true for
-/// a [CastSession] that has gone stale (its `mediaInfo` survives the drop —
+/// a [CastSession] that has gone stale (its `mediaInfo` survives the drop,
 /// see `CastSession.copyWith`), and this is the app's single largest
 /// `Icons.cast_connected` glyph. Rendering it over a connection that no
 /// longer exists is exactly the false "connected" claim this feature exists
@@ -147,7 +147,7 @@ class CastPlaceholderView extends StatelessWidget {
     // has no skip, so there is no second copy to disagree with, and the
     // alternative is the feature simply not existing on a TV.
     //
-    // Withheld over a stale session for the reason the glyph goes outline —
+    // Withheld over a stale session for the reason the glyph goes outline:
     // the receiver is gone, and a control that silently does nothing is that
     // same false "connected" claim wearing a different hat.
     //
