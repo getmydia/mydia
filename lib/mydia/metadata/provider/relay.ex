@@ -260,12 +260,14 @@ defmodule Mydia.Metadata.Provider.Relay do
     language = resolve_language(config, opts)
 
     append =
-      Keyword.get(opts, :append_to_response, [
+      opts
+      |> Keyword.get(:append_to_response, [
         "credits",
         "alternative_titles",
         "videos",
         "external_ids"
       ])
+      |> with_rating_resource(media_type)
 
     endpoint = build_details_endpoint(media_type, provider_id)
 
@@ -293,6 +295,14 @@ defmodule Mydia.Metadata.Provider.Relay do
         {:error, error}
     end
   end
+
+  # Every TMDB detail fetch carries the certification, because an access
+  # restriction treats a missing rating as unsuitable. Leaving it to callers
+  # meant seven of them forgot and every age-limited request was refused
+  # (#1000). TMDB validates append resources per endpoint, so the movie and TV
+  # names must not be mixed.
+  defp with_rating_resource(append, :tv_show), do: Enum.uniq(append ++ ["content_ratings"])
+  defp with_rating_resource(append, _movie), do: Enum.uniq(append ++ ["release_dates"])
 
   # Fetch from TVDB
   defp fetch_tvdb_by_id(config, provider_id, opts) do
