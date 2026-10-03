@@ -543,3 +543,23 @@ and TV badge counts are computed the same way, once per LiveView mount, by the
 same `Collections.claimed_categories/1` result the Movies and TV pages use.
 The badge and the page it links to therefore share one exclusion set and
 cannot disagree.
+
+## Access restrictions and ratings
+
+- An item with a NULL `content_rating_age` is invisible to every age-limited
+  account. Every TMDB detail fetch carries the certification (the relay
+  provider appends it), TVDB shows borrow TMDB's when TVDB has none, and
+  `Mydia.Jobs.ContentRatingFetch` repaired rows saved before that.
+- Titles outside the library go through `Mydia.Media.RemoteFilter`, which
+  looks up certification and category per title via `RemoteSignals` (cached
+  24h). A failed lookup counts as unrated.
+- `RemoteFilter.discover_params/2` only narrows TMDB `/discover`; it never
+  replaces the filter. TMDB ignores certification on `/discover/tv`.
+- Discover, `/search`, `/import`, `/review` and the downloads match dialog all
+  filter TMDB matches through `RemoteFilter`. A new user-facing surface that
+  lists remote titles must do the same.
+- `test/mydia/access_restrictions/remote_filter_guard_test.exs` fails when a
+  user-facing module calls the metadata catalog without going through
+  `RemoteFilter`. The check is file-granular: one `RemoteFilter` call anywhere
+  in a file satisfies it, so it catches a forgotten surface and not a single
+  unfiltered call path inside a filtered file.
