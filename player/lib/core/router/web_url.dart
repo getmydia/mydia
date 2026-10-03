@@ -8,7 +8,7 @@ import 'package:web/web.dart' as web;
 /// Returns the hash without the leading '#', or '/' if no hash is present.
 ///
 /// Phoenix injects `window.mydiaInitialHash` before Flutter loads to capture
-/// the hash before any potential timing issues with dart:html's window.location.
+/// the hash before any potential timing issues with window.location.
 String getInitialRoute() {
   // First, try to read the hash that Phoenix captured before Flutter loaded
   final phoenixHash =
