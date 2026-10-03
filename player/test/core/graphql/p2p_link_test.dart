@@ -255,7 +255,8 @@ void main() {
       );
 
       expect(result.hasException, isFalse);
-      expect(result.data?['movies']?['id'], '1');
+      final movies = result.data?['movies'] as Map<String, Object?>?;
+      expect(movies?['id'], '1');
       expect(service.attempts, 2);
     });
 

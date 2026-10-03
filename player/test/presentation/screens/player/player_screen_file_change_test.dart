@@ -348,7 +348,9 @@ Future<void> _mountWithFactory(
   final state = tester.state(find.byType(PlayerScreen));
   final binding = state as dynamic;
   return (
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     preference: binding.subtitlePreferenceForTesting as SubtitlePreference?,
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     appliedForPlayback: binding.preferenceAppliedForTesting as bool,
   );
 }
@@ -556,13 +558,16 @@ void main() {
     await player.seek(const Duration(seconds: 4900));
     await tester.pump();
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.watchedInvalidationSentForTesting as bool, isTrue,
         reason: 'sanity: file A must have crossed the watched threshold');
 
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.watchedInvalidationSentForTesting as bool, isFalse);
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.isDownloadedSourceForTesting as bool, isFalse);
   });
 
@@ -760,10 +765,12 @@ void main() {
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
 
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.savedPositionSecondsForTesting as int?, 4200,
         reason: 'sanity: file A carries its own saved position');
     expect(
-      (state.serverSubtitleTracksForTesting as List).isNotEmpty,
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      (state.serverSubtitleTracksForTesting as List<Object?>).isNotEmpty,
       isTrue,
       reason: 'sanity: file A carries its own subtitle track',
     );
@@ -771,11 +778,13 @@ void main() {
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.savedPositionSecondsForTesting as int?, isNull,
         reason: 'file A\'s resume position must not survive a failed '
             'detail query for file B');
     expect(
-      (state.serverSubtitleTracksForTesting as List).isEmpty,
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      (state.serverSubtitleTracksForTesting as List<Object?>).isEmpty,
       isTrue,
       reason: 'file A\'s subtitle tracks must not survive a failed detail '
           'query for file B',

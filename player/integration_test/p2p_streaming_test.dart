@@ -373,13 +373,15 @@ void main() {
       ''';
 
       final response = await apiClient.graphqlRequest(query, {});
-      final edges = response['data']['movies']['edges'] as List;
+      final edges = response.object('data').object('movies').list('edges');
       String? mediaItemId;
       for (final edge in edges) {
-        final movie = edge['node'];
-        final files = movie['files'] as List?;
-        if (files != null && files.any((f) => f['id'] == fileId)) {
-          mediaItemId = movie['id'] as String;
+        final movie = edge.object('node');
+        final files =
+            movie.field<Object?>('files') == null ? null : movie.list('files');
+        if (files != null &&
+            files.any((f) => f.field<Object?>('id') == fileId)) {
+          mediaItemId = movie.field<String>('id');
           break;
         }
       }

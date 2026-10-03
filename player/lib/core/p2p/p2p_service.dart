@@ -821,7 +821,9 @@ class P2pService {
       final errors = _decodeJson(res.errors!);
       if (errors is List && errors.isNotEmpty) {
         final firstError = errors.first;
-        throw Exception(firstError['message'] ?? 'GraphQL error');
+        final message =
+            firstError is Map<String, Object?> ? firstError['message'] : null;
+        throw Exception(message ?? 'GraphQL error');
       }
     }
 

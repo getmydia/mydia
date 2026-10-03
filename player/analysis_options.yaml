@@ -8,6 +8,7 @@ linter:
     - avoid_print
     - avoid_unnecessary_containers
     - use_key_in_widget_constructors
+    - avoid_dynamic_calls
 
 analyzer:
   exclude:
