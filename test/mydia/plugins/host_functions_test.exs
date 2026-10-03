@@ -826,8 +826,10 @@ defmodule Mydia.Plugins.HostFunctionsTest do
       set_age(hidden, 17)
       set_age(visible, 8)
 
-      assert {:error, %Error{type: :not_found}} =
-               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt610"))
+      unmatched = HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt999998"))
+      assert unmatched == {:ok, %{status: :"not-found"}}
+
+      assert HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt610")) == unmatched
 
       refute Repo.exists?(
                from(ci in Mydia.Collections.CollectionItem, where: ci.media_item_id == ^hidden.id)

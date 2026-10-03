@@ -1139,9 +1139,11 @@ defmodule Mydia.Plugins.HostFunctions do
     scope = Scope.for_user(user)
 
     # The Matcher resolves ids as the system and add_item/2 does not check
-    # visibility, so a hidden title is refused here, like a missing one.
-    with {:ok, _item} <- fetch_media_item(scope, media_item_id) do
-      favorite_unless_present(user, scope, media_item_id)
+    # visibility, so a hidden title is reported exactly like an unmatched id,
+    # which keeps the result from telling a plugin the title exists.
+    case fetch_media_item(scope, media_item_id) do
+      {:ok, _item} -> favorite_unless_present(user, scope, media_item_id)
+      {:error, _} -> {:ok, %{status: :"not-found"}}
     end
   end
 
