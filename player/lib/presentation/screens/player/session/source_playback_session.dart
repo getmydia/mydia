@@ -1,4 +1,4 @@
-/// The data half of a Plex or Stash playback session, built on the
+/// The data half of a third-party playback session, built on the
 /// source's neutral item detail. Transport and progress are the subclass's.
 library;
 
