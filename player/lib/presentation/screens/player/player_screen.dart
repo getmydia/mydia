@@ -22,6 +22,7 @@ import '../../../core/player/hls_engine.dart';
 import '../../../core/player/media_start.dart';
 import '../../../core/player/subtitle_cues.dart';
 import '../../../core/player/player_orientation_lease_controller.dart';
+import '../../../core/player/progress_reporter.dart';
 import '../../../core/player/progress_service.dart';
 import '../../../core/player/subtitle_stream_index.dart';
 import '../../../core/player/image_subtitle_sidecar.dart';
@@ -55,6 +56,7 @@ import '../../../core/playback/quality_choice.dart';
 import '../../../core/playback/seek_decision.dart';
 import '../../../core/playback/source_switch_gate.dart';
 import '../../../core/playback/playback_controller.dart';
+import '../../../core/playback/playback_transport.dart';
 import '../../../core/playback/link_path.dart';
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_memory_providers.dart';
@@ -359,7 +361,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     implements RemotePlayerBinding {
   Player? _player;
   VideoController? _videoController;
-  ProgressService? _progressService;
+  ProgressReporter? _progressService;
 
   /// Play-to-first-frame marks for this screen's current load. Replaced on
   /// every `_initializePlayer` run, so a source restart times itself.
@@ -818,7 +820,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Owns the streaming session for the source now playing. Rebuilt on every
   /// online initialization, since the connection mode it needs can change
   /// between them; the previous one's session is ended first.
-  PlaybackController? _playback;
+  PlaybackTransport? _playback;
   PlaybackMonitor? _monitor;
   AdaptationPolicy? _policy;
   StreamSubscription<HealthSample>? _healthSubscription;
@@ -3036,13 +3038,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     // Start progress tracking
-    if (_progressService != null) {
-      _progressService!.timeline = _timeline;
-      if (widget.mediaType == 'movie') {
-        _progressService!.startMovieSync(player, widget.mediaId);
-      } else if (widget.mediaType == 'episode') {
-        _progressService!.startEpisodeSync(player, widget.mediaId);
-      }
+    final progress = _progressService;
+    if (progress != null) {
+      progress.timeline = _timeline;
+      progress.start(player,
+          mediaType: widget.mediaType, mediaId: widget.mediaId);
     }
 
     // Listen for playback completion
@@ -4176,7 +4176,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // what left every downloaded-while-online record permanently unsynced,
       // queued behind a flush that would one day replay them over newer
       // server progress.
-      if (progressService != null) {
+      if (progressService is ProgressService) {
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
@@ -4201,11 +4201,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (progressService == null) return;
 
-    if (mediaType == 'movie') {
-      await progressService.saveMovieProgress(player, mediaId);
-    } else if (mediaType == 'episode') {
-      await progressService.saveEpisodeProgress(player, mediaId);
-    }
+    await progressService.save(player, mediaType: mediaType, mediaId: mediaId);
   }
 
   /// Seeks to a real media position, restarting the stream if necessary.
