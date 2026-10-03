@@ -163,6 +163,26 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
     end
   end
 
+  describe "invalidation racing a cache insert" do
+    test "a hit older than its device's invalidation stamp is re-verified" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, claims} = MediaToken.create_token(device)
+      cache_key = :crypto.hash(:sha256, token)
+
+      started = System.monotonic_time()
+      {:ok, stale_device, _claims} = MediaToken.verify_token(token)
+      assert :ok = TokenCache.store_if_current(cache_key, stale_device, claims, started)
+
+      # The role changes and invalidation's stamp lands after the insert's
+      # check, without its deletion scan reaching the entry.
+      {:ok, _} = admin |> Ecto.Changeset.change(role: "user") |> Repo.update()
+      :ets.insert(:media_token_cache_invalidations, {device.id, System.monotonic_time()})
+
+      assert {:ok, %{user: %{role: "user"}}, _claims} = TokenCache.validate(token)
+    end
+  end
+
   defp create_device(user, attrs \\ %{}) do
     default_attrs = %{
       device_name: "Test Device #{System.unique_integer([:positive])}",

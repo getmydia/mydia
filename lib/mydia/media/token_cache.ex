@@ -63,9 +63,15 @@ defmodule Mydia.Media.TokenCache do
     now = System.monotonic_time(:millisecond)
 
     case :ets.lookup(@table, cache_key) do
-      [{^cache_key, device, claims, expires_at}] when expires_at > now ->
-        # Cache hit and not expired
-        {:ok, device, claims}
+      [{^cache_key, device, claims, expires_at, started}] when expires_at > now ->
+        if stale_entry?(device, started) do
+          # An invalidation landed after this snapshot was taken but its
+          # deletion scan missed the insert: treat as a miss.
+          :ets.delete(@table, cache_key)
+          validate_and_cache(token, cache_key)
+        else
+          {:ok, device, claims}
+        end
 
       _ ->
         # Cache miss or expired - validate via MediaToken
@@ -96,7 +102,7 @@ defmodule Mydia.Media.TokenCache do
     # Scan and delete all entries for this device
     # This is O(n) but should be rare (only on device revocation)
     :ets.foldl(
-      fn {key, device, _claims, _expires_at}, acc ->
+      fn {key, device, _claims, _expires_at, _started}, acc ->
         if device.id == device_id do
           :ets.delete(@table, key)
         end
@@ -157,6 +163,13 @@ defmodule Mydia.Media.TokenCache do
     end
   end
 
+  defp stale_entry?(device, started) do
+    case :ets.lookup(@stamps, device.id) do
+      [{_id, stamped_at}] -> stamped_at >= started
+      _ -> false
+    end
+  end
+
   @doc false
   # Caches a verified token unless its device was invalidated at or after
   # `started` (a `System.monotonic_time/0` value taken before verification).
@@ -167,7 +180,7 @@ defmodule Mydia.Media.TokenCache do
 
       _ ->
         expires_at = System.monotonic_time(:millisecond) + @ttl_ms
-        :ets.insert(@table, {cache_key, device, claims, expires_at})
+        :ets.insert(@table, {cache_key, device, claims, expires_at, started})
         :ok
     end
   end
