@@ -60,6 +60,7 @@ void main() {
   testWidgets('the add screen offers Plex, Stash and Mydia', (tester) async {
     await pumpAdd(tester, mydia: false);
     expect(find.byKey(const Key('add-source-plex')), findsOneWidget);
+    expect(find.byKey(const Key('add-source-jellyfin')), findsOneWidget);
     expect(find.byKey(const Key('add-source-stash')), findsOneWidget);
     final mydia =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
