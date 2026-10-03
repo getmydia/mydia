@@ -6,6 +6,9 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
   `queued` is true whenever the insert succeeds. The search workers are unique
   for 60 seconds on their arguments, so a repeat inside that window is merged by
   Oban and still reports true.
+
+  Every search queued here skips the quality profile's grab delay: the caller
+  asked for it now.
   """
 
   alias Mydia.Jobs.TVShowSearch
@@ -35,7 +38,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
     with {:ok, item} <- Loaders.item(id, ["mediaItemId"]),
          :ok <- Loaders.require_show(item, ["mediaItemId"]),
          {:ok, season} <- validate_season(season) do
-      insert(%{mode: "season", media_item_id: item.id, season_number: season})
+      insert(%{mode: "season", media_item_id: item.id, season_number: season, bypass_delay: true})
     else
       {:error, %UserError{} = error} -> {:ok, not_queued(error)}
     end
@@ -45,7 +48,7 @@ defmodule MydiaWeb.LibrarySchema.Resolvers.Search do
           {:ok, map()} | {:error, String.t()}
   def search_episode(_parent, %{id: id}, _resolution) do
     case Loaders.episode(id, ["id"]) do
-      {:ok, episode} -> insert(%{mode: "specific", episode_id: episode.id})
+      {:ok, episode} -> insert(%{mode: "specific", episode_id: episode.id, bypass_delay: true})
       {:error, %UserError{} = error} -> {:ok, not_queued(error)}
     end
   end
