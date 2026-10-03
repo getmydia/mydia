@@ -122,7 +122,7 @@ void main() {
 
   group('resetToDefaults', () {
     test('restores order and unhides without deleting saved filters', () async {
-      final filter = FilterDestination(
+      const filter = FilterDestination(
         id: 'filter_keep_me',
         label: 'Keep me',
         filter: MediaFilter.allMovies,

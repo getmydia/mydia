@@ -6,7 +6,7 @@ void main() {
   group('NowPlayingMetadataResolver', () {
     late List<Map<String, dynamic>> calls;
     Map<String, dynamic>? response;
-    Object? error;
+    Exception? error;
 
     NowPlayingMetadataResolver build() => NowPlayingMetadataResolver(
           (document, variables) async {

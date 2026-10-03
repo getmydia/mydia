@@ -146,7 +146,7 @@ class HiveCastSessionStore implements CastSessionStore {
   static const boxName = 'cast_session';
   static const _key = 'session';
 
-  final Box<Map> _box;
+  final Box<Map<dynamic, dynamic>> _box;
 
   const HiveCastSessionStore(this._box);
 

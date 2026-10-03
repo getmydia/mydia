@@ -46,9 +46,9 @@ Future<void> _pump(
           () => _FakeP2pStatusNotifier(status),
         ),
       ],
-      child: MaterialApp(
+      child: const MaterialApp(
         builder: toastLayerBuilder,
-        home: const DiagnosticsScreen(),
+        home: DiagnosticsScreen(),
       ),
     ),
   );

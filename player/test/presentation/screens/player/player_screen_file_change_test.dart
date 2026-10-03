@@ -90,7 +90,7 @@ class _ProbedPlayer extends PlatformPlayer {
   /// something to actually catch. `_player` is already this player by the
   /// time this throws (`_openPlayerAndStart` assigns it before calling
   /// `open`), which is what lets [disposeGate] hold that catch open.
-  Object? openError;
+  Exception? openError;
 
   /// Set by a test that wants to suspend [dispose] partway through, the way
   /// a slow platform teardown would -- in particular, holding
@@ -348,7 +348,9 @@ Future<void> _mountWithFactory(
   final state = tester.state(find.byType(PlayerScreen));
   final binding = state as dynamic;
   return (
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     preference: binding.subtitlePreferenceForTesting as SubtitlePreference?,
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     appliedForPlayback: binding.preferenceAppliedForTesting as bool,
   );
 }
@@ -495,8 +497,8 @@ void main() {
 
     // Release file A's parked open and let its now-superseded tail drain.
     openGate.complete();
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
     expect(players.first.disposeCallCount, 1,
@@ -556,13 +558,16 @@ void main() {
     await player.seek(const Duration(seconds: 4900));
     await tester.pump();
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.watchedInvalidationSentForTesting as bool, isTrue,
         reason: 'sanity: file A must have crossed the watched threshold');
 
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.watchedInvalidationSentForTesting as bool, isFalse);
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.isDownloadedSourceForTesting as bool, isFalse);
   });
 
@@ -598,8 +603,8 @@ void main() {
     // completer only schedules a microtask, and reaching the rest of the
     // load past it depends on real asynchronous I/O the same way the second
     // `_initializePlayer` does (see `_pumpUntilSwitched`).
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
     expect(player.openedUris.where((u) => u.contains('/file-a/')), isEmpty,
@@ -643,7 +648,8 @@ void main() {
     // that throttle before it ever reaches `_player`, passing this test
     // whether or not the switch itself is correct. Waiting past it is what
     // makes the assertions below mean anything.
-    await tester.runAsync(() => Future.delayed(const Duration(seconds: 11)));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(seconds: 11)));
 
     // Switch B (movie-2 -> movie-3) starts immediately, before A resumes.
     await _mount(tester, link, player, fileId: 'file-c', mediaId: 'movie-3');
@@ -654,8 +660,8 @@ void main() {
       '__typename': 'RootMutationType',
       'updateMovieProgress': null,
     });
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
     final saves = link.requests
@@ -707,7 +713,8 @@ void main() {
     // throttle, and without waiting it out, `dispose()`'s own save below
     // would no-op on the throttle rather than on `_player` being detached --
     // passing this test whether or not the fix is in place.
-    await tester.runAsync(() => Future.delayed(const Duration(seconds: 11)));
+    await tester
+        .runAsync(() => Future<void>.delayed(const Duration(seconds: 11)));
 
     // The screen is torn down while the switch is still parked.
     await tester.pumpWidget(const SizedBox());
@@ -717,8 +724,8 @@ void main() {
       '__typename': 'RootMutationType',
       'updateMovieProgress': null,
     });
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
     final saves = link.requests
@@ -758,10 +765,12 @@ void main() {
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-a');
 
     final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.savedPositionSecondsForTesting as int?, 4200,
         reason: 'sanity: file A carries its own saved position');
     expect(
-      (state.serverSubtitleTracksForTesting as List).isNotEmpty,
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      (state.serverSubtitleTracksForTesting as List<Object?>).isNotEmpty,
       isTrue,
       reason: 'sanity: file A carries its own subtitle track',
     );
@@ -769,11 +778,13 @@ void main() {
     await _mount(tester, link, player, fileId: 'file-b');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
+    // ignore: avoid_dynamic_calls, private State class cannot be named from here
     expect(state.savedPositionSecondsForTesting as int?, isNull,
         reason: 'file A\'s resume position must not survive a failed '
             'detail query for file B');
     expect(
-      (state.serverSubtitleTracksForTesting as List).isEmpty,
+      // ignore: avoid_dynamic_calls, private State class cannot be named from here
+      (state.serverSubtitleTracksForTesting as List<Object?>).isEmpty,
       isTrue,
       reason: 'file A\'s subtitle tracks must not survive a failed detail '
           'query for file B',
@@ -889,8 +900,8 @@ void main() {
     // Release file B's parked dispose and let its now-superseded catch
     // drain.
     disposeGate.complete();
-    await tester
-        .runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
     expect(find.text('Failed to load video'), findsNothing,

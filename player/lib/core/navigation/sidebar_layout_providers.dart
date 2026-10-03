@@ -14,7 +14,8 @@ part 'sidebar_layout_providers.g.dart';
 @Riverpod(keepAlive: true)
 Future<SidebarLayoutStore> sidebarLayoutStoreAsync(Ref ref) async {
   try {
-    final box = await Hive.openBox<Map>(HiveSidebarLayoutStore.boxName);
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
+        HiveSidebarLayoutStore.boxName);
     return HiveSidebarLayoutStore(box);
   } catch (e) {
     debugPrint('[SidebarLayout] Box unavailable, not persisting: $e');

@@ -245,14 +245,18 @@ Future<_TestMovie> _fetchTestMovie(E2eApiClient api) async {
   ''';
 
   final response = await api.graphqlRequest(query, const {});
-  final edges = response['data']?['movies']?['edges'] as List? ?? const [];
+  final data = response.field<Map<String, Object?>?>('data');
+  final movies = data?['movies'] as Map<String, Object?>?;
+  final edges = movies?['edges'] as List<Object?>? ?? const [];
   for (final edge in edges) {
-    final movie = edge['node'] as Map<String, dynamic>;
-    final files = movie['files'] as List?;
+    final movie = JsonObject(
+      (edge! as Map<String, Object?>)['node']! as Map<String, Object?>,
+    );
+    final files = movie.field<List<Object?>?>('files');
     if (files != null && files.isNotEmpty) {
       return _TestMovie(
-        id: movie['id'] as String,
-        title: movie['title'] as String,
+        id: movie.field<String>('id'),
+        title: movie.field<String>('title'),
       );
     }
   }
@@ -500,9 +504,10 @@ void main() {
         }
       ''';
       final response = await adminApi.graphqlRequest(query, const {});
-      final devices = response['data']?['devices'] as List? ?? const [];
+      final data = response.field<Map<String, Object?>?>('data');
+      final devices = data?['devices'] as List<Object?>? ?? const [];
       final nodeIds = devices
-          .map((d) => d['nodeId'] as String?)
+          .map((d) => (d! as Map<String, Object?>)['nodeId'] as String?)
           .whereType<String>()
           .toSet();
       return nodeIds.contains(aNodeId) && nodeIds.contains(bNodeId);

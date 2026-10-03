@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 // Conditional import for web URL handling
-import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
+import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
+    as web_url;
 import '../sources/sources_providers.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';

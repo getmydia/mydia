@@ -3,6 +3,8 @@
 /// This provides secure storage on iOS, Android, macOS, Windows, and Linux.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -203,7 +205,8 @@ class NativeAuthStorage implements AuthStorage {
   Future<void> delete(String key) async {
     _memoryStorage.remove(key);
     _readCache[key] = null;
-    _inflight.remove(key);
+    // Only drops the map entry; the removed read future is not ours to await.
+    unawaited(_inflight.remove(key));
     _generation++;
 
     await _withFallback<void>(() => _backend.delete(key), () {});

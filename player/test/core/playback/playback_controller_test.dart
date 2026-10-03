@@ -539,6 +539,7 @@ void main() {
       final positions = StreamController<Duration>.broadcast(
         onListen: listening.complete,
       );
+      addTearDown(positions.close);
       final log = <String>[];
       final attached = Completer<void>();
       final switched = controller.replaceSource(
@@ -620,6 +621,7 @@ void main() {
           firstAdvanceTimeout: const Duration(milliseconds: 20));
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final stuck = StreamController<Duration>.broadcast();
+      addTearDown(stuck.close);
       await expectLater(
         controller.replaceSource(
           _transcode480,
@@ -640,6 +642,7 @@ void main() {
       final controller = _controller(link);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final positions = StreamController<Duration>.broadcast();
+      addTearDown(positions.close);
       final attached = Completer<void>();
       final first = controller.replaceSource(
         _transcode480,
@@ -947,6 +950,7 @@ void main() {
   group('awaitFirstAdvance', () {
     test('completes on the first position past the first one seen', () async {
       final positions = StreamController<Duration>.broadcast();
+      addTearDown(positions.close);
       final done = awaitFirstAdvance(positions.stream,
           timeout: const Duration(seconds: 5));
       positions.add(const Duration(seconds: 300));

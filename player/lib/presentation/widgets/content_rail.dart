@@ -21,7 +21,7 @@ class ContentRail extends StatefulWidget {
   final List<dynamic> items;
   final bool showProgress;
   final bool showEpisodeInfo;
-  final Function(String id, String type)? onItemTap;
+  final void Function(String id, String type)? onItemTap;
   final VoidCallback? onSeeAllTap;
 
   /// Called instead of [onItemTap] for cards that should start playback

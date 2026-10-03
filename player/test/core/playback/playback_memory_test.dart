@@ -9,9 +9,12 @@ import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
 
-class _UnreadableBox extends Fake implements Box<Map> {
+class _UnreadableBox extends Fake implements Box<Map<dynamic, dynamic>> {
   @override
-  Map? get(dynamic key, {Map? defaultValue}) =>
+  Map<dynamic, dynamic>? get(
+    dynamic key, {
+    Map<dynamic, dynamic>? defaultValue,
+  }) =>
       throw StateError('corrupt record');
 
   @override
@@ -51,7 +54,7 @@ void main() {
     (
       'HivePlaybackMemory',
       () async => HivePlaybackMemory(
-            await Hive.openBox<Map>(
+            await Hive.openBox<Map<dynamic, dynamic>>(
               'playback_memory_test_${boxes++}',
               bytes: Uint8List(0),
             ),
@@ -130,8 +133,8 @@ void main() {
   }
 
   test('HivePlaybackMemory survives a malformed record', () async {
-    final box =
-        await Hive.openBox<Map>('playback_memory_bad', bytes: Uint8List(0));
+    final box = await Hive.openBox<Map<dynamic, dynamic>>('playback_memory_bad',
+        bytes: Uint8List(0));
     await box.put(server, {'failures': 'not a map', 'stalls': 'nope'});
     final memory = HivePlaybackMemory(box);
     expect(memory.failuresFor(server, now: now), isEmpty);
@@ -139,7 +142,7 @@ void main() {
   });
 
   test('HivePlaybackMemory skips malformed stall entries', () async {
-    final box = await Hive.openBox<Map>(
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
       'playback_memory_bad_stalls',
       bytes: Uint8List(0),
     );
@@ -162,7 +165,7 @@ void main() {
 
   test('HivePlaybackMemory drops a legacy throughput estimate on write',
       () async {
-    final box = await Hive.openBox<Map>(
+    final box = await Hive.openBox<Map<dynamic, dynamic>>(
       'playback_memory_legacy_throughput',
       bytes: Uint8List(0),
     );

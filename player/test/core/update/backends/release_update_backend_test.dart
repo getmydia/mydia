@@ -35,7 +35,7 @@ class _StubService implements UpdateService {
 class _RecordingUpdater extends PlatformUpdater {
   _RecordingUpdater({this.throws, this.handsOffUnconfirmed = false});
 
-  final Object? throws;
+  final Exception? throws;
   AvailableUpdate? applied;
 
   @override

@@ -14,8 +14,8 @@ const String _collectionSyncBoxName = 'collection_sync';
 
 /// Provider for the collection sync Hive box.
 @Riverpod(keepAlive: true)
-Future<Box<Map>> collectionSyncBox(Ref ref) async {
-  return Hive.openBox<Map>(_collectionSyncBoxName);
+Future<Box<Map<dynamic, dynamic>>> collectionSyncBox(Ref ref) async {
+  return Hive.openBox<Map<dynamic, dynamic>>(_collectionSyncBoxName);
 }
 
 /// Whether a specific collection is configured for auto-sync.

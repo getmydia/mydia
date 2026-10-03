@@ -37,7 +37,7 @@ void main() {
     });
 
     test('returns null when the client is unavailable', () async {
-      expect(await CompatibilityService(null).fetch(), isNull);
+      expect(await const CompatibilityService(null).fetch(), isNull);
     });
 
     test(

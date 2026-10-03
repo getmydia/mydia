@@ -4,11 +4,12 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 
 void main() {
-  late Box<Map> box;
+  late Box<Map<dynamic, dynamic>> box;
 
   setUp(() async {
     Hive.init('./.dart_tool/test_hive_sidebar');
-    box = await Hive.openBox<Map>(HiveSidebarLayoutStore.boxName);
+    box = await Hive.openBox<Map<dynamic, dynamic>>(
+        HiveSidebarLayoutStore.boxName);
     await box.clear();
   });
 

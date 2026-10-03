@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:gql/ast.dart' show DocumentNode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
@@ -33,7 +34,7 @@ final mediaInfoProvider =
       ? documentNodeQueryMovieMediaInfoLegacy
       : documentNodeQueryEpisodeMediaInfoLegacy;
 
-  Future<QueryResult<Object?>> run(doc) {
+  Future<QueryResult<Object?>> run(DocumentNode doc) {
     return client.query(
       QueryOptions(
         document: doc,

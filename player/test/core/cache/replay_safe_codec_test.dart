@@ -23,7 +23,7 @@ class _FakeCodec implements ui.Codec {
   final ui.Image image;
   int calls = 0;
   bool disposed = false;
-  Object? failNext;
+  Error? failNext;
   Completer<void>? gate;
 
   @override

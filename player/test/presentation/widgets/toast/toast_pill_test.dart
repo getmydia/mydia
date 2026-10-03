@@ -113,7 +113,7 @@ void main() {
   testWidgets('screen readers hear it as a live region', (tester) async {
     final semantics = tester.ensureSemantics();
     await _pump(tester, _entry('Saved'));
-    expect(tester.getSemantics(_pill), containsSemantics(isLiveRegion: true));
+    expect(tester.getSemantics(_pill), isSemantics(isLiveRegion: true));
     semantics.dispose();
   });
 

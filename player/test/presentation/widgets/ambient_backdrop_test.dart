@@ -190,10 +190,10 @@ void main() {
 
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(
+                child: AmbientBackdrop(
                   imageUrl: 'https://image.tmdb.org/t/p/w1280/a.jpg',
                   id: 'a',
                 ),
@@ -242,10 +242,10 @@ void main() {
 
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(imageUrl: urlA, id: 'a'),
+                child: AmbientBackdrop(imageUrl: urlA, id: 'a'),
               ),
             ),
           ),
@@ -254,10 +254,10 @@ void main() {
 
         // New id -> didUpdateWidget sees imageUrl change and precaches.
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(imageUrl: urlB, id: 'b'),
+                child: AmbientBackdrop(imageUrl: urlB, id: 'b'),
               ),
             ),
           ),

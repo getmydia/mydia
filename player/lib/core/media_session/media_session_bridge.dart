@@ -81,7 +81,8 @@ class MediaSessionBridge {
         // next change event retries, unless a newer load already replaced
         // this entry.
         if (artworkPath == null && _artwork[url] == load) {
-          _artwork.remove(url);
+          // Only drops the cache entry; the removed future already completed.
+          unawaited(_artwork.remove(url));
         }
       }
     }

@@ -103,7 +103,8 @@ class MydiaPlaybackSession implements PlaybackSession {
             '${result.exception}');
         return null;
       }
-      final data = result.data?['setAudioLanguagePreference'];
+      final data =
+          result.data?['setAudioLanguagePreference'] as Map<String, Object?>?;
       final updated = data?['preferredAudioLanguages'];
       debugPrint('[PlayerScreen] Remembered audio language: $language');
       return updated is List ? updated.cast<String>() : null;

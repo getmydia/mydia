@@ -82,7 +82,9 @@ void main() async {
   // core/crash_reporting/crash_reporter.dart.
   final crashReporter = CrashReporter.production()..install();
 
-  runZonedGuarded(
+  // Not awaited: the zone's error handler below owns every error from the
+  // guarded body, and the returned future would never carry one out.
+  unawaited(runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
@@ -111,7 +113,7 @@ void main() async {
       logSink?.recordError(error, stack);
       unawaited(crashReporter.report(error, stack, capture: CrashCapture.zone));
     },
-  );
+  ));
 }
 
 /// Hands `runApp` a [StartupGate] immediately, so the first frame is a

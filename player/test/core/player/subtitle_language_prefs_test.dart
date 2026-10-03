@@ -16,13 +16,13 @@ void main() {
 
   group('Hive-backed load/save', () {
     late Directory tempDir;
-    late Box<List> box;
+    late Box<List<dynamic>> box;
 
     setUp(() async {
       tempDir =
           await Directory.systemTemp.createTemp('subtitle_language_prefs');
       Hive.init(tempDir.path);
-      box = await Hive.openBox<List>(SubtitleLanguagePrefs.boxName);
+      box = await Hive.openBox<List<dynamic>>(SubtitleLanguagePrefs.boxName);
     });
 
     tearDown(() async {
