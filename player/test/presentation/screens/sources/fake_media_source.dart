@@ -208,6 +208,13 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
   int continueCalls = 0;
   final removed = <ItemRef>[];
 
+  /// Refs [canRemoveFromContinueWatching] answers false for.
+  final unremovable = <ItemRef>{};
+
+  @override
+  bool canRemoveFromContinueWatching(ItemSummary item) =>
+      !unremovable.contains(item.ref);
+
   @override
   Set<SourceCapability> get capabilities =>
       {...super.capabilities, SourceCapability.continueWatching};

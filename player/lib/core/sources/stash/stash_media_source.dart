@@ -139,6 +139,9 @@ class StashMediaSource extends MediaSource
     return _page(data, 1, 20).items;
   }
 
+  @override
+  bool canRemoveFromContinueWatching(ItemSummary item) => true;
+
   /// A zero resume point drops the scene from [continueWatching]. Works on
   /// every Stash the source supports; `sceneResetActivity` needs 0.27.
   @override

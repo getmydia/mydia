@@ -27,6 +27,13 @@ class FakeJellyfinServer {
   bool transcoding = true;
   String? playbackErrorCode;
 
+  /// What `/UserItems/Resume` and `/Shows/NextUp` answer, in that order.
+  List<Map<String, dynamic>> resumeItems = [];
+  List<Map<String, dynamic>> nextUpItems = [];
+
+  /// Paths that answer 500, to fail one request of several.
+  final failing = <String>{};
+
   /// Request bodies by path, decoded, in arrival order.
   final bodies = <(String, Map<String, dynamic>)>[];
 
@@ -94,7 +101,9 @@ class FakeJellyfinServer {
         'Id': 'e$n',
         'Name': 'The Quiet Tide $n',
         'Type': 'Episode',
+        'SeriesId': 'show1',
         'SeriesName': 'Saltmarsh',
+        'SeriesPrimaryImageTag': 'sp',
         'IndexNumber': n,
         'ParentIndexNumber': 1,
         'RunTimeTicks': 2700 * ticks,
@@ -171,6 +180,20 @@ class FakeJellyfinServer {
 
     if (!(request.headers['Authorization'] ?? '').contains('Token="$token"')) {
       return http.Response('', 401);
+    }
+
+    if (failing.contains(path)) return http.Response('', 500);
+    if (request.method == 'GET' && path == '/UserItems/Resume') {
+      return _json(
+          {'Items': resumeItems, 'TotalRecordCount': resumeItems.length});
+    }
+    if (request.method == 'GET' && path == '/Shows/NextUp') {
+      return _json(
+          {'Items': nextUpItems, 'TotalRecordCount': nextUpItems.length});
+    }
+    if (request.method == 'POST' &&
+        RegExp(r'^/UserItems/[^/]+/UserData$').hasMatch(path)) {
+      return _json({'PlaybackPositionTicks': body['PlaybackPositionTicks']});
     }
 
     if (request.method == 'GET' && path == '/UserViews') {

@@ -200,4 +200,11 @@ void main() {
     expect(name, 'SaveActivity');
     expect(vars, {'id': '2', 'resume_time': 0});
   });
+
+  test('every Continue Watching entry can be removed', () async {
+    final source = build().source;
+    final items = await source.continueWatching();
+    expect(items, isNotEmpty);
+    expect(items.every(source.canRemoveFromContinueWatching), isTrue);
+  });
 }
