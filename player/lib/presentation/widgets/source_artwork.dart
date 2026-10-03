@@ -51,7 +51,13 @@ ArtworkRequest? _resolved(
 }
 
 class SourcePoster extends ConsumerWidget {
-  const SourcePoster({super.key, required this.item, this.onTap});
+  const SourcePoster({
+    super.key,
+    required this.item,
+    this.onTap,
+    this.subtitle,
+    this.onContextMenu,
+  });
 
   /// One width for every poster, so one cache entry serves the grid, the
   /// rails and search.
@@ -59,6 +65,12 @@ class SourcePoster extends ConsumerWidget {
 
   final ItemSummary item;
   final VoidCallback? onTap;
+
+  /// Replaces the item's own caption (its subtitle, else its year).
+  final String? subtitle;
+
+  /// Long-press on touch, secondary tap on desktop.
+  final void Function(BuildContext posterContext)? onContextMenu;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,9 +86,10 @@ class SourcePoster extends ConsumerWidget {
         posterHeaders: request?.headers,
         posterCacheKey: request?.cacheKey,
         title: item.title,
-        subtitle: item.subtitle ?? item.year?.toString(),
+        subtitle: subtitle ?? item.subtitle ?? item.year?.toString(),
         watchStatus: watchStatusFor(item.userState, item.durationSeconds),
         onTap: onTap,
+        onContextMenu: onContextMenu,
       ),
     );
   }
