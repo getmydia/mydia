@@ -51,6 +51,21 @@ void main() {
     expect(h.controller.display.value, 300);
   });
 
+  test('setOffsets leaves an image track unbaked', () async {
+    // The server cannot shift a bitmap sidecar, so its stored offset has to
+    // reach mpv as a live delay rather than count as already applied.
+    final h = _Harness()
+      ..selected = const app_models.SubtitleTrack(
+        id: 'track-pgs',
+        language: 'en',
+        format: 'pgs',
+      );
+    h.controller.setOffsets({'track-pgs': 300});
+    await h.controller.sync();
+    expect(h.applied.last, 300);
+    expect(h.controller.display.value, 300);
+  });
+
   test('nudge applies immediately and shows the total', () async {
     final h = _Harness();
     h.controller.setOffsets({'track-1': 300});

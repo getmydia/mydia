@@ -102,10 +102,12 @@ class SubtitleDelayController {
     // track were already selected by the time this resolves, its
     // baked offset -- assumed zero until now for anything not read
     // straight from the container -- needs to catch up to what the
-    // server actually shifted into the body it already delivered.
+    // server actually shifted into the body it already delivered. The
+    // same rule as [onTrackChanged], so a bitmap track, which the server
+    // cannot shift, stays unbaked here too.
     final current = selectedTrack();
-    if (current != null && !isMpvNativeSubtitleTrackId(current.id)) {
-      _bakedMs = _offsets[current.id] ?? 0;
+    if (current != null) {
+      _bakedMs = bakedSubtitleOffsetMs(track: current, offsets: _offsets);
     }
   }
 
