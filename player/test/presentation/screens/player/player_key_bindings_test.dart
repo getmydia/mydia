@@ -38,7 +38,7 @@ PlayerKeyContext _ctx({
 void main() {
   group('resolvePlayerKey', () {
     test('ignores key up', () {
-      final up = KeyUpEvent(
+      const up = KeyUpEvent(
         physicalKey: PhysicalKeyboardKey.keyA,
         logicalKey: LogicalKeyboardKey.space,
         timeStamp: Duration.zero,
