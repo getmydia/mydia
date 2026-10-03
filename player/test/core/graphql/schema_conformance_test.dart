@@ -42,7 +42,6 @@ void main() {
       // A parse or lookup regression here would make every case below vacuous.
       expect(rootFields[OperationType.query], isNotEmpty);
       expect(rootFields[OperationType.mutation], isNotEmpty);
-      expect(rootFields[OperationType.subscription], isNotEmpty);
       expect(rootFields[OperationType.mutation], contains('toggleFavorite'));
     });
 
@@ -126,8 +125,8 @@ void main() {
 
 /// Maps each operation type to the field names of its root object, honouring
 /// the schema's own `schema { query: ... }` block rather than assuming the
-/// conventional `Query`/`Mutation` names. Mydia's roots are `RootQueryType`,
-/// `RootMutationType`, and `RootSubscriptionType`.
+/// conventional `Query`/`Mutation` names. Mydia's roots are `RootQueryType`
+/// and `RootMutationType`.
 Map<OperationType, Set<String>> _rootFieldsByOperation(DocumentNode schema) {
   final rootTypeNames = <OperationType, String>{};
   final objectFields = <String, Set<String>>{};

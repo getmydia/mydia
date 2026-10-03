@@ -2,8 +2,8 @@ defmodule MydiaWeb.Schema.Middleware.RequireAuth do
   @moduledoc """
   Absinthe middleware that rejects a resolution when no user is authenticated.
 
-  `MydiaWeb.Schema.middleware/3` applies this to every root query, mutation and
-  subscription field outside a small public allowlist, so authorization fails
+  `MydiaWeb.Schema.middleware/3` applies this to every root query and
+  mutation field outside a small public allowlist, so authorization fails
   closed. Resolvers may still perform their own `current_user` checks; those now
   act as defence in depth rather than as the only barrier.
 

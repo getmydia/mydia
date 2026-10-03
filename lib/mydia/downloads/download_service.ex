@@ -108,7 +108,7 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> get_job_status(job_id)
+      iex> get_job_status(scope, job_id)
       {:ok, %{job_id: "uuid", status: "transcoding", progress: 0.5, error: nil, file_size: nil}}
   """
   def get_job_status(%Scope{} = scope, job_id) do
@@ -137,7 +137,7 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> cancel_job(job_id)
+      iex> cancel_job(scope, job_id)
       {:ok, :cancelled}
   """
   def cancel_job(%Scope{} = scope, job_id) do

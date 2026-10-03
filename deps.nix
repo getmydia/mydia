@@ -19,7 +19,7 @@ let
       };
 
       beamDeps = [ dataloader decimal nimble_parsec telemetry ];
-
+    };
 
     absinthe_plug = buildMix rec {
       name = "absinthe_plug";
