@@ -579,7 +579,10 @@ defmodule MydiaWeb.Api.StreamController do
       {:ok, port, os_pid} ->
         # Stream the remuxed content to the client
         FfmpegRemuxer.stream_to_conn(conn, port, os_pid,
-          on_activity: fn -> if remux_session, do: DirectPlaySession.heartbeat(remux_session) end
+          on_activity: fn ->
+            if remux_session, do: DirectPlaySession.heartbeat(remux_session)
+            recheck_remux_access(conn, media_file)
+          end
         )
 
       {:error, :ffmpeg_not_found} ->
@@ -597,6 +600,28 @@ defmodule MydiaWeb.Api.StreamController do
         conn
         |> put_status(:internal_server_error)
         |> json(%{error: "Failed to start streaming"})
+    end
+  end
+
+  # The remux response can run for the whole title, so revocation (a role or
+  # restriction change) is enforced at each heartbeat against the user's
+  # current scope. `:halt` ends the response.
+  defp recheck_remux_access(conn, media_file) do
+    with {:ok, user_id} <- get_user_id(conn) do
+      case Mydia.Accounts.get_user_by_id(user_id) do
+        nil ->
+          :halt
+
+        user ->
+          scope = Mydia.Accounts.Scope.for_user(user)
+
+          case Mydia.Media.authorize_media_file(scope, media_file) do
+            :ok -> :ok
+            _denied -> :halt
+          end
+      end
+    else
+      _ -> :ok
     end
   end
 

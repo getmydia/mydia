@@ -125,6 +125,9 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
   ## Options
 
   - `:chunk_size` - Size of chunks to read from FFmpeg (default: 64KB)
+  - `:on_activity` - Zero-arity function called on the first chunk and then at most
+    every 30 seconds. Returning `:halt` stops the remux and ends the response
+    without sending the pending chunk; any other return value continues.
 
   ## Returns
 
@@ -298,24 +301,12 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
         {fire?, last_activity} =
           throttle_activity(last_activity, System.monotonic_time(:millisecond))
 
-        if fire? and is_function(on_activity, 0), do: on_activity.()
-
-        # Send chunk to client
-        case Plug.Conn.chunk(conn, data) do
-          {:ok, conn} ->
-            stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity)
-
-          {:error, :closed} ->
-            # Client disconnected
-            Logger.debug("Client disconnected during fMP4 streaming")
-            stop_remux(port, os_pid)
-            conn
-
-          {:error, reason} ->
-            # Other errors (timeout, etc.)
-            Logger.warning("Chunk send failed: #{inspect(reason)}, stopping remux")
-            stop_remux(port, os_pid)
-            conn
+        if fire? and is_function(on_activity, 0) and on_activity.() == :halt do
+          Logger.info("fMP4 remux halted by on_activity callback")
+          stop_remux(port, os_pid)
+          conn
+        else
+          send_chunk(conn, data, port, os_pid, chunk_size, on_activity, last_activity)
         end
 
       {^port, {:exit_status, 0}} ->
@@ -335,6 +326,25 @@ defmodule Mydia.Streaming.FfmpegRemuxer do
       # Timeout after 30 seconds of no data
       30_000 ->
         Logger.warning("fMP4 remux timeout - no data for 30 seconds")
+        stop_remux(port, os_pid)
+        conn
+    end
+  end
+
+  defp send_chunk(conn, data, port, os_pid, chunk_size, on_activity, last_activity) do
+    case Plug.Conn.chunk(conn, data) do
+      {:ok, conn} ->
+        stream_loop(conn, port, os_pid, chunk_size, on_activity, last_activity)
+
+      {:error, :closed} ->
+        # Client disconnected
+        Logger.debug("Client disconnected during fMP4 streaming")
+        stop_remux(port, os_pid)
+        conn
+
+      {:error, reason} ->
+        # Other errors (timeout, etc.)
+        Logger.warning("Chunk send failed: #{inspect(reason)}, stopping remux")
         stop_remux(port, os_pid)
         conn
     end
