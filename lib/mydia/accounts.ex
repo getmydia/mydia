@@ -295,11 +295,18 @@ defmodule Mydia.Accounts do
 
   @doc """
   Updates a user.
+
+  A role change revokes access the user's cached media tokens and live
+  sessions no longer have, the same as `update_user_role/2`.
   """
   def update_user(%User{} = user, attrs) do
     user
     |> User.changeset(attrs)
     |> Repo.update()
+    |> tap(fn
+      {:ok, updated} -> if updated.role != user.role, do: revoke_stale_access(updated)
+      _error -> :ok
+    end)
   end
 
   @doc """
