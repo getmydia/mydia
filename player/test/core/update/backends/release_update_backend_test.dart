@@ -35,7 +35,7 @@ class _StubService implements UpdateService {
 class _RecordingUpdater extends PlatformUpdater {
   _RecordingUpdater({this.throws, this.handsOffUnconfirmed = false});
 
-  final Object? throws;
+  final Exception? throws;
   AvailableUpdate? applied;
 
   @override
@@ -49,7 +49,7 @@ class _RecordingUpdater extends PlatformUpdater {
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {
-    if (throws != null) Error.throwWithStackTrace(throws!, StackTrace.current);
+    if (throws != null) throw throws!;
     applied = update;
     onProgress?.call(1.0);
   }

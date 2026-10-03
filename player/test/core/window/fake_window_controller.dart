@@ -17,7 +17,7 @@ class FakeWindowController implements WindowController {
   final List<double> setAspectRatioCalls = [];
 
   /// When set, [setAspectRatio] throws this instead of recording the call.
-  Object? setAspectRatioError;
+  Error? setAspectRatioError;
 
   /// Every rect passed to [setBounds], in order.
   final List<Rect> setBoundsCalls = [];
@@ -30,7 +30,7 @@ class FakeWindowController implements WindowController {
 
   /// When set, [setBounds] throws this instead of recording the call. Lets a
   /// test drive the failure path of code that must still clean up afterwards.
-  Object? setBoundsError;
+  Error? setBoundsError;
 
   /// Ordered log of mutating calls, so tests can assert call *sequence*, not
   /// just call counts. `setBoundsCalls`/`maximizeCalls` record what and how
@@ -49,7 +49,7 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> setBounds(Rect newBounds) async {
     final error = setBoundsError;
-    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
+    if (error != null) throw error;
     setBoundsCalls.add(newBounds);
     callLog.add('setBounds');
     bounds = newBounds;
@@ -77,7 +77,7 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> setAspectRatio(double value) async {
     final error = setAspectRatioError;
-    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
+    if (error != null) throw error;
     setAspectRatioCalls.add(value);
     callLog.add('setAspectRatio');
     aspectRatio = value;

@@ -158,7 +158,6 @@ Stream<List<CastDevice>> mergeCastDiscovery(
 
   final latest = List<List<CastDevice>>.filled(backends.length, const []);
   final subs = <StreamSubscription<List<CastDevice>>>[];
-  // ignore: close_sinks, returned as a stream; the listener's cancel runs onCancel which cancels every backend subscription
   late final StreamController<List<CastDevice>> controller;
 
   // Coalesced onto the microtask queue rather than published straight from
@@ -191,14 +190,25 @@ Stream<List<CastDevice>> mergeCastDiscovery(
     },
   );
 
+  var remaining = backends.length;
   for (var i = 0; i < backends.length; i++) {
     final index = i;
     subs.add(backends[i]
         .startDiscovery(capabilities: capabilities, timeout: timeout)
-        .listen((devices) {
-      latest[index] = devices;
-      scheduleFlush();
-    }, onError: controller.addError));
+        .listen(
+            (devices) {
+              latest[index] = devices;
+              scheduleFlush();
+            },
+            onError: controller.addError,
+            onDone: () {
+              remaining--;
+              if (remaining > 0) return;
+              // Queued behind any pending flush so the last devices still publish.
+              scheduleMicrotask(() {
+                if (!controller.isClosed) unawaited(controller.close());
+              });
+            }));
   }
 
   return controller.stream;

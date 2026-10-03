@@ -53,7 +53,7 @@ class _FakeP2pService extends P2pService {
 class _RetryP2pService extends P2pService {
   int attempts = 0;
   final int succeedOnAttempt;
-  final Object failureError;
+  final Exception failureError;
 
   _RetryP2pService({
     required this.succeedOnAttempt,
@@ -74,10 +74,7 @@ class _RetryP2pService extends P2pService {
   }) async {
     final currentAttempt = attempts++;
     if (currentAttempt < succeedOnAttempt) {
-      if (failureError is Exception || failureError is Error) {
-        Error.throwWithStackTrace(failureError, StackTrace.current);
-      }
-      throw Exception(failureError.toString());
+      throw failureError;
     }
     return {
       '__typename': 'Query',

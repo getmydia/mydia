@@ -7,7 +7,7 @@ void main() {
 
   final calls = <MethodCall>[];
   Object? response;
-  Object? error;
+  Exception? error;
 
   setUp(() {
     calls.clear();
@@ -16,9 +16,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(kInstallerChannel, (call) async {
       calls.add(call);
-      if (error != null) {
-        Error.throwWithStackTrace(error!, StackTrace.current);
-      }
+      if (error != null) throw error!;
       return response;
     });
   });

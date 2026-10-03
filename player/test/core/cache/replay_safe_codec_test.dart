@@ -23,7 +23,7 @@ class _FakeCodec implements ui.Codec {
   final ui.Image image;
   int calls = 0;
   bool disposed = false;
-  Object? failNext;
+  Error? failNext;
   Completer<void>? gate;
 
   @override
@@ -40,7 +40,7 @@ class _FakeCodec implements ui.Codec {
     final failure = failNext;
     if (failure != null) {
       failNext = null;
-      Error.throwWithStackTrace(failure, StackTrace.current);
+      throw failure;
     }
     return _Frame(image.clone());
   }

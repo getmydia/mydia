@@ -6,14 +6,12 @@ void main() {
   group('NowPlayingMetadataResolver', () {
     late List<Map<String, dynamic>> calls;
     Map<String, dynamic>? response;
-    Object? error;
+    Exception? error;
 
     NowPlayingMetadataResolver build() => NowPlayingMetadataResolver(
           (document, variables) async {
             calls.add(variables);
-            if (error != null) {
-              Error.throwWithStackTrace(error!, StackTrace.current);
-            }
+            if (error != null) throw error!;
             return response;
           },
         );

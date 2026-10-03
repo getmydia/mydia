@@ -121,7 +121,7 @@ class HiveDownloadDatabase implements DownloadDatabase {
 /// A [DownloadJobService] whose responses the test controls outright.
 class FakeDownloadJobService implements DownloadJobService {
   DownloadJobStatus status;
-  Object? statusError;
+  Exception? statusError;
   String downloadUrl;
   int prepareCount = 0;
   int cancelCount = 0;
@@ -140,7 +140,7 @@ class FakeDownloadJobService implements DownloadJobService {
   @override
   Future<DownloadJobStatus> getJobStatus(String jobId) async {
     final error = statusError;
-    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
+    if (error != null) throw error;
     return status;
   }
 
@@ -152,7 +152,7 @@ class FakeDownloadJobService implements DownloadJobService {
   }) async {
     prepareCount++;
     final error = statusError;
-    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
+    if (error != null) throw error;
     return status;
   }
 

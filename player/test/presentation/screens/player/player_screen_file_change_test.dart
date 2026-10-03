@@ -90,7 +90,7 @@ class _ProbedPlayer extends PlatformPlayer {
   /// something to actually catch. `_player` is already this player by the
   /// time this throws (`_openPlayerAndStart` assigns it before calling
   /// `open`), which is what lets [disposeGate] hold that catch open.
-  Object? openError;
+  Exception? openError;
 
   /// Set by a test that wants to suspend [dispose] partway through, the way
   /// a slow platform teardown would -- in particular, holding
@@ -105,7 +105,7 @@ class _ProbedPlayer extends PlatformPlayer {
     final gate = openGate;
     if (gate != null) await gate.future;
     final error = openError;
-    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
+    if (error != null) throw error;
     opened = true;
     if (playable is Media) {
       openedUris.add(playable.uri);
