@@ -256,7 +256,8 @@ defmodule Mydia.Downloads.Client.Blackhole do
 
   defp get_target_folder(config, base_folder, opts) do
     connection_settings = config[:connection_settings] || config.connection_settings || %{}
-    use_subfolders = connection_settings["use_category_subfolders"] == true
+    # The admin form stores connection_settings as strings; YAML/env carry booleans.
+    use_subfolders = connection_settings["use_category_subfolders"] in [true, "true"]
 
     if use_subfolders and opts[:category] do
       {:ok, Path.join(base_folder, opts[:category])}

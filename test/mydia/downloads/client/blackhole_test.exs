@@ -156,6 +156,30 @@ defmodule Mydia.Downloads.Client.BlackholeTest do
     end
 
     @tag :tmp_dir
+    test "creates category subfolder when the form saved the string \"true\"", %{
+      tmp_dir: tmp_dir
+    } do
+      watch_folder = Path.join(tmp_dir, "watch")
+      completed_folder = Path.join(tmp_dir, "completed")
+      File.mkdir_p!(watch_folder)
+      File.mkdir_p!(completed_folder)
+
+      # connection_settings is a plain :map, so the admin form stores strings.
+      config = %{
+        connection_settings: %{
+          "watch_folder" => watch_folder,
+          "completed_folder" => completed_folder,
+          "use_category_subfolders" => "true"
+        }
+      }
+
+      assert {:ok, _hash} =
+               Blackhole.add_torrent(config, {:file, @sample_torrent_file}, category: "movies")
+
+      assert File.dir?(Path.join(watch_folder, "movies"))
+    end
+
+    @tag :tmp_dir
     test "handles magnet links by writing .magnet file", %{tmp_dir: tmp_dir} do
       watch_folder = Path.join(tmp_dir, "watch")
       completed_folder = Path.join(tmp_dir, "completed")

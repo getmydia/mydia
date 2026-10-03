@@ -818,5 +818,97 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
 
       refute Settings.get_download_client_config!(client.id).enabled
     end
+
+    test "unchecking Remove Completed persists false", %{conn: conn} do
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          "name" => "toggle_remove_#{System.unique_integer([:positive])}",
+          "type" => "qbittorrent",
+          "host" => "localhost",
+          "port" => "8080",
+          "priority" => "1",
+          "remove_completed" => "true"
+        })
+
+      conn
+      |> edit_client(client)
+      |> form("#download-client-form", %{
+        "download_client_config" => %{"remove_completed" => "false"}
+      })
+      |> render_submit()
+
+      refute Settings.get_download_client_config!(client.id).remove_completed
+    end
+
+    test "unchecking remote fetch toggles persists false", %{conn: conn} do
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          "name" => "toggle_seedbox_#{System.unique_integer([:positive])}",
+          "type" => "qbittorrent",
+          "host" => "localhost",
+          "port" => "8080",
+          "priority" => "1",
+          "connection_settings" => %{
+            "remote_fetch" => %{
+              "enabled" => "true",
+              "host" => "seedbox.example.com",
+              "username" => "seeder",
+              "auth_method" => "password",
+              "password" => "secret",
+              "delete_after_transfer" => "true"
+            }
+          }
+        })
+
+      conn
+      |> edit_client(client)
+      |> form("#download-client-form", %{
+        "download_client_config" => %{
+          "connection_settings" => %{
+            "remote_fetch" => %{"enabled" => "false", "delete_after_transfer" => "false"}
+          }
+        }
+      })
+      |> render_submit()
+
+      remote_fetch =
+        Settings.get_download_client_config!(client.id).connection_settings["remote_fetch"]
+
+      assert remote_fetch["enabled"] in [false, "false"]
+      assert remote_fetch["delete_after_transfer"] in [false, "false"]
+    end
+
+    test "Category Subfolders round-trips on and off for blackhole", %{conn: conn} do
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          "name" => "toggle_blackhole_#{System.unique_integer([:positive])}",
+          "type" => "blackhole",
+          "priority" => "1",
+          "connection_settings" => %{
+            "watch_folder" => "/tmp/watch",
+            "completed_folder" => "/tmp/completed",
+            "use_category_subfolders" => "true"
+          }
+        })
+
+      view = edit_client(conn, client)
+
+      # A saved string "true" must render as checked.
+      assert has_element?(
+               view,
+               ~s{input[type="checkbox"][name="download_client_config[connection_settings][use_category_subfolders]"][checked]}
+             )
+
+      view
+      |> form("#download-client-form", %{
+        "download_client_config" => %{
+          "connection_settings" => %{"use_category_subfolders" => "false"}
+        }
+      })
+      |> render_submit()
+
+      settings = Settings.get_download_client_config!(client.id).connection_settings
+      assert settings["use_category_subfolders"] in [false, "false"]
+    end
   end
 end
