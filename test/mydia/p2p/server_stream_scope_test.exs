@@ -26,4 +26,24 @@ defmodule Mydia.P2p.ServerStreamScopeTest do
       assert {:error, :not_ready} = Server.lookup_transcode_job(Scope.unrestricted(), job.id)
     end
   end
+
+  describe "authorize_direct_file/2" do
+    test "a hidden file is not found, the same as a missing one" do
+      movie = categorized_media_item_fixture(%{type: "movie"}, "movie")
+      file = media_file_fixture(%{media_item_id: movie.id})
+
+      assert {:error, :not_found} = Server.authorize_direct_file(restricted_scope(), file.id)
+
+      assert {:error, :not_found} =
+               Server.authorize_direct_file(restricted_scope(), Ecto.UUID.generate())
+    end
+
+    test "a visible file comes back with its library path loaded" do
+      file = media_file_fixture()
+
+      assert {:ok, loaded} = Server.authorize_direct_file(Scope.unrestricted(), file.id)
+      assert loaded.id == file.id
+      assert %Mydia.Settings.LibraryPath{} = loaded.library_path
+    end
+  end
 end

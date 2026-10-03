@@ -688,7 +688,7 @@ defmodule Mydia.P2p.Server do
         cond do
           String.starts_with?(req.session_id, "direct:") ->
             file_id = String.replace_prefix(req.session_id, "direct:", "")
-            handle_direct_stream(resource, stream_id, file_id, user, req)
+            handle_direct_stream(resource, stream_id, file_id, user, scope, req)
 
           String.starts_with?(req.session_id, "download:") ->
             job_id = String.replace_prefix(req.session_id, "download:", "")
@@ -740,46 +740,49 @@ defmodule Mydia.P2p.Server do
     end
   end
 
-  defp handle_direct_stream(resource, stream_id, file_id, user, req) do
-    try do
-      media_file = Mydia.Library.get_media_file!(file_id, preload: [:library_path])
-
-      case Mydia.Library.MediaFile.absolute_path(media_file) do
-        nil ->
-          Logger.warning("Direct stream: cannot resolve path for file #{file_id}")
-          send_hls_error(resource, stream_id, 404, "File path not found")
-
-        absolute_path ->
-          if File.exists?(absolute_path) do
-            # Start or reuse a direct play session for tracking
-            case Mydia.Streaming.HlsSessionSupervisor.start_direct_session(
-                   media_file.id,
-                   user.id
-                 ) do
-              {:ok, pid, :started} ->
-                Logger.info(
-                  "P2P Direct Play started: file=#{file_id}, path=#{Path.basename(absolute_path)}"
-                )
-
-                Mydia.Streaming.DirectPlaySession.heartbeat(pid)
-
-              {:ok, pid, :existing} ->
-                Mydia.Streaming.DirectPlaySession.heartbeat(pid)
-
-              _ ->
-                :ok
-            end
-
-            stream_hls_file(resource, stream_id, absolute_path, req)
-          else
-            Logger.warning("Direct stream: file not found at #{absolute_path}")
-            send_hls_error(resource, stream_id, 404, "File not found on disk")
-          end
-      end
-    rescue
-      Ecto.NoResultsError ->
-        Logger.warning("Direct stream: media file #{file_id} not found in database")
+  defp handle_direct_stream(resource, stream_id, file_id, user, scope, req) do
+    case authorize_direct_file(scope, file_id) do
+      {:error, :not_found} ->
+        Logger.warning("Direct stream: media file #{file_id} not found")
         send_hls_error(resource, stream_id, 404, "Media file not found")
+
+      {:ok, media_file} ->
+        stream_direct_file(resource, stream_id, media_file, user, req)
+    end
+  end
+
+  defp stream_direct_file(resource, stream_id, media_file, user, req) do
+    case Mydia.Library.MediaFile.absolute_path(media_file) do
+      nil ->
+        Logger.warning("Direct stream: cannot resolve path for file #{media_file.id}")
+        send_hls_error(resource, stream_id, 404, "File path not found")
+
+      absolute_path ->
+        if File.exists?(absolute_path) do
+          # Start or reuse a direct play session for tracking
+          case Mydia.Streaming.HlsSessionSupervisor.start_direct_session(
+                 media_file.id,
+                 user.id
+               ) do
+            {:ok, pid, :started} ->
+              Logger.info(
+                "P2P Direct Play started: file=#{media_file.id}, path=#{Path.basename(absolute_path)}"
+              )
+
+              Mydia.Streaming.DirectPlaySession.heartbeat(pid)
+
+            {:ok, pid, :existing} ->
+              Mydia.Streaming.DirectPlaySession.heartbeat(pid)
+
+            _ ->
+              :ok
+          end
+
+          stream_hls_file(resource, stream_id, absolute_path, req)
+        else
+          Logger.warning("Direct stream: file not found at #{absolute_path}")
+          send_hls_error(resource, stream_id, 404, "File not found on disk")
+        end
     end
   end
 
@@ -1323,6 +1326,16 @@ defmodule Mydia.P2p.Server do
         else
           {:error, :not_ready}
         end
+    end
+  end
+
+  @doc false
+  # Public for its test. A file outside the caller's scope answers exactly as
+  # a missing one, so a direct stream request cannot probe for hidden titles.
+  def authorize_direct_file(%Scope{} = scope, file_id) do
+    case Mydia.Media.authorize_media_file_id(scope, file_id) do
+      {:ok, media_file} -> {:ok, Mydia.Repo.preload(media_file, :library_path)}
+      :denied -> {:error, :not_found}
     end
   end
 end
