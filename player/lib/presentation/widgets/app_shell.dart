@@ -30,6 +30,13 @@ import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
+/// Routes a Mydia user in offline mode may still open: downloads, and the
+/// third-party sources, which do not depend on the Mydia server.
+bool offlineRouteAllowed(String route) =>
+    route == '/downloads' ||
+    route.startsWith('/s/') ||
+    route.startsWith('/sources');
+
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
   final String location;
@@ -306,7 +313,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   void _navigateTo(String route) {
-    if (_isOfflineMode() && route != '/downloads') {
+    if (_isOfflineMode() && !offlineRouteAllowed(route)) {
       _showOfflineToast();
       return;
     }

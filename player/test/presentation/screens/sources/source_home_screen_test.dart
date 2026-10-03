@@ -69,6 +69,8 @@ void main() {
     final fake = FakeMediaSource(failWith: const SourceException.unreachable());
     await pumpHome(tester, fake);
     expect(find.byKey(const Key('source-error-retry')), findsOneWidget);
+    expect(find.text(fake.displayName), findsOneWidget,
+        reason: 'the header stays so the drawer and title are still there');
     fake.failWith = null;
     await tester.tap(find.byKey(const Key('source-error-retry')));
     await tester.pumpAndSettle();

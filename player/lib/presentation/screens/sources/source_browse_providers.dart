@@ -95,8 +95,13 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
   final LibraryRef library;
   BrowseQuery _query = const BrowseQuery();
 
+  /// Bumped whenever the list is rebuilt for a (new) query, so a page that
+  /// was requested for the old one is dropped when it lands.
+  int _generation = 0;
+
   @override
   Future<LibraryBrowseState> build() async {
+    _generation++;
     final source = _require(ref, library.sourceId);
     final page = await source.browse(library, _query);
     return LibraryBrowseState(
@@ -109,6 +114,7 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
 
   Future<void> setQuery(BrowseQuery query) async {
     _query = query;
+    _generation++;
     state = const AsyncLoading();
     ref.invalidateSelf();
     await future;
@@ -121,19 +127,23 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
     };
     final cursor = current?.nextCursor;
     if (current == null || cursor == null || current.loadingMore) return;
+    final generation = _generation;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
       final page = await _require(ref, library.sourceId)
           .browse(library, current.query, cursor: cursor);
-      if (!ref.mounted) return;
+      if (!ref.mounted || generation != _generation) return;
       state = AsyncData(current.copyWith(
         items: [...current.items, ...page.items],
         nextCursor: page.nextCursor,
         clearCursor: page.nextCursor == null,
         loadingMore: false,
       ));
-    } on SourceException {
-      if (ref.mounted) state = AsyncData(current.copyWith(loadingMore: false));
+    } catch (_) {
+      // Any failure, not just a SourceException: loadingMore must not stick.
+      if (ref.mounted && generation == _generation) {
+        state = AsyncData(current.copyWith(loadingMore: false));
+      }
     }
   }
 }

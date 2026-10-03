@@ -170,22 +170,24 @@ class SidebarContent extends ConsumerWidget {
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: () =>
-                    ref.read(sidebarEditModeProvider.notifier).toggle(),
-                tooltip: 'Edit sidebar',
-                visualDensity: VisualDensity.compact,
-                icon: Icon(
-                  Icons.edit_outlined,
-                  size: 20,
-                  color: editing ? AppColors.primary : AppColors.textSecondary,
+              if (thirdPartyId == null)
+                IconButton(
+                  onPressed: () =>
+                      ref.read(sidebarEditModeProvider.notifier).toggle(),
+                  tooltip: 'Edit sidebar',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    Icons.edit_outlined,
+                    size: 20,
+                    color:
+                        editing ? AppColors.primary : AppColors.textSecondary,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
         SourceSwitcher(onNavigate: onNavigate),
-        if (editing)
+        if (editing && thirdPartyId == null)
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
             onReset: () => _confirmReset(context, ref),

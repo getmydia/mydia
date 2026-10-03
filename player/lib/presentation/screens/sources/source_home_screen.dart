@@ -39,10 +39,21 @@ class SourceHomeScreen extends ConsumerWidget {
                 for (final library in value) _LibraryRow(library: library),
               ],
             ),
-          AsyncError(:final error) => SourceErrorView(
-              error: error,
-              account: source?.source.account,
-              onRetry: () => ref.invalidate(sourceLibrariesProvider(sourceId)),
+          AsyncError(:final error) => Column(
+              children: [
+                _Header(
+                    title: source?.displayName ?? 'Server',
+                    sourceId: sourceId,
+                    searchable: false),
+                Expanded(
+                  child: SourceErrorView(
+                    error: error,
+                    account: source?.source.account,
+                    onRetry: () =>
+                        ref.invalidate(sourceLibrariesProvider(sourceId)),
+                  ),
+                ),
+              ],
             ),
           _ => const Center(child: CircularProgressIndicator()),
         },
