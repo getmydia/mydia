@@ -18,6 +18,7 @@ defmodule Mydia.Settings.QualityProfile do
           upgrades_allowed: boolean(),
           upgrade_until_score: integer() | nil,
           min_upgrade_margin: integer() | nil,
+          grab_delay_hours: non_neg_integer(),
           description: String.t() | nil,
           is_system: boolean(),
           version: integer(),
@@ -83,6 +84,9 @@ defmodule Mydia.Settings.QualityProfile do
     field :upgrades_allowed, :boolean, default: true
     field :upgrade_until_score, :integer, default: 85
     field :min_upgrade_margin, :integer, default: 5
+    # Hours an automatic grab waits after the first acceptable release appears,
+    # unless one already meets upgrade_until_score. See Mydia.Indexers.GrabDelay.
+    field :grab_delay_hours, :integer, default: 0
 
     # Enhanced fields for import/export and configuration management
     field :description, :string
@@ -107,6 +111,7 @@ defmodule Mydia.Settings.QualityProfile do
       :upgrades_allowed,
       :upgrade_until_score,
       :min_upgrade_margin,
+      :grab_delay_hours,
       :description,
       :is_system,
       :version,
@@ -125,6 +130,10 @@ defmodule Mydia.Settings.QualityProfile do
     |> validate_number(:min_upgrade_margin,
       greater_than_or_equal_to: 0,
       less_than_or_equal_to: 100
+    )
+    |> validate_number(:grab_delay_hours,
+      greater_than_or_equal_to: 0,
+      less_than_or_equal_to: 168
     )
   end
 

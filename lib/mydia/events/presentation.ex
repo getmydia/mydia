@@ -233,6 +233,12 @@ defmodule Mydia.Events.Presentation do
       color: "text-warning",
       title: "All results filtered out"
     },
+    %{
+      type: "search.deferred",
+      icon: "hero-clock",
+      color: "text-info",
+      title: "Grab delayed"
+    },
     # Recorded only by v0.15.x, which ran the identity check in shadow beside
     # the old title gate. Nothing records it now; kept so those rows render.
     %{
@@ -544,6 +550,11 @@ defmodule Mydia.Events.Presentation do
 
   def detail(%Event{type: "search.filtered_out", metadata: metadata}) do
     "#{search_subject(metadata)}, #{metadata["results_count"] || 0} rejected"
+  end
+
+  def detail(%Event{type: "search.deferred", metadata: metadata}) do
+    "#{search_subject(metadata)}, waiting for better releases, " <>
+      "grab #{next_eligible(metadata["grab_after"])}"
   end
 
   def detail(%Event{type: "search.identity_shadow", metadata: metadata}) do

@@ -29,6 +29,9 @@ defmodule Mydia.Metadata.Structs.SearchResult do
     :vote_average,
     :vote_count,
     :original_language,
+    # Filled by `Mydia.Media.RemoteFilter` for restricted scopes; search
+    # endpoints never carry it.
+    :content_rating,
     # Classification signals. TMDB ships these with every search and discover
     # hit, so keeping them costs no extra request and lets a caller work out a
     # title's category without fetching its full metadata.
@@ -57,7 +60,8 @@ defmodule Mydia.Metadata.Structs.SearchResult do
           vote_count: integer() | nil,
           genre_ids: [integer()],
           origin_country: [String.t()],
-          original_language: String.t() | nil
+          original_language: String.t() | nil,
+          content_rating: String.t() | nil
         }
 
   @doc """

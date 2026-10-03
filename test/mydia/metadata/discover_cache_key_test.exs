@@ -42,6 +42,25 @@ defmodule Mydia.Metadata.DiscoverCacheKeyTest do
     assert_receive {:provider, "2"}
   end
 
+  test "two genre exclusions are cached separately", %{bypass: bypass} do
+    test_pid = self()
+
+    Bypass.expect(bypass, "GET", "/tmdb/movies/discover", fn conn ->
+      conn = Plug.Conn.fetch_query_params(conn)
+      send(test_pid, {:without, conn.query_params["without_genres"]})
+
+      conn
+      |> Plug.Conn.put_resp_content_type("application/json")
+      |> Plug.Conn.resp(200, Jason.encode!(%{"results" => [], "total_pages" => 1}))
+    end)
+
+    assert {:ok, _} = Metadata.discover(:movie, without_genres: "16")
+    assert {:ok, _} = Metadata.discover(:movie, [])
+
+    assert_receive {:without, "16"}
+    assert_receive {:without, nil}
+  end
+
   test "two release windows are cached separately", %{bypass: bypass} do
     test_pid = self()
 

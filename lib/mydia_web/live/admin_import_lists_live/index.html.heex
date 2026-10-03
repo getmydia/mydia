@@ -331,6 +331,7 @@
 
             <div class="flex flex-col gap-3">
               <label class="flex items-center gap-3 cursor-pointer">
+                <input type="hidden" name={@form[:auto_add].name} value="false" />
                 <input
                   type="checkbox"
                   name={@form[:auto_add].name}
@@ -351,6 +352,7 @@
               </label>
 
               <label class="flex items-center gap-3 cursor-pointer">
+                <input type="hidden" name={@form[:monitored].name} value="false" />
                 <input
                   type="checkbox"
                   name={@form[:monitored].name}
@@ -367,6 +369,7 @@
               </label>
 
               <label class="flex items-center gap-3 cursor-pointer">
+                <input type="hidden" name={@form[:enabled].name} value="false" />
                 <input
                   type="checkbox"
                   name={@form[:enabled].name}

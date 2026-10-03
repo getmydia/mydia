@@ -18,6 +18,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
   alias Mydia.Library.ReleaseParser
   alias Mydia.Media
   alias Mydia.Media.Add
+  alias Mydia.Media.RemoteFilter
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
   alias Mydia.Settings
@@ -94,7 +95,7 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
       %{dialog | library_results: [], external_results: [], search_warning: nil}
     else
       library = Media.list_media_items(dialog.scope, search: query, limit: @result_limit)
-      {external, warning} = provider_search(dialog.type, query, library)
+      {external, warning} = provider_search(dialog.scope, dialog.type, query, library)
 
       %{dialog | library_results: library, external_results: external, search_warning: warning}
     end
@@ -169,10 +170,13 @@ defmodule MydiaWeb.DownloadsLive.MatchDialog do
 
   # A relay outage must not empty the dialog: the library half still works and
   # is often all the operator needs.
-  defp provider_search(type, query, library) do
+  defp provider_search(scope, type, query, library) do
     case Metadata.search_cached(Metadata.default_relay_config(), query, media_type: type) do
       {:ok, results} ->
-        {results |> reject_known(library, type) |> Enum.take(@result_limit), nil}
+        # A restricted account may match downloads, so the provider hits it can
+        # pick from obey the same limits as Discover.
+        filtered = RemoteFilter.filter(results, scope)
+        {filtered |> reject_known(library, type) |> Enum.take(@result_limit), nil}
 
       {:error, _reason} ->
         {[], @relay_down}

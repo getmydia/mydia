@@ -91,7 +91,7 @@ defmodule Mydia.Downloads.Client.Blackhole do
   def get_status(config, client_id) do
     with {:ok, watch_folder, completed_folder} <- get_folder_paths(config) do
       # Check if torrent file exists in watch folder (pending)
-      torrent_file = find_torrent_file(watch_folder, client_id)
+      torrent_file = find_torrent_file(watch_dirs(config, watch_folder), client_id)
 
       # Check if matching folder exists in completed folder
       completed_path = find_completed_download(completed_folder, client_id)
@@ -115,7 +115,7 @@ defmodule Mydia.Downloads.Client.Blackhole do
   def list_torrents(config, opts \\ []) do
     with {:ok, watch_folder, completed_folder} <- get_folder_paths(config) do
       # List pending torrents (files in watch folder)
-      pending = list_pending_torrents(watch_folder)
+      pending = list_pending_torrents(watch_dirs(config, watch_folder))
 
       # List completed torrents (folders in completed folder)
       completed = list_completed_downloads(completed_folder)
@@ -134,7 +134,7 @@ defmodule Mydia.Downloads.Client.Blackhole do
 
     with {:ok, watch_folder, completed_folder} <- get_folder_paths(config) do
       # Remove torrent file from watch folder
-      torrent_file = find_torrent_file(watch_folder, client_id)
+      torrent_file = find_torrent_file(watch_dirs(config, watch_folder), client_id)
 
       if torrent_file do
         File.rm(torrent_file)
@@ -255,10 +255,7 @@ defmodule Mydia.Downloads.Client.Blackhole do
   end
 
   defp get_target_folder(config, base_folder, opts) do
-    connection_settings = config[:connection_settings] || config.connection_settings || %{}
-    use_subfolders = connection_settings["use_category_subfolders"] == true
-
-    if use_subfolders and opts[:category] do
+    if use_category_subfolders?(config) and opts[:category] do
       {:ok, Path.join(base_folder, opts[:category])}
     else
       {:ok, base_folder}
@@ -286,23 +283,53 @@ defmodule Mydia.Downloads.Client.Blackhole do
     end
   end
 
-  defp find_torrent_file(watch_folder, hash) do
+  defp find_torrent_file(dirs, hash) do
     hash_upper = String.upcase(hash)
 
-    case File.ls(watch_folder) do
-      {:ok, files} ->
-        Enum.find_value(files, fn file ->
-          file_upper = String.upcase(file)
+    Enum.find_value(dirs, fn dir ->
+      case File.ls(dir) do
+        {:ok, files} ->
+          Enum.find_value(files, fn file ->
+            file_upper = String.upcase(file)
 
-          if String.starts_with?(file_upper, hash_upper) and
-               (String.ends_with?(file, @torrent_extension) or String.ends_with?(file, ".magnet")) do
-            Path.join(watch_folder, file)
-          end
-        end)
+            if String.starts_with?(file_upper, hash_upper) and
+                 (String.ends_with?(file, @torrent_extension) or
+                    String.ends_with?(file, ".magnet")) do
+              Path.join(dir, file)
+            end
+          end)
 
-      {:error, _} ->
-        nil
+        {:error, _} ->
+          nil
+      end
+    end)
+  end
+
+  # The watch folder plus, with category subfolders on, each immediate
+  # subdirectory (categories are single path segments).
+  defp watch_dirs(config, watch_folder) do
+    if use_category_subfolders?(config) do
+      case File.ls(watch_folder) do
+        {:ok, entries} ->
+          subdirs =
+            entries
+            |> Enum.map(&Path.join(watch_folder, &1))
+            |> Enum.filter(&File.dir?/1)
+
+          [watch_folder | subdirs]
+
+        {:error, _} ->
+          [watch_folder]
+      end
+    else
+      [watch_folder]
     end
+  end
+
+  defp use_category_subfolders?(config) do
+    connection_settings = config[:connection_settings] || config.connection_settings || %{}
+    # The admin form stores connection_settings as strings; YAML/env carry booleans.
+    connection_settings["use_category_subfolders"] in [true, "true"]
   end
 
   defp find_completed_download(completed_folder, hash) do
@@ -325,22 +352,24 @@ defmodule Mydia.Downloads.Client.Blackhole do
     end
   end
 
-  defp list_pending_torrents(watch_folder) do
-    case File.ls(watch_folder) do
-      {:ok, files} ->
-        files
-        |> Enum.filter(fn file ->
-          String.ends_with?(file, @torrent_extension) or String.ends_with?(file, ".magnet")
-        end)
-        |> Enum.map(fn file ->
-          file_path = Path.join(watch_folder, file)
-          hash = Path.basename(file, Path.extname(file))
-          build_pending_status(hash, file_path)
-        end)
+  defp list_pending_torrents(dirs) do
+    Enum.flat_map(dirs, fn dir ->
+      case File.ls(dir) do
+        {:ok, files} ->
+          files
+          |> Enum.filter(fn file ->
+            String.ends_with?(file, @torrent_extension) or String.ends_with?(file, ".magnet")
+          end)
+          |> Enum.map(fn file ->
+            file_path = Path.join(dir, file)
+            hash = Path.basename(file, Path.extname(file))
+            build_pending_status(hash, file_path)
+          end)
 
-      {:error, _} ->
-        []
-    end
+        {:error, _} ->
+          []
+      end
+    end)
   end
 
   defp list_completed_downloads(completed_folder) do

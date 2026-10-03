@@ -45,6 +45,7 @@ defmodule Mydia.Metadata do
   # leaving one out lets two different queries share an entry.
   @discover_cache_fields [
     :genres,
+    :without_genres,
     :original_language,
     :year,
     :min_rating,

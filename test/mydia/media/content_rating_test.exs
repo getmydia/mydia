@@ -70,4 +70,31 @@ defmodule Mydia.Media.ContentRatingTest do
       assert ages == [0, 7, 12, 14, 16, 18]
     end
   end
+
+  describe "regional strings seen in production" do
+    for {rating, age} <- [
+          {"13+", 13},
+          {"16+", 16},
+          {"17+", 17},
+          {"18+", 18},
+          {"R15+", 15},
+          {"R18+", 18},
+          {"R-15", 15},
+          {"R-18", 18},
+          {"MA15+", 15},
+          {"M", 15},
+          {"PG12", 12},
+          {"PG-12", 12},
+          {" r15+ ", 15}
+        ] do
+      test "#{inspect(rating)} is #{age}" do
+        assert ContentRating.min_age(unquote(rating)) == unquote(age)
+      end
+    end
+
+    test "NR stays unrated" do
+      assert ContentRating.min_age("NR") == nil
+      assert ContentRating.min_age("Not Rated") == nil
+    end
+  end
 end
