@@ -8,6 +8,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/jellyfin_sign_in_controller.dart';
@@ -25,7 +26,7 @@ class _Unauthenticated extends AuthStateNotifier {
   FakeJellyfinServer server,
   InMemorySourceStore store,
   MockAuthStorage storage
-}) setUpContainer() {
+}) setUpContainer({bool identityFails = false}) {
   final server = FakeJellyfinServer();
   final store = InMemorySourceStore();
   final storage = MockAuthStorage();
@@ -36,11 +37,13 @@ class _Unauthenticated extends AuthStateNotifier {
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
       jellyfinIdentityProvider.overrideWith(
-        (ref) async => const JellyfinIdentity(
-          deviceId: 'dev1',
-          version: '1',
-          deviceName: 'Mydia Player on Linux',
-        ),
+        (ref) async => identityFails
+            ? throw StateError('no identity')
+            : const JellyfinIdentity(
+                deviceId: 'dev1',
+                version: '1',
+                deviceName: 'Mydia Player on Linux',
+              ),
       ),
       jellyfinQuickConnectPollProvider.overrideWithValue(
         const Duration(milliseconds: 10),
@@ -152,6 +155,79 @@ void main() {
       FakeJellyfinServer.password,
     );
     expect(state(), isA<JellyfinSignedIn>());
+  });
+
+  test('a storage failure while saving leaves the form, not a spinner',
+      () async {
+    server.quickConnectEnabled = false;
+    await ctl().submitAddress('https://media.example.test');
+    storage.failAllWrites = true;
+    await ctl().submitPassword(
+      FakeJellyfinServer.username,
+      FakeJellyfinServer.password,
+    );
+    expect(
+      (state() as JellyfinPassword).error,
+      'Could not save this server on this device.',
+    );
+  });
+
+  test('an unexpected failure checking the address shows an error', () async {
+    final s = setUpContainer(identityFails: true);
+    final sub2 = s.container.listen(jellyfinSignInProvider(null), (_, __) {});
+    addTearDown(sub2.close);
+    await s.container
+        .read(jellyfinSignInProvider(null).notifier)
+        .submitAddress('https://media.example.test');
+    expect(
+      (s.container.read(jellyfinSignInProvider(null)) as JellyfinEnterAddress)
+          .error,
+      'Could not reach this Jellyfin server. Try again.',
+    );
+  });
+
+  test('re-auth as another user keeps the account but follows the user',
+      () async {
+    const accountId = 'acct1';
+    const oldAccount = ProviderAccount(
+      id: accountId,
+      kind: SourceKind.jellyfin,
+      displayName: 'Old',
+      storageNamespace: 'ns-old',
+      activeProfileId: 'old-profile',
+      needsReauth: true,
+    );
+    await c.read(sourceRecordsProvider.notifier).putAccount(
+          SourceAccountRecord(
+            account: oldAccount,
+            profiles: const [
+              SourceProfile(
+                id: 'old-profile',
+                accountId: accountId,
+                name: 'Old',
+                isOwner: false,
+              ),
+            ],
+            servers: const [],
+            addedAtMs: 1234,
+          ),
+        );
+    final p = jellyfinSignInProvider(accountId);
+    final sub2 = c.listen(p, (_, __) {});
+    addTearDown(sub2.close);
+    server.quickConnectEnabled = false;
+    await c.read(p.notifier).submitAddress('https://media.example.test');
+    await c.read(p.notifier).submitPassword(
+          FakeJellyfinServer.username,
+          FakeJellyfinServer.password,
+        );
+    expect(c.read(p), isA<JellyfinSignedIn>());
+    final record = (await store.load()).accounts.single;
+    expect(record.account.id, accountId);
+    expect(record.account.storageNamespace, 'ns-old');
+    expect(record.account.activeProfileId, FakeJellyfinServer.userId);
+    expect(record.account.needsReauth, isFalse);
+    expect(record.addedAtMs, 1234);
   });
 
   test('switching to the password stops polling', () {

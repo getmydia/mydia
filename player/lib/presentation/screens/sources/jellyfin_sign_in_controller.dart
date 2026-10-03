@@ -132,6 +132,12 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
       }
     } on SourceException catch (e) {
       if (ref.mounted) state = JellyfinEnterAddress(error: e.viewerMessage);
+    } catch (_) {
+      if (ref.mounted) {
+        state = const JellyfinEnterAddress(
+          error: 'Could not reach this Jellyfin server. Try again.',
+        );
+      }
     }
   }
 
@@ -155,8 +161,15 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
           quickConnectAvailable: _quickConnect,
         );
       }
+    } catch (_) {
+      if (ref.mounted) state = _signInFailed();
     }
   }
+
+  JellyfinPassword _signInFailed() => JellyfinPassword(
+        error: 'Could not sign in to Jellyfin. Try again.',
+        quickConnectAvailable: _quickConnect,
+      );
 
   Future<void> _check(JellyfinAuth auth, QuickConnectCode code) async {
     if (_checking || !ref.mounted) return;
@@ -177,6 +190,9 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
               error: e.viewerMessage,
               quickConnectAvailable: _quickConnect,
             );
+    } catch (_) {
+      _poll?.cancel();
+      if (ref.mounted) state = _signInFailed();
     } finally {
       _checking = false;
     }
@@ -201,6 +217,8 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
             : e.viewerMessage,
         quickConnectAvailable: _quickConnect,
       );
+    } catch (_) {
+      if (ref.mounted) state = _signInFailed();
     }
   }
 
@@ -212,26 +230,25 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
         'Jellyfin sent a user id this app cannot use.',
       );
     }
-    final snapshot = await ref.read(sourceRecordsProvider.future);
-    final existing = reauthAccountId == null
-        ? null
-        : snapshot.accounts
-            .where((a) => a.account.id == reauthAccountId)
-            .firstOrNull;
-    final accountId =
-        existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
-    final account = existing?.account.copyWith(
-          displayName: session.userName,
-          needsReauth: false,
-        ) ??
-        ProviderAccount(
-          id: accountId,
-          kind: SourceKind.jellyfin,
-          displayName: session.userName,
-          storageNamespace: SourceSecrets.newStorageNamespace(accountId),
-          activeProfileId: session.userId,
-        );
     try {
+      final snapshot = await ref.read(sourceRecordsProvider.future);
+      final existing = reauthAccountId == null
+          ? null
+          : snapshot.accounts
+              .where((a) => a.account.id == reauthAccountId)
+              .firstOrNull;
+      final accountId =
+          existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
+      // A re-auth may sign in as a different user, so the active profile
+      // follows the session rather than the old record.
+      final account = ProviderAccount(
+        id: accountId,
+        kind: SourceKind.jellyfin,
+        displayName: session.userName,
+        storageNamespace: existing?.account.storageNamespace ??
+            SourceSecrets.newStorageNamespace(accountId),
+        activeProfileId: session.userId,
+      );
       // Token first: a stored server without it would fail every request.
       await ref
           .read(sourceSecretsProvider)
