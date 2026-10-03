@@ -65,7 +65,8 @@ defmodule Mydia.Media.RemoteFilter do
   defp us_certification(age) when age < 8, do: "G"
   defp us_certification(age) when age < 13, do: "PG"
   defp us_certification(age) when age < 17, do: "PG-13"
-  defp us_certification(_age), do: "R"
+  defp us_certification(17), do: "R"
+  defp us_certification(_age), do: "NC-17"
 
   # `Mydia.Metadata.genres/1` returns atom-keyed maps, built by
   # `Relay.fetch_genres/2`. Reading them with `genre["id"]` returns nil for

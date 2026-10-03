@@ -117,4 +117,16 @@ defmodule MydiaWeb.DiscoverLive.RestrictedDiscoverTest do
 
     assert has_element?(view, "#discover-page")
   end
+
+  test "an 18+ limit allows NC-17 on discover" do
+    scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 18}))
+    assert Keyword.get(RemoteFilter.discover_params(scope), :certification_lte) == "NC-17"
+  end
+
+  for {age, cert} <- [{0, "G"}, {7, "G"}, {12, "PG"}, {14, "PG-13"}, {16, "PG-13"}] do
+    test "a #{age}+ limit maps to #{cert}" do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: unquote(age)}))
+      assert Keyword.get(RemoteFilter.discover_params(scope), :certification_lte) == unquote(cert)
+    end
+  end
 end
