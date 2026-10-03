@@ -1136,8 +1136,17 @@ defmodule Mydia.Plugins.HostFunctions do
   # remove from it, so a service-side deletion can never destroy local curation.
   defp apply_favorite(user_id, media_item_id) do
     user = Accounts.get_user!(user_id)
+    scope = Scope.for_user(user)
 
-    if Collections.is_favorite?(Scope.for_user(user), media_item_id) do
+    # The Matcher resolves ids as the system and add_item/2 does not check
+    # visibility, so a hidden title is refused here, like a missing one.
+    with {:ok, _item} <- fetch_media_item(scope, media_item_id) do
+      favorite_unless_present(user, scope, media_item_id)
+    end
+  end
+
+  defp favorite_unless_present(user, scope, media_item_id) do
+    if Collections.is_favorite?(scope, media_item_id) do
       {:ok, %{status: :"already-favorited"}}
     else
       with {:ok, favorites} <- Collections.get_or_create_favorites(user),

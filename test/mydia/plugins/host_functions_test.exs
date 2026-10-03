@@ -2,6 +2,7 @@ defmodule Mydia.Plugins.HostFunctionsTest do
   use Mydia.DataCase, async: true
 
   import Mydia.MediaFixtures
+  import Ecto.Query, only: [from: 2]
   import Mydia.AccountsFixtures
 
   alias Mydia.Accounts.Scope
@@ -813,6 +814,35 @@ defmodule Mydia.Plugins.HostFunctionsTest do
 
       assert {:ok, %{status: :"not-found"}} =
                HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt999999"))
+    end
+
+    test "a restricted user cannot favorite a hidden item, but can a visible one" do
+      user = restricted_user_fixture(%{max_content_age: 12})
+      {:ok, _} = Connections.connect("tester", user.id, %{access_token: "t"})
+      p = plugin(%{"surfaces:write" => ["collections:favorite"]})
+
+      hidden = movie_with(%{imdb_id: "tt610", tmdb_id: 610})
+      visible = movie_with(%{imdb_id: "tt611", tmdb_id: 611})
+      set_age(hidden, 17)
+      set_age(visible, 8)
+
+      assert {:error, %Error{type: :not_found}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt610"))
+
+      refute Repo.exists?(
+               from(ci in Mydia.Collections.CollectionItem, where: ci.media_item_id == ^hidden.id)
+             )
+
+      assert {:ok, %{status: :changed}} =
+               HostFunctions.ensure_favorite(p, fav_target(user.id, imdb: "tt611"))
+
+      assert Mydia.Collections.is_favorite?(Scope.for_user(user), visible.id)
+    end
+
+    defp set_age(item, age) do
+      Repo.update_all(from(m in Mydia.Media.MediaItem, where: m.id == ^item.id),
+        set: [content_rating_age: age]
+      )
     end
   end
 end
