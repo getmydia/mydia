@@ -36,7 +36,22 @@ defmodule Mydia.Media.ContentRating do
     "12A" => 12,
     "15" => 15,
     "18" => 18,
-    "R18" => 18
+    "R18" => 18,
+    # Age-suffixed and regional strings TMDB and TVDB return for non-US/UK
+    # releases (Japan, Australia, Korea, streaming services). Unmapped strings
+    # read as unrated, which an active limit hides.
+    "13+" => 13,
+    "16+" => 16,
+    "17+" => 17,
+    "18+" => 18,
+    "R15+" => 15,
+    "R18+" => 18,
+    "R-15" => 15,
+    "R-18" => 18,
+    "MA15+" => 15,
+    "M" => 15,
+    "PG12" => 12,
+    "PG-12" => 12
   }
 
   @thresholds [

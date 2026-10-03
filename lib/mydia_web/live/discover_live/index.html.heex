@@ -246,6 +246,18 @@
             </p>
           </div>
         </div>
+      <% @visible_items == [] and Mydia.Accounts.Scope.restricted?(@current_scope) and not @has_more -> %>
+        <div
+          id="discover-restricted-empty"
+          class="flex flex-col items-center justify-center py-16 gap-4"
+        >
+          <div class="bg-base-200 rounded-full p-6">
+            <.icon name="hero-lock-closed" class="w-10 h-10 text-base-content/40" />
+          </div>
+          <p class="text-lg font-medium text-base-content/80">
+            Nothing here is available for your account.
+          </p>
+        </div>
       <% @visible_items == [] -> %>
         <div class="flex flex-col items-center justify-center py-16 gap-4">
           <div class="bg-base-200 rounded-full p-6">
@@ -312,6 +324,7 @@
     metadata={@selected_metadata}
     loading={@detail_loading}
     current_user={@current_user}
+    current_scope={@current_scope}
     open={@selected_item != nil}
     config_open={@add_config != nil}
   >

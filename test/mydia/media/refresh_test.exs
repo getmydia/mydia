@@ -3,6 +3,7 @@ defmodule Mydia.Media.RefreshTest do
 
   import ExUnit.CaptureLog
   import Mydia.MediaFixtures
+  import Mydia.MetadataCacheHelpers, only: [warm_tvdb_rating_fallback: 1]
 
   alias Mydia.Media.MediaItem
   alias Mydia.Media.Refresh
@@ -308,6 +309,8 @@ defmodule Mydia.Media.RefreshTest do
           tmdb_id: nil
         })
 
+      warm_tvdb_rating_fallback("7777")
+
       Bypass.expect_once(bypass, "GET", "/tvdb/series/4243/extended", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -354,6 +357,8 @@ defmodule Mydia.Media.RefreshTest do
           tmdb_id: nil
         })
 
+      warm_tvdb_rating_fallback("8888")
+
       Bypass.expect_once(bypass, "GET", "/tvdb/series/4244/extended", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
@@ -396,6 +401,8 @@ defmodule Mydia.Media.RefreshTest do
           tvdb_id: 4245,
           tmdb_id: 9999
         })
+
+      warm_tvdb_rating_fallback("9999")
 
       Bypass.expect_once(bypass, "GET", "/tvdb/series/4245/extended", fn conn ->
         conn

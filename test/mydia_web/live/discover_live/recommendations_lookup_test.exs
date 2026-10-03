@@ -108,6 +108,7 @@ defmodule MydiaWeb.DiscoverLive.RecommendationsLookupTest do
     } do
       tmdb_id = unique_provider_id()
       recommended_id = unique_provider_id()
+      warm_tvdb_rating_fallback(tmdb_id)
 
       Bypass.expect_once(bypass, "GET", "/tvdb/series/#{tvdb_id}/extended", fn conn ->
         body = tvdb_extended_body(tvdb_id, remote_ids: [tmdb_remote_id(tmdb_id)])
@@ -196,6 +197,8 @@ defmodule MydiaWeb.DiscoverLive.RecommendationsLookupTest do
       tvdb_id_b = unique_provider_id()
       tmdb_id_a = unique_provider_id()
       tmdb_id_b = unique_provider_id()
+      warm_tvdb_rating_fallback(tmdb_id_a)
+      warm_tvdb_rating_fallback(tmdb_id_b)
 
       Bypass.expect_once(bypass, "GET", "/tvdb/search", fn conn ->
         body = %{

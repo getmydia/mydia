@@ -35,7 +35,11 @@ defmodule MydiaWeb.DiscoverLive.RegionalRows do
         socket
 
       source ->
-        extra = RemoteFilter.discover_params(scope)
+        extra =
+          scope
+          |> RemoteFilter.discover_params(media_type)
+          |> Keyword.take([:certification_country, :certification_lte])
+
         today = Date.utc_today()
 
         socket

@@ -38,7 +38,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
   end
 
   describe "tier 1: TVDB's own trailers" do
-    test "uses TVDB trailers and never requests TMDB", ctx do
+    test "uses TVDB trailers and never requests TMDB for videos", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [tvdb_trailer("https://www.youtube.com/watch?v=TVDBKEY1")],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -55,13 +59,20 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
       assert video.site == "YouTube"
       assert video.type == "Trailer"
 
-      # Tier 1 short-circuits: the cross-reference exists but must not be used.
+      # Tier 1 short-circuits the video fallback, but the rating fallback may
+      # still make a TMDB request when TVDB carries no ratings.
+      assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end
   end
 
   describe "tier 2: TMDB cross-reference fallback" do
     test "uses TMDB videos when TVDB carries no trailers", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_videos:#{ctx.tmdb_id}:en-US")
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -81,6 +92,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
     end
 
     test "memoizes the fallback so repeat fetches cost one TMDB request", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_videos:#{ctx.tmdb_id}:en-US")
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -95,11 +111,19 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
         assert [%Video{key: "TMDBKEY1"}] = metadata.videos
       end
 
+      # The video fallback and rating fallback each make one TMDB request on
+      # the first fetch; both are memoized.
+      assert_receive {:relay_request, :tmdb}, 100
       assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end
 
     test "caches an empty result so a show with no trailers anywhere stops re-requesting", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_videos:#{ctx.tmdb_id}:en-US")
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -114,6 +138,9 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
         assert metadata.videos == []
       end
 
+      # The video fallback and rating fallback each make one TMDB request on
+      # the first fetch; both are memoized.
+      assert_receive {:relay_request, :tmdb}, 100
       assert_receive {:relay_request, :tmdb}, 100
       refute_receive {:relay_request, :tmdb}, 100
     end
@@ -152,6 +179,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
     end
 
     test "still returns {:ok, metadata} when the TMDB fallback request fails", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_videos:#{ctx.tmdb_id}:en-US")
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]
@@ -180,6 +212,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbVideosTest do
     end
 
     test "does not cache a failed fallback, so the next fetch recovers the trailer", ctx do
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_videos:#{ctx.tmdb_id}:en-US")
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{ctx.tmdb_id}")
+      end)
+
       stub_tvdb(ctx, %{
         "trailers" => [],
         "remoteIds" => [tmdb_remote_id(ctx.tmdb_id)]

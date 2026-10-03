@@ -110,9 +110,10 @@ defmodule MydiaWeb.MediaLive.Show.DetailModalEvents do
   """
   def fetch_recommendations(socket, ref, media_type) do
     config = socket.assigns.metadata_config
+    scope = socket.assigns.current_scope
 
     start_async(socket, :load_selected_recommendations, fn ->
-      Recommendations.for_ref(ref, media_type, config)
+      Recommendations.for_ref(ref, media_type, scope, config)
     end)
   end
 

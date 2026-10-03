@@ -3,11 +3,14 @@ defmodule Mydia.Media.FranchisesTest do
 
   import Mydia.MediaFixtures
   import ExUnit.CaptureLog
+  import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers, only: [unique_provider_id: 0, warm_remote_signals: 3]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media
-  alias Mydia.Media.{Franchise, FranchiseEntry, Franchises}
+  alias Mydia.Media.{Franchise, FranchiseEntry, Franchises, RemoteSignals}
   alias Mydia.Metadata.Cache
+  import Mydia.RelayStubs, only: [stub_tmdb_movie: 3]
 
   setup do
     bypass = Bypass.open()
@@ -351,6 +354,109 @@ defmodule Mydia.Media.FranchisesTest do
       stub_collection(bypass, cid, [part(891, "Only", "2001-01-01")])
 
       assert Franchises.for_media_item(Scope.unrestricted(), movie, config) == :none
+    end
+  end
+
+  describe "for_media_item/3 under a restriction" do
+    test "a restricted scope does not see out-of-bounds franchise parts",
+         %{bypass: bypass, config: config} do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      [current, ok, blocked] = for _ <- 1..3, do: unique_provider_id()
+      cid = unique_provider_id()
+
+      warm_remote_signals(
+        {:tmdb, ok},
+        :movie,
+        %RemoteSignals{content_rating: "PG", age: 8, category: "movie"}
+      )
+
+      warm_remote_signals(
+        {:tmdb, blocked},
+        :movie,
+        %RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+      )
+
+      stub_collection(bypass, cid, [
+        part(current, "Cinder Saga I", "2001-01-01"),
+        part(ok, "Cinder Saga II", "2003-01-01"),
+        part(blocked, "Cinder Saga III", "2005-01-01")
+      ])
+
+      item = movie_with_pointer(current, cid)
+
+      assert {:ok, franchise} = Franchises.for_media_item(scope, item, config)
+      assert Enum.map(franchise.entries, & &1.tmdb_id) == [current, ok]
+      assert franchise.total_count == 2
+    end
+
+    test "exempts the viewed movie from the restriction even when it is out of bounds",
+         %{bypass: bypass, config: config} do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      [current, ok] = for _ <- 1..2, do: unique_provider_id()
+      cid = unique_provider_id()
+
+      warm_remote_signals(
+        {:tmdb, ok},
+        :movie,
+        %RemoteSignals{content_rating: "PG", age: 8, category: "movie"}
+      )
+
+      warm_remote_signals(
+        {:tmdb, current},
+        :movie,
+        %RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+      )
+
+      stub_collection(bypass, cid, [
+        part(current, "Cinder Saga I", "2001-01-01"),
+        part(ok, "Cinder Saga II", "2003-01-01")
+      ])
+
+      item = movie_with_pointer(current, cid)
+
+      assert {:ok, franchise} = Franchises.for_media_item(scope, item, config)
+      assert Enum.map(franchise.entries, & &1.tmdb_id) == [current, ok]
+    end
+
+    test "is :none when the only allowed part is the viewed movie",
+         %{bypass: bypass, config: config} do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      [current, blocked] = for _ <- 1..2, do: unique_provider_id()
+      cid = unique_provider_id()
+
+      warm_remote_signals(
+        {:tmdb, blocked},
+        :movie,
+        %RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+      )
+
+      stub_collection(bypass, cid, [
+        part(current, "Cinder Saga I", "2001-01-01"),
+        part(blocked, "Cinder Saga II", "2003-01-01")
+      ])
+
+      item = movie_with_pointer(current, cid)
+
+      assert Franchises.for_media_item(scope, item, config) == :none
+    end
+
+    test "asks the injected relay for part ratings", %{bypass: bypass, config: config} do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      [current, ok] = for _ <- 1..2, do: unique_provider_id()
+      cid = unique_provider_id()
+      on_exit(fn -> Cache.delete(RemoteSignals.cache_key({:tmdb, ok}, :movie)) end)
+      stub_tmdb_movie(bypass, ok, certification: "PG", test_pid: self())
+
+      stub_collection(bypass, cid, [
+        part(current, "Cinder Saga I", "2001-01-01"),
+        part(ok, "Cinder Saga II", "2003-01-01")
+      ])
+
+      item = movie_with_pointer(current, cid)
+
+      assert {:ok, franchise} = Franchises.for_media_item(scope, item, config)
+      assert Enum.map(franchise.entries, & &1.tmdb_id) == [current, ok]
+      assert_received {:relay_hit, _, _}
     end
   end
 

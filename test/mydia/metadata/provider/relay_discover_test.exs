@@ -56,6 +56,14 @@ defmodule Mydia.Metadata.Provider.RelayDiscoverTest do
       assert params["vote_count.gte"] == "10"
     end
 
+    test "#{media_type}: sends without_genres when given", %{bypass: bypass, config: config} do
+      capture_query(bypass, unquote(path))
+
+      assert {:ok, _} = Relay.fetch_discover(config, unquote(media_type), without_genres: "16")
+      assert_receive {:query, params}
+      assert params["without_genres"] == "16"
+    end
+
     test "#{media_type}: omits the new params otherwise", %{bypass: bypass, config: config} do
       capture_query(bypass, unquote(path))
 

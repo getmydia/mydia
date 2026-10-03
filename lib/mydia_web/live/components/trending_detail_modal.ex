@@ -14,6 +14,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         metadata={@selected_metadata}
         loading={@detail_loading}
         current_user={@current_user}
+        current_scope={@current_scope}
         open={@selected_item != nil}
         config_open={false}
       />
@@ -124,7 +125,10 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <% end %>
                     <.content_rating_badge
                       id="trending-detail-content-rating"
-                      rating={@metadata && @metadata.content_rating}
+                      rating={
+                        (@metadata && @metadata.content_rating) ||
+                          (@item && Map.get(@item, :content_rating))
+                      }
                     />
                     <span
                       :if={release_label(@metadata)}
@@ -167,36 +171,50 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     {render_slot(@actions)}
                   <% else %>
                     <%= if not in_library?(@item) do %>
-                      <%= if @current_user && @current_user.role == "guest" do %>
-                        <button
-                          phx-click={@request_event}
-                          phx-value-ref={@item_ref}
-                          phx-value-media_type={media_type_string(@item)}
-                          disabled={Map.get(@item, :request_status) != nil}
-                          class="btn btn-primary"
-                        >
-                          <%= if Map.get(@item, :request_status) do %>
-                            <.icon name="hero-check" class="w-4 h-4" /> Requested
-                          <% else %>
-                            <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                          <% end %>
-                        </button>
-                      <% else %>
-                        <div class="join">
+                      <%= cond do %>
+                        <% outside_scope?(@current_scope, @item, @metadata) -> %>
                           <button
-                            phx-click={@add_event}
+                            id="trending-detail-restricted"
+                            type="button"
+                            disabled
+                            class="btn btn-disabled"
+                            title={Mydia.Media.restricted_message()}
+                          >
+                            <.icon name="hero-lock-closed" class="w-4 h-4" /> Not available
+                          </button>
+                          <p class="text-xs text-white/70 w-full">
+                            {Mydia.Media.restricted_message()}
+                          </p>
+                        <% @current_user && @current_user.role == "guest" -> %>
+                          <button
+                            phx-click={@request_event}
                             phx-value-ref={@item_ref}
                             phx-value-media_type={media_type_string(@item)}
-                            class="btn btn-primary join-item"
+                            disabled={Map.get(@item, :request_status) != nil}
+                            class="btn btn-primary"
                           >
-                            <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                            <%= if Map.get(@item, :request_status) do %>
+                              <.icon name="hero-check" class="w-4 h-4" /> Requested
+                            <% else %>
+                              <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                            <% end %>
                           </button>
-                          <.library_picker_button
-                            ref={@item_ref}
-                            media_type={media_type_string(@item)}
-                            title={@item.title}
-                          />
-                        </div>
+                        <% true -> %>
+                          <div class="join">
+                            <button
+                              phx-click={@add_event}
+                              phx-value-ref={@item_ref}
+                              phx-value-media_type={media_type_string(@item)}
+                              class="btn btn-primary join-item"
+                            >
+                              <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                            </button>
+                            <.library_picker_button
+                              ref={@item_ref}
+                              media_type={media_type_string(@item)}
+                              title={@item.title}
+                            />
+                          </div>
                       <% end %>
                     <% else %>
                       <.link navigate={library_path(@item)} class="btn btn-ghost">
@@ -308,6 +326,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
      |> assign_new(:metadata, fn -> nil end)
+     # Without a scope the modal cannot judge limits; the submit gate still holds.
+     |> assign_new(:current_scope, fn -> nil end)
      # Optional slot: the dashboard renders this modal without one.
      |> assign_new(:rail, fn -> [] end)
      # Optional slot: Dashboard and Discovery render the default header actions.
@@ -369,6 +389,16 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       _ -> nil
     end
   end
+
+  # The same rule that refuses the request on submit, so the button and the
+  # server cannot disagree. Undecided until the detail metadata arrives, which
+  # is the only point a rating is known for certain; until then the submit
+  # gate still holds.
+  defp outside_scope?(nil, _item, _metadata), do: false
+  defp outside_scope?(_scope, _item, nil), do: false
+
+  defp outside_scope?(scope, item, metadata),
+    do: not Mydia.Media.writable?(scope, %{type: media_type_string(item), metadata: metadata})
 
   defp in_library?(nil), do: false
   defp in_library?(item), do: Map.get(item, :in_library, false)

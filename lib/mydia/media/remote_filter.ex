@@ -6,66 +6,172 @@ defmodule Mydia.Media.RemoteFilter do
   or rating to filter on. Category is recovered by classifying the genre ids
   and origin signals TMDB returns with each hit, which costs no extra request.
 
-  Rating is not recoverable this way. TMDB search returns no certification and
-  exposes no parameter to filter by one, so a search hit above an account's age
-  limit still appears on `/request`. Nothing reaches the library from there
-  without an admin approving the request, which is the control that actually
-  holds. `/discover` is different: TMDB's discover endpoint does take a
-  certification ceiling, so `discover_params/1` applies the limit there.
+  Rating is not in a search hit. For a restricted scope it comes from
+  `Mydia.Media.RemoteSignals`, one cached lookup per title, so an age limit
+  hides titles above it and titles with no certification. `discover_params/2`
+  is only a pre-filter that narrows what TMDB returns on `/discover`.
   """
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.CategoryClassifier
+  alias Mydia.Media.MediaCategory
+  alias Mydia.Media.RemoteSignals
+  alias Mydia.Media.Restrictions
   alias Mydia.Metadata
   alias Mydia.Metadata.Structs.SearchResult
 
   @doc """
   True when a search result may be shown to this scope.
+
+  `signals` comes from `Mydia.Media.RemoteSignals`. Without them, an age
+  limit refuses (a search hit carries no certification), and the category is
+  classified from the hit's own genre and origin fields.
   """
-  @spec allow?(SearchResult.t(), Scope.t()) :: boolean()
-  def allow?(_result, %Scope{allowed_categories: nil}), do: true
+  @spec allow?(SearchResult.t(), Scope.t(), RemoteSignals.t() | :error | nil) :: boolean()
+  def allow?(result, scope, signals \\ nil)
+  def allow?(_result, %Scope{allowed_categories: nil, max_content_age: nil}, _signals), do: true
 
-  def allow?(%SearchResult{} = result, %Scope{allowed_categories: categories}) do
-    category =
-      result.media_type
-      |> CategoryClassifier.classify_from_metadata(%{
-        genres: genre_names(result.genre_ids, result.media_type),
-        origin_country: result.origin_country,
-        original_language: result.original_language
-      })
-      |> to_string()
-
-    category in categories
+  def allow?(%SearchResult{} = result, %Scope{} = scope, signals) do
+    Restrictions.allowed?(category(result, signals), age(signals), scope)
   end
 
   @doc """
-  Keeps only the results this scope is allowed to see.
-  """
-  @spec filter([SearchResult.t()], Scope.t()) :: [SearchResult.t()]
-  def filter(results, %Scope{allowed_categories: nil}) when is_list(results), do: results
+  Keeps only the results this scope may see, looking up certifications and
+  categories as needed. Kept results carry `content_rating` when it is known.
 
-  def filter(results, %Scope{} = scope) when is_list(results) do
-    Enum.filter(results, &allow?(&1, scope))
+  Options: `:config`, the relay config for lookups (tests inject Bypass).
+  """
+  @spec filter([SearchResult.t()], Scope.t(), keyword()) :: [SearchResult.t()]
+  def filter(results, scope, opts \\ [])
+
+  def filter(results, %Scope{allowed_categories: nil, max_content_age: nil}, _opts)
+      when is_list(results),
+      do: results
+
+  def filter(results, %Scope{} = scope, opts) when is_list(results) do
+    signals =
+      results
+      |> Enum.filter(&needs_lookup?(&1, scope))
+      |> RemoteSignals.fetch_many(opts[:config])
+
+    Enum.flat_map(results, fn result ->
+      found = found_signals(signals, result)
+
+      if allow?(result, scope, found), do: [with_rating(result, found)], else: []
+    end)
   end
+
+  # A result with no resolvable ref was never looked up, so it has no signals.
+  # Under a category limit that needed them, it counts as a failed lookup.
+  defp found_signals(signals, result) do
+    case RemoteSignals.ref_for(result) do
+      {:ok, ref} -> Map.get(signals, {result.media_type, ref})
+      :error -> if no_signals?(result), do: :error
+    end
+  end
+
+  defp needs_lookup?(_result, %Scope{max_content_age: age}) when not is_nil(age), do: true
+  defp needs_lookup?(result, %Scope{allowed_categories: [_ | _]}), do: no_signals?(result)
+  defp needs_lookup?(_result, _scope), do: false
+
+  defp no_signals?(%SearchResult{genre_ids: [], origin_country: [], original_language: nil}),
+    do: true
+
+  defp no_signals?(_result), do: false
+
+  defp category(_result, %RemoteSignals{category: category}) when is_binary(category),
+    do: category
+
+  # The lookup failed for a hit with nothing to classify from: unknown, which
+  # a category limit refuses.
+  defp category(result, :error), do: if(no_signals?(result), do: nil, else: classify(result))
+  defp category(result, _signals), do: classify(result)
+
+  defp age(%RemoteSignals{age: age}), do: age
+  defp age(_signals), do: nil
+
+  defp with_rating(result, %RemoteSignals{content_rating: rating}),
+    do: %{result | content_rating: rating}
+
+  defp with_rating(result, _signals), do: result
+
+  defp classify(result) do
+    result.media_type
+    |> CategoryClassifier.classify_from_metadata(%{
+      genres: genre_names(result.genre_ids, result.media_type),
+      origin_country: result.origin_country,
+      original_language: result.original_language
+    })
+    |> to_string()
+  end
+
+  @animation_genre_id "16"
 
   @doc """
-  Extra TMDB discover parameters implied by a scope's age limit.
+  TMDB discover parameters implied by a scope, for one media type.
 
-  Returns an empty list when the scope sets no limit. TMDB expresses this as a
-  certification ceiling in one country's system rather than as an age, so this
-  maps the age back onto the US ladder.
+  A certification ceiling (honoured by `/discover/movie` only, expressed in the
+  US ladder) and genre or language hints derived from the allowed categories.
+  Hints narrow what TMDB returns so a restricted page fills on the first
+  fetch; `filter/3` still decides what is shown.
   """
-  @spec discover_params(Scope.t()) :: keyword()
-  def discover_params(%Scope{max_content_age: nil}), do: []
-
-  def discover_params(%Scope{max_content_age: age}) do
-    [certification_country: "US", certification_lte: us_certification(age)]
+  @spec discover_params(Scope.t(), :movie | :tv_show) :: keyword()
+  def discover_params(%Scope{} = scope, media_type) do
+    certification_params(scope) ++ category_hints(allowed_for(scope, media_type))
   end
+
+  @doc "False when the scope allows no category of this media type at all."
+  @spec any_category?(Scope.t(), :movie | :tv_show) :: boolean()
+  def any_category?(%Scope{allowed_categories: nil}, _media_type), do: true
+  def any_category?(%Scope{} = scope, media_type), do: allowed_for(scope, media_type) != []
+
+  defp certification_params(%Scope{max_content_age: nil}), do: []
+
+  defp certification_params(%Scope{max_content_age: age}),
+    do: [certification_country: "US", certification_lte: us_certification(age)]
+
+  defp allowed_for(%Scope{allowed_categories: nil}, _media_type), do: nil
+
+  defp allowed_for(%Scope{allowed_categories: allowed}, media_type) do
+    of_type =
+      if media_type == :tv_show,
+        do: MediaCategory.series_categories(),
+        else: MediaCategory.movie_categories()
+
+    names = Enum.map(of_type, &to_string/1)
+    Enum.filter(allowed, &(&1 in names))
+  end
+
+  defp category_hints(nil), do: []
+  defp category_hints([]), do: []
+
+  defp category_hints(allowed) do
+    kinds = MapSet.new(allowed, &kind/1)
+
+    cond do
+      kinds == MapSet.new([:anime]) ->
+        [required_genres: [@animation_genre_id], original_language: "ja"]
+
+      MapSet.subset?(kinds, MapSet.new([:anime, :cartoon])) ->
+        [required_genres: [@animation_genre_id]]
+
+      not MapSet.member?(kinds, :anime) and not MapSet.member?(kinds, :cartoon) ->
+        [without_genres: @animation_genre_id]
+
+      true ->
+        []
+    end
+  end
+
+  defp kind("anime_" <> _), do: :anime
+  defp kind("cartoon_" <> _), do: :cartoon
+  defp kind(_live_action), do: :live_action
 
   defp us_certification(age) when age < 8, do: "G"
   defp us_certification(age) when age < 13, do: "PG"
   defp us_certification(age) when age < 17, do: "PG-13"
-  defp us_certification(_age), do: "R"
+  defp us_certification(17), do: "R"
+  defp us_certification(_age), do: "NC-17"
 
   # `Mydia.Metadata.genres/1` returns atom-keyed maps, built by
   # `Relay.fetch_genres/2`. Reading them with `genre["id"]` returns nil for

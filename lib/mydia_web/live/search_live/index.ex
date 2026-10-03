@@ -6,6 +6,7 @@ defmodule MydiaWeb.SearchLive.Index do
   alias Mydia.Library.ReleaseParser, as: FileParser
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
+  alias Mydia.Media.RemoteFilter
   alias Mydia.Media
   alias Mydia.Downloads
   alias Mydia.Settings
@@ -292,12 +293,16 @@ defmodule MydiaWeb.SearchLive.Index do
 
   def handle_event("manual_search_submit", %{"search_query" => query}, socket) do
     media_type = Map.get(socket.assigns, :manual_search_media_type, :movie)
+    scope = socket.assigns.current_scope
 
     {:noreply,
      socket
      |> start_async(:manual_metadata_search, fn ->
        config = Metadata.default_relay_config()
-       Metadata.search(config, query, media_type: media_type)
+
+       with {:ok, results} <- Metadata.search(config, query, media_type: media_type) do
+         {:ok, RemoteFilter.filter(results, scope)}
+       end
      end)}
   end
 
@@ -1282,7 +1287,7 @@ defmodule MydiaWeb.SearchLive.Index do
     Logger.info("Adding release to library: #{title}")
 
     with {:ok, parsed} <- parse_release_title(title),
-         {:ok, metadata_or_matches} <- search_and_fetch_metadata(parsed) do
+         {:ok, metadata_or_matches} <- search_and_fetch_metadata(scope, parsed) do
       case metadata_or_matches do
         {:multiple_matches, matches, media_type} ->
           # Return the matches to trigger disambiguation in the UI
@@ -1319,7 +1324,9 @@ defmodule MydiaWeb.SearchLive.Index do
     end
   end
 
-  defp search_and_fetch_metadata(parsed) do
+  @doc false
+  # Public only so the restricted auto-match branches can be pinned in tests.
+  def search_and_fetch_metadata(scope, parsed) do
     # Use the default metadata relay configuration
     config = Metadata.default_relay_config()
 
@@ -1335,20 +1342,27 @@ defmodule MydiaWeb.SearchLive.Index do
     search_opts = [media_type: media_type]
     search_opts = if parsed.year, do: [{:year, parsed.year} | search_opts], else: search_opts
 
-    case Metadata.search(config, parsed.title, search_opts) do
-      {:ok, []} ->
+    # A restricted account must not match a release to a title outside its
+    # limits. The branch is chosen on the raw hit count, though: a release
+    # that was ambiguous stays ambiguous, so the account confirms the pick
+    # instead of having the one survivor linked automatically.
+    search_result =
+      with {:ok, matches} <- Metadata.search(config, parsed.title, search_opts) do
+        {:ok, length(matches), RemoteFilter.filter(matches, scope)}
+      end
+
+    case search_result do
+      {:ok, _raw_count, []} ->
         Logger.warning("No metadata matches found for: #{parsed.title}")
         {:error, :no_metadata_match}
 
-      {:ok, [single_match]} ->
+      {:ok, 1, [single_match]} ->
         # Only one match, fetch it directly
-        Logger.info(
-          "Found single metadata match: #{single_match["title"] || single_match["name"]}"
-        )
+        Logger.info("Found single metadata match: #{single_match.title || single_match.name}")
 
         fetch_full_metadata(config, single_match, media_type)
 
-      {:ok, matches} when length(matches) > 1 ->
+      {:ok, _raw_count, matches} ->
         # Multiple matches, return them for disambiguation
         Logger.info("Found #{length(matches)} metadata matches, requires disambiguation")
         {:ok, {:multiple_matches, matches, media_type}}

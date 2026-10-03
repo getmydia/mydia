@@ -260,12 +260,14 @@ defmodule Mydia.Metadata.Provider.Relay do
     language = resolve_language(config, opts)
 
     append =
-      Keyword.get(opts, :append_to_response, [
+      opts
+      |> Keyword.get(:append_to_response, [
         "credits",
         "alternative_titles",
         "videos",
         "external_ids"
       ])
+      |> with_rating_resource(media_type)
 
     endpoint = build_details_endpoint(media_type, provider_id)
 
@@ -293,6 +295,14 @@ defmodule Mydia.Metadata.Provider.Relay do
         {:error, error}
     end
   end
+
+  # Every TMDB detail fetch carries the certification, because an access
+  # restriction treats a missing rating as unsuitable. Leaving it to callers
+  # meant seven of them forgot and every age-limited request was refused
+  # (#1000). TMDB validates append resources per endpoint, so the movie and TV
+  # names must not be mixed.
+  defp with_rating_resource(append, :tv_show), do: Enum.uniq(append ++ ["content_ratings"])
+  defp with_rating_resource(append, _movie), do: Enum.uniq(append ++ ["release_dates"])
 
   # Fetch from TVDB
   defp fetch_tvdb_by_id(config, provider_id, opts) do
@@ -344,7 +354,8 @@ defmodule Mydia.Metadata.Provider.Relay do
         metadata = %{
           metadata
           | provider: :tvdb,
-            videos: resolve_tvdb_videos(config, data, preferred, language)
+            videos: resolve_tvdb_videos(config, data, preferred, language),
+            content_rating: metadata.content_rating || tmdb_rating_for_tvdb(config, data)
         }
 
         {:ok, metadata}
@@ -428,6 +439,40 @@ defmodule Mydia.Metadata.Provider.Relay do
         )
 
         {:ok, []}
+    end
+  end
+
+  # TVDB's contentRatings is empty for most series (73% of the TV shows on one
+  # production install had no rating), and an access restriction hides an
+  # unrated title. The TMDB cross-reference in `remoteIds` usually has one.
+  # Cached for a day like the trailer fallback; a failure degrades to nil and
+  # is not cached, so it is retried on the next fetch.
+  defp tmdb_rating_for_tvdb(config, data) do
+    with tmdb_id when is_binary(tmdb_id) <- tmdb_id_from_remote_ids(data["remoteIds"]),
+         {:ok, rating} <-
+           Cache.fetch(
+             "tvdb_tmdb_rating:#{tmdb_id}",
+             fn -> request_tmdb_rating(config, tmdb_id) end,
+             ttl: :timer.hours(24)
+           ) do
+      rating
+    else
+      _ -> nil
+    end
+  end
+
+  defp request_tmdb_rating(config, tmdb_id) do
+    case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: []) do
+      {:ok, %MediaMetadata{content_rating: rating}} ->
+        {:ok, rating}
+
+      {:error, _reason} = error ->
+        Logger.debug("TMDB rating fallback failed; leaving it uncached",
+          tmdb_id: tmdb_id,
+          result: inspect(error)
+        )
+
+        error
     end
   end
 
@@ -1201,6 +1246,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     params =
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
+      |> maybe_add_param(:without_genres, Keyword.get(opts, :without_genres))
       |> maybe_add_param(:with_original_language, original_language)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)

@@ -197,6 +197,7 @@ defmodule Mydia.Media.AddTest do
       bypass = Bypass.open()
       tvdb_id = System.unique_integer([:positive])
       tmdb_id = System.unique_integer([:positive])
+      Mydia.MetadataCacheHelpers.warm_tvdb_rating_fallback(tmdb_id)
 
       body = %{
         "data" => %{

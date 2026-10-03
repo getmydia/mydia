@@ -101,6 +101,10 @@ defmodule Mydia.Application do
         # age limit an admin sets hides the whole library. Idempotent by row
         # state; enqueue_once/0 never raises.
         Mydia.Jobs.ContentRatingAgeBackfill.enqueue_once()
+        # Fetches a certification once for rows stored without one, which are
+        # invisible to every age-limited account. Unique forever on its
+        # version; enqueue_once/0 never raises.
+        Mydia.Jobs.ContentRatingFetch.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end

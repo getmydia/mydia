@@ -5,7 +5,7 @@ defmodule Mydia.Media.ProviderSwitch do
   safely reconciling episodes when the provider changes.
 
   This is the read side (`resolve_library_provider/1`, `provider_refresh_decision/1`,
-  `find_reidentify_candidate/3`) plus the destructive switch
+  `find_reidentify_candidate/4`) plus the destructive switch
   (`adopt_provider_switch/5`). It calls back into `Mydia.Media` for shared
   persistence and scoring helpers.
   """
@@ -14,7 +14,7 @@ defmodule Mydia.Media.ProviderSwitch do
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media
-  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.{Episode, MediaItem, RemoteFilter}
   alias Mydia.Library.MediaFile
   alias Mydia.Repo
 
@@ -90,16 +90,22 @@ defmodule Mydia.Media.ProviderSwitch do
   Searches the target provider for a show and decides whether the best match is
   confident enough to adopt automatically.
 
-  Read-only: this does not mutate the item. Returns:
+  Read-only: this does not mutate the item. When a `scope` is given, hits its
+  access restrictions would hide are dropped before ranking. Returns:
 
     * `{:confident, %SearchResult{}}` - near-exact title and matching year; the
       caller may adopt it via `adopt_provider_switch/5`
     * `{:needs_picker, [%SearchResult{}]}` - ranked candidates for a manual pick
     * `{:error, reason}` - search failed
   """
-  @spec find_reidentify_candidate(MediaItem.t(), atom(), map() | nil) ::
+  @spec find_reidentify_candidate(MediaItem.t(), atom(), map() | nil, Scope.t() | nil) ::
           {:confident, struct()} | {:needs_picker, [struct()]} | {:error, term()}
-  def find_reidentify_candidate(%MediaItem{} = media_item, target_provider, config \\ nil) do
+  def find_reidentify_candidate(
+        %MediaItem{} = media_item,
+        target_provider,
+        config \\ nil,
+        scope \\ nil
+      ) do
     config = config || Mydia.Metadata.default_relay_config()
 
     base_opts = [media_type: :tv_show, provider: target_provider]
@@ -107,14 +113,19 @@ defmodule Mydia.Media.ProviderSwitch do
 
     case Mydia.Metadata.search(config, media_item.title, search_opts) do
       {:ok, results} when results != [] ->
-        rank_reidentify_candidates(results, media_item)
+        rank_reidentify_candidates(results, media_item, scope, config)
 
       {:ok, []} when not is_nil(media_item.year) ->
         # Retry without the year filter before giving up.
         case Mydia.Metadata.search(config, media_item.title, base_opts) do
-          {:ok, results} when results != [] -> rank_reidentify_candidates(results, media_item)
-          {:ok, []} -> {:needs_picker, []}
-          {:error, reason} -> {:error, reason}
+          {:ok, results} when results != [] ->
+            rank_reidentify_candidates(results, media_item, scope, config)
+
+          {:ok, []} ->
+            {:needs_picker, []}
+
+          {:error, reason} ->
+            {:error, reason}
         end
 
       {:ok, []} ->
@@ -125,9 +136,12 @@ defmodule Mydia.Media.ProviderSwitch do
     end
   end
 
-  defp rank_reidentify_candidates(results, media_item) do
+  # A scope's access restrictions apply before ranking, so a hidden title is
+  # never listed in the picker nor adopted as the confident match.
+  defp rank_reidentify_candidates(results, media_item, scope, config) do
     ranked =
       results
+      |> visible_to(scope, config)
       |> Enum.map(fn result ->
         {result, Media.calculate_title_match_score(result, media_item)}
       end)
@@ -142,6 +156,11 @@ defmodule Mydia.Media.ProviderSwitch do
       {:needs_picker, ranked}
     end
   end
+
+  defp visible_to(results, nil, _config), do: results
+
+  defp visible_to(results, %Scope{} = scope, config),
+    do: RemoteFilter.filter(results, scope, config: config)
 
   # Conservative gate for the silent, destructive auto-adopt. A confident match
   # WIPES the show's episodes and per-episode watch history with no operator
