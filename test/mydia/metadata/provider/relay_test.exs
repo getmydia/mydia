@@ -496,17 +496,22 @@ defmodule Mydia.Metadata.Provider.RelayTest do
   describe "TVDB remoteIds cross-reference" do
     test "maps remoteIds into external_ids" do
       bypass = Bypass.open()
-      tvdb_id = 121_361
+      tvdb_id = 900_000_000 + System.unique_integer([:positive])
+      tmdb_id = to_string(900_000_000 + System.unique_integer([:positive]))
+
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{tmdb_id}")
+      end)
 
       body = %{
         "data" => %{
           "id" => tvdb_id,
-          "name" => "Game of Thrones",
+          "name" => "Fixture Series Alpha",
           "firstAired" => "2011-04-17",
           "seasons" => [],
           "trailers" => [%{"url" => "https://youtube.com/watch?v=x", "language" => "eng"}],
           "remoteIds" => [
-            %{"sourceName" => "TheMovieDB.com", "id" => "1399", "type" => 12},
+            %{"sourceName" => "TheMovieDB.com", "id" => tmdb_id, "type" => 12},
             %{"sourceName" => "IMDB", "id" => "tt0944947", "type" => 2}
           ]
         }
@@ -519,12 +524,12 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       end)
 
       # The TMDB rating fallback queries the TMDB endpoint when TVDB has no rating
-      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/1399", fn conn ->
+      Bypass.stub(bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
         conn = Plug.Conn.fetch_query_params(conn)
 
         body = %{
-          "id" => 1399,
-          "name" => "Game of Thrones",
+          "id" => String.to_integer(tmdb_id),
+          "name" => "Fixture Series Alpha",
           "credits" => %{"cast" => [], "crew" => []},
           "content_ratings" => %{"results" => [%{"iso_3166_1" => "US", "rating" => "TV-MA"}]}
         }
@@ -537,19 +542,19 @@ defmodule Mydia.Metadata.Provider.RelayTest do
       assert {:ok, metadata} =
                Relay.fetch_by_ref(relay_config(bypass), {:tvdb, tvdb_id}, media_type: :tv_show)
 
-      assert metadata.external_ids.tmdb == 1399
+      assert metadata.external_ids.tmdb == String.to_integer(tmdb_id)
       assert metadata.external_ids.imdb == "tt0944947"
       assert metadata.imdb_id == "tt0944947"
     end
 
     test "leaves the cross-reference nil when remoteIds carries a non-string id" do
       bypass = Bypass.open()
-      tvdb_id = 121_362
+      tvdb_id = 900_000_000 + System.unique_integer([:positive])
 
       body = %{
         "data" => %{
           "id" => tvdb_id,
-          "name" => "Bad Remote Ids",
+          "name" => "Fixture Series Beta",
           "seasons" => [],
           "trailers" => [%{"url" => "https://youtube.com/watch?v=y", "language" => "eng"}],
           "remoteIds" => [%{"sourceName" => "TheMovieDB.com", "id" => 1399, "type" => 12}]

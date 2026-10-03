@@ -463,8 +463,16 @@ defmodule Mydia.Metadata.Provider.Relay do
 
   defp request_tmdb_rating(config, tmdb_id) do
     case perform_tmdb_fetch(config, tmdb_id, :tv_show, append_to_response: []) do
-      {:ok, %MediaMetadata{content_rating: rating}} -> {:ok, rating}
-      {:error, _} = error -> error
+      {:ok, %MediaMetadata{content_rating: rating}} ->
+        {:ok, rating}
+
+      {:error, _reason} = error ->
+        Logger.debug("TMDB rating fallback failed; leaving it uncached",
+          tmdb_id: tmdb_id,
+          result: inspect(error)
+        )
+
+        error
     end
   end
 

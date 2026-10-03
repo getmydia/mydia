@@ -101,6 +101,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbContentRatingsTest do
     test "takes TMDB's rating when TVDB has none", ctx do
       tvdb_id = unique_provider_id()
       tmdb_id = unique_provider_id()
+
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{tmdb_id}")
+      end)
+
       stub_tvdb_series(ctx.bypass, tvdb_id, remote_tmdb_id: tmdb_id)
       stub_tmdb_tv(ctx.bypass, tmdb_id, certification: "TV-PG")
 
@@ -111,6 +116,11 @@ defmodule Mydia.Metadata.Provider.RelayTvdbContentRatingsTest do
     test "keeps TVDB's rating and does not ask TMDB", ctx do
       tvdb_id = unique_provider_id()
       tmdb_id = unique_provider_id()
+
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{tmdb_id}")
+      end)
+
       stub_tvdb_series(ctx.bypass, tvdb_id, certification: "TV-14", remote_tmdb_id: tmdb_id)
       stub_tmdb_tv(ctx.bypass, tmdb_id, certification: "TV-MA", test_pid: self())
 
@@ -130,14 +140,40 @@ defmodule Mydia.Metadata.Provider.RelayTvdbContentRatingsTest do
     test "a failing TMDB lookup leaves the rating nil and the fetch ok", ctx do
       tvdb_id = unique_provider_id()
       tmdb_id = unique_provider_id()
+
+      on_exit(fn ->
+        Mydia.Metadata.Cache.delete("tvdb_tmdb_rating:#{tmdb_id}")
+      end)
+
       stub_tvdb_series(ctx.bypass, tvdb_id, remote_tmdb_id: tmdb_id)
 
       Bypass.stub(ctx.bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
         Plug.Conn.resp(conn, 500, "boom")
       end)
 
+      ExUnit.CaptureLog.capture_log(fn ->
+        assert {:ok, md} = Relay.fetch_by_ref(ctx.config, {:tvdb, tvdb_id}, media_type: :tv_show)
+        assert md.content_rating == nil
+      end)
+
+      # Re-stub the route to succeed and verify the error was not cached
+      Bypass.stub(ctx.bypass, "GET", "/tmdb/tv/shows/#{tmdb_id}", fn conn ->
+        conn = Plug.Conn.fetch_query_params(conn)
+
+        body = %{
+          "id" => tmdb_id,
+          "name" => "Fixture Show",
+          "credits" => %{"cast" => [], "crew" => []},
+          "content_ratings" => %{"results" => [%{"iso_3166_1" => "US", "rating" => "TV-14"}]}
+        }
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(body))
+      end)
+
       assert {:ok, md} = Relay.fetch_by_ref(ctx.config, {:tvdb, tvdb_id}, media_type: :tv_show)
-      assert md.content_rating == nil
+      assert md.content_rating == "TV-14"
     end
   end
 
