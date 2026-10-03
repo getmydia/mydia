@@ -7,7 +7,9 @@ defmodule Mydia.AccessRestrictions.RemoteFilterGuardTest do
   """
   use ExUnit.Case, async: true
 
-  @catalog_calls ~w(search_cached fetch_curated_list discover trending_movies trending_tv_shows fetch_recommendations_by_ref_cached)
+  # Cached and uncached variants alike: `search` is the free-text TMDB search
+  # behind /search and /import (both in the :authenticated live_session).
+  @catalog_calls ~w(search search_cached fetch_trending fetch_curated_list discover trending_movies trending_tv_shows fetch_recommendations_by_ref_cached)
 
   # Helpers that filter internally, so a caller of one needs no RemoteFilter
   # of its own.
