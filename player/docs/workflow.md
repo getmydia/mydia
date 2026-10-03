@@ -9,7 +9,7 @@ writing 91 outputs in about 53s.
 
 The gap hides until the first commit. A widget test run against a single file
 passes, because its imports never reach generated code, so the work looks
-finished. Then the whole-project `dart analyze --fatal-warnings` pre-commit hook
+finished. Then the whole-project `dart analyze --fatal-infos` pre-commit hook
 rejects the commit with hundreds of `Target of URI hasn't been generated` errors
 in files you never opened, and it reads like the branch is broken. Any plan handed
 to another agent needs this as an explicit task 0.
@@ -55,16 +55,24 @@ restart, e2e, logs, android and macos; everything else goes through
 named `player`, so test imports are `package:player/...`, never
 `package:mydia_player/...`.
 
-## analyze exits 1 on a standing backlog
+## analyze is clean and stays clean
 
-`./dev flutter analyze` exits 1 on the standing info-level backlog, so never chain
-`./dev flutter analyze && ./dev flutter test ...`; the `&&` silently skips the test
-run. Judge it with `2>&1 | grep -c "error •"` against the baseline rather than
-expecting "No issues found!". `flutter analyze` reports roughly 1557 pre-existing
-info-level lints, so read the error and warning counts rather than the total.
+`dart analyze` reports "No issues found!", and both gates hold it there: CI runs
+`dart analyze --fatal-infos` in the player test job, and so does the pre-commit
+hook. Any new diagnostic, infos included, fails both, so there is no baseline to
+compare against. Run `dart analyze` in `player/` and expect nothing.
 
-The gate that actually blocks is `dart analyze --fatal-warnings` in the pre-commit
-hook, and it runs over the whole player project rather than staged files. A
+The analyzer runs the three strict language modes (`strict-casts`,
+`strict-inference`, `strict-raw-types`) and five extra lints (`unawaited_futures`,
+`avoid_dynamic_calls`, `close_sinks`, `cancel_subscriptions`, `only_throw_errors`).
+Never silence a diagnostic by widening a type to `dynamic`; give the value a real
+type or a checked cast. The one exception is the Hive map and list boxes, which
+must be typed `Box<Map<dynamic, dynamic>>` and `Box<List<dynamic>>` because
+hive_ce's debug assertion requires that exact runtime type (see
+`lib/core/storage/app_hive.dart`). A line `// ignore: <rule>` is allowed only with
+a reason on the same line, and `ignore_for_file` is not used.
+
+The hook runs over the whole player project rather than staged files. A
 breaking change to a shared Dart type therefore cannot be committed separately
 from the consumers it breaks. Plans that stage "change the model in task N, fix
 its callers in task N+3" do not work here: either land them together, or have the
@@ -83,7 +91,7 @@ package reformatted 53 files on disk in one shot.
 Worse than noise, reformatting the whole tree breaks the build. It splits the
 declaration under `// ignore: unused_field` on `_certVerifier` in
 `lib/core/p2p/connection_manager.dart` so the ignore stops applying, and the
-`dart analyze --fatal-warnings` pre-commit hook then rejects the commit over a
+`dart analyze --fatal-infos` pre-commit hook then rejects the commit over a
 file you never touched.
 
 The whole-tree check is misleading because the `dart-format` pre-commit hook runs
