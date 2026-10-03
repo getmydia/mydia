@@ -214,6 +214,14 @@ void main() {
       expect(pushed.last, '/s/acc1:owner:aa11/library/movies');
     });
 
+    testWidgets('an empty hub list falls back to the library rows',
+        (tester) async {
+      final fake = FakeHubSource()..hubList = const [];
+      await pumpHome(tester, fake);
+      expect(
+          find.byKey(const Key('source-library-row-movies')), findsOneWidget);
+    });
+
     testWidgets('a hub failure falls back to the library rows', (tester) async {
       final fake = FakeHubSource()
         ..hubsError = const SourceException.unreachable();

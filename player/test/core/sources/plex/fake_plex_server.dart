@@ -22,6 +22,10 @@ class FakePlexServer {
   /// Set to make the transcode decision refuse the conversion.
   bool refuseTranscode = false;
 
+  /// Set to make `/hubs` also answer a repeated hub id and a hub holding
+  /// more movies than a row may show.
+  bool crowdedHubs = false;
+
   static const movies = [
     ('101', 'The Lantern Keeper', 2019),
     ('102', 'Saltwater Clocks', 2021),
@@ -255,6 +259,23 @@ class FakePlexServer {
                 showSummary,
               ],
             },
+            if (crowdedHubs) ...[
+              {
+                'hubIdentifier': 'home.movies.recent',
+                'title': 'Recently Added in Films, again',
+                'type': 'movie',
+                'Metadata': [_movie('101', 'The Lantern Keeper', 2019)],
+              },
+              {
+                'hubIdentifier': 'home.movies.long',
+                'title': 'A Long Shelf',
+                'type': 'movie',
+                'Metadata': [
+                  for (var i = 0; i < 25; i++)
+                    _movie('${700 + i}', 'Shelf Film $i', 2000 + i),
+                ],
+              },
+            ],
             {
               'hubIdentifier': 'home.music.recent',
               'title': 'Recently Added in Music',

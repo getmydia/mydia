@@ -236,6 +236,9 @@ class FakeHubSource extends FakeResumingSource implements HomeHubs {
 
   SourceException? hubsError;
 
+  /// Replaces the default two hubs when set.
+  List<Hub>? hubList;
+
   @override
   Set<SourceCapability> get capabilities =>
       {...super.capabilities, SourceCapability.hubs};
@@ -243,6 +246,7 @@ class FakeHubSource extends FakeResumingSource implements HomeHubs {
   @override
   Future<List<Hub>> hubs() async {
     if (hubsError case final e?) throw e;
+    if (hubList case final list?) return list;
     return [
       Hub(
         id: 'home.movies.recent',

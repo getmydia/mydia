@@ -1,5 +1,5 @@
-/// Per-screen state for the generic source screens, keyed by source. Each
-/// screen invalidates its own providers after a write; nothing here is
+/// Per-screen state for the generic source screens, keyed by source. Screens
+/// invalidate through `invalidateSourceItemWrites` after a write; nothing here is
 /// wired to Mydia's `QueryWatcher`.
 library;
 

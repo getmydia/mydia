@@ -170,11 +170,19 @@ class PlexMediaSource extends MediaSource
     if (_sectionKinds == null) await libraries();
     final libraryIds = _sectionKinds?.keys.toSet() ?? const <String>{};
     final body = await client.container('/hubs', {'count': '$_rowLimit'});
+    final seen = <String>{};
     return [
       for (final h in (body['Hub'] as List? ?? const []))
         if (h is Map)
-          plexHub(id, h.cast<String, dynamic>(), libraryIds: libraryIds),
-    ].whereType<Hub>().toList();
+          if (plexHub(id, h.cast<String, dynamic>(), libraryIds: libraryIds)
+              case final hub? when seen.add(hub.id))
+            Hub(
+              id: hub.id,
+              title: hub.title,
+              items: hub.items.take(_rowLimit).toList(),
+              library: hub.library,
+            ),
+    ];
   }
 
   @override

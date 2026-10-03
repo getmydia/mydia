@@ -136,7 +136,7 @@ class _Rows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hubs = ref.watch(sourceHubsProvider(sourceId));
     final list = hubs.hasValue ? hubs.requireValue : null;
-    if (list != null) {
+    if (list != null && list.isNotEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -156,7 +156,7 @@ class _Rows extends ConsumerWidget {
         ],
       );
     }
-    if (hubs.isLoading) {
+    if (hubs.isLoading && list == null) {
       return const Padding(
         padding: EdgeInsets.all(24),
         child: Center(child: CircularProgressIndicator()),
