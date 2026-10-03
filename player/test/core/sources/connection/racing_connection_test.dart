@@ -2,8 +2,9 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/connection/plex_connection_manager.dart';
+import 'package:player/core/sources/connection/racing_connection.dart';
 import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/plex/plex_connections.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -15,6 +16,9 @@ final httpLocal = c('http://10.0.0.5:32400', local: true);
 final remote = c('https://203-0-113-9.m1.plex.direct:32400');
 final httpRemote = c('http://203.0.113.9:32400');
 final relay = c('https://relay-1.m1.plex.direct:8443', relay: true);
+
+List<ServerConnection> plexRank(List<ServerConnection> all) =>
+    rankPlexConnections(all, allowInsecureLocal: true);
 
 /// Each candidate answers after its delay with its machine id; a null id
 /// refuses. A candidate missing from the map never answers.
@@ -50,8 +54,9 @@ void main() {
   test('base after dispose fails cleanly and does not touch the notifier',
       () async {
     final probe = ScriptedProbe()..answers[local.uri] = (Duration.zero, 'm1');
-    final manager = PlexConnectionManager(
-      machineIdentifier: 'm1',
+    final manager = RacingConnection(
+      rank: plexRank,
+      expectedId: 'm1',
       candidates: [local],
       probe: probe.call,
     );
@@ -66,8 +71,9 @@ void main() {
         ..answers[relay.uri] = (const Duration(milliseconds: 100), 'm1')
         ..answers[local.uri] = (const Duration(milliseconds: 900), 'm1')
         ..answers[remote.uri] = (const Duration(milliseconds: 50), null);
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, remote, relay],
         probe: probe.call,
       );
@@ -90,8 +96,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), 'other')
         ..answers[relay.uri] = (const Duration(milliseconds: 200), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, relay],
         probe: probe.call,
       );
@@ -108,8 +115,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(seconds: 4), 'm1')
         ..answers[relay.uri] = (const Duration(seconds: 5), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, relay],
         probe: probe.call,
       );
@@ -125,8 +133,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), null)
         ..answers[relay.uri] = (const Duration(milliseconds: 10), null);
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, relay],
         probe: probe.call,
       );
@@ -155,8 +164,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), 'm1')
         ..answers[relay.uri] = (const Duration(milliseconds: 500), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, relay],
         probe: probe.call,
       );
@@ -181,8 +191,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), 'm1')
         ..answers[remote.uri] = (const Duration(milliseconds: 20), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, remote],
         probe: probe.call,
       );
@@ -204,8 +215,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), 'm1')
         ..answers[relay.uri] = (const Duration(milliseconds: 20), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local, relay],
         probe: probe.call,
       );
@@ -227,8 +239,9 @@ void main() {
       final probe = ScriptedProbe()
         ..answers[local.uri] = (const Duration(milliseconds: 10), 'm1')
         ..answers[remote.uri] = (const Duration(milliseconds: 10), 'm1');
-      final manager = PlexConnectionManager(
-        machineIdentifier: 'm1',
+      final manager = RacingConnection(
+        rank: plexRank,
+        expectedId: 'm1',
         candidates: [local],
         probe: probe.call,
         refetch: () async {
@@ -255,5 +268,31 @@ void main() {
       [httpLocal],
       reason: 'plex.tv saying "local" does not make a public address private',
     );
+  });
+
+  test('races in the order the injected ranking gives', () {
+    fakeAsync((async) {
+      final lan = c('http://192.168.1.30:8096', local: true);
+      final wan = c('https://media.example.test');
+      final probe = ScriptedProbe()
+        ..answers[wan.uri] = (Duration.zero, 's1')
+        ..answers[lan.uri] = (const Duration(milliseconds: 50), 's1');
+      final manager = RacingConnection(
+        expectedId: 's1',
+        candidates: [wan, lan],
+        // Plain HTTP on the LAN first, the way Jellyfin ranks.
+        rank: (all) => [...all]
+          ..sort((a, b) => connectionRank(a).compareTo(connectionRank(b))),
+        probe: probe.call,
+      );
+      Uri? first;
+      manager.base().then((u) => first = u);
+      async.elapse(const Duration(milliseconds: 10));
+      expect(first, wan.uri, reason: 'the first answer is used at once');
+      async.elapse(const Duration(milliseconds: 100));
+      expect(manager.currentBase, lan.uri,
+          reason: 'the better-ranked LAN address takes over');
+      manager.dispose();
+    });
   });
 }

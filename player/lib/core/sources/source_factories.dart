@@ -9,7 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
 import 'connection/connection_refresh_bus.dart';
-import 'connection/plex_connection_manager.dart';
+import 'connection/racing_connection.dart';
+import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
 import 'media_source.dart';
 import 'plex/plex_identity.dart';
@@ -69,10 +70,11 @@ PlexMediaSource _plex(Ref ref, Source source) {
   final identity = ref.read(plexIdentityProvider.future);
   final rediscoveries = ref.read(_plexRediscoveriesProvider);
   final token = _CachedSecret(() => secrets.serverToken(source));
-  final connection = PlexConnectionManager(
-    machineIdentifier: source.server.machineIdentifier ?? source.server.id,
+  final connection = RacingConnection(
+    expectedId: source.server.machineIdentifier ?? source.server.id,
     candidates: source.server.connections,
-    allowInsecureLocal: !source.server.httpsRequired,
+    rank: (all) => rankPlexConnections(all,
+        allowInsecureLocal: !source.server.httpsRequired),
     probe: (base, timeout) => plexIdentityProbe(http, base, timeout),
     refetch: () =>
         _rediscoverPlex(ref, source, http, secrets, identity, rediscoveries),

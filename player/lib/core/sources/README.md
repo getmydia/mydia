@@ -30,9 +30,10 @@ non-Mydia account.
 ## Connections
 
 Every request reads `SourceConnection.base()` at call time.
-`PlexConnectionManager` probes every advertised connection with
-`GET /identity` (3s, relay 6s), uses the first that answers with the right
-`machineIdentifier`, and moves to a better-ranked one when it answers
+`RacingConnection` probes every known connection (Plex's from plex.tv,
+Jellyfin's entered URL and LAN address) with an identity request (3s,
+relay 6s) and uses the first that answers with
+the expected server id, moving to a better-ranked one when it answers
 (local, then remote, then relay; HTTPS before HTTP; plain HTTP only on the
 LAN). It looks again on resume, on a network change, after a failed
 request and every 15 minutes, re-reading `connections[]` from plex.tv.
