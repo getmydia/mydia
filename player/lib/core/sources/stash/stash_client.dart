@@ -11,13 +11,24 @@ import 'stash_documents.dart';
 
 /// [path] (with its query, if any) under [base], keeping any subpath the
 /// server is mounted at behind a reverse proxy. `Uri.resolve` would drop it
-/// for a path that starts with `/`.
+/// for a path that starts with `/`. If [path] already starts with the prefix
+/// (e.g. server-provided paths), the prefix is not repeated.
 Uri stashUnder(Uri base, String path) {
   final prefix = base.path.endsWith('/')
       ? base.path.substring(0, base.path.length - 1)
       : base.path;
+
+  // Extract just the path without query string to check for prefix
+  final pathWithoutQuery = Uri.parse(path).path;
+
+  // If path equals the prefix or starts with '$prefix/', don't prepend
+  final needsPrefix = prefix.isEmpty ||
+      (pathWithoutQuery != prefix && !pathWithoutQuery.startsWith('$prefix/'));
+
   final relative = path.startsWith('/') ? path : '/$path';
-  return Uri.parse('${base.scheme}://${base.authority}$prefix$relative');
+  final finalPath = needsPrefix ? '$prefix$relative' : relative;
+
+  return Uri.parse('${base.scheme}://${base.authority}$finalPath');
 }
 
 class StashClient {

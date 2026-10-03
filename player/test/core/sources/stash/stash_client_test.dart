@@ -21,6 +21,28 @@ void main() {
         Uri.parse('http://192.168.1.20:9999/graphql'));
   });
 
+  test('stashUnder does not repeat the prefix when server sends it', () {
+    // Server returns a path that already includes the prefix
+    expect(stashUnder(proxied, '/stash/scene/4/screenshot?t=1700').toString(),
+        'https://host.example.test/stash/scene/4/screenshot?t=1700');
+
+    // Same without the leading slash still works
+    expect(stashUnder(proxied, 'stash/scene/4/screenshot?t=1700').toString(),
+        'https://host.example.test/stash/stash/scene/4/screenshot?t=1700');
+  });
+
+  test('stashUnder works with base that has no path', () {
+    final noPath = Uri.parse('https://host.example.test');
+    expect(stashUnder(noPath, '/graphql').toString(),
+        'https://host.example.test/graphql');
+  });
+
+  test('stashUnder still prepends prefix for paths like /stashed/x', () {
+    // 'stashed' is just a substring, not the actual prefix
+    expect(stashUnder(proxied, '/stashed/x').toString(),
+        'https://host.example.test/stash/stashed/x');
+  });
+
   test('requests and artwork land under the proxy subpath', () async {
     final requested = <Uri>[];
     final client = StashClient(
