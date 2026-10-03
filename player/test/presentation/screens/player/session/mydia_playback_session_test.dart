@@ -208,4 +208,64 @@ void main() {
       expect(await _session(link).subtitleOffsets(), isNull);
     });
   });
+
+  group('seasonEpisodes', () {
+    const episodeTarget = PlaybackTarget(
+      mediaType: 'episode',
+      mediaId: 'ep-1',
+      fileId: 'file-1',
+      showId: 'show-1',
+      seasonNumber: 2,
+    );
+
+    Map<String, dynamic> episode(int n, {List<Object?>? files}) => {
+          '__typename': 'Episode',
+          'id': 'ep-$n',
+          'seasonNumber': 2,
+          'episodeNumber': n,
+          'title': n == 2 ? null : 'The Lantern Keeper $n',
+          'overview': null,
+          'airDate': null,
+          'runtime': null,
+          'monitored': true,
+          'thumbnailUrl': null,
+          'hasFile': true,
+          'progress': null,
+          'files': files,
+        };
+
+    test('asks for the given season of the target show', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Query',
+            'seasonEpisodes': [episode(1, files: const [])],
+          });
+      await _session(link, target: episodeTarget).seasonEpisodes(3);
+      expect(link.requests.single.variables,
+          {'showId': 'show-1', 'seasonNumber': 3});
+    });
+
+    test('keeps null titles and the server file list shape', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Query',
+            'seasonEpisodes': [
+              episode(1, files: [
+                {'__typename': 'MediaFile', 'id': 'f-1'},
+              ]),
+              episode(2),
+            ],
+          });
+      final episodes =
+          (await _session(link, target: episodeTarget).seasonEpisodes(2))!;
+      expect(episodes[0].title, 'The Lantern Keeper 1');
+      expect(episodes[0].fileIds, ['f-1']);
+      expect(episodes[1].title, isNull);
+      expect(episodes[1].fileIds, isNull);
+    });
+
+    test('is null without a show id', () async {
+      final link = StubLink((_, __) => {'__typename': 'Query'});
+      expect(await _session(link).seasonEpisodes(1), isNull);
+      expect(link.requests, isEmpty);
+    });
+  });
 }

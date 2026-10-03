@@ -22,4 +22,7 @@ abstract interface class PlaybackSession {
 
   /// Track ref to offset in milliseconds. Null when unavailable.
   Future<Map<String, int>?> subtitleOffsets();
+
+  /// The target show's [seasonNumber]. Null when unavailable. Never throws.
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber);
 }

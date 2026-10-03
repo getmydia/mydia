@@ -14,6 +14,7 @@ import '../../../../graphql/fragments/media_file_fragment.graphql.dart';
 import '../../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../../graphql/queries/media_segments.graphql.dart';
 import '../../../../graphql/queries/movie_detail.graphql.dart';
+import '../../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../../graphql/queries/streaming_candidates.graphql.dart';
 import '../../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
@@ -323,6 +324,43 @@ class MydiaPlaybackSession implements PlaybackSession {
       return {for (final s in settings) s.trackRef: s.offsetMs};
     } catch (e) {
       debugPrint('[PlayerScreen] Subtitle offsets unavailable: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async {
+    final showId = _target().showId;
+    if (showId == null) return null;
+    try {
+      final result = await _requireClient().query(
+        QueryOptions(
+          document: documentNodeQuerySeasonEpisodes,
+          variables: Variables$Query$SeasonEpisodes(
+            showId: showId,
+            seasonNumber: seasonNumber,
+          ).toJson(),
+        ),
+      );
+      if (result.data == null) return null;
+      final episodes =
+          Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
+      if (episodes == null) return null;
+      return episodes
+          .whereType<Query$SeasonEpisodes$seasonEpisodes>()
+          .map(
+            (e) => PlaybackEpisode(
+              id: e.id,
+              seasonNumber: e.seasonNumber,
+              episodeNumber: e.episodeNumber,
+              title: e.title,
+              fileIds: e.files?.map((f) => f?.id).toList(),
+              thumbnailUrl: e.thumbnailUrl,
+            ),
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching season episodes: $e');
       return null;
     }
   }

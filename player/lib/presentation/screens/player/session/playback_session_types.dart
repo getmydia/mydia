@@ -87,3 +87,24 @@ class FetchedSubtitlePreference {
   const FetchedSubtitlePreference(this.value);
   final SubtitlePreference? value;
 }
+
+/// One episode of the season being played, for up-next and previous.
+class PlaybackEpisode {
+  const PlaybackEpisode({
+    required this.id,
+    required this.seasonNumber,
+    required this.episodeNumber,
+    this.title,
+    this.fileIds,
+    this.thumbnailUrl,
+  });
+
+  final String id;
+  final int seasonNumber;
+  final int episodeNumber;
+  final String? title;
+
+  /// As the server sent it: null, empty, or with null entries.
+  final List<String?>? fileIds;
+  final String? thumbnailUrl;
+}

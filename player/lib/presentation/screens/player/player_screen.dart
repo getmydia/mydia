@@ -94,7 +94,6 @@ import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
 import '../../../graphql/schema.graphql.dart';
-import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
@@ -509,12 +508,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   int? _runtimeMinutes;
-  List<Query$SeasonEpisodes$seasonEpisodes>? _seasonEpisodes;
+  List<PlaybackEpisode>? _seasonEpisodes;
   int? _currentEpisodeIndex;
 
   /// The next season's episodes, fetched lazily the first time the viewer
   /// reaches the end of the current season.
-  List<Query$SeasonEpisodes$seasonEpisodes>? _nextSeasonEpisodes;
+  List<PlaybackEpisode>? _nextSeasonEpisodes;
 
   /// Whether the next-season lookup has run, whatever its outcome.
   ///
@@ -523,10 +522,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `_maybeShowUpNext` runs on every position tick, so conflating them
   /// would refetch a missing season several times a second.
   bool _nextSeasonResolved = false;
-
-  /// The client `_fetchSeasonEpisodes` was handed, kept so the next-season
-  /// lookup can run from a position tick, where no client is in scope.
-  GraphQLClient? _graphQLClient;
 
   // Track selection state
   /// The subtitle tracks the *server* reported for this file, exactly as
@@ -1690,7 +1685,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             if (!_isCurrentLoad(gen)) return;
             _graphqlClient = graphqlClient;
             _progressService = ProgressService(graphqlClient);
-            await _fetchProgressAndEpisodes(graphqlClient, gen);
+            await _fetchProgressAndEpisodes(gen);
             if (!_isCurrentLoad(gen)) return;
           } catch (e) {
             debugPrint('Could not initialize progress sync: $e');
@@ -1843,7 +1838,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       );
 
       // Fetch saved progress and episode list for TV shows
-      await _fetchProgressAndEpisodes(graphqlClient, gen);
+      await _fetchProgressAndEpisodes(gen);
       if (!_isCurrentLoad(gen)) return;
       _playTimeline?.mark('queries_done');
 
@@ -3142,7 +3137,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// reads the tracks `_fetchDetail` builds from the detail.
   /// Season episodes no longer waits for the detail to succeed, so a failed
   /// detail now costs one extra query rather than skipping it.
-  Future<void> _fetchProgressAndEpisodes(GraphQLClient client, int gen) {
+  Future<void> _fetchProgressAndEpisodes(int gen) {
     return runIsolated({
       'detail and subtitle preference': () async {
         await _fetchDetail(gen);
@@ -3151,7 +3146,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (widget.mediaType == 'episode' &&
           widget.showId != null &&
           widget.seasonNumber != null)
-        'season episodes': () => _fetchSeasonEpisodes(client, gen),
+        'season episodes': () => _fetchSeasonEpisodes(gen),
       'segments': () => _fetchSegments(gen),
       'subtitle offsets': () => _loadSubtitleOffsets(gen),
     });
@@ -3693,38 +3688,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     setState(() => _applySubtitleTracks(mkTracks));
   }
 
-  Future<void> _fetchSeasonEpisodes(GraphQLClient client, int gen) async {
-    _graphQLClient = client;
-    if (widget.showId == null || widget.seasonNumber == null) return;
-
-    try {
-      final result = await client.query(
-        QueryOptions(
-          document: documentNodeQuerySeasonEpisodes,
-          variables: Variables$Query$SeasonEpisodes(
-            showId: widget.showId!,
-            seasonNumber: widget.seasonNumber!,
-          ).toJson(),
-        ),
-      );
-
-      if (result.data != null) {
-        final episodes =
-            Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
-        if (episodes != null && _isCurrentLoad(gen)) {
-          setState(() {
-            _seasonEpisodes = episodes
-                .whereType<Query$SeasonEpisodes$seasonEpisodes>()
-                .toList();
-            _currentEpisodeIndex =
-                _seasonEpisodes?.indexWhere((ep) => ep.id == widget.mediaId);
-          });
-          _publishNowPlaying();
-        }
-      }
-    } catch (e) {
-      debugPrint('Error fetching season episodes: $e');
-    }
+  Future<void> _fetchSeasonEpisodes(int gen) async {
+    final seasonNumber = widget.seasonNumber;
+    if (widget.showId == null || seasonNumber == null) return;
+    final episodes = await _session.seasonEpisodes(seasonNumber);
+    if (episodes == null || !_isCurrentLoad(gen)) return;
+    setState(() {
+      _seasonEpisodes = episodes;
+      _currentEpisodeIndex =
+          _seasonEpisodes?.indexWhere((ep) => ep.id == widget.mediaId);
+    });
+    _publishNowPlaying();
   }
 
   Future<void> _fetchNextSeason() async {
@@ -3735,31 +3709,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
     _nextSeasonResolved = true;
 
-    final client = _graphQLClient;
-    if (client == null) return;
-
-    try {
-      final result = await client.query(
-        QueryOptions(
-          document: documentNodeQuerySeasonEpisodes,
-          variables: Variables$Query$SeasonEpisodes(
-            showId: widget.showId!,
-            seasonNumber: widget.seasonNumber! + 1,
-          ).toJson(),
-        ),
-      );
-
-      if (result.data == null || !mounted) return;
-      final episodes =
-          Query$SeasonEpisodes.fromJson(result.data!).seasonEpisodes;
-      if (episodes == null) return;
-      _nextSeasonEpisodes =
-          episodes.whereType<Query$SeasonEpisodes$seasonEpisodes>().toList();
-    } catch (e) {
-      // No offer is the right failure mode: this runs fired-and-forgotten off
-      // a position tick, with no caller waiting on a result.
-      debugPrint('[PlayerScreen] Could not fetch next season: $e');
-    }
+    // No offer is the right failure mode: this runs fired-and-forgotten off
+    // a position tick, with no caller waiting on a result.
+    final episodes = await _session.seasonEpisodes(widget.seasonNumber! + 1);
+    if (episodes == null || !mounted) return;
+    _nextSeasonEpisodes = episodes;
   }
 
   void _onPlaybackProgress() {
@@ -4140,13 +4094,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     final previousEpisode = _seasonEpisodes![previousIndex];
-    final files = previousEpisode.files;
+    final files = previousEpisode.fileIds;
     if (files == null || files.isEmpty) {
       return;
     }
 
-    final firstFile = files.first;
-    if (firstFile == null) {
+    final firstFileId = files.first;
+    if (firstFileId == null) {
       return;
     }
 
@@ -4154,7 +4108,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         'S${previousEpisode.seasonNumber}E${previousEpisode.episodeNumber}${previousEpisode.title != null ? ' - ${previousEpisode.title}' : ''}';
     _navigateToEpisode(
       previousEpisode.id,
-      firstFile.id,
+      firstFileId,
       title,
       seasonNumber: previousEpisode.seasonNumber,
     );
@@ -4164,7 +4118,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// `up_next_policy.dart` take. Keeping the resolvers off the GraphQL layer
   /// is what makes them unit testable without codegen having run.
   List<UpNextCandidate> _upNextCandidates(
-    List<Query$SeasonEpisodes$seasonEpisodes> episodes,
+    List<PlaybackEpisode> episodes,
   ) {
     return episodes
         .map(
@@ -4173,10 +4127,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             seasonNumber: episode.seasonNumber,
             episodeNumber: episode.episodeNumber,
             title: episode.title ?? 'Episode ${episode.episodeNumber}',
-            fileIds: (episode.files ??
-                    const <Query$SeasonEpisodes$seasonEpisodes$files?>[])
-                .whereType<Query$SeasonEpisodes$seasonEpisodes$files>()
-                .map((file) => file.id)
+            fileIds: (episode.fileIds ?? const <String?>[])
+                .whereType<String>()
                 .toList(),
             thumbnailUrl: episode.thumbnailUrl,
           ),
