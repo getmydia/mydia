@@ -465,8 +465,8 @@ defmodule Mydia.Playback do
 
   See `Mydia.Playback.OnDeck.list/2` for the rule set and options.
   """
-  @spec on_deck(binary(), keyword()) :: [Mydia.Playback.OnDeckEntry.t()]
-  defdelegate on_deck(user_id, opts \\ []), to: Mydia.Playback.OnDeck, as: :list
+  @spec on_deck(Mydia.Accounts.Scope.t(), keyword()) :: [Mydia.Playback.OnDeckEntry.t()]
+  defdelegate on_deck(scope, opts \\ []), to: Mydia.Playback.OnDeck, as: :list
 
   @doc """
   Hides a title from the user's Continue Watching rail.

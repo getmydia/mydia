@@ -8,7 +8,6 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
   `has_downloads` is never exposed.
   """
 
-  alias Mydia.Accounts.Scope
   alias Mydia.Library.MediaFile
   alias Mydia.Media
   alias Mydia.Repo
@@ -75,12 +74,12 @@ defmodule MydiaWeb.Schema.Resolvers.CalendarResolver do
     end)
   end
 
-  # The calendar is a per-viewer read, so it is scoped like every other
-  # `Mydia.Media` call. A resolution with no scope in context (an unauthenticated
-  # path) falls back to the system scope rather than crashing, matching
-  # `BrowseResolver.current_scope/1`.
-  defp current_scope(%{context: context}), do: context[:current_scope] || Scope.system()
-  defp current_scope(_resolution), do: Scope.system()
+  # The calendar is a per-viewer read, scoped like every other `Mydia.Media`
+  # call. `RequireAuth` guarantees a user on this field and both context
+  # builders set a scope with every user, so a missing scope is a bug in a
+  # context builder. Passing nil fails loudly in `Mydia.Media` rather than
+  # quietly showing the whole library, the same as `BrowseResolver`.
+  defp current_scope(%{context: context}), do: context[:current_scope]
 
   defp load_files_by(_key_field, []), do: %{}
 

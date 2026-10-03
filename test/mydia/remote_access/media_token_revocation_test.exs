@@ -117,6 +117,93 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
     end
   end
 
+  describe "Accounts.update_user_role/2" do
+    test "a demoted admin's cached token resolves to their new role on the next request" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, _claims} = MediaToken.create_token(device)
+
+      assert {:ok, %{user: %{role: "admin"}}, _claims} = TokenCache.validate(token)
+      assert TokenCache.count() == 1
+
+      {:ok, _} = Accounts.update_user_role(admin, %{role: "user"})
+
+      assert TokenCache.count() == 0
+      assert {:ok, %{user: %{role: "user"}}, _claims} = TokenCache.validate(token)
+    end
+  end
+
+  describe "Accounts.update_user/2" do
+    test "a role change empties the token cache" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, _claims} = MediaToken.create_token(device)
+
+      assert {:ok, _device, _claims} = TokenCache.validate(token)
+      assert TokenCache.count() == 1
+
+      {:ok, _} = Accounts.update_user(admin, %{role: "user"})
+
+      assert TokenCache.count() == 0
+    end
+
+    test "an update that leaves the role alone keeps the cached token" do
+      user = insert(:user, role: "user")
+      device = create_device(user)
+      {:ok, token, _claims} = MediaToken.create_token(device)
+
+      assert {:ok, _device, _claims} = TokenCache.validate(token)
+
+      {:ok, _} =
+        Accounts.update_user(user, %{
+          email: "renamed-#{System.unique_integer([:positive])}@example.com"
+        })
+
+      assert TokenCache.count() == 1
+    end
+  end
+
+  describe "invalidation racing a cache insert" do
+    test "a hit older than its device's invalidation stamp is re-verified" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, claims} = MediaToken.create_token(device)
+      cache_key = :crypto.hash(:sha256, token)
+
+      started = System.monotonic_time()
+      {:ok, stale_device, _claims} = MediaToken.verify_token(token)
+      assert :ok = TokenCache.store_if_current(cache_key, stale_device, claims, started)
+
+      # The role changes and invalidation's stamp lands after the insert's
+      # check, without its deletion scan reaching the entry.
+      {:ok, _} = admin |> Ecto.Changeset.change(role: "user") |> Repo.update()
+      :ets.insert(:media_token_cache_invalidations, {device.id, System.monotonic_time()})
+
+      assert {:ok, %{user: %{role: "user"}}, _claims} = TokenCache.validate(token)
+    end
+
+    test "finish_validation re-verifies when a validation loses the race with an invalidation" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, claims} = MediaToken.create_token(device)
+      cache_key = :crypto.hash(:sha256, token)
+
+      started = System.monotonic_time()
+      {:ok, stale_device, _stale_claims} = MediaToken.verify_token(token)
+
+      # Role changes after verification but before the cache insert attempt
+      {:ok, _} = admin |> Ecto.Changeset.change(role: "user") |> Repo.update()
+      :ets.insert(:media_token_cache_invalidations, {device.id, System.monotonic_time()})
+
+      # finish_validation should detect the race and re-verify, not cache the stale snapshot
+      assert {:ok, %{user: %{role: "user"}}, _fresh_claims} =
+               TokenCache.finish_validation(token, cache_key, stale_device, claims, started)
+
+      # Nothing was cached because re-verification would re-run validate_and_cache
+      assert TokenCache.count() == 0
+    end
+  end
+
   defp create_device(user, attrs \\ %{}) do
     default_attrs = %{
       device_name: "Test Device #{System.unique_integer([:positive])}",

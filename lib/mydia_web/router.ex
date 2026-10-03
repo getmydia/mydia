@@ -337,10 +337,8 @@ defmodule MydiaWeb.Router do
     # Playback progress
     get "/playback/movie/:id", PlaybackController, :show_movie
     get "/playback/episode/:id", PlaybackController, :show_episode
-    get "/playback/file/:id", PlaybackController, :show_file
     post "/playback/movie/:id", PlaybackController, :update_movie
     post "/playback/episode/:id", PlaybackController, :update_episode
-    post "/playback/file/:id", PlaybackController, :update_file
 
     # Thumbnails
     get "/media/:id/thumbnails.vtt", ThumbnailController, :show_vtt

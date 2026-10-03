@@ -10,7 +10,6 @@ lib/graphql/
 ├── fragments/              # Reusable GraphQL fragments
 ├── queries/               # GraphQL queries
 ├── mutations/             # GraphQL mutations
-├── subscriptions/         # GraphQL subscriptions
 └── *.graphql.dart         # Auto-generated Dart code (do not edit manually)
 ```
 
@@ -158,14 +157,6 @@ final isAuth = ref.watch(authStateProvider);
 ### Favorites
 
 - `ToggleFavorite` - Toggle favorite status for a media item
-
-## WebSocket Subscriptions
-
-For real-time updates (when implemented), use the WebSocket-enabled client:
-
-```dart
-final client = ref.watch(graphqlClientWithSubscriptionsProvider);
-```
 
 ## Schema Updates
 

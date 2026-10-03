@@ -251,66 +251,9 @@ defmodule MydiaWeb.SchemaTest do
       assert "Node" in library_path_interfaces
     end
 
-    test "has Subscription type" do
+    test "has no Subscription type" do
       {:ok, introspection} = Schema.introspect(MydiaWeb.Schema)
-      assert introspection.data["__schema"]["subscriptionType"]
-      assert introspection.data["__schema"]["subscriptionType"]["name"] == "RootSubscriptionType"
-    end
-
-    test "has device subscription fields" do
-      {:ok, introspection} = Schema.introspect(MydiaWeb.Schema)
-      types = introspection.data["__schema"]["types"]
-
-      subscription_type = Enum.find(types, fn t -> t["name"] == "RootSubscriptionType" end)
-      field_names = Enum.map(subscription_type["fields"], & &1["name"])
-
-      assert "deviceStatusChanged" in field_names
-      assert "progressUpdated" in field_names
-    end
-
-    test "defines DeviceStatusEvent type" do
-      {:ok, introspection} = Schema.introspect(MydiaWeb.Schema)
-      types = introspection.data["__schema"]["types"]
-
-      device_status_event_type = Enum.find(types, fn t -> t["name"] == "DeviceStatusEvent" end)
-      assert device_status_event_type
-      assert device_status_event_type["kind"] == "OBJECT"
-
-      field_names = Enum.map(device_status_event_type["fields"], & &1["name"])
-      assert "device" in field_names
-      assert "event" in field_names
-    end
-
-    test "defines Device type" do
-      {:ok, introspection} = Schema.introspect(MydiaWeb.Schema)
-      types = introspection.data["__schema"]["types"]
-
-      device_type = Enum.find(types, fn t -> t["name"] == "Device" end)
-      assert device_type
-      assert device_type["kind"] == "OBJECT"
-
-      field_names = Enum.map(device_type["fields"], & &1["name"])
-      assert "id" in field_names
-      assert "deviceName" in field_names
-      assert "platform" in field_names
-      assert "lastSeenAt" in field_names
-      assert "revokedAt" in field_names
-      assert "insertedAt" in field_names
-    end
-
-    test "defines DeviceEventType enum" do
-      {:ok, introspection} = Schema.introspect(MydiaWeb.Schema)
-      types = introspection.data["__schema"]["types"]
-
-      device_event_type_enum = Enum.find(types, fn t -> t["name"] == "DeviceEventType" end)
-      assert device_event_type_enum
-      assert device_event_type_enum["kind"] == "ENUM"
-
-      enum_values = Enum.map(device_event_type_enum["enumValues"], & &1["name"])
-      assert "CONNECTED" in enum_values
-      assert "DISCONNECTED" in enum_values
-      assert "REVOKED" in enum_values
-      assert "DELETED" in enum_values
+      assert introspection.data["__schema"]["subscriptionType"] == nil
     end
   end
 

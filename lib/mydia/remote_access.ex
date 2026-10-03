@@ -416,8 +416,6 @@ defmodule Mydia.RemoteAccess do
         # revoked_at just written above (T-107). Must happen for every path
         # that can end with a device no longer allowed to authenticate.
         Mydia.Media.TokenCache.invalidate_for_device(updated_device.id)
-        # Publish device status change event
-        publish_device_event(updated_device, :revoked)
         result
 
       error ->
@@ -435,8 +433,6 @@ defmodule Mydia.RemoteAccess do
         # is gone, but a cached token would still resolve to the in-memory
         # snapshot taken before the delete.
         Mydia.Media.TokenCache.invalidate_for_device(deleted_device.id)
-        # Publish device status change event
-        publish_device_event(deleted_device, :deleted)
         result
 
       error ->
@@ -982,25 +978,6 @@ defmodule Mydia.RemoteAccess do
     end
   end
 
-  # Subscription helpers
-
-  @doc """
-  Publishes a device status change event to GraphQL subscriptions.
-  """
-  def publish_device_event(device, event_type)
-      when event_type in [:connected, :disconnected, :revoked, :deleted] do
-    event_payload = %{
-      device: format_device_for_subscription(device),
-      event: event_type
-    }
-
-    MydiaWeb.Schema.Publish.publish(
-      MydiaWeb.Endpoint,
-      event_payload,
-      device_status_changed: "device_status:#{device.user_id}"
-    )
-  end
-
   @doc """
   Publishes a claim consumed event via PubSub.
   Used to notify the UI that a pairing code has been used and the modal should close.
@@ -1021,16 +998,4 @@ defmodule Mydia.RemoteAccess do
   """
   @spec claims_topic(binary()) :: String.t()
   def claims_topic(user_id), do: "remote_access:claims:#{user_id}"
-
-  # Format device struct for subscription payload
-  defp format_device_for_subscription(device) do
-    %{
-      id: device.id,
-      device_name: device.device_name,
-      platform: device.platform,
-      last_seen_at: device.last_seen_at,
-      revoked_at: device.revoked_at,
-      inserted_at: device.inserted_at
-    }
-  end
 end

@@ -106,4 +106,43 @@ defmodule MydiaWeb.Schema.DownloadMutationsTest do
     refute is_nil(options)
     assert options != []
   end
+
+  @job_status_mutation """
+  mutation DownloadJobStatus($jobId: ID!) { downloadJobStatus(jobId: $jobId) { jobId status } }
+  """
+
+  @cancel_job_mutation """
+  mutation CancelDownloadJob($jobId: ID!) { cancelDownloadJob(jobId: $jobId) { success } }
+  """
+
+  describe "job mutations for a title outside the caller's scope" do
+    setup do
+      movie = restricted_movie()
+      [file] = Mydia.Library.get_media_files_for_item(movie.id)
+      {:ok, job} = Mydia.Downloads.get_or_create_job(file.id, "720p")
+      user = AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+      %{job: job, user: user}
+    end
+
+    test "downloadJobStatus reads as not found", %{job: job, user: user} do
+      {:ok, result} =
+        Absinthe.run(@job_status_mutation, MydiaWeb.Schema,
+          variables: %{"jobId" => job.id},
+          context: context_for(user)
+        )
+
+      assert %{errors: [%{message: "Job not found"}]} = result
+    end
+
+    test "cancelDownloadJob reads as not found and cancels nothing", %{job: job, user: user} do
+      {:ok, result} =
+        Absinthe.run(@cancel_job_mutation, MydiaWeb.Schema,
+          variables: %{"jobId" => job.id},
+          context: context_for(user)
+        )
+
+      assert %{errors: [%{message: "Job not found"}]} = result
+      assert Repo.get(Mydia.Downloads.TranscodeJob, job.id)
+    end
+  end
 end

@@ -21,19 +21,6 @@ let
       beamDeps = [ dataloader decimal nimble_parsec telemetry ];
     };
 
-    absinthe_phoenix = buildMix rec {
-      name = "absinthe_phoenix";
-      version = "2.0.5";
-
-      src = fetchHex {
-        pkg = "absinthe_phoenix";
-        version = "${version}";
-        sha256 = "086c6d4a1c32f7444713130d204c87b1b006169f5159026b73f02f7d38ccd05c";
-      };
-
-      beamDeps = [ absinthe absinthe_plug decimal phoenix phoenix_html phoenix_pubsub ];
-    };
-
     absinthe_plug = buildMix rec {
       name = "absinthe_plug";
       version = "1.5.10";

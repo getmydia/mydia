@@ -68,6 +68,65 @@ defmodule Mydia.Media.TokenCacheTest do
       assert :ok = TokenCache.invalidate_for_device("any-device-id")
       assert :ok = TokenCache.invalidate_for_device("another-device-id")
     end
+
+    test "never moves a device's invalidation stamp backwards" do
+      device_id = "dev-x"
+
+      # First invalidation creates the stamp
+      :ok = TokenCache.invalidate_for_device(device_id)
+
+      assert [{^device_id, first_stamp}] =
+               :ets.lookup(:media_token_cache_invalidations, device_id)
+
+      # Insert an artificially NEWER stamp
+      newer = System.monotonic_time() + 1_000_000_000
+      :ets.insert(:media_token_cache_invalidations, {device_id, newer})
+
+      # Second invalidation with an older timestamp should not overwrite the newer one
+      :ok = TokenCache.invalidate_for_device(device_id)
+
+      assert [{^device_id, final_stamp}] =
+               :ets.lookup(:media_token_cache_invalidations, device_id)
+
+      assert final_stamp == newer
+      assert final_stamp > first_stamp
+    end
+  end
+
+  describe "validation racing an invalidation" do
+    test "store_if_current/4 skips the insert when the device was invalidated after verification began" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("race-device")
+
+      assert :skipped =
+               TokenCache.store_if_current(<<1>>, %{id: "race-device"}, %{}, started)
+
+      assert TokenCache.count() == 0
+    end
+
+    test "store_if_current/4 inserts when the invalidation predates verification" do
+      :ok = TokenCache.invalidate_for_device("race-device")
+      started = System.monotonic_time()
+
+      assert :ok = TokenCache.store_if_current(<<2>>, %{id: "race-device"}, %{}, started)
+      assert TokenCache.count() == 1
+    end
+
+    test "invalidations of other devices do not block the insert" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("other-device")
+
+      assert :ok = TokenCache.store_if_current(<<3>>, %{id: "race-device"}, %{}, started)
+      assert TokenCache.count() == 1
+    end
+
+    test "clear/0 forgets invalidation stamps" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("race-device")
+      TokenCache.clear()
+
+      assert :ok = TokenCache.store_if_current(<<4>>, %{id: "race-device"}, %{}, started)
+    end
   end
 
   describe "module structure" do

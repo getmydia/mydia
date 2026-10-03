@@ -189,4 +189,29 @@ defmodule MydiaWeb.Api.MediaAccessTest do
 
     assert %{"error" => "Media not found"} = json_response(conn, 404)
   end
+
+  describe "download jobs for a restricted movie" do
+    setup do
+      movie = adult_movie()
+      file = media_file_fixture(%{media_item_id: movie.id})
+      {:ok, job} = Mydia.Downloads.get_or_create_job(file.id, "720p")
+      %{job: job}
+    end
+
+    test "status is not found", %{conn: conn, job: job} do
+      conn = conn |> restricted_conn() |> get(~p"/api/v1/download/job/#{job.id}/status")
+      assert %{"error" => "Job not found"} = json_response(conn, 404)
+    end
+
+    test "cancel is not found and leaves the job in place", %{conn: conn, job: job} do
+      conn = conn |> restricted_conn() |> delete(~p"/api/v1/download/job/#{job.id}")
+      assert %{"error" => "Job not found"} = json_response(conn, 404)
+      assert Repo.get(Mydia.Downloads.TranscodeJob, job.id)
+    end
+
+    test "file is not found", %{conn: conn, job: job} do
+      conn = conn |> restricted_conn() |> get(~p"/api/v1/download/job/#{job.id}/file")
+      assert %{"error" => "Job not found"} = json_response(conn, 404)
+    end
+  end
 end

@@ -6,6 +6,7 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   require Logger
 
   alias Mydia.Accounts.User
+  alias Mydia.Media
   alias Mydia.Subtitles
   alias Mydia.Subtitles.Candidate
   alias Mydia.Subtitles.Extractor
@@ -14,16 +15,17 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   Searches every enabled provider for subtitles matching a media file.
   """
   def search(_parent, %{media_file_id: media_file_id, languages: languages}, %{
-        context: %{current_user: %User{}}
+        context: %{current_user: %User{}} = context
       }) do
-    case Subtitles.search_candidates(media_file_id, Enum.join(languages, ",")) do
-      {:ok, %{results: results, providers: providers}} ->
-        {:ok,
-         %{
-           results: Enum.map(results, &to_candidate(&1, media_file_id)),
-           providers: providers
-         }}
-
+    with {:ok, _file} <- visible_file(context, media_file_id),
+         {:ok, %{results: results, providers: providers}} <-
+           Subtitles.search_candidates(media_file_id, Enum.join(languages, ",")) do
+      {:ok,
+       %{
+         results: Enum.map(results, &to_candidate(&1, media_file_id)),
+         providers: providers
+       }}
+    else
       {:error, :media_file_not_found} ->
         {:error, "Media file not found"}
 
@@ -42,9 +44,10 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   Downloads a candidate and returns the resulting subtitle track.
   """
   def download(_parent, %{media_file_id: media_file_id, token: token}, %{
-        context: %{current_user: %User{}}
+        context: %{current_user: %User{}} = context
       }) do
-    with {:ok, payload} <- Candidate.verify(token, media_file_id),
+    with {:ok, _file} <- visible_file(context, media_file_id),
+         {:ok, payload} <- Candidate.verify(token, media_file_id),
          {:ok, subtitle} <- Subtitles.download_from_result(payload, media_file_id) do
       track =
         media_file_id
@@ -56,6 +59,9 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
         track -> {:ok, Map.put(track, :_media_file_id, media_file_id)}
       end
     else
+      {:error, :media_file_not_found} ->
+        {:error, "Media file not found"}
+
       {:error, :expired} ->
         {:error, "These search results expired. Search again."}
 
@@ -74,6 +80,15 @@ defmodule MydiaWeb.Schema.Resolvers.SubtitleSearchResolver do
   def download(_parent, _args, _info), do: {:error, "Not authenticated"}
 
   ## Private
+
+  # A file outside the caller's scope answers exactly as a missing one, so
+  # neither search nor download can confirm a hidden title exists.
+  defp visible_file(context, media_file_id) do
+    case Media.authorize_media_file_id(context[:current_scope], media_file_id) do
+      {:ok, file} -> {:ok, file}
+      :denied -> {:error, :media_file_not_found}
+    end
+  end
 
   defp to_candidate(result, media_file_id) do
     # Providers often leave :format nil and put the real extension on the file

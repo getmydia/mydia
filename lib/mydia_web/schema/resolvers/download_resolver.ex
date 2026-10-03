@@ -39,8 +39,8 @@ defmodule MydiaWeb.Schema.Resolvers.DownloadResolver do
   @doc """
   Get current status and progress of a transcode job.
   """
-  def job_status(_parent, %{job_id: job_id}, _resolution) do
-    case DownloadService.get_job_status(job_id) do
+  def job_status(_parent, %{job_id: job_id}, %{context: context}) do
+    case DownloadService.get_job_status(context[:current_scope], job_id) do
       {:ok, job_info} -> {:ok, job_info}
       {:error, :job_not_found} -> {:error, "Job not found"}
     end
@@ -49,8 +49,8 @@ defmodule MydiaWeb.Schema.Resolvers.DownloadResolver do
   @doc """
   Cancel a transcode job.
   """
-  def cancel_job(_parent, %{job_id: job_id}, _resolution) do
-    case DownloadService.cancel_job(job_id) do
+  def cancel_job(_parent, %{job_id: job_id}, %{context: context}) do
+    case DownloadService.cancel_job(context[:current_scope], job_id) do
       {:ok, :cancelled} -> {:ok, %{success: true}}
       {:error, :job_not_found} -> {:error, "Job not found"}
     end

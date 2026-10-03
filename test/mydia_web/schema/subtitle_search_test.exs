@@ -148,4 +148,46 @@ defmodule MydiaWeb.Schema.SubtitleSearchTest do
 
     assert %{"errors" => [_ | _]} = body
   end
+
+  describe "under an access restriction" do
+    setup %{conn: conn} do
+      movie = MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+      hidden = MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      restricted =
+        AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      %{hidden: hidden, restricted_conn: log_in_user(build_conn(), restricted), admin_conn: conn}
+    end
+
+    test "search answers a hidden file exactly like a missing one", ctx do
+      hidden_body =
+        gql(ctx.restricted_conn, @search, %{"mediaFileId" => ctx.hidden.id, "languages" => ["en"]})
+
+      missing_body =
+        gql(ctx.restricted_conn, @search, %{
+          "mediaFileId" => Ecto.UUID.generate(),
+          "languages" => ["en"]
+        })
+
+      assert %{"errors" => [%{"message" => "Media file not found"}]} = hidden_body
+
+      assert hidden_body["errors"] |> hd() |> Map.get("message") ==
+               missing_body["errors"] |> hd() |> Map.get("message")
+    end
+
+    test "download refuses a hidden file even with a valid token", ctx do
+      %{"data" => %{"subtitleSearch" => %{"results" => [result]}}} =
+        gql(ctx.admin_conn, @search, %{"mediaFileId" => ctx.hidden.id, "languages" => ["en"]})
+
+      body =
+        gql(ctx.restricted_conn, @download, %{
+          "mediaFileId" => ctx.hidden.id,
+          "token" => result["token"]
+        })
+
+      assert %{"errors" => [%{"message" => "Media file not found"}]} = body
+      assert Mydia.Subtitles.Extractor.list_external_subtitle_tracks(ctx.hidden.id) == []
+    end
+  end
 end

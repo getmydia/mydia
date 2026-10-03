@@ -31,4 +31,53 @@ defmodule Mydia.Streaming.FfmpegRemuxerActivityTest do
       assert fired?
     end
   end
+
+  describe "stream_to_conn/4 with a halting on_activity" do
+    # A stand-in for FFmpeg: emits one chunk, then would run for a minute.
+    defp open_slow_port do
+      port =
+        Port.open({:spawn_executable, System.find_executable("sh")}, [
+          :binary,
+          :exit_status,
+          :use_stdio,
+          args: ["-c", "echo chunk; sleep 60"]
+        ])
+
+      {:os_pid, os_pid} = Port.info(port, :os_pid)
+      {port, os_pid}
+    end
+
+    test "returns promptly and sends nothing when on_activity returns :halt" do
+      {port, os_pid} = open_slow_port()
+      conn = Plug.Test.conn(:get, "/stream")
+
+      {micros, conn} =
+        :timer.tc(fn ->
+          FfmpegRemuxer.stream_to_conn(conn, port, os_pid, on_activity: fn -> :halt end)
+        end)
+
+      assert micros < 5_000_000
+      assert Port.info(port) == nil
+      refute conn.resp_body =~ "chunk"
+    end
+
+    test "keeps streaming when on_activity returns anything else" do
+      {port, os_pid} = open_slow_port()
+      test_pid = self()
+      conn = Plug.Test.conn(:get, "/stream")
+
+      # Halt on the second heartbeat is not reachable (throttled), so end the
+      # stream by killing the process once the first chunk has been sent.
+      on_activity = fn ->
+        send(test_pid, :activity)
+        spawn(fn -> System.cmd("kill", [to_string(os_pid)]) end)
+        :ok
+      end
+
+      conn = FfmpegRemuxer.stream_to_conn(conn, port, os_pid, on_activity: on_activity)
+
+      assert_received :activity
+      assert conn.resp_body =~ "chunk"
+    end
+  end
 end
