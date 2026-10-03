@@ -87,6 +87,21 @@ defmodule Mydia.Jobs.ContentRatingFetchTest do
     refute_received {:relay_hit, "/tmdb/tv/shows/" <> _, _}
   end
 
+  test "a failed write fails the job so Oban retries instead of retiring it", %{bypass: bypass} do
+    id = unique_provider_id()
+    stub_tmdb_movie(bypass, id, certification: "PG-13")
+
+    # A movie row without a year fails MediaItem.changeset/2 on every update.
+    item =
+      insert(:media_item, type: "movie", year: nil, tmdb_id: id, metadata: %{title: "Yearless"})
+
+    {result, log} = ExUnit.CaptureLog.with_log(fn -> run() end)
+
+    assert {:error, {:relay_errors, 1}} = result
+    assert log =~ "could not store rating"
+    assert Media.get_media_item!(Scope.unrestricted(), item.id).content_rating_age == nil
+  end
+
   test "a TMDB answer with no certification is not an error", %{bypass: bypass} do
     id = unique_provider_id()
     stub_tmdb_movie(bypass, id, test_pid: self())

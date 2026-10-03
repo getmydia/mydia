@@ -134,8 +134,18 @@ defmodule Mydia.Jobs.ContentRatingFetch do
     |> MediaItem.changeset(%{metadata: %{item.metadata | content_rating: rating}})
     |> Repo.update()
     |> case do
-      {:ok, _} -> :filled
-      {:error, _} -> :unrated
+      {:ok, _} ->
+        :filled
+
+      {:error, changeset} ->
+        # Not :unrated: that is final for this unique-forever job. Count it so
+        # perform returns an error and Oban retries.
+        Logger.warning(
+          "ContentRatingFetch: could not store rating for #{item.id}: " <>
+            inspect(changeset.errors)
+        )
+
+        :error
     end
   end
 end
