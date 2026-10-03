@@ -232,11 +232,15 @@ class JellyfinSignInController extends Notifier<JellyfinSignInState> {
     }
     try {
       final snapshot = await ref.read(sourceRecordsProvider.future);
-      final existing = reauthAccountId == null
-          ? null
-          : snapshot.accounts
-              .where((a) => a.account.id == reauthAccountId)
-              .firstOrNull;
+      // Jellyfin revokes a user's earlier token when the same user signs in
+      // again from this install, so adding a user already saved for this
+      // server must update that account instead of leaving a dead twin.
+      final existing = snapshot.accounts.where((a) {
+        if (reauthAccountId != null) return a.account.id == reauthAccountId;
+        return a.account.kind == SourceKind.jellyfin &&
+            a.account.activeProfileId == session.userId &&
+            a.servers.any((s) => s.id == info.id);
+      }).firstOrNull;
       final accountId =
           existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
       // A re-auth may sign in as a different user, so the active profile

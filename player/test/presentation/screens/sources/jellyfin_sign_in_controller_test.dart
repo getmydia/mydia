@@ -230,6 +230,73 @@ void main() {
     expect(record.addedAtMs, 1234);
   });
 
+  Future<void> seedJellyfin(String profileId) async {
+    const accountId = 'jfold';
+    await storage.write('ns-jfold/account_token', 'old-token');
+    await c.read(sourceRecordsProvider.notifier).putAccount(
+          SourceAccountRecord(
+            account: ProviderAccount(
+              id: accountId,
+              kind: SourceKind.jellyfin,
+              displayName: 'Old',
+              storageNamespace: 'ns-jfold',
+              activeProfileId: profileId,
+              needsReauth: true,
+            ),
+            profiles: [
+              SourceProfile(
+                id: profileId,
+                accountId: accountId,
+                name: 'Old',
+                isOwner: false,
+              ),
+            ],
+            servers: [
+              SourceServer(
+                id: FakeJellyfinServer.serverId,
+                accountId: accountId,
+                profileId: profileId,
+                name: 'Harbor',
+                connections: const [],
+              ),
+            ],
+            addedAtMs: 4321,
+          ),
+        );
+  }
+
+  Future<void> addWithPassword() async {
+    server.quickConnectEnabled = false;
+    await ctl().submitAddress('https://media.example.test');
+    await ctl().submitPassword(
+      FakeJellyfinServer.username,
+      FakeJellyfinServer.password,
+    );
+    expect(state(), isA<JellyfinSignedIn>());
+  }
+
+  test('adding a user already on this server updates that account', () async {
+    await seedJellyfin(FakeJellyfinServer.userId);
+    await addWithPassword();
+    final record = (await store.load()).accounts.single;
+    expect(record.account.id, 'jfold');
+    expect(record.account.storageNamespace, 'ns-jfold');
+    expect(record.addedAtMs, 4321);
+    expect(record.account.needsReauth, isFalse);
+    expect(
+      await storage.read('ns-jfold/account_token'),
+      FakeJellyfinServer.token,
+    );
+  });
+
+  test('a different user on the same server is a second account', () async {
+    await seedJellyfin('someone-else');
+    await addWithPassword();
+    final accounts = (await store.load()).accounts;
+    expect(accounts, hasLength(2));
+    expect(accounts.where((a) => a.account.id == 'jfold'), hasLength(1));
+  });
+
   test('switching to the password stops polling', () {
     fakeAsync((async) {
       ctl().submitAddress('https://media.example.test');
