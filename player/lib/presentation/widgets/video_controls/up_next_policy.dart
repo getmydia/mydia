@@ -53,7 +53,7 @@ bool shouldOfferUpNext({
 ///
 /// Manual next-episode actions ignore [autoPlayCancelled]; only the countdown
 /// path checks it, as a belt against a fire that was scheduled before
-/// [_cancelAutoPlay] ran.
+/// UpNextController.cancel ran.
 bool shouldBlockAutoPlayNext({
   required bool autoPlayCancelled,
   required bool fromAutoCountdown,
@@ -94,8 +94,8 @@ class UpNextCandidate {
 /// A next episode that is known to be playable.
 ///
 /// There is no way to construct one without a [fileId], which is the point:
-/// `_maybeShowUpNext` used to offer an episode whose `files` list was empty,
-/// and `_playNextEpisode` would then return silently after the countdown had
+/// `UpNextController.onPositionTick` used to offer an episode whose `files` list was empty,
+/// and `UpNextController.playNext` would then return silently after the countdown had
 /// already drained. A prompt that appears is now a prompt that can be
 /// fulfilled.
 @immutable
@@ -130,7 +130,7 @@ class UpNextTarget {
   String get pillLabel => '$eyebrow · $episodeCode';
 
   /// The title written into the player route, matching the format
-  /// `_playNextEpisode` already builds.
+  /// `UpNextController.playNext` already builds.
   String get routeTitle => '$episodeCode - $title';
 }
 
