@@ -6,46 +6,91 @@ defmodule Mydia.Media.RemoteFilter do
   or rating to filter on. Category is recovered by classifying the genre ids
   and origin signals TMDB returns with each hit, which costs no extra request.
 
-  Rating is not recoverable this way. TMDB search returns no certification and
-  exposes no parameter to filter by one, so a search hit above an account's age
-  limit still appears on `/request`. Nothing reaches the library from there
-  without an admin approving the request, which is the control that actually
-  holds. `/discover` is different: TMDB's discover endpoint does take a
-  certification ceiling, so `discover_params/1` applies the limit there.
+  Rating is not in a search hit. For a restricted scope it comes from
+  `Mydia.Media.RemoteSignals`, one cached lookup per title, so an age limit
+  hides titles above it and titles with no certification. `discover_params/1`
+  is only a pre-filter that narrows what TMDB returns on `/discover`.
   """
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.CategoryClassifier
+  alias Mydia.Media.RemoteSignals
+  alias Mydia.Media.Restrictions
   alias Mydia.Metadata
+  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
 
   @doc """
   True when a search result may be shown to this scope.
+
+  `signals` comes from `Mydia.Media.RemoteSignals`. Without them, an age
+  limit refuses (a search hit carries no certification), and the category is
+  classified from the hit's own genre and origin fields.
   """
-  @spec allow?(SearchResult.t(), Scope.t()) :: boolean()
-  def allow?(_result, %Scope{allowed_categories: nil}), do: true
+  @spec allow?(SearchResult.t(), Scope.t(), RemoteSignals.t() | :error | nil) :: boolean()
+  def allow?(result, scope, signals \\ nil)
+  def allow?(_result, %Scope{allowed_categories: nil, max_content_age: nil}, _signals), do: true
 
-  def allow?(%SearchResult{} = result, %Scope{allowed_categories: categories}) do
-    category =
-      result.media_type
-      |> CategoryClassifier.classify_from_metadata(%{
-        genres: genre_names(result.genre_ids, result.media_type),
-        origin_country: result.origin_country,
-        original_language: result.original_language
-      })
-      |> to_string()
-
-    category in categories
+  def allow?(%SearchResult{} = result, %Scope{} = scope, signals) do
+    Restrictions.allowed?(category(result, signals), age(signals), scope)
   end
 
   @doc """
-  Keeps only the results this scope is allowed to see.
-  """
-  @spec filter([SearchResult.t()], Scope.t()) :: [SearchResult.t()]
-  def filter(results, %Scope{allowed_categories: nil}) when is_list(results), do: results
+  Keeps only the results this scope may see, looking up certifications and
+  categories as needed. Kept results carry `content_rating` when it is known.
 
-  def filter(results, %Scope{} = scope) when is_list(results) do
-    Enum.filter(results, &allow?(&1, scope))
+  Options: `:config`, the relay config for lookups (tests inject Bypass).
+  """
+  @spec filter([SearchResult.t()], Scope.t(), keyword()) :: [SearchResult.t()]
+  def filter(results, scope, opts \\ [])
+
+  def filter(results, %Scope{allowed_categories: nil, max_content_age: nil}, _opts)
+      when is_list(results),
+      do: results
+
+  def filter(results, %Scope{} = scope, opts) when is_list(results) do
+    signals =
+      results
+      |> Enum.filter(&needs_lookup?(&1, scope))
+      |> RemoteSignals.fetch_many(opts[:config])
+
+    Enum.flat_map(results, fn result ->
+      found = Map.get(signals, {result.media_type, Ref.from_search_result(result)})
+
+      if allow?(result, scope, found), do: [with_rating(result, found)], else: []
+    end)
+  end
+
+  defp needs_lookup?(_result, %Scope{max_content_age: age}) when not is_nil(age), do: true
+  defp needs_lookup?(result, %Scope{allowed_categories: [_ | _]}), do: no_signals?(result)
+  defp needs_lookup?(_result, _scope), do: false
+
+  defp no_signals?(%SearchResult{genre_ids: [], origin_country: [], original_language: nil}),
+    do: true
+
+  defp no_signals?(_result), do: false
+
+  defp category(_result, %RemoteSignals{category: category}) when is_binary(category),
+    do: category
+
+  defp category(result, _signals), do: classify(result)
+
+  defp age(%RemoteSignals{age: age}), do: age
+  defp age(_signals), do: nil
+
+  defp with_rating(result, %RemoteSignals{content_rating: rating}),
+    do: %{result | content_rating: rating}
+
+  defp with_rating(result, _signals), do: result
+
+  defp classify(result) do
+    result.media_type
+    |> CategoryClassifier.classify_from_metadata(%{
+      genres: genre_names(result.genre_ids, result.media_type),
+      origin_country: result.origin_country,
+      original_language: result.original_language
+    })
+    |> to_string()
   end
 
   @doc """

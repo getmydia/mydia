@@ -247,6 +247,18 @@ defmodule Mydia.MetadataCacheHelpers do
   end
 
   @doc """
+  Seeds the per-title certification and category `Mydia.Media.RemoteFilter`
+  looks up for restricted accounts, so a restricted LiveView test makes no
+  relay call.
+  """
+  def warm_remote_signals(ref, media_type, %Mydia.Media.RemoteSignals{} = signals) do
+    key = Mydia.Media.RemoteSignals.cache_key(ref, media_type)
+    Cache.put(key, signals, ttl: :timer.minutes(30))
+    on_exit(fn -> Cache.delete(key) end)
+    :ok
+  end
+
+  @doc """
   Populates the movie search cache for `query` with `results`.
 
   `results` are raw TMDB result maps with string keys, matching
