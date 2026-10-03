@@ -8,6 +8,7 @@ import '../sources/sources_providers.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/source_item_screen.dart';
+import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
@@ -407,6 +408,16 @@ GoRouter appRouter(Ref ref) {
           final id = state.pathParameters['id']!;
           return EpisodeDetailScreen(id: id);
         },
+      ),
+      GoRoute(
+        path: '/s/:sourceId/player/:itemId',
+        name: 'source_player',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => SourcePlayerRoute(
+          sourceId: SourceId(state.pathParameters['sourceId']!),
+          itemId: state.pathParameters['itemId']!,
+          uri: state.uri,
+        ),
       ),
       // Queue player route for collection playback (must be before /player/:type/:id)
       GoRoute(
