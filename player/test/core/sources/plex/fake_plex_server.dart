@@ -19,6 +19,9 @@ class FakePlexServer {
   /// transport level, as a dropped connection does.
   bool throwTransport = false;
 
+  /// Set to make the transcode decision refuse the conversion.
+  bool refuseTranscode = false;
+
   static const movies = [
     ('101', 'The Lantern Keeper', 2019),
     ('102', 'Saltwater Clocks', 2021),
@@ -214,6 +217,20 @@ class FakePlexServer {
       case '/:/scrobble':
       case '/:/unscrobble':
       case '/:/timeline':
+        return http.Response('', 200);
+      case '/video/:/transcode/universal/decision':
+        return refuseTranscode
+            ? _container({
+                'generalDecisionCode': 2000,
+                'generalDecisionText':
+                    'The video codec is not supported by this server.',
+              })
+            : _container({
+                'generalDecisionCode': 1001,
+                'generalDecisionText':
+                    'Direct play not available; Conversion OK',
+              });
+      case '/video/:/transcode/universal/stop':
         return http.Response('', 200);
       case '/library/streams/33':
         return http.Response('1\n00:00:01,000 --> 00:00:02,000\nHola\n', 200);
