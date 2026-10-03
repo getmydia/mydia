@@ -57,7 +57,7 @@ defmodule MydiaWeb.DiscoverLive.YearRangeTest do
     %Phoenix.LiveView.Socket{assigns: Map.merge(defaults, assigns)}
   end
 
-  defp load_with(bypass, year_from, year_to) do
+  defp load_with(bypass, year_from, year_to, extra \\ %{}) do
     test_pid = self()
 
     Bypass.expect_once(bypass, "GET", "/tmdb/movies/discover", fn conn ->
@@ -75,6 +75,7 @@ defmodule MydiaWeb.DiscoverLive.YearRangeTest do
         search_mode: false,
         search_query: "",
         category: :discover,
+        source: nil,
         selected_genres: [],
         selected_language: nil,
         year_from: year_from,
@@ -83,6 +84,8 @@ defmodule MydiaWeb.DiscoverLive.YearRangeTest do
         sort_by: "popularity.desc",
         current_scope: Scope.unrestricted()
       })
+
+    socket = %{socket | assigns: Map.merge(socket.assigns, extra)}
 
     Index.handle_info(:load_data, socket)
     assert_receive {:discover_params, params}
@@ -102,5 +105,29 @@ defmodule MydiaWeb.DiscoverLive.YearRangeTest do
 
     assert params["primary_release_date.gte"] == "1985-01-01"
     refute Map.has_key?(params, "primary_release_date.lte")
+  end
+
+  describe "on the home tab" do
+    @home %{category: :home, source: :in_cinemas}
+
+    test "an earlier From year keeps the source's own start", %{bypass: bypass} do
+      source_gte = Date.utc_today() |> Date.add(-42) |> Date.to_iso8601()
+      params = load_with(bypass, 1990, nil, @home)
+
+      assert params["primary_release_date.gte"] == source_gte
+    end
+
+    test "an earlier To year narrows the source's end", %{bypass: bypass} do
+      params = load_with(bypass, nil, 2000, @home)
+
+      assert params["primary_release_date.lte"] == "2000-12-31"
+    end
+
+    test "a later To year never widens the source's end", %{bypass: bypass} do
+      source_lte = Date.to_iso8601(Date.utc_today())
+      params = load_with(bypass, nil, Date.utc_today().year + 5, @home)
+
+      assert params["primary_release_date.lte"] == source_lte
+    end
   end
 end

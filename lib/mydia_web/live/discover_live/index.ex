@@ -1239,8 +1239,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
-    Keyword.merge(base, Keyword.put(opts, :sort_by, assigns.sort_by))
+    base
+    |> Keyword.merge(Keyword.put(opts, :sort_by, assigns.sort_by), fn
+      key, source, user when key in [:release_date_gte, :release_date_lte] ->
+        narrow_release_bound(key, source, user)
+
+      _key, _source, user ->
+        user
+    end)
   end
+
+  # A year range narrows a regional source's release window, never widens it.
+  # Dates are ISO `YYYY-MM-DD`, so string order is date order.
+  defp narrow_release_bound(:release_date_gte, source, user), do: max(source, user)
+  defp narrow_release_bound(:release_date_lte, source, user), do: min(source, user)
 
   defp build_url_params(assigns, overrides) do
     params = %{"type" => to_string(assigns.media_type)}
