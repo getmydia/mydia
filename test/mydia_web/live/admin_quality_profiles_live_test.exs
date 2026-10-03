@@ -297,7 +297,7 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       |> render_submit()
 
       updated = Settings.get_quality_profile!(profile.id)
-      refute updated.quality_standards[:require_hdr]
+      assert updated.quality_standards[:require_hdr] == false
     end
   end
 end
