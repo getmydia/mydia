@@ -386,7 +386,6 @@ defmodule MydiaWeb.Live.UserAuth do
     |> MapSet.new()
   end
 
-  # Mount the current user from the session
   # A restriction change re-navigates the page to its own URL, so everything on
   # it is re-queried under the new scope. Only routed LiveViews take part: the
   # handle_params hook is how the URL is known, and it cannot be attached to a
@@ -423,6 +422,7 @@ defmodule MydiaWeb.Live.UserAuth do
     end
   end
 
+  # Mount the current user from the session
   defp mount_current_user(socket, session) do
     case session do
       %{"guardian_default_token" => token} ->

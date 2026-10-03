@@ -1148,9 +1148,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # load asks for a full page; "Load more" asks for a full page on top of what
   # is already on screen, so a click always buys roughly a page of new titles
   # however many of them turn out to be owned.
-  # Anything that drops results after the page arrives can strand the grid:
-  # "Hide in library", and any access restriction. A restricted page loses
-  # more per fetch, so it may go further before giving up.
   defp maybe_auto_advance(socket, advances, target) do
     cond do
       not filtering?(socket) ->
@@ -1171,9 +1168,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  # Anything that drops results after the page arrives can strand the grid:
+  # "Hide in library", and any access restriction.
   defp filtering?(socket),
     do: socket.assigns.hide_owned or Scope.restricted?(socket.assigns.current_scope)
 
+  # A restricted page loses more per fetch, so it may go further before giving
+  # up.
   defp advance_cap(socket) do
     if Scope.restricted?(socket.assigns.current_scope),
       do: @max_auto_advance_restricted,
