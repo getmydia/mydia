@@ -105,15 +105,12 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   end
 
   @doc """
-  Renders the Plugins tab: header, installed summary rows, and the store catalog.
-
-  Each installed plugin renders a compact summary row with provenance and
-  lifecycle actions. The catalog lists
-  available store entries with an Install action.
+  Renders the Plugins tab: the intro line and one compact summary row per
+  installed plugin, with provenance and lifecycle actions. The store lives in
+  `store_modal/1`.
   """
   attr :installed, :list, required: true
   attr :updates, :any, required: true
-  attr :browse, :any, default: nil, doc: "a Mydia.Plugins.Index.BrowseResult, nil before browsing"
 
   def plugins_tab(assigns) do
     ~H"""
@@ -133,34 +130,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.plugin_row :for={plugin <- @installed} plugin={plugin} updates={@updates} />
         </div>
       </div>
-
-      <%!-- Store catalog --%>
-      <div :if={@browse && @browse.error} id="browse-error" class="alert alert-error">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <span>Could not reach a plugin source: {@browse.error}</span>
-      </div>
-
-      <div
-        :if={@browse && is_nil(@browse.error) && @browse.status in [:empty, :all_installed]}
-        id="catalog-empty"
-        class="alert alert-info"
-      >
-        <.icon name="hero-information-circle" class="w-5 h-5" />
-        <span>{empty_catalog_message(@browse)}</span>
-      </div>
-
-      <div :if={@browse && @browse.status == :available} id="plugin-catalog" class="space-y-2">
-        <h3 class="text-base font-semibold">Available</h3>
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.catalog_row :for={entry <- @browse.catalog} entry={entry} />
-        </div>
-      </div>
     </div>
     """
   end
-
-  defp empty_catalog_message(%{status: :all_installed}),
-    do: "Every plugin in the store is already installed."
 
   defp empty_catalog_message(%{source_count: count}) when count > 1,
     do: "The plugin store has no plugins yet (checked #{count} sources)."
@@ -182,6 +154,64 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       <span :if={@browsing?} class="loading loading-spinner loading-xs"></span>
       <.icon :if={!@browsing?} name="hero-squares-plus" class="w-4 h-4" /> Browse store
     </.button>
+    """
+  end
+
+  @doc """
+  The store modal. It opens on every Browse store click and renders the
+  loading, error, empty and populated states inside itself.
+  """
+  attr :browse, :any,
+    required: true,
+    doc: "a Mydia.Plugins.Index.BrowseResult, nil while browsing"
+
+  def store_modal(assigns) do
+    ~H"""
+    <div
+      id="store-modal"
+      class="modal modal-open"
+      phx-window-keydown="close_store"
+      phx-key="Escape"
+    >
+      <div class="modal-box max-w-2xl">
+        <h3 class="text-lg font-bold flex items-center gap-2">
+          <.icon name="hero-squares-plus" class="w-5 h-5" /> Plugin store
+        </h3>
+
+        <div :if={is_nil(@browse)} id="store-loading" class="flex justify-center py-10">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <div :if={@browse} class="mt-4 space-y-3">
+          <div :if={@browse.error} id="browse-error" class="alert alert-error">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+            <span>Could not reach a plugin source: {@browse.error}</span>
+          </div>
+
+          <div
+            :if={is_nil(@browse.error) and @browse.status == :empty}
+            id="catalog-empty"
+            class="alert alert-info"
+          >
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>{empty_catalog_message(@browse)}</span>
+          </div>
+
+          <div
+            :if={@browse.status == :available}
+            id="plugin-catalog"
+            class="bg-base-200 rounded-box divide-y divide-base-300"
+          >
+            <.catalog_row :for={item <- @browse.catalog} item={item} />
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <.button id="close-store" class="btn btn-ghost" phx-click="close_store">Close</.button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="close_store"></div>
+    </div>
     """
   end
 
@@ -374,36 +404,54 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
   defp settings_disabled_reason(_plugin), do: nil
 
-  @doc "A compact summary row for one store catalog entry."
-  attr :entry, :map, required: true
+  @doc "One store entry with the action its install state allows."
+  attr :item, Mydia.Plugins.Index.CatalogItem, required: true
 
   def catalog_row(assigns) do
     ~H"""
     <div
-      id={"catalog-row-#{@entry.slug}"}
+      id={"catalog-row-#{@item.entry.slug}"}
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4"
     >
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="font-medium">{@entry.name}</span>
-          <span class="text-xs text-base-content/50">v{@entry.version}</span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-medium">{@item.entry.name}</span>
+          <span class="text-xs text-base-content/50">v{@item.entry.version}</span>
+          <span
+            :if={@item.installed_version && @item.installed_version != @item.entry.version}
+            class="text-xs text-base-content/50"
+          >
+            (installed v{@item.installed_version})
+          </span>
         </div>
-        <p :if={@entry.description} class="text-sm text-base-content/70 truncate">
-          {@entry.description}
+        <p :if={@item.entry.description} class="text-sm text-base-content/70 truncate">
+          {@item.entry.description}
         </p>
       </div>
+      <span
+        :if={@item.state in [:installed, :bundled]}
+        id={"catalog-state-#{@item.entry.slug}"}
+        class="badge badge-sm badge-ghost"
+      >
+        {if(@item.state == :bundled, do: "Bundled", else: "Installed")}
+      </span>
       <.button
-        id={"install-#{@entry.slug}"}
+        :if={@item.state in [:not_installed, :update, :replace]}
+        id={"install-#{@item.entry.slug}"}
         variant="primary"
         class="btn btn-primary btn-sm"
         phx-click="review_install"
-        phx-value-slug={@entry.slug}
+        phx-value-slug={@item.entry.slug}
       >
-        Install
+        {install_label(@item)}
       </.button>
     </div>
     """
   end
+
+  defp install_label(%{state: :update, entry: entry}), do: "Update to v#{entry.version}"
+  defp install_label(%{state: :replace}), do: "Install store version"
+  defp install_label(_item), do: "Install"
 
   @doc """
   The capability-approval modal: the emphasized surface.

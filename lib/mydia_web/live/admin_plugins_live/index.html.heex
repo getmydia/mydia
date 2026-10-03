@@ -6,8 +6,12 @@
     <MydiaWeb.AdminPluginsLive.Components.plugins_tab
       installed={@installed}
       updates={@updates}
-      browse={@browse}
     />
+
+    <%!-- Store modal: always opens on Browse store; hidden while an approval is open --%>
+    <%= if @store_open? and is_nil(@approval) do %>
+      <MydiaWeb.AdminPluginsLive.Components.store_modal browse={@browse} />
+    <% end %>
 
     <%!-- Capability approval modal (the emphasized surface) --%>
     <%= if @approval do %>

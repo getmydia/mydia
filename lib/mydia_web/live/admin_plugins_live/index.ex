@@ -21,6 +21,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Index.CatalogItem
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
@@ -45,6 +46,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
      |> assign(:page_title, "Configuration - Plugins")
      |> assign(:browse, nil)
      |> assign(:browsing?, false)
+     |> assign(:store_open?, false)
      |> assign(:approval, nil)
      |> assign(:detail, nil)
      |> assign(:logs, nil)
@@ -60,25 +62,34 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   ## Store browsing (R13)
 
   @impl true
+  # A click while a browse is in flight still opens the store; the result fills
+  # it when it lands.
   def handle_event("browse_store", _params, %{assigns: %{browsing?: true}} = socket),
-    do: {:noreply, socket}
+    do: {:noreply, assign(socket, :store_open?, true)}
 
   def handle_event("browse_store", _params, socket) do
     # Computed outside the closure so the task does not copy the socket.
-    slugs = Enum.map(socket.assigns.installed, & &1.slug)
+    installed = socket.assigns.installed
 
     {:noreply,
      socket
-     |> assign(browsing?: true, browse: nil)
-     |> start_async(:browse, fn -> Index.browse(slugs) end)}
+     |> assign(store_open?: true, browsing?: true, browse: nil)
+     |> start_async(:browse, fn -> Index.browse(installed) end)}
+  end
+
+  def handle_event("close_store", _params, socket) do
+    {:noreply, assign(socket, store_open?: false, browse: nil)}
   end
 
   ## Capability approval (KTD6, AE1)
 
   def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(catalog_of(socket.assigns.browse), &(&1.slug == slug)) do
-      nil -> {:noreply, socket}
-      entry -> {:noreply, assign(socket, :approval, approval_from_entry(entry))}
+    case Enum.find(catalog_of(socket.assigns.browse), &(&1.entry.slug == slug)) do
+      nil ->
+        {:noreply, socket}
+
+      %CatalogItem{entry: entry} ->
+        {:noreply, assign(socket, :approval, approval_from_entry(entry))}
     end
   end
 
@@ -113,6 +124,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
           |> assign(:browse, nil)
+          |> assign(:store_open?, false)
           |> load_installed()
 
         {:error, error} ->
@@ -431,6 +443,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       slug: config.slug,
       name: config.name,
       version: config.version,
+      source_url: config.source_url,
       enabled: config.enabled,
       source: :index,
       capabilities: capabilities,
