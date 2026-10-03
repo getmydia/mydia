@@ -22,6 +22,7 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
   # process, and OnDeck.list/2 queries from its caller.
   use Mydia.DataCase, async: false
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.Playback
@@ -109,14 +110,14 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
         watch(ctx.user, e1, ago(100 + n))
       end
 
-      small = count_queries.(fn -> OnDeck.list(ctx.user.id, now: now()) end)
+      small = count_queries.(fn -> OnDeck.list(Scope.for_user(ctx.user), now: now()) end)
 
       for n <- 4..15 do
         {_show, [e1, _e2]} = show_with_episodes(2, "Large #{n}")
         watch(ctx.user, e1, ago(100 + n))
       end
 
-      large = count_queries.(fn -> OnDeck.list(ctx.user.id, now: now()) end)
+      large = count_queries.(fn -> OnDeck.list(Scope.for_user(ctx.user), now: now()) end)
 
       assert small == large,
              "expected a constant query count, got #{small} for 3 shows and #{large} for 15"
@@ -158,7 +159,7 @@ defmodule Mydia.Playback.OnDeckQueryCountTest do
         nil
       )
 
-      [entry] = OnDeck.list(ctx.user.id, now: now())
+      [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       :telemetry.detach("on-deck-file-rows-#{inspect(ref)}")
 
       file_rows =

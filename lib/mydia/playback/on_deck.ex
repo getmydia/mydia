@@ -26,8 +26,9 @@ defmodule Mydia.Playback.OnDeck do
 
   import Ecto.Query
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Library.{MediaFile, MediaFileEpisode}
-  alias Mydia.Media.{Episode, MediaItem}
+  alias Mydia.Media.{Episode, MediaItem, Restrictions}
   alias Mydia.Playback.{Dismissal, NextEpisode, OnDeckEntry, Progress}
   alias Mydia.Repo
 
@@ -45,9 +46,14 @@ defmodule Mydia.Playback.OnDeck do
     * `:min_position_seconds` - the viewing floor (default #{@default_min_position_seconds})
     * `:max_age_days` - the recency window (default #{@default_max_age_days})
     * `:now` - the clock, injectable so tests need not manipulate real time
+
+  Only titles visible under `scope` appear. Progress is recorded regardless of
+  visibility (watch sync writes under `Scope.system()`), so filtering here,
+  before the limit, is what keeps a hidden title off the rail without
+  shortening it.
   """
-  @spec list(binary(), keyword()) :: [OnDeckEntry.t()]
-  def list(user_id, opts \\ []) do
+  @spec list(Scope.t(), keyword()) :: [OnDeckEntry.t()]
+  def list(%Scope{user: %{id: user_id}} = scope, opts \\ []) do
     limit = Keyword.get(opts, :limit, @default_limit)
     min_position = Keyword.get(opts, :min_position_seconds, @default_min_position_seconds)
     max_age_days = Keyword.get(opts, :max_age_days, @default_max_age_days)
@@ -64,7 +70,8 @@ defmodule Mydia.Playback.OnDeck do
     # Ranked on lean rows, then hydrated: only the entries that make the rail
     # get their full episode and file rows. Loading them for every episode of
     # every engaged show cost ~200ms and 8MB on a real library to return ten.
-    (movie_candidates(counting) ++ show_candidates(counting, user_id, min_position))
+    (movie_candidates(counting, scope) ++
+       show_candidates(counting, user_id, min_position, scope))
     |> Enum.reject(&dismissed?(&1, dismissals))
     |> Enum.sort_by(&sort_key/1, :desc)
     |> Enum.take(limit)
@@ -109,7 +116,7 @@ defmodule Mydia.Playback.OnDeck do
 
   # Candidates carry `files: []` until `hydrate/1`. The has-a-file test that
   # used to read the loaded files is a membership check on ids instead.
-  defp movie_candidates(counting) do
+  defp movie_candidates(counting, scope) do
     candidates =
       Enum.filter(counting, fn progress ->
         not is_nil(progress.media_item_id) and progress.watched == false and
@@ -117,7 +124,7 @@ defmodule Mydia.Playback.OnDeck do
       end)
 
     ids = Enum.map(candidates, & &1.media_item_id)
-    movies = ids |> load_media_items() |> Map.new(&{&1.id, &1})
+    movies = ids |> load_media_items(scope) |> Map.new(&{&1.id, &1})
     playable = movie_ids_with_files(ids)
 
     for progress <- candidates,
@@ -134,7 +141,7 @@ defmodule Mydia.Playback.OnDeck do
     end
   end
 
-  defp show_candidates(counting, user_id, min_position) do
+  defp show_candidates(counting, user_id, min_position, scope) do
     episode_rows = Enum.filter(counting, &(not is_nil(&1.episode_id)))
     episode_ids = Enum.map(episode_rows, & &1.episode_id)
     episode_to_show = load_episode_show_ids(episode_ids)
@@ -148,7 +155,7 @@ defmodule Mydia.Playback.OnDeck do
       end)
 
     show_ids = Map.keys(sort_at_by_show)
-    shows = show_ids |> load_media_items() |> Map.new(&{&1.id, &1})
+    shows = show_ids |> load_media_items(scope) |> Map.new(&{&1.id, &1})
     episodes_by_show = load_playable_episodes(show_ids)
 
     all_episode_ids =
@@ -259,10 +266,14 @@ defmodule Mydia.Playback.OnDeck do
     |> Map.new()
   end
 
-  defp load_media_items([]), do: []
+  defp load_media_items([], _scope), do: []
 
-  defp load_media_items(ids) do
-    Repo.all(from(m in MediaItem, where: m.id in ^ids))
+  # Visibility is applied here, at candidate time, so a hidden title never
+  # becomes a candidate and cannot take one of the caller's slots.
+  defp load_media_items(ids, scope) do
+    from(m in MediaItem, where: m.id in ^ids)
+    |> Restrictions.apply(scope)
+    |> Repo.all()
   end
 
   defp movie_ids_with_files([]), do: MapSet.new()

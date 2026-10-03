@@ -200,6 +200,25 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     end
   end
 
+  test "a restricted viewer's rails omit a hidden show they started", ctx do
+    {:ok, _} =
+      Mydia.Media.update_category(Mydia.Accounts.Scope.system(), ctx.show, "tv_show",
+        override: true
+      )
+
+    restricted =
+      AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+    [e1 | _] = ctx.episodes
+    :changed = Playback.ensure_watched(restricted.id, episode_id: e1.id)
+
+    assert {:ok, %{data: %{"continueWatching" => []}}} =
+             run_query(@query, %{"first" => 10}, restricted)
+
+    assert {:ok, %{data: %{"upNext" => []}}} =
+             run_query(@up_next_query, %{"first" => 10}, restricted)
+  end
+
   describe "removeFromContinueWatching" do
     @remove_mutation """
     mutation Remove($mediaItemId: ID!) {
