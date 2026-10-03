@@ -115,6 +115,7 @@ import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
 import 'session/playback_session.dart';
+import 'player_key_bindings.dart';
 import 'session/playback_session_types.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_preference.dart';
@@ -127,46 +128,13 @@ export '../../../core/player/resume_plan.dart'
         kEndOfMediaThresholdSeconds,
         kWatchedThreshold,
         shouldOfferResume;
+export 'player_key_bindings.dart'
+    show ArrowIntent, BackAction, handleEpisodeNavKey;
 
 /// How many times a subtitle preference may retake a one-shot a track-list
 /// revision superseded. Three is well past any revision count media_kit
 /// produces in practice; it is a stop, not a budget.
 const int _maxPreferenceApplyRetries = 3;
-
-/// What an arrow key press means in the player.
-///
-/// A remote's D-pad and a keyboard's arrows deliver the same key codes, so one
-/// handler serves both, but they cannot mean the same thing. A keyboard viewer
-/// has a pointer and a volume slider; a remote viewer has neither, and the
-/// only focusable things on screen are the OSD controls, which are not there
-/// while the OSD is hidden.
-enum ArrowIntent {
-  seekBackward,
-  seekForward,
-
-  /// Start or continue a D-pad scrub: the directional-tier answer for left
-  /// and right with the OSD hidden. A remote has no pointer to drag the bar
-  /// with, so the press reveals the OSD and moves a cursor instead of seeking.
-  scrubBackward,
-  scrubForward,
-  volumeUp,
-  volumeDown,
-
-  /// Show the OSD. The directional-tier answer for up and down, which have no
-  /// volume to change: on a television that belongs to the remote and the
-  /// receiver, and binding it means one press changes two volumes.
-  revealChrome,
-
-  /// Let the key fall through to focus traversal, so it walks the OSD's
-  /// controls. Returning this means the handler must report `ignored`.
-  traverse,
-}
-
-/// What a Back press does in the player.
-///
-/// On a remote, Back is the only way out of anything, so it peels one layer
-/// at a time. Everywhere else it leaves the player.
-enum BackAction { cancelScrub, hideChrome, pop }
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String mediaId;
@@ -301,30 +269,12 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required LogicalKeyboardKey key,
     required bool directionalPrimary,
     required bool chromeVisible,
-  }) {
-    if (directionalPrimary && chromeVisible) return ArrowIntent.traverse;
-
-    switch (key) {
-      case LogicalKeyboardKey.arrowLeft:
-        return directionalPrimary
-            ? ArrowIntent.scrubBackward
-            : ArrowIntent.seekBackward;
-      case LogicalKeyboardKey.arrowRight:
-        return directionalPrimary
-            ? ArrowIntent.scrubForward
-            : ArrowIntent.seekForward;
-      case LogicalKeyboardKey.arrowUp:
-        return directionalPrimary
-            ? ArrowIntent.revealChrome
-            : ArrowIntent.volumeUp;
-      case LogicalKeyboardKey.arrowDown:
-        return directionalPrimary
-            ? ArrowIntent.revealChrome
-            : ArrowIntent.volumeDown;
-      default:
-        return ArrowIntent.traverse;
-    }
-  }
+  }) =>
+      arrowIntentFor(
+        key: key,
+        directionalPrimary: directionalPrimary,
+        chromeVisible: chromeVisible,
+      );
 
   /// Resolves a Back press for this input tier and state.
   ///
@@ -336,12 +286,12 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required bool directionalPrimary,
     required bool scrubActive,
     required bool chromeBlocksBack,
-  }) {
-    if (!directionalPrimary) return BackAction.pop;
-    if (scrubActive) return BackAction.cancelScrub;
-    if (chromeBlocksBack) return BackAction.hideChrome;
-    return BackAction.pop;
-  }
+  }) =>
+      backActionFor(
+        directionalPrimary: directionalPrimary,
+        scrubActive: scrubActive,
+        chromeBlocksBack: chromeBlocksBack,
+      );
 }
 
 /// Thrown by [_PlayerScreenState._openPlayerAndStart] when the load it is
@@ -5191,7 +5141,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_chromeFocusNode.hasFocus) _focusNode.requestFocus();
   }
 
-  /// Handle keyboard shortcuts (desktop only)
+  /// Handle keyboard shortcuts and remote keys. The decision is
+  /// [resolvePlayerKey]'s; this only reads the screen and executes it.
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     final player = _player;
     if (player == null) {
@@ -5204,26 +5155,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _upNextCountdown?.noteInput();
 
-    // Arrow keys mean different things depending on the input tier and
-    // whether the OSD is on screen. See `resolveArrowIntent`'s own dartdoc.
-    final arrow = PlayerScreen.resolveArrowIntent(
-      key: event.logicalKey,
-      directionalPrimary: InputCapabilities.directionalPrimary,
-      chromeVisible: _chromeVisibility.visible,
+    final command = resolvePlayerKey(
+      event,
+      PlayerKeyContext(
+        directionalPrimary: InputCapabilities.directionalPrimary,
+        chromeVisible: _chromeVisibility.visible,
+        chromeHasFocus: _chromeFocusNode.hasFocus,
+        hasNext: _hasNextEpisode,
+        hasPrevious: _hasPreviousEpisode,
+        upNextShowing: _showUpNext,
+        fullscreenAvailable: _fullscreen.available.value,
+        isFullscreen: _fullscreen.isFullscreen.value,
+        isDesktop: PlatformFeatures.isDesktop,
+        shiftPressed: HardwareKeyboard.instance.isShiftPressed,
+        volume: player.state.volume,
+      ),
     );
+    if (command == null) return KeyEventResult.ignored;
+    if (command is KeyEpisodeNav) {
+      return handleEpisodeNavKey(
+        event,
+        hasPreviousEpisode: _hasPreviousEpisode,
+        hasNextEpisode: _hasNextEpisode,
+        onPreviousEpisode: _playPreviousEpisode,
+        onNextEpisode: _playNextEpisode,
+      );
+    }
+    _runKeyCommand(player, command);
+    return KeyEventResult.handled;
+  }
 
-    switch (arrow) {
-      case ArrowIntent.seekBackward:
-        _skipBy(const Duration(seconds: -10));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.seekForward:
-        _skipBy(const Duration(seconds: 10));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.scrubBackward:
-      case ArrowIntent.scrubForward:
-        final forward = arrow == ArrowIntent.scrubForward;
+  void _runKeyCommand(Player player, PlayerKeyCommand command) {
+    switch (command) {
+      case KeySeekBy(:final offset):
+        _skipBy(offset);
+      case KeyScrub(:final forward):
         final started = _scrub.step(
           forward ? ScrubDirection.forward : ScrubDirection.backward,
           isRepeat: false,
@@ -5235,169 +5201,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Unknown runtime: a cursor has nothing to be a fraction of.
           _skipBy(Duration(seconds: forward ? 10 : -10));
         }
-        return KeyEventResult.handled;
-
-      case ArrowIntent.volumeUp:
-        player.setVolume((player.state.volume + 10.0).clamp(0.0, 100.0));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.volumeDown:
-        player.setVolume((player.state.volume - 10.0).clamp(0.0, 100.0));
-        return KeyEventResult.handled;
-
-      case ArrowIntent.revealChrome:
+      case KeySetVolume(:final volume):
+        player.setVolume(volume);
+      case KeyRevealChrome():
         _chromeVisibility.show();
         _osdPlayPauseFocus.requestFocus();
-        return KeyEventResult.handled;
-
-      case ArrowIntent.traverse:
-        // Falls through to the switch below, which handles the non-arrow
-        // keys. An arrow reaching here is deliberately left unhandled so
-        // focus traversal moves between the OSD's controls.
-        break;
-    }
-
-    switch (event.logicalKey) {
-      case LogicalKeyboardKey.space:
-        // Play/Pause
+      case KeyTogglePlay(:final revealChrome):
         player.playOrPause();
-        return KeyEventResult.handled;
-
-      // A remote's centre press. With the OSD hidden there is no focused
-      // control to receive it — the controls' own FocusHighlight is what
-      // handles select/enter normally — so OK would otherwise do nothing at
-      // all. Revealing and focusing is the same move the arrow keys make.
-      //
-      // Gated on the directional tier because the key handler also runs on
-      // desktop and web (`wantsKeyHandling` is true there via
-      // `supportsKeyboardShortcuts`), where Enter previously fell through to
-      // `ignored` and did nothing. A keyboard user pressing Enter over a
-      // hidden OSD has not asked for the OSD.
-      case LogicalKeyboardKey.select:
-      case LogicalKeyboardKey.enter:
-      case LogicalKeyboardKey.gameButtonA:
-        if (!InputCapabilities.directionalPrimary) {
-          return KeyEventResult.ignored;
-        }
-        if (_chromeFocusNode.hasFocus) return KeyEventResult.ignored;
-        _chromeVisibility.show();
-        _osdPlayPauseFocus.requestFocus();
-        return KeyEventResult.handled;
-
-      // A remote's transport buttons. The Chromecast remote's play/pause is
-      // the one that matters here; the rest arrive from fuller remotes and
-      // from desktop keyboards with a media row, which get them for free.
-      case LogicalKeyboardKey.mediaPlayPause:
-        player.playOrPause();
-        _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaPlay:
+        if (revealChrome) _chromeVisibility.show();
+      case KeyPlay():
         player.play();
         _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaPause:
+      case KeyPause():
         player.pause();
         _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaFastForward:
+      case KeyMediaSkip(:final offset):
         final position = _timeline.toReal(player.state.position);
-        final duration = _timeline.resolveDuration(player.state.duration);
-        final target = position + const Duration(seconds: 30);
-        seekToReal(target > duration ? duration : target);
+        final target = position + offset;
+        if (offset.isNegative) {
+          seekToReal(target < Duration.zero ? Duration.zero : target);
+        } else {
+          final duration = _timeline.resolveDuration(player.state.duration);
+          seekToReal(target > duration ? duration : target);
+        }
         _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaRewind:
-        final position = _timeline.toReal(player.state.position);
-        final target = position - const Duration(seconds: 30);
-        seekToReal(target < Duration.zero ? Duration.zero : target);
-        _chromeVisibility.show();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaTrackNext:
-        if (!_hasNextEpisode) return KeyEventResult.ignored;
+      case KeyNextEpisode():
         _playNextEpisode();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.mediaTrackPrevious:
-        if (!_hasPreviousEpisode) return KeyEventResult.ignored;
+      case KeyPreviousEpisode():
         _playPreviousEpisode();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyF:
-      case LogicalKeyboardKey.f11:
-        // Gated on the same signal as the button, so the two cannot disagree
-        // about whether fullscreen exists. Claiming the key while doing nothing
-        // would swallow it from anything else that wants it.
-        if (!_fullscreen.available.value) return KeyEventResult.ignored;
+      case KeyEpisodeNav():
+        // Answered by _handleKeyEvent before reaching here.
+        break;
+      case KeyToggleFullscreen():
         _fullscreen.toggle();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyT:
-        if (!PlatformFeatures.isDesktop) return KeyEventResult.ignored;
+      case KeyExitFullscreen():
+        _fullscreen.exit();
+      case KeyToggleAlwaysOnTop():
         _toggleAlwaysOnTop();
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyM:
-        // Toggle mute
-        if (player.state.volume > 0) {
-          player.setVolume(0.0);
-        } else {
-          player.setVolume(100.0);
-        }
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.keyZ:
-        // mpv's own subtitle-delay binding: z earlier, shift+z later. A
-        // no-op with no track selected or the offsets query never having
-        // succeeded -- see [_nudgeSubtitleDelay].
-        if (HardwareKeyboard.instance.isShiftPressed) {
-          _nudgeSubtitleDelay(100);
-        } else {
-          _nudgeSubtitleDelay(-100);
-        }
-        return KeyEventResult.handled;
-
-      case LogicalKeyboardKey.escape:
-        // The prompt takes the first branch: while it is up, Escape means
-        // "not this", not "leave fullscreen". This case already returned
-        // `handled` unconditionally, so nothing downstream changes.
-        if (_showUpNext) {
-          _cancelAutoPlay();
-          return KeyEventResult.handled;
-        }
-        if (_fullscreen.isFullscreen.value) {
-          _fullscreen.exit();
-        }
-        return KeyEventResult.handled;
-
-      // Previous/next episode. This is the only reachable path to episode
-      // navigation on a narrow window: below `PanelMetrics.touchTargets`'s
-      // breakpoint, `ChromePanel`'s in-bar transport drops to play/pause
-      // only (see `TransportSurface.compact`), and that gate is on viewport
-      // *width*, not `PlatformFeatures.isMobile` — so a narrowed desktop or
-      // web browser window loses the in-bar buttons too, with no
-      // `UpNextOverlay` (autoplay-only, next-episode-only) or touch gesture
-      // to fall back on. This actually covers web now that
-      // `PlatformFeatures.supportsKeyboardShortcuts` includes it (see that
-      // getter's own dartdoc) — previously this whole `Focus`/`onKeyEvent`
-      // wrapper was desktop-only, so a narrowed *web* window had no
-      // fallback at all, keyboard or otherwise.
-      case LogicalKeyboardKey.pageUp:
-      case LogicalKeyboardKey.pageDown:
-        return handleEpisodeNavKey(
-          event,
-          hasPreviousEpisode: _hasPreviousEpisode,
-          hasNextEpisode: _hasNextEpisode,
-          onPreviousEpisode: _playPreviousEpisode,
-          onNextEpisode: _playNextEpisode,
-        );
-
-      default:
-        return KeyEventResult.ignored;
+      case KeyNudgeSubtitle(:final deltaMs):
+        _nudgeSubtitleDelay(deltaMs);
+      case KeyCancelUpNext():
+        _cancelAutoPlay();
+      case KeyConsumed():
+        break;
     }
   }
 
@@ -6633,55 +6479,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final resolved = _timeline.resolveDuration(player.state.duration);
     return resolved > Duration.zero ? resolved : null;
-  }
-}
-
-/// Pure `PageUp`/`PageDown` episode-navigation key handling, extracted from
-/// `_PlayerScreenState._handleKeyEvent` so it can be unit-tested directly.
-///
-/// `_handleKeyEvent`'s other cases (`space`, arrows, `keyF`, `keyM`,
-/// `escape`) all reach directly into a real media_kit [Player] or call
-/// `setState`/native fullscreen APIs, and `PlayerScreen` itself is a
-/// `ConsumerStatefulWidget` that creates its own real [Player] and depends on
-/// Riverpod/GraphQL providers with no existing test harness — pumping the
-/// full screen to test one `switch` case is impractical. This case is the
-/// one exception: it only needs two booleans and two callbacks, so it is
-/// pulled out as a free function that takes those as parameters instead of
-/// closing over `State` fields, making it directly testable with a
-/// synthetic [KeyEvent] and no widget tree at all.
-///
-/// Mirrors exactly what the in-bar previous/next-episode buttons do
-/// (`TransportSurface`'s `onPreviousEpisode`/`onNextEpisode`, gated the same
-/// way by [hasPreviousEpisode]/[hasNextEpisode]) — this key handler is a
-/// fallback for when those buttons aren't reachable (see the call site's own
-/// comment), not a separate, independently-gated feature.
-@visibleForTesting
-KeyEventResult handleEpisodeNavKey(
-  KeyEvent event, {
-  required bool hasPreviousEpisode,
-  required bool hasNextEpisode,
-  required VoidCallback onPreviousEpisode,
-  required VoidCallback onNextEpisode,
-}) {
-  if (event is! KeyDownEvent) {
-    return KeyEventResult.ignored;
-  }
-
-  switch (event.logicalKey) {
-    case LogicalKeyboardKey.pageUp:
-      if (hasPreviousEpisode) {
-        onPreviousEpisode();
-      }
-      return KeyEventResult.handled;
-
-    case LogicalKeyboardKey.pageDown:
-      if (hasNextEpisode) {
-        onNextEpisode();
-      }
-      return KeyEventResult.handled;
-
-    default:
-      return KeyEventResult.ignored;
   }
 }
 
