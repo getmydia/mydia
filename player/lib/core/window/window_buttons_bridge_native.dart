@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import 'window_buttons_hidden.dart';
@@ -43,6 +44,35 @@ bool shouldCallNativeButtonBridge({
 }) =>
     platform == TargetPlatform.macOS && !(hidden && isFullscreen);
 
+bool? _pendingHidden;
+
+/// Writes [windowButtonsHiddenSignal], after the frame when the widget tree
+/// is locked.
+///
+/// [ChromeVisibility]'s `dispose()` restores the buttons while the player
+/// route unmounts, which runs inside `BuildOwner.finalizeTree`. A synchronous
+/// write there rebuilds the Linux title row's `ValueListenableBuilder` under
+/// the build lock and trips "setState() or markNeedsBuild() called when
+/// widget tree was locked". The latest request wins: a write outside a frame
+/// supersedes one still waiting for its frame to end.
+@visibleForTesting
+void publishWindowButtonsHidden(bool hidden) {
+  if (SchedulerBinding.instance.schedulerPhase !=
+      SchedulerPhase.persistentCallbacks) {
+    _pendingHidden = null;
+    windowButtonsHiddenSignal.value = hidden;
+    return;
+  }
+  final alreadyScheduled = _pendingHidden != null;
+  _pendingHidden = hidden;
+  if (alreadyScheduled) return;
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    final pending = _pendingHidden;
+    _pendingHidden = null;
+    if (pending != null) windowButtonsHiddenSignal.value = pending;
+  });
+}
+
 /// Hides or shows the window's close/minimize/maximize buttons.
 ///
 /// Writes the app-wide signal on every platform, which is what the
@@ -52,7 +82,7 @@ bool shouldCallNativeButtonBridge({
 /// Fire-and-forget: callers do not await this, so any failure is caught and
 /// logged here rather than propagating.
 void setWindowButtonsHidden(bool hidden) {
-  windowButtonsHiddenSignal.value = hidden;
+  publishWindowButtonsHidden(hidden);
 
   if (!shouldCallNativeButtonBridge(
     platform: defaultTargetPlatform,

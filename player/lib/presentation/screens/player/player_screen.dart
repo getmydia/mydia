@@ -3415,6 +3415,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _onPlaybackError(String message) {
     debugPrint('[PlayerScreen] Playback error: $message');
     if (!mounted) return;
+    // mpv plays on without sound; neither a fault nor an error page.
+    if (audioOutputUnavailable(message)) return;
 
     // A direct or copy source reports faults to the policy so it can fall
     // back. Only a fallback that fails reaches the error page.

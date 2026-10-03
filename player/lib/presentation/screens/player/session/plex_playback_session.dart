@@ -167,6 +167,11 @@ class PlexStreamResolver implements StreamResolver {
           if (height != null)
             'videoResolution': '${(height * 16 / 9).round()}x$height',
           // Plex reads X-Plex-* parameters from the query as well as headers.
+          // PMS picks a base profile from X-Plex-Platform and has none for
+          // Linux or macOS: the decision answers 400 "unable to find a
+          // matching profile" there. Generic exists for every platform, and
+          // the extra below says what this device actually decodes.
+          'X-Plex-Client-Profile-Name': 'Generic',
           'X-Plex-Client-Profile-Extra': plexProfileExtra(profile),
         };
         final decision = await client.container(

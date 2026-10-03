@@ -88,6 +88,9 @@ void main() {
     expect(url.queryParameters['directStream'], '0');
     expect(url.queryParameters['maxVideoBitrate'], '4000');
     expect(url.queryParameters['videoResolution'], '1280x720');
+    // PMS has no platform profile for Linux or macOS and refuses those
+    // without a named one.
+    expect(url.queryParameters['X-Plex-Client-Profile-Name'], 'Generic');
     expect(url.queryParameters['session'], transport.sessionId);
     expect(o.server.requests.map((r) => r.url.path),
         contains('/video/:/transcode/universal/decision'));
