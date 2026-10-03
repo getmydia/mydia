@@ -1,4 +1,4 @@
-library connection_provider;
+library;
 
 import 'dart:async';
 

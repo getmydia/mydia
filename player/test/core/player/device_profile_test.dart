@@ -34,7 +34,8 @@ void main() {
       expect(header, isNot(contains('=')));
 
       final decoded = jsonDecode(
-          utf8.decode(base64Url.decode(base64Url.normalize(header))));
+        utf8.decode(base64Url.decode(base64Url.normalize(header))),
+      ) as Map<String, Object?>;
       expect(decoded['containers'], ['mkv']);
     });
 

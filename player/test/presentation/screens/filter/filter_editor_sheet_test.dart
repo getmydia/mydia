@@ -88,7 +88,7 @@ void main() {
     await _pumpEditor(
       tester,
       store: store,
-      initialFilter: MediaFilter(
+      initialFilter: const MediaFilter(
         kind: MediaKind.movies,
         category: MediaCategoryFilter.animeMovie,
         watch: WatchScope.all,

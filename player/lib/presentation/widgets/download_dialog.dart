@@ -75,14 +75,27 @@ class _DownloadDialogState extends State<DownloadDialog> {
                   ),
             ),
             const SizedBox(height: 12),
-            ...widget.files.map((file) => _buildQualityOption(file)),
+            RadioGroup<MediaFile>(
+              groupValue: _selectedFile,
+              onChanged: (value) {
+                setState(() {
+                  _selectedFile = value;
+                });
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...widget.files.map((file) => _buildQualityOption(file)),
+                ],
+              ),
+            ),
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(
+          child: const Text(
             'Cancel',
             style: TextStyle(color: AppColors.textSecondary),
           ),
@@ -114,7 +127,9 @@ class _DownloadDialogState extends State<DownloadDialog> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.2) : AppColors.surfaceVariant,
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.2)
+              : AppColors.surfaceVariant,
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
             width: 2,
@@ -125,12 +140,6 @@ class _DownloadDialogState extends State<DownloadDialog> {
           children: [
             Radio<MediaFile>(
               value: file,
-              groupValue: _selectedFile,
-              onChanged: (value) {
-                setState(() {
-                  _selectedFile = value;
-                });
-              },
               activeColor: AppColors.primary,
             ),
             const SizedBox(width: 8),
@@ -155,7 +164,7 @@ class _DownloadDialogState extends State<DownloadDialog> {
               ),
             ),
             if (isSelected)
-              Icon(
+              const Icon(
                 Icons.check_circle,
                 color: AppColors.primary,
               ),

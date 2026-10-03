@@ -8,12 +8,18 @@ linter:
     - avoid_print
     - avoid_unnecessary_containers
     - use_key_in_widget_constructors
+    - avoid_dynamic_calls
+    - unawaited_futures
+    - close_sinks
+    - cancel_subscriptions
+    - only_throw_errors
 
 analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.graphql.dart"
+    - "lib/native/frb_generated*.dart"
     - "rust_builder/cargokit/**"
     - build/**
     - android/**
@@ -24,3 +30,7 @@ analyzer:
     - linux/**
   errors:
     invalid_annotation_target: ignore
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true

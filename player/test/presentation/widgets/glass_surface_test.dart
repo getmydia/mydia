@@ -134,7 +134,7 @@ void main() {
 
     testWidgets('still wraps in a RepaintBoundary', (tester) async {
       await tester.pumpWidget(
-        _host(GlassSurface.faux(child: const SizedBox())),
+        _host(const GlassSurface.faux(child: SizedBox())),
       );
       expect(
         find.ancestor(
@@ -148,12 +148,12 @@ void main() {
     testWidgets('showRim: false drops the rim border', (tester) async {
       await tester.pumpWidget(
         _host(
-          GlassSurface.faux(
+          const GlassSurface.faux(
             showRim: false,
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [Colors.black, Colors.transparent],
             ),
-            child: const SizedBox(),
+            child: SizedBox(),
           ),
         ),
       );
@@ -177,7 +177,7 @@ void main() {
             mainAxisSize: MainAxisSize.min,
             children: [
               GlassSurface.appBar(child: const Text('real')),
-              GlassSurface.faux(child: const Text('faux')),
+              const GlassSurface.faux(child: Text('faux')),
             ],
           ),
         ),

@@ -14,7 +14,8 @@ import 'playback_progress_store.dart';
 /// to rebuild it.
 final playbackProgressStoreProvider =
     FutureProvider<PlaybackProgressStore>((ref) async {
-  final box = await Hive.openBox<Map>(HivePlaybackProgressStore.boxName);
+  final box = await Hive.openBox<Map<dynamic, dynamic>>(
+      HivePlaybackProgressStore.boxName);
   return HivePlaybackProgressStore(box);
 });
 

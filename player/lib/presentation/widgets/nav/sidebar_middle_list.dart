@@ -43,10 +43,11 @@ class SidebarMiddleList extends StatelessWidget {
   /// Builds the row body. [editingTrailing] is null outside edit mode.
   final Widget Function(SidebarEditRow row, {Widget? editingTrailing}) buildRow;
 
-  /// Raw `ReorderableListView` indices into [rows], passed through with no
-  /// arithmetic. `SidebarLayout.orderAfterReorder` performs the
-  /// newIndex-past-oldIndex adjustment itself; doing it here too would be a
-  /// second adjustment and an off-by-one on downward drags.
+  /// `ReorderableListView.onReorderItem` indices into [rows], passed through
+  /// with no arithmetic. `newIndex` is already the row's final position (the
+  /// list adjusts for the removed row), so adjusting it here or in
+  /// `SidebarLayout.orderAfterReorder` would be an off-by-one on downward
+  /// drags.
   final void Function(int oldIndex, int newIndex) onReorder;
 
   final void Function(String id) onRestore;
@@ -103,7 +104,7 @@ class SidebarMiddleList extends StatelessWidget {
       padding: EdgeInsets.zero,
       buildDefaultDragHandles: false,
       itemCount: rows.length,
-      onReorder: onReorder,
+      onReorderItem: onReorder,
       itemBuilder: (context, index) {
         final row = rows[index];
 

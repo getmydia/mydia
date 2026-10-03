@@ -225,7 +225,7 @@ class _SidebarRowState extends State<SidebarRow> {
           ignoring: !showMenu,
           child: PopupMenuButton<String>(
             padding: EdgeInsets.zero,
-            icon: Icon(
+            icon: const Icon(
               Icons.more_vert,
               size: 20,
               color: AppColors.textSecondary,

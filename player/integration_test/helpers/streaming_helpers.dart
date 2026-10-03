@@ -81,36 +81,44 @@ class StreamingTestHelper {
     try {
       final response = await _api.graphqlRequest(query, {});
 
-      if (response['errors'] != null) {
+      if (response.field<Object?>('errors') != null) {
         return null;
       }
 
-      final edges = response['data']['movies']['edges'] as List?;
-      if (edges == null || edges.isEmpty) {
+      final movies = response.object('data').object('movies');
+      if (movies.field<Object?>('edges') == null) {
+        return null;
+      }
+      final edges = movies.list('edges');
+      if (edges.isEmpty) {
         return null;
       }
 
       // Find the test video
       for (final edge in edges) {
-        final movie = edge['node'];
-        final title = movie['title'] as String?;
+        final movie = edge.object('node');
+        final title = movie.field<String?>('title');
         if (title != null && title.contains('E2E Test')) {
-          final files = movie['files'] as List?;
-          if (files != null && files.isNotEmpty) {
-            _testMediaItemId = movie['id'] as String;
-            _testMediaFileId = files.first['id'] as String;
-            return _testMediaFileId;
+          if (movie.field<Object?>('files') != null) {
+            final files = movie.list('files');
+            if (files.isNotEmpty) {
+              _testMediaItemId = movie.field<String>('id');
+              _testMediaFileId = files.first.field<String>('id');
+              return _testMediaFileId;
+            }
           }
         }
       }
 
       // If no E2E test video found, use the first available
-      final firstMovie = edges.first['node'];
-      final files = firstMovie['files'] as List?;
-      if (files != null && files.isNotEmpty) {
-        _testMediaItemId = firstMovie['id'] as String;
-        _testMediaFileId = files.first['id'] as String;
-        return _testMediaFileId;
+      final firstMovie = edges.first.object('node');
+      if (firstMovie.field<Object?>('files') != null) {
+        final files = firstMovie.list('files');
+        if (files.isNotEmpty) {
+          _testMediaItemId = firstMovie.field<String>('id');
+          _testMediaFileId = files.first.field<String>('id');
+          return _testMediaFileId;
+        }
       }
 
       return null;
@@ -144,22 +152,21 @@ class StreamingTestHelper {
       'strategy': strategy,
     });
 
-    if (response['errors'] != null) {
-      final errors = response['errors'] as List;
-      throw Exception('Failed to start streaming: ${errors.first['message']}');
+    if (response.field<Object?>('errors') != null) {
+      final errors = response.list('errors');
+      throw Exception(
+          'Failed to start streaming: ${errors.first.field<Object?>('message')}');
     }
 
-    final data = response['data']['startStreamingSession'];
-    final sessionId = data['sessionId'] as String;
+    final data = response.object('data').object('startStreamingSession');
+    final sessionId = data.field<String>('sessionId');
     // Construct HLS URL client-side from session ID
     final hlsUrl = '$_mydiaUrl/api/v1/hls/$sessionId/index.m3u8';
 
     return StreamingSession(
       sessionId: sessionId,
       hlsUrl: hlsUrl,
-      duration: data['duration'] != null
-          ? (data['duration'] as num).toDouble()
-          : null,
+      duration: data.field<num?>('duration')?.toDouble(),
       fileId: fileId,
     );
   }
@@ -202,7 +209,7 @@ class StreamingTestHelper {
         // Connection errors are expected while stream initializes
       }
 
-      await Future.delayed(retryDelay);
+      await Future<void>.delayed(retryDelay);
     }
 
     return false;
@@ -250,7 +257,7 @@ class StreamingTestHelper {
         // Connection errors are expected while stream initializes
       }
 
-      await Future.delayed(retryDelay);
+      await Future<void>.delayed(retryDelay);
     }
 
     return false;
@@ -271,15 +278,15 @@ class StreamingTestHelper {
     try {
       final response = await _api.graphqlRequest(query, {});
 
-      if (response['errors'] != null) {
+      if (response.field<Object?>('errors') != null) {
         return P2pConnectionStatus(disconnected: true);
       }
 
-      final data = response['data']['remoteAccessStatus'];
+      final data = response.object('data').object('remoteAccessStatus');
       return P2pConnectionStatus(
-        enabled: data['enabled'] as bool? ?? false,
-        endpointAddr: data['endpointAddr'] as String?,
-        connectedPeers: data['connectedPeers'] as int? ?? 0,
+        enabled: data.field<bool?>('enabled') ?? false,
+        endpointAddr: data.field<String?>('endpointAddr'),
+        connectedPeers: data.field<int?>('connectedPeers') ?? 0,
         disconnected: false,
       );
     } catch (e) {
@@ -300,7 +307,7 @@ class StreamingTestHelper {
         return true;
       }
 
-      await Future.delayed(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(seconds: 1));
     }
 
     return false;
@@ -395,35 +402,41 @@ class StreamingTestHelper {
         'id': id,
       });
 
-      if (response['errors'] != null) {
-        final errors = response['errors'] as List;
+      if (response.field<Object?>('errors') != null) {
+        final errors = response.list('errors');
         throw Exception(
-            'Streaming candidates query failed: ${errors.first['message']}');
+            'Streaming candidates query failed: ${errors.first.field<Object?>('message')}');
       }
 
-      final data = response['data']['streamingCandidates'];
-      if (data == null) return null;
+      final responseData = response.object('data');
+      if (responseData.field<Object?>('streamingCandidates') == null) {
+        return null;
+      }
+      final data = responseData.object('streamingCandidates');
 
-      final candidates = (data['candidates'] as List)
+      final candidates = data
+          .list('candidates')
           .map((c) => StreamingCandidate(
-                strategy: c['strategy'] as String,
-                mime: c['mime'] as String,
-                container: c['container'] as String,
-                videoCodec: c['videoCodec'] as String?,
-                audioCodec: c['audioCodec'] as String?,
+                strategy: c.field<String>('strategy'),
+                mime: c.field<String>('mime'),
+                container: c.field<String>('container'),
+                videoCodec: c.field<String?>('videoCodec'),
+                audioCodec: c.field<String?>('audioCodec'),
               ))
           .toList();
 
-      final metadata = data['metadata'] as Map<String, dynamic>?;
+      final metadata = data.field<Object?>('metadata') == null
+          ? null
+          : data.object('metadata');
 
       return StreamingCandidatesResult(
-        fileId: data['fileId'] as String,
+        fileId: data.field<String>('fileId'),
         candidates: candidates,
         metadata: metadata != null
             ? StreamingMetadata(
-                duration: (metadata['duration'] as num?)?.toDouble(),
-                width: metadata['width'] as int?,
-                height: metadata['height'] as int?,
+                duration: metadata.field<num?>('duration')?.toDouble(),
+                width: metadata.field<int?>('width'),
+                height: metadata.field<int?>('height'),
               )
             : null,
       );

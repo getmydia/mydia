@@ -153,7 +153,7 @@ Stream<DownloadJobStatus> downloadJobStatus(
       }
 
       // Wait before next poll
-      await Future.delayed(pollInterval);
+      await Future<void>.delayed(pollInterval);
     } catch (e) {
       // If we had a previous status, we can continue with that
       if (lastStatus != null) {

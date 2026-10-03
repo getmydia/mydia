@@ -29,7 +29,7 @@ const _feed = {
         'published_at': '2026-09-15T08:00:00Z',
       },
     },
-    'windows': {},
+    'windows': <String, Object?>{},
   },
 };
 

@@ -352,6 +352,7 @@ Future<void> _pump(
 /// and not a second `SubtitleContent` request.
 int _applyRetries(WidgetTester tester) {
   final state = tester.state(find.byType(PlayerScreen)) as dynamic;
+  // ignore: avoid_dynamic_calls, private State class cannot be named from here
   return state.preferenceApplyRetriesForTesting as int;
 }
 

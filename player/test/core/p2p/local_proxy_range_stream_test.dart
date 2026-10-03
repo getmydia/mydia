@@ -31,6 +31,7 @@ class RawRangeClient {
 
   static Future<RawRangeClient> open(int port, String path) async {
     final socket = await Socket.connect(InternetAddress.loopbackIPv4, port);
+    addTearDown(socket.destroy);
     socket.write(
       'GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\nRange: bytes=0-\r\n\r\n',
     );

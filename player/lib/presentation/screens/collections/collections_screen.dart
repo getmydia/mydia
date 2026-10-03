@@ -226,7 +226,7 @@ class _CollectionCardState extends State<_CollectionCard> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
           transform: _isHovered
-              ? (Matrix4.identity()..scale(1.02, 1.02, 1.0))
+              ? (Matrix4.identity()..scaleByDouble(1.02, 1.02, 1.0, 1.0))
               : Matrix4.identity(),
           decoration: BoxDecoration(
             color: AppColors.surface,

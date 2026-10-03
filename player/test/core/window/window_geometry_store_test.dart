@@ -36,12 +36,12 @@ void main() {
 
   group('HiveWindowGeometryStore', () {
     late Directory tempDir;
-    late Box<Map> box;
+    late Box<Map<dynamic, dynamic>> box;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('window_geometry_test');
       Hive.init(tempDir.path);
-      box = await Hive.openBox<Map>('window_geometry_test');
+      box = await Hive.openBox<Map<dynamic, dynamic>>('window_geometry_test');
     });
 
     tearDown(() async {

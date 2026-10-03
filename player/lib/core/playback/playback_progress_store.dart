@@ -24,7 +24,7 @@ abstract class PlaybackProgressStore {
 class HivePlaybackProgressStore implements PlaybackProgressStore {
   static const boxName = 'playback_progress';
 
-  final Box<Map> _box;
+  final Box<Map<dynamic, dynamic>> _box;
 
   const HivePlaybackProgressStore(this._box);
 

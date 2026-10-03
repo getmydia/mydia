@@ -31,6 +31,7 @@ void main() {
   group('FamilyTarget', () {
     test('two targets over the same operation are equal', () {
       expect(
+        // ignore: prefer_const_constructors, a runtime instance exercises == rather than identity
         FamilyTarget('CollectionItems'),
         const FamilyTarget('CollectionItems'),
       );
@@ -46,6 +47,7 @@ void main() {
     test('equal targets collapse in a set', () {
       final targets = {
         const FamilyTarget('CollectionItems'),
+        // ignore: prefer_const_constructors, a runtime instance exercises hashCode and == rather than identity
         FamilyTarget('CollectionItems'),
       };
 

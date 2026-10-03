@@ -35,8 +35,10 @@ class E2eApiClient {
   factory E2eApiClient.fromEnvironment() {
     // Use runtime environment variables - the test driver runs on the host
     final mydiaUrl = Platform.environment['MYDIA_URL'] ?? 'http://mydia:4000';
-    final adminEmail = Platform.environment['E2E_ADMIN_EMAIL'] ?? 'admin@test.local';
-    final adminPassword = Platform.environment['E2E_ADMIN_PASSWORD'] ?? 'testpassword123';
+    final adminEmail =
+        Platform.environment['E2E_ADMIN_EMAIL'] ?? 'admin@test.local';
+    final adminPassword =
+        Platform.environment['E2E_ADMIN_PASSWORD'] ?? 'testpassword123';
 
     return E2eApiClient(
       mydiaUrl: mydiaUrl,
@@ -68,12 +70,13 @@ class E2eApiClient {
 
     final response = await graphqlRequest(query, variables);
 
-    if (response['errors'] != null) {
-      final errors = response['errors'] as List;
-      throw Exception('Login failed: ${errors.first['message']}');
+    if (response.field<Object?>('errors') != null) {
+      final errors = response.list('errors');
+      throw Exception(
+          'Login failed: ${errors.first.field<Object?>('message')}');
     }
 
-    _authToken = response['data']['login']['token'] as String;
+    _authToken = response.object('data').object('login').field<String>('token');
   }
 
   /// Generate a claim code for device pairing.
@@ -95,22 +98,23 @@ class E2eApiClient {
 
     final response = await graphqlRequest(query, {});
 
-    if (response['errors'] != null) {
-      final errors = response['errors'] as List;
-      throw Exception('Failed to generate claim code: ${errors.first['message']}');
+    if (response.field<Object?>('errors') != null) {
+      final errors = response.list('errors');
+      throw Exception(
+          'Failed to generate claim code: ${errors.first.field<Object?>('message')}');
     }
 
-    final data = response['data']['generateClaimCode'];
+    final data = response.object('data').object('generateClaimCode');
     return ClaimCodeResult(
-      code: data['code'] as String,
-      expiresAt: DateTime.parse(data['expiresAt'] as String),
+      code: data.field<String>('code'),
+      expiresAt: DateTime.parse(data.field<String>('expiresAt')),
     );
   }
 
   /// Perform a GraphQL request.
-  Future<Map<String, dynamic>> graphqlRequest(
+  Future<JsonObject> graphqlRequest(
     String query,
-    Map<String, dynamic> variables,
+    Map<String, Object?> variables,
   ) async {
     final uri = Uri.parse('$mydiaUrl/api/graphql');
 
@@ -135,7 +139,7 @@ class E2eApiClient {
       );
     }
 
-    return jsonDecode(response.body) as Map<String, dynamic>;
+    return JsonObject(jsonDecode(response.body) as Map<String, Object?>);
   }
 
   /// Check if the Mydia server is healthy.
@@ -160,11 +164,23 @@ class E2eApiClient {
       if (await isHealthy()) {
         return;
       }
-      await Future.delayed(interval);
+      await Future<void>.delayed(interval);
     }
 
-    throw TimeoutException('Mydia server did not become healthy within $timeout');
+    throw TimeoutException(
+        'Mydia server did not become healthy within $timeout');
   }
+}
+
+/// Decoded JSON object. Read fields with [field], [object] and [list].
+extension type const JsonObject(Map<String, Object?> raw) {
+  T field<T>(String key) => raw[key] as T;
+  JsonObject object(String key) =>
+      JsonObject(raw[key]! as Map<String, Object?>);
+  List<JsonObject> list(String key) => [
+        for (final e in raw[key]! as List<Object?>)
+          JsonObject(e! as Map<String, Object?>),
+      ];
 }
 
 /// Result of generating a claim code.

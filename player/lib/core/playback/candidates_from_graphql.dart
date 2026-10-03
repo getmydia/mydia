@@ -8,7 +8,8 @@ List<CandidateStrategy> candidateStrategiesFrom(
   List<Query$StreamingCandidates$streamingCandidates$candidates>? candidates,
 ) =>
     [
-      for (final c in candidates ?? const [])
+      for (final c in candidates ??
+          const <Query$StreamingCandidates$streamingCandidates$candidates>[])
         CandidateStrategy(
           strategy: c.strategy.toJson(),
           mime: c.mime,
