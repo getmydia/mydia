@@ -379,8 +379,14 @@ class _NativeDownloadService implements DownloadService {
   /// this only keeps a failure in their error path from becoming an unhandled
   /// async error.
   void _runInBackground(Future<void> task, String what) {
+    // Hand failures to the zone that started the work, exactly where an
+    // unawaited future's error used to land. In the app that is the
+    // `runZonedGuarded` handler in main.dart, which logs it and files a crash
+    // report with the stack trace.
+    final zone = Zone.current;
     unawaited(task.catchError((Object e, StackTrace s) {
       debugPrint('[DownloadService] $what failed: $e');
+      zone.handleUncaughtError(e, s);
     }));
   }
 
@@ -1533,7 +1539,7 @@ class _NativeDownloadService implements DownloadService {
 
     // 6. Process queue to start next download
     if (processQueue) {
-      await _processQueue();
+      _runInBackground(_processQueue(), 'process queue');
     }
   }
 

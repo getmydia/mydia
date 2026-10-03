@@ -61,9 +61,13 @@ class DownloadManager {
     await _database.saveTask(task);
     // The download runs for as long as the transfer does; the caller gets the
     // queued task back immediately and follows progress on the stream.
+    // Failures go to the current zone, as an unawaited error always did, so
+    // the app's `runZonedGuarded` handler still logs and reports them.
+    final zone = Zone.current;
     unawaited(
       _startDownloadTask(task).catchError((Object e, StackTrace s) {
         debugPrint('[DownloadManager] download ${task.id} crashed: $e');
+        zone.handleUncaughtError(e, s);
       }),
     );
 
