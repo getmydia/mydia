@@ -29,7 +29,10 @@ defmodule Mydia.Jobs.ContentRatingFetch do
 
   @version 1
   @batch_size 100
-  @default_delay_ms 250
+  # Every install runs this at boot against one shared relay, so pace requests
+  # and add jitter to keep a fleet restart from arriving in lockstep.
+  @default_delay_ms 500
+  @jitter_ms 250
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: args}) do
@@ -107,7 +110,7 @@ defmodule Mydia.Jobs.ContentRatingFetch do
   # :unrated means TMDB answered without a certification, which is final until
   # a metadata refresh; :error is a transport or HTTP failure worth retrying.
   defp fill(%MediaItem{} = item, config, delay) do
-    if delay > 0, do: Process.sleep(delay)
+    if delay > 0, do: Process.sleep(delay + :rand.uniform(@jitter_ms) - 1)
     media_type = if item.type == "tv_show", do: :tv_show, else: :movie
 
     case Metadata.fetch_by_ref(config, {:tmdb, item.tmdb_id},
