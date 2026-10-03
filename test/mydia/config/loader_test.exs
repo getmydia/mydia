@@ -289,6 +289,21 @@ defmodule Mydia.Config.LoaderTest do
       assert path.name == "Kids Movies"
     end
 
+    test "truncates a LIBRARY_PATH_<N>_NAME longer than 60 characters" do
+      System.put_env("LIBRARY_PATH_1_PATH", "/media/second_library")
+      System.put_env("LIBRARY_PATH_1_TYPE", "movies")
+      System.put_env("LIBRARY_PATH_1_NAME", String.duplicate("a", 70))
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+          assert [path] = config.library_paths
+          assert path.name == String.duplicate("a", 60)
+        end)
+
+      assert log =~ "truncated"
+    end
+
     test "loads a Newznab API path from environment configuration" do
       System.put_env("INDEXER_1_NAME", "Custom Newznab")
       System.put_env("INDEXER_1_TYPE", "newznab")

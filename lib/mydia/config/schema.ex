@@ -20,6 +20,10 @@ defmodule Mydia.Config.Schema do
   # clamp_scan_interval/1.
   @min_scan_interval 900
 
+  # Upper bound for a library display name, in characters. Matches the cap in
+  # Mydia.Settings.LibraryPath; see clamp_library_name/1.
+  @max_library_name_length 60
+
   # Music, books, and adult library support was removed. These three values stay
   # accepted by the config schema, and only by the config schema, because config
   # is loaded by Mydia.Application before the supervision tree starts and
@@ -915,6 +919,7 @@ defmodule Mydia.Config.Schema do
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
     |> coerce_removed_library_types()
     |> clamp_scan_interval()
+    |> clamp_library_name()
   end
 
   defp coerce_removed_library_types(changeset) do
@@ -954,6 +959,27 @@ defmodule Mydia.Config.Schema do
         )
 
         put_change(changeset, :scan_interval, @min_scan_interval)
+
+      _ ->
+        changeset
+    end
+  end
+
+  # An over-long name would pass config loading and then be rejected by
+  # LibraryPath.changeset during sync, dropping the whole library. Truncate it
+  # and say so, as clamp_scan_interval/1 does.
+  defp clamp_library_name(changeset) do
+    case get_change(changeset, :name) do
+      name when is_binary(name) and byte_size(name) > @max_library_name_length ->
+        if String.length(name) > @max_library_name_length do
+          Logger.warning(
+            "Library name is longer than #{@max_library_name_length} characters and was truncated: #{inspect(name)}"
+          )
+
+          put_change(changeset, :name, String.slice(name, 0, @max_library_name_length))
+        else
+          changeset
+        end
 
       _ ->
         changeset
