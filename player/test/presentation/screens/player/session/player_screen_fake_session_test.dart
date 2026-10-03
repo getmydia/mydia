@@ -52,16 +52,73 @@ class _RecordingPlatformPlayer extends PlatformPlayer {
   Future<void> setSubtitleTrack(SubtitleTrack track) async {}
 }
 
+const _mydiaOnly = [
+  'StreamingCandidates',
+  'StartStreamingSession',
+  'UpdateMovieProgress',
+  'MovieDetail',
+];
+
+/// Records which Mydia playback operations were sent. `operationName` is
+/// null for everything the player issues, so names come from [isOperation].
+StubLink _recordingLink(List<String> operations) {
+  return StubLink((request, _) {
+    for (final name in _mydiaOnly) {
+      if (isOperation(request, name)) operations.add(name);
+    }
+    if (isOperation(request, 'MovieDetail')) {
+      return movieDetailResponse(positionSeconds: 0);
+    }
+    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
+    if (isOperation(request, 'SubtitleTrackSettings')) {
+      return subtitleTrackSettingsResponse();
+    }
+    if (isOperation(request, 'MovieSubtitlePreference')) {
+      return subtitlePreferenceResponse();
+    }
+    if (isOperation(request, 'StreamingCandidates')) {
+      return streamingCandidatesResponse(directPlay: true, duration: 5400);
+    }
+    return <String, dynamic>{
+      '__typename': 'RootMutationType',
+      'updateMovieProgress': null,
+    };
+  });
+}
+
 void main() {
+  testWidgets('positive control: the Mydia session does issue those operations',
+      (tester) async {
+    final operations = <String>[];
+    final container = buildPlayerScreenContainer(
+      link: _recordingLink(operations),
+      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+    final fake = _RecordingPlatformPlayer();
+
+    await pumpPlayerScreen(
+      tester,
+      container,
+      createPlayer: () => Player(platformPlayer: fake),
+    );
+    await pumpUntil(tester, () => fake.opened != null);
+
+    expect(operations, contains('StreamingCandidates'));
+    expect(operations, contains('MovieDetail'));
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
   testWidgets('plays what the session resolves and reports through it',
       (tester) async {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
       connectionState: conn.ConnectionState.direct(),
-      link: StubLink((request, _) {
-        operations.add(request.operation.operationName ?? '');
-        return <String, dynamic>{'__typename': 'RootQueryType'};
-      }),
+      link: _recordingLink(operations),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -90,12 +147,7 @@ void main() {
     expect(fake.opened!.httpHeaders, {'X-Plex-Token': 'tok'});
     await pumpUntil(tester, () => session.progress.starts.isNotEmpty);
     expect(session.progress.starts.single, ('movie', 'm1'));
-    for (final mydiaOnly in [
-      'StreamingCandidates',
-      'StartStreamingSession',
-      'UpdateMovieProgress',
-      'MovieDetail',
-    ]) {
+    for (final mydiaOnly in _mydiaOnly) {
       expect(operations, isNot(contains(mydiaOnly)), reason: mydiaOnly);
     }
 

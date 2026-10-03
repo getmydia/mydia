@@ -65,8 +65,12 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   Future<ProgressReporter> openProgress() async {
+    final deps = _streaming;
+    if (deps == null) {
+      throw StateError('MydiaPlaybackSession was built without streaming');
+    }
     final client = await _awaitClient();
-    _streaming?.adoptClient(client);
+    deps.adoptClient(client);
     return ProgressService(client);
   }
 
