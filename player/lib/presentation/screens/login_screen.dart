@@ -19,6 +19,7 @@ import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
 import '../widgets/channel_badge.dart';
 import 'login/login_controller.dart';
+import 'sources/add_source_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -468,12 +469,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildContent(LoginState loginState, bool isCompact) {
-    if (InputCapabilities.directionalPrimary) {
-      return _buildTvPairingLayout(loginState, isCompact);
-    }
-    // Always show the claim code card which now contains
-    // the direct connection form as an expandable section
-    return _buildClaimCodeCard(loginState, isCompact);
+    // The claim code card contains the direct connection form as an
+    // expandable section.
+    final card = InputCapabilities.directionalPrimary
+        ? _buildTvPairingLayout(loginState, isCompact)
+        : _buildClaimCodeCard(loginState, isCompact);
+    // The way in for someone with only a Plex or Stash server.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        card,
+        const SizedBox(height: 16),
+        const ConnectOtherServerButton(),
+      ],
+    );
   }
 
   Widget _buildBackgroundDecoration() {

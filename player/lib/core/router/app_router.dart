@@ -6,6 +6,9 @@ import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
 import '../sources/sources_providers.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/plex_sign_in_screen.dart';
+import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
@@ -94,6 +97,39 @@ class PlayerRouteParams {
   }
 }
 
+/// Where the router sends [location], or null to stay. Pure, so the rules
+/// are testable without a router.
+String? appRedirect({
+  required AsyncValue<AuthStatus> auth,
+  required String location,
+}) {
+  final authStatus = auth.maybeWhen(
+    data: (status) => status,
+    orElse: () => AuthStatus.unauthenticated,
+  );
+  if (auth.isLoading) return null;
+
+  final isLoginRoute = location == '/login';
+  final isDownloadsRoute = location == '/downloads';
+  final isPlayerRoute = location.startsWith('/player');
+  // Reached from the login screen's "Connect Plex or Stash instead".
+  final isAddSourceRoute = location.startsWith('/sources/add');
+
+  if (authStatus == AuthStatus.unauthenticated &&
+      !isLoginRoute &&
+      !isAddSourceRoute) {
+    return '/login';
+  }
+  if (authStatus == AuthStatus.offlineMode &&
+      !isDownloadsRoute &&
+      !isPlayerRoute &&
+      !isAddSourceRoute) {
+    return '/downloads';
+  }
+  if (authStatus == AuthStatus.authenticated && isLoginRoute) return '/';
+  return null;
+}
+
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Creating appRouter provider');
@@ -124,49 +160,15 @@ GoRouter appRouter(Ref ref) {
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
-      // Read auth state directly from the provider each time
-      // This ensures we always get the latest state
-      final authState = ref.read(authStateProvider);
-      final authStatus = authState.maybeWhen(
-        data: (status) => status,
-        orElse: () => AuthStatus.unauthenticated,
+      final target = appRedirect(
+        auth: ref.read(authStateProvider),
+        location: state.matchedLocation,
       );
-      final isLoading = authState.isLoading;
-      final isLoginRoute = state.matchedLocation == '/login';
-      final isDownloadsRoute = state.matchedLocation == '/downloads';
-      final isPlayerRoute = state.matchedLocation.startsWith('/player');
-
-      debugPrint(
-          '[AppRouter] Redirect check: authStatus=$authStatus, isLoading=$isLoading, path=${state.matchedLocation}');
-
-      // While loading, allow navigation to continue
-      if (isLoading) {
-        return null;
+      if (target != null) {
+        debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
+            'to $target');
       }
-
-      // Unauthenticated: must go to login
-      if (authStatus == AuthStatus.unauthenticated && !isLoginRoute) {
-        debugPrint('[AppRouter] Redirecting to /login (unauthenticated)');
-        return '/login';
-      }
-
-      // Offline mode: only allow downloads and player routes
-      if (authStatus == AuthStatus.offlineMode) {
-        if (!isDownloadsRoute && !isPlayerRoute) {
-          debugPrint('[AppRouter] Redirecting to /downloads (offline mode)');
-          return '/downloads';
-        }
-      }
-
-      // Authenticated on login: go home
-      if (authStatus == AuthStatus.authenticated && isLoginRoute) {
-        debugPrint(
-            '[AppRouter] Redirecting to / (authenticated on login page)');
-        return '/';
-      }
-
-      // No redirect needed
-      return null;
+      return target;
     },
     routes: [
       // Login route - outside shell
@@ -175,6 +177,28 @@ GoRouter appRouter(Ref ref) {
         name: 'login',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/sources/add',
+        name: 'add_source',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const AddSourceScreen(),
+      ),
+      GoRoute(
+        path: '/sources/add/plex',
+        name: 'add_source_plex',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => PlexSignInScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/stash',
+        name: 'add_source_stash',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => StashConnectScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
       ),
 
       // Shell route for main app with bottom navigation
