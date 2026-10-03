@@ -117,6 +117,8 @@ import 'session/mydia_playback_session.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
 import 'session/playback_session_types.dart';
+import 'audio_track_detection.dart';
+import 'remote_control_mapping.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
@@ -130,6 +132,8 @@ export '../../../core/player/resume_plan.dart'
         shouldOfferResume;
 export 'player_key_bindings.dart'
     show ArrowIntent, BackAction, handleEpisodeNavKey;
+export 'audio_track_detection.dart';
+export 'remote_control_mapping.dart';
 
 /// How many times a subtitle preference may retake a one-shot a track-list
 /// revision superseded. Three is well past any revision count media_kit
@@ -6495,79 +6499,6 @@ VoidCallback bindUpNextCountdownElapsed(
 ) =>
     () => playNext(fromAutoCountdown: true);
 
-/// media_kit's current audio track list mapped onto the app's own model,
-/// together with the reverse lookup needed to hand a chosen track back to
-/// media_kit.
-@visibleForTesting
-class AudioTrackDetection {
-  const AudioTrackDetection({required this.tracks, required this.byId});
-
-  /// Selectable tracks, in the order media_kit reports them. Never contains
-  /// the `auto`/`no` sentinels.
-  final List<app_models_audio.AudioTrack> tracks;
-
-  /// [app_models_audio.AudioTrack.id] to the media_kit track it came from.
-  /// `_showAudioSelector` passes the resolved value to `setAudioTrack`, so a
-  /// missing entry silently no-ops the user's choice.
-  final Map<String, AudioTrack> byId;
-}
-
-/// Maps media_kit's audio tracks onto the app's model.
-///
-/// Extracted as a free function so the mapping can be unit-tested without a
-/// live `Player` — see [shouldRestartForSeek]'s dartdoc for why one cannot be
-/// constructed under `flutter test`.
-///
-/// Which track counts as the default comes from media_kit's own `isDefault`
-/// flag, which carries the container's disposition. Position is only the
-/// fallback, for files that flag nothing: a dual-language release can order
-/// its tracks one way and flag another, and picking by position alone
-/// mislabels those.
-@visibleForTesting
-AudioTrackDetection detectAudioTracks(List<AudioTrack> mkTracks) {
-  final tracks = <app_models_audio.AudioTrack>[];
-  final byId = <String, AudioTrack>{};
-
-  for (final mkTrack in mkTracks) {
-    // Skip the "auto" and "no" sentinel tracks
-    if (mkTrack == AudioTrack.auto() || mkTrack == AudioTrack.no()) continue;
-
-    tracks.add(
-      app_models_audio.AudioTrack(
-        id: mkTrack.id,
-        language: mkTrack.language ?? 'und',
-        title: mkTrack.title,
-        isDefault: mkTrack.isDefault ?? false,
-      ),
-    );
-    byId[mkTrack.id] = mkTrack;
-  }
-
-  if (tracks.isNotEmpty && !tracks.any((t) => t.isDefault)) {
-    final first = tracks.first;
-    tracks[0] = app_models_audio.AudioTrack(
-      id: first.id,
-      language: first.language,
-      title: first.title,
-      isDefault: true,
-    );
-  }
-
-  return AudioTrackDetection(tracks: tracks, byId: byId);
-}
-
-/// Reports media_kit's track list every time it is revised.
-///
-/// mpv discovers tracks asynchronously while it probes the file, and revises
-/// the list afterwards, so sampling it once at a fixed moment after `open()`
-/// races the probe. On a slow enough source the sample lands before any
-/// track exists and the selectors are left permanently empty. Driving
-/// detection off the stream instead means a late arrival still reaches the
-/// UI.
-///
-/// `player.stream.tracks` is a plain broadcast stream with no replay, so
-/// callers must subscribe before opening the media and still run a detection
-/// pass afterwards to cover anything emitted in between.
 /// A picked subtitle track made loadable, or null with the line to show the
 /// viewer instead. See `_resolveMediaKitSubtitleTrack`.
 typedef _ResolvedSubtitle = ({SubtitleTrack? track, String failureMessage});
@@ -6587,118 +6518,3 @@ typedef _QueuedSubtitlePreference = ({
   String fileId,
   int generation,
 });
-
-@visibleForTesting
-StreamSubscription<Tracks> watchTracks(
-  Stream<Tracks> tracks,
-  void Function(Tracks tracks) onTracks,
-) {
-  return tracks.listen(onTracks);
-}
-
-/// Converts the wire's 0.0-1.0 volume level to media_kit's 0-100 scale, used
-/// by [_PlayerScreenState.setVolume]. Clamps out-of-range input rather than
-/// trusting the caller — a remote peer, not this app, decides what crosses
-/// the wire.
-///
-/// Extracted as a free function, alongside its inverse
-/// [playerVolumeToRemoteControlVolume] and [remoteControlMuteVolume], so the
-/// 0-1/0-100 conversion `_PlayerScreenState`'s `RemotePlayerBinding`
-/// implementation depends on is directly unit-tested rather than only
-/// exercised indirectly through `RemoteTargetController`'s own tests, which
-/// drive a hand-written fake binding and never reach this arithmetic. See
-/// [shouldRestartForSeek]'s dartdoc for why a real `Player` cannot stand in
-/// for it under `flutter test` instead.
-@visibleForTesting
-double remoteControlVolumeToPlayerVolume(double level) =>
-    level.clamp(0.0, 1.0) * 100;
-
-/// The inverse of [remoteControlVolumeToPlayerVolume], for reporting the
-/// current volume back out through [_PlayerScreenState.describe].
-@visibleForTesting
-double playerVolumeToRemoteControlVolume(double playerVolume) =>
-    playerVolume / 100;
-
-/// media_kit has no separate mute flag on this screen, only volume: muting
-/// snaps it to 0 and unmuting snaps it to full, mirroring
-/// `_handleKeyEvent`'s existing `keyM` case exactly rather than restoring
-/// whatever was set before muting, which would need new state this screen
-/// does not keep.
-@visibleForTesting
-double remoteControlMuteVolume(bool muted) => muted ? 0.0 : 100.0;
-
-/// Whether [_PlayerScreenState.describe] should report the player as muted.
-/// Paired with [remoteControlMuteVolume] rather than a tracked mute flag:
-/// muted is exactly "volume is 0" (including when there is no player at
-/// all, since `null == 0` is false).
-@visibleForTesting
-bool isPlayerVolumeMuted(double? playerVolume) => playerVolume == 0;
-
-/// Finds the element of [tracks] whose [idOf] equals [id], or null when
-/// nothing matches — the case every `selectTrack` branch in
-/// [_PlayerScreenState] must silently no-op for rather than throw, since
-/// `id` names a track a *remote peer* chose, which this screen never
-/// validated before it arrived.
-@visibleForTesting
-T? findTrackById<T>(
-  List<T> tracks,
-  String id, {
-  required String Function(T track) idOf,
-}) =>
-    tracks.where((track) => idOf(track) == id).firstOrNull;
-
-/// Maps [_PlayerScreenState]'s own loading/error flags and the `Player`'s
-/// state onto the wire's [FlutterPlaybackState], for
-/// [_PlayerScreenState.describe] by way of
-/// [_PlayerScreenState._remoteControlPlaybackState].
-///
-/// Order is significant, checked in this priority: [hasError] wins over
-/// everything else — a player still decoding through a stream error is not
-/// meaningfully "playing". [isLoading]/`!hasPlayer` come next because this
-/// screen's own `_isLoading`/`_error` fields describe *screen* phases where
-/// `Player.state` may not exist yet or may be stale from a session this
-/// screen already tore down, so they are trusted ahead of whatever the
-/// `Player` itself reports. [buffering] and [completed] are checked before
-/// [playing] because media_kit can report `playing: true` while buffering,
-/// and after the file has already ended.
-@visibleForTesting
-FlutterPlaybackState remoteControlPlaybackState({
-  required bool hasError,
-  required bool isLoading,
-  required bool hasPlayer,
-  required bool buffering,
-  required bool completed,
-  required bool playing,
-}) {
-  if (hasError) return FlutterPlaybackState.error;
-  if (isLoading || !hasPlayer) return FlutterPlaybackState.loading;
-  if (buffering) return FlutterPlaybackState.buffering;
-  if (completed) return FlutterPlaybackState.ended;
-  return playing ? FlutterPlaybackState.playing : FlutterPlaybackState.paused;
-}
-
-/// Casts to a remote target, stopping local playback only once the receiver
-/// has confirmed the load — never before, and never at all if it refuses.
-///
-/// This ordering is what makes "Push" (spec term: capture position and
-/// track selections, `Hello`, `LoadContent`, only then stop locally)
-/// non-destructive. An unreachable receiver or a rejected codec must never
-/// cost the viewer their place in a film: when [startCast] throws, [stopLocal]
-/// simply never runs, and whatever [_PlayerScreenState._player] was doing
-/// keeps doing it. The caller's own `catch` (see `_showCastDevicePicker`) is
-/// what turns that exception into a toast instead of a crash.
-///
-/// Extracted as a free function for the same reason as [applyQualityChoice]
-/// and [shouldRestartForSeek]: proving this ordering under `flutter test`
-/// needs to observe whether local playback kept running, and this suite can
-/// never construct a real, playing media_kit `Player` to observe that
-/// against (see [shouldRestartForSeek]'s dartdoc) — so the ordering itself
-/// is what gets pinned instead, independent of any real player.
-@visibleForTesting
-Future<void> pushToRemoteTarget({
-  required Future<void> Function() startCast,
-  required Future<void> Function() stopLocal,
-}) async {
-  await startCast();
-  await stopLocal();
-}
