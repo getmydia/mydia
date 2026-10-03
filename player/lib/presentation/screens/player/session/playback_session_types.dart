@@ -4,6 +4,8 @@
 library;
 
 import '../../../../core/playback/playback_plan.dart';
+import '../../../../domain/models/subtitle_track.dart';
+import '../subtitle_preference.dart';
 
 /// What the screen is playing, read from the route on every call.
 class PlaybackTarget {
@@ -58,3 +60,30 @@ class PlaybackOffer {
 /// said no (a GraphQL error with no transport failure). Only that case makes
 /// it safe to retry against a different id.
 typedef CandidatesFetch = ({PlaybackOffer? offer, bool serverRejected});
+
+/// Saved progress and the server's subtitle list for the file being played.
+class PlaybackDetail {
+  const PlaybackDetail({
+    this.savedPositionSeconds,
+    this.savedDurationSeconds,
+    this.lastWatchedAt,
+    this.runtimeMinutes,
+    this.serverSubtitleTracks,
+  });
+
+  final int? savedPositionSeconds;
+  final int? savedDurationSeconds;
+  final DateTime? lastWatchedAt;
+  final int? runtimeMinutes;
+
+  /// Null when the picked file was not found or carried no subtitle list;
+  /// the screen then keeps the list it has.
+  final List<SubtitleTrack>? serverSubtitleTracks;
+}
+
+/// A subtitle preference that was fetched. [value] null means the viewer
+/// has none, which differs from the fetch failing (a null result).
+class FetchedSubtitlePreference {
+  const FetchedSubtitlePreference(this.value);
+  final SubtitlePreference? value;
+}

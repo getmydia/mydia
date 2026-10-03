@@ -8,7 +8,16 @@ import 'package:flutter/foundation.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../../core/playback/candidates_from_graphql.dart';
+import '../../../../domain/models/media_segment.dart';
+import '../../../../domain/models/subtitle_track.dart';
+import '../../../../graphql/fragments/media_file_fragment.graphql.dart';
+import '../../../../graphql/queries/episode_detail.graphql.dart';
+import '../../../../graphql/queries/media_segments.graphql.dart';
+import '../../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../../graphql/queries/streaming_candidates.graphql.dart';
+import '../../../../graphql/queries/subtitle_preference.graphql.dart';
+import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
+import '../subtitle_preference.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
@@ -107,6 +116,214 @@ class MydiaPlaybackSession implements PlaybackSession {
     } catch (e) {
       debugPrint('[PlayerScreen] Error fetching streaming candidates: $e');
       return (offer: null, serverRejected: false);
+    }
+  }
+
+  static String? _rootFor(String mediaType) => switch (mediaType) {
+        'movie' => 'movie',
+        'episode' => 'episode',
+        _ => null,
+      };
+
+  /// Default fetch policy, as before. There is deliberately no
+  /// `hasException` check: a partial answer still carries progress.
+  @override
+  Future<PlaybackDetail?> detail() async {
+    final target = _target();
+    try {
+      if (target.mediaType == 'movie') {
+        final result = await _requireClient().query(
+          QueryOptions(
+            document: documentNodeQueryMovieDetail,
+            variables: Variables$Query$MovieDetail(id: target.mediaId).toJson(),
+          ),
+        );
+        if (result.data == null) return null;
+        final movie = Query$MovieDetail.fromJson(result.data!).movie;
+        return PlaybackDetail(
+          savedPositionSeconds: movie?.progress?.positionSeconds,
+          savedDurationSeconds: movie?.progress?.durationSeconds,
+          lastWatchedAt:
+              DateTime.tryParse(movie?.progress?.lastWatchedAt ?? ''),
+          runtimeMinutes: movie?.runtime,
+          serverSubtitleTracks: _subtitlesFor(movie?.files, target.fileId),
+        );
+      }
+      if (target.mediaType == 'episode') {
+        final result = await _requireClient().query(
+          QueryOptions(
+            document: documentNodeQueryEpisodeDetail,
+            variables:
+                Variables$Query$EpisodeDetail(id: target.mediaId).toJson(),
+          ),
+        );
+        if (result.data == null) return null;
+        final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
+        return PlaybackDetail(
+          savedPositionSeconds: episode?.progress?.positionSeconds,
+          savedDurationSeconds: episode?.progress?.durationSeconds,
+          lastWatchedAt:
+              DateTime.tryParse(episode?.progress?.lastWatchedAt ?? ''),
+          runtimeMinutes: episode?.runtime,
+          serverSubtitleTracks: _subtitlesFor(episode?.files, target.fileId),
+        );
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching progress: $e');
+      return null;
+    }
+  }
+
+  /// The first file whose id is [fileId] decides. This always matches on
+  /// the route's file id, never `playFileId`, so on the self-heal path in
+  /// `_initializePlayer` (server rejected the selected file and re-ranked
+  /// one instead) this is comparing against the id the server just
+  /// rejected. No file matches, so external subtitles are silently
+  /// dropped for that playback. Intentional for now; see [candidates] for
+  /// the self-heal itself.
+  static List<SubtitleTrack>? _subtitlesFor(
+    List<Fragment$MediaFileFragment?>? files,
+    String fileId,
+  ) {
+    if (files == null || files.isEmpty) return null;
+    for (final file in files) {
+      if (file == null) continue;
+      if (file.id == fileId) {
+        final subtitles = file.subtitles;
+        if (subtitles == null) return null;
+        return subtitles
+            .whereType<Fragment$MediaFileFragment$subtitles>()
+            .map(SubtitleTrack.fromGraphQL)
+            .toList();
+      }
+    }
+    return null;
+  }
+
+  /// A **separate query on purpose, and it has to stay that way.** An
+  /// unknown field is a document-level validation error in GraphQL, not a
+  /// field-level one, so a server predating the segments schema rejects the
+  /// whole query the selection appears in and returns no data at all. Folded
+  /// back into `MediaFileFragment` as a tidy-up, that would cost the resume
+  /// position and the external subtitle list on every episode and movie
+  /// detail view. Here it costs exactly one thing, the skip button.
+  ///
+  /// Matched on the route's file id, never `playFileId`, so on the
+  /// self-heal path this finds no segments and skip markers are silently
+  /// dropped for that playback. Intentional for now.
+  @override
+  Future<List<MediaSegment>?> segments() async {
+    final target = _target();
+    final root = _rootFor(target.mediaType);
+    if (root == null) return null;
+    try {
+      final result = await _requireClient().query(
+        QueryOptions(
+          document: root == 'movie'
+              ? documentNodeQueryMovieSegments
+              : documentNodeQueryEpisodeSegments,
+          variables: root == 'movie'
+              ? Variables$Query$MovieSegments(id: target.mediaId).toJson()
+              : Variables$Query$EpisodeSegments(id: target.mediaId).toJson(),
+        ),
+      );
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] No segments available: ${result.exception}');
+        return null;
+      }
+      return MediaSegment.forFile(
+        result.data,
+        root: root,
+        fileId: target.fileId,
+      );
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching segments: $e');
+      return null;
+    }
+  }
+
+  /// `networkOnly`: `client.query` defaults to `FetchPolicy.cacheFirst` over
+  /// a persistent `HiveStore`, so a returning viewer would otherwise get the
+  /// choice they made last time, not the current one.
+  ///
+  /// Matched on the route's file id, never `playFileId`, as for [segments].
+  @override
+  Future<FetchedSubtitlePreference?> subtitlePreference() async {
+    final target = _target();
+    final root = _rootFor(target.mediaType);
+    if (root == null) return null;
+    try {
+      final result = await _requireClient().query(
+        QueryOptions(
+          document: root == 'movie'
+              ? documentNodeQueryMovieSubtitlePreference
+              : documentNodeQueryEpisodeSubtitlePreference,
+          variables: root == 'movie'
+              ? Variables$Query$MovieSubtitlePreference(id: target.mediaId)
+                  .toJson()
+              : Variables$Query$EpisodeSubtitlePreference(id: target.mediaId)
+                  .toJson(),
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+      if (result.hasException) {
+        debugPrint('[PlayerScreen] Subtitle preference unavailable: '
+            '${result.exception}');
+        return null;
+      }
+      final data = result.data;
+      if (data == null) return null;
+      final preferred = preferredSubtitleJsonForFile(
+        data,
+        root: root,
+        fileId: target.fileId,
+      );
+      return FetchedSubtitlePreference(
+        subtitlePreferenceFrom(
+          mode: preferred?['mode'] as String?,
+          language: preferred?['language'] as String?,
+          forced: preferred?['forced'] as bool?,
+          hearingImpaired: preferred?['hearingImpaired'] as bool?,
+          trackTitle: preferred?['trackTitle'] as String?,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[PlayerScreen] Error fetching subtitle preference: $e');
+      return null;
+    }
+  }
+
+  /// `networkOnly`: a cached offset would become the baseline the next save
+  /// adds to, silently overwriting a newer server offset with an older one.
+  @override
+  Future<Map<String, int>?> subtitleOffsets() async {
+    try {
+      final result = await _requireClient().query(
+        QueryOptions(
+          document: documentNodeQuerySubtitleTrackSettings,
+          variables: Variables$Query$SubtitleTrackSettings(
+            mediaFileId: _target().fileId,
+          ).toJson(),
+          fetchPolicy: FetchPolicy.networkOnly,
+        ),
+      );
+      if (result.hasException) {
+        debugPrint(
+            '[PlayerScreen] Subtitle offsets unavailable: ${result.exception}');
+        return null;
+      }
+      final data = result.data;
+      if (data == null) {
+        debugPrint('[PlayerScreen] No data returned for subtitle offsets');
+        return null;
+      }
+      final settings =
+          Query$SubtitleTrackSettings.fromJson(data).subtitleTrackSettings;
+      return {for (final s in settings) s.trackRef: s.offsetMs};
+    } catch (e) {
+      debugPrint('[PlayerScreen] Subtitle offsets unavailable: $e');
+      return null;
     }
   }
 }

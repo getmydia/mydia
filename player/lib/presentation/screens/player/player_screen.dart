@@ -94,17 +94,11 @@ import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
 import '../../../domain/models/download.dart';
 import '../../../graphql/schema.graphql.dart';
-import '../../../graphql/fragments/media_file_fragment.graphql.dart';
-import '../../../graphql/queries/movie_detail.graphql.dart';
-import '../../../graphql/queries/episode_detail.graphql.dart';
-import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
 import '../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../graphql/queries/subtitle_search.graphql.dart';
-import '../../../graphql/queries/subtitle_track_settings.graphql.dart';
-import '../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../graphql/mutations/download_subtitle.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_offset.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
@@ -3121,51 +3115,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Fetches the movie or episode detail document: saved progress, runtime,
   /// and the subtitle tracks extracted from its files.
-  Future<void> _fetchDetail(GraphQLClient client, int gen) async {
+  Future<void> _fetchDetail(int gen) async {
+    final detail = await _session.detail();
+    if (!_isCurrentLoad(gen)) return;
+    if (detail == null) return;
     try {
-      if (widget.mediaType == 'movie') {
-        // Fetch movie progress
-        final result = await client.query(
-          QueryOptions(
-            document: documentNodeQueryMovieDetail,
-            variables: Variables$Query$MovieDetail(id: widget.mediaId).toJson(),
-          ),
-        );
-        if (!_isCurrentLoad(gen)) return;
-
-        if (result.data != null) {
-          final movie = Query$MovieDetail.fromJson(result.data!).movie;
-          _savedPositionSeconds = movie?.progress?.positionSeconds;
-          _savedDurationSeconds = movie?.progress?.durationSeconds;
-          _serverLastWatchedAt =
-              DateTime.tryParse(movie?.progress?.lastWatchedAt ?? '');
-          _runtimeMinutes = movie?.runtime;
-
-          // Extract subtitle tracks from files
-          _extractSubtitlesFromFiles(movie?.files);
-        }
-      } else if (widget.mediaType == 'episode') {
-        // Fetch episode progress
-        final result = await client.query(
-          QueryOptions(
-            document: documentNodeQueryEpisodeDetail,
-            variables:
-                Variables$Query$EpisodeDetail(id: widget.mediaId).toJson(),
-          ),
-        );
-        if (!_isCurrentLoad(gen)) return;
-
-        if (result.data != null) {
-          final episode = Query$EpisodeDetail.fromJson(result.data!).episode;
-          _savedPositionSeconds = episode?.progress?.positionSeconds;
-          _savedDurationSeconds = episode?.progress?.durationSeconds;
-          _serverLastWatchedAt =
-              DateTime.tryParse(episode?.progress?.lastWatchedAt ?? '');
-          _runtimeMinutes = episode?.runtime;
-
-          // Extract subtitle tracks from files
-          _extractSubtitlesFromFiles(episode?.files);
-        }
+      _savedPositionSeconds = detail.savedPositionSeconds;
+      _savedDurationSeconds = detail.savedDurationSeconds;
+      _serverLastWatchedAt = detail.lastWatchedAt;
+      _runtimeMinutes = detail.runtimeMinutes;
+      final tracks = detail.serverSubtitleTracks;
+      if (tracks != null) {
+        _serverSubtitleTracks = tracks;
+        _refreshSubtitleTracks();
+        debugPrint('Extracted ${tracks.length} subtitle tracks from GraphQL');
       }
     } catch (e) {
       debugPrint('Error fetching progress: $e');
@@ -3176,21 +3139,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// was already failure-isolated; they used to run one after another.
   ///
   /// The subtitle preference stays chained after the detail: applying it
-  /// reads the tracks `_extractSubtitlesFromFiles` builds from the detail.
+  /// reads the tracks `_fetchDetail` builds from the detail.
   /// Season episodes no longer waits for the detail to succeed, so a failed
   /// detail now costs one extra query rather than skipping it.
   Future<void> _fetchProgressAndEpisodes(GraphQLClient client, int gen) {
     return runIsolated({
       'detail and subtitle preference': () async {
-        await _fetchDetail(client, gen);
-        await _fetchSubtitlePreference(client, gen);
+        await _fetchDetail(gen);
+        await _fetchSubtitlePreference(gen);
       },
       if (widget.mediaType == 'episode' &&
           widget.showId != null &&
           widget.seasonNumber != null)
         'season episodes': () => _fetchSeasonEpisodes(client, gen),
-      'segments': () => _fetchSegments(client, gen),
-      'subtitle offsets': () => _loadSubtitleOffsets(client, gen),
+      'segments': () => _fetchSegments(gen),
+      'subtitle offsets': () => _loadSubtitleOffsets(gen),
     });
   }
 
@@ -3207,7 +3170,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// every media file this screen loads (see [_fetchProgressAndEpisodes]),
   /// and a previous file's offsets or its "loaded" flag must never survive
   /// into a new one just because this fetch happened to fail for it.
-  Future<void> _loadSubtitleOffsets(GraphQLClient client, int gen) async {
+  ///
+  /// The session reads `networkOnly`, because `_saveSubtitleDelay` sends the
+  /// loaded offset plus the current nudge: a cached value would silently
+  /// overwrite a newer server offset with an older one. See
+  /// player_screen_subtitle_offsets_cache_test.dart.
+  Future<void> _loadSubtitleOffsets(int gen) async {
     if (mounted) {
       setState(() {
         _subtitleOffsets = {};
@@ -3215,43 +3183,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       });
     }
 
+    final offsets = await _session.subtitleOffsets();
+    if (offsets == null) return;
+    if (!_isCurrentLoad(gen)) return;
+
     try {
-      final result = await client.query(
-        QueryOptions(
-          document: documentNodeQuerySubtitleTrackSettings,
-          variables: Variables$Query$SubtitleTrackSettings(
-            mediaFileId: widget.fileId,
-          ).toJson(),
-          // `client.query` defaults to `FetchPolicy.cacheFirst` over a
-          // persistent `HiveStore`. A viewer who has played this file before
-          // would otherwise get whatever offset was cached last time, and
-          // `_saveSubtitleDelay` sends that stale baseline plus the current
-          // nudge -- silently overwriting a newer server offset with an
-          // older one. See player_screen_subtitle_offsets_cache_test.dart.
-          fetchPolicy: FetchPolicy.networkOnly,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Subtitle offsets unavailable: ${result.exception}');
-        return;
-      }
-
-      final data = result.data;
-      if (data == null) {
-        debugPrint('[PlayerScreen] No data returned for subtitle offsets');
-        return;
-      }
-
-      final settings =
-          Query$SubtitleTrackSettings.fromJson(data).subtitleTrackSettings;
-      if (!_isCurrentLoad(gen)) return;
-
       setState(() {
-        _subtitleOffsets = {
-          for (final s in settings) s.trackRef: s.offsetMs,
-        };
+        _subtitleOffsets = offsets;
         _subtitleOffsetsLoaded = true;
 
         // Defensive, not expected to fire in the normal flow: this is
@@ -3448,35 +3386,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
   }
 
-  /// Extract subtitle tracks from media files returned by GraphQL
-  void _extractSubtitlesFromFiles(List<Fragment$MediaFileFragment?>? files) {
-    if (files == null || files.isEmpty) return;
-
-    // Find the file matching the current fileId. This always matches on
-    // `widget.fileId`, never `playFileId`, so on the self-heal path in
-    // [_initializePlayer] (server rejected the selected file and re-ranked
-    // one instead) this is comparing against the id the server just
-    // rejected. No file matches, so external subtitles are silently
-    // dropped for that playback. Intentional for now — see
-    // [MydiaPlaybackSession.candidates] for the self-heal itself.
-    for (final file in files) {
-      if (file == null) continue;
-      if (file.id == widget.fileId) {
-        final subtitles = file.subtitles;
-        if (subtitles != null) {
-          _serverSubtitleTracks = subtitles
-              .whereType<Fragment$MediaFileFragment$subtitles>()
-              .map((sub) => app_models.SubtitleTrack.fromGraphQL(sub))
-              .toList();
-          _refreshSubtitleTracks();
-          debugPrint('Extracted ${_serverSubtitleTracks.length} subtitle '
-              'tracks from GraphQL');
-        }
-        break;
-      }
-    }
-  }
-
   /// Drop the previous media's segments and re-arm the once-per-session skip
   /// guard, but only when the media actually changed.
   ///
@@ -3516,47 +3425,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   ///
   /// Every failure lands on the same answer, no segments. Detection is
   /// additive background work and must never surface as a playback error.
-  Future<void> _fetchSegments(GraphQLClient client, int gen) async {
-    final root = switch (widget.mediaType) {
-      'movie' => 'movie',
-      'episode' => 'episode',
-      _ => null,
-    };
-    if (root == null) return;
-
-    try {
-      final result = await client.query(
-        QueryOptions(
-          document: root == 'movie'
-              ? documentNodeQueryMovieSegments
-              : documentNodeQueryEpisodeSegments,
-          variables: root == 'movie'
-              ? Variables$Query$MovieSegments(id: widget.mediaId).toJson()
-              : Variables$Query$EpisodeSegments(id: widget.mediaId).toJson(),
-        ),
-      );
-      if (!_isCurrentLoad(gen)) return;
-
-      if (result.hasException) {
-        debugPrint('[PlayerScreen] No segments available: ${result.exception}');
-        return;
-      }
-
-      // Matched on `widget.fileId`, never `playFileId`, so on the self-heal
-      // path in [_initializePlayer] (server rejected the selected file and
-      // re-ranked one instead) this looks up segments for the id the server
-      // just rejected and finds none. Skip markers are silently dropped for
-      // that playback. Intentional for now — see [MydiaPlaybackSession.candidates]
-      // for the self-heal itself.
-      _segments = MediaSegment.forFile(
-        result.data,
-        root: root,
-        fileId: widget.fileId,
-      );
-      debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
-    } catch (e) {
-      debugPrint('[PlayerScreen] Error fetching segments: $e');
-    }
+  Future<void> _fetchSegments(int gen) async {
+    final segments = await _session.segments();
+    if (!_isCurrentLoad(gen)) return;
+    if (segments == null) return;
+    _segments = segments;
+    debugPrint('[PlayerScreen] ${_segments.length} skippable segment(s)');
   }
 
   /// Load the viewer's per-show subtitle choice for the file now playing.
@@ -3577,61 +3451,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// track-list revision, nothing else would trigger an apply.
   /// [_applySubtitlePreference] is idempotent past its own one-shot, so this
   /// costs nothing when a revision got there first.
-  Future<void> _fetchSubtitlePreference(GraphQLClient client, int gen) async {
-    final root = switch (widget.mediaType) {
-      'movie' => 'movie',
-      'episode' => 'episode',
-      _ => null,
-    };
-    if (root == null) return;
+  Future<void> _fetchSubtitlePreference(int gen) async {
+    final fetched = await _session.subtitlePreference();
+    if (fetched == null) return;
+    if (!_isCurrentLoad(gen)) return;
 
     try {
-      final result = await client.query(
-        QueryOptions(
-          document: root == 'movie'
-              ? documentNodeQueryMovieSubtitlePreference
-              : documentNodeQueryEpisodeSubtitlePreference,
-          variables: root == 'movie'
-              ? Variables$Query$MovieSubtitlePreference(id: widget.mediaId)
-                  .toJson()
-              : Variables$Query$EpisodeSubtitlePreference(id: widget.mediaId)
-                  .toJson(),
-          // Same reason as `_loadSubtitleOffsets`: `client.query` defaults to
-          // `FetchPolicy.cacheFirst` over a persistent `HiveStore`, and a
-          // viewer who has played this file before would otherwise get the
-          // choice they had made last time rather than the current one.
-          fetchPolicy: FetchPolicy.networkOnly,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint('[PlayerScreen] Subtitle preference unavailable: '
-            '${result.exception}');
-        return;
-      }
-
-      final data = result.data;
-      if (data == null) return;
-
-      // Matched on `widget.fileId`, never `playFileId`, for the same reason
-      // `_extractSubtitlesFromFiles` and `_fetchSegments` are: on the
-      // self-heal path the server re-ranked a different file, and looking up
-      // the id it just rejected finds nothing. The preference is silently
-      // dropped for that playback.
-      final preferred = preferredSubtitleJsonForFile(
-        data,
-        root: root,
-        fileId: widget.fileId,
-      );
-      if (!_isCurrentLoad(gen)) return;
-
-      _subtitlePreference = subtitlePreferenceFrom(
-        mode: preferred?['mode'] as String?,
-        language: preferred?['language'] as String?,
-        forced: preferred?['forced'] as bool?,
-        hearingImpaired: preferred?['hearingImpaired'] as bool?,
-        trackTitle: preferred?['trackTitle'] as String?,
-      );
+      _subtitlePreference = fetched.value;
 
       // The track list may already be complete and settled, in which case no
       // further revision is coming to trigger this.
@@ -3858,7 +3684,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// whatever media_kit has already published.
   ///
   /// The counterpart to [_onTracksChanged]: that one runs when media_kit
-  /// revises its side, this one when [_extractSubtitlesFromFiles] or a
+  /// revises its side, this one when [_fetchDetail] or a
   /// freshly downloaded sidecar revises the server's.
   void _refreshSubtitleTracks() {
     if (!mounted) return;
