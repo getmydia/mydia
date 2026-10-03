@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/router/app_router.dart';
+import 'package:player/core/sources/source.dart';
 
 import '../../presentation/screens/sources/fake_media_source.dart'
     show fakeSource;
@@ -47,6 +48,32 @@ void main() {
     test('lands on the source instead of the login screen', () {
       expect(go('/'), '/s/acc1:owner:aa11');
       expect(go('/movies'), '/s/acc1:owner:aa11');
+    });
+
+    test('lands on the remembered source, not always the first', () {
+      const second = Source(
+        account: ProviderAccount(
+          id: 'acc2',
+          kind: SourceKind.stash,
+          displayName: 'stash',
+          storageNamespace: 'source/acc2',
+          activeProfileId: 'owner',
+        ),
+        profile: SourceProfile(
+            id: 'owner', accountId: 'acc2', name: 'Owner', isOwner: true),
+        server: SourceServer(
+            id: 'main', accountId: 'acc2', profileId: 'owner', name: 'Den'),
+      );
+      String? landing(SourceId? active) => appRedirect(
+            auth: const AsyncData(AuthStatus.unauthenticated),
+            location: '/',
+            sourcesLoading: false,
+            thirdParty: const [fakeSource, second],
+            activeId: active,
+          );
+      expect(landing(second.id), '/s/acc2:owner:main');
+      expect(landing(const SourceId('gone:owner:x')), '/s/acc1:owner:aa11');
+      expect(landing(null), '/s/acc1:owner:aa11');
     });
 
     test('leaves source, management and login routes alone', () {

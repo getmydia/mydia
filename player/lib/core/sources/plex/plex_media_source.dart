@@ -44,11 +44,17 @@ class PlexMediaSource extends MediaSource implements WatchedState, Searchable {
   @override
   Future<List<Library>> libraries() async {
     final body = await client.container('/library/sections');
-    return [
+    final libraries = [
       for (final d in (body['Directory'] as List? ?? const []))
         if (d is Map) plexLibrary(id, d.cast<String, dynamic>()),
     ].whereType<Library>().toList();
+    _sectionKinds = {for (final l in libraries) l.ref.id: l.kind};
+    return libraries;
   }
+
+  /// Section kinds by section id, so paging a library does not re-fetch
+  /// `/library/sections` on every page. Filled by [libraries].
+  Map<String, LibraryKind>? _sectionKinds;
 
   @override
   Future<Page<ItemSummary>> browse(
@@ -56,15 +62,15 @@ class PlexMediaSource extends MediaSource implements WatchedState, Searchable {
     BrowseQuery query, {
     Cursor? cursor,
   }) async {
-    final sections = await libraries();
-    final section = sections.where((l) => l.ref == library).firstOrNull;
+    if (_sectionKinds == null) await libraries();
+    final kind = _sectionKinds?[library.id];
     final sort =
         plexSortOptions.where((o) => o.id == query.sortId).firstOrNull ??
             plexSortOptions.first;
     final descending = query.descending ?? sort.descendingByDefault;
     final start = int.tryParse(cursor?.value ?? '') ?? 0;
     final body = await client.container('/library/sections/${library.id}/all', {
-      'type': section?.kind == LibraryKind.shows ? '2' : '1',
+      'type': kind == LibraryKind.shows ? '2' : '1',
       'sort': '${sort.id}:${descending ? 'desc' : 'asc'}',
       if (query.filterIds.contains('unwatched')) 'unwatched': '1',
       'X-Plex-Container-Start': '$start',

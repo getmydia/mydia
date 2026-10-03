@@ -32,18 +32,21 @@ Future<void> until(bool Function() condition) async {
 
 void main() {
   late String? pinToken;
+  late String? pinBody;
   late MockAuthStorage storage;
   late InMemorySourceStore store;
   late ProviderContainer container;
 
   setUp(() {
     pinToken = null;
+    pinBody = null;
     storage = MockAuthStorage();
     store = InMemorySourceStore();
     final client = MockClient((request) async {
       switch ('${request.method} ${request.url.path}') {
         case 'POST /api/v2/pins':
-          return http.Response(jsonEncode({'id': 7, 'code': 'QZ4K'}), 201);
+          return http.Response(
+              pinBody ?? jsonEncode({'id': 7, 'code': 'QZ4K'}), 201);
         case 'GET /api/v2/pins/7':
           return http.Response(
               jsonEncode({'id': 7, 'authToken': pinToken}), 200);
@@ -73,6 +76,15 @@ void main() {
   PlexSignInState state() => container.read(plexSignInProvider(null));
   PlexSignInController controller() =>
       container.read(plexSignInProvider(null).notifier);
+
+  test('an unexpected reply fails the sign-in instead of spinning', () async {
+    pinBody = jsonEncode({'id': 'x'});
+    await controller().start();
+    expect(
+        state(),
+        isA<PlexSignInFailed>().having((s) => s.message, 'message',
+            'Could not sign in to Plex. Try again.'));
+  });
 
   test('shows the code, waits, then offers every server', () async {
     await controller().start();

@@ -114,6 +114,7 @@ String? appRedirect({
   required String location,
   required bool sourcesLoading,
   required List<Source> thirdParty,
+  SourceId? activeId,
 }) {
   final authStatus = auth.maybeWhen(
     data: (status) => status,
@@ -136,7 +137,11 @@ String? appRedirect({
     // Usable with a Plex or Stash server alone: land there, not on login.
     if (sourcesLoading) return null;
     if (thirdParty.isNotEmpty) {
-      return isSourceRoute ? null : '/s/${thirdParty.first.id.value}';
+      if (isSourceRoute) return null;
+      // The remembered source when it still exists, else the first.
+      final landing = thirdParty.where((s) => s.id == activeId).firstOrNull ??
+          thirdParty.first;
+      return '/s/${landing.id.value}';
     }
     return '/login';
   }
@@ -166,6 +171,7 @@ GoRouter appRouter(Ref ref) {
   // A first Plex or Stash source makes the app usable without Mydia.
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
 
   // Dispose the notifier when the provider is disposed
   ref.onDispose(() {
@@ -189,6 +195,7 @@ GoRouter appRouter(Ref ref) {
         location: state.matchedLocation,
         sourcesLoading: ref.read(sourcesLoadingProvider),
         thirdParty: ref.read(thirdPartySourcesProvider),
+        activeId: ref.read(selectedSourceIdProvider),
       );
       if (target != null) {
         debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '

@@ -96,8 +96,14 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       );
     } on SourceException catch (e) {
       if (ref.mounted) state = PlexSignInFailed(e.viewerMessage);
+    } catch (_) {
+      // An unexpected reply (a malformed PIN, say) must not leave a spinner.
+      _poll?.cancel();
+      if (ref.mounted) state = const PlexSignInFailed(_genericFailure);
     }
   }
+
+  static const _genericFailure = 'Could not sign in to Plex. Try again.';
 
   Future<void> _check(PlexTvClient tv, int pinId) async {
     if (_checking || !ref.mounted) return;
@@ -125,6 +131,9 @@ class PlexSignInController extends Notifier<PlexSignInState> {
     } on SourceException catch (e) {
       _poll?.cancel();
       if (ref.mounted) state = PlexSignInFailed(e.viewerMessage);
+    } catch (_) {
+      _poll?.cancel();
+      if (ref.mounted) state = const PlexSignInFailed(_genericFailure);
     } finally {
       _checking = false;
     }

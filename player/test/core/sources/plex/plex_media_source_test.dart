@@ -70,6 +70,23 @@ void main() {
     expect(libraries.last.kind, LibraryKind.shows);
   });
 
+  test('paging a library fetches the sections once', () async {
+    final b = build();
+    const library = LibraryRef(sourceId: sid, id: '1');
+    const query = BrowseQuery(pageSize: 2);
+    final first = await b.source.browse(library, query);
+    await b.source.browse(library, query, cursor: first.nextCursor);
+    final sectionCalls = b.server.requests
+        .where((r) => r.url.path == '/library/sections')
+        .length;
+    expect(sectionCalls, 1);
+
+    // libraries() refreshes what browse reuses.
+    await b.source.libraries();
+    expect(b.server.requests.where((r) => r.url.path == '/library/sections'),
+        hasLength(2));
+  });
+
   test('sends sort, filter and paging as Plex expects', () async {
     final b = build();
     await b.source.browse(
