@@ -73,6 +73,7 @@ class SourceSwitcher extends ConsumerWidget {
         SourceKind.mydia => Icons.dns_rounded,
         SourceKind.plex => Icons.live_tv_rounded,
         SourceKind.stash => Icons.video_library_rounded,
+        SourceKind.jellyfin => Icons.smart_display_rounded,
       };
 }
 

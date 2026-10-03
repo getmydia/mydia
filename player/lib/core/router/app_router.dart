@@ -18,6 +18,7 @@ import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
+import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
@@ -125,16 +126,16 @@ String? appRedirect({
   final isLoginRoute = location == '/login';
   final isDownloadsRoute = location == '/downloads';
   final isPlayerRoute = location.startsWith('/player');
-  // Reached from the login screen's "Connect Plex or Stash instead".
+  // Reached from the login screen's "Connect another server instead".
   final isAddSourceRoute = location.startsWith('/sources/add');
-  // Plex and Stash screens, and the screens that manage them.
+  // Third-party server screens, and the screens that manage them.
   final isSourceRoute =
       location.startsWith('/s/') || location.startsWith('/sources');
 
   if (authStatus == AuthStatus.unauthenticated &&
       !isLoginRoute &&
       !isAddSourceRoute) {
-    // Usable with a Plex or Stash server alone: land there, not on login.
+    // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
     if (sourcesLoading) return null;
     if (thirdParty.isNotEmpty) {
       if (isSourceRoute) return null;
@@ -168,7 +169,7 @@ GoRouter appRouter(Ref ref) {
     refreshNotifier.refresh();
   });
 
-  // A first Plex or Stash source makes the app usable without Mydia.
+  // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
@@ -230,6 +231,14 @@ GoRouter appRouter(Ref ref) {
         name: 'add_source_stash',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => StashConnectScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/jellyfin',
+        name: 'add_source_jellyfin',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => JellyfinConnectScreen(
           reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),

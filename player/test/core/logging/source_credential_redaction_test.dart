@@ -9,6 +9,8 @@ void main() {
     'ApiKey: stashsecret42',
     '{"ApiKey": "stashsecret42"}',
     'apikey=stashsecret42',
+    'Authorization: MediaBrowser Client="Mydia Player", Device="d", DeviceId="x", Version="1", Token="jellysecret42"',
+    '{"AccessToken":"jellysecret42","User":{}}',
   ];
 
   for (final line in lines) {
@@ -16,12 +18,14 @@ void main() {
       final out = redactLogMessage(line);
       expect(out, isNot(contains('plexsecret42')));
       expect(out, isNot(contains('stashsecret42')));
+      expect(out, isNot(contains('jellysecret42')));
     });
 
     test('crash sanitizing removes the credential from: $line', () {
       final out = sanitizeString(line);
       expect(out, isNot(contains('plexsecret42')));
       expect(out, isNot(contains('stashsecret42')));
+      expect(out, isNot(contains('jellysecret42')));
     });
   }
 }

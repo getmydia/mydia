@@ -1,6 +1,7 @@
-/// Reaches one Plex server over whichever of its advertised connections
-/// answers, starting with the first to answer and moving to a better one
-/// when it answers too.
+/// Reaches one server over whichever of its known connections answers,
+/// starting with the first to answer and moving to a better one when it
+/// answers too. Plex feeds it plex.tv's advertised connections; Jellyfin
+/// its entered URL and its LAN address.
 ///
 /// Modelled on the relay-first, hot-swap idea Mydia's own connection uses:
 /// browsing starts after one round trip, usually through the relay or the
@@ -18,44 +19,31 @@ import '../media_source.dart';
 import '../source.dart';
 import 'source_connection.dart';
 
-/// Returns the `machineIdentifier` the server at [base] reports, or null.
+/// Returns the server id the server at [base] reports, or null.
 typedef IdentityProbe = Future<String?> Function(Uri base, Duration timeout);
 
-/// The server's current `connections[]` from plex.tv.
+/// The server's current connections, as its source knows them.
 typedef CandidateFetch = Future<List<ServerConnection>> Function();
 
+/// [all] filtered to what may be tried and sorted best first.
+typedef ConnectionRanking = List<ServerConnection> Function(
+    List<ServerConnection> all);
+
 /// Lower is better: local, then remote, then relay; HTTPS before HTTP.
-int plexConnectionRank(ServerConnection c) =>
+int connectionRank(ServerConnection c) =>
     (c.relay ? 4 : (c.local ? 0 : 2)) + (c.uri.scheme == 'https' ? 0 : 1);
 
-/// [all] in preference order, without plain HTTP except on the LAN, and
-/// not even there when the server requires HTTPS.
-List<ServerConnection> rankPlexConnections(
-  List<ServerConnection> all, {
-  required bool allowInsecureLocal,
-}) =>
-    all
-        .where((c) =>
-            c.uri.scheme == 'https' ||
-            // plex.tv's `local` flag is only a claim: a plain HTTP candidate
-            // must also be a private address.
-            (c.local &&
-                !c.relay &&
-                allowInsecureLocal &&
-                isPrivateHost(c.uri.host)))
-        .toList()
-      ..sort((a, b) => plexConnectionRank(a).compareTo(plexConnectionRank(b)));
-
-class PlexConnectionManager implements SourceConnection {
-  PlexConnectionManager({
-    required this.machineIdentifier,
+class RacingConnection implements SourceConnection {
+  RacingConnection({
+    required this.expectedId,
     required List<ServerConnection> candidates,
     required IdentityProbe probe,
+    required ConnectionRanking rank,
     CandidateFetch? refetch,
-    this.allowInsecureLocal = true,
     this.refreshEvery = const Duration(minutes: 15),
   })  : _candidates = candidates,
         _probe = probe,
+        _rank = rank,
         _refetch = refetch;
 
   /// Started by the first use, not the constructor: the switcher builds a
@@ -69,8 +57,16 @@ class PlexConnectionManager implements SourceConnection {
   static const _directTimeout = Duration(seconds: 3);
   static const _relayTimeout = Duration(seconds: 6);
 
-  final String machineIdentifier;
-  final bool allowInsecureLocal;
+  /// The id the server must report back: Plex's `machineIdentifier`,
+  /// Jellyfin's server `Id`.
+  final String expectedId;
+  final ConnectionRanking _rank;
+
+  /// Each candidate's place in the latest ranking, by URI. A candidate
+  /// missing from it (the list changed under a race) sorts last.
+  Map<Uri, int> _order = const {};
+  int _orderOf(ServerConnection c) => _order[c.uri] ?? 1 << 20;
+
   final Duration refreshEvery;
   final IdentityProbe _probe;
   final CandidateFetch? _refetch;
@@ -113,7 +109,7 @@ class PlexConnectionManager implements SourceConnection {
         if (_disposed) return;
         if (fresh.isNotEmpty) _candidates = fresh;
       } catch (e) {
-        debugPrint('[PlexConnection] Could not re-fetch connections: $e');
+        debugPrint('[RacingConnection] Could not re-fetch connections: $e');
       }
     }
     await _race();
@@ -132,8 +128,8 @@ class PlexConnectionManager implements SourceConnection {
     final generation = ++_generation;
     _racing = true;
     final answered = <ServerConnection>[];
-    final ranked = rankPlexConnections(_candidates,
-        allowInsecureLocal: allowInsecureLocal);
+    final ranked = _rank(_candidates);
+    _order = {for (var i = 0; i < ranked.length; i++) ranked[i].uri: i};
     if (_current == null) _status.value = SourceConnectionStatus.connecting;
 
     await Future.wait([
@@ -155,8 +151,7 @@ class PlexConnectionManager implements SourceConnection {
       }
       return;
     }
-    answered
-        .sort((a, b) => plexConnectionRank(a).compareTo(plexConnectionRank(b)));
+    answered.sort((a, b) => _orderOf(a).compareTo(_orderOf(b)));
     _adopt(answered.first);
   }
 
@@ -173,11 +168,10 @@ class PlexConnectionManager implements SourceConnection {
       id = null;
     }
     if (generation != _generation || _disposed) return;
-    if (id != machineIdentifier) return;
+    if (id != expectedId) return;
     answered.add(candidate);
     final current = _current;
-    if (current == null ||
-        plexConnectionRank(candidate) < plexConnectionRank(current)) {
+    if (current == null || _orderOf(candidate) < _orderOf(current)) {
       _adopt(candidate);
     }
   }

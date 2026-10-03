@@ -31,6 +31,14 @@ class AddSourceScreen extends ConsumerWidget {
                 onTap: () => context.push('/sources/add/plex'),
               ),
               ListTile(
+                key: const Key('add-source-jellyfin'),
+                leading: const Icon(Icons.smart_display_rounded),
+                title: const Text('Jellyfin'),
+                subtitle:
+                    const Text('Sign in with Quick Connect or a password'),
+                onTap: () => context.push('/sources/add/jellyfin'),
+              ),
+              ListTile(
                 key: const Key('add-source-stash'),
                 leading: const Icon(Icons.video_library_rounded),
                 title: const Text('Stash'),
@@ -66,7 +74,7 @@ class ConnectOtherServerButton extends StatelessWidget {
       key: const Key('connect-other-server'),
       onPressed: () => context.push('/sources/add'),
       icon: const Icon(Icons.add_link),
-      label: const Text('Connect Plex or Stash instead'),
+      label: const Text('Connect another server instead'),
     );
   }
 }

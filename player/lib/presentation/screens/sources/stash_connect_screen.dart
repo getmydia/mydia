@@ -13,27 +13,10 @@ import '../../../core/sources/stash/stash_client.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
+import 'server_url.dart';
 
-/// What the viewer typed, as a server root, or null when it cannot be one.
-/// A bare `host:port` is taken as HTTP, which is how Stash ships.
-Uri? parseStashUrl(String text) {
-  final trimmed = text.trim();
-  if (trimmed.isEmpty) return null;
-  final withScheme = trimmed.contains('://') ? trimmed : 'http://$trimmed';
-  final uri = Uri.tryParse(withScheme);
-  if (uri == null || uri.host.isEmpty) return null;
-  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
-  // A reverse proxy may mount Stash under a subpath, so the path stays.
-  final path = uri.path.endsWith('/')
-      ? uri.path.substring(0, uri.path.length - 1)
-      : uri.path;
-  return Uri(
-    scheme: uri.scheme,
-    host: uri.host,
-    port: uri.hasPort ? uri.port : null,
-    path: path.isEmpty ? null : path,
-  );
-}
+/// What the viewer typed, as a Stash server root.
+Uri? parseStashUrl(String text) => parseServerUrl(text);
 
 Future<SourceAccountRecord> saveStashSource(
   WidgetRef ref, {

@@ -1,5 +1,5 @@
 /// Values a [PlaybackSession] hands the player screen. No GraphQL types
-/// cross this boundary, so a Plex or Stash session can produce the same
+/// cross this boundary, so a third-party session can produce the same
 /// values.
 library;
 
@@ -116,7 +116,7 @@ class PlaybackEpisode {
 enum WriteOutcome { done, failed, unavailable }
 
 /// What the screen may do beyond playing the session's item. A
-/// Plex or Stash session has none of these; Mydia has all.
+/// Plex, Stash or Jellyfin session has none of these; Mydia has all.
 enum PlaybackFeature {
   /// A local file may stand in for the stream, and offline mode applies.
   downloads,

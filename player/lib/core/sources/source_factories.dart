@@ -9,7 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
 import 'connection/connection_refresh_bus.dart';
-import 'connection/plex_connection_manager.dart';
+import 'connection/racing_connection.dart';
+import 'jellyfin/jellyfin_client.dart';
+import 'jellyfin/jellyfin_connections.dart';
+import 'jellyfin/jellyfin_identity.dart';
+import 'jellyfin/jellyfin_media_source.dart';
+import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
 import 'media_source.dart';
 import 'plex/plex_identity.dart';
@@ -29,6 +34,7 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
     switch (source.kind) {
       SourceKind.plex => _plex(ref, source),
       SourceKind.stash => _stash(ref, source),
+      SourceKind.jellyfin => _jellyfin(ref, source),
       SourceKind.mydia => throw ArgumentError.value(
           source.kind, 'kind', 'Mydia has its own adapter'),
     };
@@ -69,10 +75,11 @@ PlexMediaSource _plex(Ref ref, Source source) {
   final identity = ref.read(plexIdentityProvider.future);
   final rediscoveries = ref.read(_plexRediscoveriesProvider);
   final token = _CachedSecret(() => secrets.serverToken(source));
-  final connection = PlexConnectionManager(
-    machineIdentifier: source.server.machineIdentifier ?? source.server.id,
+  final connection = RacingConnection(
+    expectedId: source.server.machineIdentifier ?? source.server.id,
     candidates: source.server.connections,
-    allowInsecureLocal: !source.server.httpsRequired,
+    rank: (all) => rankPlexConnections(all,
+        allowInsecureLocal: !source.server.httpsRequired),
     probe: (base, timeout) => plexIdentityProbe(http, base, timeout),
     refetch: () =>
         _rediscoverPlex(ref, source, http, secrets, identity, rediscoveries),
@@ -179,4 +186,64 @@ StashMediaSource _stash(Ref ref, Source source) {
     ),
     onDispose: events.cancel,
   );
+}
+
+JellyfinMediaSource _jellyfin(Ref ref, Source source) {
+  final http = ref.read(sourceHttpProvider);
+  final secrets = ref.read(sourceSecretsProvider);
+  final identity = ref.read(jellyfinIdentityProvider.future);
+  final token = _CachedSecret(() => secrets.accountToken(source.account));
+  late final RacingConnection connection;
+  connection = RacingConnection(
+    expectedId: source.server.id,
+    candidates: source.server.connections,
+    rank: rankJellyfinConnections,
+    probe: (base, timeout) => jellyfinIdentityProbe(http, base, timeout),
+    refetch: () =>
+        _rediscoverJellyfin(ref, source, http, () => connection.currentBase),
+  );
+  final events = ref
+      .read(connectionRefreshBusProvider)
+      .events
+      .listen((_) => unawaited(connection.refresh()));
+  return JellyfinMediaSource(
+    source: source,
+    client: JellyfinClient(
+      connection: connection,
+      http: http,
+      identity: () => identity,
+      token: token.call,
+      // The profile is the Jellyfin user.
+      userId: source.profile.id,
+      onUnauthorized: () {
+        token.forget();
+        _flagReauth(ref, source);
+      },
+    ),
+    onDispose: events.cancel,
+  );
+}
+
+/// Re-reads the server's LAN address through whichever base answers now
+/// (the entered URL when nothing does yet) and stores it when it changed.
+Future<List<ServerConnection>> _rediscoverJellyfin(
+  Ref ref,
+  Source source,
+  SourceHttp http,
+  Uri? Function() currentBase,
+) async {
+  final entered = source.server.connections.first.uri;
+  final info = await jellyfinPublicInfo(http, currentBase() ?? entered);
+  if (info.id != source.server.id) return source.server.connections;
+  final fresh = jellyfinConnections(entered, info.localAddress);
+  if (ref.mounted && !listEquals(fresh, source.server.connections)) {
+    await ref.read(sourceRecordsProvider.notifier).updateServers(
+          source.account.id,
+          (servers) => [
+            for (final s in servers)
+              s.id == source.server.id ? s.copyWith(connections: fresh) : s,
+          ],
+        );
+  }
+  return fresh;
 }

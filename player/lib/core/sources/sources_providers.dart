@@ -124,7 +124,7 @@ final sourcesLoadingProvider = Provider<bool>((ref) {
   return !records.hasValue && !records.hasError;
 });
 
-/// Plex and Stash sources the viewer has added.
+/// Plex, Stash and Jellyfin sources the viewer has added.
 final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
   final snapshot = switch (ref.watch(sourceRecordsProvider)) {
     AsyncData(:final value) => value,
@@ -226,7 +226,10 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   final MediaSource media = switch (source.kind) {
     SourceKind.mydia =>
       MydiaSource(source: source, auth: ref.watch(authStateProvider)),
-    SourceKind.plex || SourceKind.stash => buildThirdPartySource(ref, source),
+    SourceKind.plex ||
+    SourceKind.stash ||
+    SourceKind.jellyfin =>
+      buildThirdPartySource(ref, source),
   };
   ref.onDispose(media.dispose);
   return media;

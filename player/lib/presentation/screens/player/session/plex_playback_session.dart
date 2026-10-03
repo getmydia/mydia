@@ -11,25 +11,16 @@ import '../../../../core/player/periodic_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/plex/plex_media_source.dart';
 import '../../../../core/sources/plex/plex_server_client.dart';
+import '../../../../core/sources/transcode_codecs.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
 import 'source_playback_session.dart';
-
-String _mime(String? container) => switch (container) {
-      'mkv' => 'video/x-matroska',
-      'mp4' || 'm4v' || 'mov' => 'video/mp4',
-      'avi' => 'video/x-msvideo',
-      'ts' || 'mpegts' => 'video/mp2t',
-      'webm' => 'video/webm',
-      null => 'video/mp4',
-      final other => 'video/$other',
-    };
 
 List<CandidateStrategy> plexCandidates(MediaVersion v) => [
       if (v.streamPath != null)
         CandidateStrategy(
           strategy: 'DIRECT_PLAY',
-          mime: _mime(v.container),
+          mime: containerMime(v.container),
           videoCodec: v.videoCodec,
         ),
       CandidateStrategy(
@@ -47,18 +38,11 @@ List<CandidateStrategy> plexCandidates(MediaVersion v) => [
 /// The `X-Plex-Client-Profile-Extra` value: transcode HLS to codecs this
 /// device decodes.
 String plexProfileExtra(DeviceProfile? profile) {
-  const videoKnown = {'h264', 'hevc', 'vp9', 'av1'};
-  const audioKnown = {'aac', 'ac3', 'eac3', 'mp3', 'opus', 'flac'};
-  final video = (profile?.videoCodecs ?? const ['h264'])
-      .where(videoKnown.contains)
-      .join(',');
-  final audio = (profile?.audioCodecs ?? const ['aac', 'ac3'])
-      .where(audioKnown.contains)
-      .join(',');
+  final codecs = transcodeCodecs(profile);
   return 'add-transcode-target(type=videoProfile&context=streaming'
       '&protocol=hls&container=mpegts'
-      '&videoCodec=${video.isEmpty ? 'h264' : video}'
-      '&audioCodec=${audio.isEmpty ? 'aac' : audio})';
+      '&videoCodec=${codecs.video.join(',')}'
+      '&audioCodec=${codecs.audio.join(',')})';
 }
 
 class PlexPlaybackSession extends SourcePlaybackSession {

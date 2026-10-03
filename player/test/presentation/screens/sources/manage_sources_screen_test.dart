@@ -8,6 +8,8 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 
+import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
+    show jellyfinRecord;
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -43,5 +45,25 @@ void main() {
     expect((await store.load()).accounts, isEmpty);
     expect(find.text('quill'), findsNothing);
     expect(await storage.read('source/acc1/account_token'), isNull);
+  });
+
+  testWidgets('labels a Jellyfin account as a Jellyfin user', (tester) async {
+    final store = InMemorySourceStore();
+    await store.putAccount(jellyfinRecord);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Authenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: const MaterialApp(
+          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Jellyfin user'), findsOneWidget);
+    expect(find.text('Stash server'), findsNothing);
+    expect(find.text('Change address or sign in'), findsOneWidget);
+    expect(find.text('Other servers'), findsOneWidget);
   });
 }

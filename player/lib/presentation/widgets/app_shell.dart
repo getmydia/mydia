@@ -495,7 +495,7 @@ class _AppShellState extends ConsumerState<AppShell>
             ),
           ],
         ),
-        // The bottom bar holds Mydia's destinations; a Plex or Stash screen
+        // The bottom bar holds Mydia's destinations; a third-party source screen
         // uses the drawer, which holds that source's.
         bottomNavigationBar: location.startsWith('/s/')
             ? null

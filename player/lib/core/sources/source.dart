@@ -1,4 +1,4 @@
-/// Where the player's media comes from: a Mydia, Plex or Stash server.
+/// Where the player's media comes from: a Mydia, Plex, Stash or Jellyfin server.
 ///
 /// Three levels, so a change to one never reshapes the others. A
 /// [ProviderAccount] is a credential, a [SourceProfile] is who acts with it
@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-enum SourceKind { mydia, plex, stash }
+enum SourceKind { mydia, plex, stash, jellyfin }
 
 /// Storage namespace of the one Mydia login that predates sources. Its
 /// credentials stay under `AuthService`'s original keys, unmigrated.

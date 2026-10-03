@@ -1,4 +1,4 @@
-/// The sidebar's destinations while a Plex or Stash source is on screen.
+/// The sidebar's destinations while a third-party source is on screen.
 /// Mydia's own destinations (calendar, collections, downloads, favorites)
 /// mean nothing for those sources, so they are replaced, not greyed.
 library;

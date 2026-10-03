@@ -14,9 +14,11 @@ final secretPattern =
 final apiKeyPattern =
     RegExp(r'''api_key["\s:=]+[^\s"]+''', caseSensitive: false);
 
-/// A Plex token or a Stash API key in a header, a query string or JSON,
-/// quoted or not. Group 1 is everything before the value.
+/// A Plex token, a Stash API key or a Jellyfin token (the `Token="..."`
+/// field of a `MediaBrowser` authorization header, or `AccessToken` in a
+/// sign-in reply), in a header, a query string or JSON, quoted or not.
+/// Group 1 is everything before the value.
 final sourceCredentialPattern = RegExp(
-  r'''((?:x-plex-token|apikey)["']?\s*[:=]\s*["']?)[^\s"'&,}]+''',
+  r'''((?:x-plex-token|apikey|token)["']?\s*[:=]\s*["']?)[^\s"'&,}]+''',
   caseSensitive: false,
 );

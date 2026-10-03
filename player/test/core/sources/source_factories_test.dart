@@ -5,6 +5,8 @@ import 'package:http/testing.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/connection/connection_refresh_bus.dart';
+import 'package:player/core/sources/jellyfin/jellyfin_identity.dart';
+import 'package:player/core/sources/jellyfin/jellyfin_media_source.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/plex/plex_identity.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
@@ -20,6 +22,9 @@ import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
+import 'jellyfin/fake_jellyfin_server.dart';
+import 'jellyfin/jellyfin_media_source_test.dart'
+    show jellyfinRecord, jellyfinSid;
 import 'plex/fake_plex_server.dart';
 import 'plex/plex_tv_client_test.dart' show resourcesJson;
 import 'stash/fake_stash_server.dart';
@@ -80,6 +85,8 @@ Future<ProviderContainer> containerFor({
     sourceHttpProvider.overrideWithValue(http),
     plexIdentityProvider.overrideWith((ref) async => const PlexIdentity(
         clientIdentifier: 'cid', version: '1', platform: 'Linux')),
+    jellyfinIdentityProvider.overrideWith((ref) async => const JellyfinIdentity(
+        deviceId: 'dev1', version: '1', deviceName: 'Mydia Player on Linux')),
   ]);
   addTearDown(container.dispose);
   await container.read(sourceRecordsProvider.future);
@@ -240,5 +247,47 @@ void main() {
     c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
     await settle();
     expect(resourceCalls, 1);
+  });
+
+  group('Jellyfin', () {
+    late FakeJellyfinServer jellyfin;
+    late ProviderContainer jf;
+
+    setUp(() async {
+      jellyfin = FakeJellyfinServer();
+      jf = await containerFor(
+        record: jellyfinRecord,
+        http: SourceHttp(client: jellyfin.client),
+        secrets: {'source/jf1/account_token': FakeJellyfinServer.token},
+      );
+    });
+
+    test('builds a live Jellyfin source that browses', () async {
+      final media = jf.read(mediaSourceProvider(jellyfinSid));
+      expect(media, isA<JellyfinMediaSource>());
+      expect(await media!.libraries(), hasLength(2));
+    });
+
+    test('a refresh stores the LAN address the server advertises', () async {
+      final media = jf.read(mediaSourceProvider(jellyfinSid))!;
+      await media.libraries();
+      await (media as JellyfinMediaSource).client.connection.refresh();
+      await settle();
+      final server = jf.read(thirdPartySourcesProvider).single.server;
+      expect(server.connections.map((c) => c.uri.toString()), [
+        'https://media.example.test',
+        'http://192.168.1.30:8096',
+      ]);
+    });
+
+    test('a 401 flags the account', () async {
+      final media = jf.read(mediaSourceProvider(jellyfinSid))!;
+      await media.libraries();
+      jellyfin.status = 401;
+      await expectLater(media.libraries(), throwsA(isA<SourceException>()));
+      await settle();
+      expect(jf.read(thirdPartySourcesProvider).single.account.needsReauth,
+          isTrue);
+    });
   });
 }

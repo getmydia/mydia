@@ -480,7 +480,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final card = InputCapabilities.directionalPrimary
         ? _buildTvPairingLayout(loginState, isCompact)
         : _buildClaimCodeCard(loginState, isCompact);
-    // The way in for someone with only a Plex or Stash server.
+    // The way in for someone with only a Plex, Jellyfin or Stash server.
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

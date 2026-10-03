@@ -169,7 +169,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final Player Function()? createPlayer;
 
   /// The server conversation for this playback. Null builds the Mydia
-  /// session from the route, as every Mydia caller does; a Plex or Stash
+  /// session from the route, as every Mydia caller does; a third-party
   /// route passes its own.
   final PlaybackSession? session;
 
@@ -1497,7 +1497,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           );
 
       // Check for downloaded content first (before any network operations)
-      // Only Mydia has downloads. A Plex or Stash id can collide with a
+      // Only Mydia has downloads. A third-party id can collide with a
       // Mydia download's id, so it is never looked up.
       final downloadedMedia = playsDownloads
           ? (await ref.read(downloadManagerProvider.future))
@@ -1794,7 +1794,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final memory = await _openPlaybackMemory();
       if (!_isCurrentLoad(gen)) return;
       // Mydia keys stall and failure memory by server URL or p2p node; a
-      // Plex or Stash session by its source id.
+      // third-party session by its source id.
       final serverKey = setup.memoryKey;
       _memory = memory;
       _serverKey = serverKey;

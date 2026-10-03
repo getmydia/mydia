@@ -1,4 +1,4 @@
-# Sources: Mydia, Plex and Stash
+# Sources: Mydia, Plex, Stash and Jellyfin
 
 The player browses and plays from more than one kind of server. This
 package is the layer that makes them look alike to the screens.
@@ -6,8 +6,10 @@ package is the layer that makes them look alike to the screens.
 ## Model
 
 A `ProviderAccount` is a credential (a plex.tv sign-in, a Stash API key,
-the Mydia login). A `SourceProfile` is who acts with it; Plex Home users
-become profiles later. A `SourceServer` is what the viewer browses. A
+a Jellyfin user's token, the Mydia login). A `SourceProfile` is who acts
+with it; Plex Home users become profiles later. A Jellyfin account is one
+user on one server; its profile id is the Jellyfin user id, which every
+per-user call sends as `userId`. A `SourceServer` is what the viewer browses. A
 `Source` is one of each, and `SourceId` (`account:profile:server`) is what
 routes, caches and memories key on. Ids are `[A-Za-z0-9_-]+`; the store
 refuses anything else.
@@ -23,16 +25,18 @@ non-Mydia account.
 - Accounts, profiles and servers: Hive box `source_accounts`, one JSON
   record per account (`HiveSourceStore`).
 - Tokens: `AuthStorage` (secure storage) under the account's namespace,
-  `source/<accountId>/account_token` and
+  `source/<accountId>/account_token` (plex.tv token, Stash API key,
+  Jellyfin access token) and
   `source/<accountId>/<profileId>/<serverId>/token` (`SourceSecrets`).
   A record is written only after its tokens.
 
 ## Connections
 
 Every request reads `SourceConnection.base()` at call time.
-`PlexConnectionManager` probes every advertised connection with
-`GET /identity` (3s, relay 6s), uses the first that answers with the right
-`machineIdentifier`, and moves to a better-ranked one when it answers
+`RacingConnection` probes every known connection (Plex's from plex.tv,
+Jellyfin's entered URL and LAN address) with an identity request (3s,
+relay 6s) and uses the first that answers with
+the expected server id, moving to a better-ranked one when it answers
 (local, then remote, then relay; HTTPS before HTTP; plain HTTP only on the
 LAN). It looks again on resume, on a network change, after a failed
 request and every 15 minutes, re-reading `connections[]` from plex.tv.
@@ -50,7 +54,8 @@ client needs the error body.
 
 Plex tokens travel as `X-Plex-Token`, Stash keys as `ApiKey`, both as
 headers, including to the player (media_kit sends them with every segment
-request). Stash adds `apikey=` to URLs it generates; `stashRelativePath`
+request). Jellyfin tokens travel in the `Token=` field of a `MediaBrowser`
+`Authorization` header. Stash adds `apikey=` to URLs it generates; `stashRelativePath`
 strips it. Artwork caches on `sourceId|path|width`, never the URL. The log
 and crash redactors know both header names.
 
@@ -58,13 +63,15 @@ and crash redactors know both header names.
 
 `PlaybackSession` is the player screen's only view of a server. Mydia's
 session wraps the GraphQL calls, `PlaybackController` and the p2p proxy.
-Plex and Stash share `SourcePlaybackSession` (data from the neutral item
-detail) and `SimplePlaybackTransport` (no readiness probe: both serve a
-complete HLS playlist). `PlaybackFeature` lists what only Mydia does
+Plex, Stash and Jellyfin share `SourcePlaybackSession` (data from the
+neutral item detail) and `SimplePlaybackTransport` (no readiness probe: all
+serve a complete HLS playlist). Jellyfin asks the server first
+(`PlaybackInfo`, with a device profile built from the same codec list Plex
+uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what only Mydia does
 (downloads, cast, library refresh, its connection's link path); the
 screen checks before using any of them.
 
-Plex and Stash report progress through `PeriodicProgressReporter`: every
+Plex, Stash and Jellyfin report progress through `PeriodicProgressReporter`: every
 10 seconds, on every play and pause, and on a seek (a position jump of more
 than 3 seconds). Watched is marked once per playback, at the same 90%
 threshold `ProgressService` uses for Mydia.
@@ -97,7 +104,7 @@ skips that directory.
    contract suite in `test/core/sources/media_source_contract.dart`.
    `ContinueWatching` and `HomeHubs` are optional; a source that implements
    one also lists the matching `SourceCapability`.
-2. A case in `source_factories.dart`.
+2. A `SourceKind` value and a case in `source_factories.dart`.
 3. A `SourcePlaybackSession` subclass and a case in
    `playbackSessionFor`.
 4. An add flow under `presentation/screens/sources/`.
