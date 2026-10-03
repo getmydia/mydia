@@ -31,7 +31,7 @@ class ManageSourcesScreen extends ConsumerWidget {
       ),
       body: switch (records) {
         AsyncData(:final value) when value.accounts.isEmpty => const Center(
-            child: Text('No Plex or Stash servers yet.'),
+            child: Text('No servers yet.'),
           ),
         AsyncData(:final value) => ListView(
             padding: const EdgeInsets.all(16),
