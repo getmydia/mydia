@@ -123,6 +123,26 @@ defmodule MydiaWeb.AdminQualityProfilesLiveTest do
       assert profile.min_upgrade_margin == 8
     end
 
+    test "persists a grab delay through the form", %{view: view} do
+      view
+      |> element(~s{button[phx-click="new_quality_profile"]})
+      |> render_click()
+
+      assert has_element?(view, "#quality-profile-grab-delay")
+
+      view
+      |> form("#quality-profile-form",
+        quality_profile: %{
+          "name" => "Delayed Grabs",
+          "grab_delay_hours" => "24",
+          "quality_standards" => %{"preferred_resolutions" => ["1080p"]}
+        }
+      )
+      |> render_submit()
+
+      assert Settings.get_quality_profile_by_name("Delayed Grabs").grab_delay_hours == 24
+    end
+
     test "validates quality profile form", %{view: view} do
       view
       |> element(~s{button[phx-click="new_quality_profile"]})

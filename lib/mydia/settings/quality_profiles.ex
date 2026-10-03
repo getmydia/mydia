@@ -169,6 +169,7 @@ defmodule Mydia.Settings.QualityProfiles do
       upgrades_allowed: profile.upgrades_allowed,
       upgrade_until_score: profile.upgrade_until_score,
       min_upgrade_margin: profile.min_upgrade_margin,
+      grab_delay_hours: profile.grab_delay_hours,
       description: profile.description,
       is_system: false,
       version: 1,
@@ -188,6 +189,7 @@ defmodule Mydia.Settings.QualityProfiles do
       :upgrades_allowed,
       :upgrade_until_score,
       :min_upgrade_margin,
+      :grab_delay_hours,
       :description,
       :is_system,
       :version,
@@ -256,6 +258,7 @@ defmodule Mydia.Settings.QualityProfiles do
       upgrades_allowed: profile.upgrades_allowed,
       upgrade_until_score: profile.upgrade_until_score,
       min_upgrade_margin: profile.min_upgrade_margin,
+      grab_delay_hours: profile.grab_delay_hours,
       quality_standards: profile.quality_standards,
       version: profile.version,
       exported_at: DateTime.utc_now() |> DateTime.to_iso8601()
@@ -537,6 +540,7 @@ defmodule Mydia.Settings.QualityProfiles do
       upgrade_until_score: resolve_upgrade_until_score(data),
       min_upgrade_margin:
         resolve_typed(data, "min_upgrade_margin", :min_upgrade_margin, &is_integer/1),
+      grab_delay_hours: resolve_typed(data, "grab_delay_hours", :grab_delay_hours, &is_integer/1),
       quality_standards: atomize_keys(data["quality_standards"]),
       version: data["version"] || 1,
       is_system: false,

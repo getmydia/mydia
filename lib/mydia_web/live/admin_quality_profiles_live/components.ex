@@ -368,6 +368,16 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
           hint="How much higher a candidate release's score must be than the current file's before it counts as a real upgrade. Keeps a sweep from swapping files for a negligible gain."
         />
       </div>
+
+      <.input
+        field={@form[:grab_delay_hours]}
+        type="number"
+        id="quality-profile-grab-delay"
+        label="Wait before grabbing (hours)"
+        min="0"
+        max="168"
+        hint="Hold automatic grabs until the first acceptable release is this old, so better releases have time to appear. A release that already meets the upgrade cutoff is grabbed right away. Searches you start yourself never wait. 0 grabs immediately."
+      />
     </div>
     """
   end

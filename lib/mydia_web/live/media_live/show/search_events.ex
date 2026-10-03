@@ -73,7 +73,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
 
       case media_item.type do
         "movie" ->
-          %{mode: "specific", media_item_id: media_item.id}
+          %{mode: "specific", media_item_id: media_item.id, bypass_delay: true}
           |> Mydia.Jobs.MovieSearch.new()
           |> Oban.insert()
 
@@ -90,7 +90,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
            |> put_flash(:info, "Searching indexers for #{media_item.title}...")}
 
         "tv_show" ->
-          %{mode: "show", media_item_id: media_item.id}
+          %{mode: "show", media_item_id: media_item.id, bypass_delay: true}
           |> Mydia.Jobs.TVShowSearch.new()
           |> Oban.insert()
 
@@ -189,7 +189,12 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
     media_item = socket.assigns.media_item
     season_num = String.to_integer(season_number_str)
 
-    %{mode: "season", media_item_id: media_item.id, season_number: season_num}
+    %{
+      mode: "season",
+      media_item_id: media_item.id,
+      season_number: season_num,
+      bypass_delay: true
+    }
     |> Mydia.Jobs.TVShowSearch.new()
     |> Oban.insert()
 
@@ -210,7 +215,7 @@ defmodule MydiaWeb.MediaLive.Show.SearchEvents do
   def auto_search_episode(%{"episode-id" => episode_id}, socket) do
     episode = Media.get_episode!(socket.assigns.current_scope, episode_id)
 
-    %{mode: "specific", episode_id: episode_id}
+    %{mode: "specific", episode_id: episode_id, bypass_delay: true}
     |> Mydia.Jobs.TVShowSearch.new()
     |> Oban.insert()
 
