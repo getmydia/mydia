@@ -97,7 +97,7 @@ defmodule Mydia.Media.TokenCache do
   def invalidate_for_device(device_id) do
     # Stamp first so a validation that read the old snapshot and has not yet
     # stored it will see the stamp and skip the insert (see validate_and_cache/2).
-    :ets.insert(@stamps, {device_id, System.monotonic_time()})
+    advance_stamp(device_id, System.monotonic_time())
 
     # Scan and delete all entries for this device
     # This is O(n) but should be rare (only on device revocation)
@@ -145,6 +145,18 @@ defmodule Mydia.Media.TokenCache do
   end
 
   # Private functions
+
+  # Stamps only move forward: two invalidations racing for one device must
+  # not let the older timestamp overwrite the newer one.
+  defp advance_stamp(device_id, now) do
+    unless :ets.insert_new(@stamps, {device_id, now}) do
+      :ets.select_replace(@stamps, [
+        {{device_id, :"$1"}, [{:<, :"$1", now}], [{{device_id, now}}]}
+      ])
+    end
+
+    :ok
+  end
 
   defp validate_and_cache(token, cache_key) do
     # Race: verify_token reads the device and user from the database, and the

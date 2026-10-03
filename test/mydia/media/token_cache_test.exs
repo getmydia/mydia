@@ -68,6 +68,29 @@ defmodule Mydia.Media.TokenCacheTest do
       assert :ok = TokenCache.invalidate_for_device("any-device-id")
       assert :ok = TokenCache.invalidate_for_device("another-device-id")
     end
+
+    test "never moves a device's invalidation stamp backwards" do
+      device_id = "dev-x"
+
+      # First invalidation creates the stamp
+      :ok = TokenCache.invalidate_for_device(device_id)
+
+      assert [{^device_id, first_stamp}] =
+               :ets.lookup(:media_token_cache_invalidations, device_id)
+
+      # Insert an artificially NEWER stamp
+      newer = System.monotonic_time() + 1_000_000_000
+      :ets.insert(:media_token_cache_invalidations, {device_id, newer})
+
+      # Second invalidation with an older timestamp should not overwrite the newer one
+      :ok = TokenCache.invalidate_for_device(device_id)
+
+      assert [{^device_id, final_stamp}] =
+               :ets.lookup(:media_token_cache_invalidations, device_id)
+
+      assert final_stamp == newer
+      assert final_stamp > first_stamp
+    end
   end
 
   describe "validation racing an invalidation" do
