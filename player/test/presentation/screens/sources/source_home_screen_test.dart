@@ -179,4 +179,48 @@ void main() {
       expect(fake.continueCalls, 2);
     });
   });
+
+  group('hubs', () {
+    testWidgets('replace the library rows', (tester) async {
+      final fake = FakeHubSource();
+      await pumpHome(tester, fake);
+      expect(find.text('Recently Added in Films'), findsOneWidget);
+      expect(find.text('Recently Released'), findsOneWidget);
+      expect(find.byKey(const Key('source-library-row-movies')), findsNothing);
+      expect(fake.browseCalls, isEmpty,
+          reason: 'no per-library preview is fetched');
+    });
+
+    testWidgets('follow Continue Watching', (tester) async {
+      await pumpHome(tester, FakeHubSource());
+      expect(
+        tester.getTopLeft(find.byKey(const Key('source-continue-watching'))).dy,
+        lessThan(tester
+            .getTopLeft(find.byKey(const Key('source-hub-home.movies.recent')))
+            .dy),
+      );
+    });
+
+    testWidgets('a hub title opens its library; a mixed hub has no link',
+        (tester) async {
+      final pushed = await pumpHome(tester, FakeHubSource());
+      await tester
+          .tap(find.byKey(const Key('source-hub-row-home.mixed.released')));
+      await tester.pumpAndSettle();
+      expect(pushed, isEmpty);
+      await tester
+          .tap(find.byKey(const Key('source-hub-row-home.movies.recent')));
+      await tester.pumpAndSettle();
+      expect(pushed.last, '/s/acc1:owner:aa11/library/movies');
+    });
+
+    testWidgets('a hub failure falls back to the library rows', (tester) async {
+      final fake = FakeHubSource()
+        ..hubsError = const SourceException.unreachable();
+      await pumpHome(tester, fake);
+      expect(
+          find.byKey(const Key('source-library-row-movies')), findsOneWidget);
+      expect(find.byKey(const Key('source-continue-watching')), findsOneWidget);
+    });
+  });
 }

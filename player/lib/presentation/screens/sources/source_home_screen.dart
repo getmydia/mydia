@@ -54,7 +54,7 @@ class SourceHomeScreen extends ConsumerWidget {
                       sourceId: sourceId,
                       searchable: source?.as<Searchable>() != null),
                   SourceContinueWatchingRow(sourceId: sourceId),
-                  for (final library in value) _LibraryRow(library: library),
+                  _Rows(sourceId: sourceId, libraries: value),
                 ],
               ),
             ),
@@ -119,6 +119,54 @@ class _Header extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// The server's hubs when it has them, else one row per library. A hub
+/// failure falls back to the libraries; a refresh keeps the old hubs on
+/// screen until the new ones land.
+class _Rows extends ConsumerWidget {
+  const _Rows({required this.sourceId, required this.libraries});
+
+  final SourceId sourceId;
+  final List<Library> libraries;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hubs = ref.watch(sourceHubsProvider(sourceId));
+    final list = hubs.hasValue ? hubs.requireValue : null;
+    if (list != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final hub in list)
+            SourcePosterRow(
+              key: ValueKey('source-hub-${hub.id}'),
+              title: hub.title,
+              titleKey: Key('source-hub-row-${hub.id}'),
+              railId: 'hub-${hub.id}',
+              items: hub.items,
+              onTitleTap: switch (hub.library) {
+                final library? => () =>
+                    context.push(sourceLibraryLocation(library)),
+                null => null,
+              },
+            ),
+        ],
+      );
+    }
+    if (hubs.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final library in libraries) _LibraryRow(library: library),
+      ],
     );
   }
 }
