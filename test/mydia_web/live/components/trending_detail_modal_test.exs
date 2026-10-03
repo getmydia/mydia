@@ -261,4 +261,40 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       refute html =~ ~s(id="trending-detail-restricted")
     end
   end
+
+  describe "header layout" do
+    # The header used to be a fixed h-48 with the title absolutely positioned
+    # at its bottom. Enough badges on a phone pushed the title up past the top
+    # edge, where the modal box's overflow-hidden clipped it (#1008).
+    test "grows with its content instead of a fixed height" do
+      [class] =
+        render_modal(item(), metadata(%{number_of_seasons: 3}))
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#trending-detail-modal-header")
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "min-h-48"
+      refute class =~ ~r/(^|\s)h-48(\s|$)/
+    end
+
+    test "the add button keeps its full accessible name" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 3}))
+
+      refute LazyHTML.from_fragment(html)
+             |> LazyHTML.query(
+               ~s(#trending-detail-modal-actions button[aria-label="Add to Library"])
+             )
+             |> Enum.empty?()
+    end
+
+    test "the caret is full size beside the add button" do
+      [class] =
+        render_modal(item(), metadata(%{number_of_seasons: 3}))
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#trending-detail-modal-actions [data-test="add-config-caret"]))
+        |> LazyHTML.attribute("class")
+
+      refute class =~ "btn-sm"
+    end
+  end
 end
