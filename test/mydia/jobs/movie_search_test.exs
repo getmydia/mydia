@@ -1043,6 +1043,139 @@ defmodule Mydia.Jobs.MovieSearchTest do
     end
   end
 
+  describe "grab delay" do
+    defp delayed_movie(attrs \\ %{}) do
+      profile =
+        quality_profile_fixture(
+          Map.merge(
+            %{
+              name: "Delayed #{System.unique_integer([:positive])}",
+              grab_delay_hours: 24,
+              upgrade_until_score: 100,
+              quality_standards: %{preferred_resolutions: ["1080p"]}
+            },
+            attrs
+          )
+        )
+
+      media_item_fixture(%{
+        type: "movie",
+        title: "Glass Harbor",
+        year: 2031,
+        quality_profile_id: profile.id
+      })
+    end
+
+    defp mock_release(bypass, hours_old) do
+      published = DateTime.utc_now() |> DateTime.add(-hours_old * 3600, :second)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.movie_result(%{title: "Glass.Harbor", year: 2031, seeders: 40})
+          |> Map.put(:published_at, DateTime.to_iso8601(published))
+        ]
+      )
+    end
+
+    defp movie_search_jobs do
+      Repo.all(Oban.Job) |> Enum.filter(&(&1.worker == "Mydia.Jobs.MovieSearch"))
+    end
+
+    test "holds a fresh release and schedules a re-check", %{bypass: bypass} do
+      mock_release(bypass, 1)
+      movie = delayed_movie()
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert [job] = movie_search_jobs()
+      assert job.args == %{"mode" => "specific", "media_item_id" => movie.id}
+      assert job.state == "scheduled"
+      assert Mydia.Search.eligible?("movie", movie.id)
+    end
+
+    test "grabs once the release is older than the delay", %{bypass: bypass} do
+      mock_release(bypass, 25)
+      movie = delayed_movie()
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+      assert movie_search_jobs() == []
+    end
+
+    test "a user-started search skips the delay", %{bypass: bypass} do
+      mock_release(bypass, 1)
+      movie = delayed_movie()
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id,
+                 "bypass_delay" => true
+               })
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+    end
+
+    test "the all_monitored path waits too", %{bypass: bypass} do
+      mock_release(bypass, 1)
+      movie = delayed_movie()
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "all_monitored"})
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert [job] = movie_search_jobs()
+      assert job.args == %{"mode" => "specific", "media_item_id" => movie.id}
+    end
+  end
+
+  describe "grab delay on upgrades" do
+    test "an upgrade waits and re-checks in upgrade mode", %{
+      library_path: library_path,
+      bypass: bypass
+    } do
+      published = DateTime.utc_now() |> DateTime.add(-3600, :second)
+
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.movie_result(%{title: "The Matrix", year: 1999, quality: "1080p"})
+          |> Map.put(:published_at, DateTime.to_iso8601(published))
+        ]
+      )
+
+      {movie, media_file} =
+        upgrade_target(library_path,
+          profile: %{
+            name: "Delayed upgrade #{System.unique_integer([:positive])}",
+            quality_standards: %{preferred_resolutions: ["1080p"]},
+            min_upgrade_margin: 0,
+            upgrade_until_score: 100,
+            grab_delay_hours: 24
+          }
+        )
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "upgrade",
+                 "media_item_id" => movie.id,
+                 "media_file_id" => media_file.id,
+                 "reasons" => ["quality"]
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+
+      assert [job] = movie_search_jobs()
+
+      assert job.args == %{
+               "mode" => "upgrade",
+               "media_item_id" => movie.id,
+               "media_file_id" => media_file.id,
+               "reasons" => ["quality"]
+             }
+    end
+  end
+
   # Overrides only the :downloads embed of the layered runtime config
   # (Mydia.Config.get().downloads), leaving the rest of the resolved config
   # (indexers, media, and so on) exactly as this suite's setup left it.

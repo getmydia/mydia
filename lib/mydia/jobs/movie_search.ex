@@ -37,6 +37,8 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Accounts.Scope
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
+  alias Mydia.Indexers.GrabDelay
+  alias Mydia.Jobs.SearchDeferral
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library
@@ -59,7 +61,8 @@ defmodule Mydia.Jobs.MovieSearch do
       :size_range,
       :blocked_tags,
       :preferred_tags,
-      :reasons
+      :reasons,
+      bypass_delay: false
     ]
 
     @type t :: %__MODULE__{
@@ -70,10 +73,17 @@ defmodule Mydia.Jobs.MovieSearch do
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
             preferred_tags: [String.t()] | nil,
-            reasons: [:quality | :language] | nil
+            reasons: [:quality | :language] | nil,
+            bypass_delay: boolean()
           }
 
-    def parse(%{"mode" => "all_monitored"} = raw) do
+    # Set only by searches the user started (Search buttons, search on add,
+    # GraphQL); they skip the profile's grab delay. See Mydia.Indexers.GrabDelay.
+    def parse(raw) do
+      %{do_parse(raw) | bypass_delay: Map.get(raw, "bypass_delay") == true}
+    end
+
+    defp do_parse(%{"mode" => "all_monitored"} = raw) do
       %__MODULE__{
         mode: "all_monitored",
         min_seeders: Map.get(raw, "min_seeders"),
@@ -83,7 +93,7 @@ defmodule Mydia.Jobs.MovieSearch do
       }
     end
 
-    def parse(%{"mode" => "specific", "media_item_id" => media_item_id} = raw) do
+    defp do_parse(%{"mode" => "specific", "media_item_id" => media_item_id} = raw) do
       %__MODULE__{
         mode: "specific",
         media_item_id: media_item_id,
@@ -94,13 +104,13 @@ defmodule Mydia.Jobs.MovieSearch do
       }
     end
 
-    def parse(
-          %{
-            "mode" => "upgrade",
-            "media_item_id" => media_item_id,
-            "media_file_id" => media_file_id
-          } = raw
-        ) do
+    defp do_parse(
+           %{
+             "mode" => "upgrade",
+             "media_item_id" => media_item_id,
+             "media_file_id" => media_file_id
+           } = raw
+         ) do
       %__MODULE__{
         mode: "upgrade",
         media_item_id: media_item_id,
@@ -383,8 +393,8 @@ defmodule Mydia.Jobs.MovieSearch do
     results = reject_blacklisted(results, movie: movie)
     ranking_opts = build_ranking_options(movie, args)
 
-    case ReleaseRanker.select_best_result(results, ranking_opts) do
-      nil ->
+    case select_release(results, ranking_opts, args) do
+      :none ->
         Logger.warning("No suitable results after ranking for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -400,7 +410,11 @@ defmodule Mydia.Jobs.MovieSearch do
 
         {:no_results, 0}
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        defer_grab(movie, args, until, best, query, length(results))
+        {:ok, 0}
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best result for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -605,8 +619,8 @@ defmodule Mydia.Jobs.MovieSearch do
     ranking_opts = build_ranking_options(movie, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["movie"])
 
-    case ReleaseRanker.select_best_result(candidates, ranking_opts) do
-      nil ->
+    case select_release(candidates, ranking_opts, args) do
+      :none ->
         Logger.warning("No suitable results after ranking for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -625,7 +639,11 @@ defmodule Mydia.Jobs.MovieSearch do
 
         :no_results
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        defer_grab(movie, args, until, best, query, length(results))
+        :ok
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best result for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -667,6 +685,41 @@ defmodule Mydia.Jobs.MovieSearch do
             :no_results
         end
     end
+  end
+
+  defp select_release(candidates, ranking_opts, %Args{} = args) do
+    candidates
+    |> ReleaseRanker.rank_all(ranking_opts)
+    |> GrabDelay.select(ranking_opts, DateTime.utc_now(), bypass: args.bypass_delay)
+  end
+
+  # The re-check targets the same unit: an upgrade re-checks as that upgrade,
+  # anything else as a search for this one movie.
+  defp recheck_args(movie, %Args{mode: "upgrade"} = args) do
+    %{
+      "mode" => "upgrade",
+      "media_item_id" => movie.id,
+      "media_file_id" => args.media_file_id,
+      "reasons" => Reasons.encode(args.reasons)
+    }
+  end
+
+  defp recheck_args(movie, _args), do: %{"mode" => "specific", "media_item_id" => movie.id}
+
+  defp defer_grab(movie, args, until, %{result: best, score: score}, query, results_count) do
+    Logger.info("Holding automatic grab for movie until the grab delay passes",
+      media_item_id: movie.id,
+      title: movie.title,
+      result_title: best.title,
+      grab_after: until
+    )
+
+    SearchDeferral.defer(__MODULE__, recheck_args(movie, args), until, movie, %{
+      "query" => query,
+      "results_count" => results_count,
+      "selected_release" => best.title,
+      "score" => score
+    })
   end
 
   defp build_ranking_options(movie, %Args{} = args) do
