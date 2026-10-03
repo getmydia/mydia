@@ -157,12 +157,19 @@ defmodule Mydia.RequestAccessCatalog do
   end
 
   @doc """
-  Clicks Request and returns the Discover view without waiting for a row, for
-  tests that expect the click to be refused with a flash.
+  Sends the Request event and returns the Discover view without waiting for a
+  row, for tests that expect it to be refused with a flash. Sent as an event
+  because the button renders disabled for a title already requested; this is
+  what a page that went stale before another guest's request would send.
   """
   def click_request(who, %Title{} = title) do
     {:ok, view, _html} = live(who.conn, discover_path(title))
-    view |> element(request_button(title)) |> render_click()
+
+    render_hook(view, "request_media", %{
+      "ref" => "tmdb:#{title.tmdb_id}",
+      "media_type" => to_string(title.type)
+    })
+
     # Sync with the LiveView so the handle_info that submits has run.
     _ = render(view)
     view
