@@ -195,7 +195,17 @@ class JellyfinStreamResolver implements StreamResolver {
             'playSessionId': session,
             'deviceId': deviceId,
             'SegmentContainer': 'ts',
-            'VideoCodec': copy ? (version.videoCodec ?? 'h264') : 'h264',
+            // Copy keeps the source codec when this device decodes it; the
+            // device's own codecs follow, so a fallback encode targets one
+            // it can play rather than the source's.
+            'VideoCodec': copy
+                ? {
+                    if (version.videoCodec case final v?
+                        when codecs.video.contains(v))
+                      v,
+                    ...codecs.video,
+                  }.join(',')
+                : 'h264',
             'AudioCodec': codecs.audio.join(','),
             'AllowVideoStreamCopy': '$copy',
             'AllowAudioStreamCopy': 'true',

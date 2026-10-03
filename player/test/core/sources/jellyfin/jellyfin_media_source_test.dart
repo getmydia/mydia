@@ -127,6 +127,20 @@ void main() {
     expect(q['IncludeItemTypes'], 'Episode');
   });
 
+  test('seasons come in one page; a later cursor adds nothing', () async {
+    final b = build();
+    const show = ItemRef(
+        sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1');
+    final first = await b.source.children(show);
+    expect(first.nextCursor, isNull);
+    final requests = b.server.requests.length;
+    final later = await b.source.children(show, cursor: const Cursor('200'));
+    expect(later.items, isEmpty);
+    expect(later.nextCursor, isNull);
+    expect(b.server.requests.length, requests,
+        reason: 'the server would answer the same seasons again');
+  });
+
   test('a movie has no children', () async {
     final page = await build().source.children(const ItemRef(
         sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm1'));

@@ -137,6 +137,9 @@ class JellyfinMediaSource extends MediaSource
   @override
   Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async {
     final start = int.tryParse(cursor?.value ?? '') ?? 0;
+    // `/Shows/{id}/Seasons` does not page: it always answers every season,
+    // so a later cursor has nothing to add.
+    if (parent.kind == ItemKind.show && start > 0) return const Page(items: []);
     final pageQuery = {'StartIndex': '$start', 'Limit': '$_childPage'};
     final body = switch (parent.kind) {
       ItemKind.show => await client.get('/Shows/${parent.externalId}/Seasons',
@@ -158,8 +161,12 @@ class JellyfinMediaSource extends MediaSource
       ItemKind.movie || ItemKind.episode || ItemKind.video => null,
     };
     if (body == null) return const Page(items: []);
-    // `/Shows/{id}/Seasons` does not page; it starts at 0 whatever was asked.
-    return _page(body, parent.kind == ItemKind.show ? 0 : start);
+    if (parent.kind == ItemKind.show) {
+      // Every season came back, so there is no next page.
+      final page = _page(body, 0);
+      return Page(items: page.items, total: page.total);
+    }
+    return _page(body, start);
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/playback_plan.dart';
+import 'package:player/core/player/device_profile.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/jellyfin_playback_session.dart';
@@ -115,10 +116,21 @@ void main() {
     expect(end.url.queryParameters['deviceId'], 'dev1');
   });
 
-  test('copy keeps the source video codec', () async {
-    final o = open();
+  Future<Map<String, String>> copyQuery(List<String> videoCodecs) async {
+    final b = build();
+    final session = JellyfinPlaybackSession(
+      source: b.source,
+      item: movie,
+      fileId: 'm2',
+      profile: DeviceProfile(
+        containers: const ['mp4', 'mkv'],
+        videoCodecs: videoCodecs,
+        audioCodecs: const ['aac'],
+        hdrFormats: const [],
+      ),
+    );
     final source =
-        await (await setupOf(o.session)).createTransport(relayed: false).open(
+        await (await setupOf(session)).createTransport(relayed: false).open(
               const HlsPlan(
                 strategy: HlsStrategy.copy,
                 rung: QualityRung.original,
@@ -128,10 +140,19 @@ void main() {
               fileId: 'm2',
               startAt: Duration.zero,
             );
-    final q = Uri.parse(source.url).queryParameters;
-    expect(q['VideoCodec'], 'hevc');
+    return Uri.parse(source.url).queryParameters;
+  }
+
+  test('copy keeps the source video codec the device decodes', () async {
+    final q = await copyQuery(const ['h264', 'hevc']);
+    expect(q['VideoCodec'], 'hevc,h264');
     expect(q['AllowVideoStreamCopy'], 'true');
     expect(q.containsKey('MaxHeight'), isFalse);
+  });
+
+  test('copy never asks for a source codec the device cannot decode', () async {
+    final q = await copyQuery(const ['h264']);
+    expect(q['VideoCodec'], 'h264');
   });
 
   test('progress: start, progress, watched, stopped', () async {
