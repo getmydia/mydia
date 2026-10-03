@@ -4,6 +4,11 @@ defmodule Mydia.AccessRestrictions.RemoteFilterGuardTest do
   pass them through `Mydia.Media.RemoteFilter`, directly or through a helper
   that does. A new surface that forgets is how restricted accounts saw
   everything on Discover (#1000).
+
+  Limits: the scan is file-granular and textual. A second, unfiltered catalog
+  call next to a filtered one in the same file is not caught, so a reviewer
+  must check every new catalog call by hand. Whole-line `#` comments are
+  ignored; a `#` after code on the same line is not.
   """
   use ExUnit.Case, async: true
 
@@ -24,10 +29,22 @@ defmodule Mydia.AccessRestrictions.RemoteFilterGuardTest do
 
   @doc false
   def offender?(source) do
-    calls_catalog?(source) and not filtered?(source)
+    code = strip_comment_lines(source)
+    calls_catalog?(code) and not filtered?(code)
   end
 
-  defp calls_catalog?(source), do: Enum.any?(@catalog_calls, &(source =~ "Metadata.#{&1}("))
+  # A comment that names `RemoteFilter.` must not exempt a file.
+  defp strip_comment_lines(source) do
+    source
+    |> String.split("\n")
+    |> Enum.reject(&String.starts_with?(String.trim_leading(&1), "#"))
+    |> Enum.join("\n")
+  end
+
+  defp calls_catalog?(source) do
+    code = strip_comment_lines(source)
+    Enum.any?(@catalog_calls, &(code =~ "Metadata.#{&1}("))
+  end
 
   defp filtered?(source) do
     source =~ "RemoteFilter." or Enum.any?(@filtered_helpers, &(source =~ &1))
@@ -71,6 +88,15 @@ defmodule Mydia.AccessRestrictions.RemoteFilterGuardTest do
       refute offender?("""
              defmodule ViaHelper do
                def rows, do: Metadata.discover(c) && Recommendations.for_ref(scope, ref)
+             end
+             """)
+    end
+
+    test "a comment that mentions RemoteFilter does not exempt the file" do
+      assert offender?("""
+             defmodule Leaky do
+               # TODO: pipe this through RemoteFilter.filter/2 and Recommendations.for_ref(
+               def rows, do: Metadata.search(c, q)
              end
              """)
     end
