@@ -18,6 +18,7 @@ import 'plex/plex_tv_client.dart';
 import 'source.dart';
 import 'source_http.dart';
 import 'sources_providers.dart';
+import 'store/source_secrets.dart';
 import 'stash/stash_client.dart';
 import 'stash/stash_media_source.dart';
 
@@ -52,13 +53,16 @@ void _flagReauth(Ref ref, Source source) {
 PlexMediaSource _plex(Ref ref, Source source) {
   final http = ref.read(sourceHttpProvider);
   final secrets = ref.read(sourceSecretsProvider);
+  // Read once: closures below outlive the build and must not touch `ref`
+  // for anything but the guarded record writes.
+  final identity = ref.read(plexIdentityProvider.future);
   final token = _CachedSecret(() => secrets.serverToken(source));
   final connection = PlexConnectionManager(
     machineIdentifier: source.server.machineIdentifier ?? source.server.id,
     candidates: source.server.connections,
     allowInsecureLocal: !source.server.httpsRequired,
     probe: (base, timeout) => plexIdentityProbe(http, base, timeout),
-    refetch: () => _rediscoverPlex(ref, source),
+    refetch: () => _rediscoverPlex(ref, source, http, secrets, identity),
   );
   final events = ref
       .read(connectionRefreshBusProvider)
@@ -69,7 +73,7 @@ PlexMediaSource _plex(Ref ref, Source source) {
     client: PlexServerClient(
       connection: connection,
       http: http,
-      identity: () => ref.read(plexIdentityProvider.future),
+      identity: () => identity,
       token: token.call,
       onUnauthorized: () {
         token.forget();
@@ -82,14 +86,16 @@ PlexMediaSource _plex(Ref ref, Source source) {
 
 /// Re-reads the account's servers from plex.tv, stores what changed, and
 /// returns this server's current connections.
-Future<List<ServerConnection>> _rediscoverPlex(Ref ref, Source source) async {
-  final accountToken =
-      await ref.read(sourceSecretsProvider).accountToken(source.account);
+Future<List<ServerConnection>> _rediscoverPlex(
+  Ref ref,
+  Source source,
+  SourceHttp http,
+  SourceSecrets secrets,
+  Future<PlexIdentity> identity,
+) async {
+  final accountToken = await secrets.accountToken(source.account);
   if (accountToken == null) return source.server.connections;
-  final tv = PlexTvClient(
-    http: ref.read(sourceHttpProvider),
-    identity: await ref.read(plexIdentityProvider.future),
-  );
+  final tv = PlexTvClient(http: http, identity: await identity);
   final List<PlexResource> resources;
   try {
     resources = await tv.servers(accountToken);
