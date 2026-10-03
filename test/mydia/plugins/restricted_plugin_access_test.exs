@@ -60,8 +60,29 @@ defmodule Mydia.Plugins.RestrictedPluginAccessTest do
   end
 
   test "data_read without a user context still reads as the system", c do
-    assert {:ok, _} =
-             HostFunctions.data_read(c.plugin, %{"resource" => "media_item", "id" => c.hidden.id})
+    request = %{"resource" => "media_item", "id" => c.hidden.id}
+
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request)
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request, %{})
+    # A scheduled or event handler has no acting user either.
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request, %{handler: :on_event})
+  end
+
+  test "catalog search returns every hit to an unrestricted user", c do
+    user = user_fixture()
+    ctx = %{c.ctx | acting_user_id: user.id, role: user.role}
+    ok = unique_provider_id()
+    blocked = unique_provider_id()
+
+    warm_movie_search_cache("unbound", [], [
+      %{"id" => ok, "title" => "Unbound Kites"},
+      %{"id" => blocked, "title" => "Unbound Knives"}
+    ])
+
+    req = %{kind: :catalog, query: "unbound", "media-type": {:some, "movie"}, limit: :none}
+
+    assert {:ok, hits} = PageReads.search(c.plugin, ctx, req)
+    assert Enum.sort(Enum.map(hits, & &1.title)) == ["Unbound Kites", "Unbound Knives"]
   end
 
   test "catalog search drops titles over the limit", c do
@@ -119,5 +140,16 @@ defmodule Mydia.Plugins.RestrictedPluginAccessTest do
              PageWrites.execute("collection_add_items", args, c.user, nil)
 
     assert id == c.visible.id
+
+    stored =
+      Repo.all(
+        from(i in Mydia.Collections.CollectionItem,
+          where: i.collection_id == ^collection.id,
+          select: i.media_item_id
+        )
+      )
+
+    assert stored == [c.visible.id]
+    refute c.hidden.id in stored
   end
 end
