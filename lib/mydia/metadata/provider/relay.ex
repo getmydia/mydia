@@ -1246,6 +1246,7 @@ defmodule Mydia.Metadata.Provider.Relay do
     params =
       [language: language, page: page, sort_by: sort_by]
       |> maybe_add_param(:with_genres, genres)
+      |> maybe_add_param(:without_genres, Keyword.get(opts, :without_genres))
       |> maybe_add_param(:with_original_language, original_language)
       |> maybe_add_param(year_param_key(media_type), year)
       |> maybe_add_param(:"vote_average.gte", min_rating)

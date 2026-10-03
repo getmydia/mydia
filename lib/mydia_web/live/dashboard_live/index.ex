@@ -296,7 +296,13 @@ defmodule MydiaWeb.DashboardLive.Index do
 
       source ->
         country = socket.assigns.regional_country
-        extra = RemoteFilter.discover_params(socket.assigns.current_scope)
+        # The Home rail mixes movies and TV, so only the certification keys
+        # apply; they do not depend on the media type.
+        extra =
+          socket.assigns.current_scope
+          |> RemoteFilter.discover_params(:movie)
+          |> Keyword.take([:certification_country, :certification_lte])
+
         today = Date.utc_today()
 
         socket

@@ -7,6 +7,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.UserPreference
   alias Mydia.Media
   alias Mydia.Media.AddDefaults
@@ -55,6 +56,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # unowned titles, bounded so a fully-owned category cannot spin.
   @page_size 20
   @max_auto_advance 3
+  @max_auto_advance_restricted 8
 
   @unsupported_media_type "That media type is not supported."
 
@@ -570,26 +572,36 @@ defmodule MydiaWeb.DiscoverLive.Index do
       page: page
     } = socket.assigns
 
-    result =
-      cond do
-        search_mode ->
-          config = Metadata.default_relay_config()
-          Metadata.search_cached(config, search_query, media_type: media_type, page: page)
+    if RemoteFilter.any_category?(socket.assigns.current_scope, media_type) do
+      result =
+        cond do
+          search_mode ->
+            config = Metadata.default_relay_config()
+            Metadata.search_cached(config, search_query, media_type: media_type, page: page)
 
-        category in [:discover, :home] ->
-          discover_opts = build_discover_opts(socket.assigns)
-          Metadata.discover(media_type, discover_opts)
+          category in [:discover, :home] ->
+            discover_opts = build_discover_opts(socket.assigns)
+            Metadata.discover(media_type, discover_opts)
 
-        true ->
-          Metadata.fetch_curated_list(category, media_type: media_type, page: page)
-      end
+          true ->
+            Metadata.fetch_curated_list(category, media_type: media_type, page: page)
+        end
 
-    socket =
-      socket
-      |> handle_load_result(result, :replace)
-      |> maybe_auto_advance(0, @page_size)
+      socket =
+        socket
+        |> handle_load_result(result, :replace)
+        |> maybe_auto_advance(0, @page_size)
 
-    {:noreply, socket}
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:items, [])
+       |> assign_visible_items()
+       |> assign(:has_more, false)
+       |> assign(:loading, false)
+       |> assign(:load_error, nil)}
+    end
   end
 
   def handle_info({:load_page, page, advances, target}, socket) do
@@ -1135,12 +1147,15 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # load asks for a full page; "Load more" asks for a full page on top of what
   # is already on screen, so a click always buys roughly a page of new titles
   # however many of them turn out to be owned.
+  # Anything that drops results after the page arrives can strand the grid:
+  # "Hide in library", and any access restriction. A restricted page loses
+  # more per fetch, so it may go further before giving up.
   defp maybe_auto_advance(socket, advances, target) do
     cond do
-      not socket.assigns.hide_owned ->
+      not filtering?(socket) ->
         socket
 
-      advances >= @max_auto_advance ->
+      advances >= advance_cap(socket) ->
         socket
 
       length(socket.assigns.visible_items) >= target ->
@@ -1155,22 +1170,36 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  defp filtering?(socket),
+    do: socket.assigns.hide_owned or Scope.restricted?(socket.assigns.current_scope)
+
+  defp advance_cap(socket) do
+    if Scope.restricted?(socket.assigns.current_scope),
+      do: @max_auto_advance_restricted,
+      else: @max_auto_advance
+  end
+
   defp build_discover_opts(assigns) do
-    opts =
-      [page: assigns.page] ++ RemoteFilter.discover_params(assigns.current_scope)
+    hints = RemoteFilter.discover_params(assigns.current_scope, assigns.media_type)
+    {required, hints} = Keyword.pop(hints, :required_genres, [])
+    {hint_language, hints} = Keyword.pop(hints, :original_language)
+
+    opts = [page: assigns.page] ++ hints
+
+    # TMDB treats a comma in with_genres as AND, which the hint needs.
+    genres = Enum.uniq(assigns.selected_genres ++ required)
 
     opts =
-      if assigns.selected_genres != [] do
-        Keyword.put(opts, :genres, Enum.join(assigns.selected_genres, ","))
+      if genres != [] do
+        Keyword.put(opts, :genres, Enum.join(genres, ","))
       else
         opts
       end
 
     opts =
-      if assigns.selected_language do
-        Keyword.put(opts, :original_language, assigns.selected_language)
-      else
-        opts
+      case assigns.selected_language || hint_language do
+        nil -> opts
+        language -> Keyword.put(opts, :original_language, language)
       end
 
     base =

@@ -101,7 +101,7 @@ defmodule Mydia.Metadata.RegionalSources do
 
   @doc """
   Page 1 of a source. `extra_opts` carries caller-side options such as the
-  certification ceiling from `Mydia.Media.RemoteFilter.discover_params/1`.
+  certification ceiling from `Mydia.Media.RemoteFilter.discover_params/2`.
   """
   def fetch(source, media_type, country, extra_opts, today) do
     opts = Keyword.merge(opts(source, media_type, country, today), extra_opts)

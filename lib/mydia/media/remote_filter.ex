@@ -8,12 +8,13 @@ defmodule Mydia.Media.RemoteFilter do
 
   Rating is not in a search hit. For a restricted scope it comes from
   `Mydia.Media.RemoteSignals`, one cached lookup per title, so an age limit
-  hides titles above it and titles with no certification. `discover_params/1`
+  hides titles above it and titles with no certification. `discover_params/2`
   is only a pre-filter that narrows what TMDB returns on `/discover`.
   """
 
   alias Mydia.Accounts.Scope
   alias Mydia.Media.CategoryClassifier
+  alias Mydia.Media.MediaCategory
   alias Mydia.Media.RemoteSignals
   alias Mydia.Media.Restrictions
   alias Mydia.Metadata
@@ -104,19 +105,67 @@ defmodule Mydia.Media.RemoteFilter do
     |> to_string()
   end
 
+  @animation_genre_id "16"
+
   @doc """
-  Extra TMDB discover parameters implied by a scope's age limit.
+  TMDB discover parameters implied by a scope, for one media type.
 
-  Returns an empty list when the scope sets no limit. TMDB expresses this as a
-  certification ceiling in one country's system rather than as an age, so this
-  maps the age back onto the US ladder.
+  A certification ceiling (honoured by `/discover/movie` only, expressed in the
+  US ladder) and genre or language hints derived from the allowed categories.
+  Hints narrow what TMDB returns so a restricted page fills on the first
+  fetch; `filter/3` still decides what is shown.
   """
-  @spec discover_params(Scope.t()) :: keyword()
-  def discover_params(%Scope{max_content_age: nil}), do: []
-
-  def discover_params(%Scope{max_content_age: age}) do
-    [certification_country: "US", certification_lte: us_certification(age)]
+  @spec discover_params(Scope.t(), :movie | :tv_show) :: keyword()
+  def discover_params(%Scope{} = scope, media_type) do
+    certification_params(scope) ++ category_hints(allowed_for(scope, media_type))
   end
+
+  @doc "False when the scope allows no category of this media type at all."
+  @spec any_category?(Scope.t(), :movie | :tv_show) :: boolean()
+  def any_category?(%Scope{allowed_categories: nil}, _media_type), do: true
+  def any_category?(%Scope{} = scope, media_type), do: allowed_for(scope, media_type) != []
+
+  defp certification_params(%Scope{max_content_age: nil}), do: []
+
+  defp certification_params(%Scope{max_content_age: age}),
+    do: [certification_country: "US", certification_lte: us_certification(age)]
+
+  defp allowed_for(%Scope{allowed_categories: nil}, _media_type), do: nil
+
+  defp allowed_for(%Scope{allowed_categories: allowed}, media_type) do
+    of_type =
+      if media_type == :tv_show,
+        do: MediaCategory.series_categories(),
+        else: MediaCategory.movie_categories()
+
+    names = Enum.map(of_type, &to_string/1)
+    Enum.filter(allowed, &(&1 in names))
+  end
+
+  defp category_hints(nil), do: []
+  defp category_hints([]), do: []
+
+  defp category_hints(allowed) do
+    kinds = MapSet.new(allowed, &kind/1)
+
+    cond do
+      kinds == MapSet.new([:anime]) ->
+        [required_genres: [@animation_genre_id], original_language: "ja"]
+
+      MapSet.subset?(kinds, MapSet.new([:anime, :cartoon])) ->
+        [required_genres: [@animation_genre_id]]
+
+      not MapSet.member?(kinds, :anime) and not MapSet.member?(kinds, :cartoon) ->
+        [without_genres: @animation_genre_id]
+
+      true ->
+        []
+    end
+  end
+
+  defp kind("anime_" <> _), do: :anime
+  defp kind("cartoon_" <> _), do: :cartoon
+  defp kind(_live_action), do: :live_action
 
   defp us_certification(age) when age < 8, do: "G"
   defp us_certification(age) when age < 13, do: "PG"

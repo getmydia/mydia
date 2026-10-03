@@ -168,6 +168,54 @@ defmodule Mydia.Media.RemoteFilterTest do
     assert kept == to_string(ok)
   end
 
+  describe "discover_params/2 category hints" do
+    defp hints(categories, type) do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: categories}))
+      RemoteFilter.discover_params(scope, type)
+    end
+
+    test "cartoon only asks for Animation" do
+      assert hints(["cartoon_movie"], :movie)[:required_genres] == ["16"]
+      refute Keyword.has_key?(hints(["cartoon_movie"], :movie), :original_language)
+    end
+
+    test "anime only asks for Animation in Japanese" do
+      params = hints(["anime_series"], :tv_show)
+      assert params[:required_genres] == ["16"]
+      assert params[:original_language] == "ja"
+    end
+
+    test "anime and cartoon ask for Animation only" do
+      params = hints(["anime_movie", "cartoon_movie"], :movie)
+      assert params[:required_genres] == ["16"]
+      refute Keyword.has_key?(params, :original_language)
+    end
+
+    test "live action only excludes Animation" do
+      assert hints(["movie"], :movie)[:without_genres] == "16"
+    end
+
+    test "a mix of live action and animation sends no genre hint" do
+      params = hints(["movie", "cartoon_movie"], :movie)
+      refute Keyword.has_key?(params, :required_genres)
+      refute Keyword.has_key?(params, :without_genres)
+    end
+
+    test "categories of the other media type do not leak into hints" do
+      assert hints(["cartoon_movie", "tv_show"], :tv_show)[:without_genres] == "16"
+    end
+
+    test "any_category? is false when nothing of the type is allowed" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+      refute RemoteFilter.any_category?(scope, :tv_show)
+      assert RemoteFilter.any_category?(scope, :movie)
+    end
+
+    test "unrestricted sends nothing" do
+      assert RemoteFilter.discover_params(Scope.unrestricted(), :movie) == []
+    end
+  end
+
   defp movie(id),
     do: %SearchResult{
       provider_id: to_string(id),
