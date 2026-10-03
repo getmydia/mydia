@@ -72,9 +72,9 @@ ArrowIntent arrowIntentFor({
 
 /// Resolves a Back press for this input tier and state.
 ///
-/// Pure, like [arrowIntentFor]. Cancelling a
-/// scrub comes before hiding the OSD: the viewer is looking at the cursor,
-/// and Back meaning "never mind" is what every television player does.
+/// Pure, like [arrowIntentFor]. Cancelling a scrub comes before hiding the
+/// OSD: the viewer is looking at the cursor, and Back meaning "never mind" is
+/// what every television player does.
 BackAction backActionFor({
   required bool directionalPrimary,
   required bool scrubActive,

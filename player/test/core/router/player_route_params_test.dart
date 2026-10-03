@@ -42,7 +42,7 @@ void main() {
     test(
         'a route built by resolveLoadContentRoute for a remote episode '
         "LoadContent hands back non-null showId/seasonNumber — the exact "
-        'precondition PlayerScreen._hasNextEpisode/_hasPreviousEpisode gate '
+        'precondition UpNextController.hasNext/hasPrevious gate '
         'on, so a remotely-started episode keeps next/previous instead of '
         'silently losing it', () async {
       const intent = LoadContentIntent(
@@ -76,7 +76,7 @@ void main() {
       final params = PlayerRouteParams.fromUri(Uri.parse(route!));
 
       // This is the exact gate `_fetchSeasonEpisodes` and
-      // `_hasNextEpisode`/`_hasPreviousEpisode` check on `PlayerScreen`
+      // `UpNextController.hasNext`/`hasPrevious` check on `PlayerScreen`
       // (player_screen.dart): both non-null is what lets the season-episode
       // list load at all.
       expect(params.showId, isNotNull);

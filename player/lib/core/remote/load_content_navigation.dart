@@ -38,7 +38,7 @@ Future<T> readDetailKeepingAlive<T>(
 ///
 /// `title` backs `describe()`'s reporting back to controllers (it falls back
 /// to 'Untitled' with nothing supplied); `showId`/`seasonNumber` are what
-/// `PlayerScreen._hasNextEpisode`/`_hasPreviousEpisode` gate on — null either
+/// `UpNextController.hasNext`/`hasPrevious` gate on — null either
 /// one and a remotely-started episode's next/previous-episode capability is
 /// silently dead, even though the exact same fetch this type is built from
 /// already has both fields on hand. Both are null for a movie, which has

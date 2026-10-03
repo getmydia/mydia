@@ -46,7 +46,8 @@ void main() {
         countdown.start();
         async.elapse(const Duration(seconds: 4));
 
-        // What `UpNextController.cancel` does: stop the clock, then set the flag.
+        // What `UpNextController.cancel` does: stop the clock, then set the
+        // flag.
         countdown.cancel();
         autoPlayCancelled = true;
         async.elapse(const Duration(seconds: 60));

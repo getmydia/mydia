@@ -3545,7 +3545,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // current screen's season would tell this same PlayerScreen, reloading
     // for the next file, it is in the season it just left, so its
     // `_fetchSeasonEpisodes` would load the wrong list, the controller's
-    // current index would resolve to -1, and up-next would be dead for that entire season.
+    // current index would resolve to -1, and up-next would be dead for that
+    // entire season.
     context.go(
       '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
     );

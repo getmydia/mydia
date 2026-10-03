@@ -94,10 +94,10 @@ class UpNextCandidate {
 /// A next episode that is known to be playable.
 ///
 /// There is no way to construct one without a [fileId], which is the point:
-/// `UpNextController.onPositionTick` used to offer an episode whose `files` list was empty,
-/// and `UpNextController.playNext` would then return silently after the countdown had
-/// already drained. A prompt that appears is now a prompt that can be
-/// fulfilled.
+/// `UpNextController.onPositionTick` used to offer an episode whose `files`
+/// list was empty, and `UpNextController.playNext` would then return silently
+/// after the countdown had already drained. A prompt that appears is now a
+/// prompt that can be fulfilled.
 @immutable
 class UpNextTarget {
   const UpNextTarget({

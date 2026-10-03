@@ -25,8 +25,8 @@ class SegmentSkipper {
   String? _mediaKey;
 
   /// Whether detected segments are skipped without asking. Off unless the
-  /// viewer opted in; loaded once when the screen initializes and deliberately not watched,
-  /// since flipping it mid-episode is not a case worth a rebuild.
+  /// viewer opted in; loaded once when the screen initializes and deliberately
+  /// not watched, since flipping it mid-episode is not a case worth a rebuild.
   bool autoSkip = false;
 
   List<MediaSegment> get segments => _segments;
