@@ -247,6 +247,7 @@ defmodule Mydia.RequestAccessCatalog do
     |> LazyHTML.from_fragment()
     |> LazyHTML.query("[id^='request-']")
     |> LazyHTML.attribute("id")
+    |> Enum.reject(&(&1 == "request-detail-modal"))
     |> Enum.map(&String.replace_prefix(&1, "request-", ""))
   end
 
