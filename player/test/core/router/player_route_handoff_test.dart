@@ -13,6 +13,8 @@
 // building a new one -- it only gets `didUpdateWidget`. `_switchToFile` is
 // what handles that reuse; the second test below pins it.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -68,7 +70,8 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    router.push('/player/episode/first');
+    // Completes when the route pops, which the test never waits for.
+    unawaited(router.push<void>('/player/episode/first'));
     await tester.pumpAndSettle();
 
     router.go('/player/episode/second');
@@ -95,7 +98,8 @@ void main() {
     addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    router.push('/player/episode/first');
+    // Completes when the route pops, which the test never waits for.
+    unawaited(router.push<void>('/player/episode/first'));
     await tester.pumpAndSettle();
 
     router.go('/player/episode/second');

@@ -193,10 +193,12 @@ class HomeScreen extends ConsumerWidget {
     if (item is ContinueWatchingItem) {
       final file = await _bestFileOrNull(item.files, screenWidth);
       if (file == null) {
-        router.push(item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
+        await router.push<void>(
+            item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
         return;
       }
-      router.push(playerRouteForContinueWatching(item, fileId: file.id));
+      await router
+          .push<void>(playerRouteForContinueWatching(item, fileId: file.id));
     }
   }
 

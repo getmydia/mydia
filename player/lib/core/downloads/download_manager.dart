@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:path_provider/path_provider.dart';
 import '../../domain/models/download.dart';
 import 'download_database.dart';
@@ -58,7 +59,13 @@ class DownloadManager {
     );
 
     await _database.saveTask(task);
-    _startDownloadTask(task);
+    // The download runs for as long as the transfer does; the caller gets the
+    // queued task back immediately and follows progress on the stream.
+    unawaited(
+      _startDownloadTask(task).catchError((Object e, StackTrace s) {
+        debugPrint('[DownloadManager] download ${task.id} crashed: $e');
+      }),
+    );
 
     return task;
   }

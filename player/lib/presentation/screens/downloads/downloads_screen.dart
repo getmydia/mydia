@@ -344,10 +344,10 @@ class DownloadsScreen extends ConsumerWidget {
           );
         } else {
           if (activeTask != null) {
-            _showCancelDialog(context, ref, activeTask);
+            await _showCancelDialog(context, ref, activeTask);
           } else if (group.downloads.isNotEmpty) {
             final media = group.downloads.first;
-            context.push(
+            await context.push<void>(
               '/player/movie/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}',
             );
           }
@@ -614,7 +614,7 @@ class DownloadsScreen extends ConsumerWidget {
 
     if (!context.mounted) return;
 
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.surface,
