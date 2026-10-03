@@ -85,7 +85,8 @@ defmodule Mydia.Jobs.TVShowSearch do
       :blocked_tags,
       :preferred_tags,
       :reasons,
-      bypass_delay: false
+      bypass_delay: false,
+      recheck: false
     ]
 
     @type t :: %__MODULE__{
@@ -99,14 +100,21 @@ defmodule Mydia.Jobs.TVShowSearch do
             blocked_tags: [String.t()] | nil,
             preferred_tags: [String.t()] | nil,
             reasons: [:quality | :language] | nil,
-            bypass_delay: boolean()
+            bypass_delay: boolean(),
+            recheck: boolean()
           }
 
-    # Set only by searches the user started (Search buttons, search on add,
-    # GraphQL); they skip the profile's grab delay. "show" and "all_monitored"
-    # pass this struct down to each episode and season search they fan out to.
+    # bypass_delay is set only by searches the user started (Search buttons,
+    # search on add, GraphQL); they skip the profile's grab delay. "show" and
+    # "all_monitored" pass this struct down to each episode and season search
+    # they fan out to. recheck is set only on the re-check a delayed grab
+    # schedules.
     def parse(raw) do
-      %{do_parse(raw) | bypass_delay: Map.get(raw, "bypass_delay") == true}
+      %{
+        do_parse(raw)
+        | bypass_delay: Map.get(raw, "bypass_delay") == true,
+          recheck: Map.get(raw, "recheck") == true
+      }
     end
 
     defp do_parse(%{"mode" => "specific", "episode_id" => episode_id} = raw) do
@@ -249,6 +257,17 @@ defmodule Mydia.Jobs.TVShowSearch do
         episode = load_episode(episode_id)
 
         case episode do
+          %Episode{} when args.recheck ->
+            if unmonitored_episode?(episode) do
+              Logger.info("Skipping grab-delay re-check - episode is no longer monitored",
+                episode_id: episode_id
+              )
+
+              :skipped
+            else
+              search_episode(episode, args)
+            end
+
           %Episode{} ->
             search_episode(episode, args)
 
@@ -265,6 +284,9 @@ defmodule Mydia.Jobs.TVShowSearch do
     duration = System.monotonic_time(:millisecond) - start_time
 
     case result do
+      :skipped ->
+        :ok
+
       :ok ->
         Logger.info("Episode search completed",
           duration_ms: duration,
@@ -536,8 +558,17 @@ defmodule Mydia.Jobs.TVShowSearch do
 
     case load_episode_upgrade_target(episode_id, media_file_id) do
       {:ok, episode, file} ->
-        search_episode_upgrade(episode, file, args)
-        :ok
+        if args.recheck and unmonitored_episode?(episode) do
+          Logger.info("Skipping grab-delay re-check - episode is no longer monitored",
+            episode_id: episode_id,
+            media_file_id: media_file_id
+          )
+
+          {:ok, :skipped}
+        else
+          search_episode_upgrade(episode, file, args)
+          :ok
+        end
 
       {:error, :not_found} ->
         # The sweep that enqueued this job may be searching a stale
@@ -567,6 +598,14 @@ defmodule Mydia.Jobs.TVShowSearch do
     )
 
     case load_season_upgrade_target(media_item_id, media_file_id) do
+      {:ok, %MediaItem{monitored: false}, _file} when args.recheck ->
+        Logger.info("Skipping grab-delay re-check - show is no longer monitored",
+          media_item_id: media_item_id,
+          season_number: season_number
+        )
+
+        {:ok, :skipped}
+
       {:ok, media_item, file} ->
         search_season_upgrade(media_item, season_number, file, args)
         :ok
@@ -590,6 +629,9 @@ defmodule Mydia.Jobs.TVShowSearch do
   end
 
   ## Private Functions - Episode Loading
+
+  defp unmonitored_episode?(%Episode{monitored: monitored, media_item: media_item}),
+    do: not monitored or not media_item.monitored
 
   defp load_episode(episode_id) do
     Episode
@@ -647,6 +689,7 @@ defmodule Mydia.Jobs.TVShowSearch do
     |> Queue.reject_episodes_in_active_season_packs()
     |> filter_special_episodes()
     |> filter_episodes_in_backoff()
+    |> filter_episodes_awaiting_recheck()
   end
 
   # Episodes with a download still occupying them — actively downloading,
@@ -1148,14 +1191,6 @@ defmodule Mydia.Jobs.TVShowSearch do
         :no_results
 
       {:wait, until, best} ->
-        Logger.info("Holding season pack grab until the grab delay passes",
-          media_item_id: media_item.id,
-          title: media_item.title,
-          season_number: season_number,
-          result_title: best.result.title,
-          grab_after: until
-        )
-
         # :ok, not :no_results: :no_results makes the caller fall back to
         # individual episodes, which would grab exactly what the delay holds.
         SearchDeferral.defer(
@@ -1448,15 +1483,6 @@ defmodule Mydia.Jobs.TVShowSearch do
         :ok
 
       {:wait, until, best} ->
-        Logger.info("Holding automatic grab for episode until the grab delay passes",
-          episode_id: episode.id,
-          show: episode.media_item.title,
-          season: episode.season_number,
-          episode: episode.episode_number,
-          result_title: best.result.title,
-          grab_after: until
-        )
-
         SearchDeferral.defer(
           __MODULE__,
           episode_recheck_args(episode, args),
@@ -1575,17 +1601,22 @@ defmodule Mydia.Jobs.TVShowSearch do
 
   # The re-check targets the unit that waited: an upgrade re-checks as that
   # upgrade; a show or all_monitored pass narrows to the one episode or season.
+  #
+  # The "recheck" marker tells the job it may be running long after it was
+  # scheduled, so it must not grab for a target that was unmonitored meanwhile
+  # (user-started searches legitimately run on unmonitored items).
   defp episode_recheck_args(episode, %Args{mode: "upgrade_episode"} = args) do
     %{
       "mode" => "upgrade_episode",
       "episode_id" => episode.id,
       "media_file_id" => args.media_file_id,
-      "reasons" => Reasons.encode(args.reasons)
+      "reasons" => Reasons.encode(args.reasons),
+      "recheck" => true
     }
   end
 
   defp episode_recheck_args(episode, _args),
-    do: %{"mode" => "specific", "episode_id" => episode.id}
+    do: %{"mode" => "specific", "episode_id" => episode.id, "recheck" => true}
 
   defp season_recheck_args(media_item, season_number, %Args{mode: "upgrade_season"} = args) do
     %{
@@ -1593,12 +1624,18 @@ defmodule Mydia.Jobs.TVShowSearch do
       "media_item_id" => media_item.id,
       "season_number" => season_number,
       "media_file_id" => args.media_file_id,
-      "reasons" => Reasons.encode(args.reasons)
+      "reasons" => Reasons.encode(args.reasons),
+      "recheck" => true
     }
   end
 
   defp season_recheck_args(media_item, season_number, _args) do
-    %{"mode" => "season", "media_item_id" => media_item.id, "season_number" => season_number}
+    %{
+      "mode" => "season",
+      "media_item_id" => media_item.id,
+      "season_number" => season_number,
+      "recheck" => true
+    }
   end
 
   defp deferral_metadata(%{result: best, score: score}, query, results_count) do
@@ -2021,6 +2058,37 @@ defmodule Mydia.Jobs.TVShowSearch do
     end
 
     eligible
+  end
+
+  # An episode held by the grab delay has a re-check scheduled for when the
+  # delay ends, either on its own or through its season; searching it before
+  # then cannot grab anything.
+  defp filter_episodes_awaiting_recheck(episodes) do
+    pending = SearchDeferral.pending_rechecks(__MODULE__)
+
+    episode_ids =
+      for %{"mode" => mode, "episode_id" => id} <- pending,
+          mode in ["specific", "upgrade_episode"],
+          into: MapSet.new(),
+          do: id
+
+    seasons =
+      for %{"mode" => mode, "media_item_id" => id, "season_number" => number} <- pending,
+          mode in ["season", "upgrade_season"],
+          into: MapSet.new(),
+          do: {id, number}
+
+    {waiting, ready} =
+      Enum.split_with(episodes, fn episode ->
+        MapSet.member?(episode_ids, episode.id) or
+          MapSet.member?(seasons, {episode.media_item_id, episode.season_number})
+      end)
+
+    if waiting != [] do
+      Logger.info("Skipping #{length(waiting)} episodes waiting on the grab delay")
+    end
+
+    ready
   end
 
   ## Private Functions - Backoff Helpers

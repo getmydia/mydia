@@ -62,7 +62,8 @@ defmodule Mydia.Jobs.MovieSearch do
       :blocked_tags,
       :preferred_tags,
       :reasons,
-      bypass_delay: false
+      bypass_delay: false,
+      recheck: false
     ]
 
     @type t :: %__MODULE__{
@@ -74,13 +75,20 @@ defmodule Mydia.Jobs.MovieSearch do
             blocked_tags: [String.t()] | nil,
             preferred_tags: [String.t()] | nil,
             reasons: [:quality | :language] | nil,
-            bypass_delay: boolean()
+            bypass_delay: boolean(),
+            recheck: boolean()
           }
 
-    # Set only by searches the user started (Search buttons, search on add,
-    # GraphQL); they skip the profile's grab delay. See Mydia.Indexers.GrabDelay.
+    # bypass_delay is set only by searches the user started (Search buttons,
+    # search on add, GraphQL); they skip the profile's grab delay. See
+    # Mydia.Indexers.GrabDelay. recheck is set only on the re-check a delayed
+    # grab schedules.
     def parse(raw) do
-      %{do_parse(raw) | bypass_delay: Map.get(raw, "bypass_delay") == true}
+      %{
+        do_parse(raw)
+        | bypass_delay: Map.get(raw, "bypass_delay") == true,
+          recheck: Map.get(raw, "recheck") == true
+      }
     end
 
     defp do_parse(%{"mode" => "all_monitored"} = raw) do
@@ -211,6 +219,13 @@ defmodule Mydia.Jobs.MovieSearch do
         media_item = Media.get_media_item!(Scope.system(), media_item_id)
 
         case media_item do
+          %MediaItem{type: "movie", monitored: false} when args.recheck ->
+            Logger.info("Skipping grab-delay re-check - movie is no longer monitored",
+              media_item_id: media_item_id
+            )
+
+            :skipped
+
           %MediaItem{type: "movie"} = movie ->
             search_movie_with_stats(movie, args)
 
@@ -231,6 +246,9 @@ defmodule Mydia.Jobs.MovieSearch do
     duration = System.monotonic_time(:millisecond) - start_time
 
     case result do
+      :skipped ->
+        :ok
+
       {:ok, stats} ->
         Logger.info("Movie search completed",
           duration_ms: duration,
@@ -286,6 +304,14 @@ defmodule Mydia.Jobs.MovieSearch do
     )
 
     case load_upgrade_target(media_item_id, media_file_id) do
+      {:ok, %MediaItem{monitored: false}, _file} when args.recheck ->
+        Logger.info("Skipping grab-delay re-check - movie is no longer monitored",
+          media_item_id: media_item_id,
+          media_file_id: media_file_id
+        )
+
+        {:ok, :skipped}
+
       {:ok, movie, file} ->
         search_movie_upgrade(movie, file, args)
         :ok
@@ -488,7 +514,9 @@ defmodule Mydia.Jobs.MovieSearch do
       |> having([m, mf], count(mf.id) == 0)
       |> Repo.all()
 
-    filter_movies_in_backoff(movies)
+    movies
+    |> filter_movies_in_backoff()
+    |> filter_movies_awaiting_recheck()
   end
 
   # media_item_ids with an in-flight download (still in client, not failed).
@@ -514,6 +542,23 @@ defmodule Mydia.Jobs.MovieSearch do
     end
 
     eligible
+  end
+
+  # A movie held by the grab delay has a re-check scheduled for when the delay
+  # ends; searching it before then cannot grab anything.
+  defp filter_movies_awaiting_recheck(movies) do
+    waiting_ids =
+      SearchDeferral.pending_rechecks(__MODULE__)
+      |> Enum.filter(&(&1["mode"] in ["specific", "upgrade"]))
+      |> MapSet.new(& &1["media_item_id"])
+
+    {waiting, ready} = Enum.split_with(movies, &MapSet.member?(waiting_ids, &1.id))
+
+    if waiting != [] do
+      Logger.info("Skipping #{length(waiting)} movies waiting on the grab delay")
+    end
+
+    ready
   end
 
   # `opts` lets a caller thread through the two things that differ between the
@@ -695,25 +740,24 @@ defmodule Mydia.Jobs.MovieSearch do
 
   # The re-check targets the same unit: an upgrade re-checks as that upgrade,
   # anything else as a search for this one movie.
+  # The "recheck" marker tells the job it may be running long after it was
+  # scheduled, so it must not grab for an item that was unmonitored meanwhile
+  # (user-started searches legitimately run on unmonitored items).
   defp recheck_args(movie, %Args{mode: "upgrade"} = args) do
     %{
       "mode" => "upgrade",
       "media_item_id" => movie.id,
       "media_file_id" => args.media_file_id,
-      "reasons" => Reasons.encode(args.reasons)
+      "reasons" => Reasons.encode(args.reasons),
+      "recheck" => true
     }
   end
 
-  defp recheck_args(movie, _args), do: %{"mode" => "specific", "media_item_id" => movie.id}
+  defp recheck_args(movie, _args) do
+    %{"mode" => "specific", "media_item_id" => movie.id, "recheck" => true}
+  end
 
   defp defer_grab(movie, args, until, %{result: best, score: score}, query, results_count) do
-    Logger.info("Holding automatic grab for movie until the grab delay passes",
-      media_item_id: movie.id,
-      title: movie.title,
-      result_title: best.title,
-      grab_after: until
-    )
-
     SearchDeferral.defer(__MODULE__, recheck_args(movie, args), until, movie, %{
       "query" => query,
       "results_count" => results_count,

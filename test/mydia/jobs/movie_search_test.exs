@@ -1089,7 +1089,13 @@ defmodule Mydia.Jobs.MovieSearchTest do
 
       assert Mydia.Downloads.list_downloads() == []
       assert [job] = movie_search_jobs()
-      assert job.args == %{"mode" => "specific", "media_item_id" => movie.id}
+
+      assert job.args == %{
+               "mode" => "specific",
+               "media_item_id" => movie.id,
+               "recheck" => true
+             }
+
       assert job.state == "scheduled"
       assert Mydia.Search.eligible?("movie", movie.id)
     end
@@ -1126,7 +1132,53 @@ defmodule Mydia.Jobs.MovieSearchTest do
 
       assert Mydia.Downloads.list_downloads() == []
       assert [job] = movie_search_jobs()
-      assert job.args == %{"mode" => "specific", "media_item_id" => movie.id}
+
+      assert job.args == %{
+               "mode" => "specific",
+               "media_item_id" => movie.id,
+               "recheck" => true
+             }
+    end
+
+    test "a re-check of a movie unmonitored during the wait grabs nothing", %{bypass: bypass} do
+      mock_release(bypass, 25)
+      movie = delayed_movie()
+
+      {:ok, _} =
+        Mydia.Media.update_media_item(Mydia.Accounts.Scope.system(), movie, %{monitored: false})
+
+      assert :ok =
+               perform_job(MovieSearch, %{
+                 "mode" => "specific",
+                 "media_item_id" => movie.id,
+                 "recheck" => true
+               })
+
+      assert Mydia.Downloads.list_downloads() == []
+    end
+
+    test "a search without the re-check marker still grabs an unmonitored movie", %{
+      bypass: bypass
+    } do
+      mock_release(bypass, 25)
+      movie = delayed_movie()
+
+      {:ok, _} =
+        Mydia.Media.update_media_item(Mydia.Accounts.Scope.system(), movie, %{monitored: false})
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+
+      assert [_download] = Mydia.Downloads.list_downloads()
+    end
+
+    test "cron passes skip a movie that has a re-check pending", %{bypass: bypass} do
+      mock_release(bypass, 1)
+      movie = delayed_movie()
+
+      assert :ok = perform_job(MovieSearch, %{"mode" => "specific", "media_item_id" => movie.id})
+      assert [_] = movie_search_jobs()
+
+      refute movie.id in Enum.map(MovieSearch.load_monitored_movies_without_files(), & &1.id)
     end
   end
 
@@ -1171,7 +1223,8 @@ defmodule Mydia.Jobs.MovieSearchTest do
                "mode" => "upgrade",
                "media_item_id" => movie.id,
                "media_file_id" => media_file.id,
-               "reasons" => ["quality"]
+               "reasons" => ["quality"],
+               "recheck" => true
              }
     end
   end
