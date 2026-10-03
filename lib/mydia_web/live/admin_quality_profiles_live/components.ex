@@ -739,6 +739,7 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Components do
 
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-3">
+          <input type="hidden" name="quality_profile[quality_standards][require_hdr]" value="false" />
           <input
             type="checkbox"
             name="quality_profile[quality_standards][require_hdr]"
