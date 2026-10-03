@@ -674,9 +674,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # result comes back rather than against the (possibly different) ref that
   # was queried.
   def handle_info({:fetch_recommendations, item_ref, tmdb_ref, media_type}, socket) do
+    scope = socket.assigns.current_scope
+
     {:noreply,
      start_async(socket, {:load_recommendations, item_ref}, fn ->
-       Recommendations.for_ref(tmdb_ref, media_type, nil)
+       Recommendations.for_ref(tmdb_ref, media_type, scope, nil)
      end)}
   end
 
@@ -945,7 +947,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # title they have already requested, which the duplicate check then rejects.
   defp enrich_recommendations(socket, results) do
     results
-    |> RemoteFilter.filter(socket.assigns.current_scope)
     |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end

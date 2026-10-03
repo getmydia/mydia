@@ -139,42 +139,8 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEventsTest do
       assert Map.get(requested, :request_status) == nil
     end
 
-    # If handle_load_result/2 ever stopped piping results through
-    # RemoteFilter.filter/2 (or passed the wrong scope), this is the test
-    # that would catch it. Both prior tests in this describe block use an
-    # unrestricted scope (the default stub_socket/1 fills in via
-    # Scope.for_user/1 on a plain "user"), which never exercises the filter
-    # at all.
-    test "a category-restricted scope drops an out-of-bounds recommendation" do
-      current =
-        media_item_fixture(%{
-          type: "movie",
-          title: "Current",
-          tmdb_id: System.unique_integer([:positive])
-        })
-
-      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
-
-      # No genre_ids set, so it classifies as plain "movie" -- out of bounds
-      # for a cartoon_movie-only scope. With no signals on the hit, the filter
-      # looks it up, so serve that from cache.
-      id = Mydia.MetadataCacheHelpers.unique_provider_id()
-
-      Mydia.MetadataCacheHelpers.warm_remote_signals(
-        {:tmdb, id},
-        :movie,
-        %Mydia.Media.RemoteSignals{category: "movie"}
-      )
-
-      results = [result(%{provider_id: to_string(id)})]
-
-      socket = stub_socket(%{media_item: current, current_scope: scope})
-
-      {:noreply, socket} = RecommendationEvents.handle_load_result({:ok, {:ok, results}}, socket)
-
-      assert socket.assigns.recommendations == []
-    end
-
+    # Scope filtering now happens inside Recommendations, before ranking; see
+    # Mydia.Media.RecommendationsTest.
     test "an unrestricted scope keeps the same recommendation" do
       current =
         media_item_fixture(%{

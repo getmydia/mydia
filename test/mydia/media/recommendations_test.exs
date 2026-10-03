@@ -9,8 +9,11 @@ defmodule Mydia.Media.RecommendationsTest do
 
   import Mydia.MediaFixtures
   import ExUnit.CaptureLog
+  import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers
 
-  alias Mydia.Media.{MediaItem, Recommendations}
+  alias Mydia.Accounts.Scope
+  alias Mydia.Media.{MediaItem, Recommendations, RemoteSignals}
   alias Mydia.Metadata.Cache
   alias Mydia.Metadata.Structs.SearchResult
 
@@ -64,7 +67,7 @@ defmodule Mydia.Media.RecommendationsTest do
 
   defp titles(results), do: Enum.map(results, & &1.title)
 
-  describe "for_media_item/2" do
+  describe "for_media_item/3" do
     test "returns parsed recommendations for a movie", %{
       bypass: bypass,
       config: config,
@@ -76,7 +79,7 @@ defmodule Mydia.Media.RecommendationsTest do
 
       item = media_item_fixture(%{type: "movie", title: "Aftersun", tmdb_id: tmdb_id})
 
-      assert {:ok, [first]} = Recommendations.for_media_item(item, config)
+      assert {:ok, [first]} = Recommendations.for_media_item(item, Scope.unrestricted(), config)
       assert first.title == "The Eternal Daughter"
       assert first.provider_id == "101"
     end
@@ -90,13 +93,13 @@ defmodule Mydia.Media.RecommendationsTest do
 
       item = media_item_fixture(%{type: "movie", title: "Obscure", tmdb_id: tmdb_id})
 
-      assert :none = Recommendations.for_media_item(item, config)
+      assert :none = Recommendations.for_media_item(item, Scope.unrestricted(), config)
     end
 
     test "returns :none for an item with no tmdb_id", %{config: config} do
       item = %MediaItem{type: "movie", title: "No Id", tmdb_id: nil}
 
-      assert :none = Recommendations.for_media_item(item, config)
+      assert :none = Recommendations.for_media_item(item, Scope.unrestricted(), config)
     end
 
     test "returns :none and logs when the relay errors", %{
@@ -112,7 +115,7 @@ defmodule Mydia.Media.RecommendationsTest do
 
       log =
         capture_log(fn ->
-          assert :none = Recommendations.for_media_item(item, config)
+          assert :none = Recommendations.for_media_item(item, Scope.unrestricted(), config)
         end)
 
       assert log =~ "Recommendations lookup failed"
@@ -121,7 +124,7 @@ defmodule Mydia.Media.RecommendationsTest do
     test "returns :none for an unsupported media type", %{config: config, tmdb_id: tmdb_id} do
       item = %MediaItem{type: "music", title: "Album", tmdb_id: tmdb_id}
 
-      assert :none = Recommendations.for_media_item(item, config)
+      assert :none = Recommendations.for_media_item(item, Scope.unrestricted(), config)
     end
 
     test "caps what the relay returns", %{bypass: bypass, config: config, tmdb_id: tmdb_id} do
@@ -140,22 +143,23 @@ defmodule Mydia.Media.RecommendationsTest do
 
       item = media_item_fixture(%{type: "movie", title: "Prolific", tmdb_id: tmdb_id})
 
-      assert {:ok, results} = Recommendations.for_media_item(item, config)
+      assert {:ok, results} = Recommendations.for_media_item(item, Scope.unrestricted(), config)
       assert length(results) == 12
     end
   end
 
-  describe "for_ref/3" do
+  describe "for_ref/4" do
     # The defect this module exists to close: a TVDB ref (what every Discover
     # TV search result carries) must never reach TMDB's recommendations route.
     # This passes `config: nil`, which resolves to
     # `Metadata.default_relay_config/0`, not a bypass -- so a `:none` result
     # here is not "the relay was unreachable and errored," it is proof that
-    # `for_ref/3`'s only matching head is `{:tmdb, id}` and a `{:tvdb, _}` ref
-    # falls straight to the catch-all without `fetch/3` (and therefore the
+    # `for_ref/4`'s only matching head is `{:tmdb, id}` and a `{:tvdb, _}` ref
+    # falls straight to the catch-all without `fetch/4` (and therefore the
     # relay) ever being reached.
     test "returns :none for a tvdb ref rather than querying TMDB" do
-      assert Recommendations.for_ref({:tvdb, 280_619}, :tv_show, nil) == :none
+      assert Recommendations.for_ref({:tvdb, 280_619}, :tv_show, Scope.unrestricted(), nil) ==
+               :none
     end
 
     test "serves a title that is not in the library", %{
@@ -167,16 +171,18 @@ defmodule Mydia.Media.RecommendationsTest do
         %{"id" => 102, "title" => "Janet Planet", "release_date" => "2024-06-21"}
       ])
 
-      assert {:ok, [first]} = Recommendations.for_ref({:tmdb, tmdb_id}, :movie, config)
+      assert {:ok, [first]} =
+               Recommendations.for_ref({:tmdb, tmdb_id}, :movie, Scope.unrestricted(), config)
+
       assert first.title == "Janet Planet"
     end
 
     test "returns :none for a nil ref", %{config: config} do
-      assert :none = Recommendations.for_ref(nil, :movie, config)
+      assert :none = Recommendations.for_ref(nil, :movie, Scope.unrestricted(), config)
     end
 
     test "returns :none for an unsupported media type", %{config: config} do
-      assert :none = Recommendations.for_ref({:tmdb, 603}, :music, config)
+      assert :none = Recommendations.for_ref({:tmdb, 603}, :music, Scope.unrestricted(), config)
     end
   end
 
@@ -288,6 +294,53 @@ defmodule Mydia.Media.RecommendationsTest do
         ])
 
       assert titles(ranked) == ["Rated", "Loose Entry"]
+    end
+  end
+
+  describe "restricted scopes" do
+    test "a restricted scope still gets a full rail when the top entries are out of bounds" do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      source = unique_provider_id()
+
+      blocked =
+        for n <- 1..12,
+            do: %{
+              "id" => unique_provider_id(),
+              "title" => "Blocked #{n}",
+              "vote_average" => 9.0,
+              "vote_count" => 5000
+            }
+
+      allowed =
+        for n <- 1..12,
+            do: %{
+              "id" => unique_provider_id(),
+              "title" => "Allowed #{n}",
+              "vote_average" => 6.0,
+              "vote_count" => 50
+            }
+
+      for r <- blocked,
+          do:
+            warm_remote_signals({:tmdb, r["id"]}, :movie, %RemoteSignals{
+              content_rating: "R",
+              age: 17,
+              category: "movie"
+            })
+
+      for r <- allowed,
+          do:
+            warm_remote_signals({:tmdb, r["id"]}, :movie, %RemoteSignals{
+              content_rating: "PG",
+              age: 8,
+              category: "movie"
+            })
+
+      warm_recommendations_cache(source, :movie, blocked ++ allowed)
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, scope)
+      assert length(rail) == 12
+      assert Enum.all?(rail, &String.starts_with?(&1.title, "Allowed"))
     end
   end
 end
