@@ -227,7 +227,7 @@ class P2pGraphQLLink extends Link {
     // All retries exhausted
     debugPrint('[P2pGraphQLLink] All $_maxRetries retries exhausted');
     debugPrint('[P2pGraphQLLink] Last stack: $lastStack');
-    throw lastError!;
+    Error.throwWithStackTrace(lastError!, lastStack ?? StackTrace.current);
   }
 
   /// Returns true if the error is a transient connection/timeout error

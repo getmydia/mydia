@@ -49,7 +49,7 @@ class _RecordingUpdater extends PlatformUpdater {
     AppUpdate update, {
     void Function(double progress)? onProgress,
   }) async {
-    if (throws != null) throw throws!;
+    if (throws != null) Error.throwWithStackTrace(throws!, StackTrace.current);
     applied = update;
     onProgress?.call(1.0);
   }

@@ -10,6 +10,9 @@ linter:
     - use_key_in_widget_constructors
     - avoid_dynamic_calls
     - unawaited_futures
+    - close_sinks
+    - cancel_subscriptions
+    - only_throw_errors
 
 analyzer:
   exclude:

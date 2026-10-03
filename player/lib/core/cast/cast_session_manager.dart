@@ -158,6 +158,7 @@ Stream<List<CastDevice>> mergeCastDiscovery(
 
   final latest = List<List<CastDevice>>.filled(backends.length, const []);
   final subs = <StreamSubscription<List<CastDevice>>>[];
+  // ignore: close_sinks, returned as a stream; the listener's cancel runs onCancel which cancels every backend subscription
   late final StreamController<List<CastDevice>> controller;
 
   // Coalesced onto the microtask queue rather than published straight from

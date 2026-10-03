@@ -16,7 +16,9 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(kInstallerChannel, (call) async {
       calls.add(call);
-      if (error != null) throw error!;
+      if (error != null) {
+        Error.throwWithStackTrace(error!, StackTrace.current);
+      }
       return response;
     });
   });

@@ -105,7 +105,7 @@ class _ProbedPlayer extends PlatformPlayer {
     final gate = openGate;
     if (gate != null) await gate.future;
     final error = openError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     opened = true;
     if (playable is Media) {
       openedUris.add(playable.uri);

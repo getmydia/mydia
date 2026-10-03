@@ -128,14 +128,14 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
     capturedRequest = request;
     capturedRequests.add(request);
     final error = startCastError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
   }
 
   @override
   Future<void> seek(Duration position) async {
     seekTargets.add(position);
     final error = seekError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
   }
 }
 
@@ -183,7 +183,7 @@ class FakeSettingsService extends Fake implements SettingsService {
   Future<String> getDefaultQuality() async {
     getDefaultQualityCalls++;
     final error = readError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     return defaultQuality;
   }
 
@@ -191,7 +191,7 @@ class FakeSettingsService extends Fake implements SettingsService {
   Future<void> setDefaultQuality(String quality) async {
     setDefaultQualityCalls++;
     final error = writeError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     defaultQuality = quality;
   }
 

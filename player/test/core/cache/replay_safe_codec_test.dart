@@ -40,7 +40,7 @@ class _FakeCodec implements ui.Codec {
     final failure = failNext;
     if (failure != null) {
       failNext = null;
-      throw failure;
+      Error.throwWithStackTrace(failure, StackTrace.current);
     }
     return _Frame(image.clone());
   }

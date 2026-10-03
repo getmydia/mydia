@@ -74,10 +74,8 @@ class _RetryP2pService extends P2pService {
   }) async {
     final currentAttempt = attempts++;
     if (currentAttempt < succeedOnAttempt) {
-      if (failureError is Exception) {
-        throw failureError;
-      } else if (failureError is Error) {
-        throw failureError;
+      if (failureError is Exception || failureError is Error) {
+        Error.throwWithStackTrace(failureError, StackTrace.current);
       }
       throw Exception(failureError.toString());
     }

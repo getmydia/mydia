@@ -57,6 +57,7 @@ void main() {
   test('cancels the subscription on the stream after a timeout', () {
     fakeAsync((async) {
       final controller = StreamController<Tracks>();
+      addTearDown(controller.close);
       awaitRealTracks(
         current: const Tracks(),
         updates: controller.stream,

@@ -27,7 +27,9 @@ class _FakePortal implements FlatpakPortal {
   @override
   Future<void> startMonitoring() async {
     startCalls++;
-    if (failStartWith != null) throw failStartWith!;
+    if (failStartWith != null) {
+      Error.throwWithStackTrace(failStartWith!, StackTrace.current);
+    }
   }
 
   @override

@@ -49,7 +49,7 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> setBounds(Rect newBounds) async {
     final error = setBoundsError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     setBoundsCalls.add(newBounds);
     callLog.add('setBounds');
     bounds = newBounds;
@@ -77,7 +77,7 @@ class FakeWindowController implements WindowController {
   @override
   Future<void> setAspectRatio(double value) async {
     final error = setAspectRatioError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     setAspectRatioCalls.add(value);
     callLog.add('setAspectRatio');
     aspectRatio = value;

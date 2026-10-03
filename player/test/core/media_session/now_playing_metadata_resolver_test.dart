@@ -11,7 +11,9 @@ void main() {
     NowPlayingMetadataResolver build() => NowPlayingMetadataResolver(
           (document, variables) async {
             calls.add(variables);
-            if (error != null) throw error!;
+            if (error != null) {
+              Error.throwWithStackTrace(error!, StackTrace.current);
+            }
             return response;
           },
         );

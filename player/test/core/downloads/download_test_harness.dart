@@ -140,7 +140,7 @@ class FakeDownloadJobService implements DownloadJobService {
   @override
   Future<DownloadJobStatus> getJobStatus(String jobId) async {
     final error = statusError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     return status;
   }
 
@@ -152,7 +152,7 @@ class FakeDownloadJobService implements DownloadJobService {
   }) async {
     prepareCount++;
     final error = statusError;
-    if (error != null) throw error;
+    if (error != null) Error.throwWithStackTrace(error, StackTrace.current);
     return status;
   }
 
