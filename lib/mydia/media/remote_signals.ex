@@ -8,7 +8,9 @@ defmodule Mydia.Media.RemoteSignals do
   appended answers both. Results are cached for a day and shared by every
   account: a certification does not depend on who is asking.
 
-  A failed lookup is `:error` and is not cached. The filter treats it as
+  A failed lookup is `:error`. It is never cached as a success, but a short
+  negative entry (`@failure_ttl`) stops a slow or erroring relay from blocking
+  every render for the full lookup timeout. The filter treats `:error` as
   unrated, which an age limit hides.
   """
 
@@ -30,6 +32,8 @@ defmodule Mydia.Media.RemoteSignals do
         }
 
   @ttl :timer.hours(24)
+  @failure_ttl :timer.seconds(60)
+  @unavailable :unavailable
   @max_concurrency 10
   @timeout 5_000
 
@@ -64,8 +68,12 @@ defmodule Mydia.Media.RemoteSignals do
       zip_input_on_exit: true
     )
     |> Map.new(fn
-      {:ok, {key, signals}} -> {key, signals}
-      {:exit, {key, _reason}} -> {key, :error}
+      {:ok, {key, signals}} ->
+        {key, signals}
+
+      {:exit, {{media_type, ref} = key, _reason}} ->
+        remember_failure(ref, media_type)
+        {key, :error}
     end)
   end
 
@@ -85,18 +93,30 @@ defmodule Mydia.Media.RemoteSignals do
     case Cache.fetch(cache_key(ref, media_type), fn -> fetch(config, ref, media_type) end,
            ttl: @ttl
          ) do
-      {:ok, signals} -> signals
-      _error -> :error
+      {:ok, @unavailable} ->
+        :error
+
+      {:ok, signals} ->
+        signals
+
+      _error ->
+        remember_failure(ref, media_type)
+        :error
     end
   rescue
     error ->
       Logger.debug("Remote signals lookup raised: #{Exception.message(error)}")
+      remember_failure(ref, media_type)
       :error
   catch
     kind, reason ->
       Logger.debug("Remote signals lookup #{kind}: #{inspect(reason)}")
+      remember_failure(ref, media_type)
       :error
   end
+
+  defp remember_failure(ref, media_type),
+    do: Cache.put(cache_key(ref, media_type), @unavailable, ttl: @failure_ttl)
 
   defp fetch(config, ref, media_type) do
     case Metadata.fetch_by_ref(config, ref, media_type: media_type, append_to_response: []) do
