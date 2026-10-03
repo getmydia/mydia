@@ -94,6 +94,9 @@ defmodule Mydia.Plugins.RestrictedPluginAccessTest do
       %{"id" => blocked, "title" => "Chorus Knives"}
     ])
 
+    # A restricted search keeps paging until the catalog runs dry.
+    warm_movie_search_cache("chorus", [page: 2], [])
+
     warm_remote_signals({:tmdb, ok}, :movie, %RemoteSignals{
       content_rating: "PG",
       age: 8,
@@ -110,6 +113,55 @@ defmodule Mydia.Plugins.RestrictedPluginAccessTest do
 
     assert {:ok, hits} = PageReads.search(c.plugin, c.ctx, req)
     assert Enum.map(hits, & &1.title) == ["Chorus Kites"]
+  end
+
+  describe "catalog search paging for a restricted user" do
+    defp warm_signals(id, rating, age) do
+      warm_remote_signals({:tmdb, id}, :movie, %RemoteSignals{
+        content_rating: rating,
+        age: age,
+        category: "movie"
+      })
+    end
+
+    defp catalog_req(query),
+      do: %{kind: :catalog, query: query, "media-type": {:some, "movie"}, limit: :none}
+
+    test "pages past an all-hidden first page to find a visible title", c do
+      blocked = unique_provider_id()
+      ok = unique_provider_id()
+
+      warm_movie_search_cache("tidal", [], [%{"id" => blocked, "title" => "Tidal Knives"}])
+      warm_movie_search_cache("tidal", [page: 2], [%{"id" => ok, "title" => "Tidal Kites"}])
+      warm_movie_search_cache("tidal", [page: 3], [])
+      warm_signals(blocked, "R", 17)
+      warm_signals(ok, "PG", 8)
+
+      assert {:ok, hits} = PageReads.search(c.plugin, c.ctx, catalog_req("tidal"))
+      assert Enum.map(hits, & &1.title) == ["Tidal Kites"]
+    end
+
+    test "an unrestricted user makes no page 2 request", c do
+      user = user_fixture()
+      ctx = %{c.ctx | acting_user_id: user.id, role: user.role}
+      bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
+      id = unique_provider_id()
+      relay = Mydia.Metadata.default_relay_config()
+      key = "search:#{relay.type}:ember:movie::#{relay.options.language}:1"
+      on_exit(fn -> Mydia.Metadata.Cache.delete(key) end)
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"results" => [%{"id" => id, "title" => "Ember Kites"}]})
+        )
+      end)
+
+      assert {:ok, [%{title: "Ember Kites"}]} =
+               PageReads.search(c.plugin, ctx, catalog_req("ember"))
+    end
   end
 
   test "favorite_add refuses a hidden id like a missing one", c do

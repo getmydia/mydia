@@ -292,12 +292,15 @@ defmodule Mydia.MetadataCacheHelpers do
     config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
     year = Keyword.get(opts, :year)
+    page = Keyword.get(opts, :page, 1)
 
     # Mirrors the key search_cached/3 builds for these opts: no :provider or
     # :language override, so provider defaults to the config type and
     # language to the config's own.
     on_exit(fn ->
-      Cache.delete("search:#{relay.type}:#{query}:movie:#{year}:#{relay.options.language}:1")
+      Cache.delete(
+        "search:#{relay.type}:#{query}:movie:#{year}:#{relay.options.language}:#{page}"
+      )
     end)
 
     Bypass.expect_once(bypass, "GET", "/tmdb/movies/search", fn conn ->
@@ -313,7 +316,9 @@ defmodule Mydia.MetadataCacheHelpers do
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
 
-    search_opts = if year, do: [media_type: :movie, year: year], else: [media_type: :movie]
+    search_opts =
+      if(year, do: [media_type: :movie, year: year], else: [media_type: :movie]) ++
+        [page: page]
 
     {:ok, _results} = Metadata.search_cached(config, query, search_opts)
 
