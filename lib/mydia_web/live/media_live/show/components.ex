@@ -349,21 +349,27 @@ defmodule MydiaWeb.MediaLive.Show.Components do
       <div class="flex items-center gap-2 flex-shrink-0">
         <%= if @trailer_url do %>
           <button
+            id="trailer-button"
             type="button"
             phx-click="show_trailer_modal"
-            class="btn btn-sm btn-ghost gap-1"
+            class="btn btn-sm 2xl:btn-md btn-soft btn-primary gap-1.5"
           >
-            <.icon name="hero-play-circle" class="w-4 h-4 text-primary" />
+            <.icon name="hero-play-circle" class="w-4 h-4 2xl:w-5 2xl:h-5" />
             <span>Trailer</span>
           </button>
         <% end %>
 
         <%= if @has_cast_crew do %>
           <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-sm btn-ghost gap-1">
-              <.icon name="hero-users" class="w-4 h-4 text-primary" />
+            <div
+              id="cast-button"
+              tabindex="0"
+              role="button"
+              class="btn btn-sm 2xl:btn-md btn-soft btn-primary gap-1.5"
+            >
+              <.icon name="hero-users" class="w-4 h-4 2xl:w-5 2xl:h-5" />
               <span>Cast</span>
-              <.icon name="hero-chevron-down" class="w-3 h-3 opacity-60" />
+              <.icon name="hero-chevron-down" class="w-3 h-3 2xl:w-4 2xl:h-4 opacity-60" />
             </div>
             <div
               tabindex="0"

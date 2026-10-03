@@ -172,12 +172,26 @@
                   </option>
                 <% end %>
               </select>
-              <select name="year" class="select select-bordered select-sm join-item">
-                <option value="">All Years</option>
-                <%= for year <- Enum.to_list(Date.utc_today().year..1970//-1) do %>
-                  <option value={year} selected={@selected_year == year}>
-                    {year}
-                  </option>
+              <select
+                id="discover-year-from"
+                name="year_from"
+                class="select select-bordered select-sm join-item"
+                aria-label="From year"
+              >
+                <option value="">From: any</option>
+                <%= for year <- Date.utc_today().year..1900//-1 do %>
+                  <option value={year} selected={@year_from == year}>From {year}</option>
+                <% end %>
+              </select>
+              <select
+                id="discover-year-to"
+                name="year_to"
+                class="select select-bordered select-sm join-item"
+                aria-label="To year"
+              >
+                <option value="">To: any</option>
+                <%= for year <- Date.utc_today().year..1900//-1 do %>
+                  <option value={year} selected={@year_to == year}>To {year}</option>
                 <% end %>
               </select>
 

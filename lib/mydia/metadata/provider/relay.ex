@@ -534,6 +534,9 @@ defmodule Mydia.Metadata.Provider.Relay do
       "poster_path" => transform_tvdb_image(data["image"]),
       "backdrop_path" => transform_tvdb_artwork(data["artworks"], "background"),
       "genres" => genres,
+      # TVDB calls the cast "characters". Emitted in TMDB's credits shape so
+      # MediaMetadata has one cast parser for both providers.
+      "credits" => %{"cast" => tvdb_cast(data["characters"])},
       "popularity" => data["score"],
       "vote_average" => nil,
       "number_of_seasons" => length(seasons),
@@ -561,6 +564,23 @@ defmodule Mydia.Metadata.Provider.Relay do
   end
 
   defp transform_tvdb_to_tmdb_format(data, _media_type, _language, _opts), do: data
+
+  defp tvdb_cast(characters) when is_list(characters) do
+    characters
+    |> Enum.filter(&(is_map(&1) and &1["peopleType"] == "Actor" and is_binary(&1["personName"])))
+    |> Enum.sort_by(&(&1["sort"] || :infinity))
+    |> Enum.with_index()
+    |> Enum.map(fn {character, index} ->
+      %{
+        "name" => character["personName"],
+        "character" => character["name"],
+        "order" => index,
+        "profile_path" => character["personImgURL"] || character["image"]
+      }
+    end)
+  end
+
+  defp tvdb_cast(_), do: []
 
   defp tvdb_alternative_titles(data, translations, name) do
     names =

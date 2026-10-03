@@ -6,6 +6,8 @@ defmodule MydiaWeb.MediaLive.ShowLibraryTest do
   import Mydia.SettingsFixtures
   import Mydia.MediaFixtures
 
+  alias Mydia.Settings.LibraryPath
+
   setup %{conn: conn} do
     %{conn: log_in_user(conn, admin_user_fixture())}
   end
@@ -18,7 +20,7 @@ defmodule MydiaWeb.MediaLive.ShowLibraryTest do
     {:ok, view, _html} = live(conn, ~p"/movies/#{item.id}")
 
     assert has_element?(view, "[data-test='target-library']")
-    assert render(view) =~ Path.basename(library.path)
+    assert render(view) =~ LibraryPath.display_name(library)
     assert render(view) =~ "library default"
   end
 
@@ -62,8 +64,8 @@ defmodule MydiaWeb.MediaLive.ShowLibraryTest do
   test "with two or more candidates, the row is a button that opens the picker modal", %{
     conn: conn
   } do
-    library_path_fixture(%{type: "movies", path: "/tmp/aaa-first"})
-    library_path_fixture(%{type: "movies", path: "/tmp/zzz-second"})
+    first = library_path_fixture(%{type: "movies", path: "/tmp/aaa-first"})
+    second = library_path_fixture(%{type: "movies", path: "/tmp/zzz-second"})
     item = media_item_fixture(%{type: "movie", title: "Multi Library", year: 2024})
 
     {:ok, view, _html} = live(conn, ~p"/movies/#{item.id}")
@@ -75,8 +77,8 @@ defmodule MydiaWeb.MediaLive.ShowLibraryTest do
     |> render_click()
 
     assert has_element?(view, "#target-library-modal")
-    assert has_element?(view, "#target-library-modal", "aaa-first")
-    assert has_element?(view, "#target-library-modal", "zzz-second")
+    assert has_element?(view, "#target-library-modal", LibraryPath.display_name(first))
+    assert has_element?(view, "#target-library-modal", LibraryPath.display_name(second))
   end
 
   test "with a single candidate, the row is static and not clickable", %{conn: conn} do

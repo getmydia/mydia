@@ -17,6 +17,8 @@ defmodule MydiaWeb.AddMediaComponents do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Settings.LibraryPath
+
   @doc """
   Renders the five controls that decide how an item is added.
 
@@ -53,7 +55,7 @@ defmodule MydiaWeb.AddMediaComponents do
           <option value="">Select a folder...</option>
           <%= for path <- @config.libraries do %>
             <option value={path.id} selected={@config.defaults.library_path_id == path.id}>
-              {Path.basename(path.path)} · {path.path}
+              {LibraryPath.display_name(path)} · {path.path}
             </option>
           <% end %>
         </select>
