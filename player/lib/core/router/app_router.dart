@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 // Conditional import for web URL handling
 import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
+import '../sources/sources_providers.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
@@ -310,6 +311,16 @@ GoRouter appRouter(Ref ref) {
           final id = state.pathParameters['id']!;
           return EpisodeDetailScreen(id: id);
         },
+      ),
+      // Per-source screens. Redirect-only until Plex and Stash have screens.
+      GoRoute(
+        path: '/s/:sourceId',
+        name: 'source_root',
+        parentNavigatorKey: rootNavigatorKey,
+        redirect: (context, state) => sourceRootRedirect(
+          state.pathParameters['sourceId']!,
+          ref.read(sourcesProvider),
+        ),
       ),
       // Queue player route for collection playback (must be before /player/:type/:id)
       GoRoute(

@@ -15,6 +15,7 @@ import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
+import 'source_switcher.dart';
 
 /// Shared sidebar navigation content used by both the desktop sidebar and the
 /// mobile drawer.
@@ -180,6 +181,7 @@ class SidebarContent extends ConsumerWidget {
             ],
           ),
         ),
+        SourceSwitcher(onNavigate: onNavigate),
         if (editing)
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
