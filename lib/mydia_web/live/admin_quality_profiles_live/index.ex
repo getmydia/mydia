@@ -442,7 +442,8 @@ defmodule MydiaWeb.AdminQualityProfilesLive.Index do
       "description" => params["description"],
       "upgrades_allowed" => params["upgrades_allowed"],
       "upgrade_until_score" => params["upgrade_until_score"],
-      "min_upgrade_margin" => params["min_upgrade_margin"]
+      "min_upgrade_margin" => params["min_upgrade_margin"],
+      "grab_delay_hours" => params["grab_delay_hours"]
     }
 
     if quality_standards do
