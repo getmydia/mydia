@@ -6,7 +6,11 @@ defmodule Mydia.Accounts.RevokeStaleAccessTest do
   import Mydia.AccountsFixtures
   import Mydia.MediaFixtures
 
+  import Ecto.Query
+
   alias Mydia.Accounts
+  alias Mydia.Downloads.TranscodeJob
+  alias Mydia.Repo
   alias Mydia.Streaming.HlsSessionSupervisor
 
   defp direct_play(media_file, user) do
@@ -22,7 +26,8 @@ defmodule Mydia.Accounts.RevokeStaleAccessTest do
 
   test "adding a restriction stops sessions on newly hidden files only" do
     user = user_fixture()
-    hidden = direct_play(file_in("movie"), user)
+    hidden_file = file_in("movie")
+    hidden = direct_play(hidden_file, user)
     kept = direct_play(file_in("cartoon_movie"), user)
     ref = Process.monitor(hidden)
 
@@ -30,6 +35,14 @@ defmodule Mydia.Accounts.RevokeStaleAccessTest do
 
     assert_receive {:DOWN, ^ref, :process, _, _}, 1_000
     assert Process.alive?(kept)
+
+    # terminate/2 must have run, or the job row (and Now Playing card) lingers.
+    refute Repo.exists?(
+             from j in TranscodeJob,
+               where:
+                 j.media_file_id == ^hidden_file.id and j.user_id == ^user.id and
+                   j.status == "playing"
+           )
   end
 
   test "clearing a restriction stops nothing" do

@@ -431,11 +431,11 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
   @spec stop_user_sessions(String.t(), (String.t() -> boolean())) :: non_neg_integer()
   def stop_user_sessions(user_id, keep?) when is_function(keep?, 1) do
     if Process.whereis(@registry_name) do
-      for {{tag, media_file_id, ^user_id}, _pid, _meta} <- list_sessions(),
+      for {{tag, media_file_id, ^user_id}, pid, _meta} <- list_sessions(),
           not keep?.(media_file_id),
           reduce: 0 do
         count ->
-          stop_by_tag(tag, media_file_id, user_id)
+          stop_by_tag(tag, pid)
           count + 1
       end
     else
@@ -443,13 +443,13 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     end
   end
 
-  defp stop_by_tag(:hls_session, media_file_id, user_id), do: stop_session(media_file_id, user_id)
-
-  defp stop_by_tag(:direct_session, media_file_id, user_id),
-    do: stop_direct_session(media_file_id, user_id)
-
-  defp stop_by_tag(:remux_session, media_file_id, user_id),
-    do: stop_remux_session(media_file_id, user_id)
+  # Revocation uses the graceful helpers rather than terminate_child/2: these
+  # sessions do not trap exits, so terminate/2 must be reached through
+  # GenServer.stop/2 for the job row to clear and :session_ended to broadcast
+  # (otherwise the Now Playing card never clears).
+  defp stop_by_tag(:hls_session, pid), do: stop_gracefully(pid)
+  defp stop_by_tag(:direct_session, pid), do: stop_tracking_session(pid)
+  defp stop_by_tag(:remux_session, pid), do: stop_tracking_session(pid)
 
   defp session_entry?({{tag, _media_file_id, _user_id}, _pid, _meta}),
     do: tag in @session_key_tags
