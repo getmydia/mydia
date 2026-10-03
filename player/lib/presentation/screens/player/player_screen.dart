@@ -114,6 +114,7 @@ import '../../../core/update/update_provider.dart';
 import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
+import 'session/playback_session.dart';
 import 'session/playback_session_types.dart';
 import 'stats_context_builder.dart';
 import 'subtitle_preference.dart';
@@ -412,11 +413,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// produces a new client, so this is refreshed continuously rather than
   /// captured once. Null until the first resolution completes;
   /// [_terminateHlsSession] treats a still-null client the same as any
-  /// other best-effort failure (already caught and logged there).
+  /// other best-effort failure (already caught and logged there). It also
+  /// backs [_session], whose methods read it at call time.
   GraphQLClient? _graphqlClient;
 
   /// Every GraphQL data call this screen makes goes through here.
-  late final MydiaPlaybackSession _session;
+  late final PlaybackSession _session;
 
   /// Set once the 90% watched threshold is first crossed, so the invalidation
   /// fires once per playback rather than on every position tick.
