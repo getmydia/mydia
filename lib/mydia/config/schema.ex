@@ -380,6 +380,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :library_paths, LibraryPath, on_replace: :delete, primary_key: false do
       field :path, :string
+      field :name, :string
       # Keeps @removed_library_types (:music, :books, :adult) even though
       # Mydia.Settings.LibraryPath no longer stores them. Narrowing this enum
       # would crash-loop an upgrading instance instead of letting
@@ -903,6 +904,7 @@ defmodule Mydia.Config.Schema do
     schema
     |> cast(attrs, [
       :path,
+      :name,
       :type,
       :monitored,
       :scan_interval,

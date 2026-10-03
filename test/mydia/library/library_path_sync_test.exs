@@ -16,7 +16,8 @@ defmodule Mydia.Library.LibraryPathSyncTest do
         path: path,
         type: :movies,
         monitored: true,
-        scan_interval: nil
+        scan_interval: nil,
+        name: nil
       },
       attrs
     )
@@ -66,6 +67,28 @@ defmodule Mydia.Library.LibraryPathSyncTest do
       row = Repo.get_by!(LibraryPath, path: path)
       assert row.scan_interval == nil
       assert row.from_env == true
+    end
+  end
+
+  describe "name layering" do
+    test "writes the name when the runtime path supplies one" do
+      path = "/media/named"
+      sync!([runtime_path(path, %{name: "Kids Movies"})])
+
+      assert Repo.get_by!(LibraryPath, path: path).name == "Kids Movies"
+    end
+
+    test "leaves an existing name alone when the runtime path has none" do
+      path = "/media/unnamed"
+      sync!([runtime_path(path)])
+
+      Repo.get_by!(LibraryPath, path: path)
+      |> Ecto.Changeset.change(name: "Set Elsewhere")
+      |> Repo.update!()
+
+      sync!([runtime_path(path)])
+
+      assert Repo.get_by!(LibraryPath, path: path).name == "Set Elsewhere"
     end
   end
 

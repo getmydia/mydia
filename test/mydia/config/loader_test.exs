@@ -278,6 +278,17 @@ defmodule Mydia.Config.LoaderTest do
       refute Map.has_key?(path, :quality_profile_id)
     end
 
+    test "loads LIBRARY_PATH_<N>_NAME" do
+      System.put_env("LIBRARY_PATH_1_PATH", "/media/second_library")
+      System.put_env("LIBRARY_PATH_1_TYPE", "movies")
+      System.put_env("LIBRARY_PATH_1_NAME", "Kids Movies")
+
+      {:ok, config} = Loader.load(config_file: "nonexistent.yml")
+
+      assert [path] = config.library_paths
+      assert path.name == "Kids Movies"
+    end
+
     test "loads a Newznab API path from environment configuration" do
       System.put_env("INDEXER_1_NAME", "Custom Newznab")
       System.put_env("INDEXER_1_TYPE", "newznab")

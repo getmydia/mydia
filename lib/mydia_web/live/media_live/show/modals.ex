@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
   alias Mydia.Media.DiskRemoval.Preview
+  alias Mydia.Settings.LibraryPath
 
   @doc """
   Delete confirmation modal for removing a media item.
@@ -1355,7 +1356,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               phx-value-library-path-id={library.id}
               class={["justify-between", @media_item.library_path_id == library.id && "active"]}
             >
-              {Path.basename(library.path)}
+              {LibraryPath.display_name(library)}
               <.icon
                 :if={@media_item.library_path_id == library.id}
                 name="hero-check"

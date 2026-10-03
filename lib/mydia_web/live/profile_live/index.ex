@@ -293,7 +293,7 @@ defmodule MydiaWeb.ProfileLive.Index do
   defp library_options(libraries, types) do
     libraries
     |> Enum.filter(&(&1.type in types))
-    |> Enum.map(&{&1.id, &1.path})
+    |> Enum.map(&{&1.id, LibraryPath.display_name(&1)})
   end
 
   # An empty select means "inherit", stored as nil rather than "".

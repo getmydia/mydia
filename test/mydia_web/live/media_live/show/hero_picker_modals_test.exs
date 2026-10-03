@@ -210,7 +210,7 @@ defmodule MydiaWeb.MediaLive.Show.HeroPickerModalsTest do
       |> render_click()
 
       assert has_element?(view, "#target-library-modal")
-      assert has_element?(view, "#target-library-modal", "hero-target-b")
+      assert has_element?(view, "#target-library-modal", library.name)
 
       view
       |> element(

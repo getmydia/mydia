@@ -12,6 +12,7 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
   alias Mydia.Library.ImportRun
   alias Mydia.Media
   alias Mydia.Settings
+  alias Mydia.Settings.LibraryPath
   alias MydiaWeb.Live.Authorization
 
   @refresh_ms 1_000
@@ -193,7 +194,7 @@ defmodule MydiaWeb.MediaLive.Show.FindFileEvents do
 
   # A library path deleted while its scan starts must not crash the dialog.
   defp library_name(library_path_id) do
-    Settings.get_library_path!(library_path_id).path
+    library_path_id |> Settings.get_library_path!() |> LibraryPath.display_name()
   rescue
     Ecto.NoResultsError -> "a removed library"
   end

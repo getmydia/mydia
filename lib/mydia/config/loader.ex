@@ -765,6 +765,7 @@ defmodule Mydia.Config.Loader do
 
       %{}
       |> put_if_present(:path, System.get_env("#{prefix}PATH"))
+      |> put_if_present(:name, System.get_env("#{prefix}NAME"))
       |> put_if_present(:type, System.get_env("#{prefix}TYPE"), &parse_atom/1)
       |> put_if_present(:monitored, System.get_env("#{prefix}MONITORED"), &parse_boolean/1)
       |> put_if_present(

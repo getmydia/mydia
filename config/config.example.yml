@@ -134,6 +134,7 @@ library_paths:
   # Example: Movies library
   - path: "/media/movies"
     type: "movies" # Type: movies, series, or mixed
+    # name: "Movies" # Optional: display name; defaults to the folder name
     monitored: true # Enable/disable monitoring
     # scan_interval: 3600 # Optional: Scan automatically every hour
     # quality_profile_id: 1 # Optional: Assign a quality profile

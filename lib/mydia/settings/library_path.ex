@@ -13,6 +13,7 @@ defmodule Mydia.Settings.LibraryPath do
   @type t :: %__MODULE__{
           id: binary(),
           path: String.t() | nil,
+          name: String.t() | nil,
           type: atom() | nil,
           monitored: boolean(),
           scan_interval: integer() | nil,
@@ -53,6 +54,8 @@ defmodule Mydia.Settings.LibraryPath do
 
   schema "library_paths" do
     field :path, :string
+    # Optional label shown in the UI instead of the folder name.
+    field :name, :string
     field :type, Ecto.Enum, values: @path_types
     field :monitored, :boolean, default: true
     field :scan_interval, :integer
@@ -92,6 +95,7 @@ defmodule Mydia.Settings.LibraryPath do
     library_path
     |> cast(attrs, [
       :path,
+      :name,
       :type,
       :monitored,
       :scan_interval,
@@ -112,6 +116,8 @@ defmodule Mydia.Settings.LibraryPath do
       :default_for_series
     ])
     |> validate_required([:path, :type])
+    |> normalize_name()
+    |> validate_length(:name, max: 60)
     |> validate_inclusion(:type, @path_types)
     |> validate_inclusion(:tv_metadata_source, @tv_metadata_sources)
     |> validate_number(:scan_interval, greater_than_or_equal_to: 900)
@@ -126,6 +132,39 @@ defmodule Mydia.Settings.LibraryPath do
       message: "another library is already the default for series"
     )
     |> unique_constraint(:path)
+  end
+
+  @doc """
+  The label the UI shows for a library: its name, else its folder name.
+  Accepts runtime structs and plain maps as well as rows.
+  """
+  @spec display_name(%{required(:path) => String.t(), optional(:name) => String.t() | nil}) ::
+          String.t()
+  def display_name(%{path: path} = library_path) do
+    case Map.get(library_path, :name) do
+      name when is_binary(name) and name != "" -> name
+      _ -> fallback_name(path)
+    end
+  end
+
+  defp fallback_name(path) do
+    case path |> String.trim_trailing("/") |> Path.basename() do
+      "" -> path
+      basename -> basename
+    end
+  end
+
+  defp normalize_name(changeset) do
+    case get_change(changeset, :name) do
+      name when is_binary(name) ->
+        case String.trim(name) do
+          "" -> put_change(changeset, :name, nil)
+          trimmed -> put_change(changeset, :name, trimmed)
+        end
+
+      _ ->
+        changeset
+    end
   end
 
   @doc """
