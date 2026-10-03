@@ -2,6 +2,7 @@
 /// field Plex may omit is treated as optional.
 library;
 
+import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../source.dart';
@@ -68,15 +69,19 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
   };
   final index = m['index'] as int?;
   final parentIndex = m['parentIndex'] as int?;
+  final episode = kind == ItemKind.episode;
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
     title: m['title'] as String? ?? '',
-    subtitle: kind == ItemKind.episode && index != null && parentIndex != null
+    subtitle: episode && index != null && parentIndex != null
         ? 'S$parentIndex · E$index'
         : null,
+    showTitle: episode ? m['grandparentTitle'] as String? : null,
     year: m['year'] as int?,
-    poster: _art(m['thumb']),
-    backdrop: _art(m['art']),
+    // An episode's own thumb is a landscape still: the show's poster suits a
+    // poster frame, and the still suits a backdrop.
+    poster: _art(episode ? m['grandparentThumb'] ?? m['thumb'] : m['thumb']),
+    backdrop: _art(episode ? m['thumb'] ?? m['art'] : m['art']),
     durationSeconds: _seconds(m['duration']),
     userState: UserState(
       watched: watched,
@@ -85,6 +90,39 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
     childCount: m['childCount'] as int? ?? leafCount,
     index: index,
     parentIndex: parentIndex,
+  );
+}
+
+/// Plex's own Continue Watching and On Deck hubs. The Continue Watching row
+/// already shows them.
+const plexContinueHubIds = {'home.continue', 'home.ondeck'};
+
+/// A home hub, or null when it is one of [plexContinueHubIds] or holds
+/// nothing this app plays. [libraryIds] are the sections a hub may link to;
+/// Plex hubs carry no section id of their own, so it comes from the items.
+Hub? plexHub(
+  SourceId sourceId,
+  Map<String, dynamic> h, {
+  required Set<String> libraryIds,
+}) {
+  final hubId = h['hubIdentifier'];
+  if (hubId is! String || plexContinueHubIds.contains(hubId)) return null;
+  final metadata = [
+    for (final m in (h['Metadata'] as List? ?? const []))
+      if (m is Map) m.cast<String, dynamic>(),
+  ];
+  final items =
+      metadata.map((m) => plexSummary(sourceId, m)).whereType<ItemSummary>();
+  if (items.isEmpty) return null;
+  final sections = {for (final m in metadata) '${m['librarySectionID']}'};
+  final section = sections.length == 1 ? sections.single : null;
+  return Hub(
+    id: hubId,
+    title: h['title'] as String? ?? '',
+    items: items.toList(),
+    library: section != null && libraryIds.contains(section)
+        ? LibraryRef(sourceId: sourceId, id: section)
+        : null,
   );
 }
 

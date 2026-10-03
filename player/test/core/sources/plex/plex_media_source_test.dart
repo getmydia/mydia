@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/plex/plex_identity.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
 import 'package:player/core/sources/plex/plex_server_client.dart';
@@ -205,5 +206,59 @@ void main() {
       ),
     );
     expect(b.connection.failures, [FakePlexServer.base]);
+  });
+
+  group('home', () {
+    test('declares Continue Watching and hubs', () {
+      final caps = build().source.capabilities;
+      expect(caps, contains(SourceCapability.continueWatching));
+      expect(caps, contains(SourceCapability.hubs));
+    });
+
+    test('Continue Watching maps the flat list, capped at 20', () async {
+      final b = build();
+      final items = await b.source.continueWatching();
+      expect(items.map((i) => i.ref.externalId), ['402', '103']);
+      final q = b.server.requests.last.url.queryParameters;
+      expect(b.server.requests.last.url.path, '/hubs/continueWatching/items');
+      expect(q['X-Plex-Container-Size'], '20');
+    });
+
+    test('an episode carries its show title, the show poster and its still',
+        () async {
+      final episode = (await build().source.continueWatching()).first;
+      expect(episode.showTitle, 'Harbour Lights');
+      expect(episode.subtitle, 'S1 · E2');
+      expect(episode.userState.progressSeconds, 600);
+      expect(episode.poster, const ArtworkRef('/library/metadata/201/thumb/1'));
+      expect(
+          episode.backdrop, const ArtworkRef('/library/metadata/402/thumb/1'));
+    });
+
+    test('hubs drop Continue Watching, On Deck, music and empty hubs',
+        () async {
+      final hubs = await build().source.hubs();
+      expect(
+          hubs.map((h) => h.id), ['home.movies.recent', 'home.mixed.released']);
+      expect(hubs.first.title, 'Recently Added in Films');
+      expect(hubs.first.items.map((i) => i.ref.externalId), ['104', '105']);
+    });
+
+    test('a hub links to its library only when every item shares it', () async {
+      final hubs = await build().source.hubs();
+      expect(hubs.first.library, const LibraryRef(sourceId: sid, id: '1'));
+      expect(hubs.last.library, isNull);
+    });
+
+    test('remove sends a PUT with the rating key', () async {
+      final b = build();
+      await b.source.removeFromContinueWatching(
+        const ItemRef(sourceId: sid, kind: ItemKind.episode, externalId: '402'),
+      );
+      final request = b.server.requests.last;
+      expect(request.method, 'PUT');
+      expect(request.url.path, '/actions/removeFromContinueWatching');
+      expect(request.url.queryParameters['ratingKey'], '402');
+    });
   });
 }

@@ -214,6 +214,70 @@ class FakePlexServer {
             },
           ],
         });
+      case '/hubs/continueWatching/items':
+        return _container({
+          'size': 2,
+          'Metadata': [
+            resumingEpisode,
+            {..._movie('103', 'A Quiet Orbit', 2015), 'viewOffset': 1800000},
+          ],
+        });
+      case '/hubs':
+        return _container({
+          'Hub': [
+            {
+              'hubIdentifier': 'home.continue',
+              'title': 'Continue Watching',
+              'type': 'mixed',
+              'Metadata': [resumingEpisode],
+            },
+            {
+              'hubIdentifier': 'home.ondeck',
+              'title': 'On Deck',
+              'type': 'mixed',
+              'Metadata': [resumingEpisode],
+            },
+            {
+              'hubIdentifier': 'home.movies.recent',
+              'title': 'Recently Added in Films',
+              'type': 'movie',
+              'Metadata': [
+                _movie('104', 'Paper Harbour', 2023),
+                _movie('105', 'Nine Copper Bells', 2012),
+              ],
+            },
+            {
+              'hubIdentifier': 'home.mixed.released',
+              'title': 'Recently Released',
+              'type': 'mixed',
+              'Metadata': [
+                _movie('101', 'The Lantern Keeper', 2019),
+                showSummary,
+              ],
+            },
+            {
+              'hubIdentifier': 'home.music.recent',
+              'title': 'Recently Added in Music',
+              'type': 'album',
+              'Metadata': [
+                {
+                  'ratingKey': '901',
+                  'type': 'album',
+                  'title': 'Lowtide Hymns',
+                  'librarySectionID': 3,
+                },
+              ],
+            },
+            {
+              'hubIdentifier': 'home.television.recent',
+              'title': 'Recently Added in Series',
+              'type': 'episode',
+              'Metadata': <Object>[],
+            },
+          ],
+        });
+      case '/actions/removeFromContinueWatching':
+        return http.Response('', 200);
       case '/:/scrobble':
       case '/:/unscrobble':
       case '/:/timeline':
@@ -246,6 +310,33 @@ class FakePlexServer {
         'thumb': '/library/metadata/$id/thumb/1700',
         'art': '/library/metadata/$id/art/1700',
         'duration': 5400000,
+        'librarySectionID': 1,
+      };
+
+  /// Episode 402, mid-way, as Continue Watching and the hubs return it.
+  static Map<String, dynamic> get resumingEpisode => {
+        'ratingKey': '402',
+        'type': 'episode',
+        'title': 'Fog Bank',
+        'index': 2,
+        'parentIndex': 1,
+        'grandparentTitle': 'Harbour Lights',
+        'grandparentThumb': '/library/metadata/201/thumb/1',
+        'thumb': '/library/metadata/402/thumb/1',
+        'viewOffset': 600000,
+        'duration': 1800000,
+        'librarySectionID': 2,
+      };
+
+  static Map<String, dynamic> get showSummary => {
+        'ratingKey': '201',
+        'type': 'show',
+        'title': 'Harbour Lights',
+        'year': 2020,
+        'thumb': '/library/metadata/201/thumb/1',
+        'leafCount': 2,
+        'viewedLeafCount': 1,
+        'librarySectionID': 2,
       };
 
   static http.Response _container(Map<String, dynamic> body) =>

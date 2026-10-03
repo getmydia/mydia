@@ -76,6 +76,10 @@ class PlexServerClient {
   Future<void> ping(String path, [Map<String, String>? query]) =>
       _send('GET', path, query);
 
+  /// A PUT whose answer does not matter beyond its status.
+  Future<void> put(String path, [Map<String, String>? query]) =>
+      _send('PUT', path, query);
+
   Future<http.Response> _send(
     String method,
     String path,
