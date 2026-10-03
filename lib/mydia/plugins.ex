@@ -1011,7 +1011,7 @@ defmodule Mydia.Plugins do
     Enum.flat_map(installed, fn config ->
       latest = Map.get(latest_by_slug, config.slug)
 
-      if latest && version_newer?(latest, config.version) do
+      if latest && Index.version_newer?(latest, config.version) do
         [%{slug: config.slug, current: config.version, latest: latest}]
       else
         []
@@ -1037,19 +1037,8 @@ defmodule Mydia.Plugins do
     entries
     |> Enum.map(& &1.version)
     |> Enum.reject(&is_nil/1)
-    |> Enum.sort(&(not version_newer?(&2, &1)))
+    |> Enum.sort(&(not Index.version_newer?(&2, &1)))
     |> List.first()
-  end
-
-  # True when `candidate` is a newer version than `current`. Uses semver when
-  # both parse, falling back to string inequality.
-  defp version_newer?(_candidate, nil), do: true
-
-  defp version_newer?(candidate, current) do
-    case {Version.parse(candidate), Version.parse(current)} do
-      {{:ok, c}, {:ok, cur}} -> Version.compare(c, cur) == :gt
-      _ -> candidate != current and candidate > current
-    end
   end
 
   defp emit_update_event(%{slug: slug, current: current, latest: latest}) do

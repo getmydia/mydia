@@ -6,6 +6,7 @@ defmodule Mydia.Plugins.IndexTest do
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.Entry
+  alias Mydia.Settings.PluginConfig
 
   # Build a real (tiny) wasm module so the integrity hash is computed over actual
   # bytes rather than a fixture that can drift.
@@ -206,20 +207,51 @@ defmodule Mydia.Plugins.IndexTest do
       Bypass.expect_once(bypass, "GET", path, fn conn -> Plug.Conn.resp(conn, 200, body) end)
     end
 
-    test "lists entries that are not installed", %{bypass: bypass} do
+    test "lists every entry, installed or not", %{bypass: bypass} do
       serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
 
-      assert %BrowseResult{status: :available, error: nil, source_count: 1, catalog: [entry]} =
-               Index.browse([], browse_opts(bypass, ["/index.json"]))
+      installed = [
+        %PluginConfig{
+          slug: "webhook-notifier",
+          version: "1.0.0",
+          source_url: "https://cdn.test/p-1.0.0.wasm"
+        }
+      ]
 
-      assert entry.slug == "webhook-notifier"
+      assert %BrowseResult{status: :available, error: nil, source_count: 1, catalog: [item]} =
+               Index.browse(installed, browse_opts(bypass, ["/index.json"]))
+
+      assert item.entry.slug == "webhook-notifier"
     end
 
-    test "reports :all_installed when every listed entry is installed", %{bypass: bypass} do
-      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+    test "classifies each entry against what is installed", %{bypass: bypass} do
+      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
+        Plug.Conn.resp(conn, 200, catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+      end)
 
-      assert %BrowseResult{status: :all_installed, catalog: [], error: nil} =
-               Index.browse(["webhook-notifier"], browse_opts(bypass, ["/index.json"]))
+      # The catalog lists webhook-notifier at 1.0.0.
+      cases = [
+        {nil, :not_installed, nil},
+        {{"bundled", "0.9.0"}, :bundled, "0.9.0"},
+        {{"https://cdn.test/p-1.0.0.wasm", "1.0.0"}, :installed, "1.0.0"},
+        {{"https://cdn.test/p-0.9.0.wasm", "0.9.0"}, :update, "0.9.0"},
+        {{"https://cdn.test/p-2.0.0.wasm", "2.0.0"}, :replace, "2.0.0"},
+        {{"file:///home/op/p.wasm", "1.0.0"}, :replace, "1.0.0"}
+      ]
+
+      for {installed, state, installed_version} <- cases do
+        configs =
+          case installed do
+            nil -> []
+            {url, v} -> [%PluginConfig{slug: "webhook-notifier", version: v, source_url: url}]
+          end
+
+        assert %BrowseResult{catalog: [item]} =
+                 Index.browse(configs, browse_opts(bypass, ["/index.json"]))
+
+        assert {item.state, item.installed_version} == {state, installed_version},
+               "installed as #{inspect(installed)}"
+      end
     end
 
     test "reports :empty when the source lists nothing", %{bypass: bypass} do
@@ -245,6 +277,16 @@ defmodule Mydia.Plugins.IndexTest do
     test "reports :empty with no sources configured" do
       assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 0} =
                Index.browse([], sources: [])
+    end
+  end
+
+  describe "version_newer?/2" do
+    test "compares semver, treats nil as oldest, and falls back to string order" do
+      refute Index.version_newer?("1.2.0", "1.10.0")
+      assert Index.version_newer?("1.10.0", "1.2.0")
+      refute Index.version_newer?("1.0.0", "1.0.0")
+      assert Index.version_newer?("1.0.0", nil)
+      assert Index.version_newer?("b", "a")
     end
   end
 end
