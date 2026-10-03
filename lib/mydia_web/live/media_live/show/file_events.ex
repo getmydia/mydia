@@ -500,15 +500,22 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       ) do
     media_item = socket.assigns.media_item
 
-    case Downloads.DownloadService.prepare_by_file(media_file_id, resolution) do
-      {:ok, _job_info} ->
-        {:noreply,
-         socket
-         |> assign(:transcode_jobs, load_transcode_jobs(media_item))
-         |> put_flash(:info, "Pre-transcode started for #{resolution}")}
+    case Mydia.Media.authorize_media_file_id(socket.assigns.current_scope, media_file_id) do
+      {:ok, _file} ->
+        case Downloads.DownloadService.prepare_by_file(media_file_id, resolution) do
+          {:ok, _job_info} ->
+            {:noreply,
+             socket
+             |> assign(:transcode_jobs, load_transcode_jobs(media_item))
+             |> put_flash(:info, "Pre-transcode started for #{resolution}")}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start pre-transcode: #{inspect(reason)}")}
+          {:error, reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Failed to start pre-transcode: #{inspect(reason)}")}
+        end
+
+      :denied ->
+        {:noreply, put_flash(socket, :error, "Media file not found")}
     end
   end
 

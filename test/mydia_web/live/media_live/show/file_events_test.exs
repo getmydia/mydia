@@ -128,4 +128,40 @@ defmodule MydiaWeb.MediaLive.Show.FileEventsTest do
     refute Mydia.Repo.get(MediaFile, file.id)
     assert flash_text(socket, :error) =~ "could not be deleted"
   end
+
+  describe "pre_transcode/2" do
+    test "authorizes the media file before creating a transcode job" do
+      # Create a visible item and a hidden item
+      visible_item =
+        Mydia.MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "cartoon_movie")
+
+      hidden_item = Mydia.MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+
+      # Create media files for each
+      _visible_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: visible_item.id})
+      hidden_file = Mydia.MediaFixtures.media_file_fixture(%{media_item_id: hidden_item.id})
+
+      # Create a restricted user
+      restricted_user =
+        Mydia.AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      socket =
+        stub_socket(%{
+          current_user: restricted_user,
+          current_scope: Scope.for_user(restricted_user),
+          media_item: visible_item
+        })
+
+      # Try to transcode a hidden file
+      {:noreply, result_socket} =
+        FileEvents.pre_transcode(
+          %{"media-file-id" => hidden_file.id, "resolution" => "720p"},
+          socket
+        )
+
+      # Verify no job was created
+      refute Mydia.Repo.get_by(Mydia.Downloads.TranscodeJob, media_file_id: hidden_file.id)
+      assert flash_text(result_socket, :error) == "Media file not found"
+    end
+  end
 end
