@@ -185,13 +185,13 @@ void main() {
       expect(sourceRootRedirect('nope', [Source.legacyMydia()]), '/');
     });
 
-    test('sends a third-party source home until its screens exist', () {
+    test('leaves a third-party source on its own screen', () {
       expect(
         sourceRootRedirect(
           _plexSource.id.value,
           [Source.legacyMydia(), _plexSource],
         ),
-        '/',
+        isNull,
       );
     });
   });

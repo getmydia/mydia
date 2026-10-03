@@ -216,7 +216,11 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   return media;
 });
 
-/// Where `/s/:sourceId` lands. Mydia keeps its unprefixed routes, so its
-/// root is `/`. Plex and Stash get real screens here in a later change;
-/// until then every id lands on `/` rather than a dead page.
-String sourceRootRedirect(String sourceId, List<Source> sources) => '/';
+/// Where `/s/:sourceId` lands before its screen builds: Mydia keeps its
+/// unprefixed routes, so its root is `/`; an unknown id goes home; a Plex
+/// or Stash source stays (null).
+String? sourceRootRedirect(String sourceId, List<Source> sources) {
+  final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
+  if (source == null || source.kind == SourceKind.mydia) return '/';
+  return null;
+}

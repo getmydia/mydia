@@ -3,7 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 // Conditional import for web URL handling
 import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
+import '../sources/source.dart';
 import '../sources/sources_providers.dart';
+import '../../domain/sources/library.dart';
+import '../../presentation/screens/sources/source_home_screen.dart';
+import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
@@ -102,6 +106,8 @@ class PlayerRouteParams {
 String? appRedirect({
   required AsyncValue<AuthStatus> auth,
   required String location,
+  required bool sourcesLoading,
+  required List<Source> thirdParty,
 }) {
   final authStatus = auth.maybeWhen(
     data: (status) => status,
@@ -114,16 +120,24 @@ String? appRedirect({
   final isPlayerRoute = location.startsWith('/player');
   // Reached from the login screen's "Connect Plex or Stash instead".
   final isAddSourceRoute = location.startsWith('/sources/add');
+  // Plex and Stash screens, and the screens that manage them.
+  final isSourceRoute =
+      location.startsWith('/s/') || location.startsWith('/sources');
 
   if (authStatus == AuthStatus.unauthenticated &&
       !isLoginRoute &&
       !isAddSourceRoute) {
+    // Usable with a Plex or Stash server alone: land there, not on login.
+    if (sourcesLoading) return null;
+    if (thirdParty.isNotEmpty) {
+      return isSourceRoute ? null : '/s/${thirdParty.first.id.value}';
+    }
     return '/login';
   }
   if (authStatus == AuthStatus.offlineMode &&
       !isDownloadsRoute &&
       !isPlayerRoute &&
-      !isAddSourceRoute) {
+      !isSourceRoute) {
     return '/downloads';
   }
   if (authStatus == AuthStatus.authenticated && isLoginRoute) return '/';
@@ -142,6 +156,10 @@ GoRouter appRouter(Ref ref) {
     debugPrint('[AppRouter] Auth state changed: $previous -> $next');
     refreshNotifier.refresh();
   });
+
+  // A first Plex or Stash source makes the app usable without Mydia.
+  ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
 
   // Dispose the notifier when the provider is disposed
   ref.onDispose(() {
@@ -163,6 +181,8 @@ GoRouter appRouter(Ref ref) {
       final target = appRedirect(
         auth: ref.read(authStateProvider),
         location: state.matchedLocation,
+        sourcesLoading: ref.read(sourcesLoadingProvider),
+        thirdParty: ref.read(thirdPartySourcesProvider),
       );
       if (target != null) {
         debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
@@ -275,6 +295,27 @@ GoRouter appRouter(Ref ref) {
             builder: (context, state) => const SettingsScreen(),
           ),
           GoRoute(
+            path: '/s/:sourceId',
+            name: 'source_root',
+            redirect: (context, state) => sourceRootRedirect(
+              state.pathParameters['sourceId']!,
+              ref.read(sourcesProvider),
+            ),
+            builder: (context, state) => SourceHomeScreen(
+              sourceId: SourceId(state.pathParameters['sourceId']!),
+            ),
+          ),
+          GoRoute(
+            path: '/s/:sourceId/library/:libraryId',
+            name: 'source_library',
+            builder: (context, state) => SourceLibraryScreen(
+              library: LibraryRef(
+                sourceId: SourceId(state.pathParameters['sourceId']!),
+                id: state.pathParameters['libraryId']!,
+              ),
+            ),
+          ),
+          GoRoute(
             path: '/search',
             name: 'search',
             builder: (context, state) => SearchScreen(
@@ -335,16 +376,6 @@ GoRouter appRouter(Ref ref) {
           final id = state.pathParameters['id']!;
           return EpisodeDetailScreen(id: id);
         },
-      ),
-      // Per-source screens. Redirect-only until Plex and Stash have screens.
-      GoRoute(
-        path: '/s/:sourceId',
-        name: 'source_root',
-        parentNavigatorKey: rootNavigatorKey,
-        redirect: (context, state) => sourceRootRedirect(
-          state.pathParameters['sourceId']!,
-          ref.read(sourcesProvider),
-        ),
       ),
       // Queue player route for collection playback (must be before /player/:type/:id)
       GoRoute(
