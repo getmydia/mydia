@@ -80,6 +80,15 @@ defmodule Mydia.Indexers.GrabDelayTest do
              GrabDelay.select([best, older], opts(profile(%{})), @now)
   end
 
+  test "a release dated in the future cannot push the wait past the delay from now" do
+    best = ranked("Lantern.Vale.S01E01.1080p.WEB-DL.x264-GRP", hours_ago(-240))
+
+    expected_until = DateTime.add(@now, 24 * 3600, :second)
+
+    assert {:wait, ^expected_until, ^best} =
+             GrabDelay.select([best], opts(profile(%{})), @now)
+  end
+
   test "a newer, better release does not reset the clock" do
     best = ranked("Lantern.Vale.S01E01.1080p.WEB-DL.x264-GRP", hours_ago(1))
     older = ranked("Lantern.Vale.S01E01.720p.WEB-DL.x264-GRP", hours_ago(25))

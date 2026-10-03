@@ -66,7 +66,10 @@ defmodule Mydia.Indexers.GrabDelay do
     if Enum.any?(dates, &is_nil/1) do
       {:grab, best}
     else
-      until = dates |> Enum.min(DateTime) |> DateTime.add(hours * 3600, :second)
+      # A date in the future (indexer clock skew) must not stretch the wait
+      # past the delay itself.
+      oldest_until = dates |> Enum.min(DateTime) |> DateTime.add(hours * 3600, :second)
+      until = Enum.min([oldest_until, DateTime.add(now, hours * 3600, :second)], DateTime)
 
       if DateTime.compare(now, until) == :lt, do: {:wait, until, best}, else: {:grab, best}
     end
