@@ -111,9 +111,14 @@ defmodule MydiaWeb.MyRequestsLive.Index do
   defp load_requests(socket) do
     user_id = socket.assigns.current_user.id
 
+    # The item is preloaded through the viewer's scope, so a request approved
+    # after the account's limit was lowered keeps its row but offers no link
+    # into a title the account cannot open.
+    visible_items = Mydia.Media.media_items_query(socket.assigns.current_scope)
+
     opts = [
       requester_id: user_id,
-      preload: [:requester, :approved_by, :media_item]
+      preload: [:requester, :approved_by, media_item: visible_items]
     ]
 
     opts =
