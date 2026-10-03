@@ -150,6 +150,43 @@ defmodule Mydia.Settings.LibraryPathTest do
     end
   end
 
+  describe "display_names/1" do
+    test "leaves unique labels alone" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk1/Shows", name: "Kids"}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{"a" => "Films", "b" => "Kids"}
+    end
+
+    test "adds the path to labels that collide" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk2/Films", name: nil},
+        %LibraryPath{id: "c", path: "/disk1/Shows", name: nil}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{
+               "a" => "Films (/disk1/Films)",
+               "b" => "Films (/disk2/Films)",
+               "c" => "Shows"
+             }
+    end
+
+    test "a name that matches another library's folder name also disambiguates" do
+      paths = [
+        %LibraryPath{id: "a", path: "/disk1/Films", name: nil},
+        %LibraryPath{id: "b", path: "/disk2/Other", name: "Films"}
+      ]
+
+      assert LibraryPath.display_names(paths) == %{
+               "a" => "Films (/disk1/Films)",
+               "b" => "Films (/disk2/Other)"
+             }
+    end
+  end
+
   describe "display_name/1" do
     test "prefers the name" do
       assert LibraryPath.display_name(%LibraryPath{path: "/media/second_library", name: "Kids"}) ==

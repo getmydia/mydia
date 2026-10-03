@@ -147,6 +147,29 @@ defmodule Mydia.Settings.LibraryPath do
     end
   end
 
+  @doc """
+  Labels for a list of libraries shown side by side, keyed by id.
+
+  Each label is `display_name/1`; when two or more libraries in the list share
+  a label (for example `/disk1/Movies` and `/disk2/Movies`), those get the path
+  appended so they can be told apart.
+  """
+  @spec display_names([%{required(:id) => term(), required(:path) => String.t()}]) :: %{
+          term() => String.t()
+        }
+  def display_names(library_paths) do
+    labels = Map.new(library_paths, &{&1.id, display_name(&1)})
+    counts = labels |> Map.values() |> Enum.frequencies()
+
+    Map.new(library_paths, fn lp ->
+      label = Map.fetch!(labels, lp.id)
+
+      if Map.fetch!(counts, label) > 1,
+        do: {lp.id, "#{label} (#{lp.path})"},
+        else: {lp.id, label}
+    end)
+  end
+
   defp fallback_name(path) do
     case path |> String.trim_trailing("/") |> Path.basename() do
       "" -> path
