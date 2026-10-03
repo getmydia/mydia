@@ -27,6 +27,10 @@ class SourceSecrets {
   Future<void> writeAccountToken(ProviderAccount account, String token) =>
       _storage.write(_accountKey(account), token);
 
+  /// Deletes the stored account token (API key or plex.tv token).
+  Future<void> deleteAccountToken(ProviderAccount account) =>
+      _storage.delete(_accountKey(account));
+
   /// A Plex server's own access token. Stash has none; it uses the account
   /// token.
   Future<String?> serverToken(Source source) => _storage

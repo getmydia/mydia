@@ -188,4 +188,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Settings, Security'), findsOneWidget);
   });
+
+  testWidgets('re-saving an account with an empty key removes the old key',
+      (tester) async {
+    final server = FakeStashServer();
+    final storage = MockAuthStorage();
+    final store = InMemorySourceStore();
+
+    // First, save with an API key
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
+      ],
+      child: const MaterialApp(home: StashConnectScreen()),
+    ));
+
+    await tester.enterText(
+        find.byKey(const Key('stash-url-field')), '192.168.1.20:9999');
+    await tester.enterText(
+        find.byKey(const Key('stash-key-field')), FakeStashServer.apiKey);
+    await tester.tap(find.byKey(const Key('stash-connect-button')));
+    await tester.pumpAndSettle();
+
+    final record = (await store.load()).accounts.single;
+    final accountToken =
+        await storage.read('${record.account.storageNamespace}/account_token');
+    expect(accountToken, FakeStashServer.apiKey);
+
+    // Now re-auth with an empty key using a mock client that accepts no key
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        sourceHttpProvider.overrideWithValue(SourceHttp(
+          client: MockClient((_) async => http.Response(
+              '{"data":{"systemStatus":{"status":"OK"}}}', 200,
+              headers: {'content-type': 'application/json'})),
+        )),
+      ],
+      child: MaterialApp(
+        home: StashConnectScreen(reauthAccountId: record.account.id),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // The URL field should be pre-populated
+    expect(find.byWidgetPredicate((w) {
+      return w is TextField &&
+          w.controller?.text.contains('192.168.1.20') == true;
+    }), findsOneWidget);
+
+    // Clear the key field (which should be empty) and submit
+    await tester.enterText(find.byKey(const Key('stash-key-field')), '');
+    await tester.tap(find.byKey(const Key('stash-connect-button')));
+    await tester.pumpAndSettle();
+
+    // Verify the old key is deleted
+    final updatedToken =
+        await storage.read('${record.account.storageNamespace}/account_token');
+    expect(updatedToken, isNull);
+  });
 }

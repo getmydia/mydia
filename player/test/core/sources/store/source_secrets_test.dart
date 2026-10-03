@@ -33,4 +33,16 @@ void main() {
   test('a new namespace is derived from the account id', () {
     expect(SourceSecrets.newStorageNamespace('acc7'), 'source/acc7');
   });
+
+  test('deleteAccountToken removes the stored token', () async {
+    final storage = MockAuthStorage();
+    final secrets = SourceSecrets(storage);
+    final record = plexRecord();
+
+    await secrets.writeAccountToken(record.account, 'acct-token');
+    expect(await secrets.accountToken(record.account), 'acct-token');
+
+    await secrets.deleteAccountToken(record.account);
+    expect(await secrets.accountToken(record.account), isNull);
+  });
 }

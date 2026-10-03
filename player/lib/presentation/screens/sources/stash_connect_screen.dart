@@ -58,7 +58,11 @@ Future<SourceAccountRecord> saveStashSource(
         activeProfileId: 'owner',
       );
   final secrets = ref.read(sourceSecretsProvider);
-  if (apiKey.isNotEmpty) await secrets.writeAccountToken(account, apiKey);
+  if (apiKey.isNotEmpty) {
+    await secrets.writeAccountToken(account, apiKey);
+  } else {
+    await secrets.deleteAccountToken(account);
+  }
   final record = SourceAccountRecord(
     account: account,
     profiles: [
