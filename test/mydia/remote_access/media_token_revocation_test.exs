@@ -117,6 +117,22 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
     end
   end
 
+  describe "Accounts.update_user_role/2" do
+    test "a demoted admin's cached token resolves to their new role on the next request" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, _claims} = MediaToken.create_token(device)
+
+      assert {:ok, %{user: %{role: "admin"}}, _claims} = TokenCache.validate(token)
+      assert TokenCache.count() == 1
+
+      {:ok, _} = Accounts.update_user_role(admin, %{role: "user"})
+
+      assert TokenCache.count() == 0
+      assert {:ok, %{user: %{role: "user"}}, _claims} = TokenCache.validate(token)
+    end
+  end
+
   defp create_device(user, attrs \\ %{}) do
     default_attrs = %{
       device_name: "Test Device #{System.unique_integer([:positive])}",

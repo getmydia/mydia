@@ -313,6 +313,10 @@ defmodule Mydia.Accounts do
     user
     |> User.role_changeset(attrs)
     |> Repo.update()
+    |> tap(fn
+      {:ok, updated} -> revoke_stale_access(updated)
+      _error -> :ok
+    end)
   end
 
   @doc """
@@ -416,6 +420,34 @@ defmodule Mydia.Accounts do
     |> Repo.insert_or_update()
     |> tap(&mark_restrictions_present/1)
     |> tap(&reset_shelves_after(&1, user_id))
+    |> tap(&revoke_after(&1, user))
+  end
+
+  defp revoke_after({:ok, _restriction}, user), do: revoke_stale_access(user)
+  defp revoke_after(_other, _user), do: :ok
+
+  @doc """
+  Brings a user's live access in line with their current role and
+  restriction. Called after either changes.
+
+  Drops the user's cached media tokens, whose cached device carries a snapshot
+  of the user and so of their role, and stops any playback session on a file
+  the new scope hides. Sessions on files that stay visible keep running, so
+  loosening a restriction interrupts nobody.
+  """
+  @spec revoke_stale_access(User.t()) :: :ok
+  def revoke_stale_access(%User{} = user) do
+    user.id
+    |> Mydia.RemoteAccess.list_devices()
+    |> Enum.each(&Mydia.Media.TokenCache.invalidate_for_device(&1.id))
+
+    scope = Mydia.Accounts.Scope.for_user(user)
+
+    Mydia.Streaming.HlsSessionSupervisor.stop_user_sessions(user.id, fn media_file_id ->
+      match?({:ok, _}, Mydia.Media.authorize_media_file_id(scope, media_file_id))
+    end)
+
+    :ok
   end
 
   # Shelf picks are checked against restrictions when they are filled, so a
@@ -435,6 +467,8 @@ defmodule Mydia.Accounts do
       restriction ->
         Repo.delete!(restriction)
         Shelves.reset_for_user(user_id)
+        revoke_stale_access(user)
+        :ok
     end
   end
 

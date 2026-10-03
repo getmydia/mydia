@@ -420,6 +420,37 @@ defmodule Mydia.Streaming.HlsSessionSupervisor do
     |> Enum.filter(&session_entry?/1)
   end
 
+  @doc """
+  Stops every playback session (HLS, direct play, remux) belonging to
+  `user_id` whose media file `keep?` rejects. Returns how many it stopped.
+
+  Used when a user's access changes: a session started under the old scope
+  would otherwise keep serving a file the new scope hides. The registry only
+  runs while the player is enabled, and with it off there is nothing to stop.
+  """
+  @spec stop_user_sessions(String.t(), (String.t() -> boolean())) :: non_neg_integer()
+  def stop_user_sessions(user_id, keep?) when is_function(keep?, 1) do
+    if Process.whereis(@registry_name) do
+      for {{tag, media_file_id, ^user_id}, _pid, _meta} <- list_sessions(),
+          not keep?.(media_file_id),
+          reduce: 0 do
+        count ->
+          stop_by_tag(tag, media_file_id, user_id)
+          count + 1
+      end
+    else
+      0
+    end
+  end
+
+  defp stop_by_tag(:hls_session, media_file_id, user_id), do: stop_session(media_file_id, user_id)
+
+  defp stop_by_tag(:direct_session, media_file_id, user_id),
+    do: stop_direct_session(media_file_id, user_id)
+
+  defp stop_by_tag(:remux_session, media_file_id, user_id),
+    do: stop_remux_session(media_file_id, user_id)
+
   defp session_entry?({{tag, _media_file_id, _user_id}, _pid, _meta}),
     do: tag in @session_key_tags
 
