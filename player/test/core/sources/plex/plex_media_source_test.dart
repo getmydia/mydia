@@ -163,7 +163,7 @@ void main() {
     expect(b.unauthorized, [1]);
   });
 
-  test('a transport failure reports the base to the connection', () async {
+  test('an HTTP error status does not report the connection', () async {
     final b = build();
     b.server.status = 599;
     await expectLater(b.source.libraries(), throwsA(isA<SourceException>()));
@@ -172,5 +172,21 @@ void main() {
       isEmpty,
       reason: 'an HTTP error is an answer, not a dead connection',
     );
+  });
+
+  test('a transport failure reports the base to the connection', () async {
+    final b = build();
+    b.server.throwTransport = true;
+    await expectLater(
+      b.source.libraries(),
+      throwsA(
+        isA<SourceException>().having(
+          (e) => e.kind,
+          'kind',
+          SourceErrorKind.unreachable,
+        ),
+      ),
+    );
+    expect(b.connection.failures, [FakePlexServer.base]);
   });
 }

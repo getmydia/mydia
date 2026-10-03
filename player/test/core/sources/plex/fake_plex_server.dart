@@ -15,6 +15,10 @@ class FakePlexServer {
   /// Set to make every request after the identity probe answer this code.
   int? status;
 
+  /// Set to make every request after the identity probe fail at the
+  /// transport level, as a dropped connection does.
+  bool throwTransport = false;
+
   static const movies = [
     ('101', 'The Lantern Keeper', 2019),
     ('102', 'Saltwater Clocks', 2021),
@@ -31,6 +35,7 @@ class FakePlexServer {
         'MediaContainer': {'machineIdentifier': machineId},
       });
     }
+    if (throwTransport) throw http.ClientException('connection refused');
     final forced = status;
     if (forced != null) return http.Response('', forced);
     if (request.headers['X-Plex-Token'] != token) {
