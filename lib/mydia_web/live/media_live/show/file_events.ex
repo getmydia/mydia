@@ -25,6 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
   def refresh_metadata(_params, socket) do
     media_item = socket.assigns.media_item
+    scope = socket.assigns.current_scope
 
     case ProviderSwitch.provider_refresh_decision(media_item) do
       {:reidentify, target} ->
@@ -35,7 +36,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
          |> assign(:reidentifying, true)
          |> put_flash(:info, "Re-identifying on #{provider_label(target)}...")
          |> start_async(:reidentify_search, fn ->
-           {target, ProviderSwitch.find_reidentify_candidate(media_item, target)}
+           {target, ProviderSwitch.find_reidentify_candidate(media_item, target, nil, scope)}
          end)}
 
       :refetch ->
