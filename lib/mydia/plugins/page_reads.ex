@@ -25,6 +25,7 @@ defmodule Mydia.Plugins.PageReads do
   alias Mydia.Collections
   alias Mydia.Downloads
   alias Mydia.LibrarySearch
+  alias Mydia.Media.RemoteFilter
   alias Mydia.MediaRequests
   alias Mydia.Metadata
   alias Mydia.Playback
@@ -50,7 +51,7 @@ defmodule Mydia.Plugins.PageReads do
 
       case Map.get(req, :kind) do
         :library -> library_hits(user, query, types, limit)
-        :catalog -> catalog_hits(query, types, limit)
+        :catalog -> catalog_hits(user, query, types, limit)
         _ -> {:error, Error.new(:invalid_request, "unknown search kind")}
       end
     end
@@ -207,7 +208,7 @@ defmodule Mydia.Plugins.PageReads do
     {:ok, Enum.take(hits, limit)}
   end
 
-  defp catalog_hits(query, types, limit) do
+  defp catalog_hits(user, query, types, limit) do
     if String.trim(query) == "" do
       {:ok, []}
     else
@@ -216,7 +217,10 @@ defmodule Mydia.Plugins.PageReads do
       outcomes =
         Enum.map(types, fn type ->
           with {:ok, results} <- Metadata.search_cached(config, query, media_type: type) do
-            {:ok, Enum.map(results, &catalog_hit(&1, type))}
+            {:ok,
+             results
+             |> RemoteFilter.filter(Scope.for_user(user))
+             |> Enum.map(&catalog_hit(&1, type))}
           end
         end)
 

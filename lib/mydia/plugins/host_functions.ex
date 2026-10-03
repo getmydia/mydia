@@ -121,7 +121,7 @@ defmodule Mydia.Plugins.HostFunctions do
 
       v14 = %{
         "http-request" => {:fn, http_import(slug, ctx, gate_opts)},
-        "data-read" => {:fn, data_import(slug)},
+        "data-read" => {:fn, data_import(slug, ctx)},
         "log" => {:fn, log_import(slug, ctx)},
         # ── 1.1.0 ──
         "kv-get" => {:fn, kv_get_import(slug, ctx)},
@@ -488,11 +488,11 @@ defmodule Mydia.Plugins.HostFunctions do
 
   # ── data-read import ───────────────────────────────────────────────────────
 
-  defp data_import(slug) do
+  defp data_import(slug, ctx) do
     fn req ->
       typed_result(fn ->
         with {:ok, plugin} <- Plugins.get_plugin(slug),
-             {:ok, projection} <- data_read(plugin, from_data_request(req)) do
+             {:ok, projection} <- data_read(plugin, from_data_request(req), ctx) do
           {:ok, {:"media-item", to_media_item(projection)}}
         end
       end)
@@ -753,26 +753,33 @@ defmodule Mydia.Plugins.HostFunctions do
   (deny-by-default). Only a hand-picked, non-sensitive set of fields is ever
   returned — never raw rows or secrets. `request` is `%{"resource" => ns,
   "id" => id}`.
+
+  Inside `on-http` and `fill-shelf` the read runs as the acting user, like
+  `data_list`, so a hidden id answers `:not_found` exactly as a missing one
+  does. Elsewhere (events, schedules) it reads as the system.
   """
-  @spec data_read(Plugin.t(), map()) :: {:ok, map()} | {:error, Error.t()}
-  def data_read(%Plugin{} = plugin, %{"resource" => "media_item"} = request) do
+  @spec data_read(Plugin.t(), map(), map()) :: {:ok, map()} | {:error, Error.t()}
+  def data_read(plugin, request, ctx \\ %{})
+
+  def data_read(%Plugin{} = plugin, %{"resource" => "media_item"} = request, ctx) do
     with :ok <- require_data_namespace(plugin, "media_item"),
          {:ok, id} <- fetch_string(request, "id"),
-         {:ok, item} <- fetch_media_item(id) do
+         {:ok, viewer} <- list_viewer(ctx),
+         {:ok, item} <- fetch_media_item(list_scope(viewer), id) do
       {:ok, project_media_item(item)}
     end
   end
 
-  def data_read(%Plugin{}, %{"resource" => other}) do
+  def data_read(%Plugin{}, %{"resource" => other}, _ctx) do
     {:error, Error.new(:invalid_request, "unknown data:read resource: #{other}")}
   end
 
-  def data_read(%Plugin{}, _request) do
+  def data_read(%Plugin{}, _request, _ctx) do
     {:error, Error.new(:invalid_request, "data:read request requires a resource")}
   end
 
-  defp fetch_media_item(id) do
-    {:ok, Media.get_media_item!(Scope.system(), id)}
+  defp fetch_media_item(scope, id) do
+    {:ok, Media.get_media_item!(scope, id)}
   rescue
     Ecto.NoResultsError -> {:error, Error.new(:not_found, "media_item #{id} not found")}
     Ecto.Query.CastError -> {:error, Error.new(:invalid_request, "invalid media_item id")}
