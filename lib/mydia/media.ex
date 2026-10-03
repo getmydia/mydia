@@ -27,6 +27,14 @@ defmodule Mydia.Media do
   alias Mydia.MediaRequests
   alias Mydia.Library.{MediaFile, MediaFileEpisode}
 
+  @doc "See `Mydia.Media.FileAccess.authorize/2`."
+  defdelegate authorize_media_file(scope, media_file), to: Mydia.Media.FileAccess, as: :authorize
+
+  @doc "See `Mydia.Media.FileAccess.authorize_id/2`."
+  defdelegate authorize_media_file_id(scope, media_file_id),
+    to: Mydia.Media.FileAccess,
+    as: :authorize_id
+
   ## Media Items
 
   @doc """

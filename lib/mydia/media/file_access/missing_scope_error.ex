@@ -1,7 +1,7 @@
-defmodule MydiaWeb.MediaAccess.MissingScopeError do
+defmodule Mydia.Media.FileAccess.MissingScopeError do
   @moduledoc """
-  Reported, never raised, when `MydiaWeb.MediaAccess` authorizes a media file
-  for a caller that carries no `Mydia.Accounts.Scope`.
+  Reported, never raised, when `Mydia.Media.FileAccess` authorizes a media
+  file for a caller that carries no `Mydia.Accounts.Scope`.
 
   That only happens when an auth boundary forgot to assign one. The request is
   still denied (fail closed), but for an unrestricted account the denial is a
