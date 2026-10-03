@@ -96,7 +96,11 @@ class FakeStashServer {
         final page = filter['page'] as int? ?? 1;
         final perPage = filter['per_page'] as int? ?? 25;
         final q = filter['q'] as String?;
-        var all = [for (var n = 1; n <= 5; n++) scene(n)];
+        final sceneFilter = (variables['scene_filter'] as Map?) ?? const {};
+        // Scenes 4 then 2 are part-watched, most recently played first.
+        var all = sceneFilter.containsKey('resume_time')
+            ? [scene(4, resume: 120), scene(2, resume: 300)]
+            : [for (var n = 1; n <= 5; n++) scene(n)];
         if (q != null) {
           all = all.where((s) => '${s['title']}'.contains(q)).toList();
         }

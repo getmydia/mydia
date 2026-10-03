@@ -75,6 +75,16 @@ Source screens show messages through the app's toast (`Toaster`), not a
 `SnackBar`, and reserve dock clearance with `DockInsets` so content is not
 hidden behind the bottom dock.
 
+A source's home shows Continue Watching first when the source implements
+`ContinueWatching` (Plex: `/hubs/continueWatching/items`; Stash: scenes
+with a resume point, last played first). Then come the server's own rows
+when it implements `HomeHubs` (Plex's `/hubs`, minus `home.continue` and
+`home.ondeck`), otherwise one row per library. A failed Continue Watching
+hides its row; failed hubs fall back to the library rows. Removing from
+Continue Watching is a Plex `PUT /actions/removeFromContinueWatching` and a
+Stash `sceneSaveActivity` with a zero resume point (which works on every
+Stash the source supports; `sceneResetActivity` needs 0.27).
+
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the
@@ -85,6 +95,8 @@ skips that directory.
 
 1. A `MediaSource` subclass with its mapping and client, plus the shared
    contract suite in `test/core/sources/media_source_contract.dart`.
+   `ContinueWatching` and `HomeHubs` are optional; a source that implements
+   one also lists the matching `SourceCapability`.
 2. A case in `source_factories.dart`.
 3. A `SourcePlaybackSession` subclass and a case in
    `playbackSessionFor`.

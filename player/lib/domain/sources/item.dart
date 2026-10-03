@@ -70,6 +70,7 @@ class ItemSummary {
     required this.ref,
     required this.title,
     this.subtitle,
+    this.showTitle,
     this.year,
     this.poster,
     this.backdrop,
@@ -83,6 +84,9 @@ class ItemSummary {
   final ItemRef ref;
   final String title;
   final String? subtitle;
+
+  /// The series an episode belongs to. Null for anything else.
+  final String? showTitle;
   final int? year;
   final ArtworkRef? poster;
   final ArtworkRef? backdrop;

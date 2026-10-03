@@ -1,13 +1,15 @@
-/// Per-screen state for the generic source screens, keyed by source. Each
-/// screen invalidates its own providers after a write; nothing here is
+/// Per-screen state for the generic source screens, keyed by source. Screens
+/// invalidate through `invalidateSourceItemWrites` after a write; nothing here is
 /// wired to Mydia's `QueryWatcher`.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -18,6 +20,21 @@ MediaSource _require(Ref ref, SourceId id) =>
 
 String sourceItemLocation(ItemRef ref) =>
     '/s/${ref.sourceId.value}/item/${ref.kind.name}/${Uri.encodeComponent(ref.externalId)}';
+
+String sourceLibraryLocation(LibraryRef ref) =>
+    '/s/${ref.sourceId.value}/library/${Uri.encodeComponent(ref.id)}';
+
+String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
+  final ref = detail.summary.ref;
+  return Uri(
+    path: '/s/${ref.sourceId.value}/player/${ref.externalId}',
+    queryParameters: {
+      'kind': ref.kind.name,
+      'fileId': version.id,
+      'title': detail.summary.title,
+    },
+  ).toString();
+}
 
 final sourceLibrariesProvider = FutureProvider.autoDispose
     .family<List<Library>, SourceId>(
@@ -151,3 +168,37 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
 final libraryBrowseProvider = AsyncNotifierProvider.autoDispose
     .family<LibraryBrowseNotifier, LibraryBrowseState, LibraryRef>(
         LibraryBrowseNotifier.new);
+
+/// Empty for a source without the capability. No automatic retry: a failed
+/// row stays hidden until the next refresh rather than polling a down
+/// server.
+final sourceContinueWatchingProvider =
+    FutureProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) async {
+    final continueWatching = _require(ref, id).as<ContinueWatching>();
+    if (continueWatching == null) return const [];
+    return continueWatching.continueWatching();
+  },
+  retry: (_, __) => null,
+);
+
+/// Null for a source without hubs, whose home keeps one row per library.
+final sourceHubsProvider =
+    FutureProvider.autoDispose.family<List<Hub>?, SourceId>(
+  (ref, id) async {
+    final hubs = _require(ref, id).as<HomeHubs>();
+    return hubs == null ? null : await hubs.hubs();
+  },
+  retry: (_, __) => null,
+);
+
+/// Progress or watched state changed: this item, its siblings in a season
+/// list, and the home rows and grids that show it are all stale.
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) {
+  ref.invalidate(sourceItemProvider(item));
+  ref.invalidate(sourceChildrenProvider);
+  ref.invalidate(sourceLibraryPreviewProvider);
+  ref.invalidate(libraryBrowseProvider);
+  ref.invalidate(sourceContinueWatchingProvider(item.sourceId));
+  ref.invalidate(sourceHubsProvider(item.sourceId));
+}

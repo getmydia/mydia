@@ -14,7 +14,8 @@ import 'stash_client.dart';
 import 'stash_documents.dart';
 import 'stash_mapping.dart';
 
-class StashMediaSource extends MediaSource implements WatchedState, Searchable {
+class StashMediaSource extends MediaSource
+    implements WatchedState, Searchable, ContinueWatching {
   StashMediaSource({
     required this.source,
     required this.client,
@@ -31,6 +32,7 @@ class StashMediaSource extends MediaSource implements WatchedState, Searchable {
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
+        SourceCapability.continueWatching,
       };
 
   @override
@@ -119,6 +121,30 @@ class StashMediaSource extends MediaSource implements WatchedState, Searchable {
   Future<void> setWatched(ItemRef ref, bool watched) => client.query(
         watched ? stashAddPlay : stashResetPlayCount,
         {'id': ref.externalId},
+      );
+
+  @override
+  Future<List<ItemSummary>> continueWatching() async {
+    final data = await client.query(stashFindScenes, {
+      'filter': {
+        'page': 1,
+        'per_page': 20,
+        'sort': 'last_played_at',
+        'direction': 'DESC',
+      },
+      'scene_filter': {
+        'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+      },
+    });
+    return _page(data, 1, 20).items;
+  }
+
+  /// A zero resume point drops the scene from [continueWatching]. Works on
+  /// every Stash the source supports; `sceneResetActivity` needs 0.27.
+  @override
+  Future<void> removeFromContinueWatching(ItemRef ref) => client.query(
+        stashSaveActivity,
+        {'id': ref.externalId, 'resume_time': 0},
       );
 
   @override

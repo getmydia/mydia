@@ -87,6 +87,10 @@ void runMediaSourceContract(
           caps.contains(SourceCapability.watchedState));
       expect(f.source.as<Searchable>() != null,
           caps.contains(SourceCapability.searchable));
+      expect(f.source.as<ContinueWatching>() != null,
+          caps.contains(SourceCapability.continueWatching));
+      expect(f.source.as<HomeHubs>() != null,
+          caps.contains(SourceCapability.hubs));
     });
   });
 }

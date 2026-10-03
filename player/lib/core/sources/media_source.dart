@@ -15,7 +15,7 @@ enum SourceCapability {
   watchedState,
   searchable,
   continueWatching,
-  recentlyAdded,
+  hubs,
   collections,
   facets,
   profiles,

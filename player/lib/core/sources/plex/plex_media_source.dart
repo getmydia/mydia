@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -12,7 +13,8 @@ import '../source.dart';
 import 'plex_mapping.dart';
 import 'plex_server_client.dart';
 
-class PlexMediaSource extends MediaSource implements WatchedState, Searchable {
+class PlexMediaSource extends MediaSource
+    implements WatchedState, Searchable, ContinueWatching, HomeHubs {
   PlexMediaSource({
     required this.source,
     required this.client,
@@ -29,6 +31,8 @@ class PlexMediaSource extends MediaSource implements WatchedState, Searchable {
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
+        SourceCapability.continueWatching,
+        SourceCapability.hubs,
       };
 
   @override
@@ -140,6 +144,46 @@ class PlexMediaSource extends MediaSource implements WatchedState, Searchable {
           'key': ref.externalId,
         },
       );
+
+  static const _rowLimit = 20;
+
+  @override
+  Future<List<ItemSummary>> continueWatching() async {
+    final body = await client.container('/hubs/continueWatching/items', {
+      'X-Plex-Container-Start': '0',
+      'X-Plex-Container-Size': '$_rowLimit',
+    });
+    return [
+      for (final m in (body['Metadata'] as List? ?? const []))
+        if (m is Map) plexSummary(id, m.cast<String, dynamic>()),
+    ].whereType<ItemSummary>().take(_rowLimit).toList();
+  }
+
+  @override
+  Future<void> removeFromContinueWatching(ItemRef ref) => client.put(
+        '/actions/removeFromContinueWatching',
+        {'ratingKey': ref.externalId},
+      );
+
+  @override
+  Future<List<Hub>> hubs() async {
+    if (_sectionKinds == null) await libraries();
+    final libraryIds = _sectionKinds?.keys.toSet() ?? const <String>{};
+    final body = await client.container('/hubs', {'count': '$_rowLimit'});
+    final seen = <String>{};
+    return [
+      for (final h in (body['Hub'] as List? ?? const []))
+        if (h is Map)
+          if (plexHub(id, h.cast<String, dynamic>(), libraryIds: libraryIds)
+              case final hub? when seen.add(hub.id))
+            Hub(
+              id: hub.id,
+              title: hub.title,
+              items: hub.items.take(_rowLimit).toList(),
+              library: hub.library,
+            ),
+    ];
+  }
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {
