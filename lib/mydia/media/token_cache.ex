@@ -29,12 +29,15 @@ defmodule Mydia.Media.TokenCache do
   alias Mydia.RemoteAccess.MediaToken
 
   @table :media_token_cache
+  # One row per device ever invalidated: {device_id, monotonic_time}.
+  @stamps :media_token_cache_invalidations
   @ttl_ms :timer.minutes(5)
 
   @doc """
   Creates the ETS table. Must be called before the supervision tree starts.
   """
   def create_table do
+    :ets.new(@stamps, [:named_table, :public, :set, read_concurrency: true])
     :ets.new(@table, [:named_table, :public, :set, read_concurrency: true])
   end
 
@@ -86,6 +89,10 @@ defmodule Mydia.Media.TokenCache do
   """
   @spec invalidate_for_device(String.t()) :: :ok
   def invalidate_for_device(device_id) do
+    # Stamp first so a validation that read the old snapshot and has not yet
+    # stored it will see the stamp and skip the insert (see validate_and_cache/2).
+    :ets.insert(@stamps, {device_id, System.monotonic_time()})
+
     # Scan and delete all entries for this device
     # This is O(n) but should be rare (only on device revocation)
     :ets.foldl(
@@ -115,6 +122,7 @@ defmodule Mydia.Media.TokenCache do
   @spec clear() :: :ok
   def clear do
     :ets.delete_all_objects(@table)
+    :ets.delete_all_objects(@stamps)
     :ok
   end
 
@@ -133,15 +141,34 @@ defmodule Mydia.Media.TokenCache do
   # Private functions
 
   defp validate_and_cache(token, cache_key) do
+    # Race: verify_token reads the device and user from the database, and the
+    # insert happens afterwards. An invalidation landing in between would be
+    # undone by inserting the stale snapshot. Capture the time before the read
+    # and let store_if_current/4 refuse the insert if a stamp is not older.
+    started = System.monotonic_time()
+
     case MediaToken.verify_token(token) do
       {:ok, device, claims} ->
-        # Cache the successful validation
-        expires_at = System.monotonic_time(:millisecond) + @ttl_ms
-        :ets.insert(@table, {cache_key, device, claims, expires_at})
+        store_if_current(cache_key, device, claims, started)
         {:ok, device, claims}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @doc false
+  # Caches a verified token unless its device was invalidated at or after
+  # `started` (a `System.monotonic_time/0` value taken before verification).
+  def store_if_current(cache_key, device, claims, started) do
+    case :ets.lookup(@stamps, device.id) do
+      [{_id, stamped_at}] when stamped_at >= started ->
+        :skipped
+
+      _ ->
+        expires_at = System.monotonic_time(:millisecond) + @ttl_ms
+        :ets.insert(@table, {cache_key, device, claims, expires_at})
+        :ok
     end
   end
 end

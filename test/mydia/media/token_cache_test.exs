@@ -70,6 +70,42 @@ defmodule Mydia.Media.TokenCacheTest do
     end
   end
 
+  describe "validation racing an invalidation" do
+    test "store_if_current/4 skips the insert when the device was invalidated after verification began" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("race-device")
+
+      assert :skipped =
+               TokenCache.store_if_current(<<1>>, %{id: "race-device"}, %{}, started)
+
+      assert TokenCache.count() == 0
+    end
+
+    test "store_if_current/4 inserts when the invalidation predates verification" do
+      :ok = TokenCache.invalidate_for_device("race-device")
+      started = System.monotonic_time()
+
+      assert :ok = TokenCache.store_if_current(<<2>>, %{id: "race-device"}, %{}, started)
+      assert TokenCache.count() == 1
+    end
+
+    test "invalidations of other devices do not block the insert" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("other-device")
+
+      assert :ok = TokenCache.store_if_current(<<3>>, %{id: "race-device"}, %{}, started)
+      assert TokenCache.count() == 1
+    end
+
+    test "clear/0 forgets invalidation stamps" do
+      started = System.monotonic_time()
+      :ok = TokenCache.invalidate_for_device("race-device")
+      TokenCache.clear()
+
+      assert :ok = TokenCache.store_if_current(<<4>>, %{id: "race-device"}, %{}, started)
+    end
+  end
+
   describe "module structure" do
     test "module exports expected functions" do
       functions = TokenCache.__info__(:functions)
