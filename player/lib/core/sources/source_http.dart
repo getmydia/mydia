@@ -50,7 +50,10 @@ class SourceHttp {
     if (code >= 200 && code < 300 || passThrough.contains(code)) {
       return response;
     }
-    if (code == 401 || code == 403) throw const SourceException.unauthorized();
+    if (code == 401) throw const SourceException.unauthorized();
+    if (code == 403) {
+      throw const SourceException.server('The server refused access to this.');
+    }
     if (code == 404) throw const SourceException.notFound();
     throw SourceException.server('The server answered HTTP $code.');
   }

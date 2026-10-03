@@ -16,8 +16,8 @@ class SourceAccountRecord {
     final ids = [
       account.id,
       account.activeProfileId,
-      for (final p in profiles) p.id,
-      for (final s in servers) s.id,
+      for (final p in profiles) ...[p.id, p.accountId],
+      for (final s in servers) ...[s.id, s.profileId, s.accountId],
     ];
     for (final id in ids) {
       if (!isValidSourceIdComponent(id)) {

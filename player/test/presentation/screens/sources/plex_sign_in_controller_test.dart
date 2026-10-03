@@ -138,4 +138,30 @@ void main() {
     expect(record.account.needsReauth, isFalse);
     expect(await storage.read('source/$accountId/account_token'), 'second');
   });
+
+  test('re-auth that drops a server deletes its stored token', () async {
+    pinToken = 'first';
+    await controller().start();
+    await until(() => state() is PlexSignInChoosing);
+    await controller().save();
+    final accountId = (await store.load()).accounts.single.account.id;
+    final record = (await store.load()).accounts.single;
+    expect(record.servers.map((s) => s.id), ['aa11', 'bb22']);
+    expect(await storage.read('source/$accountId/owner/bb22/token'),
+        'server-token-2');
+
+    container.listen(plexSignInProvider(accountId), (_, __) {});
+    final again = container.read(plexSignInProvider(accountId).notifier);
+    await again.start();
+    await until(() =>
+        container.read(plexSignInProvider(accountId)) is PlexSignInChoosing);
+    again.toggle('bb22');
+    await again.save();
+
+    expect((await store.load()).accounts.single.servers.map((s) => s.id),
+        ['aa11']);
+    expect(await storage.read('source/$accountId/owner/aa11/token'),
+        'server-token-1');
+    expect(await storage.read('source/$accountId/owner/bb22/token'), isNull);
+  });
 }

@@ -4,6 +4,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
@@ -39,7 +40,14 @@ class _CachedSecret {
   final Future<String?> Function() _read;
   Future<String?>? _value;
 
-  Future<String?> call() => _value ??= _read();
+  /// A failed read is not cached: the next request reads again.
+  Future<String?> call() => _value ??= _read().then<String?>(
+        (v) => v,
+        onError: (Object e, StackTrace st) {
+          _value = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
   void forget() => _value = null;
 }
 
@@ -47,7 +55,10 @@ void _flagReauth(Ref ref, Source source) {
   if (!ref.mounted) return;
   unawaited(ref
       .read(sourceRecordsProvider.notifier)
-      .markNeedsReauth(source.account.id, true));
+      .markNeedsReauth(source.account.id, true)
+      .catchError((Object e) {
+    debugPrint('[Sources] Could not flag the account for sign-in: $e');
+  }));
 }
 
 PlexMediaSource _plex(Ref ref, Source source) {
@@ -56,13 +67,15 @@ PlexMediaSource _plex(Ref ref, Source source) {
   // Read once: closures below outlive the build and must not touch `ref`
   // for anything but the guarded record writes.
   final identity = ref.read(plexIdentityProvider.future);
+  final rediscoveries = ref.read(_plexRediscoveriesProvider);
   final token = _CachedSecret(() => secrets.serverToken(source));
   final connection = PlexConnectionManager(
     machineIdentifier: source.server.machineIdentifier ?? source.server.id,
     candidates: source.server.connections,
     allowInsecureLocal: !source.server.httpsRequired,
     probe: (base, timeout) => plexIdentityProbe(http, base, timeout),
-    refetch: () => _rediscoverPlex(ref, source, http, secrets, identity),
+    refetch: () =>
+        _rediscoverPlex(ref, source, http, secrets, identity, rediscoveries),
   );
   final events = ref
       .read(connectionRefreshBusProvider)
@@ -84,6 +97,11 @@ PlexMediaSource _plex(Ref ref, Source source) {
   );
 }
 
+/// In-flight plex.tv re-reads, one per account: every server of an account
+/// shares the answer instead of asking plex.tv once each.
+final _plexRediscoveriesProvider =
+    Provider<Map<String, Future<List<PlexResource>?>>>((ref) => {});
+
 /// Re-reads the account's servers from plex.tv, stores what changed, and
 /// returns this server's current connections.
 Future<List<ServerConnection>> _rediscoverPlex(
@@ -92,9 +110,34 @@ Future<List<ServerConnection>> _rediscoverPlex(
   SourceHttp http,
   SourceSecrets secrets,
   Future<PlexIdentity> identity,
+  Map<String, Future<List<PlexResource>?>> inFlight,
+) async {
+  final accountId = source.account.id;
+  final resources = await (inFlight[accountId] ??=
+      _fetchPlexResources(ref, source, http, secrets, identity)
+          .whenComplete(() {
+    // A block body: `remove` returns this very future, and a returned
+    // future would be awaited by itself.
+    inFlight.remove(accountId);
+  }));
+  return resources
+          ?.where((r) => r.clientIdentifier == source.server.id)
+          .firstOrNull
+          ?.connections ??
+      source.server.connections;
+}
+
+/// Null when there is nothing to report: no stored token, or the provider
+/// was disposed meanwhile.
+Future<List<PlexResource>?> _fetchPlexResources(
+  Ref ref,
+  Source source,
+  SourceHttp http,
+  SourceSecrets secrets,
+  Future<PlexIdentity> identity,
 ) async {
   final accountToken = await secrets.accountToken(source.account);
-  if (accountToken == null) return source.server.connections;
+  if (accountToken == null) return null;
   final tv = PlexTvClient(http: http, identity: await identity);
   final List<PlexResource> resources;
   try {
@@ -103,16 +146,12 @@ Future<List<ServerConnection>> _rediscoverPlex(
     if (e.kind == SourceErrorKind.unauthorized) _flagReauth(ref, source);
     rethrow;
   }
-  if (!ref.mounted) return source.server.connections;
+  if (!ref.mounted) return null;
   await ref.read(sourceRecordsProvider.notifier).updateServers(
         source.account.id,
         (servers) => reconcilePlexServers(servers, resources),
       );
-  return resources
-          .where((r) => r.clientIdentifier == source.server.id)
-          .firstOrNull
-          ?.connections ??
-      source.server.connections;
+  return resources;
 }
 
 StashMediaSource _stash(Ref ref, Source source) {

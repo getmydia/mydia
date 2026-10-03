@@ -37,7 +37,12 @@ List<ServerConnection> rankPlexConnections(
     all
         .where((c) =>
             c.uri.scheme == 'https' ||
-            (c.local && !c.relay && allowInsecureLocal))
+            // plex.tv's `local` flag is only a claim: a plain HTTP candidate
+            // must also be a private address.
+            (c.local &&
+                !c.relay &&
+                allowInsecureLocal &&
+                isPrivateHost(c.uri.host)))
         .toList()
       ..sort((a, b) => plexConnectionRank(a).compareTo(plexConnectionRank(b)));
 

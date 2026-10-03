@@ -247,4 +247,13 @@ void main() {
       expect(fetches, 1);
     });
   });
+
+  test('plain HTTP needs a private address, not just the local flag', () {
+    final claimedLocal = c('http://203.0.113.9:32400', local: true);
+    expect(
+      rankPlexConnections([claimedLocal, httpLocal], allowInsecureLocal: true),
+      [httpLocal],
+      reason: 'plex.tv saying "local" does not make a public address private',
+    );
+  });
 }

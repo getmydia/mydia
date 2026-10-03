@@ -84,4 +84,36 @@ void main() {
     final server = plexRecord().servers.single;
     expect(server == server.copyWith(connections: const []), isFalse);
   });
+
+  test('rejects a server or profile whose own account or profile id is unsafe',
+      () {
+    final record = plexRecord();
+    for (final bad in const [
+      SourceServer(
+          id: 'abc123', accountId: 'acc1', profileId: 'a/b', name: 'Attic'),
+      SourceServer(
+          id: 'abc123', accountId: 'a:b', profileId: 'owner', name: 'Attic'),
+    ]) {
+      expect(
+        () => SourceAccountRecord(
+          account: record.account,
+          profiles: record.profiles,
+          servers: [bad],
+          addedAtMs: 0,
+        ),
+        throwsArgumentError,
+      );
+    }
+    expect(
+      () => SourceAccountRecord(
+        account: record.account,
+        profiles: const [
+          SourceProfile(id: 'owner', accountId: 'a b', name: 'Q', isOwner: true)
+        ],
+        servers: const [],
+        addedAtMs: 0,
+      ),
+      throwsArgumentError,
+    );
+  });
 }

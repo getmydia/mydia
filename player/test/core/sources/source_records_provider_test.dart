@@ -98,4 +98,20 @@ void main() {
     broken.read(selectedSourceIdProvider.notifier).select(const SourceId('x'));
     await Future<void>.delayed(Duration.zero);
   });
+
+  test('concurrent read-modify-write calls all land', () async {
+    await store.putAccount(plexRecord());
+    await container.read(sourceRecordsProvider.future);
+    final notifier = container.read(sourceRecordsProvider.notifier);
+    await Future.wait([
+      notifier.markNeedsReauth('acc1', true),
+      notifier.updateServers(
+        'acc1',
+        (servers) => [for (final s in servers) s.copyWith(name: 'Renamed')],
+      ),
+    ]);
+    final record = (await store.load()).accounts.single;
+    expect(record.account.needsReauth, isTrue);
+    expect(record.servers.single.name, 'Renamed');
+  });
 }

@@ -40,6 +40,13 @@ class SourceSecrets {
   }) =>
       _storage.write(_serverKey(account, profileId, serverId), token);
 
+  Future<void> deleteServerToken({
+    required ProviderAccount account,
+    required String profileId,
+    required String serverId,
+  }) =>
+      _storage.delete(_serverKey(account, profileId, serverId));
+
   Future<void> deleteAll(SourceAccountRecord record) async {
     await _storage.delete(_accountKey(record.account));
     for (final server in record.servers) {

@@ -27,7 +27,7 @@ void main() {
   test('maps status codes', () async {
     for (final (code, kind) in [
       (401, SourceErrorKind.unauthorized),
-      (403, SourceErrorKind.unauthorized),
+      (403, SourceErrorKind.server),
       (404, SourceErrorKind.notFound),
       (500, SourceErrorKind.server),
     ]) {

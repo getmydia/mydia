@@ -41,48 +41,64 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         _ => null,
       };
 
-  Future<void> putAccount(SourceAccountRecord record) =>
-      _write((store) => store.putAccount(record));
+  /// Writes run one at a time. A read-modify-write (`markNeedsReauth`,
+  /// `updateServers`) reads its record inside the queue, so it always sees
+  /// what the write before it stored.
+  Future<void> _queue = Future.value();
 
-  Future<void> removeAccount(String accountId) async {
-    final record =
-        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
-    await _write((store) => store.removeAccount(accountId));
-    if (record != null) {
-      await ref.read(sourceSecretsProvider).deleteAll(record);
-    }
+  Future<T> _serialise<T>(Future<T> Function() op) {
+    final result = _queue.then((_) => op());
+    _queue = result.then((_) {}, onError: (Object _) {});
+    return result;
   }
+
+  Future<void> putAccount(SourceAccountRecord record) =>
+      _serialise(() => _write((store) => store.putAccount(record)));
+
+  Future<void> removeAccount(String accountId) => _serialise(() async {
+        final record = _record(accountId);
+        await _write((store) => store.removeAccount(accountId));
+        if (record != null) {
+          await ref.read(sourceSecretsProvider).deleteAll(record);
+        }
+      });
 
   /// Never throws: a selection that cannot be remembered still applies for
   /// this launch.
   Future<void> setActive(SourceId? id) async {
+    if (kIsWeb) return;
     try {
-      await _write((store) => store.setActive(id));
+      await _serialise(() => _write((store) => store.setActive(id)));
     } catch (e) {
       debugPrint('[Sources] Could not remember the active source: $e');
     }
   }
 
-  Future<void> markNeedsReauth(String accountId, bool value) async {
-    final record =
-        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
-    if (record == null || record.account.needsReauth == value) return;
-    await putAccount(record.copyWith(
-      account: record.account.copyWith(needsReauth: value),
-    ));
-  }
+  Future<void> markNeedsReauth(String accountId, bool value) =>
+      _serialise(() async {
+        final record = _record(accountId);
+        if (record == null || record.account.needsReauth == value) return;
+        await _write((store) => store.putAccount(record.copyWith(
+              account: record.account.copyWith(needsReauth: value),
+            )));
+      });
 
   Future<void> updateServers(
     String accountId,
     List<SourceServer> Function(List<SourceServer> servers) update,
-  ) async {
-    final record =
-        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
-    if (record == null) return;
-    await putAccount(record.copyWith(servers: update(record.servers)));
-  }
+  ) =>
+      _serialise(() async {
+        final record = _record(accountId);
+        if (record == null) return;
+        await _write((store) =>
+            store.putAccount(record.copyWith(servers: update(record.servers))));
+      });
+
+  SourceAccountRecord? _record(String accountId) =>
+      _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
 
   Future<void> _write(Future<void> Function(SourceStore store) write) async {
+    if (kIsWeb) return;
     final store = await ref.read(sourceStoreProvider.future);
     await write(store);
     final next = await store.load();

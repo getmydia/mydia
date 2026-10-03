@@ -201,6 +201,19 @@ class PlexSignInController extends Notifier<PlexSignInState> {
         addedAtMs: existing?.addedAtMs ?? DateTime.now().millisecondsSinceEpoch,
       );
       await ref.read(sourceRecordsProvider.notifier).putAccount(record);
+      // A re-auth that no longer lists a server leaves its token behind:
+      // nothing would ever read or delete it again.
+      if (existing != null) {
+        final kept = {for (final s in record.servers) (s.profileId, s.id)};
+        for (final dropped in existing.servers) {
+          if (kept.contains((dropped.profileId, dropped.id))) continue;
+          await secrets.deleteServerToken(
+            account: account,
+            profileId: dropped.profileId,
+            serverId: dropped.id,
+          );
+        }
+      }
       // A live source caches its token; rebuild it so it reads the new one.
       for (final source in record.sources) {
         ref.invalidate(mediaSourceProvider(source.id));
