@@ -156,7 +156,7 @@ const _knownBrokenWidths = <double>[320];
 List<Object> _takeAllExceptions(WidgetTester tester) {
   final exceptions = <Object>[];
   for (;;) {
-    final exception = tester.takeException();
+    final Object? exception = tester.takeException();
     if (exception == null) break;
     exceptions.add(exception);
   }
