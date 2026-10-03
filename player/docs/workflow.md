@@ -60,7 +60,12 @@ named `player`, so test imports are `package:player/...`, never
 `dart analyze` reports "No issues found!", and both gates hold it there: CI runs
 `dart analyze --fatal-infos` in the player test job, and so does the pre-commit
 hook. Any new diagnostic, infos included, fails both, so there is no baseline to
-compare against. Run `dart analyze` in `player/` and expect nothing.
+compare against. Run the same check locally from the repo root and expect
+nothing:
+
+```
+./dev flutter analyze --fatal-infos
+```
 
 The analyzer runs the three strict language modes (`strict-casts`,
 `strict-inference`, `strict-raw-types`) and five extra lints (`unawaited_futures`,
