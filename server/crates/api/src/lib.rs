@@ -12,27 +12,25 @@ pub mod node_id;
 pub mod query;
 pub mod sdl;
 pub mod streaming;
-pub mod subscription;
 pub mod types;
 
-use async_graphql::Schema;
+use async_graphql::{EmptySubscription, Schema};
 
 use crate::context::ApiContext;
 use crate::mutation::RootMutationType;
 use crate::query::RootQueryType;
-use crate::subscription::RootSubscriptionType;
 
-pub type MydiaSchema = Schema<RootQueryType, RootMutationType, RootSubscriptionType>;
+pub type MydiaSchema = Schema<RootQueryType, RootMutationType, EmptySubscription>;
 
 pub fn build_schema(ctx: ApiContext) -> MydiaSchema {
-    Schema::build(RootQueryType, RootMutationType, RootSubscriptionType)
+    Schema::build(RootQueryType, RootMutationType, EmptySubscription)
         .data(ctx)
         .finish()
 }
 
 /// Renders the schema as SDL without needing a database, for the parity gate.
 pub fn schema_sdl() -> String {
-    Schema::build(RootQueryType, RootMutationType, RootSubscriptionType)
+    Schema::build(RootQueryType, RootMutationType, EmptySubscription)
         .finish()
         .sdl()
 }

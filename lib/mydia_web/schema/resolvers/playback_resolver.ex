@@ -20,7 +20,7 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
             %{position_seconds: position}
             |> put_duration(duration, user.id, media_item_id: movie_id)
 
-          save_and_publish(user.id, [media_item_id: movie_id], attrs, movie_id)
+          save_progress(user.id, [media_item_id: movie_id], attrs)
         end
     end
   end
@@ -39,24 +39,15 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
             %{position_seconds: position}
             |> put_duration(duration, user.id, episode_id: episode_id)
 
-          save_and_publish(user.id, [episode_id: episode_id], attrs, episode_id)
+          save_progress(user.id, [episode_id: episode_id], attrs)
         end
     end
   end
 
-  defp save_and_publish(user_id, content_id, attrs, node_id) do
+  defp save_progress(user_id, content_id, attrs) do
     case Playback.save_progress(user_id, content_id, attrs) do
       {:ok, progress} ->
-        formatted_progress = format_progress(progress)
-
-        # Publish subscription event
-        MydiaWeb.Schema.Publish.publish(
-          MydiaWeb.Endpoint,
-          formatted_progress,
-          progress_updated: node_id
-        )
-
-        {:ok, formatted_progress}
+        {:ok, format_progress(progress)}
 
       {:error, changeset} ->
         {:error, format_changeset_errors(changeset)}

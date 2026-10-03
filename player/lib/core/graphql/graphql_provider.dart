@@ -249,58 +249,6 @@ final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
   );
 });
 
-/// Provider for the GraphQL client with WebSocket support for subscriptions.
-///
-/// Returns null if either the server URL or auth token is not available.
-/// Includes 401 error handling with logout on auth failure.
-final graphqlClientWithSubscriptionsProvider = Provider<GraphQLClient?>((ref) {
-  final serverUrlAsync = ref.watch(serverUrlProvider);
-  final authTokenAsync = ref.watch(authTokenProvider);
-  final authService = ref.watch(authServiceProvider);
-  // Same reasoning as `graphqlClientProvider`: `ref.read`, so this client
-  // never rebuilds off the probe resolving.
-  final deviceProfileHolder = ref.read(deviceProfileHolderProvider);
-
-  return serverUrlAsync.when(
-    data: (serverUrl) {
-      if (serverUrl == null) return null;
-
-      return authTokenAsync.when(
-        data: (authToken) {
-          return createGraphQLClientWithSubscriptions(
-            serverUrl,
-            authToken,
-            getDeviceProfile: () => deviceProfileHolder.profile,
-            onAuthError: () async {
-              // Try to refresh token (currently not supported, returns null)
-              final newToken = await authService.refreshToken();
-              if (newToken == null) {
-                // Token refresh not supported or failed, logout
-                await authService.clearSession();
-                // Invalidate the auth state to trigger UI update
-                ref.invalidate(authStateProvider);
-              }
-              return newToken;
-            },
-          );
-        },
-        loading: () => null,
-        error: (error, stackTrace) {
-          debugPrint(
-              '[graphqlClientWithSubscriptionsProvider] Auth token error: $error\n$stackTrace');
-          return null;
-        },
-      );
-    },
-    loading: () => null,
-    error: (error, stackTrace) {
-      debugPrint(
-          '[graphqlClientWithSubscriptionsProvider] Server URL error: $error\n$stackTrace');
-      return null;
-    },
-  );
-});
-
 /// Notifier for managing authentication state.
 ///
 /// Use this to update the auth token and server URL, which will automatically

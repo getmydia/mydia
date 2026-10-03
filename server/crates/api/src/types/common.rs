@@ -1,9 +1,9 @@
 //! Enums, the Node interface, pagination machinery, and the shared sort
 //! input.
 //!
-//! The 18 types owned by this module (keep in sync with
+//! The 17 types owned by this module (keep in sync with
 //! tests/types_common.rs): Node, NodeEdge, NodeConnection, PageInfo,
-//! SortInput, and the enums DeviceEventType, MediaType, SearchResultType,
+//! SortInput, and the enums MediaType, SearchResultType,
 //! LibraryType, SortField, SortDirection, MediaCategory, SubtitleFormat,
 //! StreamingStrategy, StreamingCandidateStrategy, SegmentType,
 //! MediaStreamType, PlaylistMode.
@@ -59,14 +59,6 @@ pub enum Node {
     Season(Box<crate::types::media::Season>),
     Episode(Box<crate::types::media::Episode>),
     LibraryPath(Box<crate::types::media::LibraryPath>),
-}
-
-#[derive(Enum, Copy, Clone, Eq, PartialEq)]
-pub enum DeviceEventType {
-    Connected,
-    Disconnected,
-    Revoked,
-    Deleted,
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
@@ -201,10 +193,6 @@ pub fn sdl_fragment() -> String {
 
         async fn sort_input(&self, _sort: Option<SortInput>) -> bool {
             false
-        }
-
-        async fn device_event_type(&self) -> DeviceEventType {
-            DeviceEventType::Connected
         }
 
         async fn media_type(&self) -> MediaType {

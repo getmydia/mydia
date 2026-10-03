@@ -1,6 +1,5 @@
 defmodule MydiaWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :mydia
-  use Absinthe.Phoenix.Endpoint
 
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
@@ -48,11 +47,6 @@ defmodule MydiaWeb.Endpoint do
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [session: @session_options]],
     longpoll: [connect_info: [session: @session_options]]
-
-  # WebSocket for GraphQL subscriptions
-  socket "/api/graphql/socket", Absinthe.Phoenix.Socket,
-    websocket: true,
-    longpoll: false
 
   # With the player off (ENABLE_PLAYER=false) its web build is not served at
   # all. This has to sit here: the Plug.Static below answers /player requests

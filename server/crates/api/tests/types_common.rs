@@ -4,8 +4,8 @@
 
 use mydia_api::sdl::canonicalize;
 
-/// The 18 types owned by this group: the Node interface, the pagination
-/// machinery, the one shared input, and all 13 enums. Keep in sync with the
+/// The 17 types owned by this group: the Node interface, the pagination
+/// machinery, the one shared input, and all 12 enums. Keep in sync with the
 /// comment in src/types/common.rs.
 const OWNED: &[&str] = &[
     "Node",
@@ -13,7 +13,6 @@ const OWNED: &[&str] = &[
     "NodeConnection",
     "PageInfo",
     "SortInput",
-    "DeviceEventType",
     "MediaType",
     "SearchResultType",
     "LibraryType",

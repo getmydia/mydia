@@ -14,8 +14,6 @@ const OWNED_AUTH: &[&str] = &[
     "RemoteDevice",
     "RevokeDeviceResult",
     "ClaimCode",
-    "Device",
-    "DeviceStatusEvent",
     "ToggleFavoriteResult",
 ];
 
