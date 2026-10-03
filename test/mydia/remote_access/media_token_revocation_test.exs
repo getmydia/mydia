@@ -181,6 +181,27 @@ defmodule Mydia.RemoteAccess.MediaTokenRevocationTest do
 
       assert {:ok, %{user: %{role: "user"}}, _claims} = TokenCache.validate(token)
     end
+
+    test "finish_validation re-verifies when a validation loses the race with an invalidation" do
+      admin = insert(:user, role: "admin")
+      device = create_device(admin)
+      {:ok, token, claims} = MediaToken.create_token(device)
+      cache_key = :crypto.hash(:sha256, token)
+
+      started = System.monotonic_time()
+      {:ok, stale_device, _stale_claims} = MediaToken.verify_token(token)
+
+      # Role changes after verification but before the cache insert attempt
+      {:ok, _} = admin |> Ecto.Changeset.change(role: "user") |> Repo.update()
+      :ets.insert(:media_token_cache_invalidations, {device.id, System.monotonic_time()})
+
+      # finish_validation should detect the race and re-verify, not cache the stale snapshot
+      assert {:ok, %{user: %{role: "user"}}, _fresh_claims} =
+               TokenCache.finish_validation(token, cache_key, stale_device, claims, started)
+
+      # Nothing was cached because re-verification would re-run validate_and_cache
+      assert TokenCache.count() == 0
+    end
   end
 
   defp create_device(user, attrs \\ %{}) do

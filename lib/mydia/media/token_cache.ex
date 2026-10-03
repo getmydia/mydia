@@ -155,8 +155,7 @@ defmodule Mydia.Media.TokenCache do
 
     case MediaToken.verify_token(token) do
       {:ok, device, claims} ->
-        store_if_current(cache_key, device, claims, started)
-        {:ok, device, claims}
+        finish_validation(token, cache_key, device, claims, started)
 
       {:error, reason} ->
         {:error, reason}
@@ -167,6 +166,21 @@ defmodule Mydia.Media.TokenCache do
     case :ets.lookup(@stamps, device.id) do
       [{_id, stamped_at}] -> stamped_at >= started
       _ -> false
+    end
+  end
+
+  @doc false
+  # Attempts to cache the verified token, but if a concurrent invalidation raced
+  # the verification, re-verifies instead of returning a stale device/claims.
+  def finish_validation(token, cache_key, device, claims, started) do
+    case store_if_current(cache_key, device, claims, started) do
+      :ok ->
+        {:ok, device, claims}
+
+      :skipped ->
+        # Device was invalidated after verification began; the snapshot is stale.
+        # Re-verify to get the current state.
+        MediaToken.verify_token(token)
     end
   end
 
