@@ -601,7 +601,7 @@ defmodule Mydia.Playback.OnDeckTest do
       %{restricted: restricted}
     end
 
-    defp in_progress_movie(user, category, title) do
+    defp restricted_progress_movie(user, category, title) do
       movie =
         MediaFixtures.categorized_media_item_fixture(%{type: "movie", title: title}, category)
 
@@ -617,32 +617,29 @@ defmodule Mydia.Playback.OnDeckTest do
     end
 
     test "a hidden title with progress stays off the rail", ctx do
-      in_progress_movie(ctx.restricted, "movie", "Quiet Harbor")
+      restricted_progress_movie(ctx.restricted, "movie", "Quiet Harbor")
 
       assert [] = OnDeck.list(Scope.for_user(ctx.restricted), now: now())
     end
 
     test "hidden titles do not eat the limit", ctx do
-      in_progress_movie(ctx.restricted, "movie", "Hidden One")
-      in_progress_movie(ctx.restricted, "movie", "Hidden Two")
-      visible = in_progress_movie(ctx.restricted, "cartoon_movie", "Paper Comet")
+      restricted_progress_movie(ctx.restricted, "movie", "Hidden One")
+      restricted_progress_movie(ctx.restricted, "movie", "Hidden Two")
+      visible = restricted_progress_movie(ctx.restricted, "cartoon_movie", "Paper Comet")
 
       assert [entry] = OnDeck.list(Scope.for_user(ctx.restricted), now: now(), limit: 1)
       assert entry.media_item.id == visible.id
     end
 
-    test "progress written under the system scope (watch sync) is still filtered", ctx do
-      movie = MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
-      MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+    test "progress recorded for a title before it was hidden stays off the rail", ctx do
+      movie = restricted_progress_movie(ctx.restricted, "cartoon_movie", "Paper Lantern")
+      scope = Scope.for_user(ctx.restricted)
 
-      {:ok, _} =
-        Playback.save_progress(ctx.restricted.id, [media_item_id: movie.id], %{
-          position_seconds: 0,
-          duration_seconds: 1,
-          watched: false
-        })
+      assert [_visible] = OnDeck.list(scope, now: now())
 
-      assert [] = OnDeck.list(Scope.for_user(ctx.restricted), now: now())
+      {:ok, _} = Mydia.Media.update_category(Scope.system(), movie, "movie", override: true)
+
+      assert [] = OnDeck.list(scope, now: now())
     end
   end
 end
