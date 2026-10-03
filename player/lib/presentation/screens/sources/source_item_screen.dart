@@ -8,7 +8,9 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
+import '../../../core/layout/dock_insets.dart';
 import '../../widgets/source_artwork.dart';
+import '../../widgets/toast/toaster.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
 
@@ -52,7 +54,7 @@ class SourceItemScreen extends ConsumerWidget {
       extendBodyBehindAppBar: true,
       body: switch (detail) {
         AsyncData(:final value) => ListView(
-            padding: EdgeInsets.zero,
+            padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
             children: [
               SourceBackdrop(
                 sourceId: item.sourceId,
@@ -131,16 +133,17 @@ class _Body extends ConsumerWidget {
               OutlinedButton.icon(
                 key: const Key('source-item-watched'),
                 onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
+                  final toaster = Toaster.of(context);
                   try {
                     await watched.setWatched(item, !summary.userState.watched);
                   } catch (e) {
                     if (!context.mounted) return;
-                    messenger.showSnackBar(SnackBar(
-                      content: Text(e is SourceException
+                    toaster.show(
+                      e is SourceException
                           ? e.viewerMessage
-                          : 'Could not update watched state.'),
-                    ));
+                          : 'Could not update watched state.',
+                      kind: ToastKind.error,
+                    );
                     return;
                   }
                   if (!context.mounted) return;

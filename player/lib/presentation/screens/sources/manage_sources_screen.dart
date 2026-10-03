@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
+import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 
@@ -73,15 +74,13 @@ class _AccountCard extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    final messenger = ScaffoldMessenger.of(context);
+    final toaster = Toaster.of(context);
     try {
       await ref
           .read(sourceRecordsProvider.notifier)
           .removeAccount(record.account.id);
     } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Could not remove this account.')),
-      );
+      toaster.show('Could not remove this account.', kind: ToastKind.error);
     }
   }
 

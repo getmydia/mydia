@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -28,7 +29,8 @@ class SourceHomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: switch (libraries) {
           AsyncData(:final value) => ListView(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding:
+                  EdgeInsets.fromLTRB(0, 16, 0, DockInsets.bottomOf(context)),
               children: [
                 _Header(
                     title: source?.displayName ?? 'Server',

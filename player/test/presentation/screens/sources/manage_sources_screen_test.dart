@@ -10,6 +10,7 @@ import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/toast_harness.dart';
 
 class _Authenticated extends AuthStateNotifier {
   @override
@@ -28,7 +29,8 @@ void main() {
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
-      child: const MaterialApp(home: ManageSourcesScreen()),
+      child: MaterialApp(
+          builder: toastLayerBuilder, home: const ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('quill'), findsOneWidget);

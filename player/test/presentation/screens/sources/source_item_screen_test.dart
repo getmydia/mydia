@@ -9,6 +9,7 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../../test_utils/toast_harness.dart';
 import 'fake_media_source.dart';
 
 Future<List<String>> pumpItem(
@@ -33,7 +34,7 @@ Future<List<String>> pumpItem(
       // No artwork requests: a URL keeps a spinner running and pumpAndSettle never settles.
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
   ));
   await tester.pumpAndSettle();
   return pushed;
@@ -64,7 +65,7 @@ void main() {
     expect(find.byKey(const Key('source-item-watched')), findsNothing);
   });
 
-  testWidgets('a failing setWatched shows a snackbar', (tester) async {
+  testWidgets('a failing setWatched shows a toast', (tester) async {
     await pumpItem(
         tester,
         _FailingWatchedSource(),
@@ -72,7 +73,6 @@ void main() {
             sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3'));
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
-    expect(find.byType(SnackBar), findsOneWidget);
     expect(find.text(const SourceException.unreachable().viewerMessage),
         findsOneWidget);
   });
