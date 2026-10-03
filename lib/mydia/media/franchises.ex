@@ -19,8 +19,9 @@ defmodule Mydia.Media.Franchises do
 
   alias Mydia.Accounts.Scope
   alias Mydia.{Media, Metadata, Repo}
-  alias Mydia.Media.{Franchise, FranchiseEntry, MediaItem}
+  alias Mydia.Media.{Franchise, FranchiseEntry, MediaItem, RemoteFilter}
   alias Mydia.Metadata.Provider.Error
+  alias Mydia.Metadata.Structs.SearchResult
 
   @doc """
   Returns the franchise for a movie, or `:none`.
@@ -124,8 +125,23 @@ defmodule Mydia.Media.Franchises do
   ## Assembly
 
   defp build(%Scope{} = scope, collection, %MediaItem{} = item) do
+    current_id = to_string(item.tmdb_id)
+
+    allowed_ids =
+      collection.parts
+      |> Enum.reject(&(&1.provider_id == current_id))
+      |> Enum.map(&part_result/1)
+      |> Enum.reject(&is_nil/1)
+      |> RemoteFilter.filter(scope)
+      |> MapSet.new(& &1.provider_id)
+
+    # The title being viewed is already visible to this scope, and a failed
+    # lookup must not drop it from its own franchise.
     entries =
       collection.parts
+      |> Enum.filter(
+        &(&1.provider_id == current_id or MapSet.member?(allowed_ids, &1.provider_id))
+      )
       |> Enum.map(&to_entry/1)
       |> Enum.reject(&is_nil/1)
 
@@ -150,6 +166,14 @@ defmodule Mydia.Media.Franchises do
        }}
     end
   end
+
+  # Collection parts carry no genre ids, so a restricted scope's filter looks
+  # each one up. They are always TMDB movies.
+  defp part_result(%{provider_id: id} = part) when is_binary(id) do
+    %SearchResult{provider_id: id, provider: :tmdb, media_type: :movie, title: part.title}
+  end
+
+  defp part_result(_part), do: nil
 
   defp to_entry(part) do
     case Integer.parse(part.provider_id || "") do
