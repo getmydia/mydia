@@ -87,6 +87,7 @@ class PlexConnectionManager implements SourceConnection {
 
   @override
   Future<Uri> base() {
+    if (_disposed) return Future.error(const SourceException.unreachable());
     _ensureTimer();
     final current = _current;
     if (current != null) return Future.value(current.uri);
@@ -122,6 +123,7 @@ class PlexConnectionManager implements SourceConnection {
   }
 
   Future<void> _race() async {
+    if (_disposed) return;
     final generation = ++_generation;
     _racing = true;
     final answered = <ServerConnection>[];

@@ -47,6 +47,19 @@ void main() {
     );
   });
 
+  test('base after dispose fails cleanly and does not touch the notifier',
+      () async {
+    final probe = ScriptedProbe()..answers[local.uri] = (Duration.zero, 'm1');
+    final manager = PlexConnectionManager(
+      machineIdentifier: 'm1',
+      candidates: [local],
+      probe: probe.call,
+    );
+    manager.dispose();
+    await expectLater(manager.base(), throwsA(isA<SourceException>()));
+    expect(probe.calls, isEmpty);
+  });
+
   test('the first answer is used at once, a better one replaces it', () {
     fakeAsync((async) {
       final probe = ScriptedProbe()

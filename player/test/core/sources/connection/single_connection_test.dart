@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/connection/source_connection.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -32,6 +34,18 @@ void main() {
     up = true;
     await connection.refresh();
     expect(connection.status.value, SourceConnectionStatus.local);
+  });
+
+  test('base after dispose fails cleanly and leaves the notifier alone',
+      () async {
+    final gate = Completer<bool>();
+    final connection =
+        SingleConnection(connection: lan, probe: (_) => gate.future);
+    final pending = connection.base();
+    connection.dispose();
+    gate.complete(true);
+    await expectLater(pending, throwsA(isA<SourceException>()));
+    await expectLater(connection.base(), throwsA(isA<SourceException>()));
   });
 
   test('knows private hosts', () {

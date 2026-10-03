@@ -12,6 +12,7 @@ import '../graphql/graphql_provider.dart';
 import 'media_source.dart';
 import 'mydia_source.dart';
 import 'source.dart';
+import 'source_factories.dart';
 import 'store/source_records.dart';
 import 'store/source_secrets.dart';
 import 'store/source_store.dart';
@@ -195,17 +196,24 @@ final activeSourceIdProvider = Provider<SourceId?>((ref) {
   return sources.isEmpty ? null : sources.first.id;
 });
 
-/// The [MediaSource] for [id], or null when no such source exists or its
-/// kind has no implementation yet.
+/// The [MediaSource] for [id], or null when no such source exists.
+///
+/// Watches only whether the source exists. A third-party source owns a
+/// connection race and timers, so a change to its stored record (a
+/// re-auth flag, rediscovered connections) must not rebuild it; the record
+/// is read once at build.
 final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
-  final source =
-      ref.watch(sourcesProvider).where((s) => s.id == id).firstOrNull;
-  if (source == null) return null;
-  return switch (source.kind) {
+  final exists =
+      ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
+  if (!exists) return null;
+  final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
+  final MediaSource media = switch (source.kind) {
     SourceKind.mydia =>
       MydiaSource(source: source, auth: ref.watch(authStateProvider)),
-    SourceKind.plex || SourceKind.stash => null,
+    SourceKind.plex || SourceKind.stash => buildThirdPartySource(ref, source),
   };
+  ref.onDispose(media.dispose);
+  return media;
 });
 
 /// Where `/s/:sourceId` lands. Mydia keeps its unprefixed routes, so its

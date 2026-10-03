@@ -4,6 +4,7 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia_source.dart';
+import 'package:player/core/sources/plex/plex_media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 
@@ -149,12 +150,13 @@ void main() {
       expect(c.read(mediaSourceProvider(const SourceId('nope'))), isNull);
     });
 
-    test('is null for a third-party source until PR 2 implements it', () {
+    test('is a live Plex source for a Plex source', () {
       final c = _container(
         const AsyncData(AuthStatus.authenticated),
         thirdParty: [_plexSource],
       );
-      expect(c.read(mediaSourceProvider(_plexSource.id)), isNull);
+      expect(
+          c.read(mediaSourceProvider(_plexSource.id)), isA<PlexMediaSource>());
     });
   });
 

@@ -40,6 +40,7 @@ class SingleConnection implements SourceConnection {
   final Future<bool> Function(Uri base) _probe;
   final _status = ValueNotifier(SourceConnectionStatus.connecting);
   bool _up = false;
+  bool _disposed = false;
   Future<bool>? _checking;
 
   @override
@@ -50,8 +51,11 @@ class SingleConnection implements SourceConnection {
 
   @override
   Future<Uri> base() async {
+    if (_disposed) throw const SourceException.unreachable();
     if (_up) return _connection.uri;
-    if (!await _check()) throw const SourceException.unreachable();
+    if (!await _check() || _disposed) {
+      throw const SourceException.unreachable();
+    }
     return _connection.uri;
   }
 
@@ -62,6 +66,7 @@ class SingleConnection implements SourceConnection {
 
   @override
   void reportFailure(Uri base) {
+    if (_disposed) return;
     _up = false;
     _status.value = SourceConnectionStatus.connecting;
   }
@@ -73,18 +78,22 @@ class SingleConnection implements SourceConnection {
         } catch (_) {
           up = false;
         }
+        _checking = null;
+        if (_disposed) return false;
         _up = up;
         _status.value = !up
             ? SourceConnectionStatus.unreachable
             : _connection.local
                 ? SourceConnectionStatus.local
                 : SourceConnectionStatus.remote;
-        _checking = null;
         return up;
       }();
 
   @override
-  void dispose() => _status.dispose();
+  void dispose() {
+    _disposed = true;
+    _status.dispose();
+  }
 }
 
 /// Whether [host] is on this network: RFC 1918, loopback, link-local,
