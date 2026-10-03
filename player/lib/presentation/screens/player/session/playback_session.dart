@@ -7,7 +7,7 @@ library;
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
-import '../../../widgets/subtitle_track_selector.dart';
+import '../../../../domain/models/subtitle_search_outcome.dart';
 import 'playback_session_types.dart';
 
 abstract interface class PlaybackSession {

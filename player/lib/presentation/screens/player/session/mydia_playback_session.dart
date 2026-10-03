@@ -26,7 +26,7 @@ import '../../../../graphql/queries/subtitle_content.graphql.dart';
 import '../../../../graphql/queries/subtitle_preference.graphql.dart';
 import '../../../../graphql/queries/subtitle_search.graphql.dart';
 import '../../../../graphql/queries/subtitle_track_settings.graphql.dart';
-import '../../../widgets/subtitle_track_selector.dart';
+import '../../../../domain/models/subtitle_search_outcome.dart';
 import '../subtitle_content_query.dart';
 import '../subtitle_preference.dart';
 import 'playback_session.dart';

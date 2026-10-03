@@ -13,19 +13,40 @@ import 'source.dart';
 /// add-server flows exist.
 final thirdPartySourcesProvider = Provider<List<Source>>((ref) => const []);
 
+/// Whether the legacy Mydia login has credentials.
+///
+/// `AuthStateNotifier.retryConnection` sets a bare `AsyncValue.loading()`,
+/// with no previous value. Reading that directly made Mydia vanish from the
+/// switcher for the length of every retry; this holds the last answer
+/// through loading and changes only on data or an error.
+class MydiaPresenceNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    ref.listen<AsyncValue<AuthStatus>>(authStateProvider, (_, next) {
+      final present = _presentIn(next);
+      if (present != null) state = present;
+    });
+    return _presentIn(ref.read(authStateProvider)) ?? false;
+  }
+
+  static bool? _presentIn(AsyncValue<AuthStatus> auth) => switch (auth) {
+        AsyncData(:final value) =>
+          value == AuthStatus.authenticated || value == AuthStatus.offlineMode,
+        AsyncError() => false,
+        _ => null,
+      };
+}
+
+final mydiaPresentProvider =
+    NotifierProvider<MydiaPresenceNotifier, bool>(MydiaPresenceNotifier.new);
+
 /// Every source, the legacy Mydia login first when it has credentials.
 ///
 /// Offline mode counts: the credentials exist even though the server is out
 /// of reach, and the downloads screen still belongs to that source.
 final sourcesProvider = Provider<List<Source>>((ref) {
-  final status = switch (ref.watch(authStateProvider)) {
-    AsyncData(:final value) => value,
-    _ => null,
-  };
-  final hasMydia =
-      status == AuthStatus.authenticated || status == AuthStatus.offlineMode;
   return [
-    if (hasMydia) Source.legacyMydia(),
+    if (ref.watch(mydiaPresentProvider)) Source.legacyMydia(),
     ...ref.watch(thirdPartySourcesProvider),
   ];
 });

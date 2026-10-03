@@ -15,6 +15,14 @@ enum SourceKind { mydia, plex, stash }
 /// credentials stay under `AuthService`'s original keys, unmigrated.
 const kLegacyStorageNamespace = 'legacy';
 
+final _sourceIdComponent = RegExp(r'^[A-Za-z0-9_-]+$');
+
+/// Whether [value] may be an account, profile or server id. `SourceId`
+/// joins the three with `:`, and routes carry it as a path segment, so
+/// neither separator may appear inside one.
+bool isValidSourceIdComponent(String value) =>
+    _sourceIdComponent.hasMatch(value);
+
 /// Stable identity of a [Source]. Caches, memories and routes key on it.
 @immutable
 class SourceId {
