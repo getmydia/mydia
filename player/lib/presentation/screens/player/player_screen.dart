@@ -107,15 +107,14 @@ import '../../../core/connection/connection_summary.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/playback/stats/playback_stats.dart';
 import '../../../core/playback/stats/playback_stats_collector.dart';
-import '../../../core/playback/stats/stats_metrics.dart';
 import '../../../core/playback/stats/stats_report.dart';
 import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/update/update_provider.dart';
-import '../../widgets/playback_stats/stats_panel.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
+import 'player_screen_views.dart';
 import 'session/playback_session_types.dart';
 import 'audio_track_detection.dart';
 import 'remote_control_mapping.dart';
@@ -5648,7 +5647,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // `AdaptationPolicy` at all, so nothing it observes is wrong while
       // casting, only pointless. `_buildBody`'s `Stack` (where the panel
       // lives) is not built while `isCastingProvider` is true -- `build`
-      // swaps to `_buildCastPlaceholder` first -- so the panel is already
+      // swaps to `CastPlaceholderView` first -- so the panel is already
       // invisible without this. Invisible is not inactive: without also
       // stopping the collector here, its `Timer.periodic` keeps sampling
       // mpv once a second against a player that is not decoding anything,
@@ -5711,7 +5710,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final isCasting = ref.watch(isCastingProvider);
     final castSession = ref.watch(castSessionProvider).value;
     Widget body = isCasting && castSession != null
-        ? _buildCastPlaceholder(castSession)
+        ? CastPlaceholderView(
+            session: castSession,
+            title: widget.title ?? 'Untitled',
+            segmentAt: _segmentAt,
+            onSkip: (segment) => _castSeekToReal(segment.end),
+          )
         : _buildBody();
 
     // Wrap with the key handler wherever a physical keyboard exists (native
@@ -5742,7 +5746,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // mounts, so a bare `!visible` check swallows every back press for as
     // long as there is no chrome to dismiss at all: the loading spinner
     // before the OSD ever mounts, the error screen, and the cast placeholder
-    // (`_buildCastPlaceholder`, which swaps in for `_buildBody()` above and
+    // (`CastPlaceholderView`, which swaps in for `_buildBody()` above and
     // never builds one either). None of those has anything on screen for a
     // back press to dismiss, and there is no other way out of them on a
     // remote, so back has to pass straight through in all three.
@@ -5900,31 +5904,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return _withCastAffordance(
-        Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(
-                color: Colors.red,
-              ),
-              if (_loadingMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _loadingMessage!,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
+      return _withCastAffordance(PlayerLoadingView(message: _loadingMessage));
     }
 
     if (_error != null) {
-      return _withCastAffordance(_buildError());
+      return _withCastAffordance(
+        PlayerErrorView(message: _error!, onRetry: _initializePlayer),
+      );
     }
 
     if (_videoController == null) {
@@ -5954,13 +5940,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           scrub: InputCapabilities.directionalPrimary ? _scrub : null,
           scrubberFocusNode: _scrubberFocus,
           scrubThumbnails: _scrubThumbnails,
-          onBack: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
+          onBack: () => popOrGoHome(context),
           // The chrome's own cast pill. Null on a build that cannot cast at
           // all, which drops the pill rather than drawing an empty one.
           castAction: castChromeActionFor(ref),
@@ -6064,7 +6044,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // `StatsMetrics.resolve` returns null on a viewport too short to
         // hold even the compact panel, which is when drawing nothing beats
         // drawing over the scrubber.
-        if (_statsCollector != null) _buildStatsPanel(),
+        if (_statsCollector case final collector?)
+          PlayerStatsPanel(
+            collector: collector,
+            statsContext: _statsContext,
+            onCopy: _copyStats,
+            onClose: () => unawaited(
+              ref.read(statsOverlayEnabledProvider.notifier).set(false),
+            ),
+          ),
       ],
     );
   }
@@ -6080,53 +6068,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _seasonEpisodes != null &&
       _currentEpisodeIndex != null &&
       _currentEpisodeIndex! < _seasonEpisodes!.length - 1;
-
-  Widget _buildStatsPanel() {
-    final collector = _statsCollector;
-    if (collector == null) return const SizedBox.shrink();
-
-    final metrics = StatsMetrics.resolve(
-      viewport: MediaQuery.sizeOf(context),
-      directionalPrimary: InputCapabilities.directionalPrimary,
-    );
-    if (metrics == null) return const SizedBox.shrink();
-
-    return Positioned.fill(
-      child: SafeArea(
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Padding(
-            padding: EdgeInsets.only(
-              top: metrics.top,
-              left: metrics.gutter,
-            ),
-            child: ValueListenableBuilder<StatsSample?>(
-              valueListenable: collector.samples,
-              builder: (context, sample, _) {
-                if (sample == null) return const SizedBox.shrink();
-                final statsContext = _statsContext();
-                return StatsPanel(
-                  sample: sample,
-                  context: statsContext,
-                  metrics: metrics,
-                  onCopy: metrics.showButtons
-                      ? () => _copyStats(sample, statsContext)
-                      : null,
-                  onClose: metrics.showButtons
-                      ? () => unawaited(
-                            ref
-                                .read(statsOverlayEnabledProvider.notifier)
-                                .set(false),
-                          )
-                      : null,
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   /// The link path playback is on right now, or null while a p2p connection
   /// has no peer path. Read at the moment of use: the path can change
@@ -6162,9 +6103,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       lastFallback: _lastFallback,
       knownFailures: _planInputs?.knownFailures ?? const {},
       sourceHeight: _planInputs?.sourceHeight,
-      sourceCodec: _sourceCodec(_planInputs),
+      sourceCodec: sourceCodecOf(_planInputs),
       sourceBitrateKbps: _planInputs?.fileBitrateKbps,
-      sourceContainer: _sourceContainer(_planInputs),
+      sourceContainer: sourceContainerOf(_planInputs),
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
       linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
@@ -6173,48 +6114,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
     );
-  }
-
-  /// The first candidate's video codec, or null when there is no plan or
-  /// no candidate names one.
-  ///
-  /// A plain loop rather than `candidates.map((c) => c.videoCodec)
-  /// .firstWhere((c) => c != null, orElse: () => null)`: that one-liner
-  /// does typecheck and behave correctly (both "no match" and "found
-  /// null" collapse to the same `orElse: () => null`), but it reads as
-  /// more clever than the job needs.
-  String? _sourceCodec(PlanInputs? inputs) {
-    if (inputs == null) return null;
-    for (final candidate in inputs.candidates) {
-      if (candidate.videoCodec != null) return candidate.videoCodec;
-    }
-    return null;
-  }
-
-  /// The container implied by the first candidate's MIME type, matching
-  /// [_sourceCodec]'s "first candidate describes the source file" reading
-  /// (the same one `FileShape.fromCandidates` relies on for the failure
-  /// memory's key).
-  ///
-  /// The base type before any `;` is one of the fixed set
-  /// `CodecString.build_mime_type/3` emits server-side
-  /// (`lib/mydia/streaming/codec_string.ex`), so this mirrors that mapping
-  /// rather than inventing one. `video/mp4` covers three source extensions
-  /// there (mp4, m4v, mov); the candidate does not say which one the file
-  /// actually was, so all three read as "mp4". Anything unrecognised (or
-  /// no plan at all) is null, which the Source row already omits
-  /// gracefully.
-  String? _sourceContainer(PlanInputs? inputs) {
-    if (inputs == null || inputs.candidates.isEmpty) return null;
-    final baseType = inputs.candidates.first.mime.split(';').first.trim();
-    return switch (baseType) {
-      'video/mp4' => 'mp4',
-      'video/x-matroska' => 'mkv',
-      'video/webm' => 'webm',
-      'video/mp2t' => 'ts',
-      'video/x-msvideo' => 'avi',
-      _ => null,
-    };
   }
 
   Future<void> _copyStats(StatsSample sample, StatsContext stats) async {
@@ -6233,55 +6132,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
     _showToast('Stats copied', kind: ToastKind.success);
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to load video',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              _error!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[400],
-                  ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _initializePlayer,
-            child: const Text('Retry'),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            child: const Text('Go Back'),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Show the cast device picker dialog, then hand the selected device to
@@ -6351,125 +6201,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted) return;
       showToast(context, 'Failed to start casting: $e', kind: ToastKind.error);
     }
-  }
-
-  /// What the player screen shows while the media is on a receiver.
-  ///
-  /// Deliberately inert: every control lives in `CastMiniController`, which is
-  /// mounted over this screen by `app.dart`. Duplicating them here is the
-  /// confusion this replaced — two surfaces showing the same title, device,
-  /// play/pause and stop, with the bar clipping the remote's stop button.
-  ///
-  /// [session] rather than just the device: `isCastingProvider` stays true for
-  /// a [CastSession] that has gone stale (its `mediaInfo` survives the drop —
-  /// see `CastSession.copyWith`), and this is the app's single largest
-  /// `Icons.cast_connected` glyph. Rendering it over a connection that no
-  /// longer exists is exactly the false "connected" claim this feature exists
-  /// to eliminate, so a stale session gets the same outline glyph and "Lost
-  /// connection" wording as `CastMiniController`'s stale row, not a claim of
-  /// a live cast.
-  Widget _buildCastPlaceholder(CastSession session) {
-    final device = session.device;
-    final isStale = session.isStale;
-
-    // The one control this screen does own while casting. It is not the
-    // duplication the doc comment above warns about: `CastMiniController`
-    // has no skip, so there is no second copy to disagree with, and the
-    // alternative is the feature simply not existing on a TV.
-    //
-    // Withheld over a stale session for the reason the glyph goes outline —
-    // the receiver is gone, and a control that silently does nothing is that
-    // same false "connected" claim wearing a different hat.
-    //
-    // Withheld while syncing too, like the bar's own controls: the position
-    // may be minutes old, so the segment it falls in may not be the one the
-    // receiver is playing.
-    final castPosition = session.mediaInfo?.position ?? Duration.zero;
-    final skipSegment =
-        isStale || session.isSyncing ? null : _segmentAt(castPosition);
-    final panelMetrics = PanelMetrics.resolve(
-      width: MediaQuery.sizeOf(context).width,
-      touchPrimary: InputCapabilities.touchPrimary,
-    );
-
-    return Stack(
-      children: [
-        Center(
-          child: Padding(
-            // Bottom inset keeps the text clear of the mini bar.
-            padding: const EdgeInsets.only(
-              left: 32,
-              right: 32,
-              top: 32,
-              bottom: 120,
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isStale ? Icons.cast_outlined : Icons.cast_connected,
-                  size: 96,
-                  color: isStale ? Colors.grey : Colors.blue,
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  isStale
-                      ? 'Lost connection to ${device.name}'
-                      : 'Playing on ${device.name}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.title ?? 'Untitled',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey[400],
-                      ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ),
-        // `Positioned.fill` for the same reason the local path uses it: the
-        // button aligns itself bottom-right, which needs the Stack's full
-        // constraints rather than the loose ones a bare child would get.
-        if (skipSegment != null)
-          Positioned.fill(
-            child: SkipSegmentButton(
-              key: ValueKey(skipSegment.key),
-              segment: skipSegment,
-              position: castPosition,
-              onSkip: (target) => _castSeekToReal(target.end),
-              metrics: panelMetrics,
-            ),
-          ),
-        Positioned(
-          top: 8,
-          left: 8,
-          child: SafeArea(
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/');
-                }
-              },
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
   }
 
   /// The item's runtime, from the most trustworthy source available.

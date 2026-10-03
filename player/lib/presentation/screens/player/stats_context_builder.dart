@@ -13,6 +13,7 @@ import '../../../core/format/bitrate.dart';
 import '../../../core/playback/adaptation_policy.dart' as policy;
 import '../../../core/playback/playback_memory.dart';
 import '../../../core/playback/playback_plan.dart';
+import '../../../core/playback/playback_planner.dart' show PlanInputs;
 import '../../../core/playback/stats/playback_stats.dart';
 import '../../../domain/models/quality_rung.dart';
 import '../../widgets/media_info/stream_formatters.dart' show formatSampleRate;
@@ -285,4 +286,46 @@ String _fps(double fps) {
   final rounded = fps.roundToDouble();
   if ((fps - rounded).abs() < 0.001) return rounded.toInt().toString();
   return fps.toStringAsFixed(3);
+}
+
+/// The first candidate's video codec, or null when there is no plan or
+/// no candidate names one.
+///
+/// A plain loop rather than `candidates.map((c) => c.videoCodec)
+/// .firstWhere((c) => c != null, orElse: () => null)`: that one-liner
+/// does typecheck and behave correctly (both "no match" and "found
+/// null" collapse to the same `orElse: () => null`), but it reads as
+/// more clever than the job needs.
+String? sourceCodecOf(PlanInputs? inputs) {
+  if (inputs == null) return null;
+  for (final candidate in inputs.candidates) {
+    if (candidate.videoCodec != null) return candidate.videoCodec;
+  }
+  return null;
+}
+
+/// The container implied by the first candidate's MIME type, matching
+/// [sourceCodecOf]'s "first candidate describes the source file" reading
+/// (the same one `FileShape.fromCandidates` relies on for the failure
+/// memory's key).
+///
+/// The base type before any `;` is one of the fixed set
+/// `CodecString.build_mime_type/3` emits server-side
+/// (`lib/mydia/streaming/codec_string.ex`), so this mirrors that mapping
+/// rather than inventing one. `video/mp4` covers three source extensions
+/// there (mp4, m4v, mov); the candidate does not say which one the file
+/// actually was, so all three read as "mp4". Anything unrecognised (or
+/// no plan at all) is null, which the Source row already omits
+/// gracefully.
+String? sourceContainerOf(PlanInputs? inputs) {
+  if (inputs == null || inputs.candidates.isEmpty) return null;
+  final baseType = inputs.candidates.first.mime.split(';').first.trim();
+  return switch (baseType) {
+    'video/mp4' => 'mp4',
+    'video/x-matroska' => 'mkv',
+    'video/webm' => 'webm',
+    'video/mp2t' => 'ts',
+    'video/x-msvideo' => 'avi',
+    _ => null,
+  };
 }
