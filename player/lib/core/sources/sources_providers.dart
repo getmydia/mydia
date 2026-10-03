@@ -1,17 +1,121 @@
 /// Which sources exist, which one is active, and the [MediaSource] for each.
 library;
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_status.dart';
+import '../auth/auth_storage.dart';
 import '../graphql/graphql_provider.dart';
 import 'media_source.dart';
 import 'mydia_source.dart';
 import 'source.dart';
+import 'store/source_records.dart';
+import 'store/source_secrets.dart';
+import 'store/source_store.dart';
 
-/// Plex and Stash sources the viewer has added. Always empty until the
-/// add-server flows exist.
-final thirdPartySourcesProvider = Provider<List<Source>>((ref) => const []);
+final sourceStoreProvider = FutureProvider<SourceStore>(
+  (ref) => HiveSourceStore.open(),
+  retry: (_, __) => null,
+);
+
+final sourceSecretsProvider =
+    Provider<SourceSecrets>((ref) => SourceSecrets(getAuthStorage()));
+
+/// Every stored third-party account, plus the remembered active source.
+class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
+  @override
+  Future<SourceSnapshot> build() async {
+    // Plex and Stash send no CORS headers for a foreign origin, and the web
+    // player is served by Mydia itself. Web keeps Mydia only.
+    if (kIsWeb) return SourceSnapshot.empty;
+    final store = await ref.watch(sourceStoreProvider.future);
+    return store.load();
+  }
+
+  SourceSnapshot? get _current => switch (state) {
+        AsyncData(:final value) => value,
+        _ => null,
+      };
+
+  Future<void> putAccount(SourceAccountRecord record) =>
+      _write((store) => store.putAccount(record));
+
+  Future<void> removeAccount(String accountId) async {
+    final record =
+        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
+    await _write((store) => store.removeAccount(accountId));
+    if (record != null) {
+      await ref.read(sourceSecretsProvider).deleteAll(record);
+    }
+  }
+
+  /// Never throws: a selection that cannot be remembered still applies for
+  /// this launch.
+  Future<void> setActive(SourceId? id) async {
+    try {
+      await _write((store) => store.setActive(id));
+    } catch (e) {
+      debugPrint('[Sources] Could not remember the active source: $e');
+    }
+  }
+
+  Future<void> markNeedsReauth(String accountId, bool value) async {
+    final record =
+        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
+    if (record == null || record.account.needsReauth == value) return;
+    await putAccount(record.copyWith(
+      account: record.account.copyWith(needsReauth: value),
+    ));
+  }
+
+  Future<void> updateServers(
+    String accountId,
+    List<SourceServer> Function(List<SourceServer> servers) update,
+  ) async {
+    final record =
+        _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
+    if (record == null) return;
+    await putAccount(record.copyWith(servers: update(record.servers)));
+  }
+
+  Future<void> _write(Future<void> Function(SourceStore store) write) async {
+    final store = await ref.read(sourceStoreProvider.future);
+    await write(store);
+    final next = await store.load();
+    if (!ref.mounted) return;
+    state = AsyncData(next);
+  }
+}
+
+/// No automatic retry: a store that cannot open means no third-party
+/// sources for this launch, and the UI must not wait on backoff timers.
+final sourceRecordsProvider =
+    AsyncNotifierProvider<SourceRecordsNotifier, SourceSnapshot>(
+        SourceRecordsNotifier.new,
+        retry: (_, __) => null);
+
+/// True until the stored sources have loaded once, successfully or not.
+///
+/// Riverpod retries a failed build and reports the retry as a loading state
+/// that still carries the error, so check `hasError` rather than matching
+/// [AsyncError].
+final sourcesLoadingProvider = Provider<bool>((ref) {
+  final records = ref.watch(sourceRecordsProvider);
+  return !records.hasValue && !records.hasError;
+});
+
+/// Plex and Stash sources the viewer has added.
+final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
+  final snapshot = switch (ref.watch(sourceRecordsProvider)) {
+    AsyncData(:final value) => value,
+    _ => null,
+  };
+  if (snapshot == null) return const [];
+  return [for (final account in snapshot.accounts) ...account.sources];
+});
 
 /// Whether the legacy Mydia login has credentials.
 ///
@@ -62,10 +166,17 @@ final switchableSourcesProvider = Provider<List<Source>>((ref) {
 });
 
 class SelectedSourceNotifier extends Notifier<SourceId?> {
+  /// The remembered pick, once the records have loaded.
   @override
-  SourceId? build() => null;
+  SourceId? build() => switch (ref.watch(sourceRecordsProvider)) {
+        AsyncData(:final value) => value.activeId,
+        _ => null,
+      };
 
-  void select(SourceId id) => state = id;
+  void select(SourceId id) {
+    state = id;
+    unawaited(ref.read(sourceRecordsProvider.notifier).setActive(id));
+  }
 }
 
 /// The viewer's explicit pick, if any. Read [activeSourceIdProvider] instead.
