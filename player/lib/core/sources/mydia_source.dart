@@ -1,14 +1,17 @@
 /// The Mydia login `AuthService` already holds, as a [MediaSource].
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/sources/item.dart';
+import '../../domain/sources/library.dart';
 import '../auth/auth_status.dart';
 import 'media_source.dart';
 import 'source.dart';
 
 class MydiaSource extends MediaSource {
-  const MydiaSource({required this.source, required this.auth});
+  MydiaSource({required this.source, required this.auth});
 
   @override
   final Source source;
@@ -32,6 +35,39 @@ class MydiaSource extends MediaSource {
         _ => SourceConnectionStatus.connecting,
       };
 
+  late final ValueNotifier<SourceConnectionStatus> _status =
+      ValueNotifier(connection);
+
+  @override
+  ValueListenable<SourceConnectionStatus> get statusListenable => _status;
+
   @override
   T? as<T extends Object>() => null;
+
+  // Mydia's screens predate this interface and stay on their own
+  // controllers. Moving them behind it is a later, opt-in migration.
+  static Never _ownScreens() => throw UnsupportedError(
+      'Mydia browses through its own screens, not MediaSource');
+
+  @override
+  Future<List<Library>> libraries() async => _ownScreens();
+
+  @override
+  Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
+          {Cursor? cursor}) async =>
+      _ownScreens();
+
+  @override
+  Future<ItemDetail> item(ItemRef ref) async => _ownScreens();
+
+  @override
+  Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async =>
+      _ownScreens();
+
+  @override
+  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
+      null;
+
+  @override
+  void dispose() => _status.dispose();
 }
