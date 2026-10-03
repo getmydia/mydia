@@ -39,7 +39,7 @@ defmodule Mydia.Media.Franchises do
 
     with {:ok, collection_id} <- resolve_collection_id(item, config),
          {:ok, collection} <- fetch_collection(collection_id, config) do
-      build(scope, collection, item)
+      build(scope, collection, item, config)
     else
       :none -> :none
     end
@@ -124,7 +124,7 @@ defmodule Mydia.Media.Franchises do
 
   ## Assembly
 
-  defp build(%Scope{} = scope, collection, %MediaItem{} = item) do
+  defp build(%Scope{} = scope, collection, %MediaItem{} = item, config) do
     current_id = to_string(item.tmdb_id)
 
     allowed_ids =
@@ -132,7 +132,7 @@ defmodule Mydia.Media.Franchises do
       |> Enum.reject(&(&1.provider_id == current_id))
       |> Enum.map(&part_result/1)
       |> Enum.reject(&is_nil/1)
-      |> RemoteFilter.filter(scope)
+      |> RemoteFilter.filter(scope, config: config)
       |> MapSet.new(& &1.provider_id)
 
     # The title being viewed is already visible to this scope, and a failed
