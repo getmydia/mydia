@@ -272,5 +272,12 @@ void main() {
       expect(request.url.path, '/actions/removeFromContinueWatching');
       expect(request.url.queryParameters['ratingKey'], '402');
     });
+
+    test('every Continue Watching entry can be removed', () async {
+      final source = build().source;
+      final items = await source.continueWatching();
+      expect(items, isNotEmpty);
+      expect(items.every(source.canRemoveFromContinueWatching), isTrue);
+    });
   });
 }

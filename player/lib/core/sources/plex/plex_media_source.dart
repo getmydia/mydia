@@ -160,6 +160,9 @@ class PlexMediaSource extends MediaSource
   }
 
   @override
+  bool canRemoveFromContinueWatching(ItemSummary item) => true;
+
+  @override
   Future<void> removeFromContinueWatching(ItemRef ref) => client.put(
         '/actions/removeFromContinueWatching',
         {'ratingKey': ref.externalId},

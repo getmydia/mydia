@@ -18,6 +18,11 @@ abstract interface class ContinueWatching {
   /// Most recent activity first, at most 20 items.
   Future<List<ItemSummary>> continueWatching();
 
+  /// Whether [removeFromContinueWatching] can take [item] off the row. False
+  /// for an entry the server offers no way to dismiss; its menu then offers
+  /// Details only, rather than a Remove that the next refresh would undo.
+  bool canRemoveFromContinueWatching(ItemSummary item);
+
   Future<void> removeFromContinueWatching(ItemRef ref);
 }
 
