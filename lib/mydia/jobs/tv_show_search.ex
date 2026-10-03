@@ -952,6 +952,9 @@ defmodule Mydia.Jobs.TVShowSearch do
           :ok ->
             new_count
 
+          :deferred ->
+            new_count
+
           {:error, :duplicate_download} ->
             Logger.info(
               "Season pack already downloading, skipping individual episode search",
@@ -1191,15 +1194,23 @@ defmodule Mydia.Jobs.TVShowSearch do
         :no_results
 
       {:wait, until, best} ->
-        # :ok, not :no_results: :no_results makes the caller fall back to
-        # individual episodes, which would grab exactly what the delay holds.
-        SearchDeferral.defer(
-          __MODULE__,
-          season_recheck_args(media_item, season_number, args),
-          until,
-          media_item,
-          Map.put(deferral_metadata(best, query, length(results)), "season_number", season_number)
-        )
+        # :deferred, not :no_results: :no_results makes the caller fall back
+        # to individual episodes, which would grab exactly what the delay
+        # holds. Not :ok either, which callers count as a download.
+        :ok =
+          SearchDeferral.defer(
+            __MODULE__,
+            season_recheck_args(media_item, season_number, args),
+            until,
+            media_item,
+            Map.put(
+              deferral_metadata(best, query, length(results)),
+              "season_number",
+              season_number
+            )
+          )
+
+        :deferred
 
       {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best season pack",
@@ -1872,7 +1883,7 @@ defmodule Mydia.Jobs.TVShowSearch do
           backoff_resource_types: resource_types
         ]
 
-        # Whatever this returns (:ok, {:error, :duplicate_download},
+        # Whatever this returns (:ok, :deferred, {:error, :duplicate_download},
         # :no_results, or {:error, reason}) - never fall back to
         # individual episode searches, per search_season_upgrade/4's doc
         # comment.
@@ -2431,6 +2442,9 @@ defmodule Mydia.Jobs.TVShowSearch do
           case result do
             :ok ->
               {new_count, %{results_found: length(results), downloads_initiated: 1}}
+
+            :deferred ->
+              {new_count, %{results_found: length(results), downloads_initiated: 0}}
 
             {:error, :duplicate_download} ->
               Logger.info(

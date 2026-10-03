@@ -2393,6 +2393,33 @@ defmodule Mydia.Jobs.TVShowSearchTest do
              }
     end
 
+    test "a show search holding a season pack reports no download started", %{bypass: bypass} do
+      IndexerMock.mock_prowlarr_all(bypass,
+        results: [
+          IndexerMock.season_pack_result(%{title: "Lantern.Vale", season: 1})
+          |> Map.put(:published_at, published(1))
+        ]
+      )
+
+      show = delayed_show()
+
+      for n <- 1..3 do
+        episode_fixture(%{
+          media_item_id: show.id,
+          season_number: 1,
+          episode_number: n,
+          air_date: ~D[2020-01-01]
+        })
+      end
+
+      Phoenix.PubSub.subscribe(Mydia.PubSub, "downloads")
+
+      assert :ok = perform_job(TVShowSearch, %{"mode" => "show", "media_item_id" => show.id})
+
+      assert Mydia.Downloads.list_downloads() == []
+      assert_receive {:search_completed, _id, %{downloads_initiated: 0}}
+    end
+
     test "Args.parse propagates bypass_delay in every mode" do
       for raw <- [
             %{"mode" => "specific", "episode_id" => "e"},
