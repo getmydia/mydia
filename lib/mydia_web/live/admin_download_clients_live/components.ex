@@ -369,6 +369,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
             </div>
             <label class="label cursor-pointer gap-2">
               <span class="label-text text-sm">Enabled</span>
+              <input type="hidden" name={@download_client_form[:enabled].name} value="false" />
               <input
                 type="checkbox"
                 name={@download_client_form[:enabled].name}

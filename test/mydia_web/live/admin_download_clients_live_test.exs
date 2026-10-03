@@ -774,4 +774,49 @@ defmodule MydiaWeb.AdminDownloadClientsLiveTest do
       end
     end
   end
+
+  describe "Toggles switch off" do
+    setup %{conn: conn, token: token} do
+      start_supervised!(Mydia.Indexers.Health)
+
+      conn =
+        conn
+        |> init_test_session(%{})
+        |> put_session(:guardian_default_token, token)
+        |> put_req_header("authorization", "Bearer #{token}")
+
+      %{conn: conn}
+    end
+
+    defp edit_client(conn, client) do
+      {:ok, view, _html} = live(conn, ~p"/admin/clients")
+
+      view
+      |> element(~s{button[phx-click="edit_download_client"][phx-value-id="#{client.id}"]})
+      |> render_click()
+
+      view
+    end
+
+    test "unchecking Enabled disables the client (#1001)", %{conn: conn} do
+      {:ok, client} =
+        Settings.create_download_client_config(%{
+          "name" => "toggle_enabled_#{System.unique_integer([:positive])}",
+          "type" => "qbittorrent",
+          "host" => "localhost",
+          "port" => "8080",
+          "enabled" => "true",
+          "priority" => "1"
+        })
+
+      conn
+      |> edit_client(client)
+      |> form("#download-client-form", %{
+        "download_client_config" => %{"enabled" => "false"}
+      })
+      |> render_submit()
+
+      refute Settings.get_download_client_config!(client.id).enabled
+    end
+  end
 end
