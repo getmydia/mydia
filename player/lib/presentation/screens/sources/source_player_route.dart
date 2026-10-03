@@ -2,6 +2,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -36,6 +37,16 @@ class SourcePlayerParams {
   String get mediaType => kind == ItemKind.episode ? 'episode' : 'movie';
 }
 
+/// Keyed by the whole location: a second item reached in place must build a
+/// fresh route state, and with it a fresh session.
+Widget sourcePlayerRouteBuilder(BuildContext context, GoRouterState state) =>
+    SourcePlayerRoute(
+      key: ValueKey(state.uri.toString()),
+      sourceId: SourceId(state.pathParameters['sourceId']!),
+      itemId: state.pathParameters['itemId']!,
+      uri: state.uri,
+    );
+
 class SourcePlayerRoute extends ConsumerStatefulWidget {
   const SourcePlayerRoute({
     super.key,
@@ -58,6 +69,8 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
 
   /// Built once: the player screen reads its session in `initState`.
   late final PlaybackSession? _session = () {
+    // A location with no file id cannot name a stream to open.
+    if (_params.fileId.isEmpty) return null;
     final source = ref.read(mediaSourceProvider(widget.sourceId));
     if (source == null) return null;
     return playbackSessionFor(

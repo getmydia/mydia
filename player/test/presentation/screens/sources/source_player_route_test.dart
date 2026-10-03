@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
@@ -47,5 +49,48 @@ void main() {
       ),
     ));
     expect(find.byKey(const Key('source-player-unavailable')), findsOneWidget);
+  });
+
+  testWidgets('an empty file id is unavailable rather than a blank stream',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
+      ],
+      child: MaterialApp(
+        home: SourcePlayerRoute(
+          sourceId: fakeSourceId,
+          itemId: 'm1',
+          uri: Uri.parse('/s/x/player/m1?kind=movie'),
+        ),
+      ),
+    ));
+    expect(find.byKey(const Key('source-player-unavailable')), findsOneWidget);
+  });
+
+  testWidgets('navigating to another item in place builds a fresh route state',
+      (tester) async {
+    final router = GoRouter(
+      initialLocation: '/s/x/player/a?fileId=f',
+      routes: [
+        GoRoute(
+          path: '/s/:sourceId/player/:itemId',
+          builder: sourcePlayerRouteBuilder,
+        ),
+      ],
+    );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mediaSourceProvider(const SourceId('x'))
+            .overrideWithValue(FakeMediaSource())
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+    final first = tester.state(find.byType(SourcePlayerRoute));
+
+    router.go('/s/x/player/b?fileId=f');
+    await tester.pumpAndSettle();
+    expect(tester.state(find.byType(SourcePlayerRoute)), isNot(same(first)));
   });
 }

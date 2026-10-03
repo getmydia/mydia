@@ -45,6 +45,28 @@ class _Recorder extends PeriodicProgressReporter {
       stopped.add(positionSeconds);
 }
 
+class _SlowRecorder extends _Recorder {
+  final gate = Completer<void>();
+  final order = <String>[];
+
+  @override
+  Future<void> sendProgress({
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool paused,
+  }) async {
+    await gate.future;
+    order.add('progress');
+  }
+
+  @override
+  Future<void> sendStopped({
+    required int positionSeconds,
+    required int durationSeconds,
+  }) async =>
+      order.add('stopped');
+}
+
 void main() {
   test('reports position, crosses watched once, stops at the last position',
       () async {
@@ -97,5 +119,22 @@ void main() {
     await reporter.save(player, mediaType: 'movie', mediaId: 'x');
     expect(reporter.progress, hasLength(1));
     expect(reporter.watched, 1);
+  });
+
+  test('sends stopped only after an in-flight progress report lands', () async {
+    final platform = _StaticPlatformPlayer()..at(const Duration(minutes: 10));
+    final player = Player(platformPlayer: platform);
+    final reporter = _SlowRecorder();
+    final pending = reporter.save(player, mediaType: 'movie', mediaId: 'x');
+    await Future<void>.delayed(Duration.zero);
+
+    reporter.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(reporter.order, isEmpty, reason: 'stopped waits for the report');
+
+    reporter.gate.complete();
+    await pending;
+    await Future<void>.delayed(Duration.zero);
+    expect(reporter.order, ['progress', 'stopped']);
   });
 }

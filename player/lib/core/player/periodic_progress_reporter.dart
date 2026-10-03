@@ -30,6 +30,10 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
   bool _stopped = false;
   bool _disposed = false;
 
+  /// The latest progress or watched call still on the wire. "Stopped" waits
+  /// for it so a late "playing" cannot land after it.
+  Future<void> _inFlight = Future.value();
+
   /// A position change larger than this is a seek, not playback.
   static const _seekJump = Duration(seconds: 3);
 
@@ -80,10 +84,10 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
     final last = _last;
     if (last == null || _stopped) return;
     _stopped = true;
-    unawaited(_guard(() => sendStopped(
+    unawaited(_inFlight.then((_) => _guard(() => sendStopped(
           positionSeconds: last.positionSeconds,
           durationSeconds: last.durationSeconds,
-        )));
+        ))));
   }
 
   Future<void> _report(Player player) async {
@@ -91,16 +95,19 @@ abstract class PeriodicProgressReporter implements ProgressReporter {
         player.state.position, player.state.duration, timeline);
     if (sync == null || _disposed) return;
     _last = sync;
-    await _guard(() => sendProgress(
+    final progress = _track(_guard(() => sendProgress(
           positionSeconds: sync.positionSeconds,
           durationSeconds: sync.durationSeconds,
           paused: !player.state.playing,
-        ));
+        )));
+    await progress;
     if (!_disposed && !_watchedSent && isWatched(player)) {
       _watchedSent = true;
-      await _guard(sendWatched);
+      await _track(_guard(sendWatched));
     }
   }
+
+  Future<void> _track(Future<void> call) => _inFlight = call;
 
   Future<void> _guard(Future<void> Function() send) async {
     try {

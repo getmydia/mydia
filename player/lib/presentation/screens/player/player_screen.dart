@@ -5827,7 +5827,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     final isCasting = ref.watch(isCastingProvider);
     final castSession = ref.watch(castSessionProvider).value;
-    Widget body = isCasting && castSession != null
+    Widget body = _castSupported && isCasting && castSession != null
         ? _buildCastPlaceholder(castSession)
         : _buildBody();
 
@@ -6007,7 +6007,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         PlayerTopBarSlot(
           child: ChromeTopBar(
             showBack: false,
-            castAction: castChromeActionFor(ref),
+            castAction: _castSupported ? castChromeActionFor(ref) : null,
             onCastTap: _showCastDevicePicker,
           ),
         ),
@@ -6080,7 +6080,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           },
           // The chrome's own cast pill. Null on a build that cannot cast at
           // all, which drops the pill rather than drawing an empty one.
-          castAction: castChromeActionFor(ref),
+          castAction: _castSupported ? castChromeActionFor(ref) : null,
           onCastTap: _showCastDevicePicker,
           onAudioTap: _showAudioSelector,
           onSubtitleTap: _showSubtitleSelector,
@@ -6262,14 +6262,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     );
   }
 
+  /// Whether this session can hand playback to a cast device.
+  bool get _castSupported => _session.features.contains(PlaybackFeature.cast);
+
   StatsContext _statsContext() {
     final player = _player;
-    final status = ref.read(p2pStatusNotifierProvider);
-    final isP2P = ref.read(conn.connectionProvider).isP2PMode;
+    // A session without a Mydia connection is plain HTTP: do not read the
+    // p2p providers just to describe a link it is not using.
+    final usesMydia =
+        _session.features.contains(PlaybackFeature.mydiaConnection);
+    final status = usesMydia ? ref.read(p2pStatusNotifierProvider) : null;
+    final isP2P = usesMydia && ref.read(conn.connectionProvider).isP2PMode;
     final summary = ConnectionSummary.from(
       isP2P: isP2P,
-      type: status.peerConnectionType,
-      isInitialized: status.isInitialized,
+      type: status?.peerConnectionType ?? P2pConnectionType.none,
+      isInitialized: status?.isInitialized ?? false,
     );
     return buildStatsContext(
       plan: _plan,
@@ -6287,9 +6294,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       sourceContainer: _sourceContainer(_planInputs),
       videoTrack: player?.state.track.video,
       audioTrack: player?.state.track.audio,
-      linkLabel: '${summary.label} - ${status.connectedPeersCount} peer'
-          '${status.connectedPeersCount == 1 ? '' : 's'}',
-      linkHealthy: !status.isRelayConnected,
+      linkLabel: status == null
+          ? summary.label
+          : '${summary.label} - ${status.connectedPeersCount} peer'
+              '${status.connectedPeersCount == 1 ? '' : 's'}',
+      linkHealthy: status == null || !status.isRelayConnected,
       recentStall: _planInputs?.recentStall,
       now: DateTime.now(),
     );
@@ -6407,6 +6416,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Show the cast device picker dialog, then hand the selected device to
   /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
+    if (!_castSupported) return;
     final device = await showCastDevicePicker(context);
     if (device == null || !mounted) return;
 

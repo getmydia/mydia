@@ -4,7 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/cast/cast_capabilities.dart';
+import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/presentation/screens/player/session/playback_session_types.dart';
+import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 import '../../../../test_utils/probed_tracks.dart';
@@ -87,6 +91,8 @@ StubLink _recordingLink(List<String> operations) {
 }
 
 void main() {
+  castPillTests();
+
   testWidgets('positive control: the Mydia session does issue those operations',
       (tester) async {
     final operations = <String>[];
@@ -155,5 +161,63 @@ void main() {
     await tester.pump();
     expect(session.transport.ends, greaterThan(0),
         reason: 'leaving the screen ends the stream');
+  });
+}
+
+class _CastableSession extends FakePlaybackSession {
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
+}
+
+Future<void> _pumpWithSession(
+  WidgetTester tester,
+  FakePlaybackSession session,
+) async {
+  final container = buildPlayerScreenContainer(
+    connectionState: conn.ConnectionState.direct(),
+    link: _recordingLink(<String>[]),
+    castManager: CapturingCastSessionManager(),
+    proxyService: TrackingLocalProxyService(),
+  );
+  addTearDown(container.dispose);
+  final fake = _RecordingPlatformPlayer();
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: ProviderScope(
+      overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+      ],
+      child: MaterialApp(
+        builder: toastLayerBuilder,
+        home: PlayerScreen(
+          mediaId: 'm1',
+          mediaType: 'movie',
+          fileId: 'part-1',
+          session: session,
+          createPlayer: () => Player(platformPlayer: fake),
+        ),
+      ),
+    ),
+  ));
+  await pumpUntil(tester, () => fake.opened != null);
+  await tester.pump(const Duration(milliseconds: 300));
+}
+
+void castPillTests() {
+  testWidgets('a session without the cast feature shows no cast pill',
+      (tester) async {
+    await _pumpWithSession(tester, FakePlaybackSession());
+    expect(find.byKey(CastChromeIcon.iconKey), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('positive control: a session with the cast feature has one',
+      (tester) async {
+    await _pumpWithSession(tester, _CastableSession());
+    expect(find.byKey(CastChromeIcon.iconKey), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
   });
 }

@@ -413,11 +413,7 @@ GoRouter appRouter(Ref ref) {
         path: '/s/:sourceId/player/:itemId',
         name: 'source_player',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => SourcePlayerRoute(
-          sourceId: SourceId(state.pathParameters['sourceId']!),
-          itemId: state.pathParameters['itemId']!,
-          uri: state.uri,
-        ),
+        builder: sourcePlayerRouteBuilder,
       ),
       // Queue player route for collection playback (must be before /player/:type/:id)
       GoRoute(
