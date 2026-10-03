@@ -5,6 +5,9 @@
 library;
 
 import '../../../../domain/models/media_segment.dart';
+import '../../../../domain/models/subtitle_candidate.dart';
+import '../../../../domain/models/subtitle_track.dart';
+import '../../../widgets/subtitle_track_selector.dart';
 import 'playback_session_types.dart';
 
 abstract interface class PlaybackSession {
@@ -25,4 +28,13 @@ abstract interface class PlaybackSession {
 
   /// The target show's [seasonNumber]. Null when unavailable. Never throws.
   Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber);
+
+  /// Never throws; failures are carried in the outcome's `error`.
+  Future<SubtitleSearchOutcome> searchSubtitles(List<String> languages);
+
+  /// Throws [SubtitleActionException] with a viewer-facing message.
+  Future<SubtitleTrack> downloadSubtitle(SubtitleCandidate candidate);
+
+  /// The track's body, or null on any failure. Never throws.
+  Future<String?> subtitleContent(String trackId);
 }

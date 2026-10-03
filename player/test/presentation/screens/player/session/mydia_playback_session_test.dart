@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
+import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
 import '../../../../test_utils/stub_graphql_client.dart';
 import '../player_screen_test_harness.dart';
@@ -268,4 +270,93 @@ void main() {
       expect(link.requests, isEmpty);
     });
   });
+
+  group('searchSubtitles', () {
+    test('refuses the offline sentinel without a request', () async {
+      final link = StubLink((_, __) => {'__typename': 'Query'});
+      final outcome = await _session(
+        link,
+        target: const PlaybackTarget(
+            mediaType: 'movie', mediaId: 'movie-1', fileId: 'offline'),
+      ).searchSubtitles(['eng']);
+      expect(
+          outcome.error, 'Subtitle search needs a connection to your server.');
+      expect(link.requests, isEmpty);
+    });
+
+    test('shows the resolver message on a GraphQL error', () async {
+      final link =
+          StubLink((_, __) => graphqlErrorResponse('These results expired.'));
+      final outcome = await _session(link).searchSubtitles(['eng']);
+      expect(outcome.error, 'These results expired.');
+    });
+
+    test('sends the file and languages', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('x'));
+      await _session(link).searchSubtitles(['eng', 'por']);
+      expect(link.requests.single.variables, {
+        'mediaFileId': 'file-1',
+        'languages': ['eng', 'por']
+      });
+    });
+  });
+
+  group('subtitleContent', () {
+    test('returns the body', () async {
+      final link = StubLink((_, __) => {
+            '__typename': 'Query',
+            'subtitleContent': 'WEBVTT\n\n00:00.000 --> 00:01.000\nHi',
+          });
+      expect(await _session(link).subtitleContent('3'), startsWith('WEBVTT'));
+      expect(link.requests.single.variables,
+          {'mediaFileId': 'file-1', 'trackId': '3'});
+    });
+
+    test('is null for an empty body', () async {
+      final link =
+          StubLink((_, __) => {'__typename': 'Query', 'subtitleContent': ''});
+      expect(await _session(link).subtitleContent('3'), isNull);
+    });
+
+    test('is null on a GraphQL error', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('boom'));
+      expect(await _session(link).subtitleContent('3'), isNull);
+    });
+  });
+
+  group('downloadSubtitle', () {
+    test('refuses the offline sentinel', () async {
+      final link = StubLink((_, __) => {'__typename': 'Mutation'});
+      final session = _session(
+        link,
+        target: const PlaybackTarget(
+            mediaType: 'movie', mediaId: 'movie-1', fileId: 'offline'),
+      );
+      await expectLater(
+        session.downloadSubtitle(_candidate()),
+        throwsA(isA<SubtitleActionException>()),
+      );
+      expect(link.requests, isEmpty);
+    });
+
+    test('throws the resolver message on a GraphQL error', () async {
+      final link = StubLink((_, __) => graphqlErrorResponse('Search again.'));
+      await expectLater(
+        _session(link).downloadSubtitle(_candidate()),
+        throwsA(isA<SubtitleActionException>()
+            .having((e) => e.message, 'message', 'Search again.')),
+      );
+    });
+  });
 }
+
+SubtitleCandidate _candidate() => const SubtitleCandidate(
+      token: 'tok-1',
+      language: 'en',
+      releaseName: 'Harbor.Lights.2031.WEB',
+      format: 'srt',
+      hearingImpaired: false,
+      hashMatch: false,
+      score: 50,
+      providerName: 'testprovider',
+    );

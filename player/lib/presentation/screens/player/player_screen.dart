@@ -96,9 +96,6 @@ import '../../../domain/models/download.dart';
 import '../../../graphql/schema.graphql.dart';
 import '../../../graphql/mutations/set_audio_language_preference.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_preference.graphql.dart';
-import '../../../graphql/queries/subtitle_content.graphql.dart';
-import '../../../graphql/queries/subtitle_search.graphql.dart';
-import '../../../graphql/mutations/download_subtitle.graphql.dart';
 import '../../../graphql/mutations/set_subtitle_offset.graphql.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
@@ -123,7 +120,6 @@ import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
 import 'session/playback_session_types.dart';
 import 'stats_context_builder.dart';
-import 'subtitle_content_query.dart';
 import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
@@ -4670,79 +4666,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// "search failed" copy and lose the server's own reason, which is
   /// usually the actionable half ("this file has no hash or metadata IDs
   /// to search with" is not a retry).
-  Future<SubtitleSearchOutcome> _searchSubtitles(
-    List<String> languages,
-  ) async {
-    // The `'offline'` sentinel means this is a downloaded file playing with
-    // no server file id behind it, so there is nothing to search *for*.
-    // Caught here rather than left to the server, which would answer a
-    // flat "media file not found" for what is really "you are offline".
-    if (widget.fileId == 'offline') {
-      return const SubtitleSearchOutcome(
-        results: [],
-        providers: [],
-        error: 'Subtitle search needs a connection to your server.',
-      );
-    }
-
-    try {
-      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
-      final result = await graphqlClient.query(
-        QueryOptions(
-          document: documentNodeQuerySubtitleSearch,
-          variables: Variables$Query$SubtitleSearch(
-            mediaFileId: widget.fileId,
-            languages: languages,
-          ).toJson(),
-          // Never cached: each result carries a token the server signed for
-          // a fifteen minute window, so a cache hit would hand back
-          // candidates whose download is already guaranteed to fail.
-          fetchPolicy: FetchPolicy.networkOnly,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Subtitle search failed: ${result.exception}');
-        return SubtitleSearchOutcome(
-          results: const [],
-          providers: const [],
-          error: _friendlyGraphQLError(
-            result.exception,
-            'Could not reach the server. Try again.',
-          ),
-        );
-      }
-
-      // Same reasoning as [_resolveMediaKitSubtitleTrack]'s null check:
-      // `data` is only ever null alongside `hasException` in this client,
-      // but papering over it with `?? const {}` would defer the failure
-      // one line into the generated `fromJson`'s non-nullable cast.
-      final data = result.data;
-      if (data == null) {
-        debugPrint('[PlayerScreen] Subtitle search returned no data');
-        return const SubtitleSearchOutcome(
-          results: [],
-          providers: [],
-          error: 'The server returned no results. Try again.',
-        );
-      }
-
-      final payload = Query$SubtitleSearch.fromJson(data).subtitleSearch;
-      return SubtitleSearchOutcome(
-        results: payload.results.map(SubtitleCandidate.fromGraphQL).toList(),
-        providers:
-            payload.providers.map(SubtitleProviderStatus.fromGraphQL).toList(),
-      );
-    } catch (e) {
-      debugPrint('[PlayerScreen] Error searching subtitles: $e');
-      return const SubtitleSearchOutcome(
-        results: [],
-        providers: [],
-        error: 'Subtitle search failed. Try again.',
-      );
-    }
-  }
+  Future<SubtitleSearchOutcome> _searchSubtitles(List<String> languages) =>
+      _session.searchSubtitles(languages);
 
   /// Download [candidate] into this file's library entry and return the
   /// track the server created for it.
@@ -4759,44 +4684,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<app_models.SubtitleTrack> _downloadSubtitle(
     SubtitleCandidate candidate,
   ) async {
-    if (widget.fileId == 'offline') {
-      throw const SubtitleActionException(
-        'Downloading subtitles needs a connection to your server.',
-      );
-    }
-
-    final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
-    final result = await graphqlClient.mutate(
-      MutationOptions(
-        document: documentNodeMutationDownloadSubtitle,
-        variables: Variables$Mutation$DownloadSubtitle(
-          mediaFileId: widget.fileId,
-          token: candidate.token,
-        ).toJson(),
-      ),
-    );
-
-    if (result.hasException) {
-      debugPrint(
-          '[PlayerScreen] Subtitle download failed: ${result.exception}');
-      throw SubtitleActionException(
-        _friendlyGraphQLError(
-          result.exception,
-          'Could not download that subtitle. Try again.',
-        ),
-      );
-    }
-
-    final data = result.data;
-    if (data == null) {
-      throw const SubtitleActionException(
-        'The subtitle downloaded but the server returned nothing.',
-      );
-    }
-
-    final track = app_models.SubtitleTrack.fromDownload(
-      Mutation$DownloadSubtitle.fromJson(data).downloadSubtitle,
-    );
+    final track = await _session.downloadSubtitle(candidate);
 
     // Added to the server list so it survives the sheet closing: the pick
     // that follows is applied against `_subtitleTracks`, and the controls'
@@ -4817,19 +4705,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     }
 
     return track;
-  }
-
-  /// The line to show a viewer for a failed GraphQL operation.
-  ///
-  /// A resolver's own message is written for one -- "These search results
-  /// expired. Search again.", "This file has no hash or metadata IDs to
-  /// search with" -- and is the only part of the failure worth reading. A
-  /// transport failure carries no such message, only a `linkException`
-  /// whose `toString` is a socket dump, so those fall back to [fallback].
-  String _friendlyGraphQLError(OperationException? exception, String fallback) {
-    final message = exception?.graphqlErrors.firstOrNull?.message;
-    if (message != null && message.isNotEmpty) return message;
-    return fallback;
   }
 
   /// [_pendingSubtitleSelection]'s value for "no attempt is in flight, and
@@ -4979,51 +4854,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<SubtitleTrack?> _fetchSubtitleBody(
     app_models.SubtitleTrack track,
   ) async {
-    try {
-      final graphqlClient = await ref.read(asyncGraphqlClientProvider.future);
-      final result = await graphqlClient.query(
-        subtitleContentQueryOptions(
-          mediaFileId: widget.fileId,
-          trackId: track.id,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[PlayerScreen] Failed to fetch subtitle content for ${track.id}: ${result.exception}');
-        return null;
-      }
-
-      // `result.data` is only ever null alongside `hasException` in this
-      // client, so this branch is not expected to run in practice — but it
-      // is checked explicitly rather than papered over with `?? const {}`,
-      // which looked like it handled a missing response gracefully while
-      // actually just deferring the same failure into the generated
-      // `fromJson`'s non-nullable `__typename` cast, one line down.
-      final data = result.data;
-      if (data == null) {
-        debugPrint(
-            '[PlayerScreen] No data returned for subtitle content ${track.id}');
-        return null;
-      }
-
-      final content = Query$SubtitleContent.fromJson(data).subtitleContent;
-      if (content == null || content.isEmpty) {
-        debugPrint('[PlayerScreen] No subtitle content for ${track.id}');
-        return null;
-      }
-
-      final mkTrack = SubtitleTrack.data(
-        content,
-        title: track.title,
-        language: track.language,
-      );
-      _mediaKitSubtitleTrackMap[track.id] = mkTrack;
-      return mkTrack;
-    } catch (e) {
-      debugPrint('[PlayerScreen] Error fetching subtitle content: $e');
-      return null;
-    }
+    final content = await _session.subtitleContent(track.id);
+    if (content == null) return null;
+    final mkTrack = SubtitleTrack.data(
+      content,
+      title: track.title,
+      language: track.language,
+    );
+    _mediaKitSubtitleTrackMap[track.id] = mkTrack;
+    return mkTrack;
   }
 
   /// Show audio track selector and apply selection via media_kit
