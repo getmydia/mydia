@@ -694,8 +694,10 @@ defmodule Mydia.Plugins do
 
     with :ok <- refuse_bundled(entry.slug),
          {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
-         :ok <- deactivate(entry.slug),
-         {:ok, config} <- persist_install(entry, wasm, hash, grants) do
+         {:ok, config} <- persist_install(entry, wasm, hash, grants),
+         # Only after the new build is stored, so a failed write leaves the
+         # running plugin untouched.
+         :ok <- deactivate(entry.slug) do
       config |> with_declared_settings() |> finish_activation()
     end
   end

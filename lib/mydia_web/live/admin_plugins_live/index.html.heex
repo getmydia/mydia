@@ -1,7 +1,7 @@
 <Layouts.app {assigns}>
   <.admin_page page={:plugins} count={length(@installed)}>
     <:actions>
-      <MydiaWeb.AdminPluginsLive.Components.header_actions browsing?={@browsing?} />
+      <MydiaWeb.AdminPluginsLive.Components.header_actions browsing?={@browsing? and @store_open?} />
     </:actions>
     <MydiaWeb.AdminPluginsLive.Components.plugins_tab
       installed={@installed}
