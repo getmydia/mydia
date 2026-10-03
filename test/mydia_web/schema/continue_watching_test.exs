@@ -290,10 +290,26 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
 
       assert message =~ "Authentication required"
     end
+
+    test "a hidden title cannot be dismissed", _ctx do
+      movie = MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+
+      restricted =
+        AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      assert {:ok, %{errors: [%{message: "Media item not found"}]}} =
+               run_query(@remove_mutation, %{"mediaItemId" => movie.id}, restricted)
+
+      assert Mydia.Repo.aggregate(Mydia.Playback.Dismissal, :count) == 0
+    end
   end
 
   defp run_query(query, variables, user) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user,
+        do: %{current_user: user, current_scope: Mydia.Accounts.Scope.for_user(user)},
+        else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end

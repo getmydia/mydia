@@ -15,25 +15,12 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs =
-          %{position_seconds: position}
-          |> put_duration(duration, user.id, media_item_id: movie_id)
+        with {:ok, _movie} <- load_movie(context[:current_scope], movie_id) do
+          attrs =
+            %{position_seconds: position}
+            |> put_duration(duration, user.id, media_item_id: movie_id)
 
-        case Playback.save_progress(user.id, [media_item_id: movie_id], attrs) do
-          {:ok, progress} ->
-            formatted_progress = format_progress(progress)
-
-            # Publish subscription event
-            MydiaWeb.Schema.Publish.publish(
-              MydiaWeb.Endpoint,
-              formatted_progress,
-              progress_updated: movie_id
-            )
-
-            {:ok, formatted_progress}
-
-          {:error, changeset} ->
-            {:error, format_changeset_errors(changeset)}
+          save_and_publish(user.id, [media_item_id: movie_id], attrs, movie_id)
         end
     end
   end
@@ -47,26 +34,32 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        attrs =
-          %{position_seconds: position}
-          |> put_duration(duration, user.id, episode_id: episode_id)
+        with {:ok, _episode} <- load_episode(context[:current_scope], episode_id) do
+          attrs =
+            %{position_seconds: position}
+            |> put_duration(duration, user.id, episode_id: episode_id)
 
-        case Playback.save_progress(user.id, [episode_id: episode_id], attrs) do
-          {:ok, progress} ->
-            formatted_progress = format_progress(progress)
-
-            # Publish subscription event
-            MydiaWeb.Schema.Publish.publish(
-              MydiaWeb.Endpoint,
-              formatted_progress,
-              progress_updated: episode_id
-            )
-
-            {:ok, formatted_progress}
-
-          {:error, changeset} ->
-            {:error, format_changeset_errors(changeset)}
+          save_and_publish(user.id, [episode_id: episode_id], attrs, episode_id)
         end
+    end
+  end
+
+  defp save_and_publish(user_id, content_id, attrs, node_id) do
+    case Playback.save_progress(user_id, content_id, attrs) do
+      {:ok, progress} ->
+        formatted_progress = format_progress(progress)
+
+        # Publish subscription event
+        MydiaWeb.Schema.Publish.publish(
+          MydiaWeb.Endpoint,
+          formatted_progress,
+          progress_updated: node_id
+        )
+
+        {:ok, formatted_progress}
+
+      {:error, changeset} ->
+        {:error, format_changeset_errors(changeset)}
     end
   end
 
@@ -76,25 +69,9 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Playback.mark_watched(user.id, media_item_id: movie_id) do
-          {:ok, _progress} ->
-            movie = Media.get_media_item!(context[:current_scope], movie_id)
-            {:ok, Map.put(movie, :added_at, movie.inserted_at)}
-
-          {:error, :not_found} ->
-            # Create watched progress if it doesn't exist
-            case Playback.save_progress(user.id, [media_item_id: movie_id], %{
-                   position_seconds: 0,
-                   duration_seconds: 1,
-                   watched: true
-                 }) do
-              {:ok, _} ->
-                movie = Media.get_media_item!(context[:current_scope], movie_id)
-                {:ok, Map.put(movie, :added_at, movie.inserted_at)}
-
-              {:error, changeset} ->
-                {:error, format_changeset_errors(changeset)}
-            end
+        with {:ok, movie} <- load_movie(context[:current_scope], movie_id),
+             :ok <- mark_watched(user.id, media_item_id: movie_id) do
+          {:ok, movie}
         end
     end
   end
@@ -105,14 +82,9 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Playback.delete_progress(user.id, media_item_id: movie_id) do
-          {:ok, _} ->
-            movie = Media.get_media_item!(context[:current_scope], movie_id)
-            {:ok, Map.put(movie, :added_at, movie.inserted_at)}
-
-          {:error, :not_found} ->
-            movie = Media.get_media_item!(context[:current_scope], movie_id)
-            {:ok, Map.put(movie, :added_at, movie.inserted_at)}
+        with {:ok, movie} <- load_movie(context[:current_scope], movie_id) do
+          Playback.delete_progress(user.id, media_item_id: movie_id)
+          {:ok, movie}
         end
     end
   end
@@ -123,23 +95,9 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Playback.mark_watched(user.id, episode_id: episode_id) do
-          {:ok, _progress} ->
-            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
-
-          {:error, :not_found} ->
-            # Create watched progress if it doesn't exist
-            case Playback.save_progress(user.id, [episode_id: episode_id], %{
-                   position_seconds: 0,
-                   duration_seconds: 1,
-                   watched: true
-                 }) do
-              {:ok, _} ->
-                {:ok, Media.get_episode!(context[:current_scope], episode_id)}
-
-              {:error, changeset} ->
-                {:error, format_changeset_errors(changeset)}
-            end
+        with {:ok, episode} <- load_episode(context[:current_scope], episode_id),
+             :ok <- mark_watched(user.id, episode_id: episode_id) do
+          {:ok, episode}
         end
     end
   end
@@ -150,12 +108,27 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Playback.delete_progress(user.id, episode_id: episode_id) do
-          {:ok, _} ->
-            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
+        with {:ok, episode} <- load_episode(context[:current_scope], episode_id) do
+          Playback.delete_progress(user.id, episode_id: episode_id)
+          {:ok, episode}
+        end
+    end
+  end
 
-          {:error, :not_found} ->
-            {:ok, Media.get_episode!(context[:current_scope], episode_id)}
+  # Marks an existing row watched, or creates a watched row when there is none.
+  defp mark_watched(user_id, content_id) do
+    case Playback.mark_watched(user_id, content_id) do
+      {:ok, _progress} ->
+        :ok
+
+      {:error, :not_found} ->
+        case Playback.save_progress(user_id, content_id, %{
+               position_seconds: 0,
+               duration_seconds: 1,
+               watched: true
+             }) do
+          {:ok, _} -> :ok
+          {:error, changeset} -> {:error, format_changeset_errors(changeset)}
         end
     end
   end
@@ -210,15 +183,18 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Media.toggle_favorite(user.id, media_item_id) do
-          {:ok, :added} ->
-            {:ok, %{is_favorite: true, media_item_id: media_item_id}}
+        with {:ok, _item} <-
+               load_media_item(context[:current_scope], media_item_id, "Media item not found") do
+          case Media.toggle_favorite(user.id, media_item_id) do
+            {:ok, :added} ->
+              {:ok, %{is_favorite: true, media_item_id: media_item_id}}
 
-          {:ok, :removed} ->
-            {:ok, %{is_favorite: false, media_item_id: media_item_id}}
+            {:ok, :removed} ->
+              {:ok, %{is_favorite: false, media_item_id: media_item_id}}
 
-          {:error, changeset} ->
-            {:error, format_changeset_errors(changeset)}
+            {:error, changeset} ->
+              {:error, format_changeset_errors(changeset)}
+          end
         end
     end
   end
@@ -238,17 +214,20 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
         {:error, "Authentication required"}
 
       user ->
-        case Playback.dismiss_from_on_deck(user.id, media_item_id) do
-          {:ok, _dismissal} ->
-            {:ok, %{media_item_id: media_item_id, removed: true}}
+        with {:ok, _item} <-
+               load_media_item(context[:current_scope], media_item_id, "Media item not found") do
+          case Playback.dismiss_from_on_deck(user.id, media_item_id) do
+            {:ok, _dismissal} ->
+              {:ok, %{media_item_id: media_item_id, removed: true}}
 
-          # Most often an episode id: the rail's cards are episodes, but a
-          # card stands for its whole show and that is what gets hidden.
-          {:error, :not_found} ->
-            {:error, "Media item not found"}
+            # Most often an episode id: the rail's cards are episodes, but a
+            # card stands for its whole show and that is what gets hidden.
+            {:error, :not_found} ->
+              {:error, "Media item not found"}
 
-          {:error, changeset} ->
-            {:error, format_changeset_errors(changeset)}
+            {:error, changeset} ->
+              {:error, format_changeset_errors(changeset)}
+          end
         end
     end
   end
@@ -257,18 +236,27 @@ defmodule MydiaWeb.Schema.Resolvers.PlaybackResolver do
 
   # Safe loaders return an error tuple (not a raised 500) for unknown ids. A
   # title outside the caller's scope reads as unknown, so a restricted account
-  # can neither see it nor change its watch state.
-  defp load_show(scope, show_id) do
-    case MediaItem |> Restrictions.apply(scope) |> Repo.get(show_id) do
-      nil -> {:error, "Show not found"}
-      show -> {:ok, Map.put(show, :added_at, show.inserted_at)}
+  # can neither see it nor change its watch state. Every write in this module
+  # loads through one of these first.
+  defp load_media_item(scope, id, not_found) do
+    with {:ok, uuid} <- Ecto.UUID.cast(id),
+         %MediaItem{} = item <- MediaItem |> Restrictions.apply(scope) |> Repo.get(uuid) do
+      {:ok, Map.put(item, :added_at, item.inserted_at)}
+    else
+      _ -> {:error, not_found}
     end
   end
 
+  defp load_show(scope, show_id), do: load_media_item(scope, show_id, "Show not found")
+  defp load_movie(scope, movie_id), do: load_media_item(scope, movie_id, "Movie not found")
+
   defp load_episode(scope, episode_id) do
-    case Episode |> Restrictions.apply_to_episodes(scope) |> Repo.get(episode_id) do
-      nil -> {:error, "Episode not found"}
-      episode -> {:ok, episode}
+    with {:ok, uuid} <- Ecto.UUID.cast(episode_id),
+         %Episode{} = episode <-
+           Episode |> Restrictions.apply_to_episodes(scope) |> Repo.get(uuid) do
+      {:ok, episode}
+    else
+      _ -> {:error, "Episode not found"}
     end
   end
 
