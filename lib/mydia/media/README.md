@@ -549,10 +549,15 @@ cannot disagree.
 - An item with a NULL `content_rating_age` is invisible to every age-limited
   account. Every TMDB detail fetch carries the certification (the relay
   provider appends it), TVDB shows borrow TMDB's when TVDB has none, and
-  `Mydia.Jobs.ContentRatingFetch` repaired rows saved before that.
+  `Mydia.Jobs.ContentRatingFetch` repaired rows saved before that. Rows TMDB
+  has no certification for keep a NULL age, so they stay hidden from
+  age-limited accounts until a metadata refresh finds one. The backfill fails
+  and is retried by Oban (with a minutes-long backoff) when the relay errors,
+  so an outage at first boot does not leave rows invisible for good.
 - Titles outside the library go through `Mydia.Media.RemoteFilter`, which
   looks up certification and category per title via `RemoteSignals` (cached
-  24h). A failed lookup counts as unrated.
+  24h). A failed lookup counts as unrated and is remembered for 60s, so a slow
+  relay costs one timeout rather than one per render.
 - `RemoteFilter.discover_params/2` only narrows TMDB `/discover`; it never
   replaces the filter. TMDB ignores certification on `/discover/tv`.
 - Discover, `/search`, `/import`, `/review` and the downloads match dialog all
