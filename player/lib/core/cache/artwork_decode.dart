@@ -73,6 +73,7 @@ class ArtworkNetworkImageProvider extends CachedNetworkImageProvider {
     super.url, {
     super.cacheManager,
     super.headers,
+    super.cacheKey,
     this.replaySafe = kIsWeb,
   }) : super(imageRenderMethodForWeb: artworkWebRenderMethod);
 
@@ -99,6 +100,7 @@ ImageProvider<Object> artworkImageProvider(
   BaseCacheManager? cacheManager,
   int? decodeWidth,
   Map<String, String>? headers,
+  String? cacheKey,
 }) =>
     ResizeImage.resizeIfNeeded(
       decodeWidth,
@@ -107,5 +109,6 @@ ImageProvider<Object> artworkImageProvider(
         url,
         cacheManager: cacheManager,
         headers: headers,
+        cacheKey: cacheKey,
       ),
     );

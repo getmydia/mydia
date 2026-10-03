@@ -54,6 +54,12 @@ class PosterFrame extends ConsumerStatefulWidget {
   /// Artwork URL. Null, empty, or a load failure renders [placeholder].
   final String? imageUrl;
 
+  /// Sent with the artwork request. Carries a third-party credential.
+  final Map<String, String>? imageHeaders;
+
+  /// See `ArtworkImage.cacheKey`.
+  final String? imageCacheKey;
+
   /// Rendered when there is no artwork, and on load failure. Callers supply
   /// their own icon and ground so each surface stays recognisable.
   final Widget placeholder;
@@ -79,6 +85,8 @@ class PosterFrame extends ConsumerStatefulWidget {
   const PosterFrame({
     super.key,
     this.imageUrl,
+    this.imageHeaders,
+    this.imageCacheKey,
     required this.placeholder,
     this.loadingPlaceholder,
     this.overlays = const <Widget>[],
@@ -253,6 +261,8 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
                 LayoutBuilder(
                   builder: (context, constraints) => ArtworkImage(
                     imageUrl: url,
+                    headers: widget.imageHeaders,
+                    cacheKey: widget.imageCacheKey,
                     fit: BoxFit.cover,
                     cacheManager: PosterCacheManager(),
                     decodeWidth: artworkDecodeWidth(
