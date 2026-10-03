@@ -63,6 +63,21 @@ defmodule Mydia.Media.RemoteFilterTest do
       assert RemoteFilter.filter([movie(id)], scope) == []
     end
 
+    test "drops a title whose lookup raises, without crashing the caller", %{scope: scope} do
+      broken_config = %{type: :metadata_relay, base_url: nil, options: nil}
+
+      assert RemoteFilter.filter([movie(unique_provider_id())], scope, config: broken_config) ==
+               []
+    end
+
+    test "drops a title whose provider id is not a number", %{scope: scope} do
+      hit = %SearchResult{provider_id: "not-a-number", provider: :tmdb, media_type: :movie}
+      assert RemoteFilter.filter([hit], scope, config: @dead_config) == []
+
+      nil_hit = %SearchResult{provider_id: nil, provider: :tmdb, media_type: :movie}
+      assert RemoteFilter.filter([nil_hit], scope, config: @dead_config) == []
+    end
+
     test "drops a title whose lookup fails", %{scope: scope} do
       assert RemoteFilter.filter([movie(unique_provider_id())], scope, config: @dead_config) ==
                []
@@ -80,6 +95,18 @@ defmodule Mydia.Media.RemoteFilterTest do
 
       tvdb_hit = %SearchResult{provider_id: to_string(id), provider: :tvdb, media_type: :tv_show}
       assert [_] = RemoteFilter.filter([tvdb_hit], scope)
+    end
+
+    test "a hit with no signals is dropped when its lookup fails" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["tv_show"]}))
+
+      tvdb_hit = %SearchResult{
+        provider_id: to_string(unique_provider_id()),
+        provider: :tvdb,
+        media_type: :tv_show
+      }
+
+      assert RemoteFilter.filter([tvdb_hit], scope, config: @dead_config) == []
     end
 
     test "a TVDB live action hit is dropped", %{scope: scope} do

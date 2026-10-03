@@ -17,7 +17,6 @@ defmodule Mydia.Media.RemoteFilter do
   alias Mydia.Media.RemoteSignals
   alias Mydia.Media.Restrictions
   alias Mydia.Metadata
-  alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
 
   @doc """
@@ -55,10 +54,19 @@ defmodule Mydia.Media.RemoteFilter do
       |> RemoteSignals.fetch_many(opts[:config])
 
     Enum.flat_map(results, fn result ->
-      found = Map.get(signals, {result.media_type, Ref.from_search_result(result)})
+      found = found_signals(signals, result)
 
       if allow?(result, scope, found), do: [with_rating(result, found)], else: []
     end)
+  end
+
+  # A result with no resolvable ref was never looked up, so it has no signals.
+  # Under a category limit that needed them, it counts as a failed lookup.
+  defp found_signals(signals, result) do
+    case RemoteSignals.ref_for(result) do
+      {:ok, ref} -> Map.get(signals, {result.media_type, ref})
+      :error -> if no_signals?(result), do: :error
+    end
   end
 
   defp needs_lookup?(_result, %Scope{max_content_age: age}) when not is_nil(age), do: true
@@ -73,6 +81,9 @@ defmodule Mydia.Media.RemoteFilter do
   defp category(_result, %RemoteSignals{category: category}) when is_binary(category),
     do: category
 
+  # The lookup failed for a hit with nothing to classify from: unknown, which
+  # a category limit refuses.
+  defp category(result, :error), do: if(no_signals?(result), do: nil, else: classify(result))
   defp category(result, _signals), do: classify(result)
 
   defp age(%RemoteSignals{age: age}), do: age

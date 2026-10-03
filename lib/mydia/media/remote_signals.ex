@@ -12,6 +12,8 @@ defmodule Mydia.Media.RemoteSignals do
   unrated, which an age limit hides.
   """
 
+  require Logger
+
   alias Mydia.Media.CategoryClassifier
   alias Mydia.Media.ContentRating
   alias Mydia.Metadata
@@ -42,10 +44,20 @@ defmodule Mydia.Media.RemoteSignals do
   def fetch_many(results, config) do
     config = config || Metadata.default_relay_config()
 
-    results
-    |> Enum.map(&{&1.media_type, Ref.from_search_result(&1)})
-    |> Enum.uniq()
-    |> Task.async_stream(fn key -> {key, lookup(key, config)} end,
+    keys =
+      results
+      |> Enum.flat_map(fn result ->
+        case ref_for(result) do
+          {:ok, ref} -> [{result.media_type, ref}]
+          :error -> []
+        end
+      end)
+      |> Enum.uniq()
+
+    # Unlinked, so a lookup that crashes or times out cannot take the caller
+    # (usually a LiveView) down with it.
+    Mydia.TaskSupervisor
+    |> Task.Supervisor.async_stream_nolink(keys, fn key -> {key, lookup(key, config)} end,
       max_concurrency: @max_concurrency,
       timeout: @timeout,
       on_timeout: :kill_task,
@@ -57,6 +69,18 @@ defmodule Mydia.Media.RemoteSignals do
     end)
   end
 
+  @doc """
+  The lookup ref for a search result, or `:error` when its `provider_id` is not
+  a positive integer. Such a result has no signals.
+  """
+  @spec ref_for(SearchResult.t()) :: {:ok, Ref.t()} | :error
+  def ref_for(%SearchResult{provider_id: provider_id} = result) do
+    case Integer.parse(to_string(provider_id)) do
+      {id, ""} when id > 0 -> {:ok, Ref.from_search_result(%{result | provider_id: id})}
+      _ -> :error
+    end
+  end
+
   defp lookup({media_type, ref}, config) do
     case Cache.fetch(cache_key(ref, media_type), fn -> fetch(config, ref, media_type) end,
            ttl: @ttl
@@ -64,6 +88,14 @@ defmodule Mydia.Media.RemoteSignals do
       {:ok, signals} -> signals
       _error -> :error
     end
+  rescue
+    error ->
+      Logger.debug("Remote signals lookup raised: #{Exception.message(error)}")
+      :error
+  catch
+    kind, reason ->
+      Logger.debug("Remote signals lookup #{kind}: #{inspect(reason)}")
+      :error
   end
 
   defp fetch(config, ref, media_type) do
