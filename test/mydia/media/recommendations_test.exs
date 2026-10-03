@@ -342,5 +342,62 @@ defmodule Mydia.Media.RecommendationsTest do
       assert length(rail) == 12
       assert Enum.all?(rail, &String.starts_with?(&1.title, "Allowed"))
     end
+
+    defp warm_pair(source, blocked_signals, allowed_signals) do
+      blocked_id = unique_provider_id()
+      allowed_id = unique_provider_id()
+      warm_remote_signals({:tmdb, blocked_id}, :movie, blocked_signals)
+      warm_remote_signals({:tmdb, allowed_id}, :movie, allowed_signals)
+
+      warm_recommendations_cache(source, :movie, [
+        %{
+          "id" => blocked_id,
+          "title" => "Blocked One",
+          "vote_average" => 9.0,
+          "vote_count" => 900
+        },
+        %{"id" => allowed_id, "title" => "Allowed One", "vote_average" => 5.0, "vote_count" => 60}
+      ])
+    end
+
+    test "an allowed_categories restriction keeps only the permitted category" do
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+      source = unique_provider_id()
+
+      warm_pair(
+        source,
+        %RemoteSignals{content_rating: "PG", age: 8, category: "movie"},
+        %RemoteSignals{content_rating: "PG", age: 8, category: "cartoon_movie"}
+      )
+
+      assert {:ok, rail} = Recommendations.for_ref({:tmdb, source}, :movie, scope)
+      assert titles(rail) == ["Allowed One"]
+    end
+
+    test "for_media_item/3 filters under a restriction" do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      source = unique_provider_id()
+
+      warm_pair(
+        source,
+        %RemoteSignals{content_rating: "R", age: 17, category: "movie"},
+        %RemoteSignals{content_rating: "PG", age: 8, category: "movie"}
+      )
+
+      item = media_item_fixture(%{type: "movie", title: "Source Item", tmdb_id: source})
+
+      assert {:ok, rail} = Recommendations.for_media_item(item, scope)
+      assert titles(rail) == ["Allowed One"]
+    end
+
+    test "a list that is entirely out of bounds returns :none" do
+      scope = Scope.for_user(restricted_user_fixture(%{max_content_age: 12}))
+      source = unique_provider_id()
+      blocked = %RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+
+      warm_pair(source, blocked, blocked)
+
+      assert Recommendations.for_ref({:tmdb, source}, :movie, scope) == :none
+    end
   end
 end
