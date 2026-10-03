@@ -1,7 +1,7 @@
 /// What a source's items look like once mapped out of its server's format.
 ///
 /// Mydia's own screens keep their GraphQL models; these are for the generic
-/// per-source screens, which must not know whether Plex or Stash answered.
+/// per-source screens, which must not know which server kind answered.
 library;
 
 import 'package:flutter/foundation.dart';

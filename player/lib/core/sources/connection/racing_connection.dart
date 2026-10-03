@@ -19,10 +19,10 @@ import '../media_source.dart';
 import '../source.dart';
 import 'source_connection.dart';
 
-/// Returns the `machineIdentifier` the server at [base] reports, or null.
+/// Returns the server id the server at [base] reports, or null.
 typedef IdentityProbe = Future<String?> Function(Uri base, Duration timeout);
 
-/// The server's current `connections[]` from plex.tv.
+/// The server's current connections, as its source knows them.
 typedef CandidateFetch = Future<List<ServerConnection>> Function();
 
 /// [all] filtered to what may be tried and sorted best first.

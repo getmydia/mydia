@@ -1,7 +1,7 @@
 /// Everything the player screen asks a media server, behind one seam.
 ///
 /// The Mydia implementation is the screen's former inline GraphQL, moved,
-/// not rewritten. Plex and Stash implement the same members later.
+/// not rewritten. The third-party sources implement the same members.
 library;
 
 import '../../../../core/player/progress_reporter.dart';

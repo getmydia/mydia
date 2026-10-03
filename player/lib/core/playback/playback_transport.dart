@@ -1,5 +1,5 @@
 /// What the player screen asks of whatever turns a plan into bytes: Mydia's
-/// streaming sessions, or a Plex or Stash server's URLs.
+/// streaming sessions, or a third-party server's URLs.
 ///
 /// Not called `StreamController`: `dart:async` owns that name, and the
 /// player screen imports it.

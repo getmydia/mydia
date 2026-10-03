@@ -176,7 +176,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Network changes make every Plex and Stash connection look again.
+    // Network changes make every third-party connection look again.
     ref.read(networkChangeRefreshProvider);
     _remoteIntentsSubscription = ref
         .read(remoteTargetControllerProvider)
