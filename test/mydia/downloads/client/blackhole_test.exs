@@ -252,6 +252,26 @@ defmodule Mydia.Downloads.Client.BlackholeTest do
 
   describe "get_status/2" do
     @tag :tmp_dir
+    test "finds a pending torrent in a category subfolder", %{tmp_dir: tmp_dir} do
+      watch_folder = Path.join(tmp_dir, "watch")
+      completed_folder = Path.join(tmp_dir, "completed")
+
+      config = %{
+        connection_settings: %{
+          "watch_folder" => watch_folder,
+          "completed_folder" => completed_folder,
+          "use_category_subfolders" => "true"
+        }
+      }
+
+      assert {:ok, hash} =
+               Blackhole.add_torrent(config, {:file, @sample_torrent_file}, category: "movies")
+
+      assert {:ok, status} = Blackhole.get_status(config, hash)
+      assert status.state == :downloading
+    end
+
+    @tag :tmp_dir
     test "returns pending state when torrent file exists in watch_folder", %{tmp_dir: tmp_dir} do
       watch_folder = Path.join(tmp_dir, "watch")
       completed_folder = Path.join(tmp_dir, "completed")
@@ -346,6 +366,26 @@ defmodule Mydia.Downloads.Client.BlackholeTest do
   end
 
   describe "list_torrents/2" do
+    @tag :tmp_dir
+    test "lists pending torrents from category subfolders", %{tmp_dir: tmp_dir} do
+      watch_folder = Path.join(tmp_dir, "watch")
+      completed_folder = Path.join(tmp_dir, "completed")
+
+      config = %{
+        connection_settings: %{
+          "watch_folder" => watch_folder,
+          "completed_folder" => completed_folder,
+          "use_category_subfolders" => "true"
+        }
+      }
+
+      assert {:ok, hash} =
+               Blackhole.add_torrent(config, {:file, @sample_torrent_file}, category: "movies")
+
+      assert {:ok, torrents} = Blackhole.list_torrents(config)
+      assert Enum.any?(torrents, &(&1.id == hash))
+    end
+
     @tag :tmp_dir
     test "lists pending torrents from watch folder", %{tmp_dir: tmp_dir} do
       watch_folder = Path.join(tmp_dir, "watch")
@@ -451,6 +491,26 @@ defmodule Mydia.Downloads.Client.BlackholeTest do
   end
 
   describe "remove_torrent/3" do
+    @tag :tmp_dir
+    test "removes a torrent from a category subfolder", %{tmp_dir: tmp_dir} do
+      watch_folder = Path.join(tmp_dir, "watch")
+      completed_folder = Path.join(tmp_dir, "completed")
+
+      config = %{
+        connection_settings: %{
+          "watch_folder" => watch_folder,
+          "completed_folder" => completed_folder,
+          "use_category_subfolders" => "true"
+        }
+      }
+
+      assert {:ok, hash} =
+               Blackhole.add_torrent(config, {:file, @sample_torrent_file}, category: "movies")
+
+      assert :ok = Blackhole.remove_torrent(config, hash)
+      assert File.ls!(Path.join(watch_folder, "movies")) == []
+    end
+
     @tag :tmp_dir
     test "removes torrent file from watch_folder", %{tmp_dir: tmp_dir} do
       watch_folder = Path.join(tmp_dir, "watch")
