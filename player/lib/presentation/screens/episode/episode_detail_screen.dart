@@ -211,8 +211,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
   Widget _buildContent(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
-    final showActionRow = (isDownloadSupported && _canDownload(episode)) ||
-        _canShowMediaInfo(episode);
+    final showActionRow = _canDownload(episode) || _canShowMediaInfo(episode);
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, episode),
@@ -260,10 +259,11 @@ class EpisodeDetailScreen extends ConsumerWidget {
   }
 
   /// Mydia-only: the download button needs the Mydia episode behind the view.
+  /// The button stays (disabled without files) on download-capable platforms.
   bool _canDownload(EpisodeView episode) =>
+      isDownloadSupported &&
       episode.mydiaDetail != null &&
-      episode.features.contains(DetailFeature.download) &&
-      episode.files.isNotEmpty;
+      episode.features.contains(DetailFeature.download);
 
   bool _canShowMediaInfo(EpisodeView episode) =>
       episode.mydiaDetail != null &&
@@ -420,7 +420,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
   Widget _buildActionRow(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
-    final showDownload = isDownloadSupported && _canDownload(episode);
+    final showDownload = _canDownload(episode);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
