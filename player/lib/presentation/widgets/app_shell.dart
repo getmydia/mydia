@@ -467,6 +467,9 @@ class _AppShellState extends ConsumerState<AppShell>
             Navigator.of(context).pop();
             _navigateTo(route);
           },
+          // Navigates without popping, so the drawer stays open on the new
+          // server's nav and the viewer sees the switch land.
+          onSwitchSource: _navigateTo,
           showBackToMydia: showBackToMydia,
           isOffline: isOffline,
         ),

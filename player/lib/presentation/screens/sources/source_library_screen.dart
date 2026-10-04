@@ -9,6 +9,7 @@ import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/source_artwork.dart';
 import 'source_browse_providers.dart';
+import 'source_drawer_button.dart';
 import 'source_error_view.dart';
 
 class SourceLibraryScreen extends ConsumerWidget {
@@ -32,7 +33,10 @@ class SourceLibraryScreen extends ConsumerWidget {
     };
 
     return Scaffold(
-      appBar: AppBar(title: Text(info?.title ?? '')),
+      appBar: AppBar(
+        leading: SourceDrawerButton.maybe(context),
+        title: Text(info?.title ?? ''),
+      ),
       body: Column(
         children: [
           if (info != null)
