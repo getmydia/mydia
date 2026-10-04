@@ -155,6 +155,29 @@ defmodule MydiaWeb.IntegrationsLiveTest do
     assert has_element?(view, "#account-link-#{link.id}", "Glass Orchard Server")
   end
 
+  describe "empty state" do
+    setup do
+      Registry.unregister(@slug)
+      {:ok, _} = Settings.delete_plugin_config(Settings.get_plugin_config_by_slug(@slug))
+      :ok
+    end
+
+    test "an admin is sent to the plugin store" do
+      {conn, _admin} = register_and_log_in_user(build_conn(), %{role: "admin"})
+      {:ok, view, _html} = live(conn, ~p"/integrations")
+
+      assert has_element?(view, "#integrations-empty")
+      assert has_element?(view, ~s(#integrations-browse-plugins[href="/admin/plugins"]))
+    end
+
+    test "a non-admin is told to ask an administrator", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/integrations")
+
+      assert has_element?(view, "#integrations-empty", "Ask your administrator")
+      refute has_element?(view, "#integrations-browse-plugins")
+    end
+  end
+
   describe "plugin permissions" do
     test "lists grants and revokes one", %{conn: conn, user: user} do
       :ok = Mydia.Plugins.Grants.grant("helper", user.id, "collections:write", "always", "s")

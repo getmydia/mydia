@@ -947,10 +947,16 @@ defmodule Mydia.Plugins do
     end
   end
 
-  @doc "Removes a plugin entirely: deactivates it and deletes its config (R14)."
+  @doc """
+  Removes a plugin entirely: deactivates it and deletes its config (R14).
+
+  A bundled plugin is refused: `ensure_bundled/0` would re-seed it approved and
+  enabled on the next admin page load or boot. Disabling is its off switch.
+  """
   @spec remove(String.t()) :: {:ok, :removed} | {:error, Error.t()}
   def remove(slug) do
     with {:ok, config} <- fetch_config(slug),
+         :ok <- ensure_removable(config),
          {:ok, _} <- Settings.delete_plugin_config(config) do
       # Role ceilings went with the config row. Approvals and queued writes are
       # keyed by slug alone, so they are cleared too. The journal stays as
@@ -962,6 +968,13 @@ defmodule Mydia.Plugins do
       Shelves.purge(slug)
       {:ok, :removed}
     end
+  end
+
+  defp ensure_removable(config) do
+    if Sources.origin(config) == :bundled,
+      do:
+        {:error, Error.new(:unsupported, "Bundled plugins can't be removed; disable it instead.")},
+      else: :ok
   end
 
   @doc "Enables or disables an installed plugin, starting/stopping its pool."
