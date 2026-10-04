@@ -1,7 +1,7 @@
 {
   "slug": "assistant-openai",
   "name": "Assistant",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Chat with your library through the model provider you choose: OpenAI, Anthropic, OpenRouter, Google Gemini, Groq, Mistral, DeepSeek, xAI, a local Ollama or LM Studio, or any other OpenAI-compatible server. It can search, organize collections, mark things watched and add media, with every change undoable. It also suggests things to add on each person's Home page, based on what they watched. Choosing \"Allow for this session\" in the approval dialog lets later changes of that kind by the model go through without another prompt.",
   "author": "Mydia",
   "min_host_version": "0.16.0",
@@ -22,13 +22,19 @@
   "settings_schema": [
     { "key": "provider", "type": "enum", "label": "Provider",
       "options": ["Custom (OpenAI-compatible)", "OpenAI", "Anthropic", "OpenRouter", "Google Gemini", "Groq", "Mistral", "DeepSeek", "xAI", "Ollama", "LM Studio"] },
-    { "key": "base_url", "type": "url", "label": "Server URL (for example http://ollama.lan:11434 or https://llm.example.com/v1)", "grants_host": true, "allow_private": true,
+    { "key": "base_url", "type": "url", "label": "Server URL",
+      "hint": "For example http://ollama.lan:11434 or https://llm.example.com/v1",
+      "grants_host": true, "allow_private": true,
       "visible_when": { "provider": ["", "Custom (OpenAI-compatible)", "Ollama", "LM Studio"] } },
-    { "key": "api_key", "type": "secret", "label": "API key (optional for Custom)",
+    { "key": "api_key", "type": "secret", "label": "API key", "hint": "Optional for Custom",
       "visible_when": { "provider": ["", "Custom (OpenAI-compatible)", "OpenAI", "Anthropic", "OpenRouter", "Google Gemini", "Groq", "Mistral", "DeepSeek", "xAI"] } },
-    { "key": "model", "type": "string", "label": "Default model (users can change it on the Assistant page)" },
+    { "key": "model", "type": "string", "label": "Default model",
+      "hint": "Users can change it on the Assistant page" },
     { "key": "model_choice", "type": "enum", "label": "Model choice", "options": ["Users can choose", "Admin model only"] },
-    { "key": "shelf_enabled", "type": "enum", "label": "Picked for you on Home (suggestions use the model for each active person, about once a day)", "options": ["On", "Off"] },
-    { "key": "shelf_model", "type": "string", "label": "Model for Picked for you (optional; a cheaper model works well, defaults to the model above)" }
+    { "key": "shelf_enabled", "type": "enum", "label": "Picked for you on Home",
+      "hint": "Suggestions use the model for each active person, about once a day",
+      "options": ["On", "Off"] },
+    { "key": "shelf_model", "type": "string", "label": "Model for Picked for you",
+      "hint": "Optional. A cheaper model works well; defaults to the model above" }
   ]
 }
