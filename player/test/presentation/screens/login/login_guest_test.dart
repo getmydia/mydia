@@ -1,6 +1,7 @@
 // A guest add runs the same pairing and login steps as home but stores the
 // result as its own source, leaving home's session and pairing alone.
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,36 @@ class _FakePairing extends PairingService {
     void Function(String status)? onStatusUpdate,
   }) async =>
       PairingResult.success(credentials, isP2PMode: true);
+}
+
+/// Completes only when the test says so.
+class _GatedPairing extends PairingService {
+  _GatedPairing(this.credentials);
+  final PairingCredentials credentials;
+  final gate = Completer<void>();
+
+  @override
+  Future<PairingResult> pairWithClaimCodeOnly({
+    required String claimCode,
+    required String deviceName,
+    String? platform,
+    void Function(String status)? onStatusUpdate,
+  }) async {
+    await gate.future;
+    return PairingResult.success(credentials, isP2PMode: true);
+  }
+}
+
+class _LoginSuccessAuth extends AuthService {
+  _LoginSuccessAuth(MockAuthStorage storage) : super(storage: storage);
+
+  @override
+  Future<LoginOutcome> requestLogin({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async =>
+      const LoginSuccess();
 }
 
 class _FakeDeviceInfo extends DeviceInfoService {
@@ -75,6 +106,7 @@ void main() {
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secrets)),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
+      loginHomeStorageProvider.overrideWithValue(homeStorage),
       if (pairing != null) pairingServiceProvider.overrideWithValue(pairing),
       authServiceProvider
           .overrideWithValue(auth ?? AuthService(storage: homeStorage)),
@@ -106,6 +138,78 @@ void main() {
     expect(await secrets.read('source/minst-2/account_token'), isNotNull);
     expect(homeStorage.keys, isEmpty);
     expect(await homeStorage.read('pairing_access_token'), isNull);
+  });
+
+  test('the save survives the screen going away mid-pairing', () async {
+    final pairing = _GatedPairing(_credentials('inst-2'));
+    final c = containerFor(pairing: pairing);
+    await c.read(sourceRecordsProvider.future);
+    final sub = c.listen(loginControllerProvider, (_, __) {});
+
+    final done = c
+        .read(loginControllerProvider.notifier)
+        .pairWithClaimCode('ABC123', guest: const GuestTarget());
+    // The screen leaves: the only listener goes and the controller, being
+    // autoDispose, would be torn down.
+    sub.close();
+    await Future<void>.delayed(Duration.zero);
+
+    pairing.gate.complete();
+    await done;
+
+    final records = (await store.load()).accounts;
+    expect(records.single.account.id, 'minst-2');
+    expect(await secrets.read('source/minst-2/account_token'), isNotNull);
+  });
+
+  test('a guest add into the home server is refused with a message', () async {
+    await homeStorage.write('instance_id', 'inst-2');
+    final c = containerFor(pairing: _FakePairing(_credentials('inst-2')));
+    await c.read(sourceRecordsProvider.future);
+    final sub = c.listen(loginControllerProvider, (_, __) {});
+    addTearDown(sub.close);
+
+    await c
+        .read(loginControllerProvider.notifier)
+        .pairWithClaimCode('ABC123', guest: const GuestTarget());
+
+    final state = c.read(loginControllerProvider);
+    expect(state.error, 'This is already your home server.');
+    expect(state.success, isFalse);
+    expect((await store.load()).accounts, isEmpty);
+  });
+
+  test('a guest save on storage that cannot persist warns the user', () async {
+    secrets.degradedValue = true;
+    final c = containerFor(pairing: _FakePairing(_credentials('inst-2')));
+    await c.read(sourceRecordsProvider.future);
+    final sub = c.listen(loginControllerProvider, (_, __) {});
+    addTearDown(sub.close);
+
+    await c
+        .read(loginControllerProvider.notifier)
+        .pairWithClaimCode('ABC123', guest: const GuestTarget());
+
+    expect(c.read(loginControllerProvider).credentialsNotPersisted, isTrue);
+  });
+
+  test('an unexpected stored-session outcome ends loading with an error',
+      () async {
+    final c = containerFor(auth: _LoginSuccessAuth(homeStorage));
+    await c.read(sourceRecordsProvider.future);
+    final sub = c.listen(loginControllerProvider, (_, __) {});
+    addTearDown(sub.close);
+
+    await c.read(loginControllerProvider.notifier).login(
+          'https://friend.example',
+          'maya',
+          'pw',
+          guest: const GuestTarget(),
+        );
+
+    final state = c.read(loginControllerProvider);
+    expect(state.isLoading, isFalse);
+    expect(state.error, isNotNull);
   });
 
   test('a guest URL login saves a source from the granted token', () async {

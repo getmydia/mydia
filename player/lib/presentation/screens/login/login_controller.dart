@@ -6,11 +6,14 @@ import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/channels/pairing_service.dart';
 import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
+import '../../../core/auth/auth_storage.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/mydia/guest_mydia_saver.dart';
 import '../../../core/sources/mydia/mydia_guest_credentials.dart';
 import '../../../core/sources/source.dart';
+import '../../../core/sources/sources_providers.dart'
+    show sourceSecretsProvider;
 import '../../../domain/sources/source_error.dart';
 
 // Re-export QrPairingData so UI can import from one place
@@ -92,6 +95,10 @@ enum ClaimCodeStatus {
 final pairingServiceProvider = Provider<PairingService>(
   (ref) => PairingService(p2pService: ref.read(p2pServiceProvider)),
 );
+
+/// Home's own storage, which a guest add reads to refuse home's server.
+final loginHomeStorageProvider =
+    Provider<AuthStorage>((ref) => getAuthStorage());
 
 /// Names this device to the server it pairs with. A provider so tests need
 /// no platform plugin.
@@ -200,7 +207,27 @@ class LoginController extends _$LoginController {
   /// 2. Dial that node over p2p
   /// 3. Submit the claim code and register this device
   /// 4. Store credentials and complete pairing
-  Future<void> pairWithClaimCode(String claimCode, {GuestTarget? guest}) async {
+  Future<void> pairWithClaimCode(String claimCode, {GuestTarget? guest}) =>
+      _keepingAliveForGuest(
+          guest, () => _pairWithClaimCode(claimCode, guest: guest));
+
+  /// A guest add holds this autoDispose controller open until its save is
+  /// done. The server has already used up the one-time claim code or login by
+  /// then, so a screen that leaves mid-way must not drop the credentials.
+  Future<void> _keepingAliveForGuest(
+    GuestTarget? guest,
+    Future<void> Function() run,
+  ) async {
+    final link = guest == null ? null : ref.keepAlive();
+    try {
+      await run();
+    } finally {
+      link?.close();
+    }
+  }
+
+  Future<void> _pairWithClaimCode(String claimCode,
+      {GuestTarget? guest}) async {
     state = state.copyWith(
       isLoading: true,
       error: null,
@@ -354,6 +381,15 @@ class LoginController extends _$LoginController {
     String username,
     String password, {
     GuestTarget? guest,
+  }) =>
+      _keepingAliveForGuest(
+          guest, () => _login(serverUrl, username, password, guest: guest));
+
+  Future<void> _login(
+    String serverUrl,
+    String username,
+    String password, {
+    GuestTarget? guest,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
@@ -373,7 +409,11 @@ class LoginController extends _$LoginController {
           case LoginGranted():
             await _finishGuestLogin(outcome, guest);
           case LoginSuccess():
-            break;
+            // requestLogin never answers this; end loading if it ever does.
+            state = state.copyWith(
+              isLoading: false,
+              error: 'Login failed. Please try again.',
+            );
         }
         return;
       }
@@ -428,7 +468,10 @@ class LoginController extends _$LoginController {
   }
 
   /// Submits the code for a pending [LoginState.totpChallenge].
-  Future<void> submitTotpCode(String code, {GuestTarget? guest}) async {
+  Future<void> submitTotpCode(String code, {GuestTarget? guest}) =>
+      _keepingAliveForGuest(guest, () => _submitTotpCode(code, guest: guest));
+
+  Future<void> _submitTotpCode(String code, {GuestTarget? guest}) async {
     final challenge = state.totpChallenge;
     if (challenge == null) return;
 
@@ -523,11 +566,13 @@ class LoginController extends _$LoginController {
       ref,
       credentials,
       reauthAccountId: guest.reauthAccountId,
+      homeStorage: ref.read(loginHomeStorageProvider),
     );
     if (!ref.mounted) return;
     state = state.copyWith(
       isLoading: false,
       success: true,
+      credentialsNotPersisted: ref.read(sourceSecretsProvider).degraded,
       guestSource: id,
       clearTotpChallenge: true,
       claimCodeStatus: claimCodeStatus,
@@ -552,7 +597,10 @@ class LoginController extends _$LoginController {
   ///
   /// Uses the PairingService to pair using data scanned from a QR code.
   /// The QR code contains the relay URL, instance ID, public key, and claim code.
-  Future<void> pairWithQrCode(QrPairingData qrData,
+  Future<void> pairWithQrCode(QrPairingData qrData, {GuestTarget? guest}) =>
+      _keepingAliveForGuest(guest, () => _pairWithQrCode(qrData, guest: guest));
+
+  Future<void> _pairWithQrCode(QrPairingData qrData,
       {GuestTarget? guest}) async {
     state = state.copyWith(
       isLoading: true,
