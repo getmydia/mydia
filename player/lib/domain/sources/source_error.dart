@@ -6,7 +6,8 @@ enum SourceErrorKind {
   unauthorized,
   notFound,
   unsupported,
-  server
+  server,
+  wrongPin,
 }
 
 class SourceException implements Exception {
@@ -19,6 +20,9 @@ class SourceException implements Exception {
       : this(SourceErrorKind.unsupported, message);
   const SourceException.server(String message)
       : this(SourceErrorKind.server, message);
+
+  /// plex.tv refused a Plex Home user's PIN.
+  const SourceException.wrongPin() : this(SourceErrorKind.wrongPin);
 
   final SourceErrorKind kind;
 
@@ -35,6 +39,7 @@ class SourceException implements Exception {
         SourceErrorKind.unsupported =>
           message ?? 'This server does not support that.',
         SourceErrorKind.server => message ?? 'The server reported an error.',
+        SourceErrorKind.wrongPin => 'That PIN is not right. Try again.',
       };
 
   /// The viewer message: the player screen shows a load failure as

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
 import 'source_nav_list.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
@@ -61,6 +62,12 @@ class SourceSwitcher extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: _Header(
         source: current,
+        // Named only when the account's Plex Home has someone to switch to.
+        homeUser: current.kind == SourceKind.plex &&
+                ref.watch(accountProfilesProvider(current.account.id)).length >
+                    1
+            ? current.profile.name
+            : null,
         onOpen: (anchorContext) => _open(anchorContext, ref, current),
       ),
     );
@@ -87,25 +94,41 @@ class SourceSwitcher extends ConsumerWidget {
         ref.read(selectedSourceIdProvider.notifier).select(source.id);
         (onSwitchSource ?? onNavigate)(
             source.kind == SourceKind.mydia ? '/' : '/s/${source.id.value}');
+      case SwitchUser(:final account):
+        await showPlexHomeSheet(
+          anchorContext,
+          account: account,
+          serverId: current.account.id == account.id ? current.server.id : null,
+          onSwitched: (id) => (onSwitchSource ?? onNavigate)('/s/${id.value}'),
+        );
     }
   }
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.source, required this.onOpen});
+  const _Header({
+    required this.source,
+    required this.homeUser,
+    required this.onOpen,
+  });
 
   final Source source;
+
+  /// The active Plex Home user, when the account has more than one.
+  final String? homeUser;
 
   /// Receives this row's own context, which the picker's popover hangs under.
   final ValueChanged<BuildContext> onOpen;
 
   /// The line under the name, or null when it would only repeat it: Mydia's
   /// display name is already "Mydia".
-  static String? _caption(Source source) {
+  static String? _caption(Source source, String? homeUser) {
     if (source.account.needsReauth) return 'Sign in again';
     return switch (source.kind) {
       SourceKind.mydia => null,
-      SourceKind.plex => 'Plex · ${source.account.displayName}',
+      SourceKind.plex => homeUser == null
+          ? 'Plex · ${source.account.displayName}'
+          : 'Plex · ${source.account.displayName} · $homeUser',
       SourceKind.jellyfin => 'Jellyfin · ${source.account.displayName}',
       SourceKind.stash => 'Stash · ${source.account.displayName}',
     };
@@ -116,7 +139,7 @@ class _Header extends StatelessWidget {
     void open() => onOpen(context);
     final theme = Theme.of(context).textTheme;
     final needsReauth = source.account.needsReauth;
-    final caption = _caption(source);
+    final caption = _caption(source, homeUser);
 
     return Semantics(
         button: true,

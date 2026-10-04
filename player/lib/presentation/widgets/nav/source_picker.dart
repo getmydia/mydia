@@ -34,6 +34,13 @@ final class ManageServers extends PickerChoice {
   const ManageServers();
 }
 
+/// Switch which Plex Home user [account] acts as.
+final class SwitchUser extends PickerChoice {
+  const SwitchUser(this.account);
+
+  final ProviderAccount account;
+}
+
 /// Opens the picker and resolves to the choice, or null when dismissed.
 ///
 /// The narrow layout (the drawer) gets a bottom sheet. Wider layouts get a
@@ -199,6 +206,11 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
 
   void _pick(PickerChoice choice) => Navigator.of(context).pop(choice);
 
+  /// A Plex account whose Home has another user to switch to.
+  bool _hasHomeUsers(ProviderAccount account) =>
+      account.kind == SourceKind.plex &&
+      ref.watch(accountProfilesProvider(account.id)).length > 1;
+
   @override
   Widget build(BuildContext context) {
     final sources = ref.watch(switchableSourcesProvider);
@@ -221,6 +233,16 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                   focusNode:
                       source.id == widget.currentId ? _currentNode : null,
                   onTap: () => _pick(PickSource(source)),
+                ),
+              if (_hasHomeUsers(group.first.account))
+                SidebarRow(
+                  key: ValueKey(
+                      'source-switcher-switch-user-${group.first.account.id}'),
+                  icon: Icons.switch_account_rounded,
+                  selectedIcon: Icons.switch_account_rounded,
+                  label: 'Switch user (${group.first.profile.name})',
+                  isSelected: false,
+                  onTap: () => _pick(SwitchUser(group.first.account)),
                 ),
             ],
             if (!kIsWeb) ...[

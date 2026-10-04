@@ -129,6 +129,34 @@ void main() {
     expect(find.text('Plex · someone@example.test'), findsOneWidget);
   });
 
+  testWidgets('a Plex Home with other users names the active one',
+      (tester) async {
+    final calls = _Calls();
+    final container = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(_FixedAuth.new),
+      thirdPartySourcesProvider.overrideWithValue([_plex()]),
+      accountProfilesProvider('acc1').overrideWithValue(const [
+        SourceProfile(
+            id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
+        SourceProfile(
+            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      ]),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(
+          body: SourceSwitcher(
+            location: '/s/acc1:owner:srv9',
+            onNavigate: calls.navigations.add,
+          ),
+        ),
+      ),
+    ));
+    expect(find.text('Plex · someone@example.test · Owner'), findsOneWidget);
+  });
+
   testWidgets('the header is announced as a button naming the server',
       (tester) async {
     await _pump(tester, thirdParty: [_plex()]);

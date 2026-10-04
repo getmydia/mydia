@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
@@ -45,6 +46,29 @@ void main() {
     expect((await store.load()).accounts, isEmpty);
     expect(find.text('quill'), findsNothing);
     expect(await storage.read('source/acc1/account_token'), isNull);
+  });
+
+  testWidgets('offers Switch user only for a Plex account with Home users',
+      (tester) async {
+    final store = InMemorySourceStore();
+    await store.putAccount(plexRecord().copyWith(profiles: const [
+      SourceProfile(
+          id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+      SourceProfile(
+          id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+    ]));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Authenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: const MaterialApp(
+          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manage-switch-user-acc1')), findsOneWidget);
   });
 
   testWidgets('labels a Jellyfin account as a Jellyfin user', (tester) async {

@@ -49,6 +49,7 @@ Future<List<PickerChoice?>> _open(
   SourceId currentId = SourceId.legacyMydia,
   Size size = const Size(800, 600),
   Map<SourceId, FakeMediaSource> fakes = const {},
+  List<SourceProfile> profiles = const [],
 }) async {
   // `size` is a logical size, so pin the pixel ratio; the default of 3 would
   // make every layout here a phone.
@@ -63,6 +64,11 @@ Future<List<PickerChoice?>> _open(
       for (final s in sources)
         mediaSourceProvider(s.id)
             .overrideWithValue(fakes[s.id] ?? FakeMediaSource()),
+      for (final account in {for (final s in sources) s.account.id})
+        accountProfilesProvider(account).overrideWithValue([
+          for (final p in profiles)
+            if (p.accountId == account) p
+        ]),
     ],
     child: MaterialApp(
       home: Scaffold(
@@ -121,6 +127,30 @@ void main() {
     expect((results.single! as PickSource).source.id,
         const SourceId('acc1:owner:aa11'));
     expect(find.byKey(const ValueKey('source-picker')), findsNothing);
+  });
+
+  testWidgets('a Plex Home with other users offers Switch user',
+      (tester) async {
+    final results = await _open(tester, [
+      _source('acc1', 'aa11'),
+      _source('acc2', 'bb22'),
+    ], profiles: const [
+      SourceProfile(
+          id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+      SourceProfile(
+          id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      SourceProfile(
+          id: 'owner', accountId: 'acc2', name: 'Wren', isOwner: true),
+    ]);
+    final switchUser =
+        find.byKey(const ValueKey('source-switcher-switch-user-acc1'));
+    expect(switchUser, findsOneWidget);
+    expect(find.byKey(const ValueKey('source-switcher-switch-user-acc2')),
+        findsNothing,
+        reason: 'a Home of one has nobody to switch to');
+    await tester.tap(switchUser);
+    await tester.pumpAndSettle();
+    expect((results.single! as SwitchUser).account.id, 'acc1');
   });
 
   testWidgets('add and manage return their own choices', (tester) async {

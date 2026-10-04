@@ -114,4 +114,42 @@ void main() {
     expect(record.account.needsReauth, isTrue);
     expect(record.servers.single.name, 'Renamed');
   });
+
+  test('updateRecord replaces the record inside the write queue', () async {
+    await store.putAccount(plexRecord());
+    await container.read(sourceRecordsProvider.future);
+    final notifier = container.read(sourceRecordsProvider.notifier);
+
+    final updated = notifier.updateRecord('acc1', (current) async {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      return current.copyWith(
+          account: current.account.copyWith(displayName: 'renamed'));
+    });
+    // Queued behind updateRecord: must see its result, not the old record.
+    final later = notifier.updateServers(
+        'acc1', (servers) => [for (final s in servers) s.copyWith(name: 'X')]);
+    expect((await updated)!.account.displayName, 'renamed');
+    await later;
+
+    final record = (await store.load()).accounts.single;
+    expect(record.account.displayName, 'renamed');
+    expect(record.servers.single.name, 'X');
+  });
+
+  test('updateRecord writes nothing for an unknown account or a null',
+      () async {
+    await store.putAccount(plexRecord());
+    await container.read(sourceRecordsProvider.future);
+    final notifier = container.read(sourceRecordsProvider.notifier);
+    expect(await notifier.updateRecord('nope', (c) async => c), isNull);
+    expect(await notifier.updateRecord('acc1', (c) async => null), isNull);
+    expect((await store.load()).accounts.single.account.displayName, 'quill');
+  });
+
+  test('accountProfilesProvider lists an account profiles', () async {
+    await store.putAccount(plexRecord());
+    await container.read(sourceRecordsProvider.future);
+    expect(container.read(accountProfilesProvider('acc1')).single.id, 'owner');
+    expect(container.read(accountProfilesProvider('nope')), isEmpty);
+  });
 }
