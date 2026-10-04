@@ -1,177 +1,204 @@
-/// Lists the viewer's servers in the sidebar once there is more than one.
+/// The sidebar's server header, shown once there is more than one source.
+///
+/// One row naming the server the page on screen belongs to. It used to list
+/// every server with Add and Manage permanently above the nav, which cost
+/// most of a phone's drawer and made it hard to tell which server the nav
+/// below belonged to. The list now lives in the picker the header opens.
 library;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
-import 'sidebar_row.dart';
+import '../focus_highlight.dart';
+import 'source_nav_list.dart' show sourceIdFromLocation;
+import 'source_picker.dart';
 
 class SourceSwitcher extends ConsumerWidget {
-  const SourceSwitcher({super.key, required this.onNavigate});
+  const SourceSwitcher({
+    super.key,
+    required this.location,
+    required this.onNavigate,
+    this.onSwitchSource,
+  });
 
+  final String location;
+
+  /// Add, Manage and re-auth go here.
   final ValueChanged<String> onNavigate;
+
+  /// Switching servers goes here, falling back to [onNavigate]. The mobile
+  /// drawer passes a callback that leaves the drawer open, so the viewer
+  /// sees the nav change under the new header.
+  final ValueChanged<String>? onSwitchSource;
+
+  /// The source the header names: the one in a `/s/<id>` location,
+  /// otherwise Mydia, whose screens are every other location. The remembered
+  /// pick only decides when Mydia is absent, on screens such as
+  /// `/sources/manage`.
+  static Source currentFor(
+    List<Source> sources,
+    String location,
+    SourceId? active,
+  ) {
+    final fromLocation = sourceIdFromLocation(location);
+    return sources.where((s) => s.id.value == fromLocation).firstOrNull ??
+        sources.where((s) => s.kind == SourceKind.mydia).firstOrNull ??
+        sources.where((s) => s.id == active).firstOrNull ??
+        sources.first;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(switchableSourcesProvider);
     if (sources.isEmpty) return const SizedBox.shrink();
-    final active = ref.watch(activeSourceIdProvider);
+    final current =
+        currentFor(sources, location, ref.watch(activeSourceIdProvider));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final group in _groupByAccount(sources)) ...[
-            if (group.first.kind != SourceKind.mydia)
-              _AccountCaption(account: group.first.account),
-            for (final source in group)
-              _SourceRow(
-                source: source,
-                isSelected: source.id == active,
-                onNavigate: onNavigate,
-              ),
-          ],
-          if (!kIsWeb) ...[
-            SidebarRow(
-              key: const ValueKey('source-switcher-add'),
-              icon: Icons.add_rounded,
-              selectedIcon: Icons.add_rounded,
-              label: 'Add server',
-              isSelected: false,
-              onTap: () => onNavigate('/sources/add'),
-            ),
-            SidebarRow(
-              key: const ValueKey('source-switcher-manage'),
-              icon: Icons.tune_rounded,
-              selectedIcon: Icons.tune_rounded,
-              label: 'Manage servers',
-              isSelected: false,
-              onTap: () => onNavigate('/sources/manage'),
-            ),
-          ],
-        ],
+      child: _Header(
+        source: current,
+        onOpen: (anchorContext) => _open(anchorContext, ref, current),
       ),
     );
   }
 
-  /// Sources grouped by account, in the order each account first appears.
-  static List<List<Source>> _groupByAccount(List<Source> sources) {
-    final groups = <String, List<Source>>{};
-    for (final source in sources) {
-      groups.putIfAbsent(source.account.id, () => []).add(source);
+  Future<void> _open(
+    BuildContext anchorContext,
+    WidgetRef ref,
+    Source current,
+  ) async {
+    final choice = await showSourcePicker(anchorContext, currentId: current.id);
+    // The header outlives the picker in practice, but `ref` is dead once it
+    // unmounts and the analyzer cannot see that.
+    if (choice == null || !anchorContext.mounted) return;
+    switch (choice) {
+      case AddServer():
+        onNavigate('/sources/add');
+      case ManageServers():
+        onNavigate('/sources/manage');
+      case PickSource(:final source) when source.account.needsReauth:
+        onNavigate('/sources/add/${source.kind.name}'
+            '?account=${source.account.id}');
+      case PickSource(:final source):
+        ref.read(selectedSourceIdProvider.notifier).select(source.id);
+        (onSwitchSource ?? onNavigate)(
+            source.kind == SourceKind.mydia ? '/' : '/s/${source.id.value}');
     }
-    return groups.values.toList();
-  }
-
-  static IconData _iconFor(SourceKind kind) => switch (kind) {
-        SourceKind.mydia => Icons.dns_rounded,
-        SourceKind.plex => Icons.live_tv_rounded,
-        SourceKind.stash => Icons.video_library_rounded,
-        SourceKind.jellyfin => Icons.smart_display_rounded,
-      };
-}
-
-class _AccountCaption extends StatelessWidget {
-  const _AccountCaption({required this.account});
-
-  final ProviderAccount account;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      key: ValueKey('source-switcher-account-${account.id}'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-      child: Text(
-        account.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: AppColors.textSecondary),
-      ),
-    );
   }
 }
 
-class _SourceRow extends ConsumerWidget {
-  const _SourceRow({
-    required this.source,
-    required this.isSelected,
-    required this.onNavigate,
-  });
+class _Header extends StatelessWidget {
+  const _Header({required this.source, required this.onOpen});
 
   final Source source;
-  final bool isSelected;
-  final ValueChanged<String> onNavigate;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(mediaSourceProvider(source.id))?.statusListenable;
-    final needsReauth = source.account.needsReauth;
-    Widget row(SourceConnectionStatus? current) {
-      final dim = !source.server.presence ||
-          current == SourceConnectionStatus.unreachable;
-      return Opacity(
-        opacity: dim ? 0.5 : 1,
-        child: SidebarRow(
-          key: ValueKey('source-switcher-${source.id.value}'),
-          icon: SourceSwitcher._iconFor(source.kind),
-          selectedIcon: SourceSwitcher._iconFor(source.kind),
-          label: needsReauth
-              ? '${source.displayName} (sign in again)'
-              : source.displayName,
-          isSelected: isSelected,
-          badge: current == null ? null : _StatusDot(current),
-          onTap: () {
-            if (needsReauth) {
-              onNavigate('/sources/add/${source.kind.name}'
-                  '?account=${source.account.id}');
-              return;
-            }
-            ref.read(selectedSourceIdProvider.notifier).select(source.id);
-            onNavigate(source.kind == SourceKind.mydia
-                ? '/'
-                : '/s/${source.id.value}');
-          },
-        ),
-      );
-    }
+  /// Receives this row's own context, which the picker's popover hangs under.
+  final ValueChanged<BuildContext> onOpen;
 
-    if (status == null) return row(null);
-    return ValueListenableBuilder(
-      valueListenable: status,
-      builder: (context, current, _) => row(current),
-    );
+  static String _caption(Source source) {
+    if (source.account.needsReauth) return 'Sign in again';
+    return switch (source.kind) {
+      SourceKind.mydia => 'Mydia',
+      SourceKind.plex => 'Plex · ${source.account.displayName}',
+      SourceKind.jellyfin => 'Jellyfin · ${source.account.displayName}',
+      SourceKind.stash => 'Stash · ${source.account.displayName}',
+    };
   }
-}
-
-class _StatusDot extends StatelessWidget {
-  const _StatusDot(this.status);
-
-  final SourceConnectionStatus status;
 
   @override
   Widget build(BuildContext context) {
-    final (color, label) = switch (status) {
-      SourceConnectionStatus.local => (AppColors.success, 'Local'),
-      SourceConnectionStatus.remote => (AppColors.success, 'Remote'),
-      SourceConnectionStatus.relay => (AppColors.warning, 'Relay'),
-      SourceConnectionStatus.connecting => (AppColors.info, 'Connecting'),
-      SourceConnectionStatus.unreachable => (AppColors.error, 'Unreachable'),
-    };
-    return Tooltip(
-      message: label,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    void open() => onOpen(context);
+    final theme = Theme.of(context).textTheme;
+    final needsReauth = source.account.needsReauth;
+
+    return FocusHighlight(
+      key: const ValueKey('source-switcher-header'),
+      onActivate: open,
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: open,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              border:
+                  Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+            ),
+            child: Row(
+              children: [
+                SourceStatusBuilder(
+                  sourceId: source.id,
+                  builder: (context, status) => Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        sourceKindIcon(source.kind),
+                        size: 22,
+                        color: AppColors.primary,
+                      ),
+                      if (needsReauth)
+                        const Positioned(
+                          top: -4,
+                          right: -4,
+                          child: Icon(
+                            Icons.error_rounded,
+                            size: 12,
+                            color: AppColors.warning,
+                          ),
+                        )
+                      else if (status != null)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: SourceStatusDot(status),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        source.displayName,
+                        key: const ValueKey('source-switcher-header-name'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        _caption(source),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.labelSmall?.copyWith(
+                          color: needsReauth
+                              ? AppColors.warningText
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.unfold_more_rounded,
+                  size: 20,
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
