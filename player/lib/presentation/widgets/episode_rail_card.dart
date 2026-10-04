@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/cache/poster_cache_manager.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
-import '../../domain/models/episode.dart';
+import '../../domain/detail/detail_art.dart';
+import '../../domain/detail/detail_views.dart';
 import '../../domain/models/watch_status.dart';
-import '../screens/show/season_episodes_controller.dart';
-import 'artwork_image.dart';
+import '../screens/detail/detail_actions.dart';
+import 'detail_art_image.dart';
 import 'episode_download_button.dart';
 import 'focus_highlight.dart';
 import 'toast/toaster.dart';
@@ -23,16 +22,17 @@ import 'watch_indicator.dart';
 ///
 /// Episodes without a playable file render dimmed with an "unavailable" badge
 /// and are not tappable.
-class EpisodeRailCard extends ConsumerStatefulWidget {
-  final Episode episode;
-  final String showTitle;
-  final String? showId;
-  final String? showPosterUrl;
+class EpisodeRailCard extends StatefulWidget {
+  final EpisodeView episode;
   final bool selected;
 
   /// Invoked when a playable card is tapped. Ignored (and not wired) when the
   /// episode has no file.
   final VoidCallback? onTap;
+
+  /// Reports a watched-menu choice. Null hides the menu, for a server that
+  /// cannot record watched state.
+  final Future<void> Function(EpisodeWatchedAction)? onWatchedAction;
 
   /// Finder handle for the hover preview of the selection ring.
   static const selectionPreviewKey = ValueKey('episode-card-selection-preview');
@@ -40,21 +40,19 @@ class EpisodeRailCard extends ConsumerStatefulWidget {
   const EpisodeRailCard({
     super.key,
     required this.episode,
-    required this.showTitle,
-    this.showId,
-    this.showPosterUrl,
     this.selected = false,
     this.onTap,
+    this.onWatchedAction,
   });
 
   @override
-  ConsumerState<EpisodeRailCard> createState() => _EpisodeRailCardState();
+  State<EpisodeRailCard> createState() => _EpisodeRailCardState();
 }
 
-class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
+class _EpisodeRailCardState extends State<EpisodeRailCard> {
   bool _isHovered = false;
 
-  Episode get _episode => widget.episode;
+  EpisodeView get _episode => widget.episode;
 
   @override
   Widget build(BuildContext context) {
@@ -150,17 +148,12 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
             children: [
               // Thumbnail image (16:9 fills the card).
               Positioned.fill(
-                child: _episode.thumbnailUrl != null
-                    ? ArtworkImage(
-                        imageUrl: _episode.thumbnailUrl!,
-                        fit: BoxFit.cover,
-                        cacheManager: EpisodeThumbnailCacheManager(),
-                        placeholder: (context) => Container(
-                          color: AppColors.surfaceVariant,
-                        ),
-                        errorWidget: (context) => _buildPlaceholder(),
-                      )
-                    : _buildPlaceholder(),
+                child: DetailArtImage(
+                  art: _episode.still,
+                  slot: ArtSlot.still,
+                  placeholder: (_) => _buildPlaceholder(),
+                  errorWidget: (_) => _buildPlaceholder(),
+                ),
               ),
 
               // Hover preview of the selection ring. The tap selects this
@@ -274,20 +267,24 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
   }
 
   Widget _buildActions(BuildContext context) {
-    // The watched menu renders independently of download support (e.g. Flutter
-    // web, where downloads are unavailable) as long as we know which
-    // season-scoped controller to dispatch to.
-    final showWatchedMenu = widget.showId != null;
-
+    // The download button needs the Mydia episode; other servers have none.
+    // The watched menu renders independently of it, whenever the screen
+    // supplied a callback.
+    final mydia = _episode.mydia;
     final actions = <Widget>[
-      EpisodeDownloadButton(
-        episode: _episode,
-        showTitle: widget.showTitle,
-        showId: widget.showId,
-        showPosterUrl: widget.showPosterUrl,
-      ),
-      if (showWatchedMenu) _buildWatchedMenu(context),
+      if (mydia != null && _episode.features.contains(DetailFeature.download))
+        EpisodeDownloadButton(
+          episode: mydia,
+          showTitle: _episode.showTitle,
+          showId: _episode.showTarget?.id,
+          showPosterUrl: switch (_episode.showPoster) {
+            UrlArt(:final url) => url,
+            _ => null,
+          },
+        ),
+      if (widget.onWatchedAction != null) _buildWatchedMenu(context),
     ];
+    if (actions.isEmpty) return const SizedBox.shrink();
 
     return Container(
       decoration: BoxDecoration(
@@ -353,28 +350,16 @@ class _EpisodeRailCardState extends ConsumerState<EpisodeRailCard> {
   }
 
   Future<void> _handleWatchedAction(String value) async {
-    final showId = widget.showId;
-    if (showId == null) return;
-
-    final controller = ref.read(
-      seasonEpisodesControllerProvider(
-        showId: showId,
-        seasonNumber: _episode.seasonNumber,
-      ).notifier,
-    );
+    final callback = widget.onWatchedAction;
+    if (callback == null) return;
+    final action = switch (value) {
+      'watched' => EpisodeWatchedAction.watched,
+      'unwatched' => EpisodeWatchedAction.unwatched,
+      _ => EpisodeWatchedAction.thisAndPrevious,
+    };
 
     try {
-      switch (value) {
-        case 'watched':
-          await controller.markEpisodeWatched(_episode);
-          break;
-        case 'unwatched':
-          await controller.markEpisodeUnwatched(_episode);
-          break;
-        case 'this_and_previous':
-          await controller.markThisAndPreviousWatched(_episode);
-          break;
-      }
+      await callback(action);
     } catch (_) {
       if (mounted) {
         showToast(

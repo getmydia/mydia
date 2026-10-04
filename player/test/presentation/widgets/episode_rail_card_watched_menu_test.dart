@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
+import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 
 Episode _episode({required bool? watched}) {
@@ -31,9 +32,8 @@ Future<void> _pumpCard(WidgetTester tester, Episode episode) async {
       child: MaterialApp(
         home: Scaffold(
           body: EpisodeRailCard(
-            episode: episode,
-            showTitle: 'Test Show',
-            showId: 'show-1',
+            episode: episodeViewFromMydia(episode, show: null),
+            onWatchedAction: (_) async {},
           ),
         ),
       ),

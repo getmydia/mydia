@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/episode.dart';
+import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 
@@ -26,8 +28,7 @@ List<Episode> _episodes(int count, {bool hasFile = true}) =>
 Future<void> _pump(
   WidgetTester tester,
   List<Episode> episodes, {
-  String? showId = 'show-1',
-  ValueChanged<Episode>? onEpisodeTap,
+  ValueChanged<EpisodeView>? onEpisodeTap,
 }) async {
   await mockNetworkImages(() async {
     await tester.pumpWidget(
@@ -39,9 +40,9 @@ Future<void> _pump(
         child: MaterialApp(
           home: Scaffold(
             body: EpisodeRail(
-              episodes: episodes,
-              showTitle: 'Test Show',
-              showId: showId,
+              episodes: [
+                for (final e in episodes) episodeViewFromMydia(e, show: null),
+              ],
               onEpisodeTap: onEpisodeTap,
             ),
           ),
@@ -71,7 +72,7 @@ void main() {
 
   testWidgets('shows the right fade and hides the left fade at offset 0',
       (tester) async {
-    await _pump(tester, _episodes(20, hasFile: false), showId: null);
+    await _pump(tester, _episodes(20, hasFile: false));
 
     // At rest (offset 0) only the right-edge fade is shown.
     expect(
@@ -88,7 +89,7 @@ void main() {
       (tester) async {
     // A single card cannot overflow the default 800px test surface, so there
     // is nothing to scroll to and neither edge should be faded.
-    await _pump(tester, _episodes(1, hasFile: false), showId: null);
+    await _pump(tester, _episodes(1, hasFile: false));
 
     expect(
       find.byKey(const ValueKey('episode-rail-right-fade')),
@@ -101,7 +102,7 @@ void main() {
   });
 
   testWidgets('tapping a card forwards the correct episode', (tester) async {
-    Episode? tapped;
+    EpisodeView? tapped;
     await _pump(tester, _episodes(3), onEpisodeTap: (e) => tapped = e);
 
     await tester.tap(find.byKey(const ValueKey('ep-1')));

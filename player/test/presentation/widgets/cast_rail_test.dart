@@ -2,7 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/cast_member.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 
 Widget _host(Widget child) => ProviderScope(
@@ -21,8 +21,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_host(const CastRail(
       members: [
-        CastMember(name: 'Ana Bergström', character: 'Kira Solt'),
-        CastMember(name: 'Marcus Ijeoma', character: 'Deck Chief Reyes'),
+        CastView(name: 'Ana Bergström', character: 'Kira Solt'),
+        CastView(name: 'Marcus Ijeoma', character: 'Deck Chief Reyes'),
       ],
     )));
 
@@ -35,7 +35,7 @@ void main() {
   testWidgets('falls back to a person icon when there is no profile photo',
       (tester) async {
     await tester.pumpWidget(_host(const CastRail(
-      members: [CastMember(name: 'Ana Bergström')],
+      members: [CastView(name: 'Ana Bergström')],
     )));
 
     expect(find.byIcon(Icons.person_rounded), findsOneWidget);
@@ -45,7 +45,7 @@ void main() {
     await tester.pumpWidget(_host(CastRail(
       members: List.generate(
         20,
-        (i) => CastMember(name: 'Actor $i', character: 'Role $i'),
+        (i) => CastView(name: 'Actor $i', character: 'Role $i'),
       ),
     )));
 

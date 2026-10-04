@@ -1,24 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../widgets/artwork_image.dart';
-import '../../../core/cache/artwork_decode.dart';
-import '../../../core/cache/poster_cache_manager.dart';
+import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import 'movie_detail_controller.dart';
 import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/freshness_header.dart';
-import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
-import '../../../core/downloads/download_job_providers.dart';
-import '../../../core/graphql/watch/query_key.dart';
-import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/movie_detail.dart';
+import '../../../domain/detail/detail_target.dart';
+import '../../../domain/detail/detail_views.dart';
+import '../detail/detail_links.dart';
+import '../detail/detail_providers.dart';
+import '../detail/detail_similar_rail.dart';
+import '../detail/mydia_downloads.dart';
 import '../../widgets/cast_rail.dart';
-import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
@@ -31,16 +28,16 @@ import '../../widgets/toast/toaster.dart';
 const double _kHeroBreakpoint = 700;
 
 class MovieDetailScreen extends ConsumerWidget {
-  final String id;
+  MovieDetailScreen({super.key, required String id})
+      : target = MydiaTarget(DetailKind.movie, id);
 
-  const MovieDetailScreen({
-    super.key,
-    required this.id,
-  });
+  const MovieDetailScreen.target({super.key, required this.target});
+
+  final DetailTarget target;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final movieAsync = ref.watch(movieDetailControllerProvider(id));
+    final movieAsync = ref.watch(movieViewProvider(target));
 
     // This is a full-window route (pushed outside the shell), and so the sole
     // owner of the title-bar band here: the body has to sit under
@@ -52,7 +49,7 @@ class MovieDetailScreen extends ConsumerWidget {
         body: Column(
           children: [
             FreshnessHeader(
-              queryKeys: [QueryKeys.movieDetail(id)],
+              queryKeys: freshnessKeys(target),
               topInset: freshnessTopInset(context, appBarHeight: 0),
             ),
             Expanded(
@@ -75,7 +72,7 @@ class MovieDetailScreen extends ConsumerWidget {
   ) async {
     try {
       await ref
-          .read(movieDetailControllerProvider(id).notifier)
+          .read(movieActionsProvider(target))
           .setWatched(!currentlyWatched);
     } catch (_) {
       if (context.mounted) {
@@ -213,9 +210,8 @@ class MovieDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: () => ref
-                        .read(movieDetailControllerProvider(id).notifier)
-                        .refresh(),
+                    onPressed: () =>
+                        ref.read(movieActionsProvider(target)).refresh(),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try Again'),
                     style: FilledButton.styleFrom(
@@ -234,7 +230,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, MovieDetail movie) {
+  Widget _buildContent(BuildContext context, WidgetRef ref, MovieView movie) {
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, movie),
@@ -278,18 +274,7 @@ class MovieDetailScreen extends ConsumerWidget {
             child: CastRail(members: movie.cast),
           ),
         ),
-        if (movie.similar.isNotEmpty)
-          SliverToBoxAdapter(
-            child: ContentRail(
-              title: 'Similar in your library',
-              items: movie.similar,
-              onItemTap: (id, type) {
-                context.push(
-                  type.toLowerCase() == 'movie' ? '/movie/$id' : '/show/$id',
-                );
-              },
-            ),
-          ),
+        SliverToBoxAdapter(child: DetailSimilarRail(movie: movie)),
         const SliverDockGap(),
       ],
     );
@@ -298,32 +283,44 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildActionColumn(
     BuildContext context,
     WidgetRef ref,
-    MovieDetail movie, {
+    MovieView movie, {
     required bool compact,
   }) {
+    final mydia = movie.mydia;
+    final canDownload = isDownloadSupported &&
+        mydia != null &&
+        movie.features.contains(DetailFeature.download) &&
+        movie.files.isNotEmpty;
     return DetailActionRow(
       compact: compact,
       watched: movie.isWatched,
+      showWatched: movie.features.contains(DetailFeature.watched),
       onToggleWatched: () => _toggleWatched(context, ref, movie.isWatched),
       isFavorite: movie.isFavorite,
+      showFavorite: movie.features.contains(DetailFeature.favorite),
       onToggleFavorite: () =>
-          ref.read(movieDetailControllerProvider(id).notifier).toggleFavorite(),
-      onDownload: () => _startDownload(context, ref, movie),
+          ref.read(movieActionsProvider(target)).toggleFavorite(),
+      onDownload: canDownload
+          ? () => startMydiaMovieDownload(context, ref, mydia)
+          : null,
       trailerUrl: movie.trailerUrl,
-      showDownload: isDownloadSupported && movie.files.isNotEmpty,
-      isDownloaded:
-          ref.watch(isMediaDownloadedProvider(movie.id)).value ?? false,
-      onShowMediaInfo: movie.files.isEmpty
+      showDownload: canDownload,
+      isDownloaded: mydia == null
+          ? false
+          : ref.watch(isMediaDownloadedProvider(mydia.id)).value ?? false,
+      onShowMediaInfo: mydia == null ||
+              !movie.features.contains(DetailFeature.mediaInfo) ||
+              movie.files.isEmpty
           ? null
           : () => showMediaInfo(
                 context: context,
-                id: movie.id,
+                id: mydia.id,
                 target: MediaInfoTarget.movie,
               ),
     );
   }
 
-  Widget _buildTagColumn(BuildContext context, MovieDetail movie) {
+  Widget _buildTagColumn(BuildContext context, MovieView movie) {
     final tags = <String>[
       if (movie.runtimeDisplay.isNotEmpty) movie.runtimeDisplay,
       if (movie.files.isNotEmpty && movie.files.first.resolution != null)
@@ -402,7 +399,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildProgressBar(BuildContext context, MovieDetail movie) {
+  Widget _buildProgressBar(BuildContext context, MovieView movie) {
     final progress = movie.progress!;
     final percentage = progress.percentage / 100;
     final remaining = progress.durationSeconds != null
@@ -445,7 +442,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, MovieDetail movie) {
+  Widget _buildHeroSection(BuildContext context, MovieView movie) {
     return detailHeroAppBar(
       context: context,
       expandedHeight: 380,
@@ -453,24 +450,12 @@ class MovieDetailScreen extends ConsumerWidget {
       background: Stack(
         fit: StackFit.expand,
         children: [
-          if (movie.artwork.backdropUrl != null)
-            ArtworkImage(
-              imageUrl: movie.artwork.backdropUrl!,
-              fit: BoxFit.cover,
-              cacheManager: BackdropCacheManager(),
-              decodeWidth: viewportDecodeWidth(
-                context,
-                sourceWidth: backdropSourceWidth,
-              ),
-              placeholder: (context) => Container(
-                color: AppColors.surface,
-              ),
-              errorWidget: (context) => Container(
-                color: AppColors.surface,
-              ),
-            )
-          else
-            Container(color: AppColors.surface),
+          DetailArtImage(
+            art: movie.backdrop,
+            slot: ArtSlot.backdrop,
+            placeholder: (_) => Container(color: AppColors.surface),
+            errorWidget: (_) => Container(color: AppColors.surface),
+          ),
           // Gradient overlay
           Container(
             decoration: BoxDecoration(
@@ -544,106 +529,10 @@ class MovieDetailScreen extends ConsumerWidget {
   /// in this file) for readability: the overlay `Row` it lives in is already
   /// deeply nested inside the `background` `Stack` passed to
   /// `detailHeroAppBar`.
-  Widget _buildHeroPlayControl(BuildContext context, MovieDetail movie) {
+  Widget _buildHeroPlayControl(BuildContext context, MovieView movie) {
     return HeroPlayControl(
       files: movie.files,
-      onFileSelected: (file) => context.push(
-        '/player/movie/${movie.id}?fileId=${file.id}'
-        '&title=${Uri.encodeComponent(movie.title)}',
-      ),
+      onFileSelected: (file) => context.push(moviePlayerLocation(movie, file)),
     );
-  }
-
-  Future<void> _startDownload(
-    BuildContext context,
-    WidgetRef ref,
-    MovieDetail movie,
-  ) async {
-    final isDownloadedAsync = ref.read(isMediaDownloadedProvider(movie.id));
-    final isDownloaded = isDownloadedAsync.value ?? false;
-    final hasFiles = movie.files.isNotEmpty;
-    if (!hasFiles) return;
-
-    if (isDownloaded) {
-      if (context.mounted) {
-        showToast(context, 'Already downloaded');
-      }
-    } else {
-      final selectedResolution = await showQualityDownloadDialog(
-        context,
-        contentType: 'movie',
-        contentId: movie.id,
-        title: movie.title,
-      );
-
-      if (selectedResolution != null && context.mounted) {
-        final downloadService = ref.read(unifiedDownloadJobServiceProvider);
-        final downloadManager = await ref.read(downloadManagerProvider.future);
-
-        if (downloadService != null) {
-          try {
-            await downloadManager.startProgressiveDownload(
-              mediaId: movie.id,
-              title: movie.title,
-              contentType: 'movie',
-              resolution: selectedResolution,
-              mediaType: MediaType.movie,
-              posterUrl: movie.artwork.posterUrl,
-              overview: movie.overview,
-              runtime: movie.runtime,
-              genres: movie.genres,
-              rating: movie.rating,
-              backdropUrl: movie.artwork.backdropUrl,
-              year: movie.year,
-              contentRating: movie.contentRating,
-              getDownloadUrl: (jobId) async {
-                return await downloadService.getDownloadUrl(jobId);
-              },
-              prepareDownload: () async {
-                final status = await downloadService.prepareDownload(
-                  contentType: 'movie',
-                  id: movie.id,
-                  resolution: selectedResolution,
-                );
-                return (
-                  jobId: status.jobId,
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                );
-              },
-              getJobStatus: (jobId) async {
-                final status = await downloadService.getJobStatus(jobId);
-                return (
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                  error: status.error,
-                );
-              },
-              cancelJob: (jobId) async {
-                await downloadService.cancelJob(jobId);
-              },
-            );
-
-            if (context.mounted) {
-              showToast(
-                context,
-                'Download started',
-                kind: ToastKind.success,
-              );
-            }
-          } catch (e) {
-            if (context.mounted) {
-              showToast(
-                context,
-                'Failed to start download: $e',
-                kind: ToastKind.error,
-              );
-            }
-          }
-        }
-      }
-    }
   }
 }

@@ -168,20 +168,17 @@ void main() {
     // header, not the error message body, is under test).
     final cases = <String, Widget Function(BuildContext, WidgetRef)>{
       'MovieDetailScreen loading': (context, ref) =>
-          const MovieDetailScreen(id: 'm1').loadingStateForTest(context),
+          MovieDetailScreen(id: 'm1').loadingStateForTest(context),
       'MovieDetailScreen error': (context, ref) =>
-          const MovieDetailScreen(id: 'm1')
-              .errorStateForTest(context, ref, 'boom'),
+          MovieDetailScreen(id: 'm1').errorStateForTest(context, ref, 'boom'),
       'ShowDetailScreen loading': (context, ref) =>
-          const ShowDetailScreen(id: 's1').loadingStateForTest(context),
+          ShowDetailScreen(id: 's1').loadingStateForTest(context),
       'ShowDetailScreen error': (context, ref) =>
-          const ShowDetailScreen(id: 's1')
-              .errorStateForTest(context, ref, 'boom'),
+          ShowDetailScreen(id: 's1').errorStateForTest(context, ref, 'boom'),
       'EpisodeDetailScreen loading': (context, ref) =>
-          const EpisodeDetailScreen(id: 'e1').loadingStateForTest(context),
+          EpisodeDetailScreen(id: 'e1').loadingStateForTest(context),
       'EpisodeDetailScreen error': (context, ref) =>
-          const EpisodeDetailScreen(id: 'e1')
-              .errorStateForTest(context, ref, 'boom'),
+          EpisodeDetailScreen(id: 'e1').errorStateForTest(context, ref, 'boom'),
     };
 
     for (final MapEntry(key: name, value: builder) in cases.entries) {

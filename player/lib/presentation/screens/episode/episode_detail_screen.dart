@@ -1,37 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../widgets/artwork_image.dart';
-import '../../../core/cache/artwork_decode.dart';
-import '../../../core/cache/poster_cache_manager.dart';
+import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import 'episode_detail_controller.dart';
-import '../../../domain/models/episode_detail.dart';
+import '../detail/detail_links.dart';
+import '../detail/detail_providers.dart';
+import '../detail/mydia_downloads.dart';
+import '../../../domain/detail/detail_target.dart';
+import '../../../domain/detail/detail_views.dart';
 import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/freshness_header.dart';
-import '../../widgets/quality_download_dialog.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/downloads/download_providers.dart';
-import '../../../core/downloads/download_job_providers.dart';
-import '../../../core/graphql/watch/query_key.dart';
-import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
-import '../../widgets/toast/toaster.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
-  final String id;
+  EpisodeDetailScreen({super.key, required String id})
+      : target = MydiaTarget(DetailKind.episode, id);
 
-  const EpisodeDetailScreen({
-    super.key,
-    required this.id,
-  });
+  const EpisodeDetailScreen.target({super.key, required this.target});
+
+  final DetailTarget target;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final episodeAsync = ref.watch(episodeDetailControllerProvider(id));
+    final episodeAsync = ref.watch(episodeViewProvider(target));
 
     // This is a full-window route (pushed outside the shell), and so the sole
     // owner of the title-bar band here: the body has to sit under
@@ -43,7 +39,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
         body: Column(
           children: [
             FreshnessHeader(
-              queryKeys: [QueryKeys.episodeDetail(id)],
+              queryKeys: freshnessKeys(target),
               topInset: freshnessTopInset(context, appBarHeight: 0),
             ),
             Expanded(
@@ -62,16 +58,16 @@ class EpisodeDetailScreen extends ConsumerWidget {
   /// Exposes [_buildLoadingState] for
   /// `detail_screen_inset_test.dart`: that test proves the back button
   /// clears the window chrome in this transient state too, not only in the
-  /// loaded hero, without needing `episodeDetailControllerProvider`'s
-  /// GraphQL stream to reach the loading branch.
+  /// loaded hero, without needing the episode view's GraphQL stream to
+  /// reach the loading branch.
   @visibleForTesting
   Widget loadingStateForTest(BuildContext context) =>
       _buildLoadingState(context);
 
   /// Exposes [_buildErrorState] for the same reason as
   /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
-  /// button reads `episodeDetailControllerProvider(id).notifier` from it,
-  /// even though nothing is watched during build.
+  /// button reads `episodeActionsProvider(target)` from it, even though
+  /// nothing is watched during build.
   @visibleForTesting
   Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
       _buildErrorState(context, ref, error);
@@ -193,9 +189,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: () => ref
-                        .read(episodeDetailControllerProvider(id).notifier)
-                        .refresh(),
+                    onPressed: () =>
+                        ref.read(episodeActionsProvider(target)).refresh(),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try Again'),
                     style: FilledButton.styleFrom(
@@ -215,7 +210,9 @@ class EpisodeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildContent(
-      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
+      BuildContext context, WidgetRef ref, EpisodeView episode) {
+    final showActionRow = (isDownloadSupported && _canDownload(episode)) ||
+        _canShowMediaInfo(episode);
     return CustomScrollView(
       slivers: [
         _buildHeroSection(context, episode),
@@ -238,16 +235,14 @@ class EpisodeDetailScreen extends ConsumerWidget {
                     SmartPlayButton(
                       files: episode.files,
                       onFileSelected: (file) {
-                        context.push(
-                          '/player/episode/${episode.id}?fileId=${file.id}&title=${Uri.encodeComponent(episode.fullTitle)}&showId=${episode.show.id}&seasonNumber=${episode.seasonNumber}',
-                        );
+                        context.push(episodePlayerLocation(episode, file));
                       },
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 20),
-              if (isDownloadSupported || episode.files.isNotEmpty) ...[
+              if (showActionRow) ...[
                 _buildActionRow(context, ref, episode),
                 const SizedBox(height: 20),
               ],
@@ -264,9 +259,20 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, EpisodeDetail episode) {
+  /// Mydia-only: the download button needs the Mydia episode behind the view.
+  bool _canDownload(EpisodeView episode) =>
+      episode.mydiaDetail != null &&
+      episode.features.contains(DetailFeature.download) &&
+      episode.files.isNotEmpty;
+
+  bool _canShowMediaInfo(EpisodeView episode) =>
+      episode.mydiaDetail != null &&
+      episode.features.contains(DetailFeature.mediaInfo) &&
+      episode.files.isNotEmpty;
+
+  Widget _buildHeroSection(BuildContext context, EpisodeView episode) {
     // Use episode thumbnail if available, otherwise fall back to show backdrop
-    final imageUrl = episode.thumbnailUrl ?? episode.show.artwork.backdropUrl;
+    final art = episode.still ?? episode.showBackdrop;
 
     return detailHeroAppBar(
       context: context,
@@ -276,15 +282,10 @@ class EpisodeDetailScreen extends ConsumerWidget {
         fit: StackFit.expand,
         children: [
           // Background image
-          if (imageUrl != null)
-            ArtworkImage(
-              imageUrl: imageUrl,
-              fit: BoxFit.cover,
-              cacheManager: EpisodeThumbnailCacheManager(),
-              decodeWidth: viewportDecodeWidth(
-                context,
-                sourceWidth: backdropSourceWidth,
-              ),
+          if (art != null)
+            DetailArtImage(
+              art: art,
+              slot: ArtSlot.still,
               placeholder: (context) => Container(
                 color: AppColors.surface,
               ),
@@ -346,12 +347,14 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildShowLink(BuildContext context, EpisodeDetail episode) {
+  Widget _buildShowLink(BuildContext context, EpisodeView episode) {
+    final showTarget = episode.showTarget;
+    if (showTarget == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: InkWell(
         onTap: () {
-          context.push('/show/${episode.show.id}');
+          context.push(detailLocation(showTarget));
         },
         borderRadius: BorderRadius.circular(8),
         child: Padding(
@@ -366,7 +369,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                episode.show.title,
+                episode.showTitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.primary,
                       fontWeight: FontWeight.w600,
@@ -380,7 +383,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
   }
 
   /// Title section without padding, for use inside a parent Row.
-  Widget _buildTitleSectionInline(BuildContext context, EpisodeDetail episode) {
+  Widget _buildTitleSectionInline(BuildContext context, EpisodeView episode) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -416,14 +419,15 @@ class EpisodeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildActionRow(
-      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
+      BuildContext context, WidgetRef ref, EpisodeView episode) {
+    final showDownload = isDownloadSupported && _canDownload(episode);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
-          if (isDownloadSupported) _buildDownloadButton(context, ref, episode),
-          if (episode.files.isNotEmpty) ...[
-            if (isDownloadSupported) const SizedBox(width: 8),
+          if (showDownload) _buildDownloadButton(context, ref, episode),
+          if (_canShowMediaInfo(episode)) ...[
+            if (showDownload) const SizedBox(width: 8),
             _buildMediaInfoButton(context, episode),
           ],
         ],
@@ -431,7 +435,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMediaInfoButton(BuildContext context, EpisodeDetail episode) {
+  Widget _buildMediaInfoButton(BuildContext context, EpisodeView episode) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -441,7 +445,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
         key: const Key('episode-media-info'),
         onPressed: () => showMediaInfo(
           context: context,
-          id: episode.id,
+          id: episode.mydiaDetail!.id,
           target: MediaInfoTarget.episode,
         ),
         icon: const Icon(Icons.info_outline_rounded, color: Colors.white),
@@ -451,8 +455,9 @@ class EpisodeDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildDownloadButton(
-      BuildContext context, WidgetRef ref, EpisodeDetail episode) {
-    final isDownloadedAsync = ref.watch(isMediaDownloadedProvider(episode.id));
+      BuildContext context, WidgetRef ref, EpisodeView episode) {
+    final mydia = episode.mydiaDetail!;
+    final isDownloadedAsync = ref.watch(isMediaDownloadedProvider(mydia.id));
     final isDownloaded = isDownloadedAsync.value ?? false;
     final hasFiles = episode.files.isNotEmpty;
 
@@ -463,96 +468,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
       ),
       child: IconButton(
         onPressed: hasFiles
-            ? () async {
-                if (isDownloaded) {
-                  if (context.mounted) {
-                    showToast(context, 'Already downloaded');
-                  }
-                } else {
-                  final selectedResolution = await showQualityDownloadDialog(
-                    context,
-                    contentType: 'episode',
-                    contentId: episode.id,
-                    title: episode.fullTitle,
-                  );
-
-                  if (selectedResolution != null && context.mounted) {
-                    final downloadService =
-                        ref.read(unifiedDownloadJobServiceProvider);
-                    final downloadManager =
-                        await ref.read(downloadManagerProvider.future);
-
-                    if (downloadService != null) {
-                      try {
-                        await downloadManager.startProgressiveDownload(
-                          mediaId: episode.id,
-                          title: episode.fullTitle,
-                          contentType: 'episode',
-                          resolution: selectedResolution,
-                          mediaType: MediaType.episode,
-                          posterUrl: episode.thumbnailUrl ??
-                              episode.show.artwork.posterUrl,
-                          overview: episode.overview,
-                          runtime: episode.runtime,
-                          seasonNumber: episode.seasonNumber,
-                          episodeNumber: episode.episodeNumber,
-                          showId: episode.show.id,
-                          showTitle: episode.show.title,
-                          showPosterUrl: episode.show.artwork.posterUrl,
-                          thumbnailUrl: episode.thumbnailUrl,
-                          airDate: episode.airDate,
-                          getDownloadUrl: (jobId) async {
-                            return await downloadService.getDownloadUrl(jobId);
-                          },
-                          prepareDownload: () async {
-                            final status =
-                                await downloadService.prepareDownload(
-                              contentType: 'episode',
-                              id: episode.id,
-                              resolution: selectedResolution,
-                            );
-                            return (
-                              jobId: status.jobId,
-                              status: status.status.name,
-                              progress: status.progress,
-                              fileSize: status.currentFileSize,
-                            );
-                          },
-                          getJobStatus: (jobId) async {
-                            final status =
-                                await downloadService.getJobStatus(jobId);
-                            return (
-                              status: status.status.name,
-                              progress: status.progress,
-                              fileSize: status.currentFileSize,
-                              error: status.error,
-                            );
-                          },
-                          cancelJob: (jobId) async {
-                            await downloadService.cancelJob(jobId);
-                          },
-                        );
-
-                        if (context.mounted) {
-                          showToast(
-                            context,
-                            'Download started',
-                            kind: ToastKind.success,
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          showToast(
-                            context,
-                            'Failed to start download: $e',
-                            kind: ToastKind.error,
-                          );
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+            ? () => startMydiaEpisodeDetailDownload(context, ref, mydia)
             : null,
         icon: Icon(
           isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
@@ -566,7 +482,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMetadata(BuildContext context, EpisodeDetail episode) {
+  Widget _buildMetadata(BuildContext context, EpisodeView episode) {
     final items = <Widget>[];
 
     // Runtime
@@ -650,7 +566,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildOverview(BuildContext context, EpisodeDetail episode) {
+  Widget _buildOverview(BuildContext context, EpisodeView episode) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
