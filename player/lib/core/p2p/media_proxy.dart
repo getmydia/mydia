@@ -10,20 +10,31 @@ import 'dart:collection';
 /// downloads alike — so it is started and stopped against an *owner* rather
 /// than outright. See [start] and [stop].
 abstract class MediaProxy {
-  /// Begin serving for [owner], targeting [targetPeer].
+  /// Key of the home Mydia's target. Its URLs carry no target prefix, so
+  /// every URL built before targets existed is still valid.
+  static const homeTarget = 'home';
+
+  /// Begin serving [target] for [owner], sending its requests to
+  /// [targetPeer] with [authToken].
   ///
   /// [owner] is any object with a stable identity that stands for the call
   /// site relying on the proxy — a `PlayerScreen` state, a download service.
   /// Repeat calls from the same owner re-target an already running proxy and
   /// still leave it held exactly once, which is what makes this safe to call
   /// from a path that re-runs (a session restart, a cast rebind).
+  ///
+  /// Each Mydia instance in use is its own target, so a guest instance's
+  /// stream never re-targets a download still running against home. Repeat
+  /// calls for the same target re-target that target only.
   Future<void> start({
     required Object owner,
     required String targetPeer,
     String? authToken,
+    String target = homeTarget,
   });
 
-  /// Release [owner]'s hold. Serving stops once the last owner lets go.
+  /// Release [owner]'s hold on [target]. Serving stops once no target has
+  /// an owner left.
   ///
   /// Ownership, rather than an unconditional teardown, is what keeps a screen
   /// being disposed from cutting off the screen that replaced it. Flutter
@@ -35,7 +46,12 @@ abstract class MediaProxy {
   ///
   /// Safe to call more than once, and safe to call from something that never
   /// started the proxy: both are no-ops.
-  Future<void> stop(Object owner);
+  Future<void> stop(Object owner, {String target = homeTarget});
+
+  /// Origin and prefix to build [target]'s media URLs against, with no
+  /// trailing slash: [baseUrl] for [homeTarget], `<baseUrl>/t/<target>`
+  /// for any other.
+  String targetBaseUrl(String target);
 
   /// Stop serving outright, whoever still holds it.
   ///
