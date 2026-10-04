@@ -60,7 +60,12 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
 
   Future<void> _submit() async {
     setState(() => _busy = true);
-    final error = await widget.submit(_digits);
+    String? error;
+    try {
+      error = await widget.submit(_digits);
+    } catch (_) {
+      error = 'Could not check the PIN. Try again.';
+    }
     if (!mounted) return;
     if (error == null) {
       Navigator.of(context).pop(true);
@@ -93,7 +98,7 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
           child: OutlinedButton(
             key: Key('plex-pin-key-$digit'),
             autofocus: autofocus,
-            onPressed: _busy ? null : () => _add(digit),
+            onPressed: () => _add(digit),
             child: Text(digit, style: const TextStyle(fontSize: 20)),
           ),
         ),
@@ -102,89 +107,92 @@ class _PlexPinDialogState extends State<_PlexPinDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: Text('PIN for ${widget.userName}'),
-      content: Focus(
-        onKeyEvent: _onKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (var i = 0; i < _length; i++)
-                  Container(
-                    key: Key('plex-pin-dot-$i'),
-                    margin: const EdgeInsets.all(6),
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i < _digits.length
-                          ? theme.colorScheme.primary
-                          : Colors.transparent,
-                      border: Border.all(color: theme.colorScheme.outline),
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
+        title: Text('PIN for ${widget.userName}'),
+        content: Focus(
+          onKeyEvent: _onKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < _length; i++)
+                    Container(
+                      key: Key('plex-pin-dot-$i'),
+                      margin: const EdgeInsets.all(6),
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i < _digits.length
+                            ? theme.colorScheme.primary
+                            : Colors.transparent,
+                        border: Border.all(color: theme.colorScheme.outline),
+                      ),
                     ),
-                  ),
-              ],
-            ),
-            SizedBox(
-              height: 24,
-              child: _busy
-                  ? const Center(
-                      child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2)))
-                  : _error == null
-                      ? null
-                      : Text(
-                          _error!,
-                          key: const Key('plex-pin-error'),
-                          style: TextStyle(color: theme.colorScheme.error),
-                        ),
-            ),
-            for (final row in const [
-              ['1', '2', '3'],
-              ['4', '5', '6'],
-              ['7', '8', '9'],
-            ])
+                ],
+              ),
+              SizedBox(
+                height: 24,
+                child: _busy
+                    ? const Center(
+                        child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2)))
+                    : _error == null
+                        ? null
+                        : Text(
+                            _error!,
+                            key: const Key('plex-pin-error'),
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+              ),
+              for (final row in const [
+                ['1', '2', '3'],
+                ['4', '5', '6'],
+                ['7', '8', '9'],
+              ])
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final d in row) _key(d, autofocus: d == '1'),
+                  ],
+                ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  for (final d in row) _key(d, autofocus: d == '1'),
-                ],
-              ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(width: 72),
-                _key('0'),
-                Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: SizedBox(
-                    width: 64,
-                    height: 52,
-                    child: IconButton(
-                      key: const Key('plex-pin-delete'),
-                      tooltip: 'Delete',
-                      onPressed: _busy ? null : _delete,
-                      icon: const Icon(Icons.backspace_outlined),
+                  const SizedBox(width: 72),
+                  _key('0'),
+                  Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: SizedBox(
+                      width: 64,
+                      height: 52,
+                      child: IconButton(
+                        key: const Key('plex-pin-delete'),
+                        tooltip: 'Delete',
+                        onPressed: _delete,
+                        icon: const Icon(Icons.backspace_outlined),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            key: const Key('plex-pin-cancel'),
+            onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          key: const Key('plex-pin-cancel'),
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-      ],
     );
   }
 }

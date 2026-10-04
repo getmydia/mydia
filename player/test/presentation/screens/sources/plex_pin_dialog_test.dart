@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -88,5 +90,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(result, isFalse);
     expect(submitted, isEmpty);
+  });
+
+  testWidgets('keyboard still works after a wrong PIN', (tester) async {
+    await open(
+        tester, (pin) async => pin == '1234' ? null : 'That PIN is not right.');
+    await type(tester, '0000');
+    for (final key in [
+      LogicalKeyboardKey.digit1,
+      LogicalKeyboardKey.digit2,
+      LogicalKeyboardKey.digit3,
+      LogicalKeyboardKey.digit4,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(submitted, ['0000', '1234']);
+    expect(result, isTrue);
+  });
+
+  testWidgets('cancel is disabled while a PIN is being checked',
+      (tester) async {
+    final completer = Completer<String?>();
+    await open(tester, (_) => completer.future);
+    // No pumpAndSettle: the busy spinner animates until the submit answers.
+    for (final d in '1234'.split('')) {
+      await tester.tap(find.byKey(Key('plex-pin-key-$d')));
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const Key('plex-pin-cancel')),
+        warnIfMissed: false);
+    await tester.pump();
+    expect(find.text('PIN for Pip'), findsOneWidget);
+    expect(result, isNull);
+    completer.complete(null);
+    await tester.pumpAndSettle();
+    expect(result, isTrue);
+  });
+
+  testWidgets('a throwing submit shows an error and allows a retry',
+      (tester) async {
+    var calls = 0;
+    await open(tester, (_) async {
+      calls++;
+      if (calls == 1) throw Exception('network');
+      return null;
+    });
+    await type(tester, '1111');
+    expect(find.byKey(const Key('plex-pin-error')), findsOneWidget);
+    await type(tester, '2222');
+    expect(submitted, ['1111', '2222']);
+    expect(result, isTrue);
   });
 }
