@@ -99,10 +99,12 @@ class _Header extends StatelessWidget {
   /// Receives this row's own context, which the picker's popover hangs under.
   final ValueChanged<BuildContext> onOpen;
 
-  static String _caption(Source source) {
+  /// The line under the name, or null when it would only repeat it: Mydia's
+  /// display name is already "Mydia".
+  static String? _caption(Source source) {
     if (source.account.needsReauth) return 'Sign in again';
     return switch (source.kind) {
-      SourceKind.mydia => 'Mydia',
+      SourceKind.mydia => null,
       SourceKind.plex => 'Plex · ${source.account.displayName}',
       SourceKind.jellyfin => 'Jellyfin · ${source.account.displayName}',
       SourceKind.stash => 'Stash · ${source.account.displayName}',
@@ -114,92 +116,98 @@ class _Header extends StatelessWidget {
     void open() => onOpen(context);
     final theme = Theme.of(context).textTheme;
     final needsReauth = source.account.needsReauth;
+    final caption = _caption(source);
 
-    return FocusHighlight(
-      key: const ValueKey('source-switcher-header'),
-      onActivate: open,
-      borderRadius: const BorderRadius.all(Radius.circular(12)),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: open,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceVariant.withValues(alpha: 0.35),
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              border:
-                  Border.all(color: AppColors.border.withValues(alpha: 0.6)),
-            ),
-            child: Row(
-              children: [
-                SourceStatusBuilder(
-                  sourceId: source.id,
-                  builder: (context, status) => Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(
-                        sourceKindIcon(source.kind),
-                        size: 22,
-                        color: AppColors.primary,
-                      ),
-                      if (needsReauth)
-                        const Positioned(
-                          top: -4,
-                          right: -4,
-                          child: Icon(
-                            Icons.error_rounded,
-                            size: 12,
-                            color: AppColors.warning,
+    return Semantics(
+        button: true,
+        label: 'Switch server, current: ${source.displayName}',
+        child: FocusHighlight(
+          key: const ValueKey('source-switcher-header'),
+          onActivate: open,
+          borderRadius: const BorderRadius.all(Radius.circular(12)),
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: open,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariant.withValues(alpha: 0.35),
+                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                  border: Border.all(
+                      color: AppColors.border.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  children: [
+                    SourceStatusBuilder(
+                      sourceId: source.id,
+                      builder: (context, status) => Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(
+                            sourceKindIcon(source.kind),
+                            size: 22,
+                            color: AppColors.primary,
                           ),
-                        )
-                      else if (status != null)
-                        Positioned(
-                          top: -2,
-                          right: -2,
-                          child: SourceStatusDot(status),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        source.displayName,
-                        key: const ValueKey('source-switcher-header-name'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                          if (needsReauth)
+                            const Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Icon(
+                                Icons.error_rounded,
+                                size: 12,
+                                color: AppColors.warning,
+                              ),
+                            )
+                          else if (status != null)
+                            Positioned(
+                              top: -2,
+                              right: -2,
+                              child: SourceStatusDot(status),
+                            ),
+                        ],
                       ),
-                      Text(
-                        _caption(source),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.labelSmall?.copyWith(
-                          color: needsReauth
-                              ? AppColors.warningText
-                              : AppColors.textSecondary,
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            source.displayName,
+                            key: const ValueKey('source-switcher-header-name'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          if (caption != null)
+                            Text(
+                              caption,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.labelSmall?.copyWith(
+                                color: needsReauth
+                                    ? AppColors.warningText
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const Icon(
+                      Icons.unfold_more_rounded,
+                      size: 20,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
                 ),
-                const Icon(
-                  Icons.unfold_more_rounded,
-                  size: 20,
-                  color: AppColors.textSecondary,
-                ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }

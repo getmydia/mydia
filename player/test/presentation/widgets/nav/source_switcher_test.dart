@@ -114,6 +114,27 @@ void main() {
     expect(_headerName(tester), 'Mydia');
   });
 
+  testWidgets('the Mydia header does not repeat its name as a caption',
+      (tester) async {
+    await _pump(tester, thirdParty: [_plex()]);
+    expect(
+      find.descendant(of: find.byKey(_header), matching: find.text('Mydia')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a third-party header keeps its account caption', (tester) async {
+    await _pump(tester,
+        thirdParty: [_plex()], location: '/s/acc1:owner:srv9/library/x');
+    expect(find.text('Plex · someone@example.test'), findsOneWidget);
+  });
+
+  testWidgets('the header is announced as a button naming the server',
+      (tester) async {
+    await _pump(tester, thirdParty: [_plex()]);
+    expect(find.bySemanticsLabel(RegExp('Switch server')), findsOneWidget);
+  });
+
   testWidgets('switching servers selects it and uses onSwitchSource',
       (tester) async {
     final (container, calls) = await _pump(tester, thirdParty: [_plex()]);
