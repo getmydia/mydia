@@ -87,6 +87,27 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummaryTest do
              ]
     end
 
+    test "a host-granting field with no label is named by its key" do
+      schema = [%{"key" => "server_url", "type" => "url", "grants_host" => true}]
+      summary = CapabilitySummary.build(%{}, settings_schema: schema)
+
+      assert labels(group(summary, :talks_to)) == ["The server you enter in server_url"]
+    end
+
+    test "event phrases join with one event and with three" do
+      one = CapabilitySummary.build(%{"events:subscribe" => ["media_item.added"]})
+      assert Enum.map(one.also, & &1.label) == ["reacts to new titles"]
+
+      three =
+        CapabilitySummary.build(%{
+          "events:subscribe" => ["media_item.added", "media_item.updated", "media_item.removed"]
+        })
+
+      assert Enum.map(three.also, & &1.label) == [
+               "reacts to new titles, title updates and removed titles"
+             ]
+    end
+
     test "marks only the ungranted values as new" do
       requested = %{
         "net:http" => ["api.simkl.com"],

@@ -10,6 +10,11 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
   here. A value that slips through anyway renders as its raw string rather than
   vanishing from consent.
 
+  The single exception is a host-granting settings field: its Talks to line
+  names the field by its own manifest label, so the operator can tell which
+  setting grants the host. The surrounding sentence ("The server you enter in
+  ...") stays host-authored, and the admin plugins UI already showed this label.
+
   Groups are fixed and appear in `@groups` order; an empty group is omitted.
   Background mechanics (events, schedule, storage) go to the `also` footer.
   """
@@ -174,9 +179,17 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
 
   defp host_field_entries(schema) do
     for field <- Manifest.host_granting_fields(schema) do
-      name = Map.get(field, "label") || Map.get(field, "key")
-      {:talks_to, %Line{label: "The server you enter in #{name}"}}
+      {:talks_to, %Line{label: "The server you enter in #{field_name(field)}"}}
     end
+  end
+
+  defp field_name(field) do
+    Enum.find_value(["label", "key"], "settings", fn name ->
+      case Map.get(field, name) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
   end
 
   defp values(nil), do: []
