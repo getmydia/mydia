@@ -132,6 +132,11 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
     await _tearDown();
   }
 
+  /// A browser serves only the home target, so releasing everything is
+  /// releasing home.
+  @override
+  Future<void> release(Object owner) => stop(owner);
+
   @override
   Future<void> shutdown() async {
     clearLeases();

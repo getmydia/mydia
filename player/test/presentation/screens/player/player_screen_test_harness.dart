@@ -273,6 +273,9 @@ class TrackingLocalProxyService extends Fake
   }
 
   @override
+  Future<void> release(Object owner) => stop(owner);
+
+  @override
   Future<void> shutdown() async {
     clearLeases();
     stopped = true;

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/p2p/local_proxy_service.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -91,6 +92,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
         externalId: widget.itemId,
       ),
       _params.fileId,
+      proxy: () => ref.read(localProxyServiceProvider),
     );
   }();
 

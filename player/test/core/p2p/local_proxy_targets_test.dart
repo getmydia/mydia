@@ -97,6 +97,38 @@ void main() {
     expect(proxy.isRunning, isFalse);
   });
 
+  test('release lets go of every target the owner holds', () async {
+    await proxy.start(owner: playback, targetPeer: 'home-peer');
+    await proxy.start(
+        owner: playback, targetPeer: 'guest-peer', target: 'mguest');
+
+    await proxy.release(playback);
+
+    expect(proxy.isRunning, isFalse);
+  });
+
+  test('release keeps serving a target another owner still holds', () async {
+    await proxy.start(owner: playback, targetPeer: 'home-peer');
+    await proxy.start(
+        owner: playback, targetPeer: 'guest-peer', target: 'mguest');
+    await proxy.start(owner: download, targetPeer: 'home-peer');
+
+    await proxy.release(playback);
+
+    expect(proxy.isRunning, isTrue);
+    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/mguest', 's2')),
+        HttpStatus.serviceUnavailable);
+  });
+
+  test('release from an owner that holds nothing is a no-op', () async {
+    await proxy.start(owner: download, targetPeer: 'home-peer');
+
+    await proxy.release(playback);
+
+    expect(proxy.isRunning, isTrue);
+  });
+
   test('a stop for a target the owner never held is a no-op', () async {
     await proxy.start(owner: download, targetPeer: 'home-peer');
 
