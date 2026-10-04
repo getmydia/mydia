@@ -7,8 +7,6 @@ defmodule MydiaWeb.LibraryComponents do
   """
   use Phoenix.Component
 
-  alias Phoenix.LiveView.JS
-
   # Import only what we need to avoid circular dependency
   import MydiaWeb.CoreComponents, only: [icon: 1, modal: 1]
   import MydiaWeb.SegmentedControl, only: [segmented_control: 1]
@@ -196,108 +194,6 @@ defmodule MydiaWeb.LibraryComponents do
   end
 
   @doc """
-  Renders a floating action toolbar for batch operations.
-
-  ## Attributes
-
-    * `:selected_count` - Required. Number of selected items.
-    * `:selection_mode` - Whether selection mode is active. When true, shows toolbar in selection mode.
-    * `:all_selected` - Whether all items are selected (for select all checkbox).
-    * `:show` - Whether to show the toolbar. Defaults to showing when in selection_mode or count > 0.
-  """
-  attr :selected_count, :integer, required: true
-  attr :selection_mode, :boolean, default: false
-  attr :all_selected, :boolean, default: false
-  attr :show, :boolean, default: nil
-
-  slot :actions, required: true
-
-  def batch_action_toolbar(assigns) do
-    # Show toolbar if: explicit show=true, or in selection_mode, or has selected items
-    show =
-      cond do
-        not is_nil(assigns.show) -> assigns.show
-        assigns.selection_mode -> true
-        true -> assigns.selected_count > 0
-      end
-
-    has_selection = assigns.selected_count > 0
-    assigns = assign(assigns, show: show, has_selection: has_selection)
-
-    ~H"""
-    <%= if @show do %>
-      <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom duration-300">
-        <div class="bg-base-100 shadow-2xl rounded-box border border-base-300 px-2 py-2">
-          <div class="flex items-center gap-1">
-            <%!-- Select All checkbox with count --%>
-            <%= if @selection_mode do %>
-              <label
-                class="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-base-200 cursor-pointer transition-colors"
-                title={if @all_selected, do: "Deselect all", else: "Select all"}
-              >
-                <input
-                  type="checkbox"
-                  class="checkbox checkbox-sm checkbox-primary"
-                  checked={@all_selected}
-                  phx-click={
-                    JS.push("toggle_select_all")
-                    |> JS.dispatch("mydia:toggle-select-all", to: "#media-items")
-                  }
-                />
-                <%= if @selected_count == 0 do %>
-                  <span class="text-sm">Select All</span>
-                <% else %>
-                  <span class="font-medium tabular-nums">{@selected_count}</span>
-                  <span class="text-sm text-base-content/60 hidden sm:inline">selected</span>
-                <% end %>
-              </label>
-            <% else %>
-              <div class="flex items-center gap-2 px-3 py-1.5">
-                <span class="font-medium tabular-nums">{@selected_count}</span>
-                <span class="text-sm text-base-content/60">selected</span>
-              </div>
-            <% end %>
-
-            <div class="w-px h-6 bg-base-300 mx-1"></div>
-
-            <%!-- Action buttons slot --%>
-            <div class="flex items-center">
-              {render_slot(@actions, @has_selection)}
-            </div>
-
-            <div class="w-px h-6 bg-base-300 mx-1"></div>
-
-            <%!-- Done button (in selection mode) or Close button (legacy) --%>
-            <%= if @selection_mode do %>
-              <button
-                type="button"
-                class="btn btn-sm btn-primary"
-                phx-click="toggle_selection_mode"
-                title="Done (Esc)"
-              >
-                Done
-              </button>
-            <% else %>
-              <button
-                type="button"
-                class="btn btn-sm btn-ghost btn-square"
-                phx-click={
-                  JS.push("clear_selection")
-                  |> JS.dispatch("mydia:clear-selection", to: "#media-items")
-                }
-                title="Clear selection (Esc)"
-              >
-                <.icon name="hero-x-mark" class="w-4 h-4" />
-              </button>
-            <% end %>
-          </div>
-        </div>
-      </div>
-    <% end %>
-    """
-  end
-
-  @doc """
   Renders selection controls for the header area.
 
   ## Attributes
@@ -441,12 +337,17 @@ defmodule MydiaWeb.LibraryComponents do
   attr :media_type, :any, default: nil
   attr :title, :string, default: ""
 
+  attr :size, :string,
+    default: "sm",
+    values: ~w(sm md),
+    doc: "Match the button it is joined to. Cards use sm, the preview modal md."
+
   def library_picker_button(assigns) do
     ~H"""
     <button
       type="button"
       data-test="add-config-caret"
-      class="btn btn-primary btn-sm join-item px-2"
+      class={["btn btn-primary join-item px-2", @size == "sm" && "btn-sm"]}
       title="Configure before adding"
       phx-click="open_add_config"
       phx-value-ref={@ref}

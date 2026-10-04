@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/artwork_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/focus/focus_reveal_section.dart';
 import '../../core/graphql/watch/query_key.dart';
@@ -193,10 +193,12 @@ class HomeScreen extends ConsumerWidget {
     if (item is ContinueWatchingItem) {
       final file = await _bestFileOrNull(item.files, screenWidth);
       if (file == null) {
-        router.push(item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
+        await router.push<void>(
+            item.isMovie ? '/movie/${item.id}' : '/episode/${item.id}');
         return;
       }
-      router.push(playerRouteForContinueWatching(item, fileId: file.id));
+      await router
+          .push<void>(playerRouteForContinueWatching(item, fileId: file.id));
     }
   }
 
@@ -303,14 +305,20 @@ class HomeScreen extends ConsumerWidget {
                                     if (data.continueWatching.isNotEmpty) {
                                       final item = data.continueWatching.first;
                                       return _HeroSection(
-                                        item: item,
+                                        title: item.title,
+                                        showTitle: item.showTitle,
+                                        backdropUrl:
+                                            item.backdropUrl ?? item.posterUrl,
                                         onTap: () => _handleItemTap(
                                             context, item.id, item.type),
                                       );
                                     } else {
                                       final item = data.recentlyAdded.first;
                                       return _HeroSection(
-                                        item: item,
+                                        title: item.title,
+                                        showTitle: item.showTitle,
+                                        backdropUrl:
+                                            item.backdropUrl ?? item.posterUrl,
                                         onTap: () => _handleItemTap(
                                             context, item.id, item.type),
                                       );
@@ -465,18 +473,19 @@ class HomeScreen extends ConsumerWidget {
 }
 
 class _HeroSection extends StatelessWidget {
-  final dynamic item;
+  /// The hero shows either a continue-watching or a recently-added item, which
+  /// share no supertype, so the caller passes the three fields it renders.
+  final String title;
+  final String? showTitle;
+  final String? _backdropUrl;
   final VoidCallback onTap;
 
   const _HeroSection({
-    required this.item,
+    required this.title,
+    required String? backdropUrl,
     required this.onTap,
-  });
-
-  String? get _backdropUrl {
-    if (item.backdropUrl != null) return item.backdropUrl;
-    return item.posterUrl;
-  }
+    this.showTitle,
+  }) : _backdropUrl = backdropUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -499,14 +508,14 @@ class _HeroSection extends StatelessWidget {
               width: size.width,
               height: heroHeight,
               child: _backdropUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: _backdropUrl!,
+                  ? ArtworkImage(
+                      imageUrl: _backdropUrl,
                       fit: BoxFit.cover,
                       cacheManager: BackdropCacheManager(),
-                      placeholder: (context, url) => Container(
+                      placeholder: (context) => Container(
                         color: AppColors.surface,
                       ),
-                      errorWidget: (context, url, error) => Container(
+                      errorWidget: (context) => Container(
                         color: AppColors.surface,
                         child: const Icon(
                           Icons.movie_rounded,
@@ -575,7 +584,7 @@ class _HeroSection extends StatelessWidget {
 
                 // Title
                 Text(
-                  item.title,
+                  title,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     shadows: [
@@ -591,9 +600,9 @@ class _HeroSection extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Subtitle/info
-                if (item.showTitle != null)
+                if (showTitle != null)
                   Text(
-                    item.showTitle!,
+                    showTitle!,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AppColors.textSecondary,
                         ),

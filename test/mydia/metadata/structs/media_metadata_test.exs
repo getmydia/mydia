@@ -318,4 +318,21 @@ defmodule Mydia.Metadata.Structs.MediaMetadataTest do
                ["Dunkle Laterne"]
     end
   end
+
+  describe "schema_version" do
+    test "a parsed response carries the current schema version" do
+      body = %{"id" => 7001, "name" => "The Lantern Keepers", "first_air_date" => "2019-04-02"}
+
+      metadata = MediaMetadata.from_api_response(body, :tv_show, "7001")
+
+      assert metadata.schema_version == MediaMetadata.schema_version()
+      assert MediaMetadata.schema_version() >= 1
+    end
+
+    test "a hand-built struct defaults to version 0" do
+      metadata = %MediaMetadata{provider_id: "1", provider: :tvdb, media_type: :tv_show}
+
+      assert metadata.schema_version == 0
+    end
+  end
 end

@@ -92,15 +92,22 @@ defmodule Mydia.Plugins.PageWrites do
   end
 
   def execute("favorite_add", %{"media_item_id" => id}, user, _origin, _prepared) do
-    if Collections.is_favorite?(Scope.for_user(user), id) do
-      {:ok, %{"status" => "already-favorited"}, :noop}
-    else
-      with {:ok, favorites} <- Collections.get_or_create_favorites(user),
-           {:ok, _} <- Collections.add_item(favorites, id) do
-        {:ok, %{"status" => "changed"}, %{"media_item_id" => id}}
-      else
-        _ -> {:error, Error.new(:unknown, "could not add favorite")}
-      end
+    scope = Scope.for_user(user)
+
+    cond do
+      not visible_item?(scope, id) ->
+        {:error, Error.new(:unknown, "could not add favorite")}
+
+      Collections.is_favorite?(scope, id) ->
+        {:ok, %{"status" => "already-favorited"}, :noop}
+
+      true ->
+        with {:ok, favorites} <- Collections.get_or_create_favorites(user),
+             {:ok, _} <- Collections.add_item(favorites, id) do
+          {:ok, %{"status" => "changed"}, %{"media_item_id" => id}}
+        else
+          _ -> {:error, Error.new(:unknown, "could not add favorite")}
+        end
     end
   end
 
@@ -142,7 +149,10 @@ defmodule Mydia.Plugins.PageWrites do
         _origin,
         _prepared
       ) do
+    scope = Scope.for_user(user)
+
     with {:ok, c} <- manual_collection(user, id) do
+      ids = Enum.filter(ids, &visible_item?(scope, &1))
       present = Collections.item_ids_in(c, ids)
       added = ids |> Enum.uniq() |> Enum.reject(&MapSet.member?(present, &1))
 
@@ -393,6 +403,15 @@ defmodule Mydia.Plugins.PageWrites do
     if Authorization.can_delete_media?(user),
       do: :ok,
       else: {:error, Error.new(:capability_denied, "this user may not remove media")}
+  end
+
+  # A hidden id must fail exactly like a missing one, or the error tells a
+  # restricted user that the title exists.
+  defp visible_item?(scope, id) do
+    match?(%{}, Media.get_media_item!(scope, id))
+  rescue
+    Ecto.NoResultsError -> false
+    Ecto.Query.CastError -> false
   end
 
   defp fetch_media_item(scope, id) do

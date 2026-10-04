@@ -9,8 +9,10 @@ Assistant:
 
 ```bash
 PLUGIN_0_SLUG=assistant-openai
-PLUGIN_0_SETTINGS='{"base_url":"https://api.openai.com/v1","api_key":"sk-...","model":"gpt-4.1-mini"}'
+PLUGIN_0_SETTINGS='{"base_url":"https://api.openai.com/v1","api_key":"sk-...","model":"gpt-4.1-mini","shelf_model":"gpt-4.1-nano"}'
 ```
+
+`shelf_enabled` (`On` or `Off`) and `shelf_model` control the Assistant's Picked for you suggestions.
 
 `plugins/` is different: the `:plugins` Mix compiler builds every
 `plugins/*/Cargo.toml` into `priv/plugins/`, and those ship bundled and
@@ -40,6 +42,8 @@ Bump `version` in `manifest.json`, merge, then push a tag:
 the toolchain from `rust-toolchain.toml`, generates the index with
 `scripts/build_plugin_index.exs`, deploys it to the `mydia-plugins` Cloudflare
 Pages project, and attaches the packages to a GitHub Release for the tag.
+
+The workflow signs `index.json` with the `MINISIGN_SECRET_KEY` repo secret; Mydia verifies it against `priv/plugin_index/official.pub` and refuses an unsigned index. Rotating that key means shipping a Mydia release with the new public key first.
 
 Every publish replaces the whole site, so only the current version of each
 plugin is downloadable. Installed plugins are unaffected: their bytes live in

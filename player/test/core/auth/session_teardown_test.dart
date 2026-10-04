@@ -88,5 +88,26 @@ void main() {
 
       expect(storage.containsKey('pairing_device_token'), isFalse);
     });
+
+    test('leaves other sources\' credentials alone', () async {
+      final storage = MockAuthStorage();
+      for (final entry in _signedIn.entries) {
+        await storage.write(entry.key, entry.value);
+      }
+      const guestKeys = {
+        'source/minst-2/account_token': 'guest-access',
+        'source/minst-2/owner/inst-2/token': 'guest-media',
+        'source/plex1/account_token': 'plex-tok',
+      };
+      for (final entry in guestKeys.entries) {
+        await storage.write(entry.key, entry.value);
+      }
+
+      await SessionTeardown(storage: storage).run();
+
+      for (final entry in guestKeys.entries) {
+        expect(await storage.read(entry.key), entry.value, reason: entry.key);
+      }
+    });
   });
 }

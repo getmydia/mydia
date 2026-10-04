@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, TargetPlatform, visibleForTesting;
 import 'package:flutter/material.dart';
@@ -19,6 +21,7 @@ import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
 import '../widgets/channel_badge.dart';
 import 'login/login_controller.dart';
+import 'sources/add_source_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -147,9 +150,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     // Reinitialize P2P with new relay URL
     final effectiveUrl = newUrl.isEmpty ? null : newUrl;
-    ref.read(p2pStatusNotifierProvider.notifier).reinitializeWithRelayUrl(
-          effectiveUrl == defaultRelayUrl ? null : effectiveUrl,
-        );
+    // Not awaited: re-resolving relays takes seconds and the toast below
+    // should not wait for it. The notifier catches and logs its own failures.
+    unawaited(
+      ref.read(p2pStatusNotifierProvider.notifier).reinitializeWithRelayUrl(
+            effectiveUrl == defaultRelayUrl ? null : effectiveUrl,
+          ),
+    );
 
     if (mounted) {
       showToast(
@@ -468,12 +475,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 
   Widget _buildContent(LoginState loginState, bool isCompact) {
-    if (InputCapabilities.directionalPrimary) {
-      return _buildTvPairingLayout(loginState, isCompact);
-    }
-    // Always show the claim code card which now contains
-    // the direct connection form as an expandable section
-    return _buildClaimCodeCard(loginState, isCompact);
+    // The claim code card contains the direct connection form as an
+    // expandable section.
+    final card = InputCapabilities.directionalPrimary
+        ? _buildTvPairingLayout(loginState, isCompact)
+        : _buildClaimCodeCard(loginState, isCompact);
+    // The way in for someone with only a Plex, Jellyfin or Stash server.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        card,
+        const SizedBox(height: 16),
+        const ConnectOtherServerButton(),
+        const ShowHiddenSourcesButton(),
+      ],
+    );
   }
 
   Widget _buildBackgroundDecoration() {
@@ -1491,7 +1507,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         .toUpperCase();
                     _claimCodeController.text = cleanText;
                     if (cleanText.length >= 6) {
-                      _handleClaimCodeSubmit();
+                      await _handleClaimCodeSubmit();
                     }
                   }
                 },

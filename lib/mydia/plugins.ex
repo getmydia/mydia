@@ -48,6 +48,8 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
+  alias Mydia.Plugins.Shelves
+  alias Mydia.Plugins.Sources
   alias Mydia.Settings
 
   @doc "Lists all registered plugin descriptors."
@@ -222,6 +224,52 @@ defmodule Mydia.Plugins do
     end
   end
 
+  @doc """
+  Calls a plugin's 1.6 `fill-shelf` export for one of its declared shelves, as
+  `user`. The plugin's settings ride along under `config`, as they do for a
+  page call.
+
+  Options: `:exclude` (maps with `:media_type`, `:tmdb_id`, `:tvdb_id`,
+  `:imdb_id`), `:limit`, `:now` (a `DateTime`, or Unix seconds).
+
+  Errors: `:unsupported` for a guest older than 1.6, `:busy` when a fill for
+  this user is already running, `:guest_error` carrying the guest's message.
+  """
+  @spec invoke_fill_shelf(String.t(), String.t(), Mydia.Accounts.User.t(), keyword()) ::
+          {:ok, %{items: [map()]}} | {:error, Error.t()}
+  def invoke_fill_shelf(slug, shelf_key, %Mydia.Accounts.User{} = user, opts \\ [])
+      when is_binary(slug) and is_binary(shelf_key) do
+    # The instance-scoped imports (KV, link-request) need one; a multi_instance
+    # plugin has no default instance, so it fills with none.
+    instance = Instances.default_instance(slug)
+
+    payload = %{
+      "shelf" => shelf_key,
+      "exclude" => Keyword.get(opts, :exclude, []),
+      "limit" => Keyword.get(opts, :limit, 12),
+      "now" => unix_seconds(Keyword.get(opts, :now)),
+      "config" => if(instance, do: Instances.config_for(instance), else: plugin_settings(slug))
+    }
+
+    Host.call(slug, "fill-shelf", payload,
+      handler: :fill_shelf,
+      acting_user_id: user.id,
+      role: user.role,
+      instance_id: instance && instance.id
+    )
+  end
+
+  defp unix_seconds(%DateTime{} = now), do: DateTime.to_unix(now)
+  defp unix_seconds(now) when is_integer(now), do: now
+  defp unix_seconds(_), do: System.system_time(:second)
+
+  defp plugin_settings(slug) do
+    case Settings.get_plugin_config_by_slug(slug) do
+      %{settings: %{} = settings} -> settings
+      _ -> %{}
+    end
+  end
+
   # setup and check-health are the plugin-driven admin surfaces; a manifest
   # opts in with `setup: true`.
   defp setup_capable(slug) do
@@ -374,6 +422,7 @@ defmodule Mydia.Plugins do
     # Persist YAML/env-declared plugin instances and settings before plugins start
     # scheduling against them. Same boot-side-effect gate as bundled seeding.
     if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Plugins.DeclaredSources.sync()
       Mydia.Plugins.RuntimeInstances.sync()
       DeclaredSettings.sync_all()
     end
@@ -636,13 +685,21 @@ defmodule Mydia.Plugins do
   full declared capability set. Passing `grants: %{}` installs the plugin
   **inactive** (deny-by-default) — nothing runs until `approve/2`. Extra `opts`
   (`:allow_private`, `:resolver`) are forwarded to the gate for tests.
+
+  Installing over an existing sideloaded or index install replaces its bytes,
+  manifest and grant and restarts it on the new build, which is how the store
+  replaces a sideload or applies an update. A bundled slug is refused.
   """
   @spec install(Index.Entry.t(), keyword()) :: {:ok, Plugin.t() | :inactive} | {:error, Error.t()}
   def install(%Index.Entry{} = entry, opts \\ []) do
     grants = Keyword.get(opts, :grants, entry.manifest.capabilities)
 
-    with {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
-         {:ok, config} <- persist_install(entry, wasm, hash, grants) do
+    with :ok <- refuse_bundled(entry.slug),
+         {:ok, %{wasm: wasm, hash: hash}} <- Index.fetch_package(entry, opts),
+         {:ok, config} <- persist_install(entry, wasm, hash, grants),
+         # Only after the new build is stored, so a failed write leaves the
+         # running plugin untouched.
+         :ok <- deactivate(entry.slug) do
       config |> with_declared_settings() |> finish_activation()
     end
   end
@@ -882,14 +939,24 @@ defmodule Mydia.Plugins do
            Settings.update_plugin_config(config, %{granted_capabilities: %{}, enabled: false}) do
       deactivate(slug)
       reload()
+      # A revoked plugin lost the grant its shelves were filled under. Purged
+      # last: until the registry stops declaring the shelf, a Home visit would
+      # create its row again.
+      Shelves.purge(slug)
       {:ok, :revoked}
     end
   end
 
-  @doc "Removes a plugin entirely: deactivates it and deletes its config (R14)."
+  @doc """
+  Removes a plugin entirely: deactivates it and deletes its config (R14).
+
+  A bundled plugin is refused: `ensure_bundled/0` would re-seed it approved and
+  enabled on the next admin page load or boot. Disabling is its off switch.
+  """
   @spec remove(String.t()) :: {:ok, :removed} | {:error, Error.t()}
   def remove(slug) do
     with {:ok, config} <- fetch_config(slug),
+         :ok <- ensure_removable(config),
          {:ok, _} <- Settings.delete_plugin_config(config) do
       # Role ceilings went with the config row. Approvals and queued writes are
       # keyed by slug alone, so they are cleared too. The journal stays as
@@ -897,8 +964,17 @@ defmodule Mydia.Plugins do
       Grants.purge(slug)
       deactivate(slug)
       reload()
+      # Last, for the same reason as in revoke/1: no longer declared by now.
+      Shelves.purge(slug)
       {:ok, :removed}
     end
+  end
+
+  defp ensure_removable(config) do
+    if Sources.origin(config) == :bundled,
+      do:
+        {:error, Error.new(:unsupported, "Bundled plugins can't be removed; disable it instead.")},
+      else: :ok
   end
 
   @doc "Enables or disables an installed plugin, starting/stopping its pool."
@@ -946,19 +1022,21 @@ defmodule Mydia.Plugins do
   @doc """
   Pure comparison: returns `%{slug, current, latest}` for each installed config
   that a catalog `entry` offers in a newer version (R14, no false positives on
-  equal versions).
+  equal versions). An installed plugin is only compared with entries from its
+  own origin (`Mydia.Plugins.Sources.origin/1`), so a third-party catalog cannot
+  announce an update for a plugin it did not install.
   """
   @spec detect_updates([Settings.PluginConfig.t()], [Index.Entry.t()]) :: [map()]
   def detect_updates(installed, entries) do
-    latest_by_slug =
-      entries
-      |> Enum.group_by(& &1.slug)
-      |> Map.new(fn {slug, es} -> {slug, latest_version(es)} end)
-
     Enum.flat_map(installed, fn config ->
-      latest = Map.get(latest_by_slug, config.slug)
+      origin = Sources.origin(config)
 
-      if latest && version_newer?(latest, config.version) do
+      latest =
+        entries
+        |> Enum.filter(&(&1.slug == config.slug and Index.entry_origin(&1) == origin))
+        |> latest_version()
+
+      if latest && Index.version_newer?(latest, config.version) do
         [%{slug: config.slug, current: config.version, latest: latest}]
       else
         []
@@ -974,7 +1052,7 @@ defmodule Mydia.Plugins do
           entries
 
         {:error, error} ->
-          Logger.warning("update check could not fetch #{source}: #{inspect(error)}")
+          Logger.warning("update check could not fetch #{source.url}: #{inspect(error)}")
           []
       end
     end)
@@ -984,19 +1062,8 @@ defmodule Mydia.Plugins do
     entries
     |> Enum.map(& &1.version)
     |> Enum.reject(&is_nil/1)
-    |> Enum.sort(&(not version_newer?(&2, &1)))
+    |> Enum.sort(&(not Index.version_newer?(&2, &1)))
     |> List.first()
-  end
-
-  # True when `candidate` is a newer version than `current`. Uses semver when
-  # both parse, falling back to string inequality.
-  defp version_newer?(_candidate, nil), do: true
-
-  defp version_newer?(candidate, current) do
-    case {Version.parse(candidate), Version.parse(current)} do
-      {{:ok, c}, {:ok, cur}} -> Version.compare(c, cur) == :gt
-      _ -> candidate != current and candidate > current
-    end
   end
 
   defp emit_update_event(%{slug: slug, current: current, latest: latest}) do
@@ -1024,6 +1091,7 @@ defmodule Mydia.Plugins do
       name: entry.name,
       version: entry.version,
       source_url: entry.package_url,
+      plugin_source_id: entry.source_id,
       integrity_hash: hash,
       manifest: manifest_to_map(entry.manifest),
       wasm_module: wasm,
@@ -1460,6 +1528,7 @@ defmodule Mydia.Plugins do
       "connection" => m.connection,
       "schedule" => m.schedule,
       "page" => m.page,
+      "shelves" => m.shelves,
       "min_host_version" => m.min_host_version,
       "multi_instance" => m.multi_instance,
       "category" => m.category,

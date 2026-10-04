@@ -7,6 +7,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   require Logger
 
   alias Mydia.Accounts
+  alias Mydia.Accounts.Scope
   alias Mydia.Accounts.UserPreference
   alias Mydia.Media
   alias Mydia.Media.AddDefaults
@@ -55,6 +56,7 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # unowned titles, bounded so a fully-owned category cannot spin.
   @page_size 20
   @max_auto_advance 3
+  @max_auto_advance_restricted 8
 
   @unsupported_media_type "That media type is not supported."
 
@@ -106,14 +108,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
       # Parse filter params
       selected_genres = parse_genres_param(params["genre"])
       selected_language = params["language"]
-      selected_year = parse_year_param(params["year"])
+
+      {year_from, year_to} =
+        order_years(parse_year_param(params["year_from"]), parse_year_param(params["year_to"]))
+
       min_rating = parse_rating_param(params["rating"])
       page = parse_page_param(params["page"])
 
       # Determine if filters are active or discover mode is explicitly selected
       filters_active? =
         selected_genres != [] or selected_language != nil or
-          selected_year != nil or min_rating != nil
+          year_from != nil or year_to != nil or min_rating != nil
 
       # The home tab needs a saved country. Without one (an old link, or the
       # tab was just removed) it falls back the same way an unknown category
@@ -142,7 +147,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
         |> assign(:search_mode, search_mode)
         |> assign(:selected_genres, selected_genres)
         |> assign(:selected_language, selected_language)
-        |> assign(:selected_year, selected_year)
+        |> assign(:year_from, year_from)
+        |> assign(:year_to, year_to)
         |> assign(:min_rating, min_rating)
         |> assign(:page, page)
         |> assign(:items, [])
@@ -226,7 +232,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
        |> assign(:search_mode, false)
        |> assign(:selected_genres, [])
        |> assign(:selected_language, nil)
-       |> assign(:selected_year, nil)
+       |> assign(:year_from, nil)
+       |> assign(:year_to, nil)
        |> assign(:min_rating, nil)
        |> assign(:sort_by, "popularity.desc")}
     end
@@ -270,7 +277,8 @@ defmodule MydiaWeb.DiscoverLive.Index do
       build_url_params(socket.assigns,
         genre: params["genre"],
         language: params["language"],
-        year: params["year"],
+        year_from: params["year_from"],
+        year_to: params["year_to"],
         rating: params["rating"],
         sort: params["sort"]
       )
@@ -570,26 +578,36 @@ defmodule MydiaWeb.DiscoverLive.Index do
       page: page
     } = socket.assigns
 
-    result =
-      cond do
-        search_mode ->
-          config = Metadata.default_relay_config()
-          Metadata.search_cached(config, search_query, media_type: media_type, page: page)
+    if RemoteFilter.any_category?(socket.assigns.current_scope, media_type) do
+      result =
+        cond do
+          search_mode ->
+            config = Metadata.default_relay_config()
+            Metadata.search_cached(config, search_query, media_type: media_type, page: page)
 
-        category in [:discover, :home] ->
-          discover_opts = build_discover_opts(socket.assigns)
-          Metadata.discover(media_type, discover_opts)
+          category in [:discover, :home] ->
+            discover_opts = build_discover_opts(socket.assigns)
+            Metadata.discover(media_type, discover_opts)
 
-        true ->
-          Metadata.fetch_curated_list(category, media_type: media_type, page: page)
-      end
+          true ->
+            Metadata.fetch_curated_list(category, media_type: media_type, page: page)
+        end
 
-    socket =
-      socket
-      |> handle_load_result(result, :replace)
-      |> maybe_auto_advance(0, @page_size)
+      socket =
+        socket
+        |> handle_load_result(result, :replace)
+        |> maybe_auto_advance(0, @page_size)
 
-    {:noreply, socket}
+      {:noreply, socket}
+    else
+      {:noreply,
+       socket
+       |> assign(:items, [])
+       |> assign_visible_items()
+       |> assign(:has_more, false)
+       |> assign(:loading, false)
+       |> assign(:load_error, nil)}
+    end
   end
 
   def handle_info({:load_page, page, advances, target}, socket) do
@@ -662,9 +680,11 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # result comes back rather than against the (possibly different) ref that
   # was queried.
   def handle_info({:fetch_recommendations, item_ref, tmdb_ref, media_type}, socket) do
+    scope = socket.assigns.current_scope
+
     {:noreply,
      start_async(socket, {:load_recommendations, item_ref}, fn ->
-       Recommendations.for_ref(tmdb_ref, media_type, nil)
+       Recommendations.for_ref(tmdb_ref, media_type, scope, nil)
      end)}
   end
 
@@ -933,7 +953,6 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # title they have already requested, which the duplicate check then rejects.
   defp enrich_recommendations(socket, results) do
     results
-    |> RemoteFilter.filter(socket.assigns.current_scope)
     |> MediaAddHelpers.enrich_with_library_status(socket.assigns.library_status_map)
     |> MediaRequestHelpers.enrich_with_request_status(socket.assigns.request_status_map)
   end
@@ -1137,10 +1156,10 @@ defmodule MydiaWeb.DiscoverLive.Index do
   # however many of them turn out to be owned.
   defp maybe_auto_advance(socket, advances, target) do
     cond do
-      not socket.assigns.hide_owned ->
+      not filtering?(socket) ->
         socket
 
-      advances >= @max_auto_advance ->
+      advances >= advance_cap(socket) ->
         socket
 
       length(socket.assigns.visible_items) >= target ->
@@ -1155,22 +1174,40 @@ defmodule MydiaWeb.DiscoverLive.Index do
     end
   end
 
+  # Anything that drops results after the page arrives can strand the grid:
+  # "Hide in library", and any access restriction.
+  defp filtering?(socket),
+    do: socket.assigns.hide_owned or Scope.restricted?(socket.assigns.current_scope)
+
+  # A restricted page loses more per fetch, so it may go further before giving
+  # up.
+  defp advance_cap(socket) do
+    if Scope.restricted?(socket.assigns.current_scope),
+      do: @max_auto_advance_restricted,
+      else: @max_auto_advance
+  end
+
   defp build_discover_opts(assigns) do
-    opts =
-      [page: assigns.page] ++ RemoteFilter.discover_params(assigns.current_scope)
+    hints = RemoteFilter.discover_params(assigns.current_scope, assigns.media_type)
+    {required, hints} = Keyword.pop(hints, :required_genres, [])
+    {hint_language, hints} = Keyword.pop(hints, :original_language)
+
+    opts = [page: assigns.page] ++ hints
+
+    # TMDB treats a comma in with_genres as AND, which the hint needs.
+    genres = Enum.uniq(assigns.selected_genres ++ required)
 
     opts =
-      if assigns.selected_genres != [] do
-        Keyword.put(opts, :genres, Enum.join(assigns.selected_genres, ","))
+      if genres != [] do
+        Keyword.put(opts, :genres, Enum.join(genres, ","))
       else
         opts
       end
 
     opts =
-      if assigns.selected_language do
-        Keyword.put(opts, :original_language, assigns.selected_language)
-      else
-        opts
+      case assigns.selected_language || hint_language do
+        nil -> opts
+        language -> Keyword.put(opts, :original_language, language)
       end
 
     base =
@@ -1186,11 +1223,14 @@ defmodule MydiaWeb.DiscoverLive.Index do
       end
 
     opts =
-      if assigns.selected_year do
-        Keyword.put(opts, :year, assigns.selected_year)
-      else
-        opts
-      end
+      if assigns.year_from,
+        do: Keyword.put(opts, :release_date_gte, "#{assigns.year_from}-01-01"),
+        else: opts
+
+    opts =
+      if assigns.year_to,
+        do: Keyword.put(opts, :release_date_lte, "#{assigns.year_to}-12-31"),
+        else: opts
 
     opts =
       if assigns.min_rating do
@@ -1199,8 +1239,20 @@ defmodule MydiaWeb.DiscoverLive.Index do
         opts
       end
 
-    Keyword.merge(base, Keyword.put(opts, :sort_by, assigns.sort_by))
+    base
+    |> Keyword.merge(Keyword.put(opts, :sort_by, assigns.sort_by), fn
+      key, source, user when key in [:release_date_gte, :release_date_lte] ->
+        narrow_release_bound(key, source, user)
+
+      _key, _source, user ->
+        user
+    end)
   end
+
+  # A year range narrows a regional source's release window, never widens it.
+  # Dates are ISO `YYYY-MM-DD`, so string order is date order.
+  defp narrow_release_bound(:release_date_gte, source, user), do: max(source, user)
+  defp narrow_release_bound(:release_date_lte, source, user), do: min(source, user)
 
   defp build_url_params(assigns, overrides) do
     params = %{"type" => to_string(assigns.media_type)}
@@ -1242,8 +1294,13 @@ defmodule MydiaWeb.DiscoverLive.Index do
     params =
       if language && language != "", do: Map.put(params, "language", language), else: params
 
-    year = Keyword.get(overrides, :year, assigns.selected_year)
-    params = if year && year != "", do: Map.put(params, "year", to_string(year)), else: params
+    params =
+      Enum.reduce([:year_from, :year_to], params, fn key, acc ->
+        case Keyword.get(overrides, key, Map.get(assigns, key)) do
+          value when value in [nil, ""] -> acc
+          value -> Map.put(acc, to_string(key), to_string(value))
+        end
+      end)
 
     rating = Keyword.get(overrides, :rating, assigns.min_rating)
 
@@ -1294,10 +1351,17 @@ defmodule MydiaWeb.DiscoverLive.Index do
 
   defp parse_year_param(year_string) do
     case Integer.parse(year_string) do
-      {year, ""} when year > 1900 and year < 2100 -> year
+      {year, ""} when year >= 1900 and year < 2100 -> year
       _ -> nil
     end
   end
+
+  # A reversed range is almost always a slip, so it is read as the range the
+  # user meant rather than one that matches nothing.
+  defp order_years(from, to) when is_integer(from) and is_integer(to) and from > to,
+    do: {to, from}
+
+  defp order_years(from, to), do: {from, to}
 
   defp parse_rating_param(nil), do: nil
   defp parse_rating_param(""), do: nil

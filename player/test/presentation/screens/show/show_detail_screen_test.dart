@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:gql/ast.dart' show OperationDefinitionNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/widgets/cast_rail.dart';
 import 'package:player/presentation/widgets/detail_action_row.dart';
@@ -159,6 +160,7 @@ Future<void> _pumpScreen(
   Map<int, List<Map<String, dynamic>>>? episodesBySeason,
   List<String>? pushedRoutes,
   Size? size,
+  int? initialSeason,
 }) async {
   if (size != null) {
     await tester.binding.setSurfaceSize(size);
@@ -192,8 +194,15 @@ Future<void> _pumpScreen(
             routes: [
               GoRoute(
                 path: '/show/:id',
-                builder: (context, state) =>
-                    ShowDetailScreen(id: state.pathParameters['id']!),
+                builder: (context, state) => initialSeason == null
+                    ? ShowDetailScreen(id: state.pathParameters['id']!)
+                    : ShowDetailScreen.target(
+                        target: MydiaTarget(
+                          DetailKind.show,
+                          state.pathParameters['id']!,
+                        ),
+                        initialSeason: initialSeason,
+                      ),
               ),
               GoRoute(
                 path: '/player/episode/:id',
@@ -314,6 +323,54 @@ void main() {
 
     expect(find.byType(DetailActionRow), findsOneWidget);
     expect(find.text('S2 · E1'), findsOneWidget);
+  });
+
+  testWidgets('initialSeason seeds once and a later season tap sticks',
+      (tester) async {
+    await _pumpScreen(
+      tester,
+      size: const Size(1000, 2200),
+      initialSeason: 2,
+      showJson: _showJson(seasons: [
+        {
+          '__typename': 'Season',
+          'seasonNumber': 1,
+          'episodeCount': 3,
+          'airedEpisodeCount': 3,
+          'hasFiles': true,
+        },
+        {
+          '__typename': 'Season',
+          'seasonNumber': 2,
+          'episodeCount': 2,
+          'airedEpisodeCount': 2,
+          'hasFiles': true,
+        },
+      ]),
+      episodesBySeason: {
+        1: [
+          _episodeJson(1, watched: true),
+          _episodeJson(2),
+          _episodeJson(3),
+        ],
+        2: [
+          _episodeJson(1, season: 2),
+          _episodeJson(2, season: 2),
+        ],
+      },
+    );
+    await tester.pumpAndSettle();
+
+    // Opened on season 2, not on next up (season 1).
+    expect(find.text('S2 · E1'), findsOneWidget);
+
+    await tester.tap(find.text('Season 1'));
+    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('S1 · E1'), findsOneWidget);
+    expect(find.text('S2 · E1'), findsNothing);
   });
 
   testWidgets('hero shows the release year under the title', (tester) async {
@@ -439,6 +496,15 @@ void main() {
     final actions = tester.getRect(find.byType(DetailActionRow));
     expect(play.bottom, lessThan(380));
     expect(play.bottom, lessThan(actions.top));
+
+    // Wide layout: the row shrink-wraps to one 64px slot per action, flush
+    // with the body's 20px inset, instead of squeezing into a fixed column.
+    final slots = find.descendant(
+      of: find.byType(DetailActionRow),
+      matching: find.byType(InkWell),
+    );
+    expect(actions.left, closeTo(20, 0.5));
+    expect(actions.width, 64.0 * tester.widgetList(slots).length);
   });
 
   testWidgets('hero overlay does not overflow at phone width', (tester) async {

@@ -166,7 +166,8 @@ Future<WindowGeometryStore> _openStore() async {
   try {
     await initAppHive();
     return HiveWindowGeometryStore(
-      await Hive.openBox<Map>(HiveWindowGeometryStore.boxName),
+      await Hive.openBox<Map<dynamic, dynamic>>(
+          HiveWindowGeometryStore.boxName),
     );
   } catch (e) {
     // Most likely a second instance holding the lock, which `_startApp`

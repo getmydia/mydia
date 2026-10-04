@@ -101,3 +101,37 @@ A new `quality_standards` key must be classified in `ProfileLimits`.
 every limit in all three places (automatic removal, manual listing, file
 violation). Changing a limit to a preference means changing that test, not
 just the ranker.
+
+## Grab delay
+
+`grab_delay_hours` on a quality profile is neither a limit nor a preference: it
+decides when an automatic search grabs, not what. `Mydia.Indexers.GrabDelay`
+runs on the ranked list wherever an automatic search picks a release (movie
+searches, episode searches and season-pack searches, including their upgrade
+modes) and answers grab now or wait until a time.
+
+The clock is the oldest `published_at` among the releases left after limits,
+blacklist, identity and the upgrade candidate filter. A newer upload never
+resets it, and a backlog item grabs at once because its releases are old.
+A release without a date counts as old. A release dated in the future (indexer
+clock skew) cannot stretch the wait: it is capped at the delay from now.
+
+A best release that already scores at or above `upgrade_until_score` grabs at
+once. That comparison uses the file-scale score from
+`SearchScorer.score_quality/3`, the scale the upgrade cutoff is defined on, not
+the ranker's total, which adds seeders and title match.
+
+A wait records no backoff. `Mydia.Jobs.SearchDeferral` logs `search.deferred`
+and schedules a re-check for that episode, season or movie (or the same
+upgrade) a minute after the delay ends, since upgrades otherwise only run
+nightly. The event is recorded once per wait: the re-check is unique while it
+is scheduled, and a repeat insert emits nothing.
+
+While the re-check is pending, the cron searches skip that item (and, for a
+season re-check, every episode of that season), since searching cannot grab
+anything before then. The re-check carries a `recheck` marker, and if the item
+was unmonitored in the meantime it does nothing. Searches a person starts
+carry `bypass_delay` and never wait; that includes search on add, request
+approvals and plugin page adds. Cron, the upgrade sweep, failed-download
+replacement searches and the re-check itself never set it. Manual search
+ignores the delay entirely.

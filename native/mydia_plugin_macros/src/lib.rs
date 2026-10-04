@@ -9,12 +9,14 @@ use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Ident, ItemFn, Path, Token};
 
 /// Optional macro arguments, comma-separated, any order, each at most once:
-/// `on_schedule = f`, `on_http = p`, `setup = g`, `check_health = h`.
+/// `on_schedule = f`, `on_http = p`, `setup = g`, `check_health = h`,
+/// `fill_shelf = s`.
 struct PluginArgs {
     on_schedule: Option<Path>,
     on_http: Option<Path>,
     setup: Option<Path>,
     check_health: Option<Path>,
+    fill_shelf: Option<Path>,
 }
 
 impl Parse for PluginArgs {
@@ -24,6 +26,7 @@ impl Parse for PluginArgs {
             on_http: None,
             setup: None,
             check_health: None,
+            fill_shelf: None,
         };
 
         while !input.is_empty() {
@@ -36,10 +39,11 @@ impl Parse for PluginArgs {
                 "on_http" => &mut args.on_http,
                 "setup" => &mut args.setup,
                 "check_health" => &mut args.check_health,
+                "fill_shelf" => &mut args.fill_shelf,
                 _ => {
                     return Err(syn::Error::new(
                         key.span(),
-                        "expected `on_schedule`, `on_http`, `setup` or `check_health`",
+                        "expected `on_schedule`, `on_http`, `setup`, `check_health` or `fill_shelf`",
                     ))
                 }
             };
@@ -110,6 +114,9 @@ impl Parse for PluginArgs {
 /// loudly rather than silently doing nothing. `on-http` behaves the same way,
 /// as do `setup` and `check_health` (1.5.0): a plugin that declares
 /// `setup: true` in its manifest but forgets the handler fails loudly.
+/// `fill_shelf` (1.6.0) follows the same rule: a plugin that declares
+/// `shelves` in its manifest but names no handler returns an error from
+/// `fill-shelf`, which the host records on the shelf.
 #[proc_macro_attribute]
 pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_macro_input!(attr as PluginArgs);
@@ -152,6 +159,15 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         },
     };
 
+    let fill_shelf_body = match args.fill_shelf {
+        Some(path) => quote! { #path(req) },
+        None => quote! {
+            ::core::result::Result::Err(
+                ::std::string::String::from("fill-shelf not implemented by this plugin"),
+            )
+        },
+    };
+
     let expanded = quote! {
         #func
 
@@ -187,6 +203,16 @@ pub fn plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::std::string::String,
             > {
                 #check_health_body
+            }
+
+            fn fill_shelf(
+                req: ::mydia_plugin_sdk::types::ShelfRequest,
+            ) -> ::core::result::Result<
+                ::std::vec::Vec<::mydia_plugin_sdk::types::ShelfItem>,
+                ::std::string::String,
+            > {
+                let _ = &req;
+                #fill_shelf_body
             }
         }
 

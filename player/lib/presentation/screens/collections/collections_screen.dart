@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +7,7 @@ import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/collection.dart';
+import '../../widgets/artwork_image.dart';
 import '../../widgets/browse_scaffold.dart';
 import 'collections_controller.dart';
 
@@ -226,7 +226,7 @@ class _CollectionCardState extends State<_CollectionCard> {
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
           transform: _isHovered
-              ? (Matrix4.identity()..scale(1.02, 1.02, 1.0))
+              ? (Matrix4.identity()..scaleByDouble(1.02, 1.02, 1.0, 1.0))
               : Matrix4.identity(),
           decoration: BoxDecoration(
             color: AppColors.surface,
@@ -317,10 +317,10 @@ class _CollectionCardState extends State<_CollectionCard> {
     }
 
     if (posters.length == 1) {
-      return CachedNetworkImage(
+      return ArtworkImage(
         imageUrl: posters[0],
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _placeholderTile(),
+        errorWidget: (_) => _placeholderTile(),
       );
     }
 
@@ -332,10 +332,10 @@ class _CollectionCardState extends State<_CollectionCard> {
       crossAxisSpacing: 1,
       children: List.generate(4, (index) {
         if (index < posters.length) {
-          return CachedNetworkImage(
+          return ArtworkImage(
             imageUrl: posters[index],
             fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => _placeholderTile(),
+            errorWidget: (_) => _placeholderTile(),
           );
         }
         return _placeholderTile();

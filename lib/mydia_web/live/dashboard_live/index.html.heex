@@ -181,6 +181,14 @@
           title="Recently Added"
           entries={@recently_added}
         />
+      <% :shelves -> %>
+        <ShelfComponents.shelf_rail
+          :for={rail <- @shelves}
+          rail={rail}
+          current_user={@current_user}
+          adding_ids={@adding_item_ids}
+          requesting_item_id={@requesting_item_id}
+        />
       <% :recently_added_movies -> %>
         <Components.recently_added_rail
           id="recently-added-movies-rail"
@@ -416,6 +424,7 @@
     metadata={@selected_metadata}
     loading={@detail_loading}
     current_user={@current_user}
+    current_scope={@current_scope}
     open={@selected_item != nil}
     config_open={@add_config != nil}
   />

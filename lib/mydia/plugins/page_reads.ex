@@ -1,8 +1,8 @@
 defmodule Mydia.Plugins.PageReads do
   @moduledoc """
   Reads for plugin pages: search over the library and the catalog, and the
-  acting user's own requests, downloads and collections. Only valid inside an
-  `on-http` invocation, where the host knows who is asking. Every read runs as
+  acting user's own requests, downloads and collections. Valid inside an
+  `on-http` or `fill-shelf` invocation, where the host knows whose data to read. Every read runs as
   that user and never returns another user's rows.
 
   ## Download scoping
@@ -19,12 +19,13 @@ defmodule Mydia.Plugins.PageReads do
 
   import Ecto.Query, only: [from: 2]
 
-  import Mydia.Plugins.PageContext, only: [page_user: 1, opt: 2, to_option: 1, iso: 1]
+  import Mydia.Plugins.PageContext, only: [acting_user: 1, opt: 2, to_option: 1, iso: 1]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Collections
   alias Mydia.Downloads
   alias Mydia.LibrarySearch
+  alias Mydia.Media.RemoteFilter
   alias Mydia.MediaRequests
   alias Mydia.Metadata
   alias Mydia.Playback
@@ -36,6 +37,8 @@ defmodule Mydia.Plugins.PageReads do
   @history_cap 50
   @history_default 20
   @default_limit 10
+  # Pages fetched per type when a restricted user's results are being filtered.
+  @catalog_max_pages 3
 
   @doc """
   Searches the user's visible library (`kind: :library`) or the metadata
@@ -43,14 +46,14 @@ defmodule Mydia.Plugins.PageReads do
   """
   def search(plugin, ctx, req) do
     with :ok <- require_flag(plugin, "data:search"),
-         {:ok, user} <- page_user(ctx) do
+         {:ok, user} <- acting_user(ctx) do
       limit = req |> opt(:limit) |> clamp_limit()
       types = req |> opt(:"media-type") |> media_types()
       query = Map.get(req, :query, "")
 
       case Map.get(req, :kind) do
         :library -> library_hits(user, query, types, limit)
-        :catalog -> catalog_hits(query, types, limit)
+        :catalog -> catalog_hits(user, query, types, limit)
         _ -> {:error, Error.new(:invalid_request, "unknown search kind")}
       end
     end
@@ -62,7 +65,7 @@ defmodule Mydia.Plugins.PageReads do
   """
   def list(namespace, plugin, ctx) do
     with :ok <- require_namespace(plugin, namespace),
-         {:ok, user} <- page_user(ctx) do
+         {:ok, user} <- acting_user(ctx) do
       {:ok, %{items: rows(namespace, user), "next-cursor": :none}}
     end
   end
@@ -80,7 +83,7 @@ defmodule Mydia.Plugins.PageReads do
   """
   def watch_history(plugin, ctx, req, with_origin?) do
     with :ok <- require_namespace(plugin, "watch_history"),
-         {:ok, user} <- page_user(ctx),
+         {:ok, user} <- acting_user(ctx),
          {:ok, since} <- history_since(opt(req, :"updated-since")) do
       limit = history_limit(opt(req, :limit))
 
@@ -207,15 +210,17 @@ defmodule Mydia.Plugins.PageReads do
     {:ok, Enum.take(hits, limit)}
   end
 
-  defp catalog_hits(query, types, limit) do
+  defp catalog_hits(user, query, types, limit) do
     if String.trim(query) == "" do
       {:ok, []}
     else
       config = Metadata.default_relay_config()
 
+      scope = Scope.for_user(user)
+
       outcomes =
         Enum.map(types, fn type ->
-          with {:ok, results} <- Metadata.search_cached(config, query, media_type: type) do
+          with {:ok, results} <- visible_catalog_results(config, query, type, scope, limit) do
             {:ok, Enum.map(results, &catalog_hit(&1, type))}
           end
         end)
@@ -226,6 +231,38 @@ defmodule Mydia.Plugins.PageReads do
 
         {ok, _failed} ->
           {:ok, ok |> Enum.flat_map(fn {:ok, hits} -> hits end) |> Enum.take(limit)}
+      end
+    end
+  end
+
+  # A restricted user's first page can be entirely hidden while later pages
+  # hold visible titles, so keep paging (up to @catalog_max_pages) until `limit`
+  # visible results are collected or a page comes back empty. The relay result
+  # carries no total_pages, so an empty page is the only exhaustion signal.
+  # Unrestricted scopes keep the single-page request.
+  defp visible_catalog_results(config, query, type, scope, limit) do
+    with {:ok, results} <- Metadata.search_cached(config, query, media_type: type) do
+      visible = RemoteFilter.filter(results, scope)
+
+      if Scope.restricted?(scope) do
+        {:ok, collect_catalog_pages(config, query, type, scope, limit, results, visible, 2)}
+      else
+        {:ok, visible}
+      end
+    end
+  end
+
+  defp collect_catalog_pages(config, query, type, scope, limit, last_page, acc, page) do
+    if last_page == [] or length(acc) >= limit or page > @catalog_max_pages do
+      acc
+    else
+      case Metadata.search_cached(config, query, media_type: type, page: page) do
+        {:ok, results} ->
+          visible = acc ++ RemoteFilter.filter(results, scope)
+          collect_catalog_pages(config, query, type, scope, limit, results, visible, page + 1)
+
+        {:error, _} ->
+          acc
       end
     end
   end

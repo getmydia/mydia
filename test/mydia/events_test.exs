@@ -959,6 +959,38 @@ defmodule Mydia.EventsTest do
       assert event.metadata["episode_number"] == 3
     end
 
+    test "search_deferred/3 records an info event with the grab time" do
+      media_item = %Mydia.Media.MediaItem{
+        id: Ecto.UUID.generate(),
+        title: "Lantern Vale",
+        type: "tv_show"
+      }
+
+      episode = %Mydia.Media.Episode{
+        id: Ecto.UUID.generate(),
+        season_number: 1,
+        episode_number: 4,
+        media_item_id: media_item.id
+      }
+
+      Events.search_deferred(
+        media_item,
+        %{
+          "selected_release" => "Lantern.Vale.S01E04.720p",
+          "grab_after" => "2031-03-11T12:00:00Z"
+        },
+        episode: episode
+      )
+
+      Process.sleep(100)
+
+      [event] = Events.list_events(type: "search.deferred")
+      assert event.category == "search"
+      assert event.severity == :info
+      assert event.metadata["grab_after"] == "2031-03-11T12:00:00Z"
+      assert event.metadata["episode_number"] == 4
+    end
+
     test "search_error/4 creates correct event" do
       media_item = %Mydia.Media.MediaItem{
         id: Ecto.UUID.generate(),

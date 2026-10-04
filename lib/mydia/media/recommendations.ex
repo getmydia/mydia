@@ -18,7 +18,9 @@ defmodule Mydia.Media.Recommendations do
 
   require Logger
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.RemoteFilter
   alias Mydia.Metadata
   alias Mydia.Metadata.Ref
   alias Mydia.Metadata.Structs.SearchResult
@@ -38,19 +40,23 @@ defmodule Mydia.Media.Recommendations do
   @doc """
   Returns recommendations for a library item, or `:none`.
 
+  Results are filtered for `scope` before ranking, so a restricted account still
+  gets a full rail instead of a short or empty one after the cap.
+
   `config` is the relay configuration; it defaults to
   `Metadata.default_relay_config/0` and exists so tests can inject a stub without
   touching global environment.
   """
-  @spec for_media_item(MediaItem.t(), map() | nil) :: {:ok, [SearchResult.t()]} | :none
-  def for_media_item(media_item, config \\ nil)
+  @spec for_media_item(MediaItem.t(), Scope.t(), map() | nil) ::
+          {:ok, [SearchResult.t()]} | :none
+  def for_media_item(media_item, scope, config \\ nil)
 
-  def for_media_item(%MediaItem{type: type, tmdb_id: tmdb_id}, config)
+  def for_media_item(%MediaItem{type: type, tmdb_id: tmdb_id}, %Scope{} = scope, config)
       when is_integer(tmdb_id) and is_map_key(@media_types, type) do
-    for_ref({:tmdb, tmdb_id}, Map.fetch!(@media_types, type), config)
+    for_ref({:tmdb, tmdb_id}, Map.fetch!(@media_types, type), scope, config)
   end
 
-  def for_media_item(_media_item, _config), do: :none
+  def for_media_item(_media_item, _scope, _config), do: :none
 
   @doc """
   Returns recommendations for a provider-tagged ref, or `:none`.
@@ -63,14 +69,15 @@ defmodule Mydia.Media.Recommendations do
   carries) falls to the catch-all rather than being sent to TMDB, which is how
   the rail used to render silently empty for every TVDB-sourced show.
   """
-  @spec for_ref(Ref.t() | nil, :movie | :tv_show, map() | nil) ::
+  @spec for_ref(Ref.t() | nil, :movie | :tv_show, Scope.t(), map() | nil) ::
           {:ok, [SearchResult.t()]} | :none
-  def for_ref(ref, media_type, config \\ nil)
+  def for_ref(ref, media_type, scope, config \\ nil)
 
-  def for_ref({:tmdb, id}, media_type, config) when media_type in [:movie, :tv_show],
-    do: fetch(id, media_type, config)
+  def for_ref({:tmdb, id}, media_type, %Scope{} = scope, config)
+      when media_type in [:movie, :tv_show],
+      do: fetch(id, media_type, scope, config)
 
-  def for_ref(_ref, _media_type, _config), do: :none
+  def for_ref(_ref, _media_type, _scope, _config), do: :none
 
   @doc """
   Orders recommendations by Bayesian weighted rating and caps the list.
@@ -102,7 +109,7 @@ defmodule Mydia.Media.Recommendations do
     end
   end
 
-  defp fetch(tmdb_id, media_type, config) do
+  defp fetch(tmdb_id, media_type, scope, config) do
     config = config || Metadata.default_relay_config()
 
     case Metadata.fetch_recommendations_by_ref_cached(config, {:tmdb, tmdb_id},
@@ -112,7 +119,10 @@ defmodule Mydia.Media.Recommendations do
         :none
 
       {:ok, results} when is_list(results) ->
-        {:ok, rank(results)}
+        case results |> RemoteFilter.filter(scope) |> rank() do
+          [] -> :none
+          ranked -> {:ok, ranked}
+        end
 
       {:error, reason} ->
         Logger.warning(

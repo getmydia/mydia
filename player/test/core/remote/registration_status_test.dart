@@ -31,7 +31,8 @@ void main() {
 
     test('surfaces the failure reason', () {
       expect(
-        RegistrationFailed('server rejected the node id', 3, null).describe(),
+        const RegistrationFailed('server rejected the node id', 3, null)
+            .describe(),
         'Not discoverable: server rejected the node id',
       );
     });

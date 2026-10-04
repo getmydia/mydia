@@ -2,113 +2,71 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   @moduledoc """
   Components for the admin plugin store and capability-approval UI (U9).
 
-  The capability labels here are **host-owned**: they are derived from the
-  capability *class*, never from author-supplied manifest free-text (KTD6). A
-  plugin author cannot influence the words the admin reads when approving — that
-  is the whole point of the approval surface.
+  Capability wording is **host-owned** and lives in
+  `MydiaWeb.AdminPluginsLive.CapabilitySummary`, never in manifest free text
+  (KTD6). A plugin author cannot influence the words the admin reads when
+  approving; that is the whole point of the approval surface.
   """
   use MydiaWeb, :html
 
   import MydiaWeb.PluginSetupComponents, only: [settings_field: 1]
 
-  alias Mydia.Plugins.Manifest
-
-  @doc """
-  Plain-language description of a single declared capability.
-
-  `class` is the taxonomy class and `values` its declared values (hosts, events,
-  namespaces). Always host-authored.
-  """
-  @spec capability_label(String.t(), [String.t()]) :: String.t()
-  def capability_label("net:http", hosts),
-    do: "Make network requests to: #{join(hosts)}"
-
-  def capability_label("events:subscribe", events),
-    do: "React to these events: #{join(events)}"
-
-  def capability_label("data:read", namespaces),
-    do: "Read your library data: #{join(namespaces)}"
-
-  def capability_label("surfaces:write", surfaces),
-    do: "Write to these surfaces: #{join(surfaces)}"
-
-  def capability_label("data:search", _),
-    do: "Search your library on behalf of the person using it"
-
-  def capability_label("surfaces:page", _),
-    do: "Serve its own page inside Mydia"
-
-  def capability_label("net:private", hosts),
-    do: "Reach servers on your private network: #{join(hosts)}"
-
-  def capability_label("state:kv", _),
-    do: "Store its own state across runs"
-
-  def capability_label("users:connections", _),
-    do:
-      "Read connected users' linked accounts and watch history, and mark items " <>
-        "watched on their behalf"
-
-  def capability_label("schedule:interval", _),
-    do: "Run automatically on a fixed schedule"
-
-  def capability_label(other, values),
-    do: "#{other}: #{join(values)}"
-
-  @doc "The hero icon for a capability class (host-owned)."
-  @spec capability_icon(String.t()) :: String.t()
-  def capability_icon("net:http"), do: "hero-globe-alt"
-  def capability_icon("events:subscribe"), do: "hero-bell-alert"
-  def capability_icon("data:read"), do: "hero-book-open"
-  def capability_icon("surfaces:write"), do: "hero-pencil-square"
-  def capability_icon("data:search"), do: "hero-magnifying-glass"
-  def capability_icon("surfaces:page"), do: "hero-window"
-  def capability_icon("net:private"), do: "hero-server-stack"
-  def capability_icon("state:kv"), do: "hero-circle-stack"
-  def capability_icon("users:connections"), do: "hero-users"
-  def capability_icon("schedule:interval"), do: "hero-clock"
-  def capability_icon(_), do: "hero-key"
-
-  @doc "True when a capability class carries privacy/security weight worth emphasizing."
-  @spec sensitive_capability?(String.t()) :: boolean()
-  def sensitive_capability?(class),
-    do:
-      class in [
-        "net:http",
-        "net:private",
-        "data:read",
-        "data:search",
-        "surfaces:write",
-        "users:connections"
-      ]
-
-  defp join([]), do: "(none)"
-  defp join(values), do: Enum.join(values, ", ")
+  alias MydiaWeb.AdminPluginsLive.CapabilitySummary
 
   @doc """
   One-line, host-owned summary of a capability set, for the row-level warning on
-  a plugin whose manifest outgrew its grant. Same vocabulary as
-  `capability_label/2` so the row and the approval modal cannot drift apart.
+  a plugin whose manifest outgrew its grant. Built from `CapabilitySummary` so
+  the row and the approval modal cannot drift apart.
   """
   @spec ungranted_summary(map()) :: String.t()
-  def ungranted_summary(capabilities) do
-    capabilities
-    |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.map_join("; ", fn {class, values} ->
-      capability_label(class, List.wrap(values))
-    end)
+  def ungranted_summary(capabilities),
+    do: capabilities |> CapabilitySummary.flat_labels() |> Enum.join(", ")
+
+  # Below this a two-line clamp never hides anything, so no toggle is shown.
+  @description_toggle_chars 120
+
+  @doc """
+  A plugin's description, clamped to two lines with a client-side More/Less
+  toggle when it is long enough to be clipped. Renders nothing without text.
+  The text is manifest free text, so HEEx escapes it like any other value.
+  """
+  attr :id, :string, required: true
+  attr :text, :string, default: nil
+
+  def plugin_description(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :toggle?,
+        is_binary(assigns.text) and String.length(assigns.text) > @description_toggle_chars
+      )
+
+    ~H"""
+    <div :if={is_binary(@text) and @text != ""} id={@id} class="text-sm text-base-content/70">
+      <p id={"#{@id}-text"} class="line-clamp-2 whitespace-pre-line">{@text}</p>
+      <button
+        :if={@toggle?}
+        type="button"
+        id={"#{@id}-toggle"}
+        class="link link-hover text-xs"
+        phx-click={
+          JS.toggle_class("line-clamp-2", to: "##{@id}-text")
+          |> JS.toggle(to: "##{@id}-toggle > span", display: "inline")
+        }
+      >
+        <span>More</span><span class="hidden">Less</span>
+      </button>
+    </div>
+    """
   end
 
   @doc """
-  Renders the Plugins tab: header, installed summary rows, and the store catalog.
-
-  Each installed plugin renders a compact summary row with provenance and
-  lifecycle actions. The catalog lists
-  available store entries with an Install action.
+  Renders the Plugins tab: the intro line and one compact summary row per
+  installed plugin, with provenance and lifecycle actions. The store lives in
+  `store_modal/1`.
   """
   attr :installed, :list, required: true
   attr :updates, :any, required: true
-  attr :browse, :any, default: nil, doc: "a Mydia.Plugins.Index.BrowseResult, nil before browsing"
 
   def plugins_tab(assigns) do
     ~H"""
@@ -128,34 +86,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.plugin_row :for={plugin <- @installed} plugin={plugin} updates={@updates} />
         </div>
       </div>
-
-      <%!-- Store catalog --%>
-      <div :if={@browse && @browse.error} id="browse-error" class="alert alert-error">
-        <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-        <span>Could not reach a plugin source: {@browse.error}</span>
-      </div>
-
-      <div
-        :if={@browse && is_nil(@browse.error) && @browse.status in [:empty, :all_installed]}
-        id="catalog-empty"
-        class="alert alert-info"
-      >
-        <.icon name="hero-information-circle" class="w-5 h-5" />
-        <span>{empty_catalog_message(@browse)}</span>
-      </div>
-
-      <div :if={@browse && @browse.status == :available} id="plugin-catalog" class="space-y-2">
-        <h3 class="text-base font-semibold">Available</h3>
-        <div class="bg-base-200 rounded-box divide-y divide-base-300">
-          <.catalog_row :for={entry <- @browse.catalog} entry={entry} />
-        </div>
-      </div>
     </div>
     """
   end
-
-  defp empty_catalog_message(%{status: :all_installed}),
-    do: "Every plugin in the store is already installed."
 
   defp empty_catalog_message(%{source_count: count}) when count > 1,
     do: "The plugin store has no plugins yet (checked #{count} sources)."
@@ -180,6 +113,80 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
+  @doc """
+  The store modal. It opens on every Browse store click and renders the
+  loading, error, empty and populated states inside itself.
+  """
+  attr :browse, :any,
+    required: true,
+    doc: "a Mydia.Plugins.Index.BrowseResult, nil while browsing"
+
+  def store_modal(assigns) do
+    ~H"""
+    <div
+      id="store-modal"
+      class="modal modal-open"
+      phx-window-keydown="close_store"
+      phx-key="Escape"
+    >
+      <div class="modal-box max-w-2xl">
+        <h3 class="text-lg font-bold flex items-center gap-2">
+          <.icon name="hero-squares-plus" class="w-5 h-5" /> Plugin store
+        </h3>
+
+        <div :if={is_nil(@browse)} id="store-loading" class="flex justify-center py-10">
+          <span class="loading loading-spinner loading-md"></span>
+        </div>
+
+        <div :if={@browse} class="mt-4 space-y-3">
+          <div :if={@browse.error} id="browse-error" class="alert alert-error">
+            <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+            <span>
+              {@browse.failed_count} of {@browse.source_count} sources could not be loaded: {@browse.error}
+            </span>
+          </div>
+
+          <div
+            :if={is_nil(@browse.error) and @browse.status == :empty}
+            id="catalog-empty"
+            class="alert alert-info"
+          >
+            <.icon name="hero-information-circle" class="w-5 h-5" />
+            <span>{empty_catalog_message(@browse)}</span>
+          </div>
+
+          <div
+            :if={@browse.status == :available}
+            id="plugin-catalog"
+            class="bg-base-200 rounded-box divide-y divide-base-300"
+          >
+            <.catalog_row :for={item <- @browse.catalog} item={item} />
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <.button id="close-store" class="btn btn-ghost" phx-click="close_store">Close</.button>
+        </div>
+      </div>
+      <div class="modal-backdrop" phx-click="close_store"></div>
+    </div>
+    """
+  end
+
+  @shelf_error_max 160
+
+  # The error text comes from the plugin, so it is clipped here; HEEx escapes it.
+  defp shelf_failure_text(%{failing: failing, last_error: error}) do
+    who = if failing == 1, do: "1 person", else: "#{failing} people"
+    text = "Suggestions failing for #{who}"
+
+    case error |> to_string() |> String.trim() do
+      "" -> text
+      message when byte_size(message) <= @shelf_error_max -> "#{text}: #{message}"
+      message -> "#{text}: #{String.slice(message, 0, @shelf_error_max)}..."
+    end
+  end
+
   @doc "A compact summary row for one installed plugin (provenance + lifecycle)."
   attr :plugin, :map, required: true
   attr :updates, :any, required: true
@@ -194,7 +201,11 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium truncate">{@plugin.name}</span>
           <span class="text-xs text-base-content/50">v{@plugin.version}</span>
-          <.source_badge source={@plugin.source} />
+          <.source_badge
+            id={"origin-badge-#{@plugin.slug}"}
+            origin={@plugin.origin}
+            source_name={@plugin.source_name}
+          />
           <span class={[
             "badge badge-sm",
             (@plugin.enabled && "badge-success") || "badge-ghost"
@@ -216,6 +227,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             needs re-approval
           </span>
         </div>
+        <.plugin_description id={"plugin-description-#{@plugin.slug}"} text={@plugin.description} />
         <p :if={@plugin.network_hosts != []} class="text-xs text-base-content/60 mt-1">
           <.icon name="hero-globe-alt" class="w-3 h-3 inline" />
           Can contact: {Enum.join(@plugin.network_hosts, ", ")}
@@ -228,6 +240,14 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           <.icon name="hero-exclamation-triangle" class="w-3 h-3 inline" />
           This version asks for more than you approved: {ungranted_summary(@plugin.ungranted)}. Those
           calls are denied until you re-approve it.
+        </p>
+        <p
+          :if={@plugin.shelf_failures.failing > 0}
+          id={"shelf-failure-note-#{@plugin.slug}"}
+          class="text-xs text-warning mt-1"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-3 h-3 inline" />
+          {shelf_failure_text(@plugin.shelf_failures)}
         </p>
         <ul
           :if={@plugin.multi_instance}
@@ -286,20 +306,41 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           >
             Logs
           </.button>
-          <.button
-            id={"remove-#{@plugin.slug}"}
-            class="btn btn-ghost btn-sm join-item text-error"
-            phx-click="remove"
-            phx-value-slug={@plugin.slug}
-            data-confirm={"Remove #{@plugin.name}?"}
-          >
-            <.icon name="hero-trash" class="w-4 h-4" />
-          </.button>
         </div>
+
+        <%!-- Outside the join so it survives pending approval.
+              A plugin awaiting approval must stay removable. --%>
+        <.button
+          :if={@plugin.removable}
+          id={"remove-#{@plugin.slug}"}
+          class="btn btn-ghost btn-sm text-error"
+          phx-click="remove"
+          phx-value-slug={@plugin.slug}
+          data-confirm={remove_confirm(@plugin)}
+          aria-label={"Remove #{@plugin.name}"}
+          title="Remove"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
+        </.button>
       </div>
     </div>
     """
   end
+
+  @doc false
+  # The Remove confirm names what is deleted with the plugin, so removing is
+  # never mistaken for disabling.
+  def remove_confirm(plugin) do
+    "Remove #{plugin.name}? This also deletes its settings, approvals and suggestions" <>
+      servers_suffix(plugin) <> "."
+  end
+
+  defp servers_suffix(%{multi_instance: true, instances: [_]}), do: ", plus 1 configured server"
+
+  defp servers_suffix(%{multi_instance: true, instances: [_ | _] = instances}),
+    do: ", plus #{length(instances)} configured servers"
+
+  defp servers_suffix(_plugin), do: ""
 
   @doc """
   The per-plugin Settings button.
@@ -347,83 +388,142 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
 
   defp settings_disabled_reason(_plugin), do: nil
 
-  @doc "A compact summary row for one store catalog entry."
-  attr :entry, :map, required: true
+  @doc "One store entry with the action its install state allows."
+  attr :item, Mydia.Plugins.Index.CatalogItem, required: true
 
   def catalog_row(assigns) do
+    assigns = assign(assigns, :key, catalog_key(assigns.item.entry))
+
     ~H"""
     <div
-      id={"catalog-row-#{@entry.slug}"}
+      id={"catalog-row-#{@key}"}
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4"
     >
       <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="font-medium">{@entry.name}</span>
-          <span class="text-xs text-base-content/50">v{@entry.version}</span>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-medium">{@item.entry.name}</span>
+          <span class="text-xs text-base-content/50">v{@item.entry.version}</span>
+          <span
+            :if={@item.installed_version && @item.installed_version != @item.entry.version}
+            class="text-xs text-base-content/50"
+          >
+            (installed v{@item.installed_version})
+          </span>
+          <span
+            :if={@item.entry.source_id}
+            id={"catalog-third-party-#{@key}"}
+            class="badge badge-sm badge-warning badge-outline max-w-full truncate"
+          >
+            Third-party · {@item.entry.source_name}
+          </span>
         </div>
-        <p :if={@entry.description} class="text-sm text-base-content/70 truncate">
-          {@entry.description}
+        <.plugin_description id={"catalog-description-#{@key}"} text={@item.entry.description} />
+        <p :if={@item.state == :other_source} class="text-xs text-base-content/60">
+          Installed from {@item.installed_from}
         </p>
       </div>
+      <span
+        :if={@item.state in [:installed, :bundled]}
+        id={"catalog-state-#{@key}"}
+        class="badge badge-sm badge-ghost"
+      >
+        {if(@item.state == :bundled, do: "Bundled", else: "Installed")}
+      </span>
       <.button
-        id={"install-#{@entry.slug}"}
+        :if={@item.state in [:not_installed, :update, :replace, :other_source]}
+        id={"install-#{@key}"}
         variant="primary"
         class="btn btn-primary btn-sm"
         phx-click="review_install"
-        phx-value-slug={@entry.slug}
+        phx-value-key={@key}
       >
-        Install
+        {install_label(@item)}
       </.button>
     </div>
     """
   end
 
   @doc """
+  DOM-safe key for a catalog entry. Official and third-party keys live in
+  disjoint namespaces (`official-` and `src-<uuid>-`, the uuid always 36
+  characters), so no slug, whatever it contains, can make one entry's key equal
+  another's and send a click to the wrong install.
+  """
+  def catalog_key(%{source_id: nil, slug: slug}), do: "official-#{slug}"
+  def catalog_key(%{source_id: id, slug: slug}), do: "src-#{id}-#{slug}"
+
+  defp install_label(%{state: :other_source}), do: "Replace"
+  defp install_label(%{state: :update, entry: entry}), do: "Update to v#{entry.version}"
+  defp install_label(%{state: :replace}), do: "Install store version"
+  defp install_label(_item), do: "Install"
+
+  @doc """
   The capability-approval modal: the emphasized surface.
 
-  Activation is gated behind explicit approval. Capabilities render in
-  host-owned plain language (see `capability_list/1`); the network destination
-  is made legible. Uses DaisyUI `modal modal-open` markup so the element is only
-  present when an approval is in flight.
+  Activation is gated behind explicit approval. Capabilities render as one
+  grouped, host-owned list (see `capability_summary/1`); on re-approval only the
+  widened values are badged. Uses DaisyUI `modal modal-open` markup so the
+  element is only present when an approval is in flight.
   """
   attr :approval, :map, required: true
 
   def approval_modal(assigns) do
+    reapproval? = assigns.approval.ungranted != %{}
+
+    summary =
+      CapabilitySummary.build(assigns.approval.capabilities,
+        new: assigns.approval.ungranted,
+        settings_schema: assigns.approval.settings_schema
+      )
+
+    assigns =
+      assign(assigns,
+        reapproval?: reapproval?,
+        summary: summary,
+        new_count: CapabilitySummary.new_count(summary)
+      )
+
     ~H"""
     <div id="approval-modal" class="modal modal-open">
       <div class="modal-box max-w-lg">
         <h3 class="text-lg font-bold flex items-center gap-2">
           <.icon name="hero-shield-check" class="w-5 h-5" />
-          {if(@approval.ungranted == %{}, do: "Approve", else: "Re-approve")} {@approval.name}
+          {if(@reapproval?, do: "Re-approve", else: "Approve")} {@approval.name}
         </h3>
-        <p :if={@approval.ungranted == %{}} class="text-sm text-base-content/70 mt-1">
-          {@approval.name} (v{@approval.version}) is requesting the capabilities below.
-          It cannot run until you approve them. Approval is all-or-nothing.
+        <p :if={not @reapproval?} class="text-sm text-base-content/70 mt-1">
+          It can't run until you approve. Approval is all-or-nothing.
         </p>
-        <p :if={@approval.ungranted != %{}} class="text-sm text-base-content/70 mt-1">
-          {@approval.name} (v{@approval.version}) now requests more than you approved. It keeps
-          running on the older grant, and calls into anything new are denied until you re-approve.
-          Approval is all-or-nothing.
+        <p :if={@reapproval?} id="approval-reapproval-note" class="text-sm text-base-content/70 mt-1">
+          v{@approval.version} asks for {things(@new_count)} you haven't approved. It keeps
+          running on the old grant until you re-approve.
         </p>
 
-        <div class="my-4 space-y-2">
-          <div
-            :if={@approval.ungranted != %{}}
-            id="approval-new-capabilities"
-            class="rounded-lg p-3 bg-warning/10 space-y-2"
-          >
-            <p class="font-medium flex items-center gap-2">
-              <.icon name="hero-exclamation-triangle" class="w-5 h-5 shrink-0" />
-              New since you last approved
-            </p>
-            <.capability_list id="approval-ungranted" capabilities={@approval.ungranted} />
-          </div>
+        <div
+          :if={@approval[:publisher]}
+          id="approval-publisher-warning"
+          class="alert alert-warning mt-3 text-sm"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>
+            This plugin comes from {@approval.publisher}, not the Mydia plugin index. Mydia has not
+            reviewed it; you are trusting whoever holds that source's signing key.
+          </span>
+        </div>
+        <div
+          :if={@approval[:replaces]}
+          id="approval-replaces"
+          class="alert alert-info mt-3 text-sm"
+        >
+          <.icon name="hero-arrow-path" class="w-5 h-5" />
+          <span>
+            This replaces {@approval.name} from {@approval.replaces}. Future updates will come from {@approval[
+              :publisher
+            ] || "the Mydia plugin index"}.
+          </span>
+        </div>
 
-          <p :if={@approval.ungranted != %{}} class="text-sm font-medium">
-            Everything this plugin will be granted:
-          </p>
-          <.capability_list id="approval-capabilities" capabilities={@approval.capabilities} />
-          <.host_grant_note id="approval-host-grant" settings_schema={@approval.settings_schema} />
+        <div class="my-4">
+          <.capability_summary id="approval-capabilities" summary={@summary} />
         </div>
 
         <div class="modal-action">
@@ -436,7 +536,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             class="btn btn-primary"
             phx-click="confirm_approval"
           >
-            Approve &amp; activate
+            {if(@reapproval?, do: "Re-approve", else: "Approve & activate")}
           </.button>
         </div>
       </div>
@@ -445,8 +545,11 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
+  defp things(1), do: "1 thing"
+  defp things(n), do: "#{n} things"
+
   @doc """
-  Per-plugin detail modal: granted capabilities + host grants + Revoke.
+  Per-plugin detail modal: granted capabilities and host grants.
 
   Operational surfaces (activity log, network requests, Test) live in the
   dedicated `logs_modal/1`, reached via the row's Logs button.
@@ -454,29 +557,44 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   attr :detail, :map, required: true
 
   def detail_modal(assigns) do
+    assigns =
+      assign(assigns,
+        granted_summary:
+          CapabilitySummary.build(assigns.detail.granted,
+            settings_schema: assigns.detail.settings_schema
+          ),
+        ungranted_summary: CapabilitySummary.build(assigns.detail.ungranted)
+      )
+
     ~H"""
     <div id="detail-modal" class="modal modal-open">
       <div class="modal-box max-w-2xl">
         <h3 class="text-lg font-bold">{@detail.name}</h3>
+        <p
+          :if={@detail.description}
+          id="detail-description"
+          class="text-sm text-base-content/70 mt-1 whitespace-pre-line"
+        >
+          {@detail.description}
+        </p>
 
         <div class="mt-4">
           <h4 class="font-semibold mb-2">Granted capabilities</h4>
-          <.capability_list
+          <.capability_summary
             :if={@detail.granted != %{}}
             id="detail-capabilities"
-            capabilities={@detail.granted}
+            summary={@granted_summary}
           />
           <p :if={@detail.granted == %{}} class="text-sm text-base-content/60">
             No capabilities granted.
           </p>
-          <.host_grant_note id="detail-host-grant" settings_schema={@detail.settings_schema} />
         </div>
 
         <div :if={@detail.ungranted != %{}} id="detail-ungranted" class="mt-4">
           <h4 class="font-semibold mb-2 flex items-center gap-2 text-warning">
             <.icon name="hero-exclamation-triangle" class="w-4 h-4" /> Requested but not granted
           </h4>
-          <.capability_list id="detail-ungranted-capabilities" capabilities={@detail.ungranted} />
+          <.capability_summary id="detail-ungranted-capabilities" summary={@ungranted_summary} />
           <p class="text-xs text-base-content/60 mt-2">
             This version's manifest asks for these. Calls into them are denied until you re-approve
             the plugin from its row.
@@ -491,15 +609,6 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             phx-value-slug={@detail.slug}
           >
             <.icon name="hero-document-text" class="w-4 h-4" /> View logs
-          </.button>
-          <.button
-            id={"detail-revoke-#{@detail.slug}"}
-            class="btn btn-warning btn-sm"
-            phx-click="revoke"
-            phx-value-slug={@detail.slug}
-            data-confirm="Revoke all capabilities and deactivate this plugin?"
-          >
-            Revoke capabilities
           </.button>
           <.button class="btn btn-ghost btn-sm" phx-click="close_detail">
             Close
@@ -868,89 +977,81 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   end
 
   @doc """
-  Notes that the plugin will reach the host of whatever URL the operator enters
-  in its host-granting settings (U4). Renders nothing when the plugin declares no
-  host-granting field. Keeps approval consent legible: static hosts come from
-  `capability_list`, operator-chosen hosts are disclosed here.
+  Renders a `CapabilitySummary`: one block per non-empty group (only Talks to is
+  tinted), then a muted "Also:" sentence for background mechanics. Lines new
+  since the last approval carry `data-new` and a New badge.
   """
-  attr :settings_schema, :list, default: []
   attr :id, :string, required: true
+  attr :summary, CapabilitySummary, required: true
 
-  def host_grant_note(assigns) do
-    assigns = assign(assigns, :fields, host_granting_labels(assigns.settings_schema))
-
+  def capability_summary(assigns) do
     ~H"""
-    <div
-      :if={@fields != []}
-      id={@id}
-      class="flex items-start gap-3 rounded-lg p-3 bg-warning/10"
-    >
-      <.icon name="hero-globe-alt" class="w-5 h-5 mt-0.5 shrink-0" />
-      <div>
-        <p class="font-medium">Plus any host you enter in: {Enum.join(@fields, ", ")}</p>
-        <p class="text-xs text-base-content/60">
-          This plugin reaches the server at the URL you configure in these settings.
-        </p>
-      </div>
+    <div id={@id} class="space-y-3">
+      <section
+        :for={group <- @summary.groups}
+        id={"#{@id}-group-#{group.key}"}
+        class={[
+          "rounded-lg p-3",
+          if(group.emphasized?, do: "bg-warning/10", else: "bg-base-200")
+        ]}
+      >
+        <h4 class="text-sm font-semibold flex items-center gap-2">
+          <.icon name={group_icon(group.key)} class="w-4 h-4 shrink-0" />
+          {group.title}
+        </h4>
+        <ul class="mt-1 ml-6 space-y-0.5 text-sm">
+          <li
+            :for={line <- group.lines}
+            class="flex items-center gap-2"
+            data-new={line.new? && "true"}
+          >
+            <span>{line.label}</span>
+            <span :if={line.new?} class="badge badge-warning badge-sm">New</span>
+          </li>
+        </ul>
+      </section>
+      <p :if={@summary.also != []} id={"#{@id}-also"} class="text-xs text-base-content/60">
+        Also:
+        <%= for {line, index} <- Enum.with_index(@summary.also) do %>
+          <span data-new={line.new? && "true"}>{line.label}<span :if={line.new?} class="text-warning font-medium"> (new)</span></span>{also_separator(
+            index,
+            length(@summary.also)
+          )}
+        <% end %>
+      </p>
     </div>
     """
   end
 
-  # Labels of the host-granting fields, derived from the single source of truth
-  # in Mydia.Plugins.Manifest so this disclosure can't drift from the grant logic.
-  defp host_granting_labels(schema) do
-    schema
-    |> Manifest.host_granting_fields()
-    |> Enum.map(&(Map.get(&1, "label") || Map.get(&1, "key")))
-  end
+  defp also_separator(index, count) when index == count - 1, do: "."
+  defp also_separator(_index, _count), do: ","
 
-  @doc """
-  Renders the ordered list of declared capabilities for an approval surface.
+  defp group_icon(:talks_to), do: "hero-globe-alt"
+  defp group_icon(:can_see), do: "hero-eye"
+  defp group_icon(:can_change), do: "hero-pencil-square"
+  defp group_icon(:adds), do: "hero-squares-plus"
 
-  `capabilities` is the manifest map `%{class => values}`.
-  """
-  attr :capabilities, :map, required: true
+  @doc "Where an installed plugin came from, as a small badge."
   attr :id, :string, required: true
-
-  def capability_list(assigns) do
-    ~H"""
-    <ul id={@id} class="space-y-2">
-      <li
-        :for={{class, values} <- Enum.sort_by(@capabilities, &elem(&1, 0))}
-        id={"#{@id}-#{dom_slug(class)}"}
-        class={[
-          "flex items-start gap-3 rounded-lg p-3",
-          (sensitive_capability?(class) && "bg-warning/10") || "bg-base-200"
-        ]}
-      >
-        <.icon name={capability_icon(class)} class="w-5 h-5 mt-0.5 shrink-0" />
-        <div>
-          <p class="font-medium">{capability_label(class, List.wrap(values))}</p>
-          <p :if={sensitive_capability?(class)} class="text-xs text-base-content/60">
-            Review this carefully. It grants access beyond Mydia.
-          </p>
-        </div>
-      </li>
-    </ul>
-    """
-  end
-
-  @doc "A small source-provenance badge (index/db)."
-  attr :source, :atom, required: true
+  attr :origin, :any, required: true
+  attr :source_name, :string, default: nil
 
   def source_badge(assigns) do
-    {label, cls} =
-      case assigns.source do
-        :index -> {"index", "badge-ghost"}
-        _ -> {"db", "badge-ghost"}
-      end
-
+    {label, cls} = origin_badge(assigns.origin, assigns.source_name)
     assigns = assign(assigns, label: label, cls: cls)
 
     ~H"""
-    <span class={["badge badge-sm", @cls]}>{@label}</span>
+    <span id={@id} class={["badge badge-sm max-w-full truncate", @cls]}>{@label}</span>
     """
   end
 
-  defp dom_slug(class), do: String.replace(class, ~r/[^a-z0-9]+/, "-")
+  defp origin_badge(:bundled, _name), do: {"Bundled", "badge-ghost"}
+  defp origin_badge(:official, _name), do: {"Mydia store", "badge-ghost"}
+  defp origin_badge(:sideloaded, _name), do: {"Sideloaded", "badge-ghost"}
+
+  defp origin_badge({:source, _id}, name),
+    do: {"Third-party · #{name}", "badge-warning badge-outline"}
+
+  defp origin_badge(:unknown, _name), do: {"Unknown source", "badge-ghost"}
+  defp origin_badge(_removed, _name), do: {"Source removed", "badge-ghost"}
 end

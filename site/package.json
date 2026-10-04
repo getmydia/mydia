@@ -13,12 +13,12 @@
     "@astrojs/rss": "^4.0.19",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
-    "astro": "^7.3.3",
-    "daisyui": "^5.7.42",
+    "astro": "^7.3.5",
+    "daisyui": "^5.7.44",
     "tailwindcss": "^4.2.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260918.1",
+    "@cloudflare/workers-types": "^5.20260924.1",
     "vitest": "^5.0.1"
   },
   "overrides": {

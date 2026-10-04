@@ -3,12 +3,10 @@
 //! Types owned by this module (keep in sync with tests/types_remaining.rs):
 //! User, LoginResult, LoginInput, VerifyTotpInput, AccessToken, MediaToken,
 //! ApiKey, CreateApiKeyResult, RemoteDevice, RevokeDeviceResult, ClaimCode,
-//! Device, DeviceStatusEvent, ToggleFavoriteResult.
+//! ToggleFavoriteResult.
 
 use async_graphql::{InputObject, SimpleObject, ID};
 use chrono::{DateTime, Utc};
-
-use crate::types::common::DeviceEventType;
 
 #[derive(SimpleObject)]
 pub struct User {
@@ -104,22 +102,6 @@ pub struct ClaimCode {
 }
 
 #[derive(SimpleObject)]
-pub struct Device {
-    pub id: ID,
-    pub device_name: String,
-    pub platform: String,
-    pub last_seen_at: Option<DateTime<Utc>>,
-    pub revoked_at: Option<DateTime<Utc>>,
-    pub inserted_at: DateTime<Utc>,
-}
-
-#[derive(SimpleObject)]
-pub struct DeviceStatusEvent {
-    pub device: Device,
-    pub event: DeviceEventType,
-}
-
-#[derive(SimpleObject)]
 pub struct ToggleFavoriteResult {
     pub is_favorite: bool,
     pub media_item_id: ID,
@@ -211,14 +193,6 @@ pub fn sdl_fragment() -> String {
         }
 
         async fn claim_code(&self) -> ClaimCode {
-            std::future::pending().await
-        }
-
-        async fn device(&self) -> Device {
-            std::future::pending().await
-        }
-
-        async fn device_status_event(&self) -> DeviceStatusEvent {
             std::future::pending().await
         }
 

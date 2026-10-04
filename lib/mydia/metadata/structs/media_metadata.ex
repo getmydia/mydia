@@ -10,6 +10,23 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
 
   alias Mydia.Metadata.Structs.{CastMember, CrewMember, SeasonInfo, Video}
 
+  # Bump when parsing starts producing a field that older stored blobs lack,
+  # and add a matching entry to `Mydia.Jobs.MetadataBackfill`'s
+  # `@required_versions` so those blobs get refreshed. Blobs written before
+  # this field existed load as 0.
+  #
+  # The stamp asserts the struct was parsed from a full provider fetch. Code
+  # that builds a struct from partial data (a search result, a matcher rewrap)
+  # and persists it would carry the current version without the fields the
+  # version promises.
+  #
+  # 1: TVDB `characters` mapped into `cast` (3ac79ecd4).
+  @schema_version 1
+
+  @doc "The schema version `from_api_response/3` stamps on what it parses."
+  @spec schema_version() :: pos_integer()
+  def schema_version, do: @schema_version
+
   @enforce_keys [:provider_id, :provider, :media_type]
   defstruct [
     # Required fields
@@ -57,7 +74,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
     :first_air_date,
     :last_air_date,
     :in_production,
-    :seasons
+    :seasons,
+    schema_version: 0
   ]
 
   @type external_ids :: %{
@@ -101,6 +119,7 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
           original_language: String.t() | nil,
           collection_id: integer() | nil,
           collection_name: String.t() | nil,
+          schema_version: non_neg_integer(),
           number_of_seasons: integer() | nil,
           number_of_episodes: integer() | nil,
           episode_run_time: [integer()] | nil,
@@ -175,7 +194,8 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
       origin_country: parse_origin_country(data["origin_country"]),
       original_language: data["original_language"],
       collection_id: collection_id,
-      collection_name: collection_name
+      collection_name: collection_name,
+      schema_version: @schema_version
     }
 
     case media_type do

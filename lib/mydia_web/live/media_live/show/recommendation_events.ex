@@ -18,7 +18,6 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   alias MydiaWeb.Live.Helpers.MediaRequestHelpers
   alias MydiaWeb.Live.Helpers.RecommendationsExpanded
   alias MydiaWeb.MediaLive.Show.DetailModalEvents
-  alias Mydia.Media.RemoteFilter
 
   require Logger
 
@@ -31,11 +30,12 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
   def maybe_load(socket) do
     media_item = socket.assigns.media_item
     config = socket.assigns.metadata_config
+    scope = socket.assigns.current_scope
 
     if connected?(socket) && media_item.type in ["movie", "tv_show"] &&
          is_integer(media_item.tmdb_id) do
       start_async(socket, :load_recommendations, fn ->
-        Recommendations.for_media_item(media_item, config)
+        Recommendations.for_media_item(media_item, scope, config)
       end)
     else
       socket
@@ -48,7 +48,7 @@ defmodule MydiaWeb.MediaLive.Show.RecommendationEvents do
     recommendations =
       decorate(
         scope,
-        RemoteFilter.filter(results, scope),
+        results,
         socket.assigns.media_item,
         socket.assigns.current_user
       )

@@ -40,4 +40,32 @@ defmodule Mydia.Accounts.UserLabelTest do
   test "labels an unsaved struct without an id" do
     assert User.label(%User{}) == "unknown user"
   end
+
+  describe "display_label/1" do
+    test "prefers the display name over the username" do
+      user = user(username: "tonix", display_name: "Tonix R", email: "t@example.test")
+
+      assert User.display_label(user) == "Tonix R"
+    end
+
+    test "falls back to the username when there is no display name" do
+      assert User.display_label(user(username: "tonix", display_name: nil)) == "tonix"
+    end
+
+    test "treats a blank display name as absent" do
+      assert User.display_label(user(username: "tonix", display_name: "   ")) == "tonix"
+    end
+
+    test "falls back to the email, then to an id prefix" do
+      assert User.display_label(user(username: nil, display_name: nil, email: "t@example.test")) ==
+               "t@example.test"
+
+      assert User.display_label(user(username: nil, display_name: nil, email: nil)) ==
+               "user 9f4c2a10"
+    end
+
+    test "trims the value it returns" do
+      assert User.display_label(user(display_name: "  Tonix R ")) == "Tonix R"
+    end
+  end
 end

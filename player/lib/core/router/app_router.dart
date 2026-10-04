@@ -2,9 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 // Conditional import for web URL handling
-import 'web_url_stub.dart' if (dart.library.html) 'web_url.dart' as web_url;
+import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
+    as web_url;
+import 'source_detail_routes.dart';
+import '../sources/source.dart';
+import '../sources/lock/source_lock_controller.dart';
+import '../sources/sources_providers.dart';
+import '../../domain/sources/library.dart';
+import '../../presentation/screens/sources/unlock_screen.dart';
+import '../../presentation/screens/sources/source_player_route.dart';
+import '../../presentation/screens/sources/source_search_screen.dart';
+import '../../presentation/screens/sources/source_home_screen.dart';
+import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/manage_sources_screen.dart';
+import '../../presentation/screens/sources/plex_sign_in_screen.dart';
+import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
+import '../../presentation/screens/sources/stash_connect_screen.dart';
 import '../../presentation/screens/movie/movie_detail_screen.dart';
 import '../../presentation/screens/show/show_detail_screen.dart';
 import '../../presentation/screens/episode/episode_detail_screen.dart';
@@ -93,6 +109,87 @@ class PlayerRouteParams {
   }
 }
 
+SourceId? _sourceIdIn(String location) {
+  if (!location.startsWith('/s/')) return null;
+  final segment = location.substring(3).split('/').first;
+  if (segment.isEmpty) return null;
+  // matchedLocation stays percent-encoded; the route decodes it later.
+  try {
+    return SourceId(Uri.decodeComponent(segment));
+  } on ArgumentError {
+    return SourceId(segment);
+  } on FormatException {
+    return SourceId(segment);
+  }
+}
+
+/// Where the router sends [location], or null to stay. Pure, so the rules
+/// are testable without a router.
+String? appRedirect({
+  required AsyncValue<AuthStatus> auth,
+  required String location,
+  required bool sourcesLoading,
+  required List<Source> thirdParty,
+  SourceId? activeId,
+  Set<SourceId> gated = const {},
+  String? fullLocation,
+}) {
+  final authStatus = auth.maybeWhen(
+    data: (status) => status,
+    orElse: () => AuthStatus.unauthenticated,
+  );
+  if (auth.isLoading) return null;
+
+  // A locked or hidden source opens only after unlocking. Same screen for
+  // both, so a deep link never confirms that a hidden source exists.
+  final target = _sourceIdIn(location);
+  if (target != null && gated.contains(target)) {
+    return unlockLocation(fullLocation ?? location);
+  }
+  final isUnlockRoute = location == '/unlock';
+
+  final isLoginRoute = location == '/login';
+  final isDownloadsRoute = location == '/downloads';
+  final isPlayerRoute = location.startsWith('/player');
+  // Reached from the login screen's "Connect another server instead" and
+  // "Show hidden servers" (Manage servers, after the unlock screen).
+  final isSignedOutSourcesRoute = location == '/sources/add' ||
+      location.startsWith('/sources/add/') ||
+      location == '/sources/manage';
+  // Third-party server screens, and the screens that manage them.
+  final isSourceRoute =
+      location.startsWith('/s/') || location.startsWith('/sources');
+
+  if (authStatus == AuthStatus.unauthenticated &&
+      !isLoginRoute &&
+      !isUnlockRoute &&
+      !isSignedOutSourcesRoute) {
+    // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
+    if (sourcesLoading) return null;
+    if (thirdParty.isNotEmpty) {
+      if (isSourceRoute) return null;
+      // The remembered source when it still exists, else the first.
+      final open = thirdParty.where((s) => !gated.contains(s.id));
+      final landing =
+          open.where((s) => s.id == activeId).firstOrNull ?? open.firstOrNull;
+      if (landing == null) {
+        return unlockLocation('/s/${thirdParty.first.id.value}');
+      }
+      return '/s/${landing.id.value}';
+    }
+    return '/login';
+  }
+  if (authStatus == AuthStatus.offlineMode &&
+      !isDownloadsRoute &&
+      !isUnlockRoute &&
+      !isPlayerRoute &&
+      !isSourceRoute) {
+    return '/downloads';
+  }
+  if (authStatus == AuthStatus.authenticated && isLoginRoute) return '/';
+  return null;
+}
+
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Creating appRouter provider');
@@ -105,6 +202,13 @@ GoRouter appRouter(Ref ref) {
     debugPrint('[AppRouter] Auth state changed: $previous -> $next');
     refreshNotifier.refresh();
   });
+
+  // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
+  ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
+  // A relock while a gated screen is open sends it to /unlock.
+  ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
   // Dispose the notifier when the provider is disposed
   ref.onDispose(() {
@@ -123,49 +227,20 @@ GoRouter appRouter(Ref ref) {
     debugLogDiagnostics: true,
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
-      // Read auth state directly from the provider each time
-      // This ensures we always get the latest state
-      final authState = ref.read(authStateProvider);
-      final authStatus = authState.maybeWhen(
-        data: (status) => status,
-        orElse: () => AuthStatus.unauthenticated,
+      final target = appRedirect(
+        auth: ref.read(authStateProvider),
+        location: state.matchedLocation,
+        sourcesLoading: ref.read(sourcesLoadingProvider),
+        thirdParty: ref.read(thirdPartySourcesProvider),
+        activeId: ref.read(selectedSourceIdProvider),
+        gated: ref.read(gatedSourceIdsProvider),
+        fullLocation: state.uri.toString(),
       );
-      final isLoading = authState.isLoading;
-      final isLoginRoute = state.matchedLocation == '/login';
-      final isDownloadsRoute = state.matchedLocation == '/downloads';
-      final isPlayerRoute = state.matchedLocation.startsWith('/player');
-
-      debugPrint(
-          '[AppRouter] Redirect check: authStatus=$authStatus, isLoading=$isLoading, path=${state.matchedLocation}');
-
-      // While loading, allow navigation to continue
-      if (isLoading) {
-        return null;
+      if (target != null) {
+        debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
+            'to $target');
       }
-
-      // Unauthenticated: must go to login
-      if (authStatus == AuthStatus.unauthenticated && !isLoginRoute) {
-        debugPrint('[AppRouter] Redirecting to /login (unauthenticated)');
-        return '/login';
-      }
-
-      // Offline mode: only allow downloads and player routes
-      if (authStatus == AuthStatus.offlineMode) {
-        if (!isDownloadsRoute && !isPlayerRoute) {
-          debugPrint('[AppRouter] Redirecting to /downloads (offline mode)');
-          return '/downloads';
-        }
-      }
-
-      // Authenticated on login: go home
-      if (authStatus == AuthStatus.authenticated && isLoginRoute) {
-        debugPrint(
-            '[AppRouter] Redirecting to / (authenticated on login page)');
-        return '/';
-      }
-
-      // No redirect needed
-      return null;
+      return target;
     },
     routes: [
       // Login route - outside shell
@@ -174,6 +249,50 @@ GoRouter appRouter(Ref ref) {
         name: 'login',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/unlock',
+        name: 'unlock',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) =>
+            UnlockScreen(next: state.uri.queryParameters['next']),
+      ),
+      GoRoute(
+        path: '/sources/add',
+        name: 'add_source',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const AddSourceScreen(),
+      ),
+      GoRoute(
+        path: '/sources/add/plex',
+        name: 'add_source_plex',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => PlexSignInScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/stash',
+        name: 'add_source_stash',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => StashConnectScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/jellyfin',
+        name: 'add_source_jellyfin',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => JellyfinConnectScreen(
+          reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+
+      GoRoute(
+        path: '/sources/manage',
+        name: 'manage_sources',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const ManageSourcesScreen(),
       ),
 
       // Shell route for main app with bottom navigation
@@ -250,6 +369,35 @@ GoRouter appRouter(Ref ref) {
             builder: (context, state) => const SettingsScreen(),
           ),
           GoRoute(
+            path: '/s/:sourceId',
+            name: 'source_root',
+            redirect: (context, state) => sourceRootRedirect(
+              state.pathParameters['sourceId']!,
+              ref.read(sourcesProvider),
+            ),
+            builder: (context, state) => SourceHomeScreen(
+              sourceId: SourceId(state.pathParameters['sourceId']!),
+            ),
+          ),
+          GoRoute(
+            path: '/s/:sourceId/library/:libraryId',
+            name: 'source_library',
+            builder: (context, state) => SourceLibraryScreen(
+              library: LibraryRef(
+                sourceId: SourceId(state.pathParameters['sourceId']!),
+                id: state.pathParameters['libraryId']!,
+              ),
+            ),
+          ),
+          sourceItemRoute(),
+          GoRoute(
+            path: '/s/:sourceId/search',
+            name: 'source_search',
+            builder: (context, state) => SourceSearchScreen(
+              sourceId: SourceId(state.pathParameters['sourceId']!),
+            ),
+          ),
+          GoRoute(
             path: '/search',
             name: 'search',
             builder: (context, state) => SearchScreen(
@@ -310,6 +458,13 @@ GoRouter appRouter(Ref ref) {
           final id = state.pathParameters['id']!;
           return EpisodeDetailScreen(id: id);
         },
+      ),
+      ...sourceDetailRoutes(),
+      GoRoute(
+        path: '/s/:sourceId/player/:itemId',
+        name: 'source_player',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: sourcePlayerRouteBuilder,
       ),
       // Queue player route for collection playback (must be before /player/:type/:id)
       GoRoute(

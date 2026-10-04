@@ -105,7 +105,7 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// `_castToTargetIfSet` falls through to local playback on failure without
   /// clearing the chosen device (`castTargetProvider` stays set so the bar
   /// can offer a reconnect).
-  Object? startCastError;
+  Exception? startCastError;
 
   /// Every real-media position `seek` has been asked for, in order.
   ///
@@ -118,7 +118,7 @@ class CapturingCastSessionManager extends Fake implements CastSessionManager {
   /// When set, `seek` throws it. A receiver that has gone away mid-playback is
   /// a routine state, not a hypothetical: the target is reachable over the
   /// network right up until it is not.
-  Object? seekError;
+  Error? seekError;
 
   @override
   Future<void> startCast({
@@ -164,10 +164,10 @@ class FakeSettingsService extends Fake implements SettingsService {
   /// When set, reads throw it. `flutter_secure_storage` needs a keyring on
   /// Linux desktop, so an unreadable preference is a real state, not a
   /// hypothetical one.
-  final Object? readError;
+  final Error? readError;
 
   /// When set, writes throw it.
-  final Object? writeError;
+  final Error? writeError;
 
   /// How many times the screen has asked storage for the default rung.
   /// Storage seeds the rung once per playback; the in-memory value carries
@@ -247,6 +247,7 @@ class TrackingLocalProxyService extends Fake
     required Object owner,
     required String targetPeer,
     String? authToken,
+    String target = MediaProxy.homeTarget,
   }) async {
     acquireLease(owner);
     startCalled = true;
@@ -264,7 +265,8 @@ class TrackingLocalProxyService extends Fake
   }
 
   @override
-  Future<void> stop(Object owner) async {
+  Future<void> stop(Object owner,
+      {String target = MediaProxy.homeTarget}) async {
     if (!releaseLease(owner)) return;
     stopped = true;
     _running = false;
@@ -538,8 +540,8 @@ Map<String, dynamic> movieSegmentsResponse({
 /// `_fetchProgressAndEpisodes` fires this concurrently with the other
 /// pre-play queries -- see `movieSegmentsResponse`'s dartdoc for why an
 /// ordered `StubLink.responses` script can no longer carry it in a fixed
-/// slot. An empty list here leaves `_subtitleOffsetsLoaded` true and
-/// `_subtitleOffsets` empty, so nothing downstream (mpv's sub-delay, the
+/// slot. An empty list here leaves the controller's loaded flag true and
+/// its stored offsets empty, so nothing downstream (mpv's sub-delay, the
 /// sheet's delay row) departs from zero.
 Map<String, dynamic> subtitleTrackSettingsResponse({
   List<Map<String, dynamic>> settings = const [],
@@ -751,7 +753,7 @@ ProviderContainer buildPlayerScreenContainer({
     }),
     // Null by default: no receiver, so `isCastingProvider` stays false and the
     // screen builds its local body. Pass a stream to stand in for a live cast,
-    // which is the only way to reach `_buildCastPlaceholder` — the real
+    // which is the only way to reach `CastPlaceholderView`: the real
     // provider derives from `CastSessionManager`, and the fake above has no
     // session machinery to drive it.
     castSessionProvider
@@ -833,6 +835,6 @@ Future<void> pumpUntilReal(
   final deadline = DateTime.now().add(ceiling);
   while (!condition() && DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 20));
-    await Future.delayed(const Duration(milliseconds: 5));
+    await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }

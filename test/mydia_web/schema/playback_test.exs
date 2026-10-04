@@ -61,6 +61,26 @@ defmodule MydiaWeb.Schema.PlaybackTest do
   }
   """
 
+  @mark_movie_watched_mutation """
+  mutation MarkMovieWatched($movieId: ID!) { markMovieWatched(movieId: $movieId) { id } }
+  """
+
+  @mark_movie_unwatched_mutation """
+  mutation MarkMovieUnwatched($movieId: ID!) { markMovieUnwatched(movieId: $movieId) { id } }
+  """
+
+  @mark_episode_watched_mutation """
+  mutation MarkEpisodeWatched($episodeId: ID!) { markEpisodeWatched(episodeId: $episodeId) { id } }
+  """
+
+  @mark_episode_unwatched_mutation """
+  mutation MarkEpisodeUnwatched($episodeId: ID!) { markEpisodeUnwatched(episodeId: $episodeId) { id } }
+  """
+
+  @toggle_favorite_mutation """
+  mutation ToggleFavorite($mediaItemId: ID!) { toggleFavorite(mediaItemId: $mediaItemId) { isFavorite } }
+  """
+
   setup do
     user = AccountsFixtures.user_fixture()
     show = MediaFixtures.media_item_fixture(%{type: "tv_show"})
@@ -109,6 +129,108 @@ defmodule MydiaWeb.Schema.PlaybackTest do
 
       assert {:ok, %{errors: [%{message: "Episode not found"}]}} = result
       assert Playback.get_progress(ctx.restricted.id, episode_id: hd(ctx.episodes).id) == nil
+    end
+  end
+
+  describe "item and episode mutations under an access restriction" do
+    setup ctx do
+      movie = MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+
+      Mydia.Repo.update_all(
+        from(m in Mydia.Media.MediaItem, where: m.id == ^ctx.show.id),
+        set: [category: "tv_show"]
+      )
+
+      %{
+        movie: movie,
+        episode: hd(ctx.episodes),
+        restricted:
+          AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+      }
+    end
+
+    test "updateMovieProgress writes nothing for a hidden movie", ctx do
+      result =
+        run_query(
+          @update_movie_progress_mutation,
+          %{"movieId" => ctx.movie.id, "positionSeconds" => 300, "durationSeconds" => 600},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Movie not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, media_item_id: ctx.movie.id) == nil
+    end
+
+    test "updateEpisodeProgress writes nothing for a hidden episode", ctx do
+      result =
+        run_query(
+          @update_episode_progress_mutation,
+          %{"episodeId" => ctx.episode.id, "positionSeconds" => 300, "durationSeconds" => 600},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Episode not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, episode_id: ctx.episode.id) == nil
+    end
+
+    test "markMovieWatched writes nothing for a hidden movie", ctx do
+      result =
+        run_query(@mark_movie_watched_mutation, %{"movieId" => ctx.movie.id}, ctx.restricted)
+
+      assert {:ok, %{errors: [%{message: "Movie not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, media_item_id: ctx.movie.id) == nil
+    end
+
+    test "markMovieUnwatched keeps progress for a hidden movie", ctx do
+      {:ok, _} =
+        Playback.save_progress(ctx.restricted.id, [media_item_id: ctx.movie.id], %{
+          position_seconds: 300,
+          duration_seconds: 600
+        })
+
+      result =
+        run_query(@mark_movie_unwatched_mutation, %{"movieId" => ctx.movie.id}, ctx.restricted)
+
+      assert {:ok, %{errors: [%{message: "Movie not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, media_item_id: ctx.movie.id)
+    end
+
+    test "markEpisodeWatched writes nothing for a hidden episode", ctx do
+      result =
+        run_query(
+          @mark_episode_watched_mutation,
+          %{"episodeId" => ctx.episode.id},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Episode not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, episode_id: ctx.episode.id) == nil
+    end
+
+    test "markEpisodeUnwatched keeps progress for a hidden episode", ctx do
+      {:ok, _} =
+        Playback.save_progress(ctx.restricted.id, [episode_id: ctx.episode.id], %{
+          position_seconds: 300,
+          duration_seconds: 600
+        })
+
+      result =
+        run_query(
+          @mark_episode_unwatched_mutation,
+          %{"episodeId" => ctx.episode.id},
+          ctx.restricted
+        )
+
+      assert {:ok, %{errors: [%{message: "Episode not found"}]}} = result
+      assert Playback.get_progress(ctx.restricted.id, episode_id: ctx.episode.id)
+    end
+
+    test "toggleFavorite does not favorite a hidden title", ctx do
+      result =
+        run_query(@toggle_favorite_mutation, %{"mediaItemId" => ctx.movie.id}, ctx.restricted)
+
+      assert {:ok, %{errors: [%{message: "Media item not found"}]}} = result
+      refute Mydia.Media.is_favorite?(Scope.unrestricted(), ctx.restricted.id, ctx.movie.id)
     end
   end
 
@@ -329,49 +451,6 @@ defmodule MydiaWeb.Schema.PlaybackTest do
       assert {:ok, %{errors: [%{message: message}]}} = result
       assert message =~ "duration_seconds"
       assert Playback.get_progress(ctx.user.id, episode_id: episode.id) == nil
-    end
-  end
-
-  describe "updateMovieProgress/updateEpisodeProgress mutations when Absinthe.Subscription is down (issue #708)" do
-    setup do
-      :ok = Supervisor.terminate_child(Mydia.Supervisor, Absinthe.Subscription)
-
-      on_exit(fn ->
-        {:ok, _pid} = Supervisor.restart_child(Mydia.Supervisor, Absinthe.Subscription)
-      end)
-
-      movie = MediaFixtures.media_item_fixture(%{type: "movie"})
-      %{movie: movie}
-    end
-
-    test "still saves movie progress and returns ok", ctx do
-      result =
-        run_query(
-          @update_movie_progress_mutation,
-          %{"movieId" => ctx.movie.id, "positionSeconds" => 42, "durationSeconds" => 100},
-          ctx.user
-        )
-
-      assert {:ok, %{data: %{"updateMovieProgress" => %{"positionSeconds" => 42}}}} = result
-
-      progress = Playback.get_progress(ctx.user.id, media_item_id: ctx.movie.id)
-      assert progress.position_seconds == 42
-    end
-
-    test "still saves episode progress and returns ok", ctx do
-      episode = hd(ctx.episodes)
-
-      result =
-        run_query(
-          @update_episode_progress_mutation,
-          %{"episodeId" => episode.id, "positionSeconds" => 15, "durationSeconds" => 60},
-          ctx.user
-        )
-
-      assert {:ok, %{data: %{"updateEpisodeProgress" => %{"positionSeconds" => 15}}}} = result
-
-      progress = Playback.get_progress(ctx.user.id, episode_id: episode.id)
-      assert progress.position_seconds == 15
     end
   end
 

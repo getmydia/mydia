@@ -2357,4 +2357,67 @@ defmodule Mydia.SettingsTest do
       assert Settings.get_config_setting_by_key("streaming.subtitle_language").value == ""
     end
   end
+
+  describe "grab_delay_hours" do
+    test "defaults to 0" do
+      {:ok, profile} =
+        Settings.create_quality_profile(%{
+          name: "Delay default #{System.unique_integer([:positive])}",
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      assert profile.grab_delay_hours == 0
+    end
+
+    test "accepts 0..168 and rejects values outside it" do
+      base = %{quality_standards: %{preferred_resolutions: ["1080p"]}}
+
+      assert {:ok, %{grab_delay_hours: 168}} =
+               Settings.create_quality_profile(
+                 Map.merge(base, %{name: "Delay max", grab_delay_hours: 168})
+               )
+
+      assert {:error, changeset} =
+               Settings.create_quality_profile(
+                 Map.merge(base, %{name: "Delay neg", grab_delay_hours: -1})
+               )
+
+      assert %{grab_delay_hours: [_]} = errors_on(changeset)
+
+      assert {:error, changeset} =
+               Settings.create_quality_profile(
+                 Map.merge(base, %{name: "Delay big", grab_delay_hours: 169})
+               )
+
+      assert %{grab_delay_hours: [_]} = errors_on(changeset)
+    end
+
+    test "survives clone and a JSON export/import round trip" do
+      {:ok, original} =
+        Settings.create_quality_profile(%{
+          name: "Delay round trip",
+          grab_delay_hours: 36,
+          quality_standards: %{preferred_resolutions: ["1080p"]}
+        })
+
+      {:ok, clone} = Settings.clone_quality_profile(original, "Delay round trip clone")
+      assert clone.grab_delay_hours == 36
+
+      {:ok, json} = Settings.export_profile(original, format: :json)
+      {:ok, imported} = Settings.import_profile(json, name: "Delay round trip import")
+      assert imported.grab_delay_hours == 36
+    end
+
+    test "an import that predates the field gets the default" do
+      json =
+        Jason.encode!(%{
+          "schema_version" => 1,
+          "name" => "Delay legacy import",
+          "quality_standards" => %{"preferred_resolutions" => ["1080p"]}
+        })
+
+      {:ok, imported} = Settings.import_profile(json)
+      assert imported.grab_delay_hours == 0
+    end
+  end
 end

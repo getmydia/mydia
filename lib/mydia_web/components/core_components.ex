@@ -218,7 +218,10 @@ defmodule MydiaWeb.CoreComponents do
     ~H"""
     <div class={@container_class}>
       <label>
-        <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
+        <span
+          :if={@label}
+          class="label mb-1 text-sm font-medium text-base-content/80 whitespace-normal"
+        >{@label}</span>
         <select
           id={@id}
           name={@name}
@@ -243,7 +246,10 @@ defmodule MydiaWeb.CoreComponents do
     ~H"""
     <div class={@container_class}>
       <label>
-        <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
+        <span
+          :if={@label}
+          class="label mb-1 text-sm font-medium text-base-content/80 whitespace-normal"
+        >{@label}</span>
         <textarea
           id={@id}
           name={@name}
@@ -266,7 +272,10 @@ defmodule MydiaWeb.CoreComponents do
     ~H"""
     <div class={@container_class}>
       <label>
-        <span :if={@label} class="label mb-1 text-sm font-medium text-base-content/80">{@label}</span>
+        <span
+          :if={@label}
+          class="label mb-1 text-sm font-medium text-base-content/80 whitespace-normal"
+        >{@label}</span>
         <input
           type={@type}
           name={@name}

@@ -13,6 +13,7 @@ on:
       - 'native/mydia_plugin_sdk/**'
       - 'native/mydia_plugin_macros/**'
       - 'scripts/build_plugin_index.exs'
+      - 'priv/plugin_index/**'
       - '.github/workflows/plugins-publish.yml'
   workflow_dispatch:
 
@@ -69,6 +70,25 @@ jobs:
       - name: Build index
         run: elixir scripts/build_plugin_index.exs --wasm-dir build/wasm --out build/site
 
+      # Mydia refuses an unsigned catalog. The secret key exists only as this
+      # repo secret; the public half is priv/plugin_index/official.pub.
+      - name: Sign index
+        if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/plugins-v')
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          umask 077
+          key=$(mktemp)
+          trap 'rm -f "$key"' EXIT
+          # The key was made with `minisign -G -W` (no password), so signing
+          # never prompts. A password-protected key would fail here, not hang:
+          # stdin is not a terminal in Actions.
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          minisign -S -s "$key" -m build/site/index.json -t "mydia plugin index ${GITHUB_REF_NAME}"
+          minisign -V -p priv/plugin_index/official.pub -m build/site/index.json
+
       - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/plugins-v')
         run: npx wrangler pages deploy build/site --project-name=mydia-plugins --branch=main
@@ -81,7 +101,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          gh release create "$GITHUB_REF_NAME" build/site/index.json build/wasm/*.wasm \
+          gh release create "$GITHUB_REF_NAME" build/site/index.json build/site/index.json.minisig build/wasm/*.wasm \
             --title "Extra plugins $GITHUB_REF_NAME" \
             --notes "Packages published to https://plugins.mydia.dev/index.json" \
             --latest=false

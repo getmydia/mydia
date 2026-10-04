@@ -97,7 +97,8 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
           provider_id: "121362",
           provider: :tvdb,
           media_type: :tv_show,
-          title: "Both Ids"
+          title: "Both Ids",
+          schema_version: MediaMetadata.schema_version()
         }
       })
 
@@ -117,12 +118,137 @@ defmodule Mydia.Jobs.MetadataBackfillTest do
           provider: :tvdb,
           media_type: :tv_show,
           title: "No Cross Reference",
-          external_ids: %{tmdb: nil, tvdb: nil, imdb: nil}
+          external_ids: %{tmdb: nil, tvdb: nil, imdb: nil},
+          schema_version: MediaMetadata.schema_version()
         }
       })
 
     assert :ok = perform_job(MetadataBackfill, %{})
 
     refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+  end
+
+  defp tvdb_show(title, tvdb_id, metadata_overrides \\ %{}) do
+    media_item_fixture(%{
+      type: "tv_show",
+      title: title,
+      tvdb_id: tvdb_id,
+      tmdb_id: tvdb_id + 500_000,
+      metadata:
+        struct!(
+          %MediaMetadata{
+            provider_id: to_string(tvdb_id),
+            provider: :tvdb,
+            media_type: :tv_show,
+            title: title,
+            cast: [],
+            external_ids: %{tmdb: tvdb_id + 500_000, tvdb: tvdb_id, imdb: nil}
+          },
+          metadata_overrides
+        )
+    })
+  end
+
+  describe "outdated metadata" do
+    test "enqueues a metadata-only refresh for a TVDB show stored before the current version" do
+      item = tvdb_show("Harbor Lights", 881_001)
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      assert_enqueued(
+        worker: MetadataRefresh,
+        args: %{media_item_id: item.id, fetch_episodes: false}
+      )
+    end
+
+    test "keys the required version by the resolved provider, not the blob's provider field" do
+      # tvdb_id set and no metadata_source: resolve_provider/1 answers :tvdb
+      # even though the blob says :tmdb.
+      item = tvdb_show("Harbor Lights", 881_003, %{provider: :tmdb})
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      assert_enqueued(
+        worker: MetadataRefresh,
+        args: %{media_item_id: item.id, fetch_episodes: false}
+      )
+    end
+
+    test "skips a current TVDB show even when its cast is empty" do
+      item =
+        tvdb_show("Harbor Lights", 881_002, %{schema_version: MediaMetadata.schema_version()})
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+    end
+
+    test "skips TMDB shows and movies stored before the current version" do
+      tmdb_show =
+        media_item_fixture(%{
+          type: "tv_show",
+          title: "Paper Orchard",
+          tmdb_id: 77_001,
+          tvdb_id: 77_002,
+          metadata_source: :tmdb,
+          metadata: %MediaMetadata{
+            provider_id: "77001",
+            provider: :tmdb,
+            media_type: :tv_show,
+            title: "Paper Orchard",
+            external_ids: %{tmdb: 77_001, tvdb: 77_002, imdb: nil}
+          }
+        })
+
+      movie =
+        media_item_fixture(%{
+          type: "movie",
+          title: "Quiet Meridian",
+          tmdb_id: 77_003,
+          metadata: %MediaMetadata{
+            provider_id: "77003",
+            provider: :tmdb,
+            media_type: :movie,
+            title: "Quiet Meridian"
+          }
+        })
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: tmdb_show.id})
+      refute_enqueued(worker: MetadataRefresh, args: %{media_item_id: movie.id})
+    end
+
+    test "a no-metadata item keeps the full refresh with episodes" do
+      shell = media_item_fixture(%{type: "tv_show", title: "Shell Show"})
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      [job] = all_enqueued(worker: MetadataRefresh, args: %{media_item_id: shell.id})
+      refute Map.has_key?(job.args, "fetch_episodes")
+    end
+  end
+
+  describe "staggering" do
+    test "spaces successive refreshes 15 seconds apart" do
+      tvdb_show("Alder Signal", 881_010)
+      tvdb_show("Birch Signal", 881_011)
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      [first, second] =
+        all_enqueued(worker: MetadataRefresh) |> Enum.sort_by(& &1.scheduled_at, DateTime)
+
+      assert DateTime.diff(second.scheduled_at, first.scheduled_at, :millisecond) in 15_000..15_999
+    end
+
+    test "a second run while refreshes are still scheduled queues no duplicates" do
+      item = tvdb_show("Harbor Lights", 881_020)
+
+      assert :ok = perform_job(MetadataBackfill, %{})
+      assert :ok = perform_job(MetadataBackfill, %{})
+
+      assert [_one] = all_enqueued(worker: MetadataRefresh, args: %{media_item_id: item.id})
+    end
   end
 end

@@ -212,7 +212,7 @@ class P2pGraphQLLink extends Link {
           'retrying in ${backoff.inSeconds}s: $e',
         );
 
-        await Future.delayed(backoff);
+        await Future<void>.delayed(backoff);
 
         // Try to re-establish the connection before retrying
         try {
@@ -227,7 +227,7 @@ class P2pGraphQLLink extends Link {
     // All retries exhausted
     debugPrint('[P2pGraphQLLink] All $_maxRetries retries exhausted');
     debugPrint('[P2pGraphQLLink] Last stack: $lastStack');
-    throw lastError!;
+    Error.throwWithStackTrace(lastError!, lastStack ?? StackTrace.current);
   }
 
   /// Returns true if the error is a transient connection/timeout error

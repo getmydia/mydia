@@ -315,7 +315,7 @@ void main() {
         );
 
         Object? caught;
-        unawaited(backend.connect(_connectedDevice).catchError((e) {
+        unawaited(backend.connect(_connectedDevice).catchError((Object e) {
           caught = e;
         }));
         async.flushMicrotasks();
@@ -1141,4 +1141,153 @@ void main() {
       });
     });
   });
+
+  group('MydiaCastBackend sync state', () {
+    // What an app coming back from suspension looks like from in here: no
+    // timer fired while it was away, so the wall clock jumps and the first
+    // tick afterwards finds an answer far older than any poll allows.
+    test(
+        'flags syncing once the last answer is overdue, and clears it when '
+        'the target answers again', () {
+      fakeAsync((async) {
+        var skew = Duration.zero;
+        final base = DateTime(2026, 8, 20, 12, 0);
+        final transport = _GetStateTransport();
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+          now: () => async.getClock(base).now().add(skew),
+        );
+        final syncing = <bool>[];
+        backend.syncingStream.listen(syncing.add);
+
+        unawaited(backend.connect(_connectedDevice));
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 1));
+        expect(backend.isSyncing, isFalse);
+        expect(syncing, isEmpty);
+
+        skew = const Duration(minutes: 5);
+        final resumed = transport.hold();
+        async.elapse(const Duration(seconds: 1));
+        expect(backend.isSyncing, isTrue);
+        expect(syncing, [true]);
+
+        resumed.complete(FlutterRemoteControlResponse_State(
+          _snapshot(sequence: BigInt.two),
+        ));
+        async.flushMicrotasks();
+        expect(backend.isSyncing, isFalse);
+        expect(syncing, [true, false]);
+
+        backend.dispose();
+      });
+    });
+
+    test('does not stack polls behind one that has not answered yet', () {
+      fakeAsync((async) {
+        final transport = _GetStateTransport();
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+
+        unawaited(backend.connect(_connectedDevice));
+        async.flushMicrotasks();
+
+        transport.hold();
+        async.elapse(const Duration(seconds: 10));
+        expect(transport.getStateCount, 1);
+
+        backend.dispose();
+      });
+    });
+
+    test(
+        'one failed poll keeps the session and retries; a second in a row '
+        'reports the connection lost', () {
+      fakeAsync((async) {
+        final transport = _GetStateTransport();
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+        final failures = <CastFailureKind>[];
+        backend.failureStream.listen(failures.add);
+
+        unawaited(backend.connect(_connectedDevice));
+        async.flushMicrotasks();
+
+        transport.failing = true;
+        async.elapse(const Duration(seconds: 1));
+        expect(failures, isEmpty);
+        expect(backend.isSyncing, isTrue);
+
+        async.elapse(const Duration(seconds: 1));
+        expect(failures, [CastFailureKind.connectionLost]);
+
+        backend.dispose();
+      });
+    });
+
+    test('a poll that recovers after one failure never reports a loss', () {
+      fakeAsync((async) {
+        final transport = _GetStateTransport();
+        final backend = MydiaCastBackend(
+          roster: rosterOf([('d1', 'node-tv')]),
+          transport: transport,
+          selfNodeId: 'node-self',
+        );
+        final failures = <CastFailureKind>[];
+        backend.failureStream.listen(failures.add);
+
+        unawaited(backend.connect(_connectedDevice));
+        async.flushMicrotasks();
+
+        transport.failing = true;
+        async.elapse(const Duration(seconds: 1));
+        transport.failing = false;
+        async.elapse(const Duration(seconds: 1));
+        transport.failing = true;
+        async.elapse(const Duration(seconds: 1));
+
+        expect(failures, isEmpty);
+
+        backend.dispose();
+      });
+    });
+  });
+}
+
+/// Answers `Hello` with [_welcome] and lets a test decide what each
+/// `GetState` does: answer, throw, or hang until told otherwise.
+class _GetStateTransport implements MydiaControlTransport {
+  bool failing = false;
+  int getStateCount = 0;
+  Completer<FlutterRemoteControlResponse>? _held;
+
+  /// Makes the next `GetState` wait on the returned completer.
+  Completer<FlutterRemoteControlResponse> hold() =>
+      _held = Completer<FlutterRemoteControlResponse>();
+
+  @override
+  Future<FlutterRemoteControlResponse> send(
+    String nodeId,
+    FlutterRemoteControlRequest request,
+  ) async {
+    if (request is FlutterRemoteControlRequest_Hello) return _welcome;
+    getStateCount++;
+    if (failing) throw StateError('unreachable');
+    final held = _held;
+    if (held != null) {
+      _held = null;
+      return held.future;
+    }
+    return FlutterRemoteControlResponse_State(
+      _snapshot(sequence: BigInt.from(getStateCount)),
+    );
+  }
 }

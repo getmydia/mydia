@@ -1,8 +1,78 @@
 # Test and Iterate
 
-Two recipes for the part of plugin development that isn't writing the handler:
-proving it works without a running host, and getting new bytes into a running
-Mydia without restarting it.
+Recipes for the part of plugin development that isn't writing the handler:
+getting a build into Mydia, firing events at it, reading what it did, and
+testing without a host at all. The [tutorial](../tutorial/write-your-first-plugin.md)
+walks the first loop end to end.
+
+## Install your build
+
+**Goal:** put a freshly built component and its manifest into a development
+instance, approved and enabled.
+
+1. Build the component:
+
+    ```bash
+    cargo build --release --target wasm32-wasip2
+    ```
+
+    The file is `target/wasm32-wasip2/release/<crate_name>.wasm`, with hyphens in
+    the crate name turned into underscores.
+
+2. From your Mydia checkout, install it with absolute paths:
+
+    ```bash
+    ./dev mix mydia.plugin install /abs/path/my_plugin.wasm /abs/path/manifest.json --approve
+    ```
+
+    `--approve` grants the capabilities the manifest declares. Without it the
+    plugin installs inactive, and you approve it in **Admin > System > Plugins**.
+    Installing the same slug again replaces the bytes and manifest and clears the
+    grant, so pass `--approve` each time or approve it again in the UI.
+
+3. Restart the server so it loads the install:
+
+    ```bash
+    ./dev restart
+    ```
+
+The task starts its own copy of the app, so while the server is running it logs
+a harmless `Failed to bind iroh endpoint` error. The install itself still
+succeeds.
+
+`install` refuses a bundled plugin's slug. To replace those bytes, see
+[Replace a bundled plugin's bytes](#replace-a-bundled-plugins-bytes).
+
+## Fire a test event
+
+**Goal:** run your handler without waiting for real activity.
+
+1. Open **Admin > System > Plugins** and click **Logs** on your plugin's row.
+2. Open the **Test** tab.
+3. Pick an event from the list and click **Run test**.
+
+The list holds the events the plugin subscribes to, so a plugin with no
+`events:subscribe` entry has nothing to test, and a disabled plugin shows
+"Enable this plugin to send it a test event." The handler gets a synthetic
+event with invented detail (for `media_item.added`, the title is `Test Movie`),
+and its log lines carry a `test` badge.
+
+For a plugin with several instances, such as a setup-wizard source, the test
+runs against the first enabled instance.
+
+## Read logs and network requests
+
+**Goal:** see what the handler logged and what requests it made.
+
+Click **Logs** on the plugin's row. The modal has three tabs:
+
+| Tab | Shows |
+|-----|-------|
+| **Activity** | The [`log`](../reference/host-functions.md#log) lines from your guest, plus host lines for each invocation and its result. Filter by minimum level or search the text. |
+| **Network** | Every outbound request the plugin made: time, method, URL, status, size, duration and outcome. Requests are gated by the [`net:http`](../reference/capabilities.md#nethttp) allowlist. |
+| **Test** | The event picker from the previous recipe. |
+
+Lines arrive live while the modal is open.
 
 ## Test without a host
 
@@ -32,7 +102,7 @@ mod tests {
 
     #[test]
     fn handles_added() {
-        let evt = event("media_item.added", r#"{"config":{"webhook_url":"https://example.com/h"}}"#);
+        let evt = event("media_item.added", r#"{"metadata":{"title":"Example"}}"#);
         assert!(on_event(evt).is_ok());
     }
 }
@@ -55,40 +125,62 @@ fn send(_req: &OutboundRequest) -> Option<mydia_plugin_sdk::types::OutboundRespo
 }
 ```
 
-This is exactly how the bundled notifier stays fully unit-tested. Its `src/lib.rs`
-is worth reading for the pattern at scale.
+This is how the bundled notifier stays fully unit-tested. Its `src/lib.rs` is
+worth reading for the pattern at scale.
 
-## The dev loop
+!!! note "Host logging in tests"
+    The tutorial's handler calls `host::log`, which is also a host function. Put
+    it behind the same kind of shim if you want to unit-test that handler.
 
-**Goal:** rebuild a plugin and load the new bytes into a running Mydia without
-a restart.
+## Swap bytes without reinstalling
 
-Mydia reads an **override directory** (`PLUGINS_OVERRIDE_DIR`) as the
-highest-precedence source of plugin bytes. Drop a `<slug>.wasm` there and it
-shadows the installed copy; re-activating the plugin picks it up live, no host
-restart. The loop:
+**Goal:** rebuild and load new bytes without running `install` and restarting
+every time.
 
-```bash
-# 1. Build the component. See the tutorial's "Build the component" step for
-#    the wasm32-wasip2 toolchain requirement (the nix/devenv shell provides
-#    it; a plain Docker setup does not).
-cargo build --release --target wasm32-wasip2
+Mydia reads an **override directory** as the highest-precedence source of plugin
+bytes. A `<slug>.wasm` there shadows the installed copy, and the hyphenated or
+underscored slug both work as the filename stem. The directory is read when the
+server boots, so this needs one-time setup:
 
-# 2. Copy it into the override dir, named by your manifest slug.
-#    (hyphen or underscore both resolve)
-cp target/wasm32-wasip2/release/my_plugin.wasm "$PLUGINS_OVERRIDE_DIR/my-plugin.wasm"
+1. Install the plugin once, as in [Install your build](#install-your-build).
+2. Set `PLUGINS_OVERRIDE_DIR` to a directory you own in the environment the
+   server starts in, then restart the server.
+3. Build and drop the bytes in with `sideload.sh`, which lives in the Mydia
+   checkout:
 
-# 3. Re-activate the plugin (toggle it in the admin UI, or call
-#    Mydia.Plugins.reload/0 from an IEx session), then trigger an event.
-```
+    ```bash
+    native/mydia_plugin_sdk/sideload.sh /path/to/my-plugin --name my-plugin
+    ```
 
-So the cycle is `edit -> build -> copy -> re-activate -> test`. The plugin must
-already be installed (its manifest seeded) so the host knows its capabilities;
-the copy only refreshes the Wasm bytes.
+    It builds the crate and copies the component to
+    `$PLUGINS_OVERRIDE_DIR/my-plugin.wasm`. The same two steps by hand are
+    `cargo build --release --target wasm32-wasip2` and a `cp` of the built
+    component to that path.
 
-## Install a plugin that is not in the index
+4. In **Admin > System > Plugins**, click **Disable**, then **Enable** on the
+   plugin. Enabling re-resolves the artifact, so the new bytes load without a
+   restart.
+5. Run a test from **Logs > Test**.
 
-**Goal:** try an unpublished plugin on a real server, manifest and all.
+The loop is edit, `sideload.sh`, Disable then Enable, test. The plugin must
+already be installed so the host knows its capabilities; the override only
+replaces the bytes. Changes to `manifest.json` still need a reinstall.
+
+## Replace a bundled plugin's bytes
+
+**Goal:** run your own build of a plugin that ships with Mydia, such as to try a
+fix.
+
+`install` refuses the slug of a bundled plugin. Use the override directory
+instead: set `PLUGINS_OVERRIDE_DIR` before the server boots, place your build
+there as `<slug>.wasm`, and restart. At boot the override shadows the bundled
+bytes. Later builds go through the loop in
+[Swap bytes without reinstalling](#swap-bytes-without-reinstalling). Remove the
+file and restart to return to the bundled copy.
+
+## Install on a real server
+
+**Goal:** try an unpublished plugin on a running Mydia container.
 
 Copy the component and its `manifest.json` somewhere the container can read,
 such as the `/config` volume, then install them with `mydia-cli`:
@@ -98,21 +190,9 @@ docker exec mydia mydia-cli plugin install \
   /config/my_plugin.wasm /config/manifest.json
 ```
 
-The plugin installs inactive. Open **Admin > System > Plugins** to review and
-approve its capabilities, exactly as for an index install, or pass `--approve`
-to grant the declared set immediately. Running the command again with a new
-build replaces the bytes and manifest and clears the grant, so approve it again
-afterwards. A bundled plugin cannot be replaced this way; use the override
-directory above.
-
-!!! tip "Shortcut for repo contributors"
-    If you have the Mydia repo checked out, `native/mydia_plugin_sdk/sideload.sh`
-    wraps steps 1 and 2 into one command:
-
-    ```bash
-    export PLUGINS_OVERRIDE_DIR=/path/mydia/reads
-    native/mydia_plugin_sdk/sideload.sh path/to/my_plugin --name my-plugin
-    ```
-
-    External plugin authors who pull the SDK as a dependency will not have this
-    script, so the manual build-and-copy above is the canonical path.
+Paths are resolved inside the container. This runs against the live server, so
+the plugin starts without a restart. It installs inactive unless you add
+`--approve`; approve its declared capabilities in **Admin > System > Plugins**
+otherwise. Running the command again with a new build replaces the bytes and
+manifest and clears the grant. A bundled plugin cannot be replaced this way; use
+the [override directory](#replace-a-bundled-plugins-bytes).

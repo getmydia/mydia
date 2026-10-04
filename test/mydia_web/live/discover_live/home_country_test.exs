@@ -175,6 +175,13 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
     test "certification params go out alongside the country", %{bypass: bypass} do
       stub_discover(bypass)
 
+      # The age limit makes the filter look the title up; serve it from cache.
+      warm_remote_signals({:tmdb, 424_242}, :movie, %Mydia.Media.RemoteSignals{
+        content_rating: "PG",
+        age: 8,
+        category: "movie"
+      })
+
       socket = %Phoenix.LiveView.Socket{
         assigns: %{
           __changed__: %{},
@@ -199,7 +206,8 @@ defmodule MydiaWeb.DiscoverLive.HomeCountryTest do
           home_country: "CA",
           selected_genres: [],
           selected_language: nil,
-          selected_year: nil,
+          year_from: nil,
+          year_to: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
           source: :in_cinemas,

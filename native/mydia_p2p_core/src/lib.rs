@@ -1668,7 +1668,7 @@ async fn handle_dial_finished(
                 for (request, reply) in waiting.requests {
                     let conn = conn.clone();
                     runtime::spawn(async move {
-                        let _ = reply.send(do_send_request(conn, request).await);
+                        let _ = reply.send(send_request_on(conn, request).await);
                     });
                 }
             }
@@ -1949,7 +1949,7 @@ async fn handle_command(
                 Some(conn) => {
                     let conn = conn.clone();
                     runtime::spawn(async move {
-                        let result = do_send_request(conn, request).await;
+                        let result = send_request_on(conn, request).await;
                         let _ = reply.send(result);
                     });
                 }
@@ -2657,6 +2657,55 @@ async fn handle_connection(
     }
 }
 
+/// How long a remote-control request may go unanswered before the connection
+/// it was sent on is given up for dead.
+///
+/// A phone that suspends the app leaves its connections open locally while
+/// the other end has long since dropped them. Requests written to one of
+/// those go nowhere, and they keep going nowhere until QUIC's own idle timer
+/// fires, which a production log shows taking 52 seconds after resume. A
+/// control request is answered by the target in milliseconds, so one that is
+/// still unanswered after this long is far better evidence that the path is
+/// gone than of a slow target.
+///
+/// Shrunk under `cfg(test)` to stay below the test `RESPONSE_TIMEOUT`, so the
+/// regression test sees this fire rather than the responder's own timeout.
+#[cfg(not(test))]
+const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
+#[cfg(test)]
+const CONTROL_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Send a request, giving up on the connection itself if a remote-control
+/// request goes unanswered for [`CONTROL_REQUEST_TIMEOUT`].
+///
+/// Closing is the point: `current_connection` keeps handing out the newest
+/// connection for as long as it is in the map, so a dead one that is merely
+/// timed out here would swallow every later request too. Closed, it is pruned
+/// like any other, and the caller's next request dials a fresh one on demand.
+///
+/// Only remote control gets this. GraphQL and media requests can legitimately
+/// take longer than any bound worth setting here, and they have their own
+/// recovery.
+async fn send_request_on(conn: Connection, request: MydiaRequest) -> Result<MydiaResponse, String> {
+    if !matches!(request, MydiaRequest::RemoteControl(_)) {
+        return do_send_request(conn, request).await;
+    }
+
+    let attempt = do_send_request(conn.clone(), request);
+    match runtime::time::timeout(CONTROL_REQUEST_TIMEOUT, attempt).await {
+        Ok(result) => result,
+        Err(_) => {
+            tracing::warn!(
+                "Control request to {} unanswered after {}ms; closing the connection",
+                conn.remote_id(),
+                CONTROL_REQUEST_TIMEOUT.as_millis()
+            );
+            conn.close(0u32.into(), b"control request timed out");
+            Err("control request timed out".to_string())
+        }
+    }
+}
+
 /// The most `do_send_request` reads back from a peer. Requests stay capped
 /// at 64 KiB in `handle_connection`, but responses carry whole GraphQL
 /// documents: a season with many subtitle tracks came to 254 KB on a real
@@ -3205,6 +3254,37 @@ mod tests {
             matches!(response, MydiaResponse::Error(_)),
             "expected a timeout Error response, got {response:?}"
         );
+    }
+
+    /// A controller resuming from suspension holds a connection its target
+    /// dropped long ago. Before this, a control request on it hung until
+    /// QUIC's idle timer fired, and so did every request after it, because
+    /// the dead connection stayed the peer's current one. Nothing answers
+    /// `RemoteControl` in this test, which stands in for that silence.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_unanswered_control_request_closes_its_connection() {
+        let (responder, responder_id) = Host::new(test_config());
+        let (dialer, _dialer_id) = Host::new(test_config());
+        spawn_event_drain(&responder);
+        spawn_event_drain(&dialer);
+
+        let responder_addr = wait_for_addr(&responder).await;
+        dialer
+            .dial(responder_addr)
+            .await
+            .expect("dial should succeed");
+        assert_eq!(dialer.debug_connection_count(&responder_id).await, 1);
+
+        let request = MydiaRequest::RemoteControl(RemoteControlRequest::GetState);
+        let result = dialer.send_request(responder_id.clone(), request).await;
+        assert_eq!(result, Err("control request timed out".to_string()));
+
+        wait_until(
+            || async { dialer.debug_connection_count(&responder_id).await == 0 },
+            std::time::Duration::from_secs(10),
+            "the unanswered connection to be pruned, so the next request dials a fresh one",
+        )
+        .await;
     }
 
     /// Review fix for the T-809 PR: `run_event_loop`'s `else => false` arm

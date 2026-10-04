@@ -402,6 +402,17 @@ defmodule MydiaWeb.Api.PlaybackControllerTest do
     end
   end
 
+  test "the file progress routes are gone", %{conn: conn, token: token} do
+    file = Mydia.MediaFixtures.media_file_fixture()
+
+    conn =
+      conn
+      |> put_req_header("authorization", "Bearer #{token}")
+      |> get("/api/v1/playback/file/#{file.id}")
+
+    assert conn.status == 404
+  end
+
   # Helper functions for test setup
   #
   # skip_episode_refresh: true — these tests only need a persisted media item

@@ -779,6 +779,11 @@ defmodule MydiaWeb.Schema.CommonTypes do
 
     field :recommended_player_version, non_null(:string),
       description: "Oldest player version this server would rather you ran"
+
+    field :instance_id, :string,
+      description:
+        "This server's remote access instance ID, the one its pairing QR codes carry. " <>
+          "Null until remote access has been enabled once."
   end
 
   @desc "One dated item on the player's calendar"

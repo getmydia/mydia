@@ -180,12 +180,12 @@ void main() {
 
   group('HiveCastSessionStore', () {
     late Directory tempDir;
-    late Box<Map> box;
+    late Box<Map<dynamic, dynamic>> box;
 
     setUp(() async {
       tempDir = await Directory.systemTemp.createTemp('cast_store_test');
       Hive.init(tempDir.path);
-      box = await Hive.openBox<Map>('cast_session_test');
+      box = await Hive.openBox<Map<dynamic, dynamic>>('cast_session_test');
     });
 
     tearDown(() async {

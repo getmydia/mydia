@@ -4,6 +4,11 @@ import '../../core/theme/colors.dart';
 import 'focus_highlight.dart';
 import 'toast/toaster.dart';
 
+/// Width of one action's slot when the row is [DetailActionRow.compact]. Wide
+/// enough for the longest label ("Download") at the label size with air on
+/// both sides.
+const double _kActionSlotWidth = 64;
+
 /// Action row in the detail body, below the hero: mark watched/unwatched,
 /// favorite, download, open the trailer on YouTube when one exists, and open
 /// the Media Info panel when the title has files. Shared between the movie and
@@ -12,8 +17,8 @@ class DetailActionRow extends StatelessWidget {
   final bool watched;
   final VoidCallback onToggleWatched;
   final bool isFavorite;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onDownload;
+  final VoidCallback? onToggleFavorite;
+  final VoidCallback? onDownload;
   final String? trailerUrl;
 
   /// Whether to show the Download button at all. Defaults to `true`; callers
@@ -33,25 +38,39 @@ class DetailActionRow extends StatelessWidget {
   /// pass when the title has no files to describe.
   final VoidCallback? onShowMediaInfo;
 
+  /// Whether the row shrink-wraps to fixed-width slots instead of spreading
+  /// across its parent. Defaults to `false`, which suits a phone-width column
+  /// where the row should span edge to edge. Wide layouts pass `true` so the
+  /// row takes only the width its buttons need, however many are showing.
+  final bool compact;
+
+  /// False hides Watched, for a server that cannot record it.
+  final bool showWatched;
+
+  /// False hides Favorite, for a server without favorites.
+  final bool showFavorite;
+
   const DetailActionRow({
     super.key,
     required this.watched,
     required this.onToggleWatched,
     required this.isFavorite,
-    required this.onToggleFavorite,
-    required this.onDownload,
+    this.onToggleFavorite,
+    this.onDownload,
     required this.trailerUrl,
     this.showDownload = true,
     this.isDownloaded = false,
     this.onShowMediaInfo,
+    this.compact = false,
+    this.showWatched = true,
+    this.showFavorite = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final trailerUrl = this.trailerUrl;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
+    final actions = <Widget>[
+      if (showWatched)
         _ActionButton(
           icon: watched
               ? Icons.check_circle_rounded
@@ -61,6 +80,7 @@ class DetailActionRow extends StatelessWidget {
           highlightColor: AppColors.success,
           onTap: onToggleWatched,
         ),
+      if (showFavorite && onToggleFavorite != null)
         _ActionButton(
           icon: isFavorite
               ? Icons.favorite_rounded
@@ -68,34 +88,43 @@ class DetailActionRow extends StatelessWidget {
           label: 'Favorite',
           highlighted: isFavorite,
           highlightColor: AppColors.error,
-          onTap: onToggleFavorite,
+          onTap: onToggleFavorite!,
         ),
-        if (showDownload)
-          _ActionButton(
-            icon: isDownloaded
-                ? Icons.download_done_rounded
-                : Icons.download_rounded,
-            label: 'Download',
-            highlighted: isDownloaded,
-            highlightColor: AppColors.success,
-            onTap: onDownload,
-          ),
-        if (trailerUrl != null)
-          _ActionButton(
-            icon: Icons.smart_display_rounded,
-            label: 'Trailer',
-            highlighted: false,
-            highlightColor: AppColors.primary,
-            onTap: () => _openTrailer(context, trailerUrl),
-          ),
-        if (onShowMediaInfo != null)
-          _ActionButton(
-            icon: Icons.info_outline_rounded,
-            label: 'Info',
-            highlighted: false,
-            highlightColor: AppColors.textPrimary,
-            onTap: onShowMediaInfo!,
-          ),
+      if (showDownload && onDownload != null)
+        _ActionButton(
+          icon: isDownloaded
+              ? Icons.download_done_rounded
+              : Icons.download_rounded,
+          label: 'Download',
+          highlighted: isDownloaded,
+          highlightColor: AppColors.success,
+          onTap: onDownload!,
+        ),
+      if (trailerUrl != null)
+        _ActionButton(
+          icon: Icons.smart_display_rounded,
+          label: 'Trailer',
+          highlighted: false,
+          highlightColor: AppColors.primary,
+          onTap: () => _openTrailer(context, trailerUrl),
+        ),
+      if (onShowMediaInfo != null)
+        _ActionButton(
+          icon: Icons.info_outline_rounded,
+          label: 'Info',
+          highlighted: false,
+          highlightColor: AppColors.textPrimary,
+          onTap: onShowMediaInfo!,
+        ),
+    ];
+
+    return Row(
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        for (final action in actions)
+          compact
+              ? SizedBox(width: _kActionSlotWidth, child: action)
+              : Expanded(child: action),
       ],
     );
   }
@@ -130,44 +159,46 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = highlighted ? highlightColor : AppColors.textPrimary;
 
-    return Expanded(
-      child: FocusHighlight(
-        onActivate: onTap,
-        borderRadius: const BorderRadius.all(Radius.circular(12)),
-        child: InkWell(
-          onTap: onTap,
-          // FocusHighlight above is the single focus stop for this chip.
-          // InkWell defaults canRequestFocus to true, which would otherwise
-          // register a second, invisible focus stop nested inside the first.
-          canRequestFocus: false,
-          borderRadius: BorderRadius.circular(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+    return FocusHighlight(
+      onActivate: onTap,
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      child: InkWell(
+        onTap: onTap,
+        // FocusHighlight above is the single focus stop for this chip.
+        // InkWell defaults canRequestFocus to true, which would otherwise
+        // register a second, invisible focus stop nested inside the first.
+        canRequestFocus: false,
+        borderRadius: BorderRadius.circular(22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: highlighted
+                    ? highlightColor.withValues(alpha: 0.15)
+                    : AppColors.surfaceVariant,
+                border: Border.all(
                   color: highlighted
-                      ? highlightColor.withValues(alpha: 0.15)
-                      : AppColors.surfaceVariant,
-                  border: Border.all(
-                    color: highlighted
-                        ? highlightColor.withValues(alpha: 0.45)
-                        : AppColors.border,
-                  ),
+                      ? highlightColor.withValues(alpha: 0.45)
+                      : AppColors.border,
                 ),
-                child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: const TextStyle(
-                    fontSize: 10.5, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.fade,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 10.5, color: AppColors.textSecondary),
+            ),
+          ],
         ),
       ),
     );

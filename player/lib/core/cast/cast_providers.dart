@@ -233,7 +233,8 @@ final multicastLockProvider = Provider<MulticastLock>((ref) {
 });
 
 final castSessionStoreProvider = FutureProvider<CastSessionStore>((ref) async {
-  final box = await Hive.openBox<Map>(HiveCastSessionStore.boxName);
+  final box =
+      await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
   ref.onDispose(() => unawaited(box.close()));
   return HiveCastSessionStore(box);
 });

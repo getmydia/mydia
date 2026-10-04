@@ -30,6 +30,13 @@ import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
+/// Routes a Mydia user in offline mode may still open: downloads, and the
+/// third-party sources, which do not depend on the Mydia server.
+bool offlineRouteAllowed(String route) =>
+    route == '/downloads' ||
+    route.startsWith('/s/') ||
+    route.startsWith('/sources');
+
 class AppShell extends ConsumerStatefulWidget {
   final Widget child;
   final String location;
@@ -306,7 +313,7 @@ class _AppShellState extends ConsumerState<AppShell>
   }
 
   void _navigateTo(String route) {
-    if (_isOfflineMode() && route != '/downloads') {
+    if (_isOfflineMode() && !offlineRouteAllowed(route)) {
       _showOfflineToast();
       return;
     }
@@ -460,6 +467,9 @@ class _AppShellState extends ConsumerState<AppShell>
             Navigator.of(context).pop();
             _navigateTo(route);
           },
+          // Navigates without popping, so the drawer stays open on the new
+          // server's nav and the viewer sees the switch land.
+          onSwitchSource: _navigateTo,
           showBackToMydia: showBackToMydia,
           isOffline: isOffline,
         ),
@@ -488,15 +498,19 @@ class _AppShellState extends ConsumerState<AppShell>
             ),
           ],
         ),
-        bottomNavigationBar: AppShell.dockChrome(
-          drawerOpen: _drawerOpen,
-          child: BottomNav(
-            location: location,
-            onNavigate: _navigateTo,
-            isOffline: isOffline,
-            showBackToMydia: showBackToMydia,
-          ),
-        ),
+        // The bottom bar holds Mydia's destinations; a third-party source screen
+        // uses the drawer, which holds that source's.
+        bottomNavigationBar: location.startsWith('/s/')
+            ? null
+            : AppShell.dockChrome(
+                drawerOpen: _drawerOpen,
+                child: BottomNav(
+                  location: location,
+                  onNavigate: _navigateTo,
+                  isOffline: isOffline,
+                  showBackToMydia: showBackToMydia,
+                ),
+              ),
       ),
     );
   }

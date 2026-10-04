@@ -14,11 +14,12 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
         metadata={@selected_metadata}
         loading={@detail_loading}
         current_user={@current_user}
+        current_scope={@current_scope}
         open={@selected_item != nil}
         config_open={false}
       />
 
-  The box is a flex column: a fixed header, then one scrolling child. Any new
+  The box is a flex column: a header that grows to fit its title, badges and actions (minimum backdrop height), then one scrolling child. Any new
   content belongs inside `#trending-detail-modal-body`, not as a sibling of it,
   or it will sit outside the scroll region and be unreachable. There is no
   footer; all actions live in the header's `#trending-detail-modal-actions`
@@ -79,19 +80,26 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
     >
       <%= if @open do %>
         <div class="modal-box max-w-5xl w-11/12 max-h-[90vh] p-0 flex flex-col overflow-hidden">
-          <%!-- Header with backdrop --%>
-          <div class="relative h-48 md:h-64 bg-base-300 shrink-0">
-            <%= if backdrop_path(@item, @metadata) do %>
-              <img
-                src={ImageUrl.backdrop_url(backdrop_path(@item, @metadata), "w1280")}
-                alt=""
-                class="w-full h-full object-cover"
-              />
-              <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/50 to-transparent">
-              </div>
-            <% else %>
-              <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
-            <% end %>
+          <%!-- Header with backdrop. min-h, not h: the title block is in normal
+               flow so a long badge row grows the header instead of being pushed
+               up and clipped by the box's overflow-hidden (#1008). --%>
+          <div
+            id="trending-detail-modal-header"
+            class="relative min-h-48 md:min-h-64 bg-base-300 shrink-0"
+          >
+            <div class="absolute inset-0">
+              <%= if backdrop_path(@item, @metadata) do %>
+                <img
+                  src={ImageUrl.backdrop_url(backdrop_path(@item, @metadata), "w1280")}
+                  alt=""
+                  class="w-full h-full object-cover"
+                />
+                <div class="absolute inset-0 bg-gradient-to-t from-base-100 via-base-100/50 to-transparent">
+                </div>
+              <% else %>
+                <div class="w-full h-full bg-gradient-to-br from-primary/20 to-secondary/20"></div>
+              <% end %>
+            </div>
 
             <%!-- Close button. Icon-only and always present regardless of what
                  a caller's :actions slot puts beside it in the header, so
@@ -104,8 +112,9 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
               <.icon name="hero-x-mark" class="w-5 h-5" />
             </button>
 
-            <%!-- Title overlay --%>
-            <div class="absolute bottom-0 left-0 right-0 p-4 md:p-6">
+            <%!-- Title block. pt-14 keeps the badges clear of the close button
+                 once the header grows past its minimum. --%>
+            <div class="relative flex flex-col justify-end min-h-48 md:min-h-64 p-4 md:p-6 pt-14">
               <div class="flex flex-wrap items-end gap-4">
                 <%= if poster_path(@item, @metadata) do %>
                   <img
@@ -115,7 +124,7 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                   />
                 <% end %>
                 <div class="flex-1">
-                  <h2 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg">
+                  <h2 class="text-2xl md:text-3xl font-bold text-white drop-shadow-lg pr-10">
                     {title(@item, @metadata)}
                   </h2>
                   <div class="flex flex-wrap items-center gap-2 mt-1">
@@ -124,7 +133,10 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                     <% end %>
                     <.content_rating_badge
                       id="trending-detail-content-rating"
-                      rating={@metadata && @metadata.content_rating}
+                      rating={
+                        (@metadata && @metadata.content_rating) ||
+                          (@item && Map.get(@item, :content_rating))
+                      }
                     />
                     <span
                       :if={release_label(@metadata)}
@@ -161,42 +173,60 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
                 </div>
                 <div
                   id="trending-detail-modal-actions"
-                  class="flex flex-wrap items-center gap-2 shrink-0"
+                  class="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto"
                 >
                   <%= if @actions != [] do %>
                     {render_slot(@actions)}
                   <% else %>
                     <%= if not in_library?(@item) do %>
-                      <%= if @current_user && @current_user.role == "guest" do %>
-                        <button
-                          phx-click={@request_event}
-                          phx-value-ref={@item_ref}
-                          phx-value-media_type={media_type_string(@item)}
-                          disabled={Map.get(@item, :request_status) != nil}
-                          class="btn btn-primary"
-                        >
-                          <%= if Map.get(@item, :request_status) do %>
-                            <.icon name="hero-check" class="w-4 h-4" /> Requested
-                          <% else %>
-                            <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
-                          <% end %>
-                        </button>
-                      <% else %>
-                        <div class="join">
+                      <%= cond do %>
+                        <% outside_scope?(@current_scope, @item, @metadata) -> %>
                           <button
-                            phx-click={@add_event}
+                            id="trending-detail-restricted"
+                            type="button"
+                            disabled
+                            class="btn btn-disabled"
+                            title={Mydia.Media.restricted_message()}
+                          >
+                            <.icon name="hero-lock-closed" class="w-4 h-4" /> Not available
+                          </button>
+                          <p class="text-xs text-white/70 w-full">
+                            {Mydia.Media.restricted_message()}
+                          </p>
+                        <% @current_user && @current_user.role == "guest" -> %>
+                          <button
+                            phx-click={@request_event}
                             phx-value-ref={@item_ref}
                             phx-value-media_type={media_type_string(@item)}
-                            class="btn btn-primary join-item"
+                            disabled={Map.get(@item, :request_status) != nil}
+                            class="btn btn-primary"
                           >
-                            <.icon name="hero-plus" class="w-4 h-4" /> Add to Library
+                            <%= if Map.get(@item, :request_status) do %>
+                              <.icon name="hero-check" class="w-4 h-4" /> Requested
+                            <% else %>
+                              <.icon name="hero-paper-airplane" class="w-4 h-4" /> Request
+                            <% end %>
                           </button>
-                          <.library_picker_button
-                            ref={@item_ref}
-                            media_type={media_type_string(@item)}
-                            title={@item.title}
-                          />
-                        </div>
+                        <% true -> %>
+                          <div class="join">
+                            <button
+                              phx-click={@add_event}
+                              phx-value-ref={@item_ref}
+                              phx-value-media_type={media_type_string(@item)}
+                              aria-label="Add to Library"
+                              class="btn btn-primary join-item"
+                            >
+                              <.icon name="hero-plus" class="w-4 h-4" />
+                              <span class="sm:hidden">Add</span>
+                              <span class="hidden sm:inline">Add to Library</span>
+                            </button>
+                            <.library_picker_button
+                              ref={@item_ref}
+                              media_type={media_type_string(@item)}
+                              title={@item.title}
+                              size="md"
+                            />
+                          </div>
                       <% end %>
                     <% else %>
                       <.link navigate={library_path(@item)} class="btn btn-ghost">
@@ -308,6 +338,8 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
      |> assign_new(:open, fn -> false end)
      |> assign_new(:loading, fn -> false end)
      |> assign_new(:metadata, fn -> nil end)
+     # Without a scope the modal cannot judge limits; the submit gate still holds.
+     |> assign_new(:current_scope, fn -> nil end)
      # Optional slot: the dashboard renders this modal without one.
      |> assign_new(:rail, fn -> [] end)
      # Optional slot: Dashboard and Discovery render the default header actions.
@@ -369,6 +401,16 @@ defmodule MydiaWeb.Live.Components.TrendingDetailModal do
       _ -> nil
     end
   end
+
+  # The same rule that refuses the request on submit, so the button and the
+  # server cannot disagree. Undecided until the detail metadata arrives, which
+  # is the only point a rating is known for certain; until then the submit
+  # gate still holds.
+  defp outside_scope?(nil, _item, _metadata), do: false
+  defp outside_scope?(_scope, _item, nil), do: false
+
+  defp outside_scope?(scope, item, metadata),
+    do: not Mydia.Media.writable?(scope, %{type: media_type_string(item), metadata: metadata})
 
   defp in_library?(nil), do: false
   defp in_library?(item), do: Map.get(item, :in_library, false)

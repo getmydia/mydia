@@ -1,25 +1,42 @@
 defmodule Mydia.Plugins.PageContext do
   @moduledoc """
-  Helpers shared by the page host functions that run for a signed-in user
-  (`Mydia.Plugins.PageActions` and the page read side): resolving the acting
-  user from the invocation context and marshalling WIT `option<T>` values.
+  Helpers shared by the host functions that run for a known user: resolving
+  that user from the invocation context and marshalling WIT `option<T>` values.
   """
 
   alias Mydia.Accounts
   alias Mydia.Accounts.User
   alias Mydia.Plugins.Error
 
+  # Handlers that run for one known user. `on-http` has a person at the
+  # keyboard; `fill-shelf` runs in the background on that person's behalf.
+  @user_handlers [:on_http, :fill_shelf]
+
   @doc """
-  The user a page invocation acts for. Only `on-http` invocations carry one;
-  any other handler is refused.
+  The user an invocation reads as. Set for `on-http` and `fill-shelf`
+  invocations; any other handler is refused.
+
+  Reads use this. Writes use `page_user/1`, which accepts `on-http` only: a
+  background fill has nobody to approve a change.
   """
-  @spec page_user(map()) :: {:ok, User.t()} | {:error, Error.t()}
-  def page_user(%{handler: :on_http, acting_user_id: user_id}) when is_binary(user_id) do
+  @spec acting_user(map()) :: {:ok, User.t()} | {:error, Error.t()}
+  def acting_user(%{handler: handler, acting_user_id: user_id})
+      when handler in @user_handlers and is_binary(user_id) do
     case Accounts.get_user_by_id(user_id) do
       %User{} = user -> {:ok, user}
       nil -> {:error, Error.new(:capability_denied, "unknown user")}
     end
   end
+
+  def acting_user(_ctx),
+    do: {:error, Error.new(:capability_denied, "this call needs an acting user")}
+
+  @doc """
+  The user a page invocation acts for. Only `on-http` invocations carry one;
+  any other handler, including `fill-shelf`, is refused.
+  """
+  @spec page_user(map()) :: {:ok, User.t()} | {:error, Error.t()}
+  def page_user(%{handler: :on_http} = ctx), do: acting_user(ctx)
 
   def page_user(_ctx),
     do: {:error, Error.new(:capability_denied, "page access requires an interactive session")}

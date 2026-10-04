@@ -3,6 +3,7 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseSectionTest do
   # with the mount process when the case is not async.
   use MydiaWeb.ConnCase, async: false
 
+  require Ecto.Query
   import Phoenix.LiveViewTest
   import Mydia.MediaFixtures
   import Mydia.AccountsFixtures
@@ -79,5 +80,64 @@ defmodule MydiaWeb.MediaLive.Show.FranchiseSectionTest do
              view,
              "#franchise-section-item-#{missing_tmdb_id} [phx-click='add_franchise_movie']"
            )
+  end
+
+  test "a restricted account's strip omits parts above its age limit" do
+    user = restricted_user_fixture(%{max_content_age: 12})
+    conn = log_in_user(build_conn(), user)
+
+    [current, ok, blocked] = for _ <- 1..3, do: unique_provider_id()
+    collection_id = unique_provider_id()
+
+    movie =
+      media_item_fixture(%{
+        type: "movie",
+        title: "Cinder Saga I",
+        year: 2001,
+        tmdb_id: current,
+        metadata: %{
+          "provider_id" => to_string(current),
+          "provider" => "metadata_relay",
+          "media_type" => "movie",
+          "title" => "Cinder Saga I",
+          "collection_id" => collection_id,
+          "collection_name" => "Test Collection"
+        }
+      })
+
+    warm_collection_cache(collection_id, [
+      %{"id" => current, "title" => "Cinder Saga I", "release_date" => "2001-01-01"},
+      %{"id" => ok, "title" => "Cinder Saga II", "release_date" => "2003-01-01"},
+      %{"id" => blocked, "title" => "Cinder Saga III", "release_date" => "2005-01-01"}
+    ])
+
+    warm_remote_signals(
+      {:tmdb, ok},
+      :movie,
+      %Mydia.Media.RemoteSignals{content_rating: "PG", age: 8, category: "movie"}
+    )
+
+    warm_remote_signals(
+      {:tmdb, blocked},
+      :movie,
+      %Mydia.Media.RemoteSignals{content_rating: "R", age: 17, category: "movie"}
+    )
+
+    # content_rating_age is derived on write; set it directly so the
+    # restricted viewer may open the movie.
+    Mydia.Repo.update_all(
+      Ecto.Query.from(m in Mydia.Media.MediaItem, where: m.id == ^movie.id),
+      set: [content_rating_age: 8]
+    )
+
+    warm_recommendations_cache(current, :movie, [])
+
+    {:ok, view, _html} = live(conn, ~p"/media/#{movie.id}")
+    render_async(view, 5000)
+
+    assert has_element?(view, "#franchise-section")
+    assert has_element?(view, "#franchise-section-item-#{current}")
+    assert has_element?(view, "#franchise-section-item-#{ok}")
+    refute has_element?(view, "#franchise-section-item-#{blocked}")
   end
 end

@@ -220,22 +220,28 @@ class _FilterEditorSheetState extends State<FilterEditorSheet> {
                 const SizedBox(height: 16),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: DropdownButtonFormField<MediaCategoryFilter?>(
-                    key: const Key('filter-editor-category'),
-                    value: _filter.category,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('All'),
-                      ),
-                      for (final category in categories)
-                        DropdownMenuItem(
-                          value: category,
-                          child: Text(category.displayName),
+                  // initialValue is read once, so changing the kind (which
+                  // swaps the categories and clears the selection) must
+                  // rebuild the field.
+                  child: KeyedSubtree(
+                    key: ValueKey(_filter.kind),
+                    child: DropdownButtonFormField<MediaCategoryFilter?>(
+                      key: const Key('filter-editor-category'),
+                      initialValue: _filter.category,
+                      decoration: const InputDecoration(labelText: 'Category'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text('All'),
                         ),
-                    ],
-                    onChanged: _setCategory,
+                        for (final category in categories)
+                          DropdownMenuItem(
+                            value: category,
+                            child: Text(category.displayName),
+                          ),
+                      ],
+                      onChanged: _setCategory,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),

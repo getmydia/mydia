@@ -309,6 +309,19 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
     test "certification params go out alongside the service", %{bypass: bypass} do
       stub_discover(bypass)
 
+      # The age limit makes the filter look the title up; serve it from cache.
+      for type <- [:movie, :tv_show] do
+        warm_remote_signals(
+          {:tmdb, :erlang.phash2("Maple Lantern")},
+          type,
+          %Mydia.Media.RemoteSignals{
+            content_rating: "PG",
+            age: 8,
+            category: "movie"
+          }
+        )
+      end
+
       socket = %Phoenix.LiveView.Socket{
         assigns: %{
           __changed__: %{},
@@ -336,7 +349,8 @@ defmodule MydiaWeb.DiscoverLive.RegionalRowsTest do
           regional_rows: %{},
           selected_genres: [],
           selected_language: nil,
-          selected_year: nil,
+          year_from: nil,
+          year_to: nil,
           min_rating: nil,
           sort_by: "primary_release_date.desc",
           current_scope: %Mydia.Accounts.Scope{

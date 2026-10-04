@@ -247,6 +247,31 @@ defmodule Mydia.MetadataCacheHelpers do
   end
 
   @doc """
+  Seeds the per-title certification and category `Mydia.Media.RemoteFilter`
+  looks up for restricted accounts, so a restricted LiveView test makes no
+  relay call.
+  """
+  def warm_remote_signals(ref, media_type, %Mydia.Media.RemoteSignals{} = signals) do
+    key = Mydia.Media.RemoteSignals.cache_key(ref, media_type)
+    Cache.put(key, signals, ttl: :timer.minutes(30))
+    on_exit(fn -> Cache.delete(key) end)
+    :ok
+  end
+
+  @doc """
+  Seeds an empty TMDB rating fallback for a TVDB series whose remoteIds name
+  `tmdb_id`, so fetching that series makes no extra `/tmdb/tv/shows/:id` call.
+
+  Needed by tests that pin the TMDB route with `Bypass.expect_once`.
+  """
+  def warm_tvdb_rating_fallback(tmdb_id) do
+    key = "tvdb_tmdb_rating:#{tmdb_id}"
+    Cache.put(key, nil, ttl: :timer.minutes(30))
+    on_exit(fn -> Cache.delete(key) end)
+    :ok
+  end
+
+  @doc """
   Populates the movie search cache for `query` with `results`.
 
   `results` are raw TMDB result maps with string keys, matching
@@ -267,12 +292,15 @@ defmodule Mydia.MetadataCacheHelpers do
     config = %{relay | base_url: "http://localhost:#{bypass.port}"}
 
     year = Keyword.get(opts, :year)
+    page = Keyword.get(opts, :page, 1)
 
     # Mirrors the key search_cached/3 builds for these opts: no :provider or
     # :language override, so provider defaults to the config type and
     # language to the config's own.
     on_exit(fn ->
-      Cache.delete("search:#{relay.type}:#{query}:movie:#{year}:#{relay.options.language}:1")
+      Cache.delete(
+        "search:#{relay.type}:#{query}:movie:#{year}:#{relay.options.language}:#{page}"
+      )
     end)
 
     Bypass.expect_once(bypass, "GET", "/tmdb/movies/search", fn conn ->
@@ -288,7 +316,9 @@ defmodule Mydia.MetadataCacheHelpers do
       |> Plug.Conn.resp(200, Jason.encode!(body))
     end)
 
-    search_opts = if year, do: [media_type: :movie, year: year], else: [media_type: :movie]
+    search_opts =
+      if(year, do: [media_type: :movie, year: year], else: [media_type: :movie]) ++
+        [page: page]
 
     {:ok, _results} = Metadata.search_cached(config, query, search_opts)
 

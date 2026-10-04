@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/episode.dart';
-import '../../domain/models/download.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
-import '../../core/downloads/download_job_providers.dart';
 import '../../core/theme/colors.dart';
-import 'quality_download_dialog.dart';
-import 'toast/toaster.dart';
+import '../screens/detail/mydia_downloads.dart';
 
 /// Standalone progressive-download action for an episode.
 ///
@@ -41,101 +38,20 @@ class EpisodeDownloadButton extends ConsumerWidget {
     return _ActionButton(
       icon: isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
       color: isDownloaded ? AppColors.success : AppColors.textSecondary,
-      onTap: () => _handleDownload(context, ref, isDownloaded),
+      onTap: () => _handleDownload(context, ref),
       tooltip: isDownloaded ? 'Downloaded' : 'Download',
     );
   }
 
-  Future<void> _handleDownload(
-    BuildContext context,
-    WidgetRef ref,
-    bool isDownloaded,
-  ) async {
-    if (isDownloaded) {
-      if (context.mounted) {
-        showToast(context, 'Already downloaded');
-      }
-    } else if (episode.files.isNotEmpty) {
-      // Show quality download dialog for progressive downloads
-      final selectedResolution = await showQualityDownloadDialog(
-        context,
-        contentType: 'episode',
-        contentId: episode.id,
-        title: '$showTitle - ${episode.episodeCode}',
-      );
-
-      if (selectedResolution != null && context.mounted) {
-        final downloadService = ref.read(unifiedDownloadJobServiceProvider);
-        final downloadManager = await ref.read(downloadManagerProvider.future);
-
-        if (downloadService != null) {
-          try {
-            // Start progressive download using the service
-            await downloadManager.startProgressiveDownload(
-              mediaId: episode.id,
-              title: '$showTitle - ${episode.episodeCode}: ${episode.title}',
-              contentType: 'episode',
-              resolution: selectedResolution,
-              mediaType: MediaType.episode,
-              posterUrl: episode.thumbnailUrl,
-              overview: episode.overview,
-              runtime: episode.runtime,
-              seasonNumber: episode.seasonNumber,
-              episodeNumber: episode.episodeNumber,
-              showId: showId,
-              showTitle: showTitle,
-              showPosterUrl: showPosterUrl,
-              thumbnailUrl: episode.thumbnailUrl,
-              airDate: episode.airDate,
-              getDownloadUrl: (jobId) async {
-                return await downloadService.getDownloadUrl(jobId);
-              },
-              prepareDownload: () async {
-                final status = await downloadService.prepareDownload(
-                  contentType: 'episode',
-                  id: episode.id,
-                  resolution: selectedResolution,
-                );
-                return (
-                  jobId: status.jobId,
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                );
-              },
-              getJobStatus: (jobId) async {
-                final status = await downloadService.getJobStatus(jobId);
-                return (
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                  error: status.error,
-                );
-              },
-              cancelJob: (jobId) async {
-                await downloadService.cancelJob(jobId);
-              },
-            );
-
-            if (context.mounted) {
-              showToast(
-                context,
-                'Download started',
-                kind: ToastKind.success,
-              );
-            }
-          } catch (e) {
-            if (context.mounted) {
-              showToast(
-                context,
-                'Failed to start download: $e',
-                kind: ToastKind.error,
-              );
-            }
-          }
-        }
-      }
-    }
+  Future<void> _handleDownload(BuildContext context, WidgetRef ref) {
+    return startMydiaEpisodeDownload(
+      context,
+      ref,
+      episode: episode,
+      showId: showId,
+      showTitle: showTitle,
+      showPosterUrl: showPosterUrl,
+    );
   }
 }
 

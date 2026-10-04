@@ -108,6 +108,24 @@ defmodule MydiaWeb.DownloadsLive.MatchDialogTest do
       assert dialog.search_warning == nil
     end
 
+    test "a restricted scope does not see out-of-bounds provider results" do
+      import Mydia.AccountsFixtures, only: [restricted_user_fixture: 1]
+
+      Mydia.MetadataCacheHelpers.warm_remote_signals(
+        {:tmdb, Mydia.MetadataStubProvider.movie_tmdb_id()},
+        :movie,
+        %Mydia.Media.RemoteSignals{category: "movie"}
+      )
+
+      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
+
+      restricted = MatchDialog.search(%{dialog_for(:movie) | scope: scope}, "Stub")
+      open = MatchDialog.search(dialog_for(:movie), "Stub")
+
+      assert restricted.external_results == []
+      assert Enum.any?(open.external_results, &(&1.title == "Stub Movie"))
+    end
+
     test "drops a provider result whose id is already a library item" do
       _existing =
         media_item_fixture(%{

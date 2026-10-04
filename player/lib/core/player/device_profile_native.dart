@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'android_codec_capabilities.dart';
-import 'codec_profile.dart';
 import 'device_profile.dart';
 
 /// What libmpv is built with on every desktop and mobile target Mydia ships.

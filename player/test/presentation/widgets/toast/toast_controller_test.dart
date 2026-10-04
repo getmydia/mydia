@@ -320,6 +320,7 @@ void main() {
       // identical `const` literals canonicalise to one, which would let this
       // pass on identity alone even if `ToastClaim` had no `==`.
       final equal =
+          // ignore: prefer_const_constructors, const would canonicalise to the same object as `claim`
           ToastClaim(ToastEdge.bottom, Rect.fromLTWH(12, 805, 776, 83));
       expect(identical(claim, equal), isFalse);
       controller.setClaim(#dock, claim);

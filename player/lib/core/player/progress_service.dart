@@ -6,13 +6,14 @@ import 'package:media_kit/media_kit.dart';
 
 import '../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../graphql/mutations/update_episode_progress.graphql.dart';
+import 'progress_reporter.dart';
 import 'stream_timeline.dart';
 
 /// Service for syncing playback progress to the server.
 ///
 /// Handles periodic progress updates during playback and saves
 /// final position when playback stops.
-class ProgressService {
+class ProgressService implements ProgressReporter {
   final GraphQLClient _client;
   Timer? _syncTimer;
   DateTime? _lastSyncTime;
@@ -23,6 +24,7 @@ class ProgressService {
   /// The mapping from media_kit's stream-local positions onto real media
   /// positions. Set by the player screen once the streaming session is known;
   /// [StreamTimeline.zero] is correct for direct play and offline files.
+  @override
   StreamTimeline timeline = StreamTimeline.zero;
 
   ProgressService(this._client);
@@ -53,7 +55,34 @@ class ProgressService {
     });
   }
 
+  @override
+  void start(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  }) {
+    if (mediaType == 'movie') {
+      startMovieSync(player, mediaId);
+    } else if (mediaType == 'episode') {
+      startEpisodeSync(player, mediaId);
+    }
+  }
+
+  @override
+  Future<void> save(
+    Player player, {
+    required String mediaType,
+    required String mediaId,
+  }) async {
+    if (mediaType == 'movie') {
+      await saveMovieProgress(player, mediaId);
+    } else if (mediaType == 'episode') {
+      await saveEpisodeProgress(player, mediaId);
+    }
+  }
+
   /// Stops the periodic sync timer.
+  @override
   void stopSync() {
     _syncTimer?.cancel();
     _syncTimer = null;
@@ -282,6 +311,7 @@ class ProgressService {
   /// Checks if the current playback position indicates the content is watched.
   ///
   /// Returns true if position is >= 90% of duration.
+  @override
   bool isWatched(Player player) =>
       isWatchedAt(player.state.position, player.state.duration, timeline);
 
@@ -298,6 +328,7 @@ class ProgressService {
   }
 
   /// Disposes the service and cancels any active timers.
+  @override
   void dispose() {
     _syncTimer?.cancel();
     _syncTimer = null;

@@ -1,5 +1,4 @@
 schema {
-  subscription: RootSubscriptionType
   mutation: RootMutationType
   query: RootQueryType
 }
@@ -251,59 +250,6 @@ type RootMutationType {
 
   "Store a timing correction for one subtitle track"
   setSubtitleOffset(mediaFileId: ID!, trackRef: String!, offsetMs: Int!): SubtitleTrackSetting!
-}
-
-type RootSubscriptionType {
-  "Subscribe to playback progress updates for a specific content item"
-  progressUpdated(nodeId: ID!): Progress
-
-  "Subscribe to device status changes for a user"
-  deviceStatusChanged(userId: ID!): DeviceStatusEvent
-}
-
-"Device status change event"
-type DeviceStatusEvent {
-  "The device that changed status"
-  device: Device!
-
-  "The type of status change"
-  event: DeviceEventType!
-}
-
-"Remote device information"
-type Device {
-  "Device ID"
-  id: ID!
-
-  "User-friendly device name"
-  deviceName: String!
-
-  "Platform (ios, android, web)"
-  platform: String!
-
-  "Last time device connected"
-  lastSeenAt: DateTime
-
-  "Revocation timestamp if revoked"
-  revokedAt: DateTime
-
-  "Initial pairing timestamp"
-  insertedAt: DateTime!
-}
-
-"Type of device status event"
-enum DeviceEventType {
-  "Device connected"
-  CONNECTED
-
-  "Device disconnected (no heartbeat)"
-  DISCONNECTED
-
-  "Device was revoked by user"
-  REVOKED
-
-  "Device was deleted"
-  DELETED
 }
 
 "A node that can be fetched by global ID with hierarchical navigation"
@@ -1528,6 +1474,9 @@ type ServerCompatibility {
 
   "Oldest player version this server would rather you ran"
   recommendedPlayerVersion: String!
+
+  "This server's remote access instance ID, the one its pairing QR codes carry. Null until remote access has been enabled once."
+  instanceId: String
 }
 
 "One dated item on the player's calendar"

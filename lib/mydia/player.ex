@@ -4,7 +4,7 @@ defmodule Mydia.Player do
 
   `ENABLE_PLAYER` is read once, at boot, in `config/runtime.exs`. When it is
   false nothing player-only starts: the p2p node, pairing, HLS and transcode
-  supervision, intro and credits detection, GraphQL subscriptions. The
+  supervision, intro and credits detection. The
   player's routes answer 404 and its UI is hidden.
 
   This switch sits outside the layered config (`Mydia.Config.Loader`), which

@@ -236,7 +236,7 @@ defmodule MydiaWeb.SidebarComponents do
     """
   end
 
-  defp display_name(user), do: Mydia.Accounts.User.label(user)
+  defp display_name(user), do: Mydia.Accounts.User.display_label(user)
 
   defp initials(user) do
     user

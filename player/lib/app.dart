@@ -1,14 +1,17 @@
 import 'dart:async' show StreamSubscription, unawaited;
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
+import 'core/sources/lock/source_lock_controller.dart';
+import 'core/sources/lock/window_privacy.dart';
+import 'core/sources/sources_providers.dart';
 import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
+import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
 import 'core/layout/window_chrome_inset.dart';
 import 'core/media_session/media_session_bridge.dart';
@@ -176,12 +179,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Network changes make every third-party connection look again.
+    ref.read(networkChangeRefreshProvider);
     _remoteIntentsSubscription = ref
         .read(remoteTargetControllerProvider)
         .intents
         .listen(_handleRemoteIntent);
     // Mirrors playback onto the OS media session (MPRIS on Linux).
     unawaited(ref.read(mediaSessionBridgeProvider).start());
+    ref.listenManual<bool>(
+      windowSecureProvider,
+      (_, secure) => WindowPrivacy.setSecure(secure),
+      fireImmediately: true,
+    );
     if (appMenuSupported) {
       final router = ref.read(appRouterProvider);
       _appMenu = AppMenuCommands(
@@ -459,6 +469,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(sourceLockProvider.notifier).onLifecycle(state);
+    if (state == AppLifecycleState.resumed) {
+      ref
+          .read(connectionRefreshBusProvider)
+          .ping(ConnectionRefreshReason.resume);
+    }
     _ambientLifecycle.handle(state);
     // Send what is waiting before the OS suspends the app.
     if (state == AppLifecycleState.paused ||

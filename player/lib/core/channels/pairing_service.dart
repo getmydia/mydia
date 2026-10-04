@@ -2,7 +2,7 @@
 ///
 /// This service orchestrates the complete device pairing flow using
 /// iroh-based P2P networking with relay-based discovery.
-library pairing_service;
+library;
 
 import 'dart:async';
 import 'dart:convert';
@@ -162,11 +162,14 @@ class PairingService {
   PairingService({
     AuthStorage? authStorage,
     P2pService? p2pService,
+    RelayApiClient? relayClient,
   })  : _authStorage = authStorage ?? getAuthStorage(),
-        _p2pService = p2pService;
+        _p2pService = p2pService,
+        _relayClient = relayClient;
 
   final AuthStorage _authStorage;
   final P2pService? _p2pService;
+  final RelayApiClient? _relayClient;
 
   /// Pairs this device using a claim code via relay API lookup.
   ///
@@ -175,7 +178,7 @@ class PairingService {
   /// 2. Initializes the P2P host
   /// 3. Dials the server using the EndpointAddr
   /// 4. Sends a pairing request
-  /// 5. Stores credentials on success
+  /// 5. Returns the credentials; the caller decides where they are stored
   Future<PairingResult> pairWithClaimCodeOnly({
     required String claimCode,
     required String deviceName,
@@ -199,7 +202,7 @@ class PairingService {
 
       // 1. Resolve claim code via relay API to get server's EndpointAddr
       onStatusUpdate?.call('Resolving pairing code...');
-      final relayClient = RelayApiClient();
+      final relayClient = _relayClient ?? RelayApiClient();
       final resolveResult = await relayClient.resolveClaimCode(claimCode);
       debugPrint(
           '[PairingService] Resolved node_addr: ${resolveResult.nodeAddr}');
@@ -244,15 +247,6 @@ class PairingService {
         return PairingResult.error('Server did not return required tokens');
       }
 
-      // Store credentials
-      await _authStorage.write(_StorageKeys.accessToken, accessToken);
-      await _authStorage.write(_StorageKeys.mediaToken, mediaToken);
-      await _authStorage.write(
-          _StorageKeys.serverNodeAddr, resolveResult.nodeAddr);
-      if (deviceToken != null) {
-        await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
-      }
-
       // In P2P mode, serverUrl is a p2p:// URI
       final credentials = PairingCredentials(
         serverUrl: 'p2p://mydia',
@@ -262,6 +256,7 @@ class PairingService {
         deviceToken: deviceToken,
         serverPublicKey: Uint8List(0),
         directUrls: [],
+        instanceId: resolveResult.instanceId,
         serverNodeAddr: resolveResult.nodeAddr,
       );
 
@@ -348,17 +343,6 @@ class PairingService {
         return PairingResult.error('Server did not return required tokens');
       }
 
-      // Store credentials
-      await _authStorage.write(_StorageKeys.accessToken, accessToken);
-      await _authStorage.write(_StorageKeys.mediaToken, mediaToken);
-      await _authStorage.write(_StorageKeys.serverNodeAddr, qrData.nodeAddr);
-      if (qrData.instanceId != null) {
-        await _authStorage.write(_StorageKeys.instanceId, qrData.instanceId!);
-      }
-      if (deviceToken != null) {
-        await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
-      }
-
       // In P2P mode, serverUrl is a p2p:// URI
       final credentials = PairingCredentials(
         serverUrl: 'p2p://mydia',
@@ -400,6 +384,33 @@ class PairingService {
       debugPrint('[PairingService] Failed to parse endpoint address: $e');
     }
     return null;
+  }
+
+  /// Stores [credentials] as the home Mydia's pairing, under the keys
+  /// [clearCredentials] erases and `ReconnectionService` reads.
+  ///
+  /// Pairing itself writes nothing, so a guest instance's credentials can be
+  /// stored under its own namespace instead.
+  Future<void> saveHomeCredentials(PairingCredentials credentials) async {
+    await _authStorage.write(_StorageKeys.accessToken, credentials.accessToken);
+    await _authStorage.write(_StorageKeys.mediaToken, credentials.mediaToken);
+    final nodeAddr = credentials.serverNodeAddr;
+    if (nodeAddr != null) {
+      await _authStorage.write(_StorageKeys.serverNodeAddr, nodeAddr);
+    }
+    final instanceId = credentials.instanceId;
+    if (instanceId != null) {
+      await _authStorage.write(_StorageKeys.instanceId, instanceId);
+    } else {
+      await _authStorage.delete(_StorageKeys.instanceId);
+    }
+    final deviceToken = credentials.deviceToken;
+    if (deviceToken != null) {
+      await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
+    } else {
+      // A token left from an earlier pairing would be sent to this server.
+      await _authStorage.delete(_StorageKeys.deviceToken);
+    }
   }
 
   /// Clears stored pairing credentials.

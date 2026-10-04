@@ -109,6 +109,21 @@ IconData mediaContextIcon(MediaContextAction action) => switch (action) {
         Icons.remove_circle_outline_rounded,
     };
 
+/// Where a popup menu opens to sit under [context]'s card, or null when
+/// [context] has no laid-out box.
+RelativeRect? popupPositionBelow(BuildContext context) {
+  final anchor = context.findRenderObject();
+  final overlay = Overlay.of(context).context.findRenderObject();
+  if (anchor is! RenderBox || overlay is! RenderBox) return null;
+  final topLeft = anchor.localToGlobal(Offset.zero, ancestor: overlay);
+  return RelativeRect.fromLTRB(
+    topLeft.dx,
+    topLeft.dy + anchor.size.height,
+    overlay.size.width - topLeft.dx - anchor.size.width,
+    0,
+  );
+}
+
 /// Opens the card's secondary menu, anchored under the card.
 ///
 /// Wired to long-press on touch and to secondary tap on desktop, which is how
@@ -130,17 +145,8 @@ Future<void> showMediaContextMenu(
   final actions = mediaContextActionsFor(target);
   if (actions.isEmpty) return;
 
-  final anchor = context.findRenderObject();
-  final overlay = Overlay.of(context).context.findRenderObject();
-  if (anchor is! RenderBox || overlay is! RenderBox) return;
-
-  final topLeft = anchor.localToGlobal(Offset.zero, ancestor: overlay);
-  final position = RelativeRect.fromLTRB(
-    topLeft.dx,
-    topLeft.dy + anchor.size.height,
-    overlay.size.width - topLeft.dx - anchor.size.width,
-    0,
-  );
+  final position = popupPositionBelow(context);
+  if (position == null) return;
 
   final selected = await showMenu<MediaContextAction>(
     context: context,
@@ -176,11 +182,11 @@ Future<void> showMediaContextMenu(
       onPlay();
     case MediaContextAction.goToShow:
       final showId = target.showId;
-      if (showId != null) context.push('/show/$showId');
+      if (showId != null) await context.push<void>('/show/$showId');
     case MediaContextAction.episodeDetails:
-      context.push('/episode/${target.id}');
+      await context.push<void>('/episode/${target.id}');
     case MediaContextAction.movieDetails:
-      context.push('/movie/${target.id}');
+      await context.push<void>('/movie/${target.id}');
     case MediaContextAction.removeFromContinueWatching:
       onRemoveFromContinueWatching?.call();
   }

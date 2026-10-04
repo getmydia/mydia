@@ -72,6 +72,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       :buffer,
       :duration,
       :started_at,
+      :start_number,
       ready_notified: false,
       seen_segments: MapSet.new(),
       accel_tier: :software,
@@ -90,6 +91,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
             on_segments: ([non_neg_integer()] -> any()) | nil,
             on_hwaccel_failed: (String.t() -> any()) | nil,
             seen_segments: MapSet.t(non_neg_integer()),
+            start_number: non_neg_integer() | nil,
             playlist_path: String.t() | nil,
             buffer: String.t(),
             duration: float() | nil,
@@ -248,6 +250,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
           buffer: "",
           duration: nil,
           started_at: DateTime.utc_now(),
+          start_number: Keyword.get(opts, :start_number, 0),
           accel_tier: accel_tier,
           output_buffer: ""
         }
@@ -455,6 +458,7 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       fresh =
         contents
         |> finished_indices()
+        |> own_indices(state.start_number)
         |> Enum.reject(&MapSet.member?(state.seen_segments, &1))
 
       if fresh == [] do
@@ -467,6 +471,18 @@ defmodule Mydia.Streaming.FfmpegHlsTranscoder do
       state
     end
   end
+
+  # A relocated encoder shares its output directory with the one it replaced,
+  # and that one's index.m3u8 is still there until this FFmpeg writes its own.
+  # It is also stopped asynchronously, so it can rewrite the file after this
+  # process has started. With -hls_list_size 0 a playlist always begins at the
+  # -start_number of the FFmpeg that wrote it, so one that begins anywhere
+  # else is not ours. Reporting it would tell the session this encoder has
+  # already produced the previous window's segments, and requests near that
+  # window would wait instead of relocating.
+  defp own_indices(indices, nil), do: indices
+  defp own_indices([first | _] = indices, start_number) when first == start_number, do: indices
+  defp own_indices(_indices, _start_number), do: []
 
   @impl true
   def terminate(reason, state) do

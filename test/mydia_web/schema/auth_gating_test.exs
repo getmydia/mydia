@@ -32,7 +32,7 @@ defmodule MydiaWeb.Schema.AuthGatingTest do
   describe "root field gating" do
     test "every root field requires authentication unless explicitly public" do
       ungated =
-        for root <- [:query, :mutation, :subscription],
+        for root <- [:query, :mutation],
             type = Absinthe.Schema.lookup_type(Schema, root),
             {identifier, field} <- type.fields,
             identifier not in @public_fields,

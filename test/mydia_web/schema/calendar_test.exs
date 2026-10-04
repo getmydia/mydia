@@ -284,8 +284,36 @@ defmodule MydiaWeb.Schema.CalendarTest do
     end
   end
 
+  test "a restricted user does not see hidden titles on the calendar", ctx do
+    show =
+      MediaFixtures.categorized_media_item_fixture(
+        %{type: "tv_show", title: "Hidden Show"},
+        "tv_show"
+      )
+
+    episode =
+      MediaFixtures.episode_fixture(%{
+        media_item_id: show.id,
+        season_number: 1,
+        episode_number: 1,
+        air_date: ~D[2026-08-15]
+      })
+
+    MediaFixtures.media_file_fixture(%{episode_id: episode.id})
+
+    restricted =
+      AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+    assert {:ok, %{data: %{"calendar" => [_]}}} = run_query(@query, @vars, ctx.user)
+    assert {:ok, %{data: %{"calendar" => []}}} = run_query(@query, @vars, restricted)
+  end
+
   defp run_query(query, variables, user) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user,
+        do: %{current_user: user, current_scope: Mydia.Accounts.Scope.for_user(user)},
+        else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end

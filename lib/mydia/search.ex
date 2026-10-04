@@ -377,12 +377,14 @@ defmodule Mydia.Search do
     end
   end
 
+  # Every caller is a search a person asked for (search on add, the bulk
+  # Search action, GraphQL), so it skips the profile's grab delay.
   defp auto_search_job(%MediaItem{type: "movie", id: id}) do
-    Mydia.Jobs.MovieSearch.new(%{mode: "specific", media_item_id: id})
+    Mydia.Jobs.MovieSearch.new(%{mode: "specific", media_item_id: id, bypass_delay: true})
   end
 
   defp auto_search_job(%MediaItem{type: "tv_show", id: id}) do
-    Mydia.Jobs.TVShowSearch.new(%{mode: "show", media_item_id: id})
+    Mydia.Jobs.TVShowSearch.new(%{mode: "show", media_item_id: id, bypass_delay: true})
   end
 
   defp auto_search_job(%MediaItem{id: id, type: type}) do

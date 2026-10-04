@@ -33,6 +33,7 @@ void main() {
   MediaSessionBridge build({
     NowPlayingMetadataResolver? metadata,
     Future<SystemMediaSession> Function()? createSession,
+    bool Function()? redact,
   }) =>
       MediaSessionBridge(
         controller: controller,
@@ -43,6 +44,7 @@ void main() {
           return artworkResult;
         },
         raiseWindow: () async => raises++,
+        redact: redact ?? () => false,
       );
 
   setUp(() {
@@ -75,6 +77,35 @@ void main() {
     expect(state.title, 'The Glass Orchard');
     expect(state.subtitle, '2031');
     expect(state.artworkPath, '/cache/orchard.jpg');
+    await bridge.dispose();
+  });
+
+  test('redacts title, subtitle and artwork while a locked source plays',
+      () async {
+    var resolved = 0;
+    final bridge = build(
+      metadata: NowPlayingMetadataResolver((document, variables) async {
+        resolved++;
+        return {
+          'movie': {
+            'year': 2031,
+            'artwork': {'posterUrl': 'https://img.example/ferry.jpg'},
+          },
+        };
+      }),
+      redact: () => true,
+    );
+    await bridge.start();
+    controller.attachPlayer(FakeBinding(buildSnapshot()));
+    await settle();
+
+    final state = session.updates.last;
+    expect(state.status, MediaSessionStatus.playing);
+    expect(state.title, 'Mydia');
+    expect(state.subtitle, isNull);
+    expect(state.artworkPath, isNull);
+    expect(resolved, 0);
+    expect(artworkRequests, isEmpty);
     await bridge.dispose();
   });
 

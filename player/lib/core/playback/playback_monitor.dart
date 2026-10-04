@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:media_kit/media_kit.dart';
 
+import '../player/playback_error.dart';
 import 'frame_stats_sampler.dart';
 import 'health_sample.dart';
 
@@ -24,7 +25,7 @@ class PlayerSignals {
         buffer: player.stream.buffer,
         buffering: player.stream.buffering,
         playing: player.stream.playing,
-        error: player.stream.error,
+        error: player.stream.error.where((m) => !audioOutputUnavailable(m)),
         track: player.stream.track,
       );
 

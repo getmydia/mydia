@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import '../../core/cache/poster_cache_manager.dart';
 import '../../core/theme/depth_tokens.dart';
 import '../../core/ui/reduced_motion.dart';
 import 'ambient_backdrop_provider.dart';
+import 'artwork_image.dart';
 
 /// The single owner of the player's poster depth contract (R7, R8, R11) and
 /// of loading the artwork that sits inside it.
@@ -27,10 +27,10 @@ import 'ambient_backdrop_provider.dart';
 ///    each caller has to remember;
 ///  * reduced-motion collapse, where the hover accent disappears and the
 ///    resting shadow stays;
-///  * loading the artwork itself, via [CachedNetworkImage]. This is bundled
+///  * loading the artwork itself, via [ArtworkImage]. This is bundled
 ///    with the depth contract deliberately, not incidentally: if network image
 ///    loading were reachable without going through this widget, a fresh author
-///    wiring up their own `CachedNetworkImage` would have no reason to ever
+///    wiring up their own image widget would have no reason to ever
 ///    reach for the depth tokens, and the contract would drift a fourth time.
 ///    It also bounds the decode to the laid-out width
 ///    (core/cache/artwork_decode.dart);
@@ -53,6 +53,12 @@ import 'ambient_backdrop_provider.dart';
 class PosterFrame extends ConsumerStatefulWidget {
   /// Artwork URL. Null, empty, or a load failure renders [placeholder].
   final String? imageUrl;
+
+  /// Sent with the artwork request. Carries a third-party credential.
+  final Map<String, String>? imageHeaders;
+
+  /// See `ArtworkImage.cacheKey`.
+  final String? imageCacheKey;
 
   /// Rendered when there is no artwork, and on load failure. Callers supply
   /// their own icon and ground so each surface stays recognisable.
@@ -79,6 +85,8 @@ class PosterFrame extends ConsumerStatefulWidget {
   const PosterFrame({
     super.key,
     this.imageUrl,
+    this.imageHeaders,
+    this.imageCacheKey,
     required this.placeholder,
     this.loadingPlaceholder,
     this.overlays = const <Widget>[],
@@ -114,6 +122,10 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     return url != null && url.isNotEmpty;
   }
 
+  /// The ambient backdrop loads its artwork without headers, so artwork that
+  /// needs them (a third-party credential) can never be published to it.
+  bool get _canPublishBackdrop => _hasArtwork && widget.imageHeaders == null;
+
   @override
   void initState() {
     super.initState();
@@ -124,7 +136,7 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     setState(() => _isHovered = true);
     // Drive the ambient backdrop to this poster's artwork so the real-blur
     // chrome tints with it (R5/R9). Skipped when there is no artwork.
-    if (_hasArtwork) {
+    if (_canPublishBackdrop) {
       publishBackdropHover(
         ref,
         BackdropSource(imageUrl: widget.imageUrl, id: widget.imageUrl),
@@ -145,7 +157,7 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
     // nor onExit. Without this, the backdrop would stay pinned to whichever
     // poster last triggered a real hover event.
     if (_isHovered && widget.imageUrl != oldWidget.imageUrl) {
-      final hasArtwork = _hasArtwork;
+      final hasArtwork = _canPublishBackdrop;
       final url = widget.imageUrl;
       // What this instance previously had published, in case the no-artwork
       // branch below needs to retract exactly that (and nothing fresher).
@@ -246,23 +258,25 @@ class _PosterFrameState extends ConsumerState<PosterFrame> {
             fit: StackFit.expand,
             children: [
               if (url != null && url.isNotEmpty)
-                // Decode at the size actually on screen. Full-size decodes of
-                // a whole grid exhausted GPU memory on web: Firefox painted
-                // posters black, mobile Safari dropped them on scroll-back.
+                // Decode at the size actually on screen: a grid of full-size
+                // decodes is wasted memory. ArtworkImage is also what keeps
+                // the poster painted when it scrolls back into view on
+                // Firefox and Safari.
                 LayoutBuilder(
-                  builder: (context, constraints) => CachedNetworkImage(
+                  builder: (context, constraints) => ArtworkImage(
                     imageUrl: url,
+                    headers: widget.imageHeaders,
+                    cacheKey: widget.imageCacheKey,
                     fit: BoxFit.cover,
                     cacheManager: PosterCacheManager(),
-                    memCacheWidth: artworkDecodeWidth(
+                    decodeWidth: artworkDecodeWidth(
                       constraints.maxWidth,
                       MediaQuery.devicePixelRatioOf(context),
                       sourceWidth: posterSourceWidth,
                     ),
-                    imageRenderMethodForWeb: artworkWebRenderMethod,
-                    placeholder: (context, _) =>
+                    placeholder: (context) =>
                         widget.loadingPlaceholder ?? widget.placeholder,
-                    errorWidget: (context, _, __) => widget.placeholder,
+                    errorWidget: (context) => widget.placeholder,
                   ),
                 )
               else

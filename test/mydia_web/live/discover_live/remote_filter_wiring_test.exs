@@ -140,7 +140,8 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
           category: :discover,
           selected_genres: [],
           selected_language: nil,
-          selected_year: year,
+          year_from: year,
+          year_to: nil,
           min_rating: nil,
           sort_by: "popularity.desc",
           current_scope: scope
@@ -155,20 +156,8 @@ defmodule MydiaWeb.DiscoverLive.RemoteFilterWiringTest do
   end
 
   describe "recommendations rail (handle_async(:load_recommendations, ...))" do
-    test "a category-restricted scope drops an out-of-bounds recommendation" do
-      scope = Scope.for_user(restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]}))
-      socket = stub_socket(%{current_scope: scope})
-
-      {:noreply, updated} =
-        Index.handle_async(
-          {:load_recommendations, nil},
-          {:ok, {:ok, [recommendation()]}},
-          socket
-        )
-
-      assert updated.assigns.selected_recommendations == []
-    end
-
+    # Scope filtering of the rail now happens inside Recommendations, before
+    # ranking; see Mydia.Media.RecommendationsTest.
     test "an unrestricted scope keeps the recommendation" do
       socket = stub_socket(%{current_scope: Scope.unrestricted()})
 

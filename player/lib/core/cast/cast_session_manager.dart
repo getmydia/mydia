@@ -190,14 +190,25 @@ Stream<List<CastDevice>> mergeCastDiscovery(
     },
   );
 
+  var remaining = backends.length;
   for (var i = 0; i < backends.length; i++) {
     final index = i;
     subs.add(backends[i]
         .startDiscovery(capabilities: capabilities, timeout: timeout)
-        .listen((devices) {
-      latest[index] = devices;
-      scheduleFlush();
-    }, onError: controller.addError));
+        .listen(
+            (devices) {
+              latest[index] = devices;
+              scheduleFlush();
+            },
+            onError: controller.addError,
+            onDone: () {
+              remaining--;
+              if (remaining > 0) return;
+              // Queued behind any pending flush so the last devices still publish.
+              scheduleMicrotask(() {
+                if (!controller.isClosed) unawaited(controller.close());
+              });
+            }));
   }
 
   return controller.stream;
@@ -338,6 +349,7 @@ class CastSessionManager {
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<CastPlaybackState>? _stateSub;
   StreamSubscription<CastFailureKind>? _failureSub;
+  StreamSubscription<bool>? _syncSub;
 
   CastSession? _current;
   PersistedCastSession? _persisted;
@@ -922,6 +934,7 @@ class CastSessionManager {
   /// connection.
   void _listenForConnectionLoss() {
     _cancelSubscriptions();
+    _listenForSync();
 
     _failureSub = _backend.failureStream.listen((failure) {
       // `notAuthorized` is a Mydia target revoking this app mid-session — a
@@ -984,6 +997,7 @@ class CastSessionManager {
   /// that step differs for an adopted session.
   void _listenToBackendForAdoption() {
     _cancelSubscriptions();
+    _listenForSync();
 
     _persisted = null;
     _lastRequest = null;
@@ -1515,6 +1529,7 @@ class CastSessionManager {
 
   void _listenToBackend(CastLaunchRequest request) {
     _cancelSubscriptions();
+    _listenForSync();
 
     // Casting a new item — whether via startCast or restoreSession — must
     // not inherit the previous item's duration or throttle timestamp.
@@ -2029,9 +2044,28 @@ class CastSessionManager {
     }
   }
 
+  /// Every published session carries the backend's current sync state, so
+  /// no call site building a fresh [CastSession] can drop it.
   void _publish(CastSession? session) {
-    _current = session;
-    if (!_sessions.isClosed) _sessions.add(session);
+    final backend = _backend;
+    final stamped = session?.copyWith(
+      isSyncing:
+          backend is MydiaSyncSource && (backend as MydiaSyncSource).isSyncing,
+    );
+    _current = stamped;
+    if (!_sessions.isClosed) _sessions.add(stamped);
+  }
+
+  /// Republishes the session whenever the backend's sync state flips. The
+  /// position stream cannot be relied on for that: a media-less session has
+  /// none, and a paused one only ticks while the remote UI is on screen.
+  void _listenForSync() {
+    final backend = _backend;
+    if (backend is! MydiaSyncSource) return;
+    _syncSub = (backend as MydiaSyncSource).syncingStream.listen((_) {
+      final current = _current;
+      if (current != null) _publish(current);
+    });
   }
 
   void _cancelSubscriptions() {
@@ -2039,10 +2073,12 @@ class CastSessionManager {
     _durationSub?.cancel();
     _stateSub?.cancel();
     _failureSub?.cancel();
+    _syncSub?.cancel();
     _positionSub = null;
     _durationSub = null;
     _stateSub = null;
     _failureSub = null;
+    _syncSub = null;
   }
 
   /// Release everything this manager owns.

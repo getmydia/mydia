@@ -1,0 +1,207 @@
+defmodule Mydia.Plugins.RestrictedPluginAccessTest do
+  use Mydia.DataCase, async: false
+
+  import Ecto.Query, only: [from: 2]
+  import Mydia.AccountsFixtures
+  import Mydia.MediaFixtures
+  import Mydia.MetadataCacheHelpers
+
+  alias Mydia.Media.MediaItem
+  alias Mydia.Media.RemoteSignals
+  alias Mydia.Plugins.Error
+  alias Mydia.Plugins.HostFunctions
+  alias Mydia.Plugins.PageReads
+  alias Mydia.Plugins.PageWrites
+  alias Mydia.Plugins.Plugin
+
+  defp with_age(item, age) do
+    Repo.update_all(from(m in MediaItem, where: m.id == ^item.id), set: [content_rating_age: age])
+    item
+  end
+
+  setup do
+    user = restricted_user_fixture(%{max_content_age: 12})
+    hidden = [title: "Iron Chorus"] |> Map.new() |> media_item_fixture() |> with_age(17)
+    visible = [title: "Paper Boats"] |> Map.new() |> media_item_fixture() |> with_age(8)
+
+    plugin = %Plugin{
+      slug: "helper",
+      name: "Helper",
+      enabled: true,
+      granted_capabilities: %{"data:read" => ["media_item"], "data:search" => []}
+    }
+
+    ctx = %{
+      handler: :on_http,
+      acting_user_id: user.id,
+      role: user.role,
+      session_id: "s",
+      invocation_id: "i",
+      slug: "helper"
+    }
+
+    %{user: user, hidden: hidden, visible: visible, ctx: ctx, plugin: plugin}
+  end
+
+  test "data_read hides an out-of-bounds item from a restricted user", c do
+    assert {:error, %Error{type: :not_found}} =
+             HostFunctions.data_read(
+               c.plugin,
+               %{"resource" => "media_item", "id" => c.hidden.id},
+               c.ctx
+             )
+
+    assert {:ok, %{"id" => _}} =
+             HostFunctions.data_read(
+               c.plugin,
+               %{"resource" => "media_item", "id" => c.visible.id},
+               c.ctx
+             )
+  end
+
+  test "data_read without a user context still reads as the system", c do
+    request = %{"resource" => "media_item", "id" => c.hidden.id}
+
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request)
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request, %{})
+    # A scheduled or event handler has no acting user either.
+    assert {:ok, _} = HostFunctions.data_read(c.plugin, request, %{handler: :on_event})
+  end
+
+  test "catalog search returns every hit to an unrestricted user", c do
+    user = user_fixture()
+    ctx = %{c.ctx | acting_user_id: user.id, role: user.role}
+    ok = unique_provider_id()
+    blocked = unique_provider_id()
+
+    warm_movie_search_cache("unbound", [], [
+      %{"id" => ok, "title" => "Unbound Kites"},
+      %{"id" => blocked, "title" => "Unbound Knives"}
+    ])
+
+    req = %{kind: :catalog, query: "unbound", "media-type": {:some, "movie"}, limit: :none}
+
+    assert {:ok, hits} = PageReads.search(c.plugin, ctx, req)
+    assert Enum.sort(Enum.map(hits, & &1.title)) == ["Unbound Kites", "Unbound Knives"]
+  end
+
+  test "catalog search drops titles over the limit", c do
+    ok = unique_provider_id()
+    blocked = unique_provider_id()
+
+    warm_movie_search_cache("chorus", [], [
+      %{"id" => ok, "title" => "Chorus Kites"},
+      %{"id" => blocked, "title" => "Chorus Knives"}
+    ])
+
+    # A restricted search keeps paging until the catalog runs dry.
+    warm_movie_search_cache("chorus", [page: 2], [])
+
+    warm_remote_signals({:tmdb, ok}, :movie, %RemoteSignals{
+      content_rating: "PG",
+      age: 8,
+      category: "movie"
+    })
+
+    warm_remote_signals({:tmdb, blocked}, :movie, %RemoteSignals{
+      content_rating: "R",
+      age: 17,
+      category: "movie"
+    })
+
+    req = %{kind: :catalog, query: "chorus", "media-type": {:some, "movie"}, limit: :none}
+
+    assert {:ok, hits} = PageReads.search(c.plugin, c.ctx, req)
+    assert Enum.map(hits, & &1.title) == ["Chorus Kites"]
+  end
+
+  describe "catalog search paging for a restricted user" do
+    defp warm_signals(id, rating, age) do
+      warm_remote_signals({:tmdb, id}, :movie, %RemoteSignals{
+        content_rating: rating,
+        age: age,
+        category: "movie"
+      })
+    end
+
+    defp catalog_req(query),
+      do: %{kind: :catalog, query: query, "media-type": {:some, "movie"}, limit: :none}
+
+    test "pages past an all-hidden first page to find a visible title", c do
+      blocked = unique_provider_id()
+      ok = unique_provider_id()
+
+      warm_movie_search_cache("tidal", [], [%{"id" => blocked, "title" => "Tidal Knives"}])
+      warm_movie_search_cache("tidal", [page: 2], [%{"id" => ok, "title" => "Tidal Kites"}])
+      warm_movie_search_cache("tidal", [page: 3], [])
+      warm_signals(blocked, "R", 17)
+      warm_signals(ok, "PG", 8)
+
+      assert {:ok, hits} = PageReads.search(c.plugin, c.ctx, catalog_req("tidal"))
+      assert Enum.map(hits, & &1.title) == ["Tidal Kites"]
+    end
+
+    test "an unrestricted user makes no page 2 request", c do
+      user = user_fixture()
+      ctx = %{c.ctx | acting_user_id: user.id, role: user.role}
+      bypass = Mydia.RelayStubHelpers.point_relay_at_bypass()
+      id = unique_provider_id()
+      relay = Mydia.Metadata.default_relay_config()
+      key = "search:#{relay.type}:ember:movie::#{relay.options.language}:1"
+      on_exit(fn -> Mydia.Metadata.Cache.delete(key) end)
+
+      Bypass.expect_once(bypass, "GET", "/tmdb/movies/search", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(
+          200,
+          Jason.encode!(%{"results" => [%{"id" => id, "title" => "Ember Kites"}]})
+        )
+      end)
+
+      assert {:ok, [%{title: "Ember Kites"}]} =
+               PageReads.search(c.plugin, ctx, catalog_req("ember"))
+    end
+  end
+
+  test "favorite_add refuses a hidden id like a missing one", c do
+    assert {:error, hidden_error} =
+             PageWrites.execute("favorite_add", %{"media_item_id" => c.hidden.id}, c.user, nil)
+
+    assert {:error, missing_error} =
+             PageWrites.execute(
+               "favorite_add",
+               %{"media_item_id" => Ecto.UUID.generate()},
+               c.user,
+               nil
+             )
+
+    assert hidden_error == missing_error
+
+    assert {:ok, %{"status" => "changed"}, _} =
+             PageWrites.execute("favorite_add", %{"media_item_id" => c.visible.id}, c.user, nil)
+  end
+
+  test "collection_add_items skips hidden ids", c do
+    {:ok, collection} =
+      Mydia.Collections.create_collection(c.user, %{"name" => "Shelf", "type" => "manual"})
+
+    args = %{"id" => collection.id, "media_item_ids" => [c.hidden.id, c.visible.id]}
+
+    assert {:ok, %{"added" => 1}, %{"media_item_ids" => [id]}} =
+             PageWrites.execute("collection_add_items", args, c.user, nil)
+
+    assert id == c.visible.id
+
+    stored =
+      Repo.all(
+        from(i in Mydia.Collections.CollectionItem,
+          where: i.collection_id == ^collection.id,
+          select: i.media_item_id
+        )
+      )
+
+    assert stored == [c.visible.id]
+    refute c.hidden.id in stored
+  end
+end

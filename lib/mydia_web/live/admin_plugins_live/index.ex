@@ -21,10 +21,14 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Grants
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Index.CatalogItem
   alias Mydia.Plugins.Instances
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
+  alias Mydia.Plugins.Shelves
+  alias Mydia.Plugins.Sources
   alias Mydia.Settings
+  alias MydiaWeb.AdminPluginsLive.Components
 
   # Max log rows loaded into the detail timeline on open / filter.
   @log_limit 200
@@ -44,6 +48,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
      |> assign(:page_title, "Configuration - Plugins")
      |> assign(:browse, nil)
      |> assign(:browsing?, false)
+     |> assign(:store_open?, false)
      |> assign(:approval, nil)
      |> assign(:detail, nil)
      |> assign(:logs, nil)
@@ -59,25 +64,31 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   ## Store browsing (R13)
 
   @impl true
+  # A click while a browse is in flight still opens the store; the result fills
+  # it when it lands.
   def handle_event("browse_store", _params, %{assigns: %{browsing?: true}} = socket),
-    do: {:noreply, socket}
+    do: {:noreply, assign(socket, :store_open?, true)}
 
   def handle_event("browse_store", _params, socket) do
     # Computed outside the closure so the task does not copy the socket.
-    slugs = Enum.map(socket.assigns.installed, & &1.slug)
+    installed = socket.assigns.installed
 
     {:noreply,
      socket
-     |> assign(browsing?: true, browse: nil)
-     |> start_async(:browse, fn -> Index.browse(slugs) end)}
+     |> assign(store_open?: true, browsing?: true, browse: nil)
+     |> start_async(:browse, fn -> Index.browse(installed) end)}
+  end
+
+  def handle_event("close_store", _params, socket) do
+    {:noreply, assign(socket, store_open?: false, browse: nil)}
   end
 
   ## Capability approval (KTD6, AE1)
 
-  def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(catalog_of(socket.assigns.browse), &(&1.slug == slug)) do
+  def handle_event("review_install", %{"key" => key}, socket) do
+    case Enum.find(catalog_of(socket.assigns.browse), &(Components.catalog_key(&1.entry) == key)) do
       nil -> {:noreply, socket}
-      entry -> {:noreply, assign(socket, :approval, approval_from_entry(entry))}
+      %CatalogItem{} = item -> {:noreply, assign(socket, :approval, approval_from_item(item))}
     end
   end
 
@@ -112,6 +123,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
           |> put_flash(:info, approval_flash(approval))
           |> assign(:approval, nil)
           |> assign(:browse, nil)
+          |> assign(:store_open?, false)
           |> load_installed()
 
         {:error, error} ->
@@ -127,10 +139,6 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     config = Settings.get_plugin_config_by_slug(slug)
     enable? = !(config && config.enabled)
     apply_lifecycle(socket, fn -> Plugins.set_enabled(slug, enable?) end, "Updated #{slug}.")
-  end
-
-  def handle_event("revoke", %{"slug" => slug}, socket) do
-    apply_lifecycle(socket, fn -> Plugins.revoke(slug) end, "Revoked #{slug}.")
   end
 
   def handle_event("remove", %{"slug" => slug}, socket) do
@@ -297,7 +305,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     result = %BrowseResult{
       status: :empty,
       error: "store lookup failed",
-      source_count: length(Index.sources())
+      source_count: length(Index.sources()),
+      failed_count: 1
     }
 
     {:noreply, assign(socket, browse: result, browsing?: false)}
@@ -417,27 +426,38 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     assign(socket, :installed, rows)
   end
 
-  # Normalizes a config into a render row.
-  defp row(config) do
+  # Normalizes a config into a render row. Public so tests can build the same
+  # rows the store classifies (`Index.browse/1` reads `plugin_source_id`).
+  @doc false
+  def row(config) do
     capabilities = capabilities_of(config)
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
     multi_instance = Map.get(config.manifest || %{}, "multi_instance", false) == true
+    origin = origin_of(config)
 
     %{
       multi_instance: multi_instance,
       instances: if(multi_instance, do: Mydia.Plugins.Instances.list(config.slug), else: []),
       slug: config.slug,
       name: config.name,
+      description: description_of(config),
       version: config.version,
+      source_url: config.source_url,
+      plugin_source_id: config.plugin_source_id,
       enabled: config.enabled,
-      source: :index,
+      origin: origin,
+      source_name: source_name(origin),
+      # Bundled code ships in the image and ensure_bundled re-seeds a missing
+      # row, so disabling is its only off switch.
+      removable: origin != :bundled,
       capabilities: capabilities,
       granted: granted,
       # A revised manifest never widens a grant, so an approved plugin can end up
       # asking for more than it holds and failing Denied at just those call sites.
       ungranted: Plugins.ungranted_capabilities(config),
       needs_reapproval: Plugins.needs_reapproval?(config),
+      shelf_failures: Shelves.failure_summary(config.slug),
       # Enabled/disabled is a runtime choice after approval; an empty grant means
       # capabilities are still pending approval.
       pending_approval: capabilities != %{} and granted == %{},
@@ -453,6 +473,19 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp capabilities_of(%{manifest: %{"capabilities" => caps}}) when is_map(caps), do: caps
   defp capabilities_of(%{granted_capabilities: caps}) when is_map(caps), do: caps
   defp capabilities_of(_), do: %{}
+
+  defp description_of(%{manifest: %{"description" => text}}) when is_binary(text) and text != "",
+    do: text
+
+  defp description_of(_), do: nil
+
+  # A row that never recorded where it came from is not one whose source was
+  # removed; `Sources.origin/1` folds both into `:removed`.
+  defp origin_of(%{source_url: nil, plugin_source_id: nil}), do: :unknown
+  defp origin_of(config), do: Sources.origin(config)
+
+  defp source_name({:source, _} = origin), do: Sources.origin_name(origin)
+  defp source_name(_origin), do: nil
 
   defp settings_schema_of(%{manifest: %{"settings_schema" => schema}}) when is_list(schema),
     do: schema
@@ -525,7 +558,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp catalog_of(nil), do: []
   defp catalog_of(%BrowseResult{catalog: catalog}), do: catalog
 
-  defp approval_from_entry(entry) do
+  defp approval_from_item(%CatalogItem{entry: entry} = item) do
     %{
       kind: :catalog,
       entry: entry,
@@ -535,8 +568,22 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       capabilities: entry.manifest.capabilities,
       ungranted: %{},
       settings_schema:
-        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema)
+        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema),
+      publisher: entry.source_id && publisher_label(entry),
+      replaces: if(item.state == :other_source, do: item.installed_from)
     }
+  end
+
+  # The name is whatever the catalog calls itself, so the host keeps a catalog
+  # named "Mydia" distinguishable.
+  defp publisher_label(%{source_name: name, source_url: url}) do
+    host = url && URI.parse(url).host
+
+    cond do
+      name && host -> "#{name} (#{host})"
+      name -> name
+      true -> host
+    end
   end
 
   defp approval_from_config(config) do
@@ -552,7 +599,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asks for on top of what was already approved.
       ungranted:
         (Plugins.needs_reapproval?(config) && Plugins.ungranted_capabilities(config)) || %{},
-      settings_schema: host_grant_schema_of(config)
+      settings_schema: host_grant_schema_of(config),
+      publisher: nil,
+      replaces: nil
     }
   end
 
@@ -560,6 +609,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     %{
       slug: config.slug,
       name: config.name,
+      description: description_of(config),
       enabled: config.enabled,
       granted: config.granted_capabilities || %{},
       ungranted: Plugins.ungranted_capabilities(config),
@@ -588,6 +638,13 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       actor_id: slug,
       limit: @log_limit
     )
+  end
+
+  # A source removed between browse and confirm fails the foreign key.
+  defp error_message(%Ecto.Changeset{errors: errors}) do
+    if Keyword.has_key?(errors, :plugin_source_id),
+      do: "the plugin source was removed. Reopen the store and try again",
+      else: "the plugin could not be saved"
   end
 
   defp error_message(%{__struct__: _} = error) do

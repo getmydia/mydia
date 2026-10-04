@@ -11,6 +11,14 @@ defmodule Mydia.P2p.SessionFileErrorTest do
     assert {415, _message} = Server.session_file_error(:extraction_failed)
   end
 
+  test "a segment the encoder has not reached answers 503, which the player retries" do
+    assert {503, _message} = Server.session_file_error(:timeout)
+  end
+
+  test "a segment outside the published plan answers 404" do
+    assert {404, _message} = Server.session_file_error(:out_of_range)
+  end
+
   test "the existing answers are unchanged" do
     assert {403, "Forbidden"} = Server.session_file_error(:path_traversal)
 

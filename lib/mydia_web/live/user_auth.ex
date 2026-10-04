@@ -38,7 +38,11 @@ defmodule MydiaWeb.Live.UserAuth do
       %{current_user: %Mydia.Accounts.User{} = user} ->
         # Carries the user plus their media access restrictions. Every Media
         # read and write in this LiveView takes it.
-        socket = assign(socket, :current_scope, Mydia.Accounts.Scope.for_user(user))
+        socket =
+          socket
+          |> assign(:current_scope, Mydia.Accounts.Scope.for_user(user))
+          |> watch_access_restrictions(user)
+
         {:cont, socket}
 
       _ ->
@@ -63,7 +67,11 @@ defmodule MydiaWeb.Live.UserAuth do
         if has_role?(user, required_role) do
           # Carries the user plus their media access restrictions. Every Media
           # read and write in this LiveView takes it.
-          socket = assign(socket, :current_scope, Mydia.Accounts.Scope.for_user(user))
+          socket =
+            socket
+            |> assign(:current_scope, Mydia.Accounts.Scope.for_user(user))
+            |> watch_access_restrictions(user)
+
           {:cont, socket}
         else
           socket =
@@ -376,6 +384,42 @@ defmodule MydiaWeb.Live.UserAuth do
     |> Enum.reject(& &1.disabled)
     |> Enum.map(& &1.type)
     |> MapSet.new()
+  end
+
+  # A restriction change re-navigates the page to its own URL, so everything on
+  # it is re-queried under the new scope. Only routed LiveViews take part: the
+  # handle_params hook is how the URL is known, and it cannot be attached to a
+  # live_render child. Children are skipped; they sit inside a routed page that
+  # re-navigates anyway. Attached once even when a live_session stacks
+  # :ensure_authenticated with {:ensure_role, _}.
+  defp watch_access_restrictions(socket, user) do
+    if connected?(socket) and is_nil(socket.parent_pid) and
+         not Map.get(socket.private, :access_restriction_watch, false) do
+      Phoenix.PubSub.subscribe(Mydia.PubSub, Mydia.Accounts.access_restriction_topic(user.id))
+
+      socket
+      |> put_private(:access_restriction_watch, true)
+      |> attach_hook(:access_restriction_uri, :handle_params, fn _params, uri, socket ->
+        {:cont, assign(socket, :access_restriction_return_to, uri)}
+      end)
+      |> attach_hook(:access_restriction_changed, :handle_info, fn
+        :access_restriction_changed, socket -> {:halt, remount_for_restriction(socket, user)}
+        _other, socket -> {:cont, socket}
+      end)
+    else
+      socket
+    end
+  end
+
+  defp remount_for_restriction(socket, user) do
+    case socket.assigns[:access_restriction_return_to] do
+      nil ->
+        assign(socket, :current_scope, Mydia.Accounts.Scope.for_user(user))
+
+      uri ->
+        %URI{path: path, query: query} = URI.parse(uri)
+        push_navigate(socket, to: if(query, do: "#{path}?#{query}", else: path))
+    end
   end
 
   # Mount the current user from the session

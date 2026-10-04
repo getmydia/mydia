@@ -22,9 +22,9 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       nil ->
         {:ok, []}
 
-      user ->
+      _user ->
         items =
-          user.id
+          context[:current_scope]
           |> Playback.on_deck(limit: pagination_limit(first, after_cursor))
           |> Enum.map(&build_on_deck_item/1)
 
@@ -77,9 +77,9 @@ defmodule MydiaWeb.Schema.Resolvers.DiscoveryResolver do
       nil ->
         {:ok, []}
 
-      user ->
+      _user ->
         items =
-          user.id
+          context[:current_scope]
           |> Playback.on_deck(limit: pagination_limit(first, after_cursor))
           |> Enum.filter(&(&1.kind == :episode))
           |> Enum.map(fn entry ->

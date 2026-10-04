@@ -12,6 +12,7 @@ defmodule Mydia.Accounts do
   import Ecto.Query, warn: false
   import Mydia.QueryHelpers
   require Logger
+  alias Mydia.Plugins.Shelves
   alias Mydia.Repo
 
   alias Mydia.Accounts.{
@@ -294,11 +295,18 @@ defmodule Mydia.Accounts do
 
   @doc """
   Updates a user.
+
+  A role change revokes access the user's cached media tokens and live
+  sessions no longer have, the same as `update_user_role/2`.
   """
   def update_user(%User{} = user, attrs) do
     user
     |> User.changeset(attrs)
     |> Repo.update()
+    |> tap(fn
+      {:ok, updated} -> if updated.role != user.role, do: revoke_stale_access(updated)
+      _error -> :ok
+    end)
   end
 
   @doc """
@@ -312,6 +320,10 @@ defmodule Mydia.Accounts do
     user
     |> User.role_changeset(attrs)
     |> Repo.update()
+    |> tap(fn
+      {:ok, updated} -> revoke_stale_access(updated)
+      _error -> :ok
+    end)
   end
 
   @doc """
@@ -414,16 +426,74 @@ defmodule Mydia.Accounts do
     |> AccessRestriction.changeset(attrs)
     |> Repo.insert_or_update()
     |> tap(&mark_restrictions_present/1)
+    |> tap(&reset_shelves_after(&1, user_id))
+    |> tap(&broadcast_restriction_change(&1, user_id))
+    |> tap(&revoke_after(&1, user))
   end
+
+  defp revoke_after({:ok, _restriction}, user), do: revoke_stale_access(user)
+  defp revoke_after(_other, _user), do: :ok
+
+  @doc """
+  Brings a user's live access in line with their current role and
+  restriction. Called after either changes.
+
+  Drops the user's cached media tokens, whose cached device carries a snapshot
+  of the user and so of their role, and stops any playback session on a file
+  the new scope hides. Sessions on files that stay visible keep running, so
+  loosening a restriction interrupts nobody.
+  """
+  @spec revoke_stale_access(User.t()) :: :ok
+  def revoke_stale_access(%User{} = user) do
+    user.id
+    |> Mydia.RemoteAccess.list_devices()
+    |> Enum.each(&Mydia.Media.TokenCache.invalidate_for_device(&1.id))
+
+    scope = Mydia.Accounts.Scope.for_user(user)
+
+    Mydia.Streaming.HlsSessionSupervisor.stop_user_sessions(user.id, fn media_file_id ->
+      match?({:ok, _}, Mydia.Media.authorize_media_file_id(scope, media_file_id))
+    end)
+
+    :ok
+  end
+
+  @doc "PubSub topic carrying `:access_restriction_changed` for one user."
+  @spec access_restriction_topic(term()) :: String.t()
+  def access_restriction_topic(user_id), do: "access_restrictions:#{user_id}"
+
+  # Open LiveViews hold the scope they mounted with. This tells them to
+  # rebuild it, so a new limit applies without the user reloading.
+  defp broadcast_restriction_change({:ok, _}, user_id) do
+    Phoenix.PubSub.broadcast(
+      Mydia.PubSub,
+      access_restriction_topic(user_id),
+      :access_restriction_changed
+    )
+  end
+
+  defp broadcast_restriction_change(_error, _user_id), do: :ok
+
+  # Shelf picks are checked against restrictions when they are filled, so a
+  # change has to drop the stored ones or they would show until the next refill.
+  defp reset_shelves_after({:ok, _restriction}, user_id), do: Shelves.reset_for_user(user_id)
+  defp reset_shelves_after(_other, _user_id), do: :ok
 
   @doc """
   Removes a user's access restriction, returning them to unrestricted access.
   """
   @spec clear_access_restriction(User.t()) :: :ok
-  def clear_access_restriction(%User{} = user) do
+  def clear_access_restriction(%User{id: user_id} = user) do
     case get_access_restriction(user) do
-      nil -> :ok
-      restriction -> Repo.delete!(restriction) && :ok
+      nil ->
+        :ok
+
+      restriction ->
+        Repo.delete!(restriction)
+        Shelves.reset_for_user(user_id)
+        broadcast_restriction_change({:ok, nil}, user_id)
+        revoke_stale_access(user)
+        :ok
     end
   end
 

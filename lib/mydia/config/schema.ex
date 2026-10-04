@@ -11,6 +11,9 @@ defmodule Mydia.Config.Schema do
 
   alias Mydia.Settings.PathMappingConfig
   alias Mydia.Indexers.NewznabEndpoint
+  alias Mydia.Plugins.Index.Signature
+
+  @default_index_url "https://plugins.mydia.dev/index.json"
 
   @primary_key false
 
@@ -19,6 +22,10 @@ defmodule Mydia.Config.Schema do
   # guarantee. Configured values below it are clamped rather than rejected: see
   # clamp_scan_interval/1.
   @min_scan_interval 900
+
+  # Upper bound for a library display name, in characters. Matches the cap in
+  # Mydia.Settings.LibraryPath; see clamp_library_name/1.
+  @max_library_name_length 60
 
   # Music, books, and adult library support was removed. These three values stay
   # accepted by the config schema, and only by the config schema, because config
@@ -59,6 +66,7 @@ defmodule Mydia.Config.Schema do
           library_paths: [__MODULE__.LibraryPath.t()],
           plugin_settings: [__MODULE__.PluginSettingsDecl.t()],
           plugin_instances: [__MODULE__.PluginInstanceDecl.t()],
+          plugin_sources: [__MODULE__.PluginSourceDecl.t()],
           path_mappings: [__MODULE__.PathMapping.t()]
         }
 
@@ -284,10 +292,11 @@ defmodule Mydia.Config.Schema do
       # their own budgets: the whole invocation, and each outbound request in it.
       field :page_timeout_ms, :integer, default: 120_000
       field :page_http_timeout_ms, :integer, default: 90_000
-      # Official plugin index (R13). HTTPS is the v1 trust anchor (KTD10), so all
-      # index/source URLs are validated to be https at config time.
+      # Official plugin index (R13). Every catalog is minisign-signed; the
+      # official key is compiled into Mydia.Plugins.Index. Overriding the URL
+      # (a staging index) requires the key that signs it.
       field :index_url, :string, default: "https://plugins.mydia.dev/index.json"
-      field :extra_source_urls, {:array, :string}, default: []
+      field :index_public_key, :string
       # Filesystem override directory (PLUGINS_OVERRIDE_DIR). When set, a
       # `<slug>.wasm` dropped here takes precedence over the DB blob and the
       # image-bundled artifact at activation (layered artifact resolution).
@@ -380,6 +389,7 @@ defmodule Mydia.Config.Schema do
 
     embeds_many :library_paths, LibraryPath, on_replace: :delete, primary_key: false do
       field :path, :string
+      field :name, :string
       # Keeps @removed_library_types (:music, :books, :adult) even though
       # Mydia.Settings.LibraryPath no longer stores them. Narrowing this enum
       # would crash-loop an upgrading instance instead of letting
@@ -409,6 +419,13 @@ defmodule Mydia.Config.Schema do
       field :enabled, :boolean, default: true
       field :settings, :map, default: %{}
       field :legacy_source, :string
+    end
+
+    # Env/YAML-declared plugin catalogs (PLUGINS_SOURCE_<N>_*, `plugin_sources:`).
+    # Mydia.Plugins.DeclaredSources persists them as read-only rows at boot.
+    embeds_many :plugin_sources, PluginSourceDecl, on_replace: :delete, primary_key: false do
+      field :url, :string
+      field :public_key, :string
     end
 
     embeds_many :path_mappings, PathMapping, on_replace: :delete, primary_key: false do
@@ -444,6 +461,7 @@ defmodule Mydia.Config.Schema do
     |> cast_embed(:library_paths, with: &library_path_changeset/2)
     |> cast_embed(:plugin_settings, with: &plugin_settings_changeset/2)
     |> cast_embed(:plugin_instances, with: &plugin_instance_changeset/2)
+    |> cast_embed(:plugin_sources, with: &plugin_source_changeset/2)
     |> cast_embed(:path_mappings, with: &path_mapping_changeset/2)
     |> validate_configuration()
   end
@@ -673,7 +691,7 @@ defmodule Mydia.Config.Schema do
       :page_timeout_ms,
       :page_http_timeout_ms,
       :index_url,
-      :extra_source_urls,
+      :index_public_key,
       :override_dir
     ])
     |> validate_required([:fuel_enabled])
@@ -688,7 +706,36 @@ defmodule Mydia.Config.Schema do
     |> validate_number(:page_timeout_ms, greater_than: 0)
     |> validate_number(:page_http_timeout_ms, greater_than: 0)
     |> validate_https_source(:index_url)
-    |> validate_https_sources(:extra_source_urls)
+    |> validate_index_public_key()
+  end
+
+  defp validate_index_public_key(changeset) do
+    url = get_field(changeset, :index_url)
+    key = get_field(changeset, :index_public_key)
+
+    cond do
+      key not in [nil, ""] and match?({:error, _}, Signature.parse_public_key(key)) ->
+        add_error(changeset, :index_public_key, "is not a minisign public key")
+
+      url not in [nil, "", @default_index_url] and key in [nil, ""] ->
+        add_error(changeset, :index_public_key, "is required when index_url is overridden")
+
+      true ->
+        changeset
+    end
+  end
+
+  defp plugin_source_changeset(schema, attrs) do
+    schema
+    |> cast(attrs, [:url, :public_key])
+    |> validate_required([:url, :public_key])
+    |> validate_https_source(:url)
+    |> validate_change(:public_key, fn :public_key, key ->
+      case Signature.parse_public_key(key) do
+        {:ok, _} -> []
+        {:error, _} -> [public_key: "is not a minisign public key"]
+      end
+    end)
   end
 
   # KTD10: the index/source transport is the v1 trust anchor, so a non-HTTPS
@@ -703,16 +750,6 @@ defmodule Mydia.Config.Schema do
 
       url ->
         if https?(url), do: changeset, else: add_error(changeset, field, "must be an https URL")
-    end
-  end
-
-  defp validate_https_sources(changeset, field) do
-    urls = get_field(changeset, field) || []
-
-    if Enum.all?(urls, &https?/1) do
-      changeset
-    else
-      add_error(changeset, field, "all plugin source URLs must be https")
     end
   end
 
@@ -903,6 +940,7 @@ defmodule Mydia.Config.Schema do
     schema
     |> cast(attrs, [
       :path,
+      :name,
       :type,
       :monitored,
       :scan_interval,
@@ -913,6 +951,7 @@ defmodule Mydia.Config.Schema do
     |> validate_inclusion(:type, [:movies, :series, :mixed, :music, :books, :adult])
     |> coerce_removed_library_types()
     |> clamp_scan_interval()
+    |> clamp_library_name()
   end
 
   defp coerce_removed_library_types(changeset) do
@@ -952,6 +991,27 @@ defmodule Mydia.Config.Schema do
         )
 
         put_change(changeset, :scan_interval, @min_scan_interval)
+
+      _ ->
+        changeset
+    end
+  end
+
+  # An over-long name would pass config loading and then be rejected by
+  # LibraryPath.changeset during sync, dropping the whole library. Truncate it
+  # and say so, as clamp_scan_interval/1 does.
+  defp clamp_library_name(changeset) do
+    case get_change(changeset, :name) do
+      name when is_binary(name) and byte_size(name) > @max_library_name_length ->
+        if String.length(name) > @max_library_name_length do
+          Logger.warning(
+            "Library name is longer than #{@max_library_name_length} characters and was truncated: #{inspect(name)}"
+          )
+
+          put_change(changeset, :name, String.slice(name, 0, @max_library_name_length))
+        else
+          changeset
+        end
 
       _ ->
         changeset
@@ -1123,6 +1183,7 @@ defmodule Mydia.Config.Schema do
       library_paths: [],
       plugin_settings: [],
       plugin_instances: [],
+      plugin_sources: [],
       path_mappings: []
     }
 

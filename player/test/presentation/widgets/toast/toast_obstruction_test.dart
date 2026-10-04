@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/toast/toast_obstruction.dart';
@@ -56,9 +58,9 @@ void main() {
       (tester) async {
     await _pump(
       tester,
-      Stack(children: [
-        const SizedBox.expand(key: _body),
-        const ToastObstruction(
+      const Stack(children: [
+        SizedBox.expand(key: _body),
+        ToastObstruction(
           edge: ToastEdge.left,
           child: SizedBox(width: 1400, height: 900),
         ),
@@ -218,10 +220,11 @@ void main() {
         _bottomBar(200),
       ]),
     );
-    showDialog<void>(
+    // Completes when the dialog closes, which the test never waits for.
+    unawaited(showDialog<void>(
       context: tester.element(find.byKey(_body)),
       builder: (_) => const AlertDialog(content: SizedBox(key: Key('dialog'))),
-    );
+    ));
     await tester.pumpAndSettle();
     final pill = await _showAndMeasure(tester, from: const Key('dialog'));
     expect(pill.bottom, closeTo(900 - 216, 0.5));

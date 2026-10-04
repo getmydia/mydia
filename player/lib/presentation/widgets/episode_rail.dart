@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/breakpoints.dart';
-import '../../domain/models/episode.dart';
+import '../../domain/detail/detail_views.dart';
+import '../screens/detail/detail_actions.dart';
 import 'episode_rail_card.dart';
 import 'horizontal_rail.dart';
 
@@ -10,23 +11,22 @@ import 'horizontal_rail.dart';
 /// only maps episodes onto landscape cards and sizes the rail for the two-line
 /// label strip beneath each thumbnail.
 class EpisodeRail extends StatelessWidget {
-  final List<Episode> episodes;
-  final String showTitle;
-  final String? showId;
-  final String? showPosterUrl;
+  final List<EpisodeView> episodes;
 
   /// Invoked when a playable episode card is tapped.
-  final ValueChanged<Episode>? onEpisodeTap;
+  final ValueChanged<EpisodeView>? onEpisodeTap;
   final String? selectedEpisodeId;
+
+  /// Reports a watched-menu choice for one episode. Null hides the menu.
+  final Future<void> Function(EpisodeView, EpisodeWatchedAction)?
+      onWatchedAction;
 
   const EpisodeRail({
     super.key,
     required this.episodes,
-    required this.showTitle,
-    this.showId,
-    this.showPosterUrl,
     this.onEpisodeTap,
     this.selectedEpisodeId,
+    this.onWatchedAction,
   });
 
   @override
@@ -41,13 +41,13 @@ class EpisodeRail extends StatelessWidget {
         return EpisodeRailCard(
           key: ValueKey(episode.id),
           episode: episode,
-          showTitle: showTitle,
-          showId: showId,
-          showPosterUrl: showPosterUrl,
           selected: episode.id == selectedEpisodeId,
           onTap: episode.hasFile && onEpisodeTap != null
               ? () => onEpisodeTap!(episode)
               : null,
+          onWatchedAction: onWatchedAction == null
+              ? null
+              : (action) => onWatchedAction!(episode, action),
         );
       },
     );

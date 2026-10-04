@@ -138,7 +138,11 @@ defmodule Mydia.Media.MetadataType do
       first_air_date: parse_date(data[:first_air_date]),
       last_air_date: parse_date(data[:last_air_date]),
       in_production: data[:in_production],
-      seasons: parse_seasons_list(data[:seasons])
+      seasons: parse_seasons_list(data[:seasons]),
+      # Missing on blobs written before the field existed. 0 is what
+      # MetadataBackfill compares against; dropping the field here would make
+      # every blob look outdated and re-queue it nightly.
+      schema_version: data[:schema_version] || 0
     }
   end
 

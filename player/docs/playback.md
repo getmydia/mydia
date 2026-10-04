@@ -235,6 +235,14 @@ the source loads faster than the caller waits. It used to wait a fixed 500ms,
 and a P2P or cold-transcode open is routinely slower: the resume played from
 zero, and the next progress sync saved over the position it had skipped.
 
+A session that answers FULL but whose playlist has no `#EXT-X-ENDLIST` is
+opened as a window at the requested position. Servers before the p2p playlist
+fix do this for every relayed session: they answer FULL while serving FFmpeg's
+own growing playlist, which begins at the resume point, so trusting the mode
+put the bar at zero there and saved that over the real progress.
+`PlaybackController` reads the terminator from the playlist its readiness
+probe already downloads.
+
 Web still seeks after `open`. media_kit ignores `start` for hls.js and clamps
 every reported position to it otherwise. `core/player/media_start.dart` makes
 the choice for both call sites.

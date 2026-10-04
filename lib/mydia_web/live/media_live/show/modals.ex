@@ -16,6 +16,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   alias Mydia.Indexers.SearchResult
   alias Mydia.Library.Hdr
   alias Mydia.Media.DiskRemoval.Preview
+  alias Mydia.Settings.LibraryPath
 
   @doc """
   Delete confirmation modal for removing a media item.
@@ -1332,6 +1333,8 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
   attr :libraries, :list, default: []
 
   def target_library_modal(assigns) do
+    assigns = assign(assigns, :labels, LibraryPath.display_names(assigns.libraries))
+
     ~H"""
     <div id="target-library-modal" class="modal modal-open">
       <div class="modal-box max-w-sm">
@@ -1355,7 +1358,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
               phx-value-library-path-id={library.id}
               class={["justify-between", @media_item.library_path_id == library.id && "active"]}
             >
-              {Path.basename(library.path)}
+              {@labels[library.id]}
               <.icon
                 :if={@media_item.library_path_id == library.id}
                 name="hero-check"

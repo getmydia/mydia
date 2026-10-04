@@ -8,7 +8,9 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
   use MydiaWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
+  import Mydia.AccountsFixtures
 
+  alias Mydia.Accounts.Scope
   alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Metadata.Structs.SearchResult
   alias MydiaWeb.Live.Components.TrendingDetailModal
@@ -199,6 +201,100 @@ defmodule MydiaWeb.Components.TrendingDetailModalTest do
       assert fragment |> LazyHTML.query("#trending-detail-content-rating") |> Enum.empty?()
       assert fragment |> LazyHTML.query("#trending-detail-show-status") |> Enum.empty?()
       assert fragment |> LazyHTML.query("#trending-detail-release-date") |> Enum.empty?()
+    end
+  end
+
+  describe "access limits" do
+    defp render_scoped(scope, user, item, metadata) do
+      render_component(TrendingDetailModal,
+        id: "trending-detail-modal",
+        open: true,
+        item: item,
+        metadata: metadata,
+        loading: false,
+        current_user: user,
+        current_scope: scope,
+        rail: [],
+        config_open: false
+      )
+    end
+
+    test "shows the item's rating before metadata loads" do
+      scope = Mydia.Accounts.Scope.unrestricted()
+      user = %{id: Ecto.UUID.generate(), role: "admin", username: "admin"}
+      base = item(%{media_type: :movie})
+
+      html = render_scoped(scope, user, Map.put(base, :content_rating, "PG-13"), nil)
+
+      assert html =~ ~s(id="trending-detail-content-rating")
+      assert html =~ "PG-13"
+    end
+
+    test "a title over the limit gets a disabled button instead of Request" do
+      guest = restricted_user_fixture(%{role: "guest", max_content_age: 12})
+      md = metadata(%{media_type: :movie, content_rating: "R", genres: []})
+
+      html = render_scoped(Scope.for_user(guest), guest, item(%{media_type: :movie}), md)
+
+      assert html =~ ~s(id="trending-detail-restricted")
+      assert html =~ Mydia.Media.restricted_message()
+      refute html =~ ~s(phx-click="request_media")
+    end
+
+    test "a title within the limit keeps Request" do
+      guest = restricted_user_fixture(%{role: "guest", max_content_age: 12})
+      md = metadata(%{media_type: :movie, content_rating: "PG", genres: []})
+
+      html = render_scoped(Scope.for_user(guest), guest, item(%{media_type: :movie}), md)
+
+      refute html =~ ~s(id="trending-detail-restricted")
+      assert html =~ ~s(phx-click="request_media")
+    end
+
+    test "an unrestricted admin keeps Add to Library" do
+      admin = user_fixture(%{role: "admin"})
+      md = metadata(%{media_type: :movie, content_rating: nil, genres: []})
+
+      html = render_scoped(Scope.for_user(admin), admin, item(%{media_type: :movie}), md)
+
+      assert html =~ "Add to Library"
+      refute html =~ ~s(id="trending-detail-restricted")
+    end
+  end
+
+  describe "header layout" do
+    # The header used to be a fixed h-48 with the title absolutely positioned
+    # at its bottom. Enough badges on a phone pushed the title up past the top
+    # edge, where the modal box's overflow-hidden clipped it (#1008).
+    test "grows with its content instead of a fixed height" do
+      [class] =
+        render_modal(item(), metadata(%{number_of_seasons: 3}))
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#trending-detail-modal-header")
+        |> LazyHTML.attribute("class")
+
+      assert class =~ "min-h-48"
+      refute class =~ ~r/(^|\s)h-48(\s|$)/
+    end
+
+    test "the add button keeps its full accessible name" do
+      html = render_modal(item(), metadata(%{number_of_seasons: 3}))
+
+      refute LazyHTML.from_fragment(html)
+             |> LazyHTML.query(
+               ~s(#trending-detail-modal-actions button[aria-label="Add to Library"])
+             )
+             |> Enum.empty?()
+    end
+
+    test "the caret is full size beside the add button" do
+      [class] =
+        render_modal(item(), metadata(%{number_of_seasons: 3}))
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#trending-detail-modal-actions [data-test="add-config-caret"]))
+        |> LazyHTML.attribute("class")
+
+      refute class =~ "btn-sm"
     end
   end
 end

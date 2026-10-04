@@ -206,6 +206,14 @@ class CastSession {
   /// dartdoc in `cast_session_manager.dart`).
   final CastSubtitleTrack? selectedSubtitle;
 
+  /// True while what this session shows may be out of date: the receiver has
+  /// not answered recently (typically just after this app resumed from the
+  /// background) and a fresh answer is being fetched. Not [isStale], which
+  /// means the receiver is gone; this clears by itself. The UI holds its
+  /// controls back meanwhile, since they would act on a position and play
+  /// state that may no longer be true.
+  final bool isSyncing;
+
   const CastSession({
     required this.device,
     this.mediaInfo,
@@ -213,6 +221,7 @@ class CastSession {
     this.connectionState = CastConnectionState.connected,
     this.subtitles = const [],
     this.selectedSubtitle,
+    this.isSyncing = false,
   });
 
   /// True once the receiver has dropped off the network. The UI offers a
@@ -235,8 +244,10 @@ class CastSession {
     List<CastSubtitleTrack>? subtitles,
     CastSubtitleTrack? selectedSubtitle,
     bool clearSelectedSubtitle = false,
+    bool? isSyncing,
   }) {
     return CastSession(
+      isSyncing: isSyncing ?? this.isSyncing,
       device: device ?? this.device,
       mediaInfo: mediaInfo ?? this.mediaInfo,
       playbackState: playbackState ?? this.playbackState,

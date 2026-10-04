@@ -127,7 +127,8 @@ void main() {
       'a Flatpak install requests the update through the backend directly, '
       'with no dialog and no terminal command', (tester) async {
     final notifier = _FakeUpdateNotifier(
-      UpdateState(currentVersion: '0.14.2', availableUpdate: _flatpakUpdate),
+      const UpdateState(
+          currentVersion: '0.14.2', availableUpdate: _flatpakUpdate),
     );
     final launched = <Uri>[];
 

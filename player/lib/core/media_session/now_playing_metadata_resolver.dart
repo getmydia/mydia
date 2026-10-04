@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
@@ -71,7 +73,8 @@ class NowPlayingMetadataResolver {
     } on NowPlayingFetchUnavailable {
       // No server connection yet, not a terminal failure: let the next
       // resolve for the same ids try again instead of memoising this null.
-      _cache.remove(key);
+      // Only drops the memo entry; this call's own result is returned below.
+      unawaited(_cache.remove(key));
       return null;
     } catch (e) {
       debugPrint('[MediaSession] metadata lookup failed: $e');

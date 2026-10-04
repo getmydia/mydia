@@ -686,7 +686,7 @@ void main() {
     // that: it hung until the ten minute per-test timeout, and then failed
     // the next two tests in this file with `'!inTest': is not true`,
     // because a test that times out never releases the binding.
-    final box = await Hive.openBox<List>(
+    final box = await Hive.openBox<List<dynamic>>(
       SubtitleLanguagePrefs.boxName,
       bytes: Uint8List(0),
     );

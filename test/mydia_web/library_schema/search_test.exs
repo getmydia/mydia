@@ -42,7 +42,7 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.MovieSearch,
-        args: %{"mode" => "specific", "media_item_id" => movie.id}
+        args: %{"mode" => "specific", "media_item_id" => movie.id, "bypass_delay" => true}
       )
     end
 
@@ -54,7 +54,7 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.TVShowSearch,
-        args: %{"mode" => "show", "media_item_id" => show.id}
+        args: %{"mode" => "show", "media_item_id" => show.id, "bypass_delay" => true}
       )
     end
 
@@ -88,7 +88,12 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.TVShowSearch,
-        args: %{"mode" => "season", "media_item_id" => show.id, "season_number" => 2}
+        args: %{
+          "mode" => "season",
+          "media_item_id" => show.id,
+          "season_number" => 2,
+          "bypass_delay" => true
+        }
       )
     end
 
@@ -129,7 +134,12 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.TVShowSearch,
-        args: %{"mode" => "season", "media_item_id" => show.id, "season_number" => 0}
+        args: %{
+          "mode" => "season",
+          "media_item_id" => show.id,
+          "season_number" => 0,
+          "bypass_delay" => true
+        }
       )
     end
   end
@@ -143,7 +153,7 @@ defmodule MydiaWeb.LibrarySchema.SearchTest do
 
       assert_enqueued(
         worker: Mydia.Jobs.TVShowSearch,
-        args: %{"mode" => "specific", "episode_id" => episode.id}
+        args: %{"mode" => "specific", "episode_id" => episode.id, "bypass_delay" => true}
       )
     end
 

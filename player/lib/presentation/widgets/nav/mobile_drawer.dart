@@ -9,6 +9,7 @@ import 'sidebar_row.dart';
 class MobileDrawer extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;
+  final ValueChanged<String>? onSwitchSource;
   final bool showBackToMydia;
   final bool isOffline;
 
@@ -16,6 +17,7 @@ class MobileDrawer extends StatelessWidget {
     super.key,
     required this.location,
     required this.onNavigate,
+    this.onSwitchSource,
     this.showBackToMydia = false,
     this.isOffline = false,
   });
@@ -28,6 +30,7 @@ class MobileDrawer extends StatelessWidget {
         child: SidebarContent(
           location: location,
           onNavigate: onNavigate,
+          onSwitchSource: onSwitchSource,
           isOffline: isOffline,
           backToMydiaWidget: showBackToMydia
               ? SidebarRow(

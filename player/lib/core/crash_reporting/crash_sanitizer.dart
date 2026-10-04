@@ -69,8 +69,9 @@ Map<String, Object?> sanitizeReport(Map<String, Object?> report) {
   final out = Map<String, Object?>.of(report);
 
   final message = out['error_message'];
-  if (message is String)
+  if (message is String) {
     out['error_message'] = _truncate(sanitizeString(message));
+  }
 
   final frames = out['stacktrace'];
   if (frames is List) {
@@ -94,6 +95,8 @@ Map<String, Object?> sanitizeReport(Map<String, Object?> report) {
 /// Applies every free-text rule to [input].
 String sanitizeString(String input) {
   var out = redactHomeDirectories(input);
+  out =
+      out.replaceAllMapped(sourceCredentialPattern, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_url, _rewriteUrl);
   out = out.replaceAllMapped(
     _hostLookup,

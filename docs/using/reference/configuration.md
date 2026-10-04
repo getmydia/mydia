@@ -52,7 +52,9 @@ For why the layers exist and what the database layer buys you, see
 
 ## Plugin instances
 
-Plugin instances can be declared in YAML. Keys under `settings` are the
+For installing, approving and updating plugins, see
+[Install and manage plugins](../how-to/plugins.md). Plugin instances can be
+declared in YAML. Keys under `settings` are the
 plugin's own settings. `name` identifies the instance across restarts.
 
 ```yaml
@@ -88,6 +90,18 @@ Environment variables override these; see
 [Plugins](environment-variables.md#plugins). `plugin_installs:` is no longer
 read.
 
+Signed plugin sources can be declared under `plugin_sources`:
+
+```yaml
+plugin_sources:
+  - url: https://example.com/index.json
+    public_key: RW...
+```
+
+`PLUGINS_SOURCE_<N>_URL` and `PLUGINS_SOURCE_<N>_PUBLIC_KEY` environment
+variables add to these sources, they do not replace them. See
+[Plugin sources](environment-variables.md#plugin-sources).
+
 Three plugin limits live in the `plugins:` block:
 
 ```yaml
@@ -96,3 +110,7 @@ plugins:
   store_max_keys: 1000000       # stored entries per instance
   store_max_bytes: 268435456    # stored bytes per instance (256 MiB)
 ```
+
+`plugins.index_url` can point at a staging official index, but then
+`plugins.index_public_key` is required. `plugins.extra_source_urls` is no longer
+read and logs a warning; declare sources with `plugin_sources` instead.

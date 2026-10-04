@@ -158,6 +158,44 @@ defmodule MydiaWeb.Api.MediaControllerTest do
       assert updated.tmdb_id == tmdb_id
       assert updated.title == "Rebound Signal"
     end
+
+    test "a manual match stores the matched title's rating", %{
+      conn: conn,
+      token: token,
+      movie: movie
+    } do
+      bypass = Bypass.open()
+      previous_url = Application.get_env(:mydia, :metadata_relay_url)
+      Application.put_env(:mydia, :metadata_relay_url, "http://localhost:#{bypass.port}")
+
+      on_exit(fn ->
+        case previous_url do
+          nil -> Application.delete_env(:mydia, :metadata_relay_url)
+          value -> Application.put_env(:mydia, :metadata_relay_url, value)
+        end
+      end)
+
+      tmdb_id = Mydia.MetadataCacheHelpers.unique_provider_id()
+
+      Mydia.RelayStubs.stub_tmdb_movie(bypass, tmdb_id,
+        title: "Quiet Harbor",
+        certification: "PG"
+      )
+
+      conn =
+        conn
+        |> put_req_header("authorization", "Bearer #{token}")
+        |> post("/api/v1/media/#{movie.id}/match", %{
+          "provider_id" => to_string(tmdb_id),
+          "provider_type" => "tmdb"
+        })
+
+      assert json_response(conn, 200)
+
+      updated = Media.get_media_item!(Scope.unrestricted(), movie.id)
+      assert updated.metadata.content_rating == "PG"
+      assert updated.content_rating_age == 8
+    end
   end
 
   describe "POST /api/v1/media/:id/match under a restricted scope" do

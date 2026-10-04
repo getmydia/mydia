@@ -22,7 +22,7 @@ class HiveSidebarLayoutStore implements SidebarLayoutStore {
   /// There is one sidebar, so one key.
   static const _key = 'layout';
 
-  final Box<Map> _box;
+  final Box<Map<dynamic, dynamic>> _box;
 
   @override
   SidebarLayout? get() {

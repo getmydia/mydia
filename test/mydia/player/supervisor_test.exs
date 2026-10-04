@@ -56,19 +56,18 @@ defmodule Mydia.Player.SupervisorTest do
     end
   end
 
-  test "with the player on, the application starts the player subtree and subscriptions" do
+  test "with the player on, the application starts the player subtree" do
     children = Mydia.Application.children(queues: [default: 1])
 
     assert Mydia.Player.Supervisor in children
-    assert Enum.any?(children, &match?({Absinthe.Subscription, _}, &1))
+    refute Enum.any?(children, &match?({Absinthe.Subscription, _}, &1))
   end
 
-  test "with the player off, it starts neither" do
+  test "with the player off, it does not start the player subtree" do
     disable_player()
     children = Mydia.Application.children(queues: [default: 1])
 
     refute Mydia.Player.Supervisor in children
-    refute Enum.any?(children, &match?({Absinthe.Subscription, _}, &1))
   end
 
   describe "Mydia.Player.RemoteAccess.Supervisor" do

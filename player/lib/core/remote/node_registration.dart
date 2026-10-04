@@ -49,7 +49,9 @@ class NodeRegistration {
         return false;
       }
 
-      return result.data?['registerDeviceNode']?['nodeId'] == id;
+      final registered =
+          result.data?['registerDeviceNode'] as Map<String, Object?>?;
+      return registered?['nodeId'] == id;
     } catch (error) {
       debugPrint('[NodeRegistration] threw: $error');
       return false;

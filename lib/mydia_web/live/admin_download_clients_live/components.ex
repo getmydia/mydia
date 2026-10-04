@@ -369,6 +369,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
             </div>
             <label class="label cursor-pointer gap-2">
               <span class="label-text text-sm">Enabled</span>
+              <input type="hidden" name={@download_client_form[:enabled].name} value="false" />
               <input
                 type="checkbox"
                 name={@download_client_form[:enabled].name}
@@ -529,6 +530,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                       </div>
                     </div>
                     <input
+                      type="hidden"
+                      name="download_client_config[connection_settings][use_category_subfolders]"
+                      value="false"
+                    />
+                    <input
                       type="checkbox"
                       name="download_client_config[connection_settings][use_category_subfolders]"
                       value="true"
@@ -537,7 +543,7 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                           Phoenix.HTML.Form.input_value(@download_client_form, :connection_settings) ||
                             %{},
                           ["use_category_subfolders"]
-                        ) == true
+                        ) in [true, "true"]
                       }
                       class="toggle toggle-primary toggle-sm"
                     />
@@ -753,6 +759,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                 <div class="collapse-content space-y-3">
                   <label class="label cursor-pointer justify-start gap-3">
                     <input
+                      type="hidden"
+                      name="download_client_config[connection_settings][remote_fetch][enabled]"
+                      value="false"
+                    />
+                    <input
                       type="checkbox"
                       name="download_client_config[connection_settings][remote_fetch][enabled]"
                       value="true"
@@ -847,6 +858,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
 
                       <label class="label cursor-pointer justify-start gap-3">
                         <input
+                          type="hidden"
+                          name="download_client_config[connection_settings][remote_fetch][delete_after_transfer]"
+                          value="false"
+                        />
+                        <input
                           type="checkbox"
                           name="download_client_config[connection_settings][remote_fetch][delete_after_transfer]"
                           value="true"
@@ -899,6 +915,11 @@ defmodule MydiaWeb.AdminDownloadClientsLive.Components do
                     </p>
                   </div>
                 </div>
+                <input
+                  type="hidden"
+                  name={@download_client_form[:remove_completed].name}
+                  value="false"
+                />
                 <input
                   type="checkbox"
                   name={@download_client_form[:remove_completed].name}

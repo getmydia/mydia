@@ -99,6 +99,7 @@ defmodule Mydia.Downloads.DownloadService do
   Gets the current status of a transcode job.
 
   ## Parameters
+    - scope: the caller's Mydia.Accounts.Scope; a job for a title outside it reads as not found
     - job_id: The transcode job ID
 
   ## Returns
@@ -107,23 +108,19 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> get_job_status(job_id)
+      iex> get_job_status(scope, job_id)
       {:ok, %{job_id: "uuid", status: "transcoding", progress: 0.5, error: nil, file_size: nil}}
   """
-  def get_job_status(job_id) do
-    case Repo.get(TranscodeJob, job_id) do
-      nil ->
-        {:error, :job_not_found}
-
-      job ->
-        {:ok,
-         %{
-           job_id: job.id,
-           status: job.status,
-           progress: job.progress || 0.0,
-           error: job.error,
-           file_size: job.file_size
-         }}
+  def get_job_status(%Scope{} = scope, job_id) do
+    with {:ok, job} <- get_job(scope, job_id) do
+      {:ok,
+       %{
+         job_id: job.id,
+         status: job.status,
+         progress: job.progress || 0.0,
+         error: job.error,
+         file_size: job.file_size
+       }}
     end
   end
 
@@ -131,6 +128,7 @@ defmodule Mydia.Downloads.DownloadService do
   Cancels a transcode job.
 
   ## Parameters
+    - scope: the caller's Mydia.Accounts.Scope; a job for a title outside it reads as not found
     - job_id: The transcode job ID
 
   ## Returns
@@ -139,28 +137,21 @@ defmodule Mydia.Downloads.DownloadService do
 
   ## Example
 
-      iex> cancel_job(job_id)
+      iex> cancel_job(scope, job_id)
       {:ok, :cancelled}
   """
-  def cancel_job(job_id) do
-    case Repo.get(TranscodeJob, job_id) do
-      nil ->
-        {:error, :job_not_found}
+  def cancel_job(%Scope{} = scope, job_id) do
+    with {:ok, job} <- get_job(scope, job_id) do
+      case job.media_file do
+        %Mydia.Library.MediaFile{} = media_file ->
+          JobManager.cancel_job(media_file.id, resolution_to_atom(job.resolution))
+          Downloads.cancel_transcode_job(job)
 
-      job ->
-        # Cancel the job in JobManager if it's running
-        case Repo.preload(job, :media_file) do
-          %{media_file: media_file} when not is_nil(media_file) ->
-            resolution_atom = resolution_to_atom(job.resolution)
-            JobManager.cancel_job(media_file.id, resolution_atom)
-            Downloads.cancel_transcode_job(job)
-            {:ok, :cancelled}
+        nil ->
+          Downloads.cancel_transcode_job(job)
+      end
 
-          _ ->
-            # Job has no media_file, just delete it
-            Downloads.cancel_transcode_job(job)
-            {:ok, :cancelled}
-        end
+      {:ok, :cancelled}
     end
   end
 
@@ -168,18 +159,33 @@ defmodule Mydia.Downloads.DownloadService do
   Gets a transcode job by ID.
 
   ## Parameters
+    - scope: the caller's Mydia.Accounts.Scope; a job for a title outside it reads as not found
     - job_id: The transcode job ID
 
   ## Returns
     - `{:ok, job}` - The transcode job
     - `{:error, :job_not_found}` - Job not found
   """
-  def get_job(job_id) do
-    case Repo.get(TranscodeJob, job_id) do
-      nil -> {:error, :job_not_found}
-      job -> {:ok, job}
+  def get_job(%Scope{} = scope, job_id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(job_id),
+         %TranscodeJob{} = job <- Repo.get(TranscodeJob, uuid),
+         job = Repo.preload(job, :media_file),
+         :ok <- authorize_job(scope, job) do
+      {:ok, job}
+    else
+      _ -> {:error, :job_not_found}
     end
   end
+
+  # Download jobs are shared per (media_file_id, resolution) with no owner, so
+  # the only meaningful check is whether the caller may see the job's file. A
+  # job whose file is gone (media_file nil) is visible only to an unrestricted
+  # scope, which keeps the admin cleanup path working.
+  defp authorize_job(scope, %TranscodeJob{media_file: %Mydia.Library.MediaFile{} = file}),
+    do: Media.authorize_media_file(scope, file)
+
+  defp authorize_job(scope, %TranscodeJob{media_file: nil}),
+    do: if(Scope.restricted?(scope), do: :denied, else: :ok)
 
   @doc """
   Prepares a download by media file ID directly.

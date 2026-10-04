@@ -2,6 +2,8 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
   @moduledoc false
   use MydiaWeb, :html
 
+  alias Mydia.Settings.LibraryPath
+
   @doc """
   Renders the Library Paths tab content.
   """
@@ -139,6 +141,15 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
             </label>
           </div>
           <div class="space-y-5">
+            <div>
+              <.input
+                field={@library_path_form[:name]}
+                type="text"
+                label="Name"
+                placeholder={name_placeholder(@library_path_form[:path].value)}
+                maxlength="60"
+              />
+            </div>
             <%!-- Path and Type Row --%>
             <div class="grid grid-cols-6 gap-3">
               <div class="col-span-6 md:col-span-4">
@@ -375,7 +386,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
         <%!-- Path Info --%>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="font-semibold">{Path.basename(@library_path.path)}</span>
+            <span id={"library-path-#{@library_path.id}-name"} class="font-semibold">
+              {LibraryPath.display_name(@library_path)}
+            </span>
             <%= if @library_path.from_env do %>
               <span
                 class="badge badge-primary badge-xs tooltip"
@@ -697,4 +710,9 @@ defmodule MydiaWeb.AdminLibraryPathsLive.Components do
       _ -> %{}
     end
   end
+
+  defp name_placeholder(path) when is_binary(path) and path != "",
+    do: LibraryPath.display_name(%{path: path})
+
+  defp name_placeholder(_path), do: "Defaults to the folder name"
 end

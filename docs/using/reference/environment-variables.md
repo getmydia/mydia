@@ -71,6 +71,7 @@ Configure additional libraries using numbered variables (`<N>` = 1, 2, 3, etc.):
 | Variable Pattern | Description | Example |
 |------------------|-------------|---------|
 | `LIBRARY_PATH_<N>_PATH` | Directory path | `/media/anime` |
+| `LIBRARY_PATH_<N>_NAME` | Display name shown in the UI. Defaults to the folder name. | `Kids Movies` |
 | `LIBRARY_PATH_<N>_TYPE` | Library type | `mixed` |
 | `LIBRARY_PATH_<N>_MONITORED` | Enable monitoring | `true` |
 | `LIBRARY_PATH_<N>_SCAN_INTERVAL` | Automatic scan interval in seconds. Minimum 900. Omit for manual-only scanning. | `3600` |
@@ -247,7 +248,7 @@ DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ## Media Servers
 
 Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
-The easiest setup is Admin > Media servers > Add server > Plex, which signs in
+The easiest setup is Admin > Configuration > Media Servers > Add server > Plex, which signs in
 with your Plex account and finds your servers. To declare a server in the
 environment instead:
 
@@ -269,12 +270,14 @@ old one stays behind as a disabled server you can delete in the UI.
 
 `MEDIA_SERVER_<N>_*` variables with `MEDIA_SERVER_<N>_TYPE=plex` still work and
 are translated into Plex instances, but they are deprecated: Mydia logs a
-warning at startup and shows a banner on the Media servers page. Rename them to
+warning at startup and shows a banner on the Media Servers page. Rename them to
 `PLUGIN_PLEX_<N>_*`. Jellyfin keeps using `MEDIA_SERVER_<N>_*`.
 
 ## Plugins
 
-Settings for an installed plugin can come from the environment. Install and
+How to install, approve and update plugins is in
+[Install and manage plugins](../how-to/plugins.md). Settings for an installed
+plugin can come from the environment. Install and
 approve the plugin in the admin UI (or with `mydia-cli plugin install`) first;
 these variables only fill in its settings.
 
@@ -299,6 +302,39 @@ the Settings dialog.
 The older `PLUGIN_<N>_NAME`, `_VERSION`, `_ENABLED`, `_PRIORITY`,
 `_SOURCE_URL`, `_INTEGRITY_HASH` and `_GRANTED_CAPABILITIES` variables are
 ignored.
+
+### Plugin file overrides
+
+```bash
+PLUGINS_OVERRIDE_DIR=/config/plugin-overrides
+```
+
+A directory of `<slug>.wasm` files that replace the bytes of the plugin with
+that slug, including a bundled one. The variable is read once at startup, so
+restart after changing it. Replacing a `.wasm` file inside the directory needs
+no restart: disable and enable that plugin to load it. It is meant for testing a
+patched build; see
+[Replace a bundled plugin's bytes](../../plugins/how-to/test-and-iterate.md#replace-a-bundled-plugins-bytes).
+
+### Plugin sources
+
+Extra signed plugin catalogs are declared with numbered variables, starting at 0.
+Both variables are required for each source.
+
+```bash
+PLUGINS_SOURCE_0_URL=https://example.com/index.json
+PLUGINS_SOURCE_0_PUBLIC_KEY=RWQ...
+```
+
+The URL must be `https`. The public key is the minisign key, the base64 line
+starting with `RW` in the publisher's `.pub` file. Declared sources show in
+Admin > System > Plugins > Plugin sources as read-only, with a "Declared" badge.
+Mydia trusts the declared key as given, and it replaces any key previously
+pinned for that URL at startup. Removing a declaration disables the source
+rather than deleting it. A missing key or an `http` URL is a config error at
+startup. Sources can also be added in the admin UI, which shows the key
+fingerprint to compare before you trust it. To publish a source of your own,
+see [Publish your own plugin source](../../plugins/how-to/publish-a-source.md).
 
 ## Indexers
 

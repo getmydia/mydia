@@ -426,6 +426,17 @@ defmodule Mydia.Settings.RuntimeConfig do
     end
   end
 
+  @doc "Plugin sources declared in YAML/env (`Mydia.Config.Schema.PluginSourceDecl`)."
+  def get_runtime_plugin_sources do
+    runtime_config = get_runtime_config()
+
+    if is_struct(runtime_config) and Map.has_key?(runtime_config, :plugin_sources) do
+      runtime_config.plugin_sources
+    else
+      []
+    end
+  end
+
   @doc "Plugin settings declared in YAML/env (`Mydia.Config.Schema.PluginSettingsDecl`)."
   def get_runtime_plugin_settings do
     runtime_config = get_runtime_config()
@@ -603,6 +614,7 @@ defmodule Mydia.Settings.RuntimeConfig do
     %LibraryPath{
       id: build_runtime_id(:library_path, path),
       path: path,
+      name: Map.get(map, :name),
       type: Map.get(map, :type),
       monitored: Map.get(map, :monitored, true),
       scan_interval: Map.get(map, :scan_interval),

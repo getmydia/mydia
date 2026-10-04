@@ -1,6 +1,7 @@
 defmodule Mydia.Playback.OnDeckTest do
   use Mydia.DataCase, async: true
 
+  alias Mydia.Accounts.Scope
   alias Mydia.AccountsFixtures
   alias Mydia.MediaFixtures
   alias Mydia.Playback
@@ -120,7 +121,7 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, e2, _e3]} = show_with_episodes(3)
       watch(ctx.user, e1, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.kind == :episode
       assert entry.state == :next
       assert entry.episode.id == e2.id
@@ -131,7 +132,7 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       start_watching(ctx.user, e1, 600, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.state == :continue
       assert entry.episode.id == e1.id
       assert entry.progress.position_seconds == 600
@@ -141,14 +142,14 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, episodes} = show_with_episodes(2)
       Enum.each(episodes, &watch(ctx.user, &1, ago(60)))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "carries the episode's untrashed files on the entry", ctx do
       {_show, [e1, e2, _e3]} = show_with_episodes(3)
       watch(ctx.user, e1, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.episode.id == e2.id
       assert length(entry.files) == 1
     end
@@ -158,21 +159,21 @@ defmodule Mydia.Playback.OnDeckTest do
     test "a never-started show produces no entry", ctx do
       show_with_episodes(3)
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a tap under the position floor does not create engagement", ctx do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       start_watching(ctx.user, e1, 73, ago(60))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a tap at or above the position floor does create engagement", ctx do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       start_watching(ctx.user, e1, 120, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.episode.id == e1.id
     end
 
@@ -192,7 +193,7 @@ defmodule Mydia.Playback.OnDeckTest do
           authoritative_watched: true
         )
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.state == :next
       assert entry.episode.id == e2.id
     end
@@ -201,8 +202,10 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       start_watching(ctx.user, e1, 73, ago(60))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
-      assert [_entry] = OnDeck.list(ctx.user.id, now: now(), min_position_seconds: 60)
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
+
+      assert [_entry] =
+               OnDeck.list(Scope.for_user(ctx.user), now: now(), min_position_seconds: 60)
     end
   end
 
@@ -211,14 +214,14 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       watch(ctx.user, e1, days_ago(120))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "the same row inside the window does not drop out", ctx do
       {_show, [e1, _e2, _e3]} = show_with_episodes(3)
       watch(ctx.user, e1, days_ago(30))
 
-      assert [_entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [_entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "history outside the cutoff still informs which episode is next", ctx do
@@ -227,7 +230,7 @@ defmodule Mydia.Playback.OnDeckTest do
       watch(ctx.user, e1, days_ago(300))
       watch(ctx.user, e2, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.episode.id == e3.id
       assert entry.state == :next
     end
@@ -240,7 +243,7 @@ defmodule Mydia.Playback.OnDeckTest do
       start_watching(ctx.user, e2, 600, ago(200))
       start_watching(ctx.user, e3, 600, ago(100))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       # The earliest in series order is what you would actually play next.
       assert entry.episode.id == e1.id
     end
@@ -258,7 +261,7 @@ defmodule Mydia.Playback.OnDeckTest do
           %{position_seconds: 900, duration_seconds: 7200, last_watched_at: ago(60)}
         )
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.kind == :movie
       assert entry.state == :continue
       assert entry.media_item.id == movie.id
@@ -275,7 +278,7 @@ defmodule Mydia.Playback.OnDeckTest do
           %{position_seconds: 900, duration_seconds: 7200, last_watched_at: ago(60)}
         )
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a watched movie is skipped", ctx do
@@ -293,7 +296,7 @@ defmodule Mydia.Playback.OnDeckTest do
           }
         )
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
   end
 
@@ -307,7 +310,8 @@ defmodule Mydia.Playback.OnDeckTest do
       watch(ctx.user, c1, ago(60))
       watch(ctx.user, b1, ago(1500))
 
-      titles = ctx.user.id |> OnDeck.list(now: now()) |> Enum.map(& &1.show.title)
+      titles =
+        ctx.user |> Scope.for_user() |> OnDeck.list(now: now()) |> Enum.map(& &1.show.title)
 
       assert titles == ["Charlie", "Bravo", "Alpha"]
     end
@@ -326,7 +330,7 @@ defmodule Mydia.Playback.OnDeckTest do
           %{position_seconds: 900, duration_seconds: 7200, last_watched_at: ago(60)}
         )
 
-      assert [first, second] = OnDeck.list(ctx.user.id, now: now())
+      assert [first, second] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert first.kind == :movie
       assert second.kind == :episode
     end
@@ -342,7 +346,7 @@ defmodule Mydia.Playback.OnDeckTest do
       {_target, [t1, t2]} = show_with_episodes(2, "Just Watched")
       watch(ctx.user, t1, ago(60))
 
-      entries = OnDeck.list(ctx.user.id, now: now(), limit: 10)
+      entries = OnDeck.list(Scope.for_user(ctx.user), now: now(), limit: 10)
 
       assert length(entries) == 10
       assert hd(entries).episode.id == t2.id
@@ -356,8 +360,8 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, _e2]} = show_with_episodes(2)
       watch(other, e1, ago(60))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
-      assert [_entry] = OnDeck.list(other.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
+      assert [_entry] = OnDeck.list(Scope.for_user(other), now: now())
     end
   end
 
@@ -366,7 +370,7 @@ defmodule Mydia.Playback.OnDeckTest do
       {_show, [e1, e2, _e3]} = show_with_episodes(3)
       watch(ctx.user, e1, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert OnDeckEntry.id(entry) == e2.id
     end
   end
@@ -388,7 +392,7 @@ defmodule Mydia.Playback.OnDeckTest do
         set: [trashed_at: DateTime.truncate(DateTime.utc_now(), :second)]
       )
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.state == :next
       assert entry.episode.id == e2.id
     end
@@ -401,7 +405,7 @@ defmodule Mydia.Playback.OnDeckTest do
       watch(ctx.user, e2, ago(90))
       start_watching(ctx.user, e3, 600, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.kind == :episode
       assert entry.state == :continue
       assert entry.episode.id == e3.id
@@ -413,7 +417,7 @@ defmodule Mydia.Playback.OnDeckTest do
       watch(ctx.user, e1, ago(120))
       watch(ctx.user, e2, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.kind == :episode
       assert entry.state == :next
       assert entry.episode.id == e3.id
@@ -423,22 +427,22 @@ defmodule Mydia.Playback.OnDeckTest do
   describe "list/2 dismissals" do
     test "a dismissed movie is hidden", ctx do
       movie = in_progress_movie(ctx.user, ago(60))
-      assert [_] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: now())
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a dismissed show is hidden in the :continue state", ctx do
       {show, [e1, _e2]} = show_with_episodes(2)
       start_watching(ctx.user, e1, 900, ago(60))
 
-      assert [%{state: :continue}] = OnDeck.list(ctx.user.id, now: now())
+      assert [%{state: :continue}] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: now())
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     # The case a progress-row deletion could never have covered: a `:next`
@@ -448,18 +452,18 @@ defmodule Mydia.Playback.OnDeckTest do
       {show, [e1, _e2]} = show_with_episodes(2)
       watch(ctx.user, e1, ago(60))
 
-      assert [%{state: :next}] = OnDeck.list(ctx.user.id, now: now())
+      assert [%{state: :next}] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: now())
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "dismissing the show, not the episode, is what hides an episode entry", ctx do
       {_show, [e1, _e2]} = show_with_episodes(2)
       watch(ctx.user, e1, ago(60))
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       # `OnDeckEntry.id/1` is the episode id and is only a sort tiebreak. An
       # episode id names no media item, so it is refused outright rather than
@@ -467,7 +471,7 @@ defmodule Mydia.Playback.OnDeckTest do
       assert {:error, :not_found} =
                Playback.dismiss_from_on_deck(ctx.user.id, OnDeckEntry.id(entry), now: now())
 
-      assert [_] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a dismissal older than the last watch does not hide", ctx do
@@ -475,7 +479,7 @@ defmodule Mydia.Playback.OnDeckTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(600))
 
-      assert [_] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     # Both columns are second-granularity, so a tie has to break one way. It
@@ -487,14 +491,14 @@ defmodule Mydia.Playback.OnDeckTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(60))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "playing a dismissed movie again brings it back", ctx do
       movie = in_progress_movie(ctx.user, ago(600))
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: ago(300))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       {:ok, _} =
         Playback.save_progress(
@@ -503,7 +507,7 @@ defmodule Mydia.Playback.OnDeckTest do
           %{position_seconds: 1200, duration_seconds: 7200, last_watched_at: ago(30)}
         )
 
-      assert [_] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     # `sort_at` for a show is the newest watch across all its episodes, not
@@ -513,11 +517,11 @@ defmodule Mydia.Playback.OnDeckTest do
       watch(ctx.user, e1, ago(600))
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, show.id, now: ago(300))
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       start_watching(ctx.user, e2, 900, ago(30))
 
-      assert [_] = OnDeck.list(ctx.user.id, now: now())
+      assert [_] = OnDeck.list(Scope.for_user(ctx.user), now: now())
     end
 
     test "a dismissal only hides its own title", ctx do
@@ -526,7 +530,7 @@ defmodule Mydia.Playback.OnDeckTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, dismissed.id, now: now())
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now())
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now())
       assert entry.media_item.id == kept.id
     end
 
@@ -543,8 +547,8 @@ defmodule Mydia.Playback.OnDeckTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, movie.id, now: now())
 
-      assert [] = OnDeck.list(ctx.user.id, now: now())
-      assert [_] = OnDeck.list(other.id, now: now())
+      assert [] = OnDeck.list(Scope.for_user(ctx.user), now: now())
+      assert [_] = OnDeck.list(Scope.for_user(other), now: now())
     end
 
     # Rejected before the take, so a hidden title does not eat a slot and hand
@@ -556,7 +560,7 @@ defmodule Mydia.Playback.OnDeckTest do
 
       {:ok, _} = Playback.dismiss_from_on_deck(ctx.user.id, newest.id, now: now())
 
-      assert [entry] = OnDeck.list(ctx.user.id, now: now(), limit: 1)
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.user), now: now(), limit: 1)
       assert entry.media_item.id == middle.id
     end
 
@@ -583,9 +587,59 @@ defmodule Mydia.Playback.OnDeckTest do
         )
 
       assert [%OnDeckEntry{kind: :movie, media_item: %{id: id}, files: [_]}] =
-               OnDeck.list(ctx.user.id, now: now())
+               OnDeck.list(Scope.for_user(ctx.user), now: now())
 
       assert id == kept.id
+    end
+  end
+
+  describe "under an access restriction" do
+    setup do
+      restricted =
+        AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      %{restricted: restricted}
+    end
+
+    defp restricted_progress_movie(user, category, title) do
+      movie =
+        MediaFixtures.categorized_media_item_fixture(%{type: "movie", title: title}, category)
+
+      MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
+
+      {:ok, _} =
+        Playback.save_progress(user.id, [media_item_id: movie.id], %{
+          position_seconds: 600,
+          duration_seconds: 6000
+        })
+
+      movie
+    end
+
+    test "a hidden title with progress stays off the rail", ctx do
+      restricted_progress_movie(ctx.restricted, "movie", "Quiet Harbor")
+
+      assert [] = OnDeck.list(Scope.for_user(ctx.restricted), now: now())
+    end
+
+    test "hidden titles do not eat the limit", ctx do
+      restricted_progress_movie(ctx.restricted, "movie", "Hidden One")
+      restricted_progress_movie(ctx.restricted, "movie", "Hidden Two")
+      visible = restricted_progress_movie(ctx.restricted, "cartoon_movie", "Paper Comet")
+
+      assert [entry] = OnDeck.list(Scope.for_user(ctx.restricted), now: now(), limit: 1)
+      assert entry.media_item.id == visible.id
+    end
+
+    test "progress recorded for a title before it was hidden stays off the rail", ctx do
+      movie = restricted_progress_movie(ctx.restricted, "cartoon_movie", "Paper Lantern")
+      scope = Scope.for_user(ctx.restricted)
+
+      assert [_visible] = OnDeck.list(scope, now: now())
+
+      {:ok, _} = Mydia.Media.update_category(Scope.system(), movie, "movie", override: true)
+
+      assert [] = OnDeck.list(scope, now: now())
     end
   end
 end

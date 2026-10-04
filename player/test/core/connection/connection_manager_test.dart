@@ -82,7 +82,7 @@ void main() {
         );
 
         // Allow stream events to be processed
-        await Future.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
 
         expect(states, contains('Trying direct URL: https://example.com'));
         expect(states, contains('Direct connection successful'));
@@ -100,7 +100,7 @@ void main() {
         );
 
         // Allow stream events to be processed
-        await Future.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
 
         expect(states, contains('Falling back to P2P'));
 
@@ -120,7 +120,7 @@ void main() {
           instanceId: 'instance-123',
         );
 
-        await Future.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
 
         expect(states1, isNotEmpty);
         expect(states2, isNotEmpty);
@@ -158,7 +158,7 @@ void main() {
           instanceId: 'instance-123',
         );
 
-        await Future.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
 
         expect(states, isNotEmpty);
 

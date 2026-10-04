@@ -102,6 +102,9 @@ pub struct ServerCompatibility {
     pub version: String,
     pub min_player_version: String,
     pub recommended_player_version: String,
+    /// This server's remote access instance ID, the one its pairing QR codes
+    /// carry. Null until remote access has been enabled once.
+    pub instance_id: Option<String>,
 }
 
 /// Whether a calendar entry is an episode or a movie

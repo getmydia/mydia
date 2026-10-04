@@ -3,26 +3,28 @@
 # Print the build number (Android versionCode, Apple CFBundleVersion) for a
 # version string.
 #
-#   build = major*10_000_000 + minor*100_000 + patch*1_000 + slot
+#   build = major*100_000_000 + minor*1_000_000 + patch*100_000 + slot
 #
-#   slot:  dev.N          -> N          (0..299)
-#          alpha.M        -> 300 + M    (300..499)
-#          beta.M         -> 500 + M    (500..699)
-#          rc.M           -> 700 + M    (700..899)
-#          stable         -> 900
-#          +refresh.N     -> 900 + N    (901..999)
+#   slot:  dev.K               -> K                    (K 0..9_999)
+#          alpha.M[.dev.K]     -> 10_000 + M*1_000 + K (M 0..19)
+#          beta.M[.dev.K]      -> 30_000 + M*1_000 + K (M 0..29)
+#          rc.M[.dev.K]        -> 60_000 + M*1_000 + K (M 0..29)
+#          stable              -> 90_000
+#          +refresh.N          -> 90_000 + N           (N 1..99)
 #
-#   The dot is optional in prerelease suffixes: rc13 parses as rc.13.
+#   A .dev.K tail (K 1..999) is an on-demand build made K first-parent
+#   commits after that prerelease: above it, below the next one. The dot is
+#   optional in the prerelease itself: rc13 parses as rc.13.
 #
 # Every workflow that mints a build number calls this, so the ordering holds
 # across them. Android refuses an install whose versionCode is below the
-# installed one, which is what makes a dev build sort below the beta and
-# stable of the same version rather than above every release forever.
+# installed one, and the ordering is what lets a device move from any build to
+# any later one.
 #
-# The previous scheme derived numbers from github.run_number with a per
-# workflow offset (+10000 releases, +500000 on-demand, +900000 iOS refresh).
-# Those orderings were unrelated to version order, so an on-demand build
-# permanently blocked every release on any device that installed one.
+# Two schemes came before this one. Run-number offsets let an on-demand build
+# outrank every later release. The first version-derived scheme put every dev
+# build below every beta of the same version, so a dev build made after a beta
+# looked older than it. Every number here clears both.
 set -euo pipefail
 export LC_ALL=C.UTF-8
 
@@ -34,43 +36,36 @@ version="${1-}"
 version="${version#v}"
 
 core="$version"
-slot=900
+slot=90000
 
 case "$version" in
   *-*)
     core="${version%%-*}"
-    suffix="${version#*-}"
-    case "$suffix" in
-      dev*|Dev*)
-        n="${suffix#[Dd]ev}"
-        n="${n#.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "dev suffix must be dev<number> or dev.<number>: $version"
-        [ "$n" -le 299 ] || die "dev counter above 299 would collide with the alpha band: $version"
-        slot=$(( 10#$n ))
-        ;;
-      alpha*|Alpha*)
-        n="${suffix#[Aa]lpha}"
-        n="${n#.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "alpha suffix must be alpha<number> or alpha.<number>: $version"
-        [ "$n" -le 199 ] || die "alpha counter above 199 would collide with the beta band: $version"
-        slot=$(( 300 + 10#$n ))
-        ;;
-      beta*|Beta*)
-        n="${suffix#[Bb]eta}"
-        n="${n#.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "beta suffix must be beta<number> or beta.<number>: $version"
-        [ "$n" -le 199 ] || die "beta counter above 199 would collide with the rc band: $version"
-        slot=$(( 500 + 10#$n ))
-        ;;
-      rc*|Rc*|RC*)
-        n="${suffix#[Rr][Cc]}"
-        n="${n#.}"
-        [[ "$n" =~ ^[0-9]+$ ]] || die "rc suffix must be rc<number> or rc.<number>: $version"
-        [ "$n" -le 199 ] || die "rc counter above 199 would collide with the stable slot: $version"
-        slot=$(( 700 + 10#$n ))
+    suffix="$(printf '%s' "${version#*-}" | tr '[:upper:]' '[:lower:]')"
+    [[ "$suffix" =~ ^(dev|alpha|beta|rc)\.?([0-9]+)(\.dev\.([0-9]+))?$ ]] \
+      || die "unrecognised prerelease suffix: $version"
+    band="${BASH_REMATCH[1]}"
+    n=$(( 10#${BASH_REMATCH[2]} ))
+    tail="${BASH_REMATCH[3]}"
+    k=$(( 10#${BASH_REMATCH[4]:-0} ))
+    case "$band" in
+      dev)
+        [ -z "$tail" ] || die "a dev build cannot carry a second dev tail: $version"
+        [ "$n" -le 9999 ] || die "dev counter above 9999 would collide with the alpha band: $version"
+        slot=$n
         ;;
       *)
-        die "unrecognised prerelease suffix: $version"
+        case "$band" in
+          alpha) base=10000; max=19 ;;
+          beta)  base=30000; max=29 ;;
+          rc)    base=60000; max=29 ;;
+        esac
+        [ "$n" -le "$max" ] || die "$band counter above $max would collide with the next band: $version"
+        if [ -n "$tail" ]; then
+          [ "$k" -ge 1 ] || die "dev tail must start at 1; dev.0 is the prerelease itself: $version"
+          [ "$k" -le 999 ] || die "dev tail above 999 would collide with $band.$(( n + 1 )): $version"
+        fi
+        slot=$(( base + n * 1000 + k ))
         ;;
     esac
     ;;
@@ -79,7 +74,7 @@ case "$version" in
     n="${version#*+refresh.}"
     [[ "$n" =~ ^[0-9]+$ ]] || die "refresh suffix must be +refresh.<number>: $version"
     [ "$n" -ge 1 ] && [ "$n" -le 99 ] || die "refresh counter must be 1..99: $version"
-    slot=$(( 900 + 10#$n ))
+    slot=$(( 90000 + 10#$n ))
     ;;
 esac
 
@@ -88,8 +83,8 @@ IFS='.' read -r major minor patch extra <<< "$core"
 for part in "$major" "$minor" "$patch"; do
   [[ "${part-}" =~ ^[0-9]+$ ]] || die "version must be major.minor.patch: $version"
 done
-[ "$major" -le 209 ] || die "major above 209 overflows Android's versionCode ceiling: $version"
-[ "$minor" -le 99 ] || die "minor above 99 overflows its field: $version"
-[ "$patch" -le 99 ] || die "patch above 99 overflows its field: $version"
+[ $(( 10#$major )) -le 20 ] || die "major above 20 overflows Android's versionCode ceiling: $version"
+[ $(( 10#$minor )) -le 99 ] || die "minor above 99 overflows its field: $version"
+[ $(( 10#$patch )) -le 9 ] || die "patch above 9 overflows its field: $version"
 
-echo $(( 10#$major * 10000000 + 10#$minor * 100000 + 10#$patch * 1000 + slot ))
+echo $(( 10#$major * 100000000 + 10#$minor * 1000000 + 10#$patch * 100000 + slot ))

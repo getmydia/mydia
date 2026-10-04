@@ -161,7 +161,7 @@ void main() {
 
     await tester.runAsync(() async {
       await pumpPlayerScreen(tester, container, fileId: 'offline');
-      // The error UI (`_buildError`'s `Icons.error_outline`) is the only
+      // The error UI (`PlayerErrorView`'s `Icons.error_outline`) is the only
       // stable signal available here: on this path
       // `directStreamFileIds` never gains an entry, so polling on
       // it (as the happy-path test above does) would just spin to the

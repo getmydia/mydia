@@ -172,12 +172,26 @@
                   </option>
                 <% end %>
               </select>
-              <select name="year" class="select select-bordered select-sm join-item">
-                <option value="">All Years</option>
-                <%= for year <- Enum.to_list(Date.utc_today().year..1970//-1) do %>
-                  <option value={year} selected={@selected_year == year}>
-                    {year}
-                  </option>
+              <select
+                id="discover-year-from"
+                name="year_from"
+                class="select select-bordered select-sm join-item"
+                aria-label="From year"
+              >
+                <option value="">From: any</option>
+                <%= for year <- Date.utc_today().year..1900//-1 do %>
+                  <option value={year} selected={@year_from == year}>From {year}</option>
+                <% end %>
+              </select>
+              <select
+                id="discover-year-to"
+                name="year_to"
+                class="select select-bordered select-sm join-item"
+                aria-label="To year"
+              >
+                <option value="">To: any</option>
+                <%= for year <- Date.utc_today().year..1900//-1 do %>
+                  <option value={year} selected={@year_to == year}>To {year}</option>
                 <% end %>
               </select>
 
@@ -246,6 +260,18 @@
             </p>
           </div>
         </div>
+      <% @visible_items == [] and Mydia.Accounts.Scope.restricted?(@current_scope) and not @has_more -> %>
+        <div
+          id="discover-restricted-empty"
+          class="flex flex-col items-center justify-center py-16 gap-4"
+        >
+          <div class="bg-base-200 rounded-full p-6">
+            <.icon name="hero-lock-closed" class="w-10 h-10 text-base-content/40" />
+          </div>
+          <p class="text-lg font-medium text-base-content/80">
+            Nothing here is available for your account.
+          </p>
+        </div>
       <% @visible_items == [] -> %>
         <div class="flex flex-col items-center justify-center py-16 gap-4">
           <div class="bg-base-200 rounded-full p-6">
@@ -312,6 +338,7 @@
     metadata={@selected_metadata}
     loading={@detail_loading}
     current_user={@current_user}
+    current_scope={@current_scope}
     open={@selected_item != nil}
     config_open={@add_config != nil}
   >

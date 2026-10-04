@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import '../../widgets/artwork_image.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
@@ -163,14 +163,12 @@ class SeriesDownloadsScreen extends ConsumerWidget {
           children: [
             // Backdrop image
             if (backdropUrl != null)
-              CachedNetworkImage(
+              ArtworkImage(
                 imageUrl: backdropUrl!,
                 fit: BoxFit.cover,
                 cacheManager: BackdropCacheManager(),
-                placeholder: (context, url) =>
-                    Container(color: AppColors.surface),
-                errorWidget: (context, url, error) =>
-                    Container(color: AppColors.surface),
+                placeholder: (context) => Container(color: AppColors.surface),
+                errorWidget: (context) => Container(color: AppColors.surface),
               )
             else
               Container(color: AppColors.surface),
@@ -258,14 +256,14 @@ class SeriesDownloadsScreen extends ConsumerWidget {
           width: 100,
           height: 150,
           child: showPosterUrl != null
-              ? CachedNetworkImage(
+              ? ArtworkImage(
                   imageUrl: showPosterUrl!,
                   fit: BoxFit.cover,
                   cacheManager: PosterCacheManager(),
-                  placeholder: (context, url) => Container(
+                  placeholder: (context) => Container(
                     color: AppColors.surfaceVariant,
                   ),
-                  errorWidget: (context, url, error) => Container(
+                  errorWidget: (context) => Container(
                     color: AppColors.surfaceVariant,
                     child: const Icon(Icons.tv_rounded,
                         color: AppColors.textSecondary),

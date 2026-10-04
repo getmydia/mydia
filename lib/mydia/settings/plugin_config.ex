@@ -33,6 +33,7 @@ defmodule Mydia.Settings.PluginConfig do
           granted_capabilities: map() | nil,
           role_ceilings: map() | nil,
           source_url: String.t() | nil,
+          plugin_source_id: binary() | nil,
           integrity_hash: String.t() | nil,
           manifest: map() | nil,
           wasm_module: binary() | nil,
@@ -67,6 +68,7 @@ defmodule Mydia.Settings.PluginConfig do
     field :consecutive_schedule_failures, :integer, default: 0
 
     belongs_to :updated_by, Mydia.Accounts.User
+    belongs_to :plugin_source, Mydia.Plugins.PluginSource
 
     timestamps(type: :utc_datetime)
   end
@@ -84,6 +86,7 @@ defmodule Mydia.Settings.PluginConfig do
       :granted_capabilities,
       :role_ceilings,
       :source_url,
+      :plugin_source_id,
       :integrity_hash,
       :manifest,
       :wasm_module,
@@ -95,5 +98,6 @@ defmodule Mydia.Settings.PluginConfig do
       message: "must be lowercase alphanumeric with - or _"
     )
     |> unique_constraint(:slug)
+    |> foreign_key_constraint(:plugin_source_id)
   end
 end

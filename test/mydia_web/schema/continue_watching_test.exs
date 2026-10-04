@@ -200,6 +200,25 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     end
   end
 
+  test "a restricted viewer's rails omit a hidden show they started", ctx do
+    {:ok, _} =
+      Mydia.Media.update_category(Mydia.Accounts.Scope.system(), ctx.show, "tv_show",
+        override: true
+      )
+
+    restricted =
+      AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+    [e1 | _] = ctx.episodes
+    :changed = Playback.ensure_watched(restricted.id, episode_id: e1.id)
+
+    assert {:ok, %{data: %{"continueWatching" => []}}} =
+             run_query(@query, %{"first" => 10}, restricted)
+
+    assert {:ok, %{data: %{"upNext" => []}}} =
+             run_query(@up_next_query, %{"first" => 10}, restricted)
+  end
+
   describe "removeFromContinueWatching" do
     @remove_mutation """
     mutation Remove($mediaItemId: ID!) {
@@ -290,10 +309,26 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
 
       assert message =~ "Authentication required"
     end
+
+    test "a hidden title cannot be dismissed", _ctx do
+      movie = MediaFixtures.categorized_media_item_fixture(%{type: "movie"}, "movie")
+
+      restricted =
+        AccountsFixtures.restricted_user_fixture(%{allowed_categories: ["cartoon_movie"]})
+
+      assert {:ok, %{errors: [%{message: "Media item not found"}]}} =
+               run_query(@remove_mutation, %{"mediaItemId" => movie.id}, restricted)
+
+      assert Mydia.Repo.aggregate(Mydia.Playback.Dismissal, :count) == 0
+    end
   end
 
   defp run_query(query, variables, user) do
-    context = if user, do: %{current_user: user}, else: %{}
+    context =
+      if user,
+        do: %{current_user: user, current_scope: Mydia.Accounts.Scope.for_user(user)},
+        else: %{}
+
     Absinthe.run(query, MydiaWeb.Schema, variables: variables, context: context)
   end
 end

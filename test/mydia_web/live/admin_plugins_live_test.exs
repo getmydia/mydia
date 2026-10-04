@@ -7,6 +7,9 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
   alias Mydia.Accounts
   alias Mydia.Plugins.Host
+  alias Mydia.Plugins.Index.BrowseResult
+  alias Mydia.Plugins.Index.CatalogItem
+  alias Mydia.Plugins.Index.Entry
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
   alias MydiaWeb.AdminPluginsLive.Components
@@ -52,11 +55,48 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     config
   end
 
+  defp seed_from(slug, name, source_url) do
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        source_url: source_url,
+        manifest: manifest_map(slug, name),
+        wasm_module: guest_wasm(),
+        granted_capabilities: %{"net:http" => ["discord.com"]},
+        enabled: false
+      })
+
+    config
+  end
+
+  defp seed_described_plugin(slug, name, description, opts) do
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        manifest: Map.put(manifest_map(slug, name), "description", description),
+        wasm_module: guest_wasm(),
+        granted_capabilities: Keyword.get(opts, :granted, %{}),
+        enabled: false
+      })
+
+    config
+  end
+
   # Points the store at `index_url` only. The file's setup restores
   # :runtime_config on exit.
   defp put_plugin_sources(index_url) do
     base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
-    plugins = %{base.plugins | index_url: index_url, extra_source_urls: []}
+
+    plugins = %{
+      base.plugins
+      | index_url: index_url,
+        index_public_key: Mydia.MinisignFixtures.keypair().public
+    }
+
     Application.put_env(:mydia, :runtime_config, %{base | plugins: plugins})
   end
 
@@ -134,6 +174,42 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     config
   end
 
+  defp seed_with_hints(slug, name) do
+    manifest =
+      Map.put(manifest_map(slug, name), "settings_schema", [
+        %{
+          "key" => "model",
+          "type" => "string",
+          "label" => "Default model",
+          "hint" => "Users can change it"
+        },
+        %{
+          "key" => "base_url",
+          "type" => "url",
+          "label" => "Server URL",
+          "hint" => "For example http://ollama.lan:11434",
+          "grants_host" => true,
+          "allow_private" => true
+        }
+      ])
+
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        manifest: manifest,
+        wasm_module: guest_wasm(),
+        granted_capabilities: %{
+          "net:http" => ["discord.com"],
+          "events:subscribe" => ["media_item.added"]
+        },
+        enabled: true
+      })
+
+    config
+  end
+
   defp seed_with_schema(slug, name, opts) do
     {:ok, config} =
       Settings.create_plugin_config(%{
@@ -204,19 +280,19 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "store browsing" do
-    test "an empty store says so instead of rendering nothing", %{conn: conn} do
+    test "an empty store opens the modal and says so", %{conn: conn} do
       put_plugin_sources("")
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#catalog-empty")
-      refute has_element?(view, "#plugin-catalog")
-      refute has_element?(view, "#browse-error")
+      assert has_element?(view, "#store-modal #catalog-empty")
+      refute has_element?(view, "#store-modal #plugin-catalog")
+      refute has_element?(view, "#store-modal #browse-error")
     end
 
-    test "a failing source shows the error", %{conn: conn} do
+    test "a failing source opens the modal with the error", %{conn: conn} do
       # Non-https fails in require_https/2 before any network I/O.
       put_plugin_sources("http://insecure.test/index.json")
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
@@ -224,8 +300,239 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#browse-store") |> render_click()
       render_async(view)
 
-      assert has_element?(view, "#browse-error")
-      refute has_element?(view, "#catalog-empty")
+      assert has_element?(view, "#store-modal #browse-error")
+      refute has_element?(view, "#store-modal #catalog-empty")
+    end
+
+    test "Close dismisses the store", %{conn: conn} do
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+      view |> element("#close-store") |> render_click()
+
+      refute has_element?(view, "#store-modal")
+    end
+
+    test "an approval hides the store, and declining brings it back", %{conn: conn} do
+      seed_plugin("webhook-notifier", "Webhook Notifier", enabled: false)
+      put_plugin_sources("")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#browse-store") |> render_click()
+      render_async(view)
+      view |> element("#approve-webhook-notifier") |> render_click()
+
+      assert has_element?(view, "#approval-modal")
+      refute has_element?(view, "#store-modal")
+
+      view |> element("#decline-approval") |> render_click()
+      assert has_element?(view, "#store-modal")
+    end
+
+    test "the store modal shows a spinner before results arrive" do
+      doc =
+        render_component(&Components.store_modal/1, browse: nil)
+        |> LazyHTML.from_fragment()
+
+      refute doc |> LazyHTML.query("#store-loading") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#plugin-catalog") |> Enum.empty?()
+    end
+
+    test "each catalog row offers the action its install state allows" do
+      entry = fn slug, version ->
+        %Entry{
+          slug: slug,
+          name: slug,
+          version: version,
+          package_url: "https://cdn.test/#{slug}.wasm",
+          integrity: "sha256:ab",
+          manifest: nil
+        }
+      end
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [
+          %CatalogItem{entry: entry.("fresh", "1.0.0"), state: :not_installed},
+          %CatalogItem{
+            entry: entry.("current", "1.0.0"),
+            state: :installed,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("stale", "1.1.0"),
+            state: :update,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("sideloaded", "1.0.0"),
+            state: :replace,
+            installed_version: "1.0.0"
+          },
+          %CatalogItem{
+            entry: entry.("builtin", "1.0.0"),
+            state: :bundled,
+            installed_version: "1.0.0"
+          }
+        ]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse)
+        |> LazyHTML.from_fragment()
+
+      text = fn selector ->
+        doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
+      end
+
+      assert text.("#install-official-fresh") == "Install"
+      assert text.("#install-official-stale") == "Update to v1.1.0"
+      assert text.("#install-official-sideloaded") == "Install store version"
+      assert text.("#catalog-state-official-current") == "Installed"
+      assert text.("#catalog-state-official-builtin") == "Bundled"
+      assert doc |> LazyHTML.query("#install-official-current") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#install-official-builtin") |> Enum.empty?()
+      assert text.("#catalog-row-official-stale") =~ "(installed v1.0.0)"
+    end
+
+    test "third-party entries carry a badge and a namespaced id" do
+      sid = Ecto.UUID.generate()
+
+      entry = %Entry{
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        package_url: "https://x.test/p.wasm",
+        integrity: "sha256:ab",
+        manifest: nil,
+        source_id: sid,
+        source_name: "Example Plugins"
+      }
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [%CatalogItem{entry: entry, state: :not_installed}]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      key = "src-#{sid}-fixture-tool"
+
+      refute doc |> LazyHTML.query("#install-#{key}") |> Enum.empty?()
+
+      assert doc |> LazyHTML.query("#catalog-third-party-#{key}") |> LazyHTML.text() =~
+               "Example Plugins"
+    end
+
+    test "an entry installed from another source offers a replace naming it" do
+      entry = %Entry{
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        package_url: "https://x.test/p.wasm",
+        integrity: "sha256:ab",
+        manifest: nil
+      }
+
+      item = %CatalogItem{
+        entry: entry,
+        state: :other_source,
+        installed_version: "0.9.0",
+        installed_from: "a removed source"
+      }
+
+      browse = %BrowseResult{status: :available, source_count: 1, catalog: [item]}
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      assert doc |> LazyHTML.query("#install-official-fixture-tool") |> LazyHTML.text() =~
+               "Replace"
+
+      assert doc |> LazyHTML.query("#catalog-row-official-fixture-tool") |> LazyHTML.text() =~
+               "a removed source"
+    end
+
+    test "the store notes how many sources failed" do
+      browse = %BrowseResult{
+        status: :empty,
+        source_count: 2,
+        failed_count: 1,
+        error: "HTTP 404",
+        catalog: []
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      assert doc |> LazyHTML.query("#browse-error") |> LazyHTML.text() =~ "1 of 2 sources"
+    end
+
+    test "two sources listing one slug open the approval for the one clicked", %{conn: conn} do
+      third_sid = Ecto.UUID.generate()
+
+      entry = fn sid, name ->
+        %Entry{
+          slug: "fixture-tool",
+          name: "Fixture Tool",
+          version: "1.0.0",
+          package_url: "https://x.test/p.wasm",
+          integrity: "sha256:ab",
+          manifest: %Mydia.Plugins.Manifest{
+            slug: "fixture-tool",
+            name: "Fixture Tool",
+            version: "1.0.0"
+          },
+          source_id: sid,
+          source_url: "https://plugins.example.test/index.json",
+          source_name: name
+        }
+      end
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 2,
+        catalog: [
+          %CatalogItem{entry: entry.(nil, nil), state: :not_installed},
+          %CatalogItem{entry: entry.(third_sid, "Example Plugins"), state: :not_installed}
+        ]
+      }
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      # No catalog source is reachable in tests, so seed the browse result the
+      # store would hold, then let any message re-render the view.
+      :sys.replace_state(view.pid, fn state ->
+        socket = Phoenix.Component.assign(state.socket, browse: browse, store_open?: true)
+        %{state | socket: socket}
+      end)
+
+      send(view.pid, {:event_created, %{type: "unrelated", actor_id: nil}})
+      render(view)
+
+      key = "src-#{third_sid}-fixture-tool"
+      view |> element("#install-#{key}") |> render_click()
+
+      assert has_element?(
+               view,
+               "#approval-publisher-warning",
+               "Example Plugins (plugins.example.test)"
+             )
+    end
+
+    test "a source key never equals an official key, whatever the slug" do
+      sid = Ecto.UUID.generate()
+      source_key = Components.catalog_key(%{source_id: sid, slug: "foo"})
+
+      # Slugs may contain `-`, so try official slugs built to mimic a source key.
+      for lookalike <- ["foo--src-" <> sid, "src-#{sid}-foo", "foo-" <> String.slice(sid, 0, 8)] do
+        refute Components.catalog_key(%{source_id: nil, slug: lookalike}) == source_key
+      end
     end
 
     test "the button is disabled while a browse is in flight" do
@@ -256,7 +563,23 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#approve-webhook-notifier") |> render_click()
       assert has_element?(view, "#approval-modal")
       assert has_element?(view, "#approval-capabilities")
-      assert render(view) =~ "discord.com"
+      assert has_element?(view, "#approval-capabilities-group-talks_to", "discord.com")
+      assert has_element?(view, "#approval-capabilities-also", "reacts to new titles")
+
+      also_text =
+        view
+        |> element("#approval-capabilities-also")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+        |> String.replace(~r/\s+/, " ")
+        |> String.trim()
+
+      assert also_text =~ "reacts to new titles."
+      refute also_text =~ " ."
+      refute also_text =~ " ,"
+      refute render(view) =~ "Review this carefully"
+      refute has_element?(view, "#approval-capabilities [data-new]")
       assert has_element?(view, "#confirm-approval")
 
       # Approving activates the plugin.
@@ -264,6 +587,37 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       refute has_element?(view, "#approval-modal")
       assert Host.running?("webhook-notifier")
       assert render(view) =~ "active"
+    end
+
+    test "a third-party approval names the publisher and what it replaces" do
+      approval = %{
+        kind: :catalog,
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        capabilities: %{},
+        ungranted: %{},
+        settings_schema: [],
+        publisher: "Example Plugins",
+        replaces: "the Mydia plugin index"
+      }
+
+      render_approval = fn approval ->
+        render_component(&Components.approval_modal/1, approval: approval)
+        |> LazyHTML.from_fragment()
+      end
+
+      doc = render_approval.(approval)
+
+      assert doc |> LazyHTML.query("#approval-publisher-warning") |> LazyHTML.text() =~
+               "Example Plugins"
+
+      assert doc |> LazyHTML.query("#approval-replaces") |> LazyHTML.text() =~
+               "the Mydia plugin index"
+
+      doc = render_approval.(%{approval | publisher: nil, replaces: nil})
+      assert doc |> LazyHTML.query("#approval-publisher-warning") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#approval-replaces") |> Enum.empty?()
     end
 
     test "declining closes the modal without activating", %{conn: conn} do
@@ -287,6 +641,64 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#toggle-notifier")
       refute has_element?(view, "#approve-notifier")
       refute has_element?(view, "#reapproval-badge-notifier")
+    end
+  end
+
+  describe "failing shelves" do
+    defp fail_shelf(user, slug, message) do
+      user
+      |> Mydia.ShelfHelpers.shelf_fixture(slug: slug)
+      |> Ecto.Changeset.change(status: :failed, failure_count: 1, last_error: message)
+      |> Mydia.Repo.update!()
+    end
+
+    test "the plugin row says how many people it fails for and why", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "The model server answered 401"
+      )
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "The model server answered 401"
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(
+               view,
+               "#shelf-failure-note-suggester",
+               "Suggestions failing for 2 people: The model server answered 401"
+             )
+    end
+
+    test "the error text is escaped and clipped", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+
+      fail_shelf(
+        Mydia.AccountsFixtures.user_fixture(),
+        "suggester",
+        "<script>alert(1)</script>" <> String.duplicate("x", 400)
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      html = view |> element("#shelf-failure-note-suggester") |> render()
+      refute html =~ "<script>"
+      assert html =~ "&lt;script&gt;"
+      assert String.length(html) < 600
+    end
+
+    test "a healthy plugin shows no note", %{conn: conn} do
+      seed_plugin("suggester", "Suggester", enabled: true)
+      Mydia.ShelfHelpers.shelf_fixture(Mydia.AccountsFixtures.user_fixture(), slug: "suggester")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      refute has_element?(view, "#shelf-failure-note-suggester")
     end
   end
 
@@ -327,9 +739,10 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       html = render(view)
       assert html =~ "needs re-approval"
-      # Host-owned plain language for the ungranted values, not raw class names.
-      assert html =~ "download.completed"
-      assert html =~ "media_item"
+      # Host-owned plain language for the ungranted values, not raw identifiers.
+      assert html =~ "finished downloads"
+      assert html =~ "Media items"
+      refute html =~ "download.completed"
     end
 
     test "a normally approved plugin carries no re-approval treatment", %{conn: conn} do
@@ -357,9 +770,19 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       view |> element("#approve-notifier") |> render_click()
       assert has_element?(view, "#approval-modal")
-      # The modal separates what is new from the full set being granted.
-      assert has_element?(view, "#approval-new-capabilities")
-      assert has_element?(view, "#approval-ungranted")
+      # One grouped list, with only the widened values badged.
+      assert has_element?(view, "#approval-reapproval-note", "2 things")
+      assert has_element?(view, "#approval-capabilities-group-can_see [data-new]", "Media items")
+
+      assert has_element?(
+               view,
+               "#approval-capabilities-also [data-new]",
+               "also reacts to finished downloads"
+             )
+
+      refute has_element?(view, "#approval-capabilities-also [data-new]", "new titles")
+      refute has_element?(view, "#approval-capabilities-group-talks_to [data-new]")
+      assert has_element?(view, "#confirm-approval", "Re-approve")
 
       view |> element("#confirm-approval") |> render_click()
 
@@ -379,6 +802,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       assert has_element?(view, "#detail-ungranted")
       assert has_element?(view, "#detail-ungranted-capabilities")
+      assert has_element?(view, "#detail-ungranted-capabilities-group-can_see", "Media items")
     end
 
     test "declining leaves the grant untouched", %{conn: conn} do
@@ -395,6 +819,101 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "lifecycle (R14)" do
+    test "a bundled plugin has no remove button but can still be disabled", %{conn: conn} do
+      seed_from("notifier", "Notifier", "bundled")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#toggle-notifier")
+      refute has_element?(view, "#remove-notifier")
+      assert has_element?(view, "#origin-badge-notifier", "Bundled")
+    end
+
+    test "a store plugin is removable and its confirm names what goes with it", %{conn: conn} do
+      seed_from("notifier", "Notifier", "https://plugins.mydia.dev/notifier-1.0.0.tar")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Mydia store")
+
+      assert has_element?(
+               view,
+               ~s(#remove-notifier[data-confirm="Remove Notifier? This also deletes its settings, approvals and suggestions."])
+             )
+    end
+
+    test "the remove confirm counts a multi-instance plugin's servers" do
+      row = %{name: "Plex", multi_instance: true, instances: [%{}, %{}]}
+
+      assert Components.remove_confirm(row) ==
+               "Remove Plex? This also deletes its settings, approvals and suggestions, plus 2 configured servers."
+
+      assert Components.remove_confirm(%{row | instances: [%{}]}) =~ "plus 1 configured server."
+    end
+
+    test "a sideloaded plugin shows its origin" do
+      html =
+        render_component(&Components.source_badge/1,
+          id: "b",
+          origin: :sideloaded,
+          source_name: nil
+        )
+
+      assert html =~ "Sideloaded"
+    end
+
+    test "a plugin with no recorded source says so instead of claiming it was removed", %{
+      conn: conn
+    } do
+      seed_plugin("notifier", "Notifier", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Unknown source")
+    end
+
+    test "a plugin whose source host is not the store reads as source removed", %{conn: conn} do
+      seed_from("notifier", "Notifier", "https://gone.example.com/notifier-1.0.0.tar")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Source removed")
+    end
+
+    test "a third-party plugin's badge names its source" do
+      html =
+        render_component(&Components.source_badge/1,
+          id: "b",
+          origin: {:source, "00000000-0000-0000-0000-000000000000"},
+          source_name: "Acme plugins"
+        )
+
+      assert html =~ "Third-party · Acme plugins"
+      assert html =~ "badge-warning"
+    end
+
+    test "a plugin awaiting approval can be removed", %{conn: conn} do
+      seed_plugin("notifier", "Notifier", [])
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#remove-notifier") |> render_click()
+
+      refute has_element?(view, "#plugin-row-notifier")
+      assert Settings.get_plugin_config_by_slug("notifier") == nil
+    end
+
+    test "the detail modal offers no revoke", %{conn: conn} do
+      seed_plugin("notifier", "Notifier",
+        enabled: true,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+      view |> element("#details-notifier") |> render_click()
+
+      assert has_element?(view, "#detail-modal")
+      refute has_element?(view, "#detail-revoke-notifier")
+    end
+
     test "remove deletes the plugin row", %{conn: conn} do
       seed_plugin("notifier", "Notifier",
         enabled: true,
@@ -431,6 +950,22 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "operator settings + host disclosure (U3, U4)" do
+    test "a field's hint renders under it, joined with the private-network note on urls",
+         %{conn: conn} do
+      seed_with_hints("hinted", "Hinted")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-hinted") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form p", "Users can change it")
+
+      assert has_element?(
+               view,
+               "#plugin-settings-form p",
+               "For example http://ollama.lan:11434 This address may be on your local network."
+             )
+    end
+
     test "configuring a host-granting url grants its host (R5, R6)", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
@@ -510,8 +1045,12 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#approve-webhook-notifier") |> render_click()
-      assert has_element?(view, "#approval-host-grant")
-      assert render(view) =~ "Webhook / server URL"
+
+      assert has_element?(
+               view,
+               "#approval-capabilities-group-talks_to",
+               "The server you enter in Webhook / server URL"
+             )
     end
 
     test "a plugin without a settings schema shows a disabled Settings button with a reason",
@@ -740,7 +1279,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/plugins")
       view |> element("#details-plex") |> render_click()
 
-      refute has_element?(view, "#detail-host-grant")
+      refute render(view) =~ "The server you enter in"
     end
 
     test "a multi_instance plugin with page writes keeps Settings button enabled", %{conn: conn} do
@@ -926,6 +1465,78 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       config = Settings.get_plugin_config_by_slug("webhook-notifier")
       assert config.settings["webhook_url"] == "https://env.example.com/x"
       assert config.settings["target"] == "ntfy"
+    end
+  end
+
+  describe "descriptions" do
+    @long_description String.duplicate(
+                        "Posts a note to the household channel whenever something lands. ",
+                        4
+                      )
+
+    test "a store row shows the full description, clamped, with a toggle" do
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [
+          %CatalogItem{
+            entry: %Entry{
+              slug: "notifier",
+              name: "Notifier",
+              version: "1.0.0",
+              description: @long_description,
+              package_url: "https://cdn.test/notifier.wasm",
+              integrity: "sha256:ab",
+              manifest: nil
+            },
+            state: :not_installed
+          }
+        ]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      text =
+        doc |> LazyHTML.query("#catalog-description-official-notifier-text") |> LazyHTML.text()
+
+      assert String.trim(text) == String.trim(@long_description)
+
+      refute doc
+             |> LazyHTML.query("#catalog-description-official-notifier-toggle")
+             |> Enum.empty?()
+    end
+
+    test "a short description has no toggle" do
+      html = render_component(&Components.plugin_description/1, id: "d", text: "Posts events.")
+
+      doc = LazyHTML.from_fragment(html)
+      refute doc |> LazyHTML.query("#d-text") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#d-toggle") |> Enum.empty?()
+    end
+
+    test "no description renders nothing" do
+      html = render_component(&Components.plugin_description/1, id: "d", text: nil)
+
+      assert LazyHTML.from_fragment(html) |> LazyHTML.query("#d") |> Enum.empty?()
+    end
+
+    test "an installed row and its details show the description", %{conn: conn} do
+      seed_described_plugin("notifier", "Notifier", @long_description,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert view |> element("#plugin-description-notifier-text") |> render() =~
+               "household channel"
+
+      assert has_element?(view, "#plugin-description-notifier-toggle[phx-click]")
+
+      view |> element("#details-notifier") |> render_click()
+
+      assert view |> element("#detail-modal #detail-description") |> render() =~
+               "household channel"
     end
   end
 end

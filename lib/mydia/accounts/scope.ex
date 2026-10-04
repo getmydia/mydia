@@ -15,6 +15,11 @@ defmodule Mydia.Accounts.Scope do
       jobs. Every intentional bypass is therefore greppable.
     * `unrestricted/0` is for tests that do not care about restrictions.
 
+  `for_user/1` skips the lookup while `Accounts.access_restrictions_possible?/0`
+  is false. Every app path that writes a restriction flips it, but a row written
+  outside the app (raw SQL, a database restore) is ignored until the next
+  restart.
+
   This struct holds data only. Query composition lives in
   `Mydia.Media.Restrictions`.
   """

@@ -37,6 +37,8 @@ defmodule Mydia.Jobs.MovieSearch do
   alias Mydia.Accounts.Scope
   alias Mydia.Downloads.{Blacklists, Download}
   alias Mydia.Indexers.{RankingOptions, ReleaseIdentity}
+  alias Mydia.Indexers.GrabDelay
+  alias Mydia.Jobs.SearchDeferral
   alias Mydia.Indexers.QualityProfileResolver
   alias Mydia.Indexers.ReleaseRanker
   alias Mydia.Library
@@ -59,7 +61,9 @@ defmodule Mydia.Jobs.MovieSearch do
       :size_range,
       :blocked_tags,
       :preferred_tags,
-      :reasons
+      :reasons,
+      bypass_delay: false,
+      recheck: false
     ]
 
     @type t :: %__MODULE__{
@@ -70,10 +74,24 @@ defmodule Mydia.Jobs.MovieSearch do
             size_range: term() | nil,
             blocked_tags: [String.t()] | nil,
             preferred_tags: [String.t()] | nil,
-            reasons: [:quality | :language] | nil
+            reasons: [:quality | :language] | nil,
+            bypass_delay: boolean(),
+            recheck: boolean()
           }
 
-    def parse(%{"mode" => "all_monitored"} = raw) do
+    # bypass_delay is set only by searches the user started (Search buttons,
+    # search on add, GraphQL); they skip the profile's grab delay. See
+    # Mydia.Indexers.GrabDelay. recheck is set only on the re-check a delayed
+    # grab schedules.
+    def parse(raw) do
+      %{
+        do_parse(raw)
+        | bypass_delay: Map.get(raw, "bypass_delay") == true,
+          recheck: Map.get(raw, "recheck") == true
+      }
+    end
+
+    defp do_parse(%{"mode" => "all_monitored"} = raw) do
       %__MODULE__{
         mode: "all_monitored",
         min_seeders: Map.get(raw, "min_seeders"),
@@ -83,7 +101,7 @@ defmodule Mydia.Jobs.MovieSearch do
       }
     end
 
-    def parse(%{"mode" => "specific", "media_item_id" => media_item_id} = raw) do
+    defp do_parse(%{"mode" => "specific", "media_item_id" => media_item_id} = raw) do
       %__MODULE__{
         mode: "specific",
         media_item_id: media_item_id,
@@ -94,13 +112,13 @@ defmodule Mydia.Jobs.MovieSearch do
       }
     end
 
-    def parse(
-          %{
-            "mode" => "upgrade",
-            "media_item_id" => media_item_id,
-            "media_file_id" => media_file_id
-          } = raw
-        ) do
+    defp do_parse(
+           %{
+             "mode" => "upgrade",
+             "media_item_id" => media_item_id,
+             "media_file_id" => media_file_id
+           } = raw
+         ) do
       %__MODULE__{
         mode: "upgrade",
         media_item_id: media_item_id,
@@ -201,6 +219,13 @@ defmodule Mydia.Jobs.MovieSearch do
         media_item = Media.get_media_item!(Scope.system(), media_item_id)
 
         case media_item do
+          %MediaItem{type: "movie", monitored: false} when args.recheck ->
+            Logger.info("Skipping grab-delay re-check - movie is no longer monitored",
+              media_item_id: media_item_id
+            )
+
+            :skipped
+
           %MediaItem{type: "movie"} = movie ->
             search_movie_with_stats(movie, args)
 
@@ -221,6 +246,9 @@ defmodule Mydia.Jobs.MovieSearch do
     duration = System.monotonic_time(:millisecond) - start_time
 
     case result do
+      :skipped ->
+        :ok
+
       {:ok, stats} ->
         Logger.info("Movie search completed",
           duration_ms: duration,
@@ -276,6 +304,14 @@ defmodule Mydia.Jobs.MovieSearch do
     )
 
     case load_upgrade_target(media_item_id, media_file_id) do
+      {:ok, %MediaItem{monitored: false}, _file} when args.recheck ->
+        Logger.info("Skipping grab-delay re-check - movie is no longer monitored",
+          media_item_id: media_item_id,
+          media_file_id: media_file_id
+        )
+
+        {:ok, :skipped}
+
       {:ok, movie, file} ->
         search_movie_upgrade(movie, file, args)
         :ok
@@ -383,8 +419,8 @@ defmodule Mydia.Jobs.MovieSearch do
     results = reject_blacklisted(results, movie: movie)
     ranking_opts = build_ranking_options(movie, args)
 
-    case ReleaseRanker.select_best_result(results, ranking_opts) do
-      nil ->
+    case select_release(results, ranking_opts, args) do
+      :none ->
         Logger.warning("No suitable results after ranking for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -400,7 +436,11 @@ defmodule Mydia.Jobs.MovieSearch do
 
         {:no_results, 0}
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        defer_grab(movie, args, until, best, query, length(results))
+        {:ok, 0}
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best result for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -474,7 +514,9 @@ defmodule Mydia.Jobs.MovieSearch do
       |> having([m, mf], count(mf.id) == 0)
       |> Repo.all()
 
-    filter_movies_in_backoff(movies)
+    movies
+    |> filter_movies_in_backoff()
+    |> filter_movies_awaiting_recheck()
   end
 
   # media_item_ids with an in-flight download (still in client, not failed).
@@ -500,6 +542,23 @@ defmodule Mydia.Jobs.MovieSearch do
     end
 
     eligible
+  end
+
+  # A movie held by the grab delay has a re-check scheduled for when the delay
+  # ends; searching it before then cannot grab anything.
+  defp filter_movies_awaiting_recheck(movies) do
+    waiting_ids =
+      SearchDeferral.pending_rechecks(__MODULE__)
+      |> Enum.filter(&(&1["mode"] in ["specific", "upgrade"]))
+      |> MapSet.new(& &1["media_item_id"])
+
+    {waiting, ready} = Enum.split_with(movies, &MapSet.member?(waiting_ids, &1.id))
+
+    if waiting != [] do
+      Logger.info("Skipping #{length(waiting)} movies waiting on the grab delay")
+    end
+
+    ready
   end
 
   # `opts` lets a caller thread through the two things that differ between the
@@ -605,8 +664,8 @@ defmodule Mydia.Jobs.MovieSearch do
     ranking_opts = build_ranking_options(movie, args)
     resource_types = Keyword.get(opts, :backoff_resource_types, ["movie"])
 
-    case ReleaseRanker.select_best_result(candidates, ranking_opts) do
-      nil ->
+    case select_release(candidates, ranking_opts, args) do
+      :none ->
         Logger.warning("No suitable results after ranking for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -625,7 +684,11 @@ defmodule Mydia.Jobs.MovieSearch do
 
         :no_results
 
-      %{result: best_result, score: score, breakdown: breakdown} ->
+      {:wait, until, best} ->
+        defer_grab(movie, args, until, best, query, length(results))
+        :ok
+
+      {:grab, %{result: best_result, score: score, breakdown: breakdown}} ->
         Logger.info("Selected best result for movie",
           media_item_id: movie.id,
           title: movie.title,
@@ -667,6 +730,40 @@ defmodule Mydia.Jobs.MovieSearch do
             :no_results
         end
     end
+  end
+
+  defp select_release(candidates, ranking_opts, %Args{} = args) do
+    candidates
+    |> ReleaseRanker.rank_all(ranking_opts)
+    |> GrabDelay.select(ranking_opts, DateTime.utc_now(), bypass: args.bypass_delay)
+  end
+
+  # The re-check targets the same unit: an upgrade re-checks as that upgrade,
+  # anything else as a search for this one movie.
+  # The "recheck" marker tells the job it may be running long after it was
+  # scheduled, so it must not grab for an item that was unmonitored meanwhile
+  # (user-started searches legitimately run on unmonitored items).
+  defp recheck_args(movie, %Args{mode: "upgrade"} = args) do
+    %{
+      "mode" => "upgrade",
+      "media_item_id" => movie.id,
+      "media_file_id" => args.media_file_id,
+      "reasons" => Reasons.encode(args.reasons),
+      "recheck" => true
+    }
+  end
+
+  defp recheck_args(movie, _args) do
+    %{"mode" => "specific", "media_item_id" => movie.id, "recheck" => true}
+  end
+
+  defp defer_grab(movie, args, until, %{result: best, score: score}, query, results_count) do
+    SearchDeferral.defer(__MODULE__, recheck_args(movie, args), until, movie, %{
+      "query" => query,
+      "results_count" => results_count,
+      "selected_release" => best.title,
+      "score" => score
+    })
   end
 
   defp build_ranking_options(movie, %Args{} = args) do

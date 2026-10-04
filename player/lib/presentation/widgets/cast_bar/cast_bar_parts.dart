@@ -1,8 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
+import '../artwork_image.dart';
 
 /// The status dot's meaning, not its color.
 enum CastDot { live, idle, lost }
@@ -162,13 +162,13 @@ class CastThumb extends StatelessWidget {
         child: SizedBox(
           width: 34,
           height: 50,
-          child: CachedNetworkImage(
+          child: ArtworkImage(
             imageUrl: url,
             fit: BoxFit.cover,
             cacheManager: PosterCacheManager(),
-            placeholder: (_, __) => ColoredBox(
+            placeholder: (_) => ColoredBox(
                 color: AppColors.textPrimary.withValues(alpha: 0.06)),
-            errorWidget: (_, __, ___) => fallback,
+            errorWidget: (_) => fallback,
           ),
         ),
       ),

@@ -127,4 +127,77 @@ void main() {
     final icon = tester.widget<Icon>(find.byIcon(Icons.download_done_rounded));
     expect(icon.color, AppColors.success);
   });
+
+  group('compact', () {
+    // Align keeps the row from being stretched by the Scaffold body's tight
+    // constraints, so its width is whatever it asks for.
+    Widget compactRow({required bool allActions}) => _host(Align(
+          alignment: Alignment.topLeft,
+          child: DetailActionRow(
+            watched: false,
+            onToggleWatched: () {},
+            isFavorite: false,
+            onToggleFavorite: () {},
+            onDownload: () {},
+            trailerUrl: allActions ? 'https://example.com/trailer' : null,
+            showDownload: allActions,
+            onShowMediaInfo: allActions ? () {} : null,
+            compact: true,
+          ),
+        ));
+
+    testWidgets('five actions take five 64px slots', (tester) async {
+      await tester.pumpWidget(compactRow(allActions: true));
+
+      expect(tester.getSize(find.byType(DetailActionRow)).width, 320);
+      for (final label in [
+        'Watched',
+        'Favorite',
+        'Download',
+        'Trailer',
+        'Info'
+      ]) {
+        final slot = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(InkWell),
+        );
+        expect(tester.getSize(slot).width, 64, reason: label);
+      }
+    });
+
+    testWidgets('two actions shrink the row to 128px', (tester) async {
+      await tester.pumpWidget(compactRow(allActions: false));
+
+      expect(tester.getSize(find.byType(DetailActionRow)).width, 128);
+    });
+
+    testWidgets('labels stay on one line and fade instead of clipping',
+        (tester) async {
+      await tester.pumpWidget(compactRow(allActions: true));
+
+      final label = tester.widget<Text>(find.text('Download'));
+      expect(label.maxLines, 1);
+      expect(label.softWrap, isFalse);
+      expect(label.overflow, TextOverflow.fade);
+    });
+  });
+
+  testWidgets('non-compact row fills its parent width', (tester) async {
+    await tester.pumpWidget(_host(Align(
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: 500,
+        child: DetailActionRow(
+          watched: false,
+          onToggleWatched: () {},
+          isFavorite: false,
+          onToggleFavorite: () {},
+          onDownload: () {},
+          trailerUrl: null,
+        ),
+      ),
+    )));
+
+    expect(tester.getSize(find.byType(DetailActionRow)).width, 500);
+  });
 }

@@ -218,6 +218,10 @@ class LoginController extends _$LoginController {
         throw Exception(result.error ?? 'Pairing failed');
       }
 
+      // Before the mounted check: the server has already registered this
+      // device, so its credentials are kept even if the screen went away.
+      await pairingService.saveHomeCredentials(result.credentials!);
+
       // Check if still mounted before updating state
       if (!ref.mounted) {
         debugPrint(
@@ -233,7 +237,7 @@ class LoginController extends _$LoginController {
       final authService = ref.read(authServiceProvider);
 
       // Store access token for GraphQL/API authentication (typ: access)
-      // Media token is already stored by PairingService for streaming
+      // Media token was stored by saveHomeCredentials above
       await authService.setSession(
         token: credentials.accessToken,
         serverUrl: credentials.serverUrl,
@@ -471,6 +475,10 @@ class LoginController extends _$LoginController {
         throw Exception(result.error ?? 'Pairing failed');
       }
 
+      // Before the mounted check: the server has already registered this
+      // device, so its credentials are kept even if the screen went away.
+      await pairingService.saveHomeCredentials(result.credentials!);
+
       // Check if still mounted before updating state
       if (!ref.mounted) return;
 
@@ -481,7 +489,7 @@ class LoginController extends _$LoginController {
       final authService = ref.read(authServiceProvider);
 
       // Store access token for GraphQL/API authentication (typ: access)
-      // Media token is already stored by PairingService for streaming
+      // Media token was stored by saveHomeCredentials above
       await authService.setSession(
         token: credentials.accessToken,
         serverUrl: credentials.serverUrl,

@@ -21,7 +21,8 @@ defmodule Mydia.RelayGuard.BlockedError do
     Tests must not reach the network. Warm the metadata cache with
     Mydia.MetadataCacheHelpers (warm_recommendations_cache/3,
     warm_movie_details_cache/1, warm_collection_cache/2, warm_trending_cache/2,
-    warm_genre_cache/2, warm_movie_search_cache/3), or serve the response from
+    warm_genre_cache/2, warm_movie_search_cache/3,
+    warm_remote_signals/3, warm_tvdb_rating_fallback/1), or serve the response from
     Bypass on localhost.
     """
   end

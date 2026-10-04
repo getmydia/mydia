@@ -42,7 +42,6 @@ void main() {
       // A parse or lookup regression here would make every case below vacuous.
       expect(rootFields[OperationType.query], isNotEmpty);
       expect(rootFields[OperationType.mutation], isNotEmpty);
-      expect(rootFields[OperationType.subscription], isNotEmpty);
       expect(rootFields[OperationType.mutation], contains('toggleFavorite'));
     });
 
@@ -126,8 +125,8 @@ void main() {
 
 /// Maps each operation type to the field names of its root object, honouring
 /// the schema's own `schema { query: ... }` block rather than assuming the
-/// conventional `Query`/`Mutation` names. Mydia's roots are `RootQueryType`,
-/// `RootMutationType`, and `RootSubscriptionType`.
+/// conventional `Query`/`Mutation` names. Mydia's roots are `RootQueryType`
+/// and `RootMutationType`.
 Map<OperationType, Set<String>> _rootFieldsByOperation(DocumentNode schema) {
   final rootTypeNames = <OperationType, String>{};
   final objectFields = <String, Set<String>>{};
@@ -175,6 +174,9 @@ List<_Document> _collectDocuments() {
         path.endsWith('.freezed.dart')) {
       continue;
     }
+    // Stash's own GraphQL schema, sent to a Stash server, never Mydia's.
+    // These documents cannot conform to Mydia's schema by design.
+    if (path.contains('lib/core/sources/stash/')) continue;
 
     for (final match in _tripleQuoted.allMatches(entity.readAsStringSync())) {
       final isRaw = match.group(1) == 'r';

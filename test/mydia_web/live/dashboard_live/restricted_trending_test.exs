@@ -10,6 +10,7 @@ defmodule MydiaWeb.DashboardLive.RestrictedTrendingTest do
   use Mydia.DataCase, async: false
 
   import Mydia.AccountsFixtures
+  import Mydia.MetadataCacheHelpers, only: [warm_remote_signals: 3]
 
   alias Mydia.Accounts.Scope
   alias Mydia.Metadata.Cache
@@ -30,6 +31,9 @@ defmodule MydiaWeb.DashboardLive.RestrictedTrendingTest do
         genre_ids: []
       }
     ])
+
+    # A hit with no genre or origin is classified from a per-title lookup.
+    warm_remote_signals({:tmdb, 4101}, :movie, %Mydia.Media.RemoteSignals{category: "movie"})
 
     :ok
   end

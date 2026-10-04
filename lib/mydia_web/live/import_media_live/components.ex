@@ -13,6 +13,7 @@ defmodule MydiaWeb.ImportMediaLive.Components do
 
   alias Mydia.Library.ImportCandidateGroup
   alias Mydia.Metadata.ImageUrl
+  alias Mydia.Settings.LibraryPath
 
   @doc """
   Page-level tabs for switching the library shared by scanning and review.
@@ -27,6 +28,8 @@ defmodule MydiaWeb.ImportMediaLive.Components do
   attr :active_library_ids, :list, default: []
 
   def library_picker(assigns) do
+    assigns = assign(assigns, :labels, LibraryPath.display_names(assigns.library_paths))
+
     ~H"""
     <div
       id="library-tabs"
@@ -59,7 +62,9 @@ defmodule MydiaWeb.ImportMediaLive.Components do
           }
           class="w-4 h-4 opacity-70"
         />
-        <span class="max-w-52 truncate">{path.path}</span>
+        <span class="max-w-52 truncate" title={path.path}>
+          {@labels[path.id]}
+        </span>
         <span
           :if={path.id in @active_library_ids}
           class="loading loading-spinner loading-xs text-primary"

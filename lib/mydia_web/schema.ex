@@ -23,7 +23,6 @@ defmodule MydiaWeb.Schema do
   import_types(MydiaWeb.Schema.MediaTypes)
   import_types(MydiaWeb.Schema.QueryTypes)
   import_types(MydiaWeb.Schema.MutationTypes)
-  import_types(MydiaWeb.Schema.SubscriptionTypes)
 
   query do
     import_fields(:browse_queries)
@@ -48,11 +47,6 @@ defmodule MydiaWeb.Schema do
     import_fields(:streaming_mutations)
     import_fields(:download_mutations)
     import_fields(:subtitle_mutations)
-  end
-
-  subscription do
-    import_fields(:playback_subscriptions)
-    import_fields(:device_subscriptions)
   end
 
   # Root fields that must stay reachable without an authenticated user: logging
@@ -81,7 +75,7 @@ defmodule MydiaWeb.Schema do
   unless it is explicitly listed in `@public_fields`.
   """
   def middleware(middleware, field, %{identifier: object})
-      when object in [:query, :mutation, :subscription] do
+      when object in [:query, :mutation] do
     if field.identifier in @public_fields or field.identifier in @introspection_fields do
       middleware
     else

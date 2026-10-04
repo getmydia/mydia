@@ -25,6 +25,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
 
   def refresh_metadata(_params, socket) do
     media_item = socket.assigns.media_item
+    scope = socket.assigns.current_scope
 
     case ProviderSwitch.provider_refresh_decision(media_item) do
       {:reidentify, target} ->
@@ -35,7 +36,7 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
          |> assign(:reidentifying, true)
          |> put_flash(:info, "Re-identifying on #{provider_label(target)}...")
          |> start_async(:reidentify_search, fn ->
-           {target, ProviderSwitch.find_reidentify_candidate(media_item, target)}
+           {target, ProviderSwitch.find_reidentify_candidate(media_item, target, nil, scope)}
          end)}
 
       :refetch ->
@@ -499,20 +500,27 @@ defmodule MydiaWeb.MediaLive.Show.FileEvents do
       ) do
     media_item = socket.assigns.media_item
 
-    case Downloads.DownloadService.prepare_by_file(media_file_id, resolution) do
-      {:ok, _job_info} ->
-        {:noreply,
-         socket
-         |> assign(:transcode_jobs, load_transcode_jobs(media_item))
-         |> put_flash(:info, "Pre-transcode started for #{resolution}")}
+    case Mydia.Media.authorize_media_file_id(socket.assigns.current_scope, media_file_id) do
+      {:ok, _file} ->
+        case Downloads.DownloadService.prepare_by_file(media_file_id, resolution) do
+          {:ok, _job_info} ->
+            {:noreply,
+             socket
+             |> assign(:transcode_jobs, load_transcode_jobs(media_item))
+             |> put_flash(:info, "Pre-transcode started for #{resolution}")}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to start pre-transcode: #{inspect(reason)}")}
+          {:error, reason} ->
+            {:noreply,
+             put_flash(socket, :error, "Failed to start pre-transcode: #{inspect(reason)}")}
+        end
+
+      :denied ->
+        {:noreply, put_flash(socket, :error, "Media file not found")}
     end
   end
 
   def cancel_transcode(%{"job-id" => job_id}, socket) do
-    case Downloads.DownloadService.cancel_job(job_id) do
+    case Downloads.DownloadService.cancel_job(socket.assigns.current_scope, job_id) do
       {:ok, :cancelled} ->
         media_item = socket.assigns.media_item
 

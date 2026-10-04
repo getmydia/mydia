@@ -208,7 +208,10 @@ defmodule Mydia.Streaming.HlsSession do
     GenServer.cast(pid, :notify_ready)
   end
 
-  @segment_wait_timeout 10_000
+  # Under mpv's 5s network-timeout, which media_kit sets and the player does
+  # not override. At 10s mpv dropped the connection before the controller's 503
+  # was ever sent, so its retry never saw Retry-After and counted a network error.
+  @segment_wait_timeout 4_000
 
   @doc """
   Resolves a segment to an on-disk path, waiting or relocating the encoder as
@@ -1171,6 +1174,7 @@ defmodule Mydia.Streaming.HlsSession do
         %{
           state
           | backend_pid: backend_pid,
+            backend_opts: opts,
             window: TranscodeWindow.relocate(state.window, target),
             window_generation: generation
         }

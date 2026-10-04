@@ -251,8 +251,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     );
   }
 
-  /// Shared close/cancel control for the idle, connecting, offline and
-  /// ambient rows.
+  /// Shared close/cancel control for every row of the bar.
   Widget _closeButton({
     required Key key,
     required String tooltip,
@@ -274,7 +273,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   /// Width of each outer transport-row slot. Fixed rather than the button's
   /// own size so the row stays symmetric at every visual density: an
   /// IconButton is 48 wide on a phone but 40 on desktop (compact density).
-  static const double _transportSlot = 48;
+  /// 44 rather than 48 so the three slots a side a Mydia target shows still
+  /// fit a 360px phone.
+  static const double _transportSlot = 44;
 
   /// One outer transport slot. An absent control still takes its width, so
   /// play/pause stays centered whichever optional controls apply.
@@ -501,9 +502,22 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     if (info == null) return const SizedBox.shrink();
 
     final durationKnown = hasKnownDuration(info.duration);
+
+    // Everything below that sends a command is held back while the session
+    // is catching up with the receiver: the position and play state on
+    // screen may be minutes old, so a tap would seek relative to the wrong
+    // place or toggle the wrong way. Detach and stop stay live; neither
+    // depends on what the receiver is doing.
+    final syncing = session.isSyncing;
+
+    // A drag that syncing interrupts never reaches `onChangeEnd`, which is
+    // null while syncing. Dropped here, or the thumb would stay parked where
+    // the finger left it after the session catches up.
+    if (syncing) _dragFraction = null;
     final value =
         _dragFraction ?? castProgressFraction(info.position, info.duration);
     final isPlaying = session.playbackState == CastPlaybackState.playing;
+    final isMydia = session.device.protocol == CastProtocolKind.mydia;
 
     return CastPill(
       child: Column(
@@ -512,27 +526,30 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
           CastBarRow(
             leading: CastThumb(imageUrl: info.imageUrl),
             title: info.title,
-            status: 'Casting to ${session.device.name}',
-            dot: CastDot.live,
+            status: syncing
+                ? 'Reconnecting to ${session.device.name}…'
+                : 'Casting to ${session.device.name}',
+            dot: syncing ? CastDot.idle : CastDot.live,
             actions: [
-              // Mydia only: its disconnect is local bookkeeping and sends
-              // nothing to the target. Whether a Chromecast receiver keeps
-              // playing once dart_cast closes its session is unverified.
-              if (session.device.protocol == CastProtocolKind.mydia)
-                IconButton(
-                  key: const Key('cast-bar-detach'),
-                  icon: const Icon(Icons.link_off, size: 18),
-                  color: AppColors.textSecondary,
-                  tooltip: 'Disconnect, keep playing on ${session.device.name}',
+              // What the close button does depends on whether this device
+              // can let go without cutting the stream. `detach()` ends the
+              // HLS streaming session and LAN serving on its way out. A
+              // Mydia target resolves its own stream against the server, so
+              // it carries on and closing only hides the bar. A Chromecast
+              // is playing the stream this device set up, so there closing
+              // can only mean stop, and that still asks first.
+              if (isMydia)
+                _closeButton(
+                  key: const Key('cast-bar-dismiss'),
+                  tooltip: 'Hide, keep playing on ${session.device.name}',
                   onPressed: () => _detach(session),
+                )
+              else
+                _closeButton(
+                  key: const Key('cast-bar-stop'),
+                  tooltip: 'Stop casting',
+                  onPressed: () => _confirmStop(session.device),
                 ),
-              // Confirmed, unlike the idle/connecting close: media is
-              // actively playing here.
-              _closeButton(
-                key: const Key('cast-bar-stop'),
-                tooltip: 'Stop casting',
-                onPressed: () => _confirmStop(session.device),
-              ),
             ],
           ),
           SliderTheme(
@@ -561,10 +578,10 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                       // Null disables the control outright. Leaving it live
                       // against an unknown duration resolves every drag to
                       // `fraction * -1s`, i.e. the start.
-                      onChanged: durationKnown
+                      onChanged: durationKnown && !syncing
                           ? (v) => setState(() => _dragFraction = v)
                           : null,
-                      onChangeEnd: durationKnown
+                      onChangeEnd: durationKnown && !syncing
                           ? (v) async {
                               final target =
                                   seekTargetForFraction(v, info.duration);
@@ -606,21 +623,35 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                               ? Icons.closed_caption_off
                               : Icons.closed_caption,
                         ),
-                        onPressed: () => _pickSubtitle(session),
+                        onPressed:
+                            syncing ? null : () => _pickSubtitle(session),
                       )),
+                // Mydia only: on a Chromecast the header close button is
+                // already the stop control. Confirmed, because media is
+                // actively playing on someone else's screen.
+                if (isMydia)
+                  _slot(IconButton(
+                    key: const Key('cast-bar-stop'),
+                    icon: const Icon(Icons.stop),
+                    color: AppColors.textPrimary,
+                    tooltip: 'Stop playback on ${session.device.name}',
+                    onPressed: () => _confirmStop(session.device),
+                  )),
                 _slot(IconButton(
                   key: const Key('cast-bar-rewind'),
                   icon: const Icon(Icons.replay_10),
                   color: AppColors.textPrimary,
                   tooltip: 'Back 10 seconds',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    await manager.seek(clampSeekTarget(
-                      info.position - const Duration(seconds: 10),
-                      info.duration,
-                    ));
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          await manager.seek(clampSeekTarget(
+                            info.position - const Duration(seconds: 10),
+                            info.duration,
+                          ));
+                        },
                 )),
                 IconButton.filled(
                   key: const Key('cast-bar-play-pause'),
@@ -633,44 +664,50 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
                     foregroundColor: AppColors.onPrimary,
                   ),
                   tooltip: isPlaying ? 'Pause' : 'Play',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    if (isPlaying) {
-                      await manager.pause();
-                    } else {
-                      await manager.play();
-                    }
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          if (isPlaying) {
+                            await manager.pause();
+                          } else {
+                            await manager.play();
+                          }
+                        },
                 ),
                 _slot(IconButton(
                   key: const Key('cast-bar-forward'),
                   icon: const Icon(Icons.forward_10),
                   color: AppColors.textPrimary,
                   tooltip: 'Forward 10 seconds',
-                  onPressed: () async {
-                    final manager =
-                        await ref.read(castSessionManagerProvider.future);
-                    await manager.seek(clampSeekTarget(
-                      info.position + const Duration(seconds: 10),
-                      info.duration,
-                    ));
-                  },
+                  onPressed: syncing
+                      ? null
+                      : () async {
+                          final manager =
+                              await ref.read(castSessionManagerProvider.future);
+                          await manager.seek(clampSeekTarget(
+                            info.position + const Duration(seconds: 10),
+                            info.duration,
+                          ));
+                        },
                 )),
                 // Pull: only a Mydia target runs this same app, so only one
                 // can hand playback back to this device at its exact
                 // position. Shown for a self-started cast too, not just an
                 // adopted one: bringing your own cast back is exactly as
                 // valid a thing to want as pulling someone else's.
-                _slot(session.device.protocol == CastProtocolKind.mydia
+                _slot(isMydia
                     ? IconButton(
                         key: const Key('cast-bar-pull'),
                         icon: const Icon(Icons.phone_iphone),
                         color: AppColors.textPrimary,
                         tooltip: 'Play on this device',
-                        onPressed: _pullToLocal,
+                        onPressed: syncing ? null : _pullToLocal,
                       )
                     : null),
+                // Balances the stop slot so play/pause stays centered.
+                if (isMydia) _slot(null),
               ],
             ),
           ),
@@ -803,7 +840,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     }
   }
 
-  /// Stops controlling the target and leaves it playing.
+  /// Stops controlling the target and leaves it playing. This is what the
+  /// playing row's close button does on a Mydia target.
   ///
   /// The dismissal goes in before `detach()` publishes null. The other way
   /// round, the ambient "Playing on" row for this same item can flash up for

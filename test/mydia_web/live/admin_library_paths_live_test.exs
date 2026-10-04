@@ -90,6 +90,30 @@ defmodule MydiaWeb.AdminLibraryPathsLiveTest do
       refute has_element?(view, ~s{div[class*="modal-open"]})
     end
 
+    test "saves a display name and shows it on the card", %{view: view} do
+      test_dir =
+        Path.join(System.tmp_dir!(), "test_named_#{:erlang.unique_integer([:positive])}")
+
+      File.mkdir_p!(test_dir)
+      on_exit(fn -> File.rm_rf(test_dir) end)
+
+      view
+      |> element(~s{button[phx-click="new_library_path"]})
+      |> render_click()
+
+      view
+      |> form("#library-path-form",
+        library_path: %{path: test_dir, type: "movies", monitored: "true", name: "Kids Movies"}
+      )
+      |> render_submit()
+
+      Process.sleep(100)
+
+      library_path = Enum.find(Mydia.Settings.list_library_paths(), &(&1.path == test_dir))
+      assert library_path.name == "Kids Movies"
+      assert has_element?(view, "#library-path-#{library_path.id}-name", "Kids Movies")
+    end
+
     test "shows TV metadata source select for series libraries and persists it", %{view: view} do
       test_dir =
         Path.join(System.tmp_dir!(), "test_series_#{:erlang.unique_integer([:positive])}")

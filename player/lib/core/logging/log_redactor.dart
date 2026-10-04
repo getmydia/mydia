@@ -79,6 +79,8 @@ String redactLogMessage(String input) {
     _quotedCredential,
     (m) => '${m[1]}${m[2]![0]}[REDACTED]${m[2]![0]}',
   );
+  out =
+      out.replaceAllMapped(sourceCredentialPattern, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_userinfo, (m) => '${m[1]}[REDACTED]@');
   out = out.replaceAllMapped(_credentialParam, (m) => '${m[1]}[REDACTED]');
   out = out.replaceAllMapped(_authorization, (m) => '${m[1]}[REDACTED]');

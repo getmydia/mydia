@@ -17,6 +17,8 @@ defmodule MydiaWeb.AddMediaComponents do
   """
   use MydiaWeb, :html
 
+  alias Mydia.Settings.LibraryPath
+
   @doc """
   Renders the five controls that decide how an item is added.
 
@@ -36,11 +38,14 @@ defmodule MydiaWeb.AddMediaComponents do
   attr :quality_profiles, :list, default: []
 
   def add_config_fields(assigns) do
+    assigns =
+      assign(assigns, :library_labels, LibraryPath.display_names(assigns.config.libraries))
+
     ~H"""
-    <%!-- Library Path --%>
+    <%!-- Library --%>
     <div class="form-control mb-4">
       <label class="label">
-        <span class="label-text font-semibold">Root Folder</span>
+        <span class="label-text font-semibold">Library</span>
         <span class="label-text-alt text-error">*</span>
       </label>
       <%= if @config.libraries == [] do %>
@@ -50,10 +55,10 @@ defmodule MydiaWeb.AddMediaComponents do
         </div>
       <% else %>
         <select name="config[library_path_id]" class="select select-bordered" required>
-          <option value="">Select a folder...</option>
+          <option value="">Select a library...</option>
           <%= for path <- @config.libraries do %>
             <option value={path.id} selected={@config.defaults.library_path_id == path.id}>
-              {Path.basename(path.path)} · {path.path}
+              {@library_labels[path.id]}
             </option>
           <% end %>
         </select>

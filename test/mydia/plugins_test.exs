@@ -84,6 +84,60 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "install/2 and approve/2 (AE1, R7, deny-by-default)" do
+    test "installing a store build over a sideload replaces it", %{bypass: bypass} do
+      wasm = guest_wasm()
+      sideload = manifest!()
+
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "file:///home/op/webhook-notifier.wasm",
+          manifest: Plugins.manifest_to_map(sideload),
+          wasm_module: wasm,
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      assert {:ok, _} = Plugins.approve("webhook-notifier")
+      [{old_pool, _}] = Elixir.Registry.lookup(Mydia.Plugins.PoolRegistry, "webhook-notifier")
+
+      serve_package(bypass, wasm)
+      store = manifest!(%{"version" => "1.1.0"})
+      assert {:ok, _} = Plugins.install(entry(bypass, store, wasm), gate_opts())
+
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      assert config.version == "1.1.0"
+      assert config.source_url == "http://allowed.test:#{bypass.port}/pkg.wasm"
+
+      # The sideload's pool is stopped and a fresh one serves the store build.
+      assert [{new_pool, _}] =
+               Elixir.Registry.lookup(Mydia.Plugins.PoolRegistry, "webhook-notifier")
+
+      refute new_pool == old_pool
+    end
+
+    test "refuses to replace a bundled plugin from the store", %{bypass: bypass} do
+      {:ok, _} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "bundled",
+          granted_capabilities: %{},
+          enabled: false
+        })
+
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+
+      assert {:error, %{type: :invalid_config}} =
+               Plugins.install(entry(bypass, manifest!(), wasm), gate_opts())
+
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").source_url == "bundled"
+    end
+
     test "installing without grants does not activate; approving then activates with exactly the declared grants",
          %{bypass: bypass} do
       wasm = guest_wasm()
@@ -114,6 +168,39 @@ defmodule Mydia.PluginsTest do
       assert descriptor.enabled
       assert descriptor.granted_capabilities["net:http"] == ["discord.com"]
       assert Host.running?("webhook-notifier")
+    end
+
+    test "install pins the entry's source, and an official reinstall clears it", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      manifest = manifest!()
+      serve_package(bypass, wasm)
+
+      {:ok, source} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://third-party.test/index.json",
+          public_key: Mydia.MinisignFixtures.keypair().public
+        })
+
+      third_party = %{entry(bypass, manifest, wasm) | source_id: source.id}
+      assert {:ok, _} = Plugins.install(third_party, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == source.id
+
+      official = %{entry(bypass, manifest, wasm) | source_id: nil}
+      assert {:ok, _} = Plugins.install(official, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == nil
+    end
+
+    test "a source removed before install returns an error instead of raising", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      gone = %{entry(bypass, manifest!(), wasm) | source_id: Ecto.UUID.generate()}
+
+      assert {:error, %Ecto.Changeset{}} = Plugins.install(gone, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier") == nil
     end
 
     test "a tampered package is rejected before anything is persisted", %{bypass: bypass} do
@@ -357,6 +444,24 @@ defmodule Mydia.PluginsTest do
       serve_package(bypass, wasm)
       {:ok, _} = Plugins.install(entry(bypass, manifest!(), wasm), gate_opts())
       :ok
+    end
+
+    test "revoke and remove purge the plugin's shelves" do
+      user = Mydia.AccountsFixtures.user_fixture()
+
+      for slug <- ["webhook-notifier", "other-plugin"] do
+        shelf = Mydia.ShelfHelpers.shelf_fixture(user, slug: slug)
+        Mydia.ShelfHelpers.shelf_item_fixture(shelf)
+      end
+
+      assert {:ok, :revoked} = Plugins.revoke("webhook-notifier")
+      assert [%{plugin_slug: "other-plugin"}] = Mydia.Repo.all(Mydia.Plugins.Shelf)
+
+      shelf = Mydia.ShelfHelpers.shelf_fixture(user, slug: "webhook-notifier")
+      Mydia.ShelfHelpers.shelf_item_fixture(shelf)
+
+      assert {:ok, :removed} = Plugins.remove("webhook-notifier")
+      assert [%{plugin_slug: "other-plugin"}] = Mydia.Repo.all(Mydia.Plugins.Shelf)
     end
 
     test "revoke clears grants and deactivates, keeping the config" do
@@ -755,6 +860,34 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "ensure_bundled/0 manifest reconciliation" do
+    test "a bundled plugin cannot be removed, so ensure_bundled never resurrects it" do
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "bundled",
+          enabled: false,
+          granted_capabilities: %{"net:http" => ["discord.com"]},
+          settings: %{"delivery" => "durable"},
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.0.0",
+            "capabilities" => %{"net:http" => ["discord.com"]}
+          }
+        })
+
+      assert {:error, %Mydia.Plugins.Error{type: :unsupported, message: message}} =
+               Plugins.remove("webhook-notifier")
+
+      assert message =~ "disable it instead"
+
+      assert :ok = Plugins.ensure_bundled()
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      refute config.enabled
+    end
+
     test "refreshes manifest and exact effective grant while preserving enabled state and settings" do
       settings = %{
         "target" => "ntfy",
@@ -918,17 +1051,42 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "detect_updates/2 (R14)" do
-    defp config(slug, version), do: %Mydia.Settings.PluginConfig{slug: slug, version: version}
+    defp config(slug, version, source_id \\ nil) do
+      %Mydia.Settings.PluginConfig{
+        slug: slug,
+        version: version,
+        source_url: "https://plugins.mydia.dev/packages/#{slug}/#{version}.wasm",
+        plugin_source_id: source_id
+      }
+    end
 
-    defp avail(slug, version) do
+    defp avail(slug, version, source_id \\ nil) do
       %Entry{
         slug: slug,
         name: slug,
         version: version,
         package_url: "https://x/#{slug}.wasm",
         integrity: "sha256:ab",
-        manifest: manifest!()
+        manifest: manifest!(),
+        source_id: source_id
       }
+    end
+
+    test "a third-party catalog cannot update an official plugin" do
+      assert [] =
+               Plugins.detect_updates([config("p", "1.0.0")], [
+                 avail("p", "9.0.0", Ecto.UUID.generate())
+               ])
+    end
+
+    test "a sourced plugin updates only from its own source" do
+      mine = Ecto.UUID.generate()
+
+      assert [%{latest: "1.1.0"}] =
+               Plugins.detect_updates([config("p", "1.0.0", mine)], [
+                 avail("p", "9.0.0"),
+                 avail("p", "1.1.0", mine)
+               ])
     end
 
     test "flags a slug with a newer available version" do

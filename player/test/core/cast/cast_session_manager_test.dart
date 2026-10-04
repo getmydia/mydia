@@ -234,7 +234,7 @@ void main() {
     CastSessionStore? store,
   }) {
     final fakeClient = MockGraphQLClient();
-    when(fakeClient.mutate(any)).thenAnswer(
+    when(fakeClient.mutate<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         source: QueryResultSource.network,
         data: const {},
@@ -269,7 +269,7 @@ void main() {
     lanCalls = [];
     lanBaseUrl = null;
     hasLanInterface = true;
-    when(client.mutate(any)).thenAnswer(
+    when(client.mutate<Object?>(any)).thenAnswer(
       (_) async => QueryResult(
         source: QueryResultSource.network,
         data: const {},
@@ -377,7 +377,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 5));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate(any));
+      verifyNever(client.mutate<Object?>(any));
     });
   });
 
@@ -666,7 +666,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verify(client.mutate(any)).called(1);
+      verify(client.mutate<Object?>(any)).called(1);
     });
 
     test('does not sync before a duration is known', () async {
@@ -677,7 +677,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate(any));
+      verifyNever(client.mutate<Object?>(any));
     });
 
     /// `-1` is the Chromecast's "I don't know" placeholder, not a length.
@@ -692,7 +692,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate(any));
+      verifyNever(client.mutate<Object?>(any));
     });
 
     test('updates the persisted position', () async {
@@ -726,7 +726,7 @@ void main() {
       // Counting calls alone would pass even if syncMoviePosition and
       // syncEpisodePosition were swapped — assert on the actual mutation
       // document sent, not just that *a* mutation fired.
-      final captured = verify(client.mutate(captureAny)).captured;
+      final captured = verify(client.mutate<Object?>(captureAny)).captured;
       expect(captured, hasLength(1));
       final options = captured.single as MutationOptions;
       expect(options.document, same(documentNodeMutationUpdateEpisodeProgress));
@@ -760,7 +760,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      final captured = verify(client.mutate(captureAny)).captured;
+      final captured = verify(client.mutate<Object?>(captureAny)).captured;
       expect(captured, hasLength(1));
       final options = captured.single as MutationOptions;
       expect(options.variables['durationSeconds'], 6420);
@@ -1010,7 +1010,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verify(client.mutate(any)).called(1);
+      verify(client.mutate<Object?>(any)).called(1);
     });
 
     test('marks a restored session stale when the receiver disconnects',
@@ -2485,6 +2485,37 @@ void main() {
       expect(manager.currentSession?.mediaInfo, isNull,
           reason: 'the existing media-less connect publishes no mediaInfo');
       expect(mydia.loadedRequests, isEmpty);
+    });
+
+    test('the session says so while the backend is catching up', () async {
+      final mydia = FakeSyncingCastBackend();
+      final manager = buildManagerWithBackends(
+        chromecast: FakeBackend(devices: const []),
+        mydia: mydia,
+        sessions: FakeStreamingSessionService(),
+      );
+      addTearDown(manager.dispose);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+      ));
+      expect(manager.currentSession?.isSyncing, isFalse);
+
+      mydia.emitSyncing(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isTrue);
+
+      // An ordinary republish must not drop the flag.
+      mydia.emitPosition(const Duration(minutes: 3));
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isTrue);
+
+      mydia.emitSyncing(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.currentSession?.isSyncing, isFalse);
     });
 
     test('a playing Mydia target is adopted without sending LoadContent',

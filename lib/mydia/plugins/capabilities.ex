@@ -23,8 +23,9 @@ defmodule Mydia.Plugins.Capabilities do
       hostname, a read namespace, a write surface) and the host gates on the
       *element*, not on the class. A new element is therefore a new request even
       though the class itself was already granted.
-    * **Flags** — `state:kv`, `users:connections`, `schedule:interval` declare an
-      empty list; only the presence of the class matters.
+    * **Flags**: `state:kv`, `users:connections`, `schedule:interval` and
+      `surfaces:shelf` declare an empty list; only the presence of the class
+      matters.
     * **Anything else** — an opaque payload is compared by equality, and any
       change counts as a new request. Nothing in the v1 taxonomy uses this shape;
       treating a payload we cannot decompose as widened is the fail-closed
@@ -64,7 +65,7 @@ defmodule Mydia.Plugins.Capabilities do
   @doc """
   Renders a capability set as a compact, log-friendly string
   (`net:http [api.example.com], state:kv`). Host-owned prose for the admin UI
-  lives in `MydiaWeb.AdminPluginsLive.Components.capability_label/2` instead.
+  lives in `MydiaWeb.AdminPluginsLive.CapabilitySummary` instead.
   """
   @spec summary(set()) :: String.t()
   def summary(set) when map_size(set) == 0, do: "(none)"

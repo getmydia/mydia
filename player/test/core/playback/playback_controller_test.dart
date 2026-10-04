@@ -46,6 +46,10 @@ class _Urls implements StreamUrls {
 
 Future<({int status, String body})> _readyProbe(
         String url, Map<String, String>? headers) async =>
+    (status: 200, body: 'a.ts\nb.ts\nc.ts\n#EXT-X-ENDLIST\n');
+
+Future<({int status, String body})> _growingProbe(
+        String url, Map<String, String>? headers) async =>
     (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
 
 PlaybackController _controller(
@@ -256,7 +260,7 @@ void main() {
       ]);
       final controller = _controller(link, probe: (url, headers) async {
         polls++;
-        return (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
+        return (status: 200, body: 'a.ts\nb.ts\nc.ts\n#EXT-X-ENDLIST\n');
       });
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       expect(polls, 1);
@@ -371,6 +375,40 @@ void main() {
       expect(source.timeline.startOffset, Duration.zero);
       expect(source.timeline.totalDuration, const Duration(seconds: 2400));
       expect(source.seekOnOpen, isTrue);
+    });
+
+    test(
+        'a FULL answer whose playlist never ends is opened as a window at the '
+        'resume position', () async {
+      // A server that serves FFmpeg's own growing playlist over p2p while
+      // still answering FULL. Trusting the mode put the bar at zero on the
+      // resume point and saved that over the real position.
+      final link = _link(starts: [
+        startStreamingSessionResponse(
+          playlistMode: 'FULL',
+          startPosition: 0,
+          duration: 2400,
+        )
+      ]);
+      final source = await _controller(link, probe: _growingProbe).open(
+        _transcode480,
+        fileId: 'file-1',
+        startAt: const Duration(seconds: 600),
+      );
+      expect(source.fullPlaylist, isFalse);
+      expect(source.seekOnOpen, isFalse);
+      expect(source.timeline.startOffset, const Duration(seconds: 600));
+      expect(source.timeline.totalDuration, const Duration(seconds: 2400));
+    });
+
+    test('a FULL answer starting at zero keeps a zero offset either way',
+        () async {
+      final link = _link(starts: [
+        startStreamingSessionResponse(playlistMode: 'FULL', duration: 2400)
+      ]);
+      final source = await _controller(link, probe: _growingProbe)
+          .open(_transcode480, fileId: 'file-1', startAt: Duration.zero);
+      expect(source.timeline.startOffset, Duration.zero);
     });
   });
 
@@ -501,6 +539,7 @@ void main() {
       final positions = StreamController<Duration>.broadcast(
         onListen: listening.complete,
       );
+      addTearDown(positions.close);
       final log = <String>[];
       final attached = Completer<void>();
       final switched = controller.replaceSource(
@@ -582,6 +621,7 @@ void main() {
           firstAdvanceTimeout: const Duration(milliseconds: 20));
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final stuck = StreamController<Duration>.broadcast();
+      addTearDown(stuck.close);
       await expectLater(
         controller.replaceSource(
           _transcode480,
@@ -602,6 +642,7 @@ void main() {
       final controller = _controller(link);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final positions = StreamController<Duration>.broadcast();
+      addTearDown(positions.close);
       final attached = Completer<void>();
       final first = controller.replaceSource(
         _transcode480,
@@ -909,6 +950,7 @@ void main() {
   group('awaitFirstAdvance', () {
     test('completes on the first position past the first one seen', () async {
       final positions = StreamController<Duration>.broadcast();
+      addTearDown(positions.close);
       final done = awaitFirstAdvance(positions.stream,
           timeout: const Duration(seconds: 5));
       positions.add(const Duration(seconds: 300));

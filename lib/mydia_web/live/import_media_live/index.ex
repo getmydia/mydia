@@ -18,6 +18,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
   alias Mydia.{Library, Metadata, Settings}
   alias Mydia.ImportCandidates
   alias Mydia.Jobs.ImportRun, as: ImportRunJob
+  alias Mydia.Media.RemoteFilter
   alias Mydia.Library.{ImportCandidate, ImportCandidateGroup, ImportRun, SelectionScope}
   alias MydiaWeb.Live.Authorization
   alias MydiaWeb.ImportMediaLive.{Components, RunControl}
@@ -1192,6 +1193,7 @@ defmodule MydiaWeb.ImportMediaLive.Index do
       media_type = search_media_type(library_path, media_type_hint)
       provider = library_path && library_path.tv_metadata_source
       config = Metadata.default_relay_config()
+      scope = socket.assigns.current_scope
 
       socket
       |> assign(:match_search_token, token)
@@ -1203,7 +1205,12 @@ defmodule MydiaWeb.ImportMediaLive.Index do
             [media_type: media_type]
           end
 
-        {token, anchor_key, Metadata.search(config, query, opts)}
+        result =
+          with {:ok, results} <- Metadata.search(config, query, opts) do
+            {:ok, RemoteFilter.filter(results, scope)}
+          end
+
+        {token, anchor_key, result}
       end)
     end
   end

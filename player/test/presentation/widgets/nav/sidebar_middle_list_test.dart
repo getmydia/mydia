@@ -121,8 +121,8 @@ void main() {
   });
 
   testWidgets(
-      'edit mode passes the raw ReorderableListView indices straight '
-      'through, unmodified', (tester) async {
+      'edit mode passes the ReorderableListView onReorderItem indices '
+      'straight through, unmodified', (tester) async {
     // `_rows()` (no hidden ids) puts Home at index 0, Continue Watching at
     // 1, Movies at 2 — see SidebarLayout.defaults' builtin ordering.
     final captured = <(int, int)>[];
@@ -141,17 +141,13 @@ void main() {
     // ending half (its midpoint-to-end span is 120-144px). Per
     // `_dragUpdateItems` in the Flutter SDK's
     // `packages/flutter/lib/src/widgets/reorderable_list.dart`, landing in
-    // an item's ending half sets `newIndex = item.index + 1`, i.e. 3 —
-    // NOT 2. That "+1" is Flutter's documented pre-removal semantics:
-    // ReorderableListView reports newIndex as the insertion point in the
-    // list *before* the dragged row is removed, one past where the row
-    // actually lands once removal happens. `SidebarLayout
-    // .orderAfterReorder` performs exactly that one adjustment itself.
+    // an item's ending half sets the pre-removal insertion point
+    // `item.index + 1`, i.e. 3. `onReorderItem` hands the callback the
+    // post-removal index, which is where the row actually lands: 2.
+    // `SidebarLayout.orderAfterReorder` takes that index as is.
     //
-    // If this widget "helpfully" pre-adjusted newIndex too (reintroducing
-    // a second `-= 1`), this test would observe (0, 2) here instead of
-    // (0, 3) — precisely the off-by-one-on-downward-drags failure mode
-    // the brief warns about by name.
+    // If this widget switched back to the deprecated `onReorder` it would
+    // observe (0, 3) here, the off-by-one-on-downward-drags failure mode.
     final grip = find.descendant(
       of: find.byKey(const ValueKey('home')),
       matching: find.byType(ReorderableDragStartListener),
@@ -165,6 +161,6 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(captured, [(0, 3)]);
+    expect(captured, [(0, 2)]);
   });
 }

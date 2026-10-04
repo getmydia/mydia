@@ -8,6 +8,18 @@ import 'package:player/core/playback/playback_monitor.dart';
 import 'package:player/core/playback/stats/playback_stats_collector.dart';
 
 class _Signals {
+  _Signals() {
+    addTearDown(close);
+  }
+
+  Future<void> close() => Future.wait([
+        position.close(),
+        buffer.close(),
+        buffering.close(),
+        playing.close(),
+        error.close(),
+      ]);
+
   final position = StreamController<Duration>.broadcast();
   final buffer = StreamController<Duration>.broadcast();
   final buffering = StreamController<bool>.broadcast();

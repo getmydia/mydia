@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_network_image_platform_interface/cached_network_image_platform_interface.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,7 +76,36 @@ void main() {
       final provider =
           artworkImageProvider(url, cacheManager: PosterCacheManager());
 
-      expect(provider, isA<CachedNetworkImageProvider>());
+      expect(provider, isA<ArtworkNetworkImageProvider>());
+    });
+
+    test('the resized provider wraps the artwork provider', () {
+      final provider = artworkImageProvider(
+        url,
+        cacheManager: PosterCacheManager(),
+        decodeWidth: 320,
+      ) as ResizeImage;
+
+      expect(provider.imageProvider, isA<ArtworkNetworkImageProvider>());
+    });
+
+    test('passes headers through and needs no cache manager', () {
+      final provider = artworkImageProvider(
+        url,
+        headers: const {'authorization': 'Bearer t'},
+      ) as ArtworkNetworkImageProvider;
+
+      expect(provider.headers, const {'authorization': 'Bearer t'});
+      expect(provider.cacheManager, isNull);
+      expect(provider.imageRenderMethodForWeb, ImageRenderMethodForWeb.HttpGet);
+    });
+
+    test('replay safety follows the platform, and tests run off web', () {
+      expect(const ArtworkNetworkImageProvider(url).replaySafe, kIsWeb);
+      expect(
+        const ArtworkNetworkImageProvider(url, replaySafe: true).replaySafe,
+        isTrue,
+      );
     });
 
     test('equal inputs give equal providers, so precache hits the same key',

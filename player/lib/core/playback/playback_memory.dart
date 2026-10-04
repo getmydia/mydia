@@ -112,7 +112,7 @@ class _ServerRecord {
 
   factory _ServerRecord.empty() => _ServerRecord(failures: {}, stalls: {});
 
-  factory _ServerRecord.fromMap(Map raw) {
+  factory _ServerRecord.fromMap(Map<dynamic, dynamic> raw) {
     final failures = <String, DateTime>{};
     final rawFailures = raw['failures'];
     if (rawFailures is Map) {
@@ -183,7 +183,7 @@ class HivePlaybackMemory implements PlaybackMemory {
 
   const HivePlaybackMemory(this._box);
 
-  final Box<Map> _box;
+  final Box<Map<dynamic, dynamic>> _box;
 
   _ServerRecord _read(String serverKey) {
     try {

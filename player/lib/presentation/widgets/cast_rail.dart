@@ -1,14 +1,14 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/colors.dart';
-import '../../domain/models/cast_member.dart';
+import '../../domain/detail/detail_views.dart';
+import 'detail_art_image.dart';
 import 'horizontal_wheel_scroll.dart';
 
 /// Horizontal rail of cast members below the detail hero. Renders nothing
 /// when [members] is empty — there is no empty state, the section just
 /// doesn't exist for a title with no persisted cast.
 class CastRail extends StatelessWidget {
-  final List<CastMember> members;
+  final List<CastView> members;
 
   const CastRail({super.key, required this.members});
 
@@ -67,7 +67,7 @@ class CastRail extends StatelessWidget {
 }
 
 class _CastCard extends StatelessWidget {
-  final CastMember member;
+  final CastView member;
 
   const _CastCard({required this.member});
 
@@ -81,16 +81,14 @@ class _CastCard extends StatelessWidget {
             child: SizedBox(
               width: 72,
               height: 72,
-              child: member.profileUrl != null
-                  ? CachedNetworkImage(
-                      imageUrl: member.profileUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => Container(
-                        color: AppColors.surfaceVariant,
-                      ),
-                      errorWidget: (context, url, error) => _fallbackAvatar(),
-                    )
-                  : _fallbackAvatar(),
+              child: DetailArtImage(
+                art: member.photo,
+                slot: ArtSlot.person,
+                placeholder: (context) =>
+                    Container(color: AppColors.surfaceVariant),
+                fallback: (context) => _fallbackAvatar(),
+                errorWidget: (context) => _fallbackAvatar(),
+              ),
             ),
           ),
           const SizedBox(height: 8),

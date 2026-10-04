@@ -53,7 +53,7 @@ class _FakeP2pService extends P2pService {
 class _RetryP2pService extends P2pService {
   int attempts = 0;
   final int succeedOnAttempt;
-  final Object failureError;
+  final Exception failureError;
 
   _RetryP2pService({
     required this.succeedOnAttempt,
@@ -74,12 +74,7 @@ class _RetryP2pService extends P2pService {
   }) async {
     final currentAttempt = attempts++;
     if (currentAttempt < succeedOnAttempt) {
-      if (failureError is Exception) {
-        throw failureError;
-      } else if (failureError is Error) {
-        throw failureError;
-      }
-      throw Exception(failureError.toString());
+      throw failureError;
     }
     return {
       '__typename': 'Query',
@@ -255,7 +250,8 @@ void main() {
       );
 
       expect(result.hasException, isFalse);
-      expect(result.data?['movies']?['id'], '1');
+      final movies = result.data?['movies'] as Map<String, Object?>?;
+      expect(movies?['id'], '1');
       expect(service.attempts, 2);
     });
 

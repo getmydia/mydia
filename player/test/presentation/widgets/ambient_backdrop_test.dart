@@ -1,9 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/artwork_decode.dart';
 import 'package:player/core/cache/poster_cache_manager.dart';
 import 'package:player/presentation/widgets/ambient_backdrop.dart';
+import 'package:player/presentation/widgets/artwork_image.dart';
 
 import '../../test_utils/mock_network_images.dart';
 
@@ -46,7 +46,7 @@ void main() {
       await tester.pumpWidget(_host(const AmbientBackdrop()));
       await tester.pump();
 
-      expect(find.byType(CachedNetworkImage), findsNothing);
+      expect(find.byType(ArtworkImage), findsNothing);
       expect(find.byType(ImageFiltered), findsNothing);
     });
 
@@ -72,11 +72,11 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         // Two artwork layers exist mid-transition (outgoing + incoming).
-        expect(find.byType(CachedNetworkImage), findsNWidgets(2));
+        expect(find.byType(ArtworkImage), findsNWidgets(2));
 
         // Settle to a single layer.
         await tester.pumpAndSettle();
-        expect(find.byType(CachedNetworkImage), findsOneWidget);
+        expect(find.byType(ArtworkImage), findsOneWidget);
       });
     });
 
@@ -101,7 +101,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         // No second layer spawned.
-        expect(find.byType(CachedNetworkImage), findsOneWidget);
+        expect(find.byType(ArtworkImage), findsOneWidget);
       });
     });
 
@@ -190,10 +190,10 @@ void main() {
 
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(
+                child: AmbientBackdrop(
                   imageUrl: 'https://image.tmdb.org/t/p/w1280/a.jpg',
                   id: 'a',
                 ),
@@ -242,10 +242,10 @@ void main() {
 
       await mockNetworkImages(() async {
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(imageUrl: urlA, id: 'a'),
+                child: AmbientBackdrop(imageUrl: urlA, id: 'a'),
               ),
             ),
           ),
@@ -254,10 +254,10 @@ void main() {
 
         // New id -> didUpdateWidget sees imageUrl change and precaches.
         await tester.pumpWidget(
-          MaterialApp(
+          const MaterialApp(
             home: Scaffold(
               body: SizedBox.expand(
-                child: const AmbientBackdrop(imageUrl: urlB, id: 'b'),
+                child: AmbientBackdrop(imageUrl: urlB, id: 'b'),
               ),
             ),
           ),

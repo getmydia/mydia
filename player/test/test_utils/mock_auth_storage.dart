@@ -19,6 +19,9 @@ class MockAuthStorage implements AuthStorage {
   /// refuses the call.
   bool failAllWrites = false;
 
+  /// Every key currently held, for asserting that nothing was written.
+  Iterable<String> get keys => _storage.keys;
+
   @override
   bool get degraded => degradedValue;
 

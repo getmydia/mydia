@@ -101,6 +101,10 @@ defmodule Mydia.Application do
         # age limit an admin sets hides the whole library. Idempotent by row
         # state; enqueue_once/0 never raises.
         Mydia.Jobs.ContentRatingAgeBackfill.enqueue_once()
+        # Fetches a certification once for rows stored without one, which are
+        # invisible to every age-limited account. Unique forever on its
+        # version; enqueue_once/0 never raises.
+        Mydia.Jobs.ContentRatingFetch.enqueue_once()
         # Clean up stale HLS session directories
         cleanup_stale_hls_sessions()
       end
@@ -228,8 +232,7 @@ defmodule Mydia.Application do
         # {Mydia.Worker, arg},
         # Start to serve requests, typically the last entry
         MydiaWeb.Endpoint
-      ] ++
-      absinthe_subscription_children()
+      ]
   end
 
   # Tell Phoenix to update the endpoint configuration
@@ -238,14 +241,6 @@ defmodule Mydia.Application do
   def config_change(changed, _new, removed) do
     MydiaWeb.Endpoint.config_change(changed, removed)
     :ok
-  end
-
-  # GraphQL subscriptions only ever have player clients, and they must start
-  # after the Endpoint. MydiaWeb.Schema.Publish treats a missing subscription
-  # registry as a skipped event, so leaving this out with the player off is
-  # safe.
-  defp absinthe_subscription_children do
-    if Mydia.Player.enabled?(), do: [{Absinthe.Subscription, MydiaWeb.Endpoint}], else: []
   end
 
   defp client_health_children do
