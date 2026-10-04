@@ -310,8 +310,10 @@ PLUGINS_OVERRIDE_DIR=/config/plugin-overrides
 ```
 
 A directory of `<slug>.wasm` files that replace the bytes of the plugin with
-that slug, including a bundled one. Read once at startup, so restart after
-changing it. It is meant for testing a patched build; see
+that slug, including a bundled one. The variable is read once at startup, so
+restart after changing it. Replacing a `.wasm` file inside the directory needs
+no restart: disable and enable that plugin to load it. It is meant for testing a
+patched build; see
 [Replace a bundled plugin's bytes](../../plugins/how-to/test-and-iterate.md#replace-a-bundled-plugins-bytes).
 
 ### Plugin sources

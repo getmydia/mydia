@@ -171,7 +171,8 @@ Rebuild, install the new build and restart, using the commands from steps 4 and
 5:
 
 ```bash
-cargo build --release --target wasm32-wasip2
+cargo build --release --target wasm32-wasip2 \
+  --manifest-path /path/to/my-plugin/Cargo.toml
 ```
 
 ```bash

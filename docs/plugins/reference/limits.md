@@ -57,7 +57,10 @@ to the host.
 | `http-request` response size | 1 MiB (1,048,576 bytes) | 4 MiB (4,194,304 bytes) |
 | `http-request` timeout | 5 s | `plugins.page_http_timeout_ms`, default 90000 ms |
 
-An outbound request is allowed only to a host in `net:http`. See
+An outbound request needs the `net:http` capability. Its host must be granted,
+or its scheme, host and port must exactly match an endpoint the operator
+approved for the calling instance. A host the manifest declares but the grant
+does not hold is refused either way. See
 [capabilities](capabilities.md#nethttp).
 
 <!-- source: lib/mydia/plugins/net/gate.ex:57-58,333; lib/mydia/plugins/host_functions.ex:448-452,720-733; lib/mydia/config/schema.ex:289-292 -->

@@ -91,8 +91,8 @@ size are in [Limits](../reference/limits.md#shelves).
 
 ## 5. Read only, and check failures
 
-A fill acts as the shelf's user and can only read. Every function that changes
-the user's data returns `denied`. See
+A fill acts as the shelf's user and cannot change that user's data: every such
+function returns `denied`. With `state:kv` it can still write its own store. See
 [What a fill may do](../reference/guest-exports.md#what-a-fill-may-do) for the
 functions you can call. When fills fail, the plugin's row in
 Admin > System > Plugins shows the most recent error your plugin returned, so

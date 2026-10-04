@@ -137,7 +137,7 @@ loosen them:
 
 | Header | Value |
 |--------|-------|
-| `content-security-policy` | `default-src 'self' 'unsafe-inline'`, `connect-src 'self'`, `img-src 'self' data: https://image.tmdb.org https://artworks.thetvdb.com`, `sandbox allow-scripts allow-forms` and `frame-ancestors 'self'`. Inline scripts and styles work. Nothing loads from another origin, and the page can only call itself. |
+| `content-security-policy` | `default-src 'self' 'unsafe-inline'`, `connect-src 'self'`, `img-src 'self' data: https://image.tmdb.org https://artworks.thetvdb.com`, `sandbox allow-scripts allow-forms` and `frame-ancestors 'self'`. Inline scripts and styles work. Images may also load from the two artwork hosts; nothing else loads from another origin, and the page can only call itself. |
 | `cache-control` | `private, no-store` |
 | `x-content-type-options` | `nosniff` |
 | `referrer-policy` | `no-referrer` |
@@ -322,7 +322,7 @@ renders them. For a walkthrough see [Fill a shelf](../how-to/shelves.md).
 
 ### What a fill may do
 
-A fill acts as the shelf's user and may only read.
+A fill acts as the shelf's user. It may read, and write only its own store.
 
 | Function | Notes |
 |----------|-------|

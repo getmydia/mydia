@@ -98,7 +98,7 @@ timeout depend on the handler: see [Limits](limits.md#network).
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `url` | `string` | The full URL. Its host must be in `net:http`. |
+| `url` | `string` | The full URL. Its host must be granted under `net:http`, or the URL must match an endpoint approved for the calling instance ([Limits](limits.md#network)). |
 | `method` | `string` | The host uses `GET` when empty. |
 | `headers` | `list<tuple<string, string>>` | Request headers. |
 | `body` | `option<string>` | A text body. |
