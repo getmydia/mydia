@@ -21,6 +21,7 @@ final movieViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(movieDetailControllerProvider(id)).whenData(movieViewFromMydia),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -29,6 +30,7 @@ final showViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(showDetailControllerProvider(id)).whenData(showViewFromMydia),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -49,6 +51,8 @@ final seasonEpisodesViewProvider = Provider.autoDispose
               for (final e in episodes) episodeViewFromMydia(e, show: show),
             ],
           );
+    case SourceTarget():
+      throw UnsupportedError('Task 16');
   }
 });
 
@@ -58,6 +62,7 @@ final episodeViewProvider =
     MydiaTarget(:final id) => ref
         .watch(episodeDetailControllerProvider(id))
         .whenData(episodeViewFromMydiaDetail),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -65,6 +70,7 @@ final movieActionsProvider =
     Provider.autoDispose.family<MovieActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaMovieActions(ref, id),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -72,6 +78,7 @@ final showActionsProvider =
     Provider.autoDispose.family<ShowActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaShowActions(ref, id),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -79,6 +86,7 @@ final seasonActionsProvider =
     Provider.autoDispose.family<SeasonActions, SeasonKey>(
   (ref, key) => switch (key.show) {
     MydiaTarget(:final id) => MydiaSeasonActions(ref, id, key.seasonNumber),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -86,6 +94,7 @@ final episodeActionsProvider =
     Provider.autoDispose.family<EpisodeActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaEpisodeActions(ref, id),
+    SourceTarget() => throw UnsupportedError('Task 16'),
   },
 );
 
@@ -102,4 +111,5 @@ List<QueryKey> freshnessKeys(DetailTarget target, {int? seasonNumber}) =>
       MydiaTarget(kind: DetailKind.episode, :final id) => [
           QueryKeys.episodeDetail(id),
         ],
+      SourceTarget() => throw UnsupportedError('Task 16'),
     };

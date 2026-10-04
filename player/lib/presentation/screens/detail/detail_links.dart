@@ -11,12 +11,14 @@ String detailLocation(DetailTarget target) => switch (target) {
       MydiaTarget(kind: DetailKind.show || DetailKind.season, :final id) =>
         '/show/$id',
       MydiaTarget(kind: DetailKind.episode, :final id) => '/episode/$id',
+      SourceTarget() => throw UnsupportedError('Task 16'),
     };
 
 String moviePlayerLocation(MovieView movie, MediaFile file) =>
     switch (movie.target) {
       MydiaTarget(:final id) => '/player/movie/$id?fileId=${file.id}'
           '&title=${Uri.encodeComponent(movie.title)}',
+      SourceTarget() => throw UnsupportedError('Task 16'),
     };
 
 String episodePlayerLocation(
@@ -31,5 +33,6 @@ String episodePlayerLocation(
         '${showTarget == null ? '' : '&showId=${showTarget.id}'}'
         '&seasonNumber=${episode.seasonNumber}'
         '${resumeSeconds == null ? '' : '&resume=$resumeSeconds'}',
+    SourceTarget() => throw UnsupportedError('Task 16'),
   };
 }
