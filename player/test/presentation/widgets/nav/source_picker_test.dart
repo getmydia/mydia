@@ -149,6 +149,24 @@ void main() {
     );
   });
 
+  testWidgets('focus reaches a current server that starts off-screen',
+      (tester) async {
+    final sources = [
+      for (var i = 0; i < 15; i++) _source('acc$i', 'srv$i'),
+    ];
+    await _open(tester, sources,
+        currentId: const SourceId('acc14:owner:srv14'),
+        size: const Size(1280, 500));
+    final focused = FocusManager.instance.primaryFocus!.context!;
+    expect(
+      find.descendant(
+        of: _row('acc14:owner:srv14'),
+        matching: find.byElementPredicate((e) => e == focused),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('an account that needs sign-in says so', (tester) async {
     await _open(tester, [_source('acc1', 'aa11', needsReauth: true)]);
     expect(find.textContaining('sign in again'), findsOneWidget);

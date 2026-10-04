@@ -1,6 +1,8 @@
 /// The server picker the sidebar's server header opens.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,7 +86,8 @@ class _Popover extends StatelessWidget {
           width: anchor.width,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height - top - 16,
+              maxHeight:
+                  math.max(0, MediaQuery.sizeOf(context).height - top - 16),
             ),
             child: Material(
               color: AppColors.surfaceVariant,
@@ -199,49 +202,54 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
   @override
   Widget build(BuildContext context) {
     final sources = ref.watch(switchableSourcesProvider);
-    return ListView(
-      key: const ValueKey('source-picker'),
-      shrinkWrap: true,
-      padding: const EdgeInsets.all(8),
-      children: [
-        for (final group in groupSourcesByAccount(sources)) ...[
-          if (group.first.kind != SourceKind.mydia)
-            _AccountCaption(account: group.first.account),
-          for (final source in group)
-            _SourceRow(
-              source: source,
-              isCurrent: source.id == widget.currentId,
-              focusNode: source.id == widget.currentId ? _currentNode : null,
-              onTap: () => _pick(PickSource(source)),
-            ),
-        ],
-        if (!kIsWeb) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Divider(
-              height: 1,
-              color: AppColors.divider.withValues(alpha: 0.4),
-            ),
-          ),
-          SidebarRow(
-            key: const ValueKey('source-switcher-add'),
-            icon: Icons.add_rounded,
-            selectedIcon: Icons.add_rounded,
-            label: 'Add server',
-            isSelected: false,
-            onTap: () => _pick(const AddServer()),
-          ),
-          SidebarRow(
-            key: const ValueKey('source-switcher-manage'),
-            icon: Icons.tune_rounded,
-            selectedIcon: Icons.tune_rounded,
-            label: 'Manage servers',
-            isSelected: false,
-            onTap: () => _pick(const ManageServers()),
-          ),
-        ],
-      ],
-    );
+    // Not a ListView: that builds lazily, so a current row below the fold
+    // would never attach `_currentNode` and the focus request would do nothing.
+    return SingleChildScrollView(
+        key: const ValueKey('source-picker'),
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final group in groupSourcesByAccount(sources)) ...[
+              if (group.first.kind != SourceKind.mydia)
+                _AccountCaption(account: group.first.account),
+              for (final source in group)
+                _SourceRow(
+                  source: source,
+                  isCurrent: source.id == widget.currentId,
+                  focusNode:
+                      source.id == widget.currentId ? _currentNode : null,
+                  onTap: () => _pick(PickSource(source)),
+                ),
+            ],
+            if (!kIsWeb) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Divider(
+                  height: 1,
+                  color: AppColors.divider.withValues(alpha: 0.4),
+                ),
+              ),
+              SidebarRow(
+                key: const ValueKey('source-switcher-add'),
+                icon: Icons.add_rounded,
+                selectedIcon: Icons.add_rounded,
+                label: 'Add server',
+                isSelected: false,
+                onTap: () => _pick(const AddServer()),
+              ),
+              SidebarRow(
+                key: const ValueKey('source-switcher-manage'),
+                icon: Icons.tune_rounded,
+                selectedIcon: Icons.tune_rounded,
+                label: 'Manage servers',
+                isSelected: false,
+                onTap: () => _pick(const ManageServers()),
+              ),
+            ],
+          ],
+        ));
   }
 }
 
