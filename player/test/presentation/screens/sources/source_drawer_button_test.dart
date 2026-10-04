@@ -53,6 +53,8 @@ void main() {
     await _pumpInShell(
         tester, const SourceLibraryScreen(library: FakeMediaSource.movies));
     expect(find.byKey(_drawerButton), findsOneWidget);
+    // The tooltip is the button's accessible name.
+    expect(find.byTooltip('Menu'), findsOneWidget);
 
     await tester.tap(find.byKey(_drawerButton));
     await tester.pumpAndSettle();
