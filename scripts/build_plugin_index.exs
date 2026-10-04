@@ -4,6 +4,11 @@
 #
 #   elixir scripts/build_plugin_index.exs --wasm-dir build/wasm --out build/site
 #
+# Options: --base-url, --crates-dir, --name (catalog name, default "Mydia") and
+# --public-key (minisign public key file, default priv/plugin_index/official.pub).
+# The bare base64 key is embedded in the catalog. The script does not sign:
+# the publish workflow signs the output as index.json.minisig.
+#
 # For every <crates-dir>/<crate>/manifest.json it expects a built
 # <wasm-dir>/<crate>.wasm, copies it to <out>/packages/<slug>/<version>.wasm and
 # lists it in <out>/index.json in the catalog format Mydia.Plugins.Index reads.
@@ -17,7 +22,14 @@ defmodule BuildPluginIndex do
   def main(argv) do
     {opts, _rest, invalid} =
       OptionParser.parse(argv,
-        strict: [wasm_dir: :string, out: :string, base_url: :string, crates_dir: :string]
+        strict: [
+          wasm_dir: :string,
+          out: :string,
+          base_url: :string,
+          crates_dir: :string,
+          public_key: :string,
+          name: :string
+        ]
       )
 
     if invalid != [], do: fail("unknown options: #{inspect(invalid)}")
@@ -26,6 +38,15 @@ defmodule BuildPluginIndex do
     out = opts[:out] || fail("--out is required")
     base_url = String.trim_trailing(opts[:base_url] || @default_base_url, "/")
     crates_dir = opts[:crates_dir] || "plugins-extra"
+
+    public_key =
+      (opts[:public_key] || "priv/plugin_index/official.pub")
+      |> File.read!()
+      |> String.split("\n", trim: true)
+      |> Enum.reject(&String.starts_with?(&1, "untrusted comment:"))
+      |> List.first() || fail("public key file is empty")
+
+    name = opts[:name] || "Mydia"
 
     manifest_paths =
       crates_dir
@@ -39,7 +60,8 @@ defmodule BuildPluginIndex do
 
     File.mkdir_p!(out)
     index_path = Path.join(out, "index.json")
-    File.write!(index_path, JSON.encode!(%{"version" => 1, "plugins" => entries}))
+    catalog = %{"version" => 2, "name" => name, "public_key" => public_key, "plugins" => entries}
+    File.write!(index_path, JSON.encode!(catalog))
     IO.puts("wrote #{length(entries)} plugin(s) to #{index_path}")
   end
 

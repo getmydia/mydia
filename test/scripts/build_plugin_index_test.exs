@@ -54,7 +54,9 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     assert output =~ "wrote 1 plugin(s)"
 
     index = ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
-    assert index["version"] == 1
+    assert index["version"] == 2
+    assert index["name"] == "Mydia"
+    assert index["public_key"] =~ ~r/^RW/
     assert [entry] = index["plugins"]
 
     assert entry["package_url"] ==
@@ -105,7 +107,7 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     {_output, 0} =
       run(["--crates-dir", empty, "--wasm-dir", ctx.wasm_dir, "--out", ctx.out])
 
-    assert %{"version" => 1, "plugins" => []} =
+    assert %{"version" => 2, "plugins" => []} =
              ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
   end
 end

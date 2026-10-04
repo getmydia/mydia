@@ -43,6 +43,8 @@ the toolchain from `rust-toolchain.toml`, generates the index with
 `scripts/build_plugin_index.exs`, deploys it to the `mydia-plugins` Cloudflare
 Pages project, and attaches the packages to a GitHub Release for the tag.
 
+The workflow signs `index.json` with the `MINISIGN_SECRET_KEY` repo secret; Mydia verifies it against `priv/plugin_index/official.pub` and refuses an unsigned index. Rotating that key means shipping a Mydia release with the new public key first.
+
 Every publish replaces the whole site, so only the current version of each
 plugin is downloadable. Installed plugins are unaffected: their bytes live in
 the database.
