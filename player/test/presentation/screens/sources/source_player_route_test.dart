@@ -7,6 +7,7 @@ import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
 import 'package:player/presentation/screens/player/session/source_playback_sessions.dart';
 import 'package:player/presentation/screens/sources/source_player_route.dart';
@@ -41,6 +42,44 @@ void main() {
         SourcePlayerParams.fromUri(Uri.parse('/s/x/player/v1?kind=video'))
             .mediaType,
         'movie');
+  });
+
+  test('reads the show, season and resume point from the location', () {
+    final params = SourcePlayerParams.fromUri(Uri.parse(
+        '/s/x/player/e2?kind=episode&fileId=p9&showId=s1&seasonNumber=1'
+        '&resume=300'));
+    expect(params.showId, 's1');
+    expect(params.seasonNumber, 1);
+    expect(params.resumeSeconds, 300);
+    final bare =
+        SourcePlayerParams.fromUri(Uri.parse('/s/x/player/e2?fileId=p9'));
+    expect(bare.showId, isNull);
+    expect(bare.seasonNumber, isNull);
+    expect(bare.resumeSeconds, isNull);
+  });
+
+  testWidgets('hands the show, season and resume point to the player screen',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
+      ],
+      child: MaterialApp(
+        home: SourcePlayerRoute(
+          sourceId: fakeSourceId,
+          itemId: 'e2',
+          uri: Uri.parse(
+              '/s/x/player/e2?kind=episode&fileId=p9&showId=s1&seasonNumber=1'
+              '&resume=300'),
+        ),
+      ),
+    ));
+    final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
+    expect(screen.showId, 's1');
+    expect(screen.seasonNumber, 1);
+    expect(screen.resumeSeconds, 300);
+    expect(screen.mediaType, 'episode');
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a source with no playback says so instead of crashing',

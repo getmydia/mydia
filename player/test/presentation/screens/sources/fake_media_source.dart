@@ -56,6 +56,7 @@ ItemSummary fakeEpisode(int n) => ItemSummary(
       index: n,
       parentIndex: 1,
       durationSeconds: 1800,
+      defaultVersionId: 'part-$n',
     );
 
 class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
@@ -148,6 +149,7 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
     return ItemDetail(
       summary: summary,
       overview: 'Invented overview.',
+      show: ref.kind == ItemKind.episode ? fakeShow.ref : null,
       genres: const ['Drama'],
       versions: const [
         MediaVersion(id: 'part-1', container: 'mkv', height: 1080)

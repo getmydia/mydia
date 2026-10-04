@@ -18,6 +18,9 @@ class SourcePlayerParams {
     required this.kind,
     required this.fileId,
     this.title,
+    this.showId,
+    this.seasonNumber,
+    this.resumeSeconds,
   });
 
   factory SourcePlayerParams.fromUri(Uri uri) {
@@ -26,12 +29,18 @@ class SourcePlayerParams {
       kind: ItemKind.values.asNameMap()[q['kind']] ?? ItemKind.movie,
       fileId: q['fileId'] ?? '',
       title: q['title'],
+      showId: q['showId'],
+      seasonNumber: int.tryParse(q['seasonNumber'] ?? ''),
+      resumeSeconds: int.tryParse(q['resume'] ?? ''),
     );
   }
 
   final ItemKind kind;
   final String fileId;
   final String? title;
+  final String? showId;
+  final int? seasonNumber;
+  final int? resumeSeconds;
 
   /// The player screen's vocabulary: episodes are episodes, anything else
   /// plays as a movie (no season list, no up-next).
@@ -127,6 +136,9 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       mediaId: widget.itemId,
       fileId: _params.fileId,
       title: _params.title,
+      showId: _params.showId,
+      seasonNumber: _params.seasonNumber,
+      resumeSeconds: _params.resumeSeconds,
       session: session,
     );
   }

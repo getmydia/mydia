@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
@@ -162,6 +164,67 @@ void main() {
     expect(session.transport.ends, greaterThan(0),
         reason: 'leaving the screen ends the stream');
   });
+
+  testWidgets('a session with a season offers the next episode by its route',
+      (tester) async {
+    final container = buildPlayerScreenContainer(
+      connectionState: conn.ConnectionState.direct(),
+      link: _recordingLink(<String>[]),
+      castManager: CapturingCastSessionManager(),
+      proxyService: TrackingLocalProxyService(),
+    );
+    addTearDown(container.dispose);
+    final session = _SeasonSession();
+    final fake = _RecordingPlatformPlayer();
+    final router = GoRouter(routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, __) => PlayerScreen(
+          mediaId: 'e1',
+          mediaType: 'episode',
+          fileId: 'f1',
+          showId: 's1',
+          seasonNumber: 1,
+          session: session,
+          createPlayer: () => Player(platformPlayer: fake),
+        ),
+      ),
+      GoRoute(
+        path: '/fake/episode/:id',
+        builder: (_, state) => Text('landed ${state.pathParameters['id']}'),
+      ),
+    ]);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        builder: toastLayerBuilder,
+        routerConfig: router,
+      ),
+    ));
+    await pumpUntil(tester, () => fake.opened != null);
+    await pumpUntil(tester, () => session.progress.starts.isNotEmpty);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await pumpUntil(tester, () => find.text('landed e2').evaluate().isNotEmpty);
+    expect(find.text('landed e2'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+}
+
+class _SeasonSession extends FakePlaybackSession {
+  @override
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async => [
+        const PlaybackEpisode(
+            id: 'e1', seasonNumber: 1, episodeNumber: 1, fileIds: ['f1']),
+        const PlaybackEpisode(
+            id: 'e2',
+            seasonNumber: 1,
+            episodeNumber: 2,
+            title: 'Invented Episode 2',
+            fileIds: ['f2']),
+      ];
 }
 
 class _CastableSession extends FakePlaybackSession {
