@@ -1,11 +1,16 @@
 /// The sidebar's destinations while a third-party source is on screen.
 /// Mydia's own destinations (calendar, collections, downloads, favorites)
-/// mean nothing for those sources, so they are replaced, not greyed.
+/// mean nothing for those sources, so they are replaced, not greyed. The
+/// frame matches Mydia's nav: Home and Search on top, Settings pinned at the
+/// bottom, so switching servers changes only the libraries in between.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/auth_status.dart';
+import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/theme/colors.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -50,6 +55,12 @@ class SourceNavList extends ConsumerWidget {
     };
     final searchable =
         ref.watch(mediaSourceProvider(sourceId))?.as<Searchable>() != null;
+    // Without a Mydia sign-in the router sends `/settings` back to the
+    // source's home, so the row would be a dead end.
+    final mydiaSignedIn = switch (ref.watch(authStateProvider)) {
+      AsyncData(value: AuthStatus.authenticated) => true,
+      _ => false,
+    };
     SidebarRow row(String key, IconData icon, String label, String target) =>
         SidebarRow(
           key: ValueKey('source-nav-$key'),
@@ -60,24 +71,51 @@ class SourceNavList extends ConsumerWidget {
           onTap: () => onNavigate(target),
         );
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+    return Column(
       children: [
-        row('home', Icons.home_rounded, 'Home', root),
-        if (searchable)
-          row('search', Icons.search_rounded, 'Search', '$root/search'),
-        for (final library in libraries)
-          row(
-            'library-${library.ref.id}',
-            switch (library.kind) {
-              LibraryKind.movies => Icons.movie_rounded,
-              LibraryKind.shows => Icons.tv_rounded,
-              LibraryKind.videos => Icons.video_library_rounded,
-            },
-            library.title,
-            '$root/library/${Uri.encodeComponent(library.ref.id)}',
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: [
+              row('home', Icons.home_rounded, 'Home', root),
+              if (searchable)
+                row('search', Icons.search_rounded, 'Search', '$root/search'),
+              for (final library in libraries)
+                row(
+                  'library-${library.ref.id}',
+                  switch (library.kind) {
+                    LibraryKind.movies => Icons.movie_rounded,
+                    LibraryKind.shows => Icons.tv_rounded,
+                    LibraryKind.videos => Icons.video_library_rounded,
+                  },
+                  library.title,
+                  '$root/library/${Uri.encodeComponent(library.ref.id)}',
+                ),
+            ],
           ),
-        row('servers', Icons.dns_rounded, 'Servers', '/sources/manage'),
+        ),
+        if (mydiaSignedIn) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Divider(
+              height: 1,
+              color: AppColors.divider.withValues(alpha: 0.15),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: SidebarRow(
+              key: const ValueKey('source-nav-settings'),
+              icon: Icons.settings_outlined,
+              selectedIcon: Icons.settings_rounded,
+              label: 'Settings',
+              isSelected: false,
+              onTap: () => onNavigate('/settings'),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
       ],
     );
   }
