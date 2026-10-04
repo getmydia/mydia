@@ -50,7 +50,10 @@ plugin_sources:
 
 ## What operators see
 
-Operators add your URL as a plugin source in Admin > System > Plugins.
+Operators add your URL as a plugin source in Admin > System > Plugins. They see
+your catalog's name, URL, key fingerprint and plugin count before they trust it;
+what they do is described in
+[Add a third-party plugin source](../../using/how-to/plugin-sources.md).
 
 To test a plugin before publishing, sideload it instead
 ([test and reload loop](test-and-iterate.md)).

@@ -232,7 +232,8 @@ under [`on-http`](../reference/guest-exports.md#on-http). When the host answers
 Every write a page makes is journaled for the user. Users find them at
 `/plugins/shelf-notes/activity` (linked from the page's header) and can undo a
 single change or a whole batch. Operators set how long a grant may last for each
-role.
+role, as described in
+[Let plugins make changes for people](../../using/how-to/plugins.md#let-plugins-make-changes-for-people).
 
 ## Try it
 

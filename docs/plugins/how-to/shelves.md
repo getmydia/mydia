@@ -99,7 +99,7 @@ Admin > System > Plugins shows the most recent error your plugin returned, so
 keep error strings short and free of secrets.
 
 Operators and users see shelves on Home and can dismiss titles. That side is
-covered in the operator documentation.
+covered in [Install and manage plugins](../../using/how-to/plugins.md#what-your-users-see).
 
 ## Try it
 

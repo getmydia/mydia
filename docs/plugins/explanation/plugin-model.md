@@ -189,11 +189,10 @@ anything newly declared come back `Denied` until an operator re-approves.
 What changed is that this is no longer silent. Mydia compares each installed
 plugin's declared capabilities against its grant, value by value, so a new host
 in an allowlist or a new event in `events:subscribe` counts just as much as a
-whole new class. A plugin whose manifest has outgrown its grant is badged
-**needs re-approval** in Admin > System > Plugins, its row names what it is asking
-for beyond what you approved, and its **Review & re-approve** button opens the
-same approval modal with the new capabilities called out separately from the
-rest. Re-approving grants the currently requested set. The host also logs a
+whole new class. A plugin whose manifest has outgrown its grant is flagged in
+Admin > System > Plugins with what it is asking for beyond what was approved
+(see [Install and manage plugins](../../using/how-to/plugins.md#when-a-plugin-asks-for-more-than-you-approved)).
+Re-approving grants the currently requested set. The host also logs a
 warning naming the ungranted capabilities whenever such a plugin starts, so
 non-bundled capability drift is visible in the server log as well as in the UI.
 

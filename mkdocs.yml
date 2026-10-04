@@ -103,6 +103,8 @@ nav:
           - using/how-to/automatic-quality-upgrades.md
           - using/how-to/manage-users.md
           - using/how-to/sso-oidc.md
+          - using/how-to/plugins.md
+          - using/how-to/plugin-sources.md
           - using/how-to/postgresql.md
           - using/how-to/reverse-proxy.md
           - using/how-to/backup-restore.md

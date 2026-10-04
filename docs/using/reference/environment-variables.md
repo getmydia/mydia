@@ -275,7 +275,9 @@ warning at startup and shows a banner on the Media servers page. Rename them to
 
 ## Plugins
 
-Settings for an installed plugin can come from the environment. Install and
+How to install, approve and update plugins is in
+[Install and manage plugins](../how-to/plugins.md). Settings for an installed
+plugin can come from the environment. Install and
 approve the plugin in the admin UI (or with `mydia-cli plugin install`) first;
 these variables only fill in its settings.
 
@@ -300,6 +302,17 @@ the Settings dialog.
 The older `PLUGIN_<N>_NAME`, `_VERSION`, `_ENABLED`, `_PRIORITY`,
 `_SOURCE_URL`, `_INTEGRITY_HASH` and `_GRANTED_CAPABILITIES` variables are
 ignored.
+
+### Plugin file overrides
+
+```bash
+PLUGINS_OVERRIDE_DIR=/config/plugin-overrides
+```
+
+A directory of `<slug>.wasm` files that replace the bytes of the plugin with
+that slug, including a bundled one. Read once at startup, so restart after
+changing it. It is meant for testing a patched build; see
+[Replace a bundled plugin's bytes](../../plugins/how-to/test-and-iterate.md#replace-a-bundled-plugins-bytes).
 
 ### Plugin sources
 
