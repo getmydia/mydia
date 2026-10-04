@@ -112,9 +112,13 @@ timeout depend on the handler: see [Limits](limits.md#network).
 | `body` | `option<string>` | Present when the response body is valid UTF-8. |
 | `body-encoding` | `option<string>` | `"binary"` when the body was not UTF-8 and was left out. Otherwise absent. |
 
-A non-2xx status is a normal response, not an error. A request the gate
-refuses or that fails to complete returns `network`, and a host outside the
-grant returns `denied`.
+A non-2xx status is a normal response, not an error. Failures map as follows:
+
+| Failure | Error |
+|---------|-------|
+| The host is not in the grant, whether or not the manifest declared it | `denied` |
+| A malformed URL (scheme other than http or https, no host, userinfo, an ambiguous numeric host) or an unsupported method | `invalid-request` |
+| A private or blocked address, a failed lookup, a timeout, an oversized response or a transport failure | `network` |
 
 <!-- source: native/mydia_plugin_sdk/wit/plugin.wit:96-111,551-553; lib/mydia/plugins/host_functions.ex:658-746; lib/mydia/plugins/net/gate.ex:145-160 -->
 
@@ -272,7 +276,7 @@ event or schedule handler it returns `denied`.
 | `kind` | `search-kind` | `library` or `catalog`. |
 | `query` | `string` | |
 | `media-type` | `option<string>` | `movie` or `tv_show`. Both when absent. |
-| `limit` | `option<u32>` | At most 25. 10 when absent or not positive. |
+| `limit` | `option<u32>` | Clamped and defaulted: see [Limits](limits.md#data-reads). |
 
 `search-hit`:
 
@@ -463,9 +467,10 @@ Capability: [`users:connections`](capabilities.md#usersconnections) and [`net:ht
 
 The 1.1 form of [`link-request`](#link-request), limited to `user` links. The
 host checks that the connection belongs to the calling instance, removes any
-guest `Authorization` header and adds the token itself. The request host is
-checked like any `http-request`: against the granted `net:http` hostnames or an
-approved endpoint of the instance.
+guest `Authorization` header and adds the token itself. A disabled link and a
+link with no token yet are refused. The request host is checked like any
+`http-request`: against the granted `net:http` hostnames or an approved
+endpoint of the instance.
 
 ### links-list
 
@@ -497,9 +502,7 @@ manifest's `connection.auth_header` template, which defaults to
 removed first, whatever its case. A disabled link, a link with no token yet and
 a link of another instance are refused. The request host is checked like
 `http-request`, against the granted `net:http` hostnames or an approved
-endpoint of the instance. The WIT comment on `connection-request` speaks of
-checking the host against the manifest's connection descriptor; the host
-applies the `net:http` check described here.
+endpoint of the instance.
 
 ### propose-accounts
 
@@ -516,7 +519,7 @@ and profile pages. It creates no links. The maximum count is in
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | `string` | Required and not empty. |
-| `name` | `string` | Required. Clipped to 200 characters. |
+| `name` | `string` | Required. Clipped ([Limits](limits.md#data-reads)). |
 | `admin` | `bool` | |
 
 ### set-link-token
@@ -527,8 +530,9 @@ Capability: [`users:connections`](capabilities.md#usersconnections). Contract 1.
 
 Stores a token the remote service minted for a link, such as a Plex Home
 profile token. The guest necessarily saw this token in the response that
-minted it. The token must be 1 to 4096 bytes with no control characters. A
-disabled link is refused.
+minted it. The token must be non-empty, within the size in
+[Limits](limits.md#data-reads), and free of control characters. A disabled link
+is refused.
 
 ### set-link-status
 
@@ -556,7 +560,7 @@ Ungated. A timestamp that is not RFC 3339 returns `invalid-request`.
 | `started-at`, `finished-at` | `string` | RFC 3339. |
 | `status` | `sync-run-status` | `ok`, `partial` or `error`. |
 | `pulled`, `pushed`, `skipped`, `errors` | `u32` | Counts. |
-| `message` | `option<string>` | Clipped to 500 characters. |
+| `message` | `option<string>` | Clipped ([Limits](limits.md#data-reads)). |
 
 <!-- source: native/mydia_plugin_sdk/wit/plugin.wit:222-238,415-442,595-605,640-667; lib/mydia/plugins/host_functions.ex:1369-1610,1202-1260 -->
 

@@ -69,9 +69,13 @@ An outbound request is allowed only to a host in `net:http`. See
 | `data-list` page size | 200 | A larger or missing `limit` is clamped to 200. Cursors are opaque and last only for one run. |
 | `watch_history` page size | 50 maximum, 20 default | No cursor. Page-only namespace. |
 | `propose-accounts` | 500 accounts per call | A longer list is refused. |
+| `propose-accounts` account `name` | 200 characters | Longer names are clipped. |
+| `search` `limit` | 25 maximum, 10 default | A larger value is clamped to 25. A missing or non-positive value is 10. |
 | `search`, catalog results | 3 provider pages | Paging stops after three pages even if `limit` is not reached. |
+| `set-link-token` token | 1 to 4096 bytes | An empty or longer token is refused, as is one with control characters. |
+| `report-sync-run` `message` | 500 characters | Longer messages are clipped. |
 
-<!-- source: lib/mydia/plugins/host_functions.ex:82,1034-1035,1489,1526; native/mydia_plugin_sdk/wit/plugin.wit:125-129; lib/mydia/plugins/page_reads.ex:37-41,239-256 -->
+<!-- source: lib/mydia/plugins/host_functions.ex:82,1034-1035,1489,1526; native/mydia_plugin_sdk/wit/plugin.wit:125-129; lib/mydia/plugins/page_reads.ex:37-41,239-256,287-288; lib/mydia/plugins/host_functions.ex:1509 (name clip), 1550 (token size), 1231 (message clip) -->
 
 ## Packages
 

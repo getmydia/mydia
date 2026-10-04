@@ -37,17 +37,18 @@ host checks each value, not just the class.
 | Class | Takes | Grants | Host functions it unlocks |
 |-------|-------|--------|---------------------------|
 | [`events:subscribe`](#eventssubscribe) | List of event names | Delivery of the named [events](events.md) to `on-event`. | none |
-| [`net:http`](#nethttp) | List of exact hostnames | Outbound HTTP to those hosts. | `http-request`; with `users:connections`, `link-request` and `connection-request` |
-| [`data:read`](#dataread) | List of namespaces | Curated, read-only projections of Mydia data. | `data-read`, `data-list` |
-| [`data:search`](#datasearch) | Flag | Searching the library and the metadata catalog from a page. | `search` |
-| [`surfaces:write`](#surfaceswrite) | List of write surfaces | Curated writes. | `ensure-watched`, `set-watch-state`, `ensure-favorite`, `mark-watched-state`, `add-favorite`, `media-add`, `collection-*` |
-| [`surfaces:page`](#surfacespage) | Flag | The plugin serves its own page. | the `page.on-http` export |
-| [`surfaces:shelf`](#surfacesshelf) | Flag | The plugin fills Home shelves. | the `fill-shelf` export |
-| [`state:kv`](#statekv) | Flag | A per-instance key/value store. | `kv-get`, `kv-set`, `kv-delete`, `kv-list`, `kv-set-many` |
-| [`users:connections`](#usersconnections) | Flag | Per-user account links the host holds credentials for. | `connections-list`, `links-list`, `link-request`, `connection-request`, `propose-accounts`, `set-link-token`, `set-link-status` |
-| [`schedule:interval`](#scheduleinterval) | Flag | Running `on-schedule` on a fixed interval. | the `on-schedule` export |
+| [`net:http`](#nethttp) | List of exact hostnames | Outbound HTTP to those hosts. | [`http-request`](host-functions.md#http-request); with `users:connections`, [`link-request`](host-functions.md#link-request) and [`connection-request`](host-functions.md#connection-request) |
+| [`data:read`](#dataread) | List of namespaces | Curated, read-only projections of Mydia data. | [`data-read`](host-functions.md#data-read), [`data-list`](host-functions.md#data-list) |
+| [`data:search`](#datasearch) | Flag | Searching the library and the metadata catalog from a page or a shelf fill. | [`search`](host-functions.md#search) |
+| [`surfaces:write`](#surfaceswrite) | List of write surfaces | Curated writes. | [`ensure-watched`](host-functions.md#ensure-watched), [`set-watch-state`](host-functions.md#set-watch-state), [`ensure-favorite`](host-functions.md#ensure-favorite), [`mark-watched-state`](host-functions.md#mark-watched-state), [`add-favorite`](host-functions.md#add-favorite), [`media-add`](host-functions.md#media-add), [`collection-create`](host-functions.md#collection-create), [`collection-update`](host-functions.md#collection-update), [`collection-add-items`](host-functions.md#collection-add-items), [`collection-remove-items`](host-functions.md#collection-remove-items) |
+| [`surfaces:page`](#surfacespage) | Flag | The plugin serves its own page. | the [`on-http`](guest-exports.md#on-http) export |
+| [`surfaces:shelf`](#surfacesshelf) | Flag | The plugin fills Home shelves. | the [`fill-shelf`](guest-exports.md#fill-shelf) export |
+| [`state:kv`](#statekv) | Flag | A per-instance key/value store. | [`kv-get`](host-functions.md#kv-get), [`kv-set`](host-functions.md#kv-set), [`kv-delete`](host-functions.md#kv-delete), [`kv-list`](host-functions.md#kv-list), [`kv-set-many`](host-functions.md#kv-set-many) |
+| [`users:connections`](#usersconnections) | Flag | Per-user account links the host holds credentials for. | [`connections-list`](host-functions.md#connections-list), [`links-list`](host-functions.md#links-list), [`link-request`](host-functions.md#link-request), [`connection-request`](host-functions.md#connection-request), [`propose-accounts`](host-functions.md#propose-accounts), [`set-link-token`](host-functions.md#set-link-token), [`set-link-status`](host-functions.md#set-link-status) |
+| [`schedule:interval`](#scheduleinterval) | Flag | Running `on-schedule` on a fixed interval. | the [`on-schedule`](guest-exports.md#on-schedule) export |
 
-Two host functions need no capability: `log` and `report-sync-run`. `ensure-watched`,
+Two host functions need no capability: [`log`](host-functions.md#log) and
+[`report-sync-run`](host-functions.md#report-sync-run). `ensure-watched`,
 `set-watch-state` and `ensure-favorite` also need an active connection to the target user.
 
 <!-- source: lib/mydia/plugins/manifest.ex:169-178; lib/mydia/plugins/capabilities.ex:19-33; lib/mydia/plugins/host_functions.ex (require_capability, require_surface, require_data_namespace call sites) -->
@@ -78,7 +79,9 @@ each request URL.
   private addresses unless the operator marked the host as allowed. See
   [limits](limits.md#network) for response size and timeout.
 
-Functions: `http-request`. `link-request` and `connection-request` need this
+Functions: [`http-request`](host-functions.md#http-request).
+[`link-request`](host-functions.md#link-request) and
+[`connection-request`](host-functions.md#connection-request) need this
 capability too, as well as `users:connections`.
 
 <!-- source: lib/mydia/plugins/manifest.ex:489-526; lib/mydia/plugins/host_functions.ex:658-662,1436-1440,1479-1486 -->
@@ -90,27 +93,28 @@ rows or secrets.
 
 | Namespace | Available in | Notes |
 |-----------|--------------|-------|
-| `media_item` | Every handler | Served by `data-read` (one item) and `data-list` (enumerate). |
+| `media_item` | Every handler | Served by [`data-read`](host-functions.md#data-read) (one item) and [`data-list`](host-functions.md#data-list) (enumerate). |
 | `playback_progress` | Every handler | `data-list` only. Rows for users with an active connection to the plugin. |
 | `library_item` | Every handler | `data-list` only. Catalogued items with an `owned` flag. |
-| `media_request` | Pages | The acting user's own rows. |
-| `download` | Pages | Active downloads for items the acting user requested. |
-| `collection` | Pages | The acting user's own collections. |
-| `watch_history` | Pages | The acting user's progress rows, newest first. |
+| `media_request` | Pages and shelf fills | The acting user's own rows. |
+| `download` | Pages and shelf fills | Active downloads for items the acting user requested. |
+| `collection` | Pages and shelf fills | The acting user's own collections. |
+| `watch_history` | Pages and shelf fills | The acting user's progress rows, newest first. |
 
 During a page call and a shelf fill every namespace is read as the acting user,
 so a page never sees more than the person using it.
 
-Functions: `data-read`, `data-list`.
+Functions: [`data-read`](host-functions.md#data-read),
+[`data-list`](host-functions.md#data-list).
 
 <!-- source: lib/mydia/plugins/manifest.ex:187-197,534-548; native/mydia_plugin_sdk/wit/plugin.wit:119-131; lib/mydia/plugins/page_reads.ex:60-90 -->
 
 ### data:search
 
-A flag. Lets a page call `search` against the acting user's library (`kind`
-`library`) or the metadata catalog (`kind` `catalog`).
+A flag. Lets a page call or a shelf fill call `search` against the acting user's
+library (`kind` `library`) or the metadata catalog (`kind` `catalog`).
 
-Functions: `search`.
+Functions: [`search`](host-functions.md#search).
 
 <!-- source: lib/mydia/plugins/page_reads.ex:41-55 -->
 
@@ -121,10 +125,10 @@ on each call, and a page write is also checked against the user's role.
 
 | Surface | Host functions | Available to |
 |---------|----------------|--------------|
-| `playback:watched` | `ensure-watched`, `set-watch-state` (connected users), `mark-watched-state` (page) | Events, schedules and pages |
-| `collections:favorite` | `ensure-favorite` (connected users), `add-favorite` (page) | Events, schedules and pages |
-| `media:add` | `media-add` | Pages only |
-| `collections:write` | `collection-create`, `collection-update`, `collection-add-items`, `collection-remove-items` | Pages only |
+| `playback:watched` | [`ensure-watched`](host-functions.md#ensure-watched), [`set-watch-state`](host-functions.md#set-watch-state) (connected users), [`mark-watched-state`](host-functions.md#mark-watched-state) (page) | Events, schedules and pages |
+| `collections:favorite` | [`ensure-favorite`](host-functions.md#ensure-favorite) (connected users), [`add-favorite`](host-functions.md#add-favorite) (page) | Events, schedules and pages |
+| `media:add` | [`media-add`](host-functions.md#media-add) | Pages only |
+| `collections:write` | [`collection-create`](host-functions.md#collection-create), [`collection-update`](host-functions.md#collection-update), [`collection-add-items`](host-functions.md#collection-add-items), [`collection-remove-items`](host-functions.md#collection-remove-items) | Pages only |
 
 Page writes act as the signed-in user, are journaled, and may need the user's
 confirmation first. Every write function is refused during a shelf fill,
@@ -135,13 +139,13 @@ whatever the grant.
 ### surfaces:page
 
 A flag. The plugin serves a page at `/plugins/<slug>/app/` through the
-`page.on-http` export and appears in the navigation. Requires a `page`
+[`on-http`](guest-exports.md#on-http) export and appears in the navigation. Requires a `page`
 descriptor in the manifest. The page's reads and writes are gated by the other
 classes above. See [Serve a page](../how-to/pages.md).
 
 ### surfaces:shelf
 
-A flag. The plugin fills shelves on Home through the `fill-shelf` export.
+A flag. The plugin fills shelves on Home through the [`fill-shelf`](guest-exports.md#fill-shelf) export.
 Requires a `shelves` list in the manifest, and `shelves` is rejected without
 this capability. A shelf-only plugin may omit `events:subscribe`. See
 [Fill a shelf](../how-to/shelves.md).
@@ -154,7 +158,11 @@ A flag. A per-instance key/value store for cursors, watermarks and dedupe sets.
 Two instances of one plugin hold independent state. Sizes and quotas are in
 [limits](limits.md#storage). A write past a quota returns `denied`.
 
-Functions: `kv-get`, `kv-set`, `kv-delete`, `kv-list`, `kv-set-many`.
+Functions: [`kv-get`](host-functions.md#kv-get),
+[`kv-set`](host-functions.md#kv-set),
+[`kv-delete`](host-functions.md#kv-delete),
+[`kv-list`](host-functions.md#kv-list),
+[`kv-set-many`](host-functions.md#kv-set-many).
 
 <!-- source: lib/mydia/plugins/kv.ex:1-30; lib/mydia/plugins/host_functions.ex:820-870 -->
 
@@ -172,14 +180,19 @@ an active connection.
 attached by the host. They need `net:http` as well. `set-link-token` and
 `set-link-status` refuse a link the host has disabled.
 
-Functions: `connections-list`, `links-list`, `link-request`,
-`connection-request`, `propose-accounts`, `set-link-token`, `set-link-status`.
+Functions: [`connections-list`](host-functions.md#connections-list),
+[`links-list`](host-functions.md#links-list),
+[`link-request`](host-functions.md#link-request),
+[`connection-request`](host-functions.md#connection-request),
+[`propose-accounts`](host-functions.md#propose-accounts),
+[`set-link-token`](host-functions.md#set-link-token),
+[`set-link-status`](host-functions.md#set-link-status).
 
 <!-- source: lib/mydia/plugins/host_functions.ex:1361-1380,1382-1440,1479-1490,1493-1500,1532-1540,1566-1570 -->
 
 ### schedule:interval
 
-A flag. The host calls the `on-schedule` export on the interval the manifest's
+A flag. The host calls the [`on-schedule`](guest-exports.md#on-schedule) export on the interval the manifest's
 `schedule` descriptor declares. A `schedule` without this capability is
 rejected. See [Manifest](manifest.md) for the descriptor and the interval floor.
 
