@@ -110,13 +110,19 @@ hidden behind the bottom dock.
 
 A source's home shows Continue Watching first when the source implements
 `ContinueWatching` (Plex: `/hubs/continueWatching/items`; Stash: scenes
-with a resume point, last played first). Then come the server's own rows
-when it implements `HomeHubs` (Plex's `/hubs`, minus `home.continue` and
-`home.ondeck`), otherwise one row per library. A failed Continue Watching
-hides its row; failed hubs fall back to the library rows. Removing from
-Continue Watching is a Plex `PUT /actions/removeFromContinueWatching` and a
-Stash `sceneSaveActivity` with a zero resume point (which works on every
-Stash the source supports; `sceneResetActivity` needs 0.27).
+with a resume point, last played first; Jellyfin: `/UserItems/Resume`, then
+`/Shows/NextUp` for shows with nothing under way, 20 in all). Then come the
+server's own rows when it implements `HomeHubs` (Plex's `/hubs`, minus
+`home.continue` and `home.ondeck`), otherwise one row per library. A failed
+Continue Watching hides its row; failed hubs fall back to the library rows.
+Removing from Continue Watching is a Plex
+`PUT /actions/removeFromContinueWatching`, a Stash `sceneSaveActivity` with
+a zero resume point (which works on every Stash the source supports;
+`sceneResetActivity` needs 0.27), and a Jellyfin
+`POST /UserItems/{id}/UserData` with a zero `PlaybackPositionTicks`.
+Jellyfin cannot dismiss a Next Up episode, so
+`canRemoveFromContinueWatching` is false for one and the row's menu offers
+Details only.
 
 ## Tests
 

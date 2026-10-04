@@ -170,6 +170,17 @@ void main() {
       expect(pushed.last, '/s/acc1:owner:aa11/item/episode/e2');
     });
 
+    testWidgets('an entry the source cannot remove offers details only',
+        (tester) async {
+      final fake = FakeResumingSource()
+        ..unremovable.add(fakeResumingEpisode.ref);
+      await pumpHome(tester, fake);
+      await tester.longPress(find.byKey(const ValueKey('source-continue-e2')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('source-continue-details')), findsOneWidget);
+      expect(find.byKey(const Key('source-continue-remove')), findsNothing);
+    });
+
     testWidgets('pull to refresh reloads the row', (tester) async {
       final fake = FakeResumingSource();
       await pumpHome(tester, fake);

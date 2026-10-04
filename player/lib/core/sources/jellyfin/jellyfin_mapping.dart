@@ -83,13 +83,29 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       tag is String ? ArtworkRef('/Items/$id/Images/$type?tag=$tag') : null;
   final user = (json['UserData'] as Map?)?.cast<String, dynamic>() ?? const {};
   final position = jellyfinSeconds(user['PlaybackPositionTicks']);
+  final episode = kind == ItemKind.episode;
+  final index = json['IndexNumber'] as int?;
+  final parentIndex = episode ? json['ParentIndexNumber'] as int? : null;
+  // An episode's own Primary image is a landscape still: the series poster
+  // suits a poster frame, and the still suits a backdrop. Plex does the same.
+  final seriesId = json['SeriesId'];
+  final seriesTag = json['SeriesPrimaryImageTag'];
+  final seriesPoster = episode && seriesId is String && seriesTag is String
+      ? ArtworkRef('/Items/$seriesId/Images/Primary?tag=$seriesTag')
+      : null;
   return ItemSummary(
     ref: ItemRef(sourceId: sourceId, kind: kind, externalId: id),
     title: json['Name'] as String? ?? 'Untitled',
-    subtitle: kind == ItemKind.episode ? json['SeriesName'] as String? : null,
+    subtitle: episode && index != null && parentIndex != null
+        ? 'S$parentIndex · E$index'
+        : null,
+    showTitle: episode ? json['SeriesName'] as String? : null,
     year: json['ProductionYear'] as int?,
-    poster: image('Primary', tags['Primary']) ?? image('Thumb', tags['Thumb']),
-    backdrop: image('Backdrop', backdrops.firstOrNull) ??
+    poster: seriesPoster ??
+        image('Primary', tags['Primary']) ??
+        image('Thumb', tags['Thumb']),
+    backdrop: (episode ? image('Primary', tags['Primary']) : null) ??
+        image('Backdrop', backdrops.firstOrNull) ??
         image('Thumb', tags['Thumb']),
     durationSeconds: jellyfinSeconds(json['RunTimeTicks']),
     userState: UserState(
@@ -97,9 +113,8 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       progressSeconds: position == 0 ? null : position,
     ),
     childCount: json['ChildCount'] as int?,
-    index: json['IndexNumber'] as int?,
-    parentIndex:
-        kind == ItemKind.episode ? json['ParentIndexNumber'] as int? : null,
+    index: index,
+    parentIndex: parentIndex,
   );
 }
 

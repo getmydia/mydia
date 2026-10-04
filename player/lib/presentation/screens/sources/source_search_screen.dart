@@ -13,6 +13,7 @@ import '../../../domain/sources/item.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/source_artwork.dart';
 import 'source_browse_providers.dart';
+import 'source_drawer_button.dart';
 import 'source_error_view.dart';
 
 class SourceSearchNotifier extends Notifier<AsyncValue<List<ItemSummary>>?> {
@@ -80,7 +81,7 @@ class SourceSearchScreen extends ConsumerWidget {
         ref.watch(mediaSourceProvider(sourceId))?.as<Searchable>() != null;
     if (!searchable) {
       return Scaffold(
-        appBar: AppBar(),
+        appBar: AppBar(leading: SourceDrawerButton.maybe(context)),
         body: const Center(
           child: Text(
             'This server does not support search.',
@@ -91,6 +92,7 @@ class SourceSearchScreen extends ConsumerWidget {
     }
     return Scaffold(
       appBar: AppBar(
+        leading: SourceDrawerButton.maybe(context),
         title: TextField(
           key: const Key('source-search-field'),
           autofocus: true,

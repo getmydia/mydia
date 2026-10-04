@@ -45,6 +45,8 @@ class SourceContinueWatchingRow extends ConsumerWidget {
     // hasValue first: on a failure with no earlier list, the row is empty.
     final items = state.hasValue ? state.requireValue : const <ItemSummary>[];
     if (items.isEmpty) return const SizedBox.shrink();
+    final continueWatching =
+        ref.watch(mediaSourceProvider(sourceId))?.as<ContinueWatching>();
     return SourcePosterRow(
       key: const Key('source-continue-watching'),
       title: 'Continue Watching',
@@ -55,7 +57,13 @@ class SourceContinueWatchingRow extends ConsumerWidget {
         item: item,
         subtitle: continueWatchingCaption(item),
         onTap: () => _play(context, ref, item.ref),
-        onContextMenu: (cardContext) => _openMenu(cardContext, ref, item.ref),
+        onContextMenu: (cardContext) => _openMenu(
+          cardContext,
+          ref,
+          item.ref,
+          removable:
+              continueWatching?.canRemoveFromContinueWatching(item) ?? false,
+        ),
       ),
     );
   }
@@ -93,24 +101,26 @@ Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
 Future<void> _openMenu(
   BuildContext cardContext,
   WidgetRef ref,
-  ItemRef item,
-) async {
+  ItemRef item, {
+  required bool removable,
+}) async {
   final position = popupPositionBelow(cardContext);
   if (position == null) return;
   final selected = await showMenu<_Action>(
     context: cardContext,
     position: position,
-    items: const [
-      PopupMenuItem(
+    items: [
+      const PopupMenuItem(
         key: Key('source-continue-details'),
         value: _Action.details,
         child: Text('Details'),
       ),
-      PopupMenuItem(
-        key: Key('source-continue-remove'),
-        value: _Action.remove,
-        child: Text('Remove from Continue Watching'),
-      ),
+      if (removable)
+        const PopupMenuItem(
+          key: Key('source-continue-remove'),
+          value: _Action.remove,
+          child: Text('Remove from Continue Watching'),
+        ),
     ],
   );
   if (selected == null || !cardContext.mounted) return;

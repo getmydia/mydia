@@ -12,33 +12,41 @@ class _FixedAuth extends AuthStateNotifier {
   AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
 }
 
-const _plexSource = Source(
-  account: ProviderAccount(
-    id: 'acc1',
-    kind: SourceKind.plex,
-    displayName: 'someone@example.test',
-    storageNamespace: 'source/acc1',
-    activeProfileId: 'owner',
-  ),
-  profile: SourceProfile(
-    id: 'owner',
-    accountId: 'acc1',
-    name: 'Owner',
-    isOwner: true,
-  ),
-  server: SourceServer(
-    id: 'srv9',
-    accountId: 'acc1',
-    profileId: 'owner',
-    name: 'Basement',
-  ),
-);
+Source _plex({bool needsReauth = false}) => Source(
+      account: ProviderAccount(
+        id: 'acc1',
+        kind: SourceKind.plex,
+        displayName: 'someone@example.test',
+        storageNamespace: 'source/acc1',
+        activeProfileId: 'owner',
+        needsReauth: needsReauth,
+      ),
+      profile: const SourceProfile(
+        id: 'owner',
+        accountId: 'acc1',
+        name: 'Owner',
+        isOwner: true,
+      ),
+      server: const SourceServer(
+        id: 'srv9',
+        accountId: 'acc1',
+        profileId: 'owner',
+        name: 'Basement',
+      ),
+    );
 
-Future<ProviderContainer> _pump(
+class _Calls {
+  final navigations = <String>[];
+  final switches = <String>[];
+}
+
+Future<(ProviderContainer, _Calls)> _pump(
   WidgetTester tester, {
   required List<Source> thirdParty,
-  required List<String> navigations,
+  String location = '/',
+  bool withSwitchCallback = true,
 }) async {
+  final calls = _Calls();
   final container = ProviderContainer(
     overrides: [
       authStateProvider.overrideWith(_FixedAuth.new),
@@ -51,51 +59,82 @@ Future<ProviderContainer> _pump(
       container: container,
       child: MaterialApp(
         home: Scaffold(
-          body: SourceSwitcher(onNavigate: navigations.add),
+          body: SourceSwitcher(
+            location: location,
+            onNavigate: calls.navigations.add,
+            onSwitchSource: withSwitchCallback ? calls.switches.add : null,
+          ),
         ),
       ),
     ),
   );
-  return container;
+  return (container, calls);
+}
+
+const _header = ValueKey('source-switcher-header');
+
+String _headerName(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const ValueKey('source-switcher-header-name')))
+    .data!;
+
+Future<void> _openAndTap(WidgetTester tester, Key row) async {
+  await tester.tap(find.byKey(_header));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(row));
+  await tester.pumpAndSettle();
 }
 
 void main() {
   testWidgets('renders nothing with only the Mydia source', (tester) async {
-    await _pump(tester, thirdParty: const [], navigations: []);
-    expect(find.byType(InkWell), findsNothing);
-    expect(find.text('Mydia'), findsNothing);
-    final size = tester.getSize(find.byType(SourceSwitcher));
-    expect(size.height, 0);
+    await _pump(tester, thirdParty: const []);
+    expect(find.byKey(_header), findsNothing);
+    expect(tester.getSize(find.byType(SourceSwitcher)).height, 0);
   });
 
-  testWidgets('lists every source once a second exists', (tester) async {
-    await _pump(tester, thirdParty: [_plexSource], navigations: []);
-    expect(find.byKey(const ValueKey('source-switcher-mydia')), findsOneWidget);
+  testWidgets('is one row, not a list of servers', (tester) async {
+    await _pump(tester, thirdParty: [_plex()]);
+    expect(find.byKey(_header), findsOneWidget);
+    expect(find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('source-switcher-add')), findsNothing);
+  });
+
+  testWidgets('names the server the page belongs to', (tester) async {
+    await _pump(tester,
+        thirdParty: [_plex()], location: '/s/acc1:owner:srv9/library/x');
+    expect(_headerName(tester), 'Basement');
+  });
+
+  testWidgets('names Mydia on a Mydia page even when Plex is remembered',
+      (tester) async {
+    final (container, _) =
+        await _pump(tester, thirdParty: [_plex()], location: '/settings');
+    container.read(selectedSourceIdProvider.notifier).select(_plex().id);
+    await tester.pump();
+    expect(_headerName(tester), 'Mydia');
+  });
+
+  testWidgets('the Mydia header does not repeat its name as a caption',
+      (tester) async {
+    await _pump(tester, thirdParty: [_plex()]);
     expect(
-      find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')),
+      find.descendant(of: find.byKey(_header), matching: find.text('Mydia')),
       findsOneWidget,
     );
   });
 
-  testWidgets('selecting a third-party source navigates to its root',
-      (tester) async {
-    final navigations = <String>[];
-    final container = await _pump(tester,
-        thirdParty: [_plexSource], navigations: navigations);
-
-    await tester
-        .tap(find.byKey(const ValueKey('source-switcher-acc1:owner:srv9')));
-    await tester.pump();
-
-    expect(container.read(activeSourceIdProvider), _plexSource.id);
-    expect(navigations, ['/s/acc1:owner:srv9']);
+  testWidgets('a third-party header keeps its account caption', (tester) async {
+    await _pump(tester,
+        thirdParty: [_plex()], location: '/s/acc1:owner:srv9/library/x');
+    expect(find.text('Plex · someone@example.test'), findsOneWidget);
   });
 
-  testWidgets('a Plex account with Home users shows who is active',
+  testWidgets('a Plex Home with other users names the active one',
       (tester) async {
+    final calls = _Calls();
     final container = ProviderContainer(overrides: [
       authStateProvider.overrideWith(_FixedAuth.new),
-      thirdPartySourcesProvider.overrideWithValue(const [_plexSource]),
+      thirdPartySourcesProvider.overrideWithValue([_plex()]),
       accountProfilesProvider('acc1').overrideWithValue(const [
         SourceProfile(
             id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
@@ -107,32 +146,78 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        home: Scaffold(body: SourceSwitcher(onNavigate: (_) {})),
+        home: Scaffold(
+          body: SourceSwitcher(
+            location: '/s/acc1:owner:srv9',
+            onNavigate: calls.navigations.add,
+          ),
+        ),
       ),
     ));
-    final caption =
-        find.byKey(const ValueKey('source-switcher-switch-user-acc1'));
-    expect(caption, findsOneWidget);
-    expect(find.descendant(of: caption, matching: find.textContaining('Owner')),
-        findsOneWidget);
+    expect(find.text('Plex · someone@example.test · Owner'), findsOneWidget);
   });
 
-  testWidgets('a Plex account with one user has a plain caption',
+  testWidgets('the header is announced as a button naming the server',
       (tester) async {
-    await _pump(tester, thirdParty: const [_plexSource], navigations: []);
-    expect(find.byKey(const ValueKey('source-switcher-switch-user-acc1')),
-        findsNothing);
-    expect(find.byKey(const ValueKey('source-switcher-account-acc1')),
-        findsOneWidget);
+    await _pump(tester, thirdParty: [_plex()]);
+    expect(find.bySemanticsLabel(RegExp('Switch server')), findsOneWidget);
   });
 
-  testWidgets('selecting Mydia navigates to the existing home', (tester) async {
-    final navigations = <String>[];
-    await _pump(tester, thirdParty: [_plexSource], navigations: navigations);
+  testWidgets('switching servers selects it and uses onSwitchSource',
+      (tester) async {
+    final (container, calls) = await _pump(tester, thirdParty: [_plex()]);
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+    expect(container.read(activeSourceIdProvider), _plex().id);
+    expect(calls.switches, ['/s/acc1:owner:srv9']);
+    expect(calls.navigations, isEmpty);
+  });
 
-    await tester.tap(find.byKey(const ValueKey('source-switcher-mydia')));
-    await tester.pump();
+  testWidgets('switching to Mydia goes home', (tester) async {
+    final (_, calls) = await _pump(tester,
+        thirdParty: [_plex()], location: '/s/acc1:owner:srv9');
+    await _openAndTap(tester, const ValueKey('source-switcher-mydia'));
+    expect(calls.switches, ['/']);
+  });
 
-    expect(navigations, ['/']);
+  testWidgets('without onSwitchSource a switch goes through onNavigate',
+      (tester) async {
+    final (_, calls) =
+        await _pump(tester, thirdParty: [_plex()], withSwitchCallback: false);
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+    expect(calls.navigations, ['/s/acc1:owner:srv9']);
+  });
+
+  testWidgets('add and manage navigate', (tester) async {
+    final (_, calls) = await _pump(tester, thirdParty: [_plex()]);
+    await _openAndTap(tester, const ValueKey('source-switcher-add'));
+    await _openAndTap(tester, const ValueKey('source-switcher-manage'));
+    expect(calls.navigations, ['/sources/add', '/sources/manage']);
+    expect(calls.switches, isEmpty);
+  });
+
+  testWidgets('an account that needs sign-in routes to re-auth',
+      (tester) async {
+    final flagged = _plex(needsReauth: true);
+    final (_, calls) = await _pump(tester,
+        thirdParty: [flagged], location: '/s/acc1:owner:srv9');
+    expect(find.text('Sign in again'), findsOneWidget);
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-acc1:owner:srv9'));
+    expect(calls.navigations, ['/sources/add/plex?account=acc1']);
+    expect(calls.switches, isEmpty);
+  });
+
+  test('currentFor prefers the location, then Mydia, then the pick', () {
+    final plex = _plex();
+    final mydia = Source.legacyMydia();
+    expect(
+        SourceSwitcher.currentFor(
+            [mydia, plex], '/s/acc1:owner:srv9', mydia.id),
+        plex);
+    expect(
+        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id), mydia);
+    expect(SourceSwitcher.currentFor([plex], '/sources/manage', plex.id), plex);
   });
 }

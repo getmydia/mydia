@@ -347,6 +347,27 @@ defmodule Mydia.Plugins.ManifestTest do
       assert msg =~ "nope"
     end
 
+    test "accepts a string hint" do
+      map = schema_map([%{"key" => "model", "type" => "string", "hint" => "Users can change it"}])
+
+      assert {:ok, %Manifest{settings_schema: [field]}} = Manifest.parse(map)
+      assert field["hint"] == "Users can change it"
+    end
+
+    test "rejects a non-string hint" do
+      map = schema_map([%{"key" => "model", "type" => "string", "hint" => 123}])
+
+      assert {:error, %Error{type: :invalid_manifest, message: msg}} = Manifest.parse(map)
+      assert msg == "hint on model must be a non-empty string"
+    end
+
+    test "rejects a blank hint" do
+      map = schema_map([%{"key" => "model", "type" => "string", "hint" => "  "}])
+
+      assert {:error, %Error{type: :invalid_manifest, message: msg}} = Manifest.parse(map)
+      assert msg == "hint on model must be a non-empty string"
+    end
+
     test "rejects a malformed visible_when value" do
       map =
         schema_map([

@@ -137,6 +137,42 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     config
   end
 
+  defp seed_with_hints(slug, name) do
+    manifest =
+      Map.put(manifest_map(slug, name), "settings_schema", [
+        %{
+          "key" => "model",
+          "type" => "string",
+          "label" => "Default model",
+          "hint" => "Users can change it"
+        },
+        %{
+          "key" => "base_url",
+          "type" => "url",
+          "label" => "Server URL",
+          "hint" => "For example http://ollama.lan:11434",
+          "grants_host" => true,
+          "allow_private" => true
+        }
+      ])
+
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        manifest: manifest,
+        wasm_module: guest_wasm(),
+        granted_capabilities: %{
+          "net:http" => ["discord.com"],
+          "events:subscribe" => ["media_item.added"]
+        },
+        enabled: true
+      })
+
+    config
+  end
+
   defp seed_with_schema(slug, name, opts) do
     {:ok, config} =
       Settings.create_plugin_config(%{
@@ -586,6 +622,22 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "operator settings + host disclosure (U3, U4)" do
+    test "a field's hint renders under it, joined with the private-network note on urls",
+         %{conn: conn} do
+      seed_with_hints("hinted", "Hinted")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#settings-hinted") |> render_click()
+
+      assert has_element?(view, "#plugin-settings-form p", "Users can change it")
+
+      assert has_element?(
+               view,
+               "#plugin-settings-form p",
+               "For example http://ollama.lan:11434 This address may be on your local network."
+             )
+    end
+
     test "configuring a host-granting url grants its host (R5, R6)", %{conn: conn} do
       seed_with_schema("webhook-notifier", "Webhook Notifier", enabled: true)
       {:ok, view, _} = live(conn, ~p"/admin/plugins")

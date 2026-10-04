@@ -1,11 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_client.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_media_source.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/source_error.dart';
 
 import '../fixed_connection.dart';
 import '../media_source_contract.dart';
@@ -174,5 +177,106 @@ void main() {
     expect(url.queryParameters['fillWidth'], '300');
     expect(
         request.cacheKey, '$jellyfinSid|/Items/m2/Images/Primary?tag=p2|300');
+  });
+
+  group('Continue Watching', () {
+    const ticks = FakeJellyfinServer.ticks;
+    Map<String, dynamic> resumingEpisode(int n) => {
+          ...FakeJellyfinServer.episode(n),
+          'UserData': {'Played': false, 'PlaybackPositionTicks': 600 * ticks},
+        };
+    Map<String, dynamic> otherSeries(int n) => {
+          ...FakeJellyfinServer.episode(n),
+          'Id': 'o$n',
+          'SeriesId': 'show2',
+          'SeriesName': 'Driftwood',
+        };
+
+    test('declares the capability', () {
+      final source = build().source;
+      expect(source.capabilities, contains(SourceCapability.continueWatching));
+      expect(source.as<ContinueWatching>(), same(source));
+    });
+
+    test('asks for resumable video and next episodes, for this user', () async {
+      final b = build();
+      await b.source.continueWatching();
+      final byPath = {
+        for (final r in b.server.requests) r.url.path: r.url.queryParameters,
+      };
+      expect(byPath['/UserItems/Resume'], {
+        'userId': FakeJellyfinServer.userId,
+        'MediaTypes': 'Video',
+        'Limit': '20',
+        'EnableImageTypes': 'Primary,Backdrop,Thumb',
+      });
+      expect(byPath['/Shows/NextUp'], {
+        'userId': FakeJellyfinServer.userId,
+        'Limit': '20',
+        'enableResumable': 'false',
+        'enableRewatching': 'false',
+        'EnableImageTypes': 'Primary,Backdrop,Thumb',
+      });
+    });
+
+    test('resume entries first, then next episodes of other shows', () async {
+      final b = build();
+      b.server
+        ..resumeItems = [
+          FakeJellyfinServer.movie(3, positionSeconds: 300),
+          resumingEpisode(2),
+        ]
+        // e3 is Saltmarsh, which already has a resume card.
+        ..nextUpItems = [FakeJellyfinServer.episode(3), otherSeries(1)];
+      final items = await b.source.continueWatching();
+      expect(items.map((i) => i.ref.externalId), ['m3', 'e2', 'o1']);
+      expect(items[1].showTitle, 'Saltmarsh');
+      expect(items[1].subtitle, 'S1 · E2');
+    });
+
+    test('holds at most 20 entries', () async {
+      final b = build();
+      b.server
+        ..resumeItems = [
+          for (var n = 1; n <= 15; n++)
+            FakeJellyfinServer.movie(n, positionSeconds: 60),
+        ]
+        ..nextUpItems = [for (var n = 1; n <= 10; n++) otherSeries(n)];
+      final items = await b.source.continueWatching();
+      expect(items, hasLength(20));
+      expect(items.last.ref.externalId, 'o5');
+    });
+
+    for (final path in ['/UserItems/Resume', '/Shows/NextUp']) {
+      test('fails when $path fails', () async {
+        final b = build();
+        b.server.failing.add(path);
+        await expectLater(
+            b.source.continueWatching(), throwsA(isA<SourceException>()));
+      });
+    }
+
+    test('only an entry with a resume point can be removed', () async {
+      final b = build();
+      b.server
+        ..resumeItems = [FakeJellyfinServer.movie(3, positionSeconds: 300)]
+        ..nextUpItems = [otherSeries(1)];
+      final [resume, nextUp] = await b.source.continueWatching();
+      expect(b.source.canRemoveFromContinueWatching(resume), isTrue);
+      expect(b.source.canRemoveFromContinueWatching(nextUp), isFalse);
+    });
+
+    test('remove clears the resume point for this user', () async {
+      final b = build();
+      await b.source.removeFromContinueWatching(const ItemRef(
+          sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm3'));
+      final request = b.server.requests.last;
+      expect(request.method, 'POST');
+      expect(request.url.path, '/UserItems/m3/UserData');
+      expect(request.url.queryParameters['userId'], FakeJellyfinServer.userId);
+      final (path, body) = b.server.bodies.last;
+      expect(path, '/UserItems/m3/UserData');
+      expect(body, {'PlaybackPositionTicks': 0});
+    });
   });
 }

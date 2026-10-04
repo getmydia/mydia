@@ -58,16 +58,42 @@ void main() {
         isNull);
   });
 
-  test('episodes carry numbers and the series name', () {
+  test('episodes carry numbers, the show title and an S/E caption', () {
     final e = jellyfinSummary(sid, FakeJellyfinServer.episode(2))!;
     expect(e.ref.kind, ItemKind.episode);
     expect(e.index, 2);
     expect(e.parentIndex, 1);
-    expect(e.subtitle, 'Saltmarsh');
+    expect(e.showTitle, 'Saltmarsh');
+    expect(e.subtitle, 'S1 · E2');
     final season = jellyfinSummary(sid, FakeJellyfinServer.season)!;
     expect(season.index, 1);
     expect(season.childCount, 2);
     expect(season.parentIndex, isNull);
+    expect(season.showTitle, isNull);
+    expect(season.subtitle, isNull);
+  });
+
+  test('an episode without numbers has no caption', () {
+    final e = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.episode(2),
+      'IndexNumber': null,
+    })!;
+    expect(e.subtitle, isNull);
+    expect(e.showTitle, 'Saltmarsh');
+  });
+
+  test('an episode shows its series poster and its own still behind', () {
+    final e = jellyfinSummary(sid, FakeJellyfinServer.episode(2))!;
+    expect(e.poster, const ArtworkRef('/Items/show1/Images/Primary?tag=sp'));
+    expect(e.backdrop, const ArtworkRef('/Items/e2/Images/Primary?tag=ep2'));
+  });
+
+  test('an episode without a series poster falls back to its own art', () {
+    final e = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.episode(2),
+      'SeriesPrimaryImageTag': null,
+    })!;
+    expect(e.poster, const ArtworkRef('/Items/e2/Images/Primary?tag=ep2'));
   });
 
   test('an unknown type or missing id maps to nothing', () {
