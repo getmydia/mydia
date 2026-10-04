@@ -52,7 +52,9 @@ For why the layers exist and what the database layer buys you, see
 
 ## Plugin instances
 
-Plugin instances can be declared in YAML. Keys under `settings` are the
+For installing, approving and updating plugins, see
+[Install and manage plugins](../how-to/plugins.md). Plugin instances can be
+declared in YAML. Keys under `settings` are the
 plugin's own settings. `name` identifies the instance across restarts.
 
 ```yaml

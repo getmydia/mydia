@@ -6,7 +6,7 @@ what the user should not see, stores the result and draws the rail. This guide
 declares a "Staff picks" shelf and fills it from a plugin.
 
 For every field and function, see the
-[host API](../reference/host-api.md#fill-shelf-16) and the
+[`fill-shelf`](../reference/guest-exports.md#fill-shelf) reference and the
 [manifest reference](../reference/manifest.md#shelves).
 
 ## 1. Declare the shelf
@@ -64,104 +64,42 @@ fn on_event(_evt: Event) -> Result<String, String> {
 ```
 
 The request carries `shelf` (the key you declared), `user_id`, `limit`, `now`,
-`config_json` and `exclude`. `exclude` lists titles the host will reject because
-they are already shown or were dismissed, so returning them wastes a slot. The
-host asks for 24 items and shows the first 12 that survive.
+`config_json` and `exclude`. Leave out the titles in `exclude`: the host rejects
+them. The full record is under [`fill-shelf`](../reference/guest-exports.md#fill-shelf).
 
 Return an `Err` string when the fill fails, and an empty list when you have
 nothing to suggest. An empty list keeps whatever the shelf held.
 
-## 3. What the host does with the result
+## 3. Know what the host does with the result
 
-The host treats every returned title as untrusted. For each one it:
+The host treats every returned title as untrusted. It resolves the provider ids
+you return, drops titles that do not resolve or that this user should not see,
+and takes the title, year and poster from its own metadata. When too few titles
+survive, it keeps the previous list. The rules are listed under
+[Return contract](../reference/guest-exports.md#return-contract), and the
+numbers (how many titles to return, how many must survive, the reason length)
+are in [Limits](../reference/limits.md#shelves).
 
-- Resolves the TMDB id first. A TVDB id is used only for a TV show. A title
-  with only an IMDb id is dropped.
-- Drops a title that does not resolve, that is already in the library, that
-  someone has requested, that this user dismissed, or that the user's
-  restrictions do not allow. Repeats are dropped too.
-- Collapses the reason to one line and clips it to 140 characters.
-- Resolves at most 48 candidates per fill, four times the 12 the rail shows,
-  taken in your order.
+## 4. Choose when it runs
 
-The host takes the title, year and poster from its own metadata, never from
-the plugin. When fewer than three titles survive, the host keeps the previous
-list and counts the fill as done.
+A fill runs when a user opens Home and the shelf is stale. A shelf is stale when
+it has never been filled, when `ttl_seconds` has passed since the last fill, or
+when an event listed in `refresh_on` fired for that user. Keep `ttl_seconds`
+generous: a fill that calls a language model can spend up to two minutes of
+model calls. The refresh spacing, the backoff after a failed fill and the queue
+size are in [Limits](../reference/limits.md#shelves).
 
-## 4. When it runs
+## 5. Read only, and check failures
 
-A fill runs when a user opens Home and the shelf is stale. A shelf is stale
-when it has never been filled, when `ttl_seconds` has passed since the last
-fill, or when an event listed in `refresh_on` fired for that user. An event
-makes the shelf stale no sooner than one hour after the last fill, so a busy
-user does not trigger a fill per event.
+A fill acts as the shelf's user and cannot change that user's data: every such
+function returns `denied`. With `state:kv` it can still write its own store. See
+[What a fill may do](../reference/guest-exports.md#what-a-fill-may-do) for the
+functions you can call. When fills fail, the plugin's row in
+Admin > System > Plugins shows the most recent error your plugin returned, so
+keep error strings short and free of secrets.
 
-When a fill fails, the host waits one hour before asking again, then six hours,
-then the full `ttl_seconds`. A shelf with a shorter TTL never waits longer than
-its TTL. The host shows the previous list while it waits.
-
-Fills run on their own queue with two slots. At most two fills run at once, and
-each may spend up to two minutes. For a plugin that calls a language model,
-that is up to two minutes of model calls per fill. Operators see this cost, so
-keep `ttl_seconds` generous.
-
-## 5. What a fill may do
-
-A fill acts as the shelf's user and can only read:
-
-- `search`, with `data:search`.
-- `data-list`, with `data:read`. Results are scoped to the shelf's user, the
-  same projections that user would see.
-- `data-read`, with `data:read`. It returns a media item by id and does not
-  apply the user's restrictions.
-- `http-request`, with `net:http`. A fill gets the same outbound budget as a
-  page call.
-- `connection-request` and `link-request`, with `users:connections` and
-  `net:http`. These are outbound calls authenticated with a stored token, gated
-  by grants like `http-request`. They do not write to Mydia.
-- `kv-get`, `kv-set` and the other KV functions, with `state:kv`. Keys are
-  yours, so use per-user keys such as `user/<user_id>/seen`.
-
-A fill runs against the plugin's default instance, which is what the KV and
-link functions are scoped to. A `multi_instance` plugin has no default
-instance, so it fills with none and those functions return `not_found`.
-
-Every function that changes the user's data is refused during a fill, because
-nobody is present to approve a change. Each returns `denied`, whatever the
-plugin has been granted. Two groups are refused:
-
-- The functions that return a `write-outcome`: `media-add`,
-  `collection-create`, `collection-update`, `collection-add-items`,
-  `collection-remove-items`, `mark-watched-state` and `add-favorite`.
-- The sync writes: `ensure-watched`, `set-watch-state` and `ensure-favorite`.
-
-A plugin's own KV store is not user data and stays writable.
-
-## Limits
-
-- A fill has 120 seconds. A slow guest is stopped and the fill counts as failed.
-  The host gives each title it checks ten seconds, and a title that takes
-  longer is dropped.
-- A plugin declares at most four shelves, each key unique within the plugin.
-- Shelves are per user and appear on Home only.
-
-## Where an operator sees a failing shelf
-
-When fills fail for some people, the plugin's row in Admin > System > Plugins
-shows a line such as "Suggestions failing for 2 people", followed by the most
-recent error your plugin returned. Keep error strings short and free of
-secrets: the operator reads them.
-
-## What users see
-
-Home shows one "Picked for you" entry in Customize Home that turns on every
-home shelf. People who customised their Home before the plugin arrived must
-tick it once. Each card has a "Not interested" button. A dismissed title never
-returns to that shelf for that user.
-
-Disabling the plugin hides its shelves and keeps their contents, so enabling it
-again costs no new fill. Revoking or removing the plugin deletes its shelves,
-items and dismissals.
+Operators and users see shelves on Home and can dismiss titles. That side is
+covered in [Install and manage plugins](../../using/how-to/plugins.md#what-your-users-see).
 
 ## Try it
 

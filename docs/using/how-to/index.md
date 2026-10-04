@@ -18,6 +18,8 @@ If you are starting from nothing, begin with a
 - [Automatic quality upgrades](automatic-quality-upgrades.md) - replace files that fall below your cutoff with better releases
 - [User management](manage-users.md) - roles, accounts, and the request system
 - [SSO/OIDC configuration](sso-oidc.md) - configure single sign-on
+- [Plugins](plugins.md) - install, configure, update and remove plugins
+- [Plugin sources](plugin-sources.md) - add a third-party plugin catalog
 - [PostgreSQL support](postgresql.md) - run Mydia on PostgreSQL instead of SQLite
 - [Reverse proxy](reverse-proxy.md) - put Mydia behind Nginx, Traefik, or Caddy
 - [Backup and restore](backup-restore.md) - back up and restore the database and configuration

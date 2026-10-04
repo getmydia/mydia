@@ -8,7 +8,8 @@ step. The real, larger example is the assistant plugin in
 
 For the concepts (grants, ceilings, the journal), see
 [Pages and writes on a user's behalf](../explanation/plugin-model.md#pages-and-writes-on-a-users-behalf).
-For every field and function, see the [host API](../reference/host-api.md#14-host-functions-and-the-page-export).
+For every field and function, see the [`on-http`](../reference/guest-exports.md#on-http) and the
+[page writes](../reference/host-functions.md#page-writes).
 
 ## 1. Declare the page
 
@@ -215,37 +216,24 @@ Details worth knowing:
   the user changes theme. Set it on your `<html>` so daisyUI's theme variables
   match the host. Without it your page follows the operating system theme.
 
-## What the host sets
+## Know the limits
 
-The host serves your response with its own headers, so a plugin cannot loosen
-them:
-
-- `content-security-policy`: `default-src 'self' 'unsafe-inline'` (inline
-  scripts and styles work), `connect-src 'self'` (the page can only call
-  itself), images from `self`, `data:` and the two artwork hosts, `sandbox
-  allow-scripts allow-forms`, and `frame-ancestors 'self'`. Load nothing from
-  another origin.
-- `cache-control: private, no-store`, `x-content-type-options: nosniff` and
-  `referrer-policy: no-referrer`.
-- Of the headers you return, only `content-type` is kept.
-
-Mydia's own stylesheet is available to your page at `/assets/css/app.css`, so
-daisyUI classes such as `btn`, `chat-bubble` and `card` work without shipping CSS.
-
-## Limits
-
-- Bodies are text. Requests over 1 MiB get 413 and non-UTF-8 bodies get 415.
-- A slow call ends with 504. When all of the plugin's page slots are in use for
-  more than a couple of seconds the host answers 503 with `Retry-After`; show a
-  "try again" message rather than an error.
-- A disabled or unapproved plugin answers 404, and a stale or missing token 401.
+The host serves your response with its own security headers, so the page can
+only call itself and loads nothing from another origin. Mydia's stylesheet is at
+`/assets/css/app.css`, so daisyUI classes work. The headers are listed under
+[Page response headers](../reference/guest-exports.md#page-response-headers).
+Body size and timeouts are in [Limits](../reference/limits.md#pages). The
+statuses the host answers with (401, 404, 413, 415, 502, 503, 504) are listed
+under [`on-http`](../reference/guest-exports.md#on-http). When the host answers
+503 with `Retry-After`, show a "try again" message rather than an error.
 
 ## Undo and the activity page
 
 Every write a page makes is journaled for the user. Users find them at
 `/plugins/shelf-notes/activity` (linked from the page's header) and can undo a
-single change or a whole batch. Administrators set the longest grant each role
-may give a plugin in the plugin's settings, under role ceilings.
+single change or a whole batch. Operators set how long a grant may last for each
+role, as described in
+[Let plugins make changes for people](../../using/how-to/plugins.md#let-plugins-make-changes-for-people).
 
 ## Try it
 

@@ -597,9 +597,10 @@ interface host {
   connections-list: func() -> result<list<connection>, host-error>;
 
   /// Outbound HTTP request authenticated by a connection: the host verifies the
-  /// connection belongs to the calling plugin, verifies the request host matches
-  /// the manifest connection descriptor, strips any guest-supplied Authorization
-  /// header, and injects the bearer token itself (R22). Requires net:http and
+  /// connection belongs to the calling plugin, checks the request host against
+  /// the plugin's net:http grant (or an endpoint approved for the instance),
+  /// strips any guest-supplied Authorization header, and injects the bearer
+  /// token itself (R22). Requires net:http and
   /// users:connections. The guest never sees the token.
   connection-request: func(connection-id: string, req: outbound-request)
       -> result<outbound-response, host-error>;

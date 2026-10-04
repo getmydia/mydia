@@ -248,7 +248,7 @@ DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ## Media Servers
 
 Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
-The easiest setup is Admin > Media servers > Add server > Plex, which signs in
+The easiest setup is Admin > Configuration > Media Servers > Add server > Plex, which signs in
 with your Plex account and finds your servers. To declare a server in the
 environment instead:
 
@@ -270,12 +270,14 @@ old one stays behind as a disabled server you can delete in the UI.
 
 `MEDIA_SERVER_<N>_*` variables with `MEDIA_SERVER_<N>_TYPE=plex` still work and
 are translated into Plex instances, but they are deprecated: Mydia logs a
-warning at startup and shows a banner on the Media servers page. Rename them to
+warning at startup and shows a banner on the Media Servers page. Rename them to
 `PLUGIN_PLEX_<N>_*`. Jellyfin keeps using `MEDIA_SERVER_<N>_*`.
 
 ## Plugins
 
-Settings for an installed plugin can come from the environment. Install and
+How to install, approve and update plugins is in
+[Install and manage plugins](../how-to/plugins.md). Settings for an installed
+plugin can come from the environment. Install and
 approve the plugin in the admin UI (or with `mydia-cli plugin install`) first;
 these variables only fill in its settings.
 
@@ -300,6 +302,19 @@ the Settings dialog.
 The older `PLUGIN_<N>_NAME`, `_VERSION`, `_ENABLED`, `_PRIORITY`,
 `_SOURCE_URL`, `_INTEGRITY_HASH` and `_GRANTED_CAPABILITIES` variables are
 ignored.
+
+### Plugin file overrides
+
+```bash
+PLUGINS_OVERRIDE_DIR=/config/plugin-overrides
+```
+
+A directory of `<slug>.wasm` files that replace the bytes of the plugin with
+that slug, including a bundled one. The variable is read once at startup, so
+restart after changing it. Replacing a `.wasm` file inside the directory needs
+no restart: disable and enable that plugin to load it. It is meant for testing a
+patched build; see
+[Replace a bundled plugin's bytes](../../plugins/how-to/test-and-iterate.md#replace-a-bundled-plugins-bytes).
 
 ### Plugin sources
 

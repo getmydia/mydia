@@ -47,14 +47,13 @@ fn on_event(evt: Event) -> Result<String, String> {
 }
 ```
 
-`host::http_request` is gated by your `net:http` grant. The host re-validates
-the URL host against your allowlist and runs an SSRF check on every call, so a
-request to a host you did not declare is denied.
-
-!!! warning "`net:http` hosts are exact, no wildcards"
-    List the exact hostnames you contact (`example.com`, `discord.com`). A
-    wildcard subdomain would be a data-exfiltration channel, so the host refuses
-    them.
+`host::http_request` is gated by your `net:http` grant: a request to a host you
+did not list is denied. List the exact hostnames you contact. The matching
+rules are under [`net:http`](../reference/capabilities.md#nethttp), and the
+response size and timeout are in [Limits](../reference/limits.md#network).
+The call and its errors are described under
+[`http-request`](../reference/host-functions.md#http-request). Subscribe only to
+names from the [events reference](../reference/events.md#event-catalog).
 
 ## Send to Discord, ntfy, or a custom webhook
 
