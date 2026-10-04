@@ -75,6 +75,17 @@ class SourceSecrets {
     for (final profile in record.profiles) {
       await _storage.delete(_userKey(record.account, profile.id));
     }
+    // Server tokens are only written for chosen servers, under whichever
+    // Home user was active, so profiles x servers covers every key.
+    final serverIds = {
+      ...record.chosenServers,
+      for (final server in record.servers) server.id,
+    };
+    for (final profile in record.profiles) {
+      for (final id in serverIds) {
+        await _storage.delete(_serverKey(record.account, profile.id, id));
+      }
+    }
     for (final server in record.servers) {
       await _storage
           .delete(_serverKey(record.account, server.profileId, server.id));

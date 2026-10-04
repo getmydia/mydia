@@ -89,4 +89,24 @@ void main() {
     expect(await storage.read('source/acc1/kid0001/user_token'), isNull);
     expect(await storage.read('source/acc1/owner/user_token'), isNull);
   });
+
+  test('deleteAll removes every profile\'s server tokens', () async {
+    final storage = MockAuthStorage();
+    final secrets = SourceSecrets(storage);
+    final record = plexRecord().copyWith(
+      profiles: const [
+        SourceProfile(
+            id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+        SourceProfile(
+            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      ],
+      chosenServerIds: const ['abc123', 'zz99'],
+    );
+    await storage.write('source/acc1/kid0001/abc123/token', 'a');
+    await storage.write('source/acc1/kid0001/zz99/token', 'b');
+
+    await secrets.deleteAll(record);
+    expect(await storage.read('source/acc1/kid0001/abc123/token'), isNull);
+    expect(await storage.read('source/acc1/kid0001/zz99/token'), isNull);
+  });
 }

@@ -121,9 +121,18 @@ class PlexHomeSwitcher {
     if (next == null) throw const SourceException.notFound();
 
     final previous = previousProfile;
-    if (previous != null && previous != profileId) {
+    if (previous != null) {
+      final stillVisible = {for (final s in next.servers) s.id};
+      final sameUser = previous == profileId;
       await _forget(
-          account, previous, [for (final s in previousServers) s.id], true);
+        account,
+        previous,
+        [
+          for (final s in previousServers)
+            if (!sameUser || !stillVisible.contains(s.id)) s.id,
+        ],
+        !sameUser,
+      );
     }
 
     final sources = next.sources;
@@ -132,18 +141,24 @@ class PlexHomeSwitcher {
         .id;
   }
 
-  /// Best effort: a token left behind under an inactive profile is never
-  /// read, and removing the account deletes it.
+  /// Best effort, each delete on its own: a token left behind under an
+  /// inactive profile is never read, and removing the account deletes every
+  /// profile's tokens.
   Future<void> _forget(ProviderAccount account, String profileId,
       List<String> serverIds, bool userToken) async {
-    try {
-      for (final id in serverIds) {
+    for (final id in serverIds) {
+      try {
         await _secrets.deleteServerToken(
             account: account, profileId: profileId, serverId: id);
+      } catch (e) {
+        debugPrint('[Sources] Could not delete a Plex Home server token: $e');
       }
-      if (userToken) await _secrets.deleteUserToken(account, profileId);
+    }
+    if (!userToken) return;
+    try {
+      await _secrets.deleteUserToken(account, profileId);
     } catch (e) {
-      debugPrint('[Sources] Could not delete a Plex Home user\'s tokens: $e');
+      debugPrint('[Sources] Could not delete a Plex Home user token: $e');
     }
   }
 }

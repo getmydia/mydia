@@ -73,6 +73,7 @@ void main() {
   late _FailingStore store;
   late MockAuthStorage storage;
   late ProviderContainer container;
+  var ownerSeesOnlyAttic = false;
 
   http.Response route(http.Request request) {
     final token = request.headers['X-Plex-Token'];
@@ -93,6 +94,11 @@ void main() {
         return switch (token) {
           'kid-token' => http.Response(kidResourcesJson, 200),
           'guest-token' => http.Response(guestResourcesJson, 200),
+          'owner-switched' when ownerSeesOnlyAttic => http.Response(
+              '[{"name": "Attic", "provides": "server", '
+              '"clientIdentifier": "aa11", "owned": true, "presence": true, '
+              '"accessToken": "server-token-1", "connections": []}]',
+              200),
           _ => http.Response(resourcesJson, 200),
         };
     }
@@ -100,6 +106,7 @@ void main() {
   }
 
   setUp(() async {
+    ownerSeesOnlyAttic = false;
     store = _FailingStore();
     await store.putAccount(_record);
     storage = MockAuthStorage();
@@ -199,6 +206,17 @@ void main() {
         await storage.read('source/acc1/owner/bb22/token'), 'server-token-2');
     expect(await storage.read('source/acc1/kid0001/user_token'), isNull);
     expect(await storage.read('source/acc1/kid0001/aa11/token'), isNull);
+  });
+
+  test('re-switching to the active user drops tokens of servers they lost',
+      () async {
+    ownerSeesOnlyAttic = true;
+    await (await switcher()).switchTo(_account, _quill);
+
+    expect(await storage.read('source/acc1/owner/bb22/token'), isNull);
+    expect(await storage.read('source/acc1/owner/aa11/token'), isNotNull);
+    expect(
+        await storage.read('source/acc1/owner/user_token'), 'owner-switched');
   });
 
   test('a failed record write removes the new tokens', () async {
