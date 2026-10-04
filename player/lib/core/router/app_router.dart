@@ -5,9 +5,11 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
     as web_url;
 import '../sources/source.dart';
+import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_item_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
@@ -108,6 +110,12 @@ class PlayerRouteParams {
   }
 }
 
+SourceId? _sourceIdIn(String location) {
+  if (!location.startsWith('/s/')) return null;
+  final segment = location.substring(3).split('/').first;
+  return segment.isEmpty ? null : SourceId(segment);
+}
+
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
 String? appRedirect({
@@ -116,12 +124,22 @@ String? appRedirect({
   required bool sourcesLoading,
   required List<Source> thirdParty,
   SourceId? activeId,
+  Set<SourceId> gated = const {},
+  String? fullLocation,
 }) {
   final authStatus = auth.maybeWhen(
     data: (status) => status,
     orElse: () => AuthStatus.unauthenticated,
   );
   if (auth.isLoading) return null;
+
+  // A locked or hidden source opens only after unlocking. Same screen for
+  // both, so a deep link never confirms that a hidden source exists.
+  final target = _sourceIdIn(location);
+  if (target != null && gated.contains(target)) {
+    return unlockLocation(fullLocation ?? location);
+  }
+  final isUnlockRoute = location == '/unlock';
 
   final isLoginRoute = location == '/login';
   final isDownloadsRoute = location == '/downloads';
@@ -134,20 +152,26 @@ String? appRedirect({
 
   if (authStatus == AuthStatus.unauthenticated &&
       !isLoginRoute &&
+      !isUnlockRoute &&
       !isAddSourceRoute) {
     // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
     if (sourcesLoading) return null;
     if (thirdParty.isNotEmpty) {
       if (isSourceRoute) return null;
       // The remembered source when it still exists, else the first.
-      final landing = thirdParty.where((s) => s.id == activeId).firstOrNull ??
-          thirdParty.first;
+      final open = thirdParty.where((s) => !gated.contains(s.id));
+      final landing =
+          open.where((s) => s.id == activeId).firstOrNull ?? open.firstOrNull;
+      if (landing == null) {
+        return unlockLocation('/s/${thirdParty.first.id.value}');
+      }
       return '/s/${landing.id.value}';
     }
     return '/login';
   }
   if (authStatus == AuthStatus.offlineMode &&
       !isDownloadsRoute &&
+      !isUnlockRoute &&
       !isPlayerRoute &&
       !isSourceRoute) {
     return '/downloads';
@@ -173,6 +197,8 @@ GoRouter appRouter(Ref ref) {
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
+  // A relock while a gated screen is open sends it to /unlock.
+  ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
   // Dispose the notifier when the provider is disposed
   ref.onDispose(() {
@@ -197,6 +223,8 @@ GoRouter appRouter(Ref ref) {
         sourcesLoading: ref.read(sourcesLoadingProvider),
         thirdParty: ref.read(thirdPartySourcesProvider),
         activeId: ref.read(selectedSourceIdProvider),
+        gated: ref.read(gatedSourceIdsProvider),
+        fullLocation: state.uri.toString(),
       );
       if (target != null) {
         debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
@@ -211,6 +239,13 @@ GoRouter appRouter(Ref ref) {
         name: 'login',
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: '/unlock',
+        name: 'unlock',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) =>
+            UnlockScreen(next: state.uri.queryParameters['next']),
       ),
       GoRoute(
         path: '/sources/add',
