@@ -14,11 +14,6 @@ import '../../widgets/toast/toaster.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
 
-bool _playable(ItemKind kind) =>
-    kind == ItemKind.movie ||
-    kind == ItemKind.episode ||
-    kind == ItemKind.video;
-
 class SourceItemScreen extends ConsumerWidget {
   const SourceItemScreen({super.key, required this.item});
 
@@ -44,8 +39,7 @@ class SourceItemScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: _Body(detail: value, item: item),
               ),
-              if (item.kind == ItemKind.show || item.kind == ItemKind.season)
-                _Children(parent: item),
+              if (item.kind == ItemKind.folder) _Children(parent: item),
             ],
           ),
         AsyncError(:final error) => SourceErrorView(
@@ -95,7 +89,7 @@ class _Body extends ConsumerWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            if (_playable(item.kind) && version != null)
+            if (item.kind == ItemKind.video && version != null)
               FilledButton.icon(
                 key: const Key('source-item-play'),
                 autofocus: true,
@@ -108,7 +102,7 @@ class _Body extends ConsumerWidget {
                 icon: const Icon(Icons.play_arrow),
                 label: Text(resume ? 'Resume' : 'Play'),
               ),
-            if (watched != null && item.kind != ItemKind.show)
+            if (watched != null)
               OutlinedButton.icon(
                 key: const Key('source-item-watched'),
                 onPressed: () async {

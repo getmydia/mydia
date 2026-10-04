@@ -55,6 +55,33 @@ int? _seconds(Object? ms) => ms is num ? (ms / 1000).round() : null;
 ArtworkRef? _art(Object? path) =>
     path is String && path.isNotEmpty ? ArtworkRef(path) : null;
 
+String? _firstPartId(Map<String, dynamic> m) {
+  final media = m['Media'];
+  if (media is! List || media.isEmpty || media.first is! Map) return null;
+  final parts = (media.first as Map)['Part'];
+  if (parts is! List || parts.isEmpty || parts.first is! Map) return null;
+  final id = (parts.first as Map)['id'];
+  return id == null ? null : '$id';
+}
+
+/// A Plex person's `thumb` is an absolute metadata-static URL, not a server
+/// path. `artwork()` hands it to `/photo/:/transcode?url=`, which accepts
+/// remote URLs, so it needs no special case.
+List<Person> _roles(Object? list) => [
+      for (final r in (list is List ? list : const []))
+        if (r is Map && r['tag'] is String)
+          Person(
+            name: r['tag'] as String,
+            role: r['role'] as String?,
+            photo: _art(r['thumb']),
+          ),
+    ];
+
+ItemRef? _parentRef(SourceId sourceId, ItemKind kind, Object? key) =>
+    key is String
+        ? ItemRef(sourceId: sourceId, kind: kind, externalId: key)
+        : null;
+
 ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
   final kind = plexItemKind(m['type'] as String?);
   final id = m['ratingKey'];
@@ -90,6 +117,9 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
     childCount: m['childCount'] as int? ?? leafCount,
     index: index,
     parentIndex: parentIndex,
+    overview: m['summary'] as String?,
+    airDate: m['originallyAvailableAt'] as String?,
+    defaultVersionId: _firstPartId(m),
   );
 }
 
@@ -177,6 +207,18 @@ ItemDetail plexDetail(SourceId sourceId, Map<String, dynamic> m) {
     genres: _tags(m['Genre']),
     people: [..._tags(m['Role']), ..._tags(m['Director'])],
     studio: m['studio'] as String?,
+    cast: _roles(m['Role']),
+    contentRating: m['contentRating'] as String?,
+    show: switch (summary.ref.kind) {
+      ItemKind.episode =>
+        _parentRef(sourceId, ItemKind.show, m['grandparentRatingKey']),
+      ItemKind.season =>
+        _parentRef(sourceId, ItemKind.show, m['parentRatingKey']),
+      _ => null,
+    },
+    season: summary.ref.kind == ItemKind.episode
+        ? _parentRef(sourceId, ItemKind.season, m['parentRatingKey'])
+        : null,
     rating: rating?.toDouble(),
     versions: [
       for (final media in (m['Media'] is List ? m['Media'] as List : const []))

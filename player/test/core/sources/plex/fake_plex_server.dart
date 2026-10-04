@@ -26,6 +26,9 @@ class FakePlexServer {
   /// more movies than a row may show.
   bool crowdedHubs = false;
 
+  /// Set to make the show answer without an `OnDeck` entry.
+  bool nothingOnDeck = false;
+
   static const movies = [
     ('101', 'The Lantern Keeper', 2019),
     ('102', 'Saltwater Clocks', 2021),
@@ -89,8 +92,13 @@ class FakePlexServer {
               'Genre': [
                 {'tag': 'Drama'},
               ],
+              'contentRating': 'PG',
               'Role': [
-                {'tag': 'Ines Varga'},
+                {
+                  'tag': 'Ana Bergström',
+                  'role': 'Kira Solt',
+                  'thumb': 'https://metadata-static.plex.tv/people/a.jpg',
+                },
               ],
               'Media': [
                 {
@@ -140,6 +148,18 @@ class FakePlexServer {
             },
           ],
         });
+      case '/library/metadata/401':
+      case '/library/metadata/402':
+        return _container({
+          'Metadata': [_episode(int.parse(path.substring(path.length - 1)))],
+        });
+      case '/library/metadata/101/similar':
+        return _container({
+          'Metadata': [
+            _movie('102', 'Saltwater Clocks', 2021),
+            _movie('103', 'A Quiet Orbit', 2015),
+          ],
+        });
       case '/library/metadata/201':
         return _container({
           'Metadata': [
@@ -153,6 +173,10 @@ class FakePlexServer {
               'viewedLeafCount': 1,
               'childCount': 1,
               'summary': 'Two lighthouses, one keeper.',
+              if (q['includeOnDeck'] == '1' && !nothingOnDeck)
+                'OnDeck': {
+                  'Metadata': [_episode(2)]
+                },
             },
           ],
         });
@@ -179,28 +203,8 @@ class FakePlexServer {
           'size': 2,
           'totalSize': 2,
           'Metadata': [
-            {
-              'ratingKey': '401',
-              'type': 'episode',
-              'title': 'First Light',
-              'index': 1,
-              'parentIndex': 1,
-              'grandparentTitle': 'Harbour Lights',
-              'viewCount': 1,
-              'duration': 1800000,
-              'thumb': '/library/metadata/401/thumb/1',
-            },
-            {
-              'ratingKey': '402',
-              'type': 'episode',
-              'title': 'Fog Bank',
-              'index': 2,
-              'parentIndex': 1,
-              'grandparentTitle': 'Harbour Lights',
-              'viewOffset': 600000,
-              'duration': 1800000,
-              'thumb': '/library/metadata/402/thumb/1',
-            },
+            _episode(1),
+            _episode(2),
           ],
         });
       case '/hubs/search':
@@ -332,6 +336,31 @@ class FakePlexServer {
         'art': '/library/metadata/$id/art/1700',
         'duration': 5400000,
         'librarySectionID': 1,
+      };
+
+  static Map<String, dynamic> _episode(int n) => {
+        'ratingKey': '40$n',
+        'type': 'episode',
+        'title': n == 1 ? 'First Light' : 'Fog Bank',
+        'index': n,
+        'parentIndex': 1,
+        'grandparentTitle': 'Harbour Lights',
+        'grandparentRatingKey': '201',
+        'parentRatingKey': '301',
+        'summary': 'An invented episode.',
+        'originallyAvailableAt': '2024-01-0$n',
+        if (n == 1) 'viewCount': 1,
+        if (n == 2) 'viewOffset': 600000,
+        'duration': 1800000,
+        'thumb': '/library/metadata/40$n/thumb/1',
+        'Media': [
+          {
+            'id': 60 + n,
+            'Part': [
+              {'id': 500 + n},
+            ],
+          },
+        ],
       };
 
   /// Episode 402, mid-way, as Continue Watching and the hubs return it.

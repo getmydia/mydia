@@ -7,8 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/artwork_decode.dart';
 import '../../core/cache/poster_cache_manager.dart';
+import '../../core/sources/source.dart';
 import '../../domain/detail/detail_art.dart';
+import '../../domain/sources/item.dart';
 import 'artwork_image.dart';
+import 'source_artwork.dart';
 
 /// Where the picture sits, which picks its cache and decode width.
 enum ArtSlot { backdrop, poster, still, person }
@@ -61,6 +64,62 @@ class DetailArtImage extends ConsumerWidget {
           placeholder: loading,
           errorWidget: errorWidget ?? missing,
         ),
+      SourceArt(:final sourceId, :final ref) => _SourceArtImage(
+          sourceId: sourceId,
+          art: ref,
+          width: switch (slot) {
+            ArtSlot.backdrop || ArtSlot.still => SourceBackdrop.artworkWidth,
+            ArtSlot.poster || ArtSlot.person => SourcePoster.artworkWidth,
+          },
+          fit: fit,
+          cache: _cache,
+          loading: loading,
+          missing: missing,
+          error: errorWidget ?? missing,
+        ),
+    };
+  }
+}
+
+/// Resolves the request through the owning source, so its headers and cache
+/// key ride along instead of a credential in the URL.
+class _SourceArtImage extends ConsumerWidget {
+  const _SourceArtImage({
+    required this.sourceId,
+    required this.art,
+    required this.width,
+    required this.fit,
+    required this.cache,
+    required this.loading,
+    required this.missing,
+    required this.error,
+  });
+
+  final SourceId sourceId;
+  final ArtworkRef art;
+  final int width;
+  final BoxFit fit;
+  final BaseCacheManager? cache;
+  final WidgetBuilder loading;
+  final WidgetBuilder missing;
+  final WidgetBuilder error;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final resolved = ref.watch(
+        sourceArtworkProvider((sourceId: sourceId, art: art, width: width)));
+    return switch (resolved) {
+      AsyncData(value: final request?) => ArtworkImage(
+          imageUrl: request.url,
+          headers: request.headers,
+          cacheKey: request.cacheKey,
+          cacheManager: cache,
+          fit: fit,
+          placeholder: loading,
+          errorWidget: error,
+        ),
+      AsyncData() || AsyncError() => missing(context),
+      _ => loading(context),
     };
   }
 }

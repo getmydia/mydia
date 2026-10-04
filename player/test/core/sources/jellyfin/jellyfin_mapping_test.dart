@@ -147,4 +147,72 @@ void main() {
     expect(jellyfinSubtitleExtension('subrip'), 'srt');
     expect(jellyfinSubtitleExtension(null), 'srt');
   });
+
+  test('detail maps actors, trailer, rating, favorite and parents', () {
+    final detail = jellyfinDetail(sid, {
+      'Id': 'ep1',
+      'Type': 'Episode',
+      'Name': 'Copper Weather',
+      'SeriesId': 'show1',
+      'SeasonId': 'season1',
+      'OfficialRating': 'TV-14',
+      'RemoteTrailers': [
+        {'Url': 'https://video.test/watch?v=abc'}
+      ],
+      'UserData': {'IsFavorite': true, 'Played': false},
+      'People': [
+        {
+          'Id': 'p1',
+          'Name': 'Ana Bergstrom',
+          'Role': 'Kira',
+          'Type': 'Actor',
+          'PrimaryImageTag': 't1'
+        },
+        {'Id': 'p2', 'Name': 'Ilse Varga', 'Type': 'Director'},
+      ],
+    })!;
+    expect(detail.cast.single.name, 'Ana Bergstrom');
+    expect(detail.cast.single.role, 'Kira');
+    expect(detail.cast.single.photo,
+        const ArtworkRef('/Items/p1/Images/Primary?tag=t1'));
+    expect(detail.trailerUrl, 'https://video.test/watch?v=abc');
+    expect(detail.contentRating, 'TV-14');
+    expect(detail.isFavorite, isTrue);
+    expect(detail.show?.externalId, 'show1');
+    expect(detail.show?.kind, ItemKind.show);
+    expect(detail.season?.externalId, 'season1');
+  });
+
+  test('a season detail points at its show only', () {
+    final detail = jellyfinDetail(sid, {
+      'Id': 'season1',
+      'Type': 'Season',
+      'Name': 'Season 1',
+      'SeriesId': 'show1',
+    })!;
+    expect(detail.show?.externalId, 'show1');
+    expect(detail.season, isNull);
+    expect(detail.cast, isEmpty);
+    expect(detail.trailerUrl, isNull);
+    expect(detail.isFavorite, isFalse);
+  });
+
+  test('summary carries overview, air date and its own id as version', () {
+    final s = jellyfinSummary(sid, {
+      'Id': 'ep1',
+      'Type': 'Episode',
+      'Name': 'Copper Weather',
+      'Overview': 'Rain on the tin roofs.',
+      'PremiereDate': '2024-03-01T00:00:00.0000000Z',
+    })!;
+    expect(s.overview, 'Rain on the tin roofs.');
+    expect(s.airDate, '2024-03-01');
+    expect(s.defaultVersionId, 'ep1');
+  });
+
+  test('a short premiere date does not throw', () {
+    final s = jellyfinSummary(
+        sid, {'Id': 'a', 'Type': 'Movie', 'PremiereDate': '2024'})!;
+    expect(s.airDate, '2024');
+  });
 }

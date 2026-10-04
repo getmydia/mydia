@@ -23,6 +23,9 @@ enum SourceCapability {
   scrubThumbnails,
   downloadable,
   castable,
+  similar,
+  favorites,
+  nextUp,
 }
 
 /// How the player currently reaches a source.

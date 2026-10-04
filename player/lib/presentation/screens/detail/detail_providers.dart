@@ -2,7 +2,9 @@
 /// GraphQL controllers; nothing here changes how they fetch or invalidate.
 library;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/detail/detail_target.dart';
@@ -13,6 +15,30 @@ import '../show/season_episodes_controller.dart';
 import '../show/show_detail_controller.dart';
 import 'detail_actions.dart';
 import 'mydia_detail_mapping.dart';
+import 'source_detail_controllers.dart';
+
+/// Opens the player at [location] from a detail screen. A source item's
+/// progress changes while playing, so once the player pops everything that
+/// shows it is refetched. Mydia targets keep the player's own invalidation
+/// rules.
+Future<void> pushPlayer(
+  BuildContext context,
+  WidgetRef ref,
+  DetailTarget target,
+  String location,
+) async {
+  // Capture before the await: the screen can be gone when the player pops.
+  final container = ref.container;
+  await context.push(location);
+  // The screen under the player is paused while covered, and invalidating a
+  // paused provider flushes it in the build that resumes it, which Riverpod
+  // rejects. Let that frame finish first.
+  await WidgetsBinding.instance.endOfFrame;
+  if (!context.mounted) return;
+  if (target case SourceTarget(:final ref)) {
+    invalidateSourceDetailWrites(container, ref);
+  }
+}
 
 typedef SeasonKey = ({DetailTarget show, int seasonNumber});
 
@@ -21,6 +47,7 @@ final movieViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(movieDetailControllerProvider(id)).whenData(movieViewFromMydia),
+    SourceTarget(ref: final item) => ref.watch(sourceMovieProvider(item)),
   },
 );
 
@@ -29,6 +56,7 @@ final showViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(showDetailControllerProvider(id)).whenData(showViewFromMydia),
+    SourceTarget(ref: final item) => ref.watch(sourceShowProvider(item)),
   },
 );
 
@@ -49,6 +77,10 @@ final seasonEpisodesViewProvider = Provider.autoDispose
               for (final e in episodes) episodeViewFromMydia(e, show: show),
             ],
           );
+    case SourceTarget(ref: final item):
+      return ref.watch(
+        sourceSeasonProvider((show: item, seasonNumber: key.seasonNumber)),
+      );
   }
 });
 
@@ -58,6 +90,7 @@ final episodeViewProvider =
     MydiaTarget(:final id) => ref
         .watch(episodeDetailControllerProvider(id))
         .whenData(episodeViewFromMydiaDetail),
+    SourceTarget(ref: final item) => ref.watch(sourceEpisodeProvider(item)),
   },
 );
 
@@ -65,6 +98,8 @@ final movieActionsProvider =
     Provider.autoDispose.family<MovieActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaMovieActions(ref, id),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceMovieProvider(item).notifier),
   },
 );
 
@@ -72,6 +107,8 @@ final showActionsProvider =
     Provider.autoDispose.family<ShowActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaShowActions(ref, id),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceShowProvider(item).notifier),
   },
 );
 
@@ -79,6 +116,10 @@ final seasonActionsProvider =
     Provider.autoDispose.family<SeasonActions, SeasonKey>(
   (ref, key) => switch (key.show) {
     MydiaTarget(:final id) => MydiaSeasonActions(ref, id, key.seasonNumber),
+    SourceTarget(ref: final item) => ref.read(
+        sourceSeasonProvider((show: item, seasonNumber: key.seasonNumber))
+            .notifier,
+      ),
   },
 );
 
@@ -86,6 +127,8 @@ final episodeActionsProvider =
     Provider.autoDispose.family<EpisodeActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaEpisodeActions(ref, id),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceEpisodeProvider(item).notifier),
   },
 );
 
@@ -102,4 +145,5 @@ List<QueryKey> freshnessKeys(DetailTarget target, {int? seasonNumber}) =>
       MydiaTarget(kind: DetailKind.episode, :final id) => [
           QueryKeys.episodeDetail(id),
         ],
+      SourceTarget() => const [],
     };

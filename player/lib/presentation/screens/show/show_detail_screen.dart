@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -293,7 +292,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, show, selectedEpisode),
+        _buildHeroSection(context, ref, show, selectedEpisode),
         SliverToBoxAdapter(
           child: _buildEpisodeHeroBody(context, ref, show, selectedEpisode),
         ),
@@ -333,6 +332,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
   Widget _buildHeroSection(
     BuildContext context,
+    WidgetRef ref,
     ShowView show,
     EpisodeView? selectedEpisode,
   ) {
@@ -419,7 +419,7 @@ class ShowDetailScreen extends ConsumerWidget {
                 // leaves no dangling spacer.
                 if (selectedEpisode != null) ...[
                   const SizedBox(width: 16),
-                  _buildHeroPlayControl(context, show, selectedEpisode),
+                  _buildHeroPlayControl(context, ref, show, selectedEpisode),
                 ],
               ],
             ),
@@ -459,12 +459,16 @@ class ShowDetailScreen extends ConsumerWidget {
   /// `detailHeroAppBar`.
   Widget _buildHeroPlayControl(
     BuildContext context,
+    WidgetRef ref,
     ShowView show,
     EpisodeView episode,
   ) {
     return HeroPlayControl(
       files: episode.files,
-      onFileSelected: (file) => context.push(
+      onFileSelected: (file) => pushPlayer(
+        context,
+        ref,
+        target,
         episodePlayerLocation(
           episode,
           file,

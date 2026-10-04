@@ -11,6 +11,7 @@ import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_search_outcome.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/sources/item.dart';
+import '../../../../domain/sources/library.dart' show Cursor;
 import '../../../../domain/sources/source_error.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
@@ -25,6 +26,8 @@ String containerMime(String? container) => switch (container) {
       null => 'video/mp4',
       final other => 'video/$other',
     };
+
+const _maxChildPages = 10;
 
 abstract class SourcePlaybackSession implements PlaybackSession {
   SourcePlaybackSession({
@@ -173,7 +176,42 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   Future<Map<String, int>?> subtitleOffsets() async => null;
 
   @override
-  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async => null;
+  Future<List<PlaybackEpisode>?> seasonEpisodes(int seasonNumber) async {
+    try {
+      final show = (await loadDetail()).show;
+      if (show == null) return null;
+      final seasons = await _allChildren(show);
+      final season = seasons.where((s) => s.index == seasonNumber).firstOrNull;
+      if (season == null) return null;
+      final episodes = await _allChildren(season.ref);
+      return [
+        for (final e in episodes)
+          PlaybackEpisode(
+            id: e.ref.externalId,
+            seasonNumber: e.parentIndex ?? seasonNumber,
+            episodeNumber: e.index ?? 0,
+            title: e.title,
+            fileIds: [e.defaultVersionId],
+          ),
+      ];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Every page of [parent]'s children, capped so a broken cursor cannot
+  /// loop.
+  Future<List<ItemSummary>> _allChildren(ItemRef parent) async {
+    final all = <ItemSummary>[];
+    Cursor? cursor;
+    for (var page = 0; page < _maxChildPages; page++) {
+      final result = await source.children(parent, cursor: cursor);
+      all.addAll(result.items);
+      cursor = result.nextCursor;
+      if (cursor == null) break;
+    }
+    return all;
+  }
 
   @override
   Future<SubtitleSearchOutcome> searchSubtitles(List<String> languages) async =>

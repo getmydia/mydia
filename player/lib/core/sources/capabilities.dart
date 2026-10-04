@@ -32,3 +32,21 @@ abstract interface class HomeHubs {
   /// the Continue Watching row already shows.
   Future<List<Hub>> hubs();
 }
+
+/// Items like the one the viewer is looking at. A source implementing this
+/// also lists [SourceCapability.similar].
+abstract interface class Similar {
+  /// At most 20.
+  Future<List<ItemSummary>> similar(ItemRef ref);
+}
+
+/// A source implementing this also lists [SourceCapability.favorites].
+abstract interface class Favorites {
+  Future<void> setFavorite(ItemRef ref, bool favorite);
+}
+
+/// A source implementing this also lists [SourceCapability.nextUp].
+abstract interface class NextUp {
+  /// The episode the viewer would play next in [show], or null.
+  Future<ItemSummary?> nextUp(ItemRef show);
+}

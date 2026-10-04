@@ -4,13 +4,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 // Conditional import for web URL handling
 import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
     as web_url;
+import 'source_detail_routes.dart';
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
-import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/unlock_screen.dart';
-import '../../presentation/screens/sources/source_item_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
@@ -390,19 +389,7 @@ GoRouter appRouter(Ref ref) {
               ),
             ),
           ),
-          GoRoute(
-            path: '/s/:sourceId/item/:kind/:itemId',
-            name: 'source_item',
-            builder: (context, state) => SourceItemScreen(
-              item: ItemRef(
-                sourceId: SourceId(state.pathParameters['sourceId']!),
-                kind:
-                    ItemKind.values.asNameMap()[state.pathParameters['kind']] ??
-                        ItemKind.movie,
-                externalId: state.pathParameters['itemId']!,
-              ),
-            ),
-          ),
+          sourceItemRoute(),
           GoRoute(
             path: '/s/:sourceId/search',
             name: 'source_search',
@@ -472,6 +459,7 @@ GoRouter appRouter(Ref ref) {
           return EpisodeDetailScreen(id: id);
         },
       ),
+      ...sourceDetailRoutes(),
       GoRoute(
         path: '/s/:sourceId/player/:itemId',
         name: 'source_player',

@@ -56,6 +56,7 @@ ItemSummary fakeEpisode(int n) => ItemSummary(
       index: n,
       parentIndex: 1,
       durationSeconds: 1800,
+      defaultVersionId: 'part-$n',
     );
 
 class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
@@ -137,7 +138,10 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
           summary: fakeShow, overview: 'An invented series.');
     }
     if (ref.kind == ItemKind.season) {
-      return const ItemDetail(summary: fakeSeason);
+      return const ItemDetail(
+          summary: fakeSeason,
+          show: ItemRef(
+              sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1'));
     }
     final summary = ref.kind == ItemKind.episode
         ? fakeEpisode(int.parse(ref.externalId.substring(1)))
@@ -145,6 +149,7 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
     return ItemDetail(
       summary: summary,
       overview: 'Invented overview.',
+      show: ref.kind == ItemKind.episode ? fakeShow.ref : null,
       genres: const ['Drama'],
       versions: const [
         MediaVersion(id: 'part-1', container: 'mkv', height: 1080)
@@ -267,5 +272,45 @@ class FakeHubSource extends FakeResumingSource implements HomeHubs {
         items: [fakeMovie(7), fakeShow],
       ),
     ];
+  }
+}
+
+/// A source with the detail screens' extras: similar items, favorites and
+/// next up.
+class FakeDetailSource extends FakeMediaSource
+    implements Similar, Favorites, NextUp {
+  FakeDetailSource({this.nextUpEpisode});
+
+  /// Null answers episode 2 of the invented series.
+  final ItemSummary? nextUpEpisode;
+  Exception? nextUpError;
+  Exception? favoriteError;
+  Exception? similarError;
+  final favoriteCalls = <(ItemRef, bool)>[];
+
+  @override
+  Set<SourceCapability> get capabilities => {
+        ...super.capabilities,
+        SourceCapability.similar,
+        SourceCapability.favorites,
+        SourceCapability.nextUp,
+      };
+
+  @override
+  Future<List<ItemSummary>> similar(ItemRef ref) async {
+    if (similarError case final e?) throw e;
+    return [fakeMovie(2)];
+  }
+
+  @override
+  Future<void> setFavorite(ItemRef ref, bool favorite) async {
+    if (favoriteError case final e?) throw e;
+    favoriteCalls.add((ref, favorite));
+  }
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async {
+    if (nextUpError case final e?) throw e;
+    return nextUpEpisode ?? fakeEpisode(2);
   }
 }

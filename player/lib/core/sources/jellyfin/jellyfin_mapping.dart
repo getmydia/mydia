@@ -115,7 +115,39 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
     childCount: json['ChildCount'] as int?,
     index: index,
     parentIndex: parentIndex,
+    overview: json['Overview'] as String?,
+    airDate: _isoDate(json['PremiereDate']),
+    // An item's own id is the id of its primary media source.
+    defaultVersionId: id,
   );
+}
+
+/// The `yyyy-MM-dd` head of an ISO timestamp; shorter strings pass as is.
+String? _isoDate(Object? value) => value is String && value.isNotEmpty
+    ? value.substring(0, value.length < 10 ? value.length : 10)
+    : null;
+
+ItemRef? _jref(SourceId sourceId, ItemKind kind, Object? id) => id is String
+    ? ItemRef(sourceId: sourceId, kind: kind, externalId: id)
+    : null;
+
+List<Person> _actors(Object? list) => [
+      for (final p in (list is List ? list : const []))
+        if (p is Map && p['Type'] == 'Actor' && p['Name'] is String)
+          Person(
+            name: p['Name'] as String,
+            role: p['Role'] as String?,
+            photo: p['Id'] is String && p['PrimaryImageTag'] is String
+                ? ArtworkRef(
+                    '/Items/${p['Id']}/Images/Primary?tag=${p['PrimaryImageTag']}')
+                : null,
+          ),
+    ];
+
+String? _trailerUrl(Object? trailers) {
+  if (trailers is! List || trailers.isEmpty) return null;
+  final first = trailers.first;
+  return first is Map && first['Url'] is String ? first['Url'] as String : null;
 }
 
 List<String> _names(Object? list) => [
@@ -179,6 +211,8 @@ ItemDetail? jellyfinDetail(SourceId sourceId, Map<String, dynamic> json) {
   if (summary == null) return null;
   final itemId = summary.ref.externalId;
   final studios = _names(json['Studios']);
+  final kind = summary.ref.kind;
+  final user = (json['UserData'] as Map?) ?? const {};
   return ItemDetail(
     summary: summary,
     overview: json['Overview'] as String?,
@@ -193,6 +227,16 @@ ItemDetail? jellyfinDetail(SourceId sourceId, Map<String, dynamic> json) {
         if (t is String) t,
     ],
     rating: (json['CommunityRating'] as num?)?.toDouble(),
+    cast: _actors(json['People']),
+    trailerUrl: _trailerUrl(json['RemoteTrailers']),
+    contentRating: json['OfficialRating'] as String?,
+    isFavorite: user['IsFavorite'] == true,
+    show: kind == ItemKind.episode || kind == ItemKind.season
+        ? _jref(sourceId, ItemKind.show, json['SeriesId'])
+        : null,
+    season: kind == ItemKind.episode
+        ? _jref(sourceId, ItemKind.season, json['SeasonId'])
+        : null,
     versions: [
       for (final s in (json['MediaSources'] as List? ?? const []))
         if (s is Map)

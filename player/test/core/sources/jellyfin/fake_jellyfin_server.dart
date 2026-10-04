@@ -34,6 +34,9 @@ class FakeJellyfinServer {
   /// Paths that answer 500, to fail one request of several.
   final failing = <String>{};
 
+  /// Favorite toggles as (method, item id), in arrival order.
+  final favoriteCalls = <(String, String)>[];
+
   /// Request bodies by path, decoded, in arrival order.
   final bodies = <(String, Map<String, dynamic>)>[];
 
@@ -188,8 +191,25 @@ class FakeJellyfinServer {
           {'Items': resumeItems, 'TotalRecordCount': resumeItems.length});
     }
     if (request.method == 'GET' && path == '/Shows/NextUp') {
-      return _json(
-          {'Items': nextUpItems, 'TotalRecordCount': nextUpItems.length});
+      final series = q['seriesId'];
+      final items = [
+        for (final m in nextUpItems)
+          if (series == null || m['SeriesId'] == series) m,
+      ];
+      return _json({'Items': items, 'TotalRecordCount': items.length});
+    }
+    if (request.method == 'GET' &&
+        RegExp(r'^/Items/[^/]+/Similar$').hasMatch(path)) {
+      return _json({
+        'Items': [movie(4), movie(5)],
+        'TotalRecordCount': 2,
+      });
+    }
+    final favorite = RegExp(r'^/UserFavoriteItems/([^/]+)$').firstMatch(path);
+    if (favorite != null &&
+        (request.method == 'POST' || request.method == 'DELETE')) {
+      favoriteCalls.add((request.method, favorite.group(1)!));
+      return _json({'IsFavorite': request.method == 'POST'});
     }
     if (request.method == 'POST' &&
         RegExp(r'^/UserItems/[^/]+/UserData$').hasMatch(path)) {

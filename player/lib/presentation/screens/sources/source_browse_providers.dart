@@ -4,22 +4,26 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
+import '../detail/detail_links.dart';
 
 MediaSource _require(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
 
-String sourceItemLocation(ItemRef ref) =>
-    '/s/${ref.sourceId.value}/item/${ref.kind.name}/${Uri.encodeComponent(ref.externalId)}';
+String sourceItemLocation(ItemRef ref) => detailKindOf(ref.kind) != null
+    ? detailLocation(SourceTarget(ref))
+    : '/s/${ref.sourceId.value}/item/${ref.kind.name}/${Uri.encodeComponent(ref.externalId)}';
 
 String sourceLibraryLocation(LibraryRef ref) =>
     '/s/${ref.sourceId.value}/library/${Uri.encodeComponent(ref.id)}';
@@ -194,11 +198,26 @@ final sourceHubsProvider =
 
 /// Progress or watched state changed: this item, its siblings in a season
 /// list, and the home rows and grids that show it are all stale.
-void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) {
-  ref.invalidate(sourceItemProvider(item));
-  ref.invalidate(sourceChildrenProvider);
-  ref.invalidate(sourceLibraryPreviewProvider);
-  ref.invalidate(libraryBrowseProvider);
-  ref.invalidate(sourceContinueWatchingProvider(item.sourceId));
-  ref.invalidate(sourceHubsProvider(item.sourceId));
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) =>
+    _invalidateWrites(ref.invalidate, item);
+
+/// [invalidateSourceItemWrites] through a container, for a write that
+/// finishes after its notifier is disposed: a `Ref` throws then, a container
+/// does not.
+void invalidateSourceContainerWrites(
+  ProviderContainer container,
+  ItemRef item,
+) =>
+    _invalidateWrites(container.invalidate, item);
+
+void _invalidateWrites(
+  void Function(ProviderOrFamily provider) invalidate,
+  ItemRef item,
+) {
+  invalidate(sourceItemProvider(item));
+  invalidate(sourceChildrenProvider);
+  invalidate(sourceLibraryPreviewProvider);
+  invalidate(libraryBrowseProvider);
+  invalidate(sourceContinueWatchingProvider(item.sourceId));
+  invalidate(sourceHubsProvider(item.sourceId));
 }

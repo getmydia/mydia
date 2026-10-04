@@ -214,7 +214,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
     final showActionRow = _canDownload(episode) || _canShowMediaInfo(episode);
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, episode),
+        _buildHeroSection(context, ref, episode),
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,7 +234,12 @@ class EpisodeDetailScreen extends ConsumerWidget {
                     SmartPlayButton(
                       files: episode.files,
                       onFileSelected: (file) {
-                        context.push(episodePlayerLocation(episode, file));
+                        pushPlayer(
+                          context,
+                          ref,
+                          target,
+                          episodePlayerLocation(episode, file),
+                        );
                       },
                     ),
                   ],
@@ -270,7 +275,11 @@ class EpisodeDetailScreen extends ConsumerWidget {
       episode.features.contains(DetailFeature.mediaInfo) &&
       episode.files.isNotEmpty;
 
-  Widget _buildHeroSection(BuildContext context, EpisodeView episode) {
+  Widget _buildHeroSection(
+    BuildContext context,
+    WidgetRef ref,
+    EpisodeView episode,
+  ) {
     // Use episode thumbnail if available, otherwise fall back to show backdrop
     final art = episode.still ?? episode.showBackdrop;
 

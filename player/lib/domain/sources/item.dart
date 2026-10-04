@@ -55,6 +55,17 @@ class ArtworkRef {
 }
 
 @immutable
+class Person {
+  const Person({required this.name, this.role, this.photo});
+
+  final String name;
+
+  /// The character played.
+  final String? role;
+  final ArtworkRef? photo;
+}
+
+@immutable
 class UserState {
   const UserState({this.watched = false, this.progressSeconds});
 
@@ -79,6 +90,9 @@ class ItemSummary {
     this.childCount,
     this.index,
     this.parentIndex,
+    this.overview,
+    this.airDate,
+    this.defaultVersionId,
   });
 
   final ItemRef ref;
@@ -101,6 +115,14 @@ class ItemSummary {
 
   /// Season number of an episode.
   final int? parentIndex;
+  final String? overview;
+
+  /// ISO date, `YYYY-MM-DD`.
+  final String? airDate;
+
+  /// The version an episode list entry plays by default, when the listing
+  /// names one without a detail call.
+  final String? defaultVersionId;
 }
 
 enum MediaStreamKind { audio, subtitle }
@@ -170,6 +192,12 @@ class ItemDetail {
     this.tags = const [],
     this.rating,
     this.versions = const [],
+    this.cast = const [],
+    this.trailerUrl,
+    this.contentRating,
+    this.isFavorite = false,
+    this.show,
+    this.season,
   });
 
   final ItemSummary summary;
@@ -182,4 +210,12 @@ class ItemDetail {
   /// Zero to ten.
   final double? rating;
   final List<MediaVersion> versions;
+  final List<Person> cast;
+  final String? trailerUrl;
+  final String? contentRating;
+  final bool isFavorite;
+
+  /// For an episode or season: its show. For an episode: its season.
+  final ItemRef? show;
+  final ItemRef? season;
 }
