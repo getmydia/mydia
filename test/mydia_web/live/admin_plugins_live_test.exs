@@ -59,7 +59,13 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   # :runtime_config on exit.
   defp put_plugin_sources(index_url) do
     base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
-    plugins = %{base.plugins | index_url: index_url, extra_source_urls: []}
+
+    plugins = %{
+      base.plugins
+      | index_url: index_url,
+        index_public_key: Mydia.MinisignFixtures.keypair().public
+    }
+
     Application.put_env(:mydia, :runtime_config, %{base | plugins: plugins})
   end
 

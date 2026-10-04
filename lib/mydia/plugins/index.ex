@@ -63,8 +63,7 @@ defmodule Mydia.Plugins.Index do
   """
   @spec sources() :: [String.t()]
   def sources do
-    cfg = config()
-    [cfg.index_url | cfg.extra_source_urls] |> Enum.reject(&blank?/1) |> Enum.uniq()
+    [config().index_url] |> Enum.reject(&blank?/1) |> Enum.uniq()
   end
 
   @doc """

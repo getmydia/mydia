@@ -43,7 +43,8 @@ defmodule Mydia.Config.Loader do
          merged <- merge_all_configs(yaml_config, db_config, env_config),
          normalized <- normalize_legacy_indexer_types(merged),
          translated <- translate_legacy_plex_media_servers(normalized),
-         cleaned <- drop_removed_plugin_installs(translated) do
+         cleaned <-
+           translated |> drop_removed_plugin_installs() |> drop_removed_extra_source_urls() do
       validate(cleaned)
     end
   end
@@ -267,6 +268,7 @@ defmodule Mydia.Config.Loader do
       library_paths: load_library_paths_env(),
       plugin_settings: load_plugin_settings_env(),
       plugin_instances: load_plugin_instances_env(),
+      plugin_sources: load_plugin_sources_env(),
       plugins: load_plugins_runtime_env(),
       path_mappings: load_path_mappings_env()
     }
@@ -559,6 +561,25 @@ defmodule Mydia.Config.Loader do
   # lower-cased (PLUGIN_PLEX_0_URL -> "url").
   @plugin_instance_env ~r/^PLUGIN_([A-Z][A-Z0-9_]*?)_(\d+)_([A-Z][A-Z0-9_]*)$/
 
+  # PLUGINS_SOURCE_<N>_URL / PLUGINS_SOURCE_<N>_PUBLIC_KEY declare signed plugin
+  # catalogs. Plural PLUGINS_ like PLUGINS_OVERRIDE_DIR: the singular form would
+  # match the PLUGIN_<SLUG>_<N>_<KEY> instance pattern as slug "source".
+  @plugin_source_env ~r/^PLUGINS_SOURCE_(\d+)_(URL|PUBLIC_KEY)$/
+
+  defp load_plugin_sources_env do
+    System.get_env()
+    |> Enum.flat_map(fn {key, value} ->
+      case Regex.run(@plugin_source_env, key) do
+        [_, index, "URL"] -> [{String.to_integer(index), :url, value}]
+        [_, index, "PUBLIC_KEY"] -> [{String.to_integer(index), :public_key, value}]
+        nil -> []
+      end
+    end)
+    |> Enum.group_by(&elem(&1, 0), fn {_index, field, value} -> {field, value} end)
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(fn {_index, fields} -> Map.new(fields) end)
+  end
+
   defp load_plugin_instances_env do
     System.get_env()
     |> Enum.flat_map(fn {key, value} ->
@@ -627,6 +648,21 @@ defmodule Mydia.Config.Loader do
   end
 
   defp drop_removed_plugin_installs(config), do: config
+
+  # `plugins.extra_source_urls` listed unsigned catalogs. Every source now needs
+  # the key that signs it.
+  defp drop_removed_extra_source_urls(%{plugins: %{extra_source_urls: _} = plugins} = config) do
+    warn_once(
+      :removed_extra_source_urls,
+      "Ignoring `plugins.extra_source_urls`: plugin sources now need a signing key. " <>
+        "Declare each under `plugin_sources:` with `url` and `public_key`, or add it in " <>
+        "Admin > System > Plugins."
+    )
+
+    %{config | plugins: Map.delete(plugins, :extra_source_urls)}
+  end
+
+  defp drop_removed_extra_source_urls(config), do: config
 
   # The config is reloaded after every DB save, so a boot-level warning is
   # logged on the first load of a boot only.
@@ -989,6 +1025,7 @@ defmodule Mydia.Config.Loader do
           :library_paths,
           :plugin_settings,
           :plugin_instances,
+          :plugin_sources,
           :path_mappings
         ] and
           is_list(left_val) and

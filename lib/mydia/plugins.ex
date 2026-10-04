@@ -421,6 +421,7 @@ defmodule Mydia.Plugins do
     # Persist YAML/env-declared plugin instances and settings before plugins start
     # scheduling against them. Same boot-side-effect gate as bundled seeding.
     if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Plugins.DeclaredSources.sync()
       Mydia.Plugins.RuntimeInstances.sync()
       DeclaredSettings.sync_all()
     end
