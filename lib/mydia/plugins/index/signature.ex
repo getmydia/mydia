@@ -42,9 +42,8 @@ defmodule Mydia.Plugins.Index.Signature do
   def verify(body, minisig, %PublicKey{} = key) when is_binary(body) and is_binary(minisig) do
     with {:ok, alg, key_id, sig, trusted, global} <- parse_signature(minisig),
          :ok <- same_key(key_id, key),
-         :ok <- check(signed_message(alg, body), sig, key, "signature does not match"),
-         :ok <- check(sig <> trusted, global, key, "trusted comment signature does not match") do
-      :ok
+         :ok <- check(signed_message(alg, body), sig, key, "signature does not match") do
+      check(sig <> trusted, global, key, "trusted comment signature does not match")
     end
   end
 
