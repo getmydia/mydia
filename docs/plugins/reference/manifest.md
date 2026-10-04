@@ -43,7 +43,7 @@ grant is stored separately (see [Capabilities](capabilities.md#grants-and-approv
 | `author` | string | no | none | Plugin author. |
 | `entrypoint` | string | no | `"handle"` | Accepted and ignored. The host calls the guest's [exports](guest-exports.md) by name, so this value selects nothing. |
 | `delivery` | string | no | `"inline"` | Read for plugins bundled with Mydia only: `durable` (an Oban job, retried, at-least-once) or `inline` (synchronous, not retried). Any other value becomes `inline`. Plugins installed from an index or sideloaded always run `inline`. |
-| `min_host_version` | string | no | none | The lowest Mydia release that can run the plugin. A semantic version, or the manifest is rejected. See [What the host-version floor is for](../explanation/plugin-model.md). |
+| `min_host_version` | string | no | none | The lowest Mydia release that can run the plugin. A semantic version, or the manifest is rejected. The rules are in [What the host-version floor is for](../explanation/plugin-model.md#what-the-host-version-floor-is-for). |
 | `multi_instance` | boolean | no | `false` | `true` lets operators add several instances, each with its own settings, store, links and schedule. Any non-boolean value is rejected. |
 | `category` | string | no | none | Where the host lists instances. The only value is `media_server`, which puts them on Admin > Media servers. Any other value is rejected. |
 | `setup` | boolean | no | `false` | `true` when the plugin exports [`setup`](guest-exports.md#setup): the host then creates instances through the setup wizard instead of the plain settings form. Any non-boolean value is rejected. |
@@ -249,4 +249,4 @@ with [`connection-request`](host-functions.md#connection-request).
 
 `min_host_version` is described in the [top-level fields](#top-level-fields)
 table. The reasoning and the rules for how Mydia applies it are in
-[What the host-version floor is for](../explanation/plugin-model.md).
+[What the host-version floor is for](../explanation/plugin-model.md#what-the-host-version-floor-is-for).
