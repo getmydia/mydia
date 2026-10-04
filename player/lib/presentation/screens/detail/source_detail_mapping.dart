@@ -125,13 +125,14 @@ EpisodeView episodeViewFromSource(
   required String showTitle,
   DetailTarget? showTarget,
   ArtworkRef? showPoster,
+  int? fallbackSeasonNumber,
   required Set<DetailFeature> features,
 }) =>
     EpisodeView(
       target: SourceTarget(e.ref),
       showTarget: showTarget,
       showTitle: e.showTitle ?? showTitle,
-      seasonNumber: e.parentIndex ?? 0,
+      seasonNumber: e.parentIndex ?? fallbackSeasonNumber ?? 0,
       episodeNumber: e.index ?? 0,
       title: e.title,
       overview: e.overview,

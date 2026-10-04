@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
@@ -194,11 +195,30 @@ final sourceHubsProvider =
 
 /// Progress or watched state changed: this item, its siblings in a season
 /// list, and the home rows and grids that show it are all stale.
-void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) {
-  ref.invalidate(sourceItemProvider(item));
-  ref.invalidate(sourceChildrenProvider);
-  ref.invalidate(sourceLibraryPreviewProvider);
-  ref.invalidate(libraryBrowseProvider);
-  ref.invalidate(sourceContinueWatchingProvider(item.sourceId));
-  ref.invalidate(sourceHubsProvider(item.sourceId));
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) =>
+    _invalidateWrites(ref.invalidate, item);
+
+/// [invalidateSourceItemWrites] for a provider or notifier.
+void invalidateSourceRefWrites(Ref ref, ItemRef item) =>
+    _invalidateWrites(ref.invalidate, item);
+
+/// [invalidateSourceItemWrites] through a container, for a write that
+/// finishes after its notifier is disposed: a `Ref` throws then, a container
+/// does not.
+void invalidateSourceContainerWrites(
+  ProviderContainer container,
+  ItemRef item,
+) =>
+    _invalidateWrites(container.invalidate, item);
+
+void _invalidateWrites(
+  void Function(ProviderOrFamily provider) invalidate,
+  ItemRef item,
+) {
+  invalidate(sourceItemProvider(item));
+  invalidate(sourceChildrenProvider);
+  invalidate(sourceLibraryPreviewProvider);
+  invalidate(libraryBrowseProvider);
+  invalidate(sourceContinueWatchingProvider(item.sourceId));
+  invalidate(sourceHubsProvider(item.sourceId));
 }

@@ -126,6 +126,28 @@ class EpisodeView {
   String get runtimeDisplay => _runtime(runtime);
 
   String get fullTitle => '$showTitle - $episodeCode';
+
+  EpisodeView copyWith({Progress? progress, bool clearProgress = false}) =>
+      EpisodeView(
+        target: target,
+        showTarget: showTarget,
+        showTitle: showTitle,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber,
+        title: title,
+        overview: overview,
+        airDate: airDate,
+        runtime: runtime,
+        still: still,
+        showBackdrop: showBackdrop,
+        showPoster: showPoster,
+        progress: clearProgress ? null : (progress ?? this.progress),
+        files: files,
+        hasFile: hasFile,
+        features: features,
+        mydia: mydia,
+        mydiaDetail: mydiaDetail,
+      );
 }
 
 @immutable

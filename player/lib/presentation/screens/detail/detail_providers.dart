@@ -13,6 +13,7 @@ import '../show/season_episodes_controller.dart';
 import '../show/show_detail_controller.dart';
 import 'detail_actions.dart';
 import 'mydia_detail_mapping.dart';
+import 'source_detail_controllers.dart';
 
 typedef SeasonKey = ({DetailTarget show, int seasonNumber});
 
@@ -21,7 +22,7 @@ final movieViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(movieDetailControllerProvider(id)).whenData(movieViewFromMydia),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) => ref.watch(sourceMovieProvider(item)),
   },
 );
 
@@ -30,7 +31,7 @@ final showViewProvider =
   (ref, target) => switch (target) {
     MydiaTarget(:final id) =>
       ref.watch(showDetailControllerProvider(id)).whenData(showViewFromMydia),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) => ref.watch(sourceShowProvider(item)),
   },
 );
 
@@ -51,8 +52,10 @@ final seasonEpisodesViewProvider = Provider.autoDispose
               for (final e in episodes) episodeViewFromMydia(e, show: show),
             ],
           );
-    case SourceTarget():
-      throw UnsupportedError('Task 16');
+    case SourceTarget(ref: final item):
+      return ref.watch(
+        sourceSeasonProvider((show: item, seasonNumber: key.seasonNumber)),
+      );
   }
 });
 
@@ -62,7 +65,7 @@ final episodeViewProvider =
     MydiaTarget(:final id) => ref
         .watch(episodeDetailControllerProvider(id))
         .whenData(episodeViewFromMydiaDetail),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) => ref.watch(sourceEpisodeProvider(item)),
   },
 );
 
@@ -70,7 +73,8 @@ final movieActionsProvider =
     Provider.autoDispose.family<MovieActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaMovieActions(ref, id),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceMovieProvider(item).notifier),
   },
 );
 
@@ -78,7 +82,8 @@ final showActionsProvider =
     Provider.autoDispose.family<ShowActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaShowActions(ref, id),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceShowProvider(item).notifier),
   },
 );
 
@@ -86,7 +91,10 @@ final seasonActionsProvider =
     Provider.autoDispose.family<SeasonActions, SeasonKey>(
   (ref, key) => switch (key.show) {
     MydiaTarget(:final id) => MydiaSeasonActions(ref, id, key.seasonNumber),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) => ref.read(
+        sourceSeasonProvider((show: item, seasonNumber: key.seasonNumber))
+            .notifier,
+      ),
   },
 );
 
@@ -94,7 +102,8 @@ final episodeActionsProvider =
     Provider.autoDispose.family<EpisodeActions, DetailTarget>(
   (ref, target) => switch (target) {
     MydiaTarget(:final id) => MydiaEpisodeActions(ref, id),
-    SourceTarget() => throw UnsupportedError('Task 16'),
+    SourceTarget(ref: final item) =>
+      ref.read(sourceEpisodeProvider(item).notifier),
   },
 );
 
@@ -111,5 +120,5 @@ List<QueryKey> freshnessKeys(DetailTarget target, {int? seasonNumber}) =>
       MydiaTarget(kind: DetailKind.episode, :final id) => [
           QueryKeys.episodeDetail(id),
         ],
-      SourceTarget() => throw UnsupportedError('Task 16'),
+      SourceTarget() => const [],
     };

@@ -269,3 +269,43 @@ class FakeHubSource extends FakeResumingSource implements HomeHubs {
     ];
   }
 }
+
+/// A source with the detail screens' extras: similar items, favorites and
+/// next up.
+class FakeDetailSource extends FakeMediaSource
+    implements Similar, Favorites, NextUp {
+  FakeDetailSource({this.nextUpEpisode});
+
+  /// Null answers episode 2 of the invented series.
+  final ItemSummary? nextUpEpisode;
+  Exception? nextUpError;
+  Exception? favoriteError;
+  Exception? similarError;
+  final favoriteCalls = <(ItemRef, bool)>[];
+
+  @override
+  Set<SourceCapability> get capabilities => {
+        ...super.capabilities,
+        SourceCapability.similar,
+        SourceCapability.favorites,
+        SourceCapability.nextUp,
+      };
+
+  @override
+  Future<List<ItemSummary>> similar(ItemRef ref) async {
+    if (similarError case final e?) throw e;
+    return [fakeMovie(2)];
+  }
+
+  @override
+  Future<void> setFavorite(ItemRef ref, bool favorite) async {
+    if (favoriteError case final e?) throw e;
+    favoriteCalls.add((ref, favorite));
+  }
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async {
+    if (nextUpError case final e?) throw e;
+    return nextUpEpisode ?? fakeEpisode(2);
+  }
+}
