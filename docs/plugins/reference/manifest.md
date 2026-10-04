@@ -164,6 +164,7 @@ in the admin UI, and the operator's values arrive at runtime inside the event's
 |-----------|------------|---------|
 | `key` | all | The config key your handler reads. |
 | `label` | all | Form label shown to the operator. |
+| `hint` | all | Help text shown under the field. Keep `label` short and put examples and caveats here. |
 | `required` | all | **Not implemented.** Accepted in the manifest and then ignored: the form does not mark the field, and an empty value is not rejected. Validate in your handler instead. |
 | `options` | `enum` | The allowed choices (array of strings). |
 | `grants_host` | `url` | The host of the operator's value is added to the plugin's `net:http` allowlist at config time. |
