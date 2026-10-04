@@ -233,10 +233,10 @@ class PlexSignInController extends Notifier<PlexSignInState> {
             serverId: dropped.id,
           );
         }
-        final previous = existing.account.activeProfileId;
-        if (previous != kOwnerProfileId) {
-          await secrets.deleteUserToken(account, previous);
-        }
+        // The owner too: a leftover owner user token (from a switch back to
+        // the owner) would shadow the fresh account token.
+        await secrets.deleteUserToken(
+            account, existing.account.activeProfileId);
       }
       // A live source caches its token; rebuild it so it reads the new one.
       for (final source in record.sources) {

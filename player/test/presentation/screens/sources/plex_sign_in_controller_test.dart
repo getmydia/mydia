@@ -159,6 +159,29 @@ void main() {
     expect(await storage.read('source/$accountId/account_token'), 'second');
   });
 
+  test('re-auth as the owner drops a stale owner user token', () async {
+    pinToken = 'first';
+    await controller().start();
+    await until(() => state() is PlexSignInChoosing);
+    await controller().save();
+    final account = (await store.load()).accounts.single.account;
+    // Left behind by an earlier switch from a Home user back to the owner.
+    await storage.write('source/${account.id}/owner/user_token', 'old');
+
+    container.listen(plexSignInProvider(account.id), (_, __) {});
+    final again = container.read(plexSignInProvider(account.id).notifier);
+    pinToken = 'second';
+    await again.start();
+    await until(() =>
+        container.read(plexSignInProvider(account.id)) is PlexSignInChoosing);
+    await again.save();
+
+    expect(
+      await SourceSecrets(storage).userToken(account, 'owner'),
+      'second',
+    );
+  });
+
   test('re-auth that drops a server deletes its stored token', () async {
     pinToken = 'first';
     await controller().start();
