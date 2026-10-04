@@ -45,7 +45,8 @@ defmodule Mydia.Plugins.Manifest do
   An optional top-level `settings_schema` declares the operator-editable config
   fields a plugin exposes. Each field is an object with `key`, `type`
   (`string | url | secret | enum | text`, where `text` renders as a multiline
-  textarea), and optional `label`, `required`, and (for `enum`) `options`. A
+  textarea), and optional `label`, `hint` (help text shown under the field),
+  `required`, and (for `enum`) `options`. A
   `url` field may carry `grants_host: true`, which marks it as **host-granting**:
   the host of the operator-configured value is added to the plugin's effective
   `net:http` allowlist at config time (see `Mydia.Plugins` host-grant
@@ -936,10 +937,18 @@ defmodule Mydia.Plugins.Manifest do
            "visible_when on #{key} must be an object mapping a setting key to a string or list of strings"
          )}
 
+      not valid_hint?(Map.get(field, "hint")) ->
+        {:error, Error.new(:invalid_manifest, "hint on #{key} must be a non-empty string")}
+
       true ->
         :ok
     end
   end
+
+  # `hint` (optional) is help text the settings UI shows under the field.
+  defp valid_hint?(nil), do: true
+  defp valid_hint?(hint) when is_binary(hint), do: not blank?(hint)
+  defp valid_hint?(_), do: false
 
   # `visible_when` (optional) gates a field's visibility in the settings UI on
   # the value of another setting: a map of `controlling_key => value`, where
