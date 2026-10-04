@@ -11,6 +11,11 @@ import 'package:flutter/foundation.dart';
 
 enum SourceKind { mydia, plex, stash, jellyfin }
 
+/// How a server is kept from whoever else uses this device. `locked` shows
+/// it with a badge and asks to authenticate on open; `hidden` leaves it out
+/// of every list until the app is unlocked.
+enum SourceLock { none, locked, hidden }
+
 /// Storage namespace of the one Mydia login that predates sources. Its
 /// credentials stay under `AuthService`'s original keys, unmigrated.
 const kLegacyStorageNamespace = 'legacy';

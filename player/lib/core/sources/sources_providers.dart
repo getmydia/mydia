@@ -52,8 +52,20 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     return result;
   }
 
-  Future<void> putAccount(SourceAccountRecord record) =>
-      _serialise(() => _write((store) => store.putAccount(record)));
+  /// A sign-in flow writes a fresh record with no locks. Keep the stored
+  /// record's locks for servers the new record still lists, so signing in
+  /// again never unhides a server.
+  Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+        final stored = _record(record.account.id);
+        final ids = {for (final s in record.servers) s.id};
+        final kept = {
+          for (final e in (stored?.serverLocks ?? const {}).entries)
+            if (ids.contains(e.key)) e.key: e.value,
+          ...record.serverLocks,
+        };
+        return _write(
+            (store) => store.putAccount(record.copyWith(serverLocks: kept)));
+      });
 
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
@@ -82,6 +94,29 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
               account: record.account.copyWith(needsReauth: value),
             )));
       });
+
+  Future<void> setServerLock(
+          String accountId, String serverId, SourceLock lock) =>
+      _serialise(() async {
+        final record = _record(accountId);
+        if (record == null) return;
+        final locks = {...record.serverLocks}..remove(serverId);
+        if (lock != SourceLock.none) locks[serverId] = lock;
+        await _write(
+            (store) => store.putAccount(record.copyWith(serverLocks: locks)));
+      });
+
+  /// "Forgot PIN": every account with a locked or hidden server goes, with
+  /// its tokens. Nothing that was out of sight becomes visible.
+  Future<void> removeLockedAccounts() async {
+    final ids = [
+      for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+        if (r.serverLocks.isNotEmpty) r.account.id,
+    ];
+    for (final id in ids) {
+      await removeAccount(id);
+    }
+  }
 
   Future<void> updateServers(
     String accountId,

@@ -13,6 +13,7 @@ class SourceAccountRecord {
     required this.servers,
     required this.addedAtMs,
     this.chosenServerIds,
+    this.serverLocks = const {},
   }) {
     final ids = [
       account.id,
@@ -20,6 +21,7 @@ class SourceAccountRecord {
       for (final p in profiles) ...[p.id, p.accountId],
       for (final s in servers) ...[s.id, s.profileId, s.accountId],
       ...?chosenServerIds,
+      ...serverLocks.keys,
     ];
     for (final id in ids) {
       if (!isValidSourceIdComponent(id)) {
@@ -42,6 +44,14 @@ class SourceAccountRecord {
         ],
         addedAtMs: json['addedAtMs'] as int,
         chosenServerIds: (json['chosenServerIds'] as List?)?.cast<String>(),
+        serverLocks: {
+          for (final MapEntry(:key, :value)
+              in ((json['serverLocks'] as Map?) ?? const {}).entries)
+            // A value this build does not know came from a newer one: keep
+            // the server out of sight rather than unlock it.
+            key as String:
+                SourceLock.values.asNameMap()[value] ?? SourceLock.hidden,
+        }..removeWhere((_, lock) => lock == SourceLock.none),
       );
 
   final ProviderAccount account;
@@ -53,6 +63,14 @@ class SourceAccountRecord {
   /// Home user is shown the ones they can see. Null on records written
   /// before Plex Home: [chosenServers] then reads the stored servers.
   final List<String>? chosenServerIds;
+
+  /// Lock mode per server id. Never holds [SourceLock.none]; a server that
+  /// is absent is unlocked. Kept for every Home user of a Plex account,
+  /// since the lock belongs to the server, not the profile.
+  final Map<String, SourceLock> serverLocks;
+
+  SourceLock lockOf(String serverId) =>
+      serverLocks[serverId] ?? SourceLock.none;
 
   List<String> get chosenServers =>
       chosenServerIds ?? [for (final s in servers) s.id];
@@ -71,6 +89,7 @@ class SourceAccountRecord {
     List<SourceProfile>? profiles,
     List<SourceServer>? servers,
     List<String>? chosenServerIds,
+    Map<String, SourceLock>? serverLocks,
   }) =>
       SourceAccountRecord(
         account: account ?? this.account,
@@ -78,6 +97,7 @@ class SourceAccountRecord {
         servers: servers ?? this.servers,
         addedAtMs: addedAtMs,
         chosenServerIds: chosenServerIds ?? this.chosenServerIds,
+        serverLocks: serverLocks ?? this.serverLocks,
       );
 
   Map<String, dynamic> toJson() => {
@@ -86,6 +106,10 @@ class SourceAccountRecord {
         'servers': [for (final s in servers) s.toJson()],
         'addedAtMs': addedAtMs,
         if (chosenServerIds != null) 'chosenServerIds': chosenServerIds,
+        if (serverLocks.isNotEmpty)
+          'serverLocks': {
+            for (final e in serverLocks.entries) e.key: e.value.name,
+          },
       };
 }
 
