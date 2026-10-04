@@ -24,6 +24,8 @@ defmodule Mydia.Plugins.Error do
     * `:too_large` - Response exceeded the gate's size cap
     * `:invalid_request` - A host-function request payload was missing or malformed
     * `:integrity_mismatch` - Package hash did not match the declared value
+    * `:signature_invalid` - A catalog's minisign signature is missing, malformed or does not verify
+    * `:key_changed` - A catalog is now signed by a different key than the one pinned for its source
     * `:invalid_config` - Invalid configuration provided
     * `:unsupported` - The guest's contract predates the export being called (setup/check-health on a < 1.5 guest)
     * `:busy` - The plugin has no free invocation slot or lock within the wait
@@ -46,6 +48,8 @@ defmodule Mydia.Plugins.Error do
           | :too_large
           | :invalid_request
           | :integrity_mismatch
+          | :signature_invalid
+          | :key_changed
           | :invalid_config
           | :unsupported
           | :busy
