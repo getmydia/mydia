@@ -27,6 +27,13 @@ Future<List<String>> pumpHome(WidgetTester tester, FakeMediaSource fake) async {
       },
     ),
     GoRoute(
+      path: '/s/:id/episode/:item',
+      builder: (_, s) {
+        pushed.add(s.uri.toString());
+        return const SizedBox();
+      },
+    ),
+    GoRoute(
       path: '/s/:id/item/:kind/:item',
       builder: (_, s) {
         pushed.add(s.uri.toString());
@@ -167,7 +174,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('source-continue-details')));
       await tester.pumpAndSettle();
-      expect(pushed.last, '/s/acc1:owner:aa11/item/episode/e2');
+      expect(pushed.last, '/s/acc1:owner:aa11/episode/e2');
     });
 
     testWidgets('an entry the source cannot remove offers details only',

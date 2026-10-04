@@ -137,7 +137,10 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
           summary: fakeShow, overview: 'An invented series.');
     }
     if (ref.kind == ItemKind.season) {
-      return const ItemDetail(summary: fakeSeason);
+      return const ItemDetail(
+          summary: fakeSeason,
+          show: ItemRef(
+              sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1'));
     }
     final summary = ref.kind == ItemKind.episode
         ? fakeEpisode(int.parse(ref.externalId.substring(1)))

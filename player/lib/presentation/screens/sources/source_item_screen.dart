@@ -44,8 +44,7 @@ class SourceItemScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(24),
                 child: _Body(detail: value, item: item),
               ),
-              if (item.kind == ItemKind.show || item.kind == ItemKind.season)
-                _Children(parent: item),
+              if (item.kind == ItemKind.folder) _Children(parent: item),
             ],
           ),
         AsyncError(:final error) => SourceErrorView(

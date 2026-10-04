@@ -60,7 +60,7 @@ void main() {
         tester,
         _NoWatchedSource(),
         const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3'));
+            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
     expect(find.byKey(const Key('source-item-play')), findsOneWidget);
     expect(find.byKey(const Key('source-item-watched')), findsNothing);
   });
@@ -70,7 +70,7 @@ void main() {
         tester,
         _FailingWatchedSource(),
         const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3'));
+            sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3'));
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
     expect(find.text(const SourceException.unreachable().viewerMessage),
@@ -78,9 +78,9 @@ void main() {
   });
 
   const movie =
-      ItemRef(sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm3');
+      ItemRef(sourceId: fakeSourceId, kind: ItemKind.video, externalId: 'm3');
 
-  testWidgets('a movie offers resume, focused, and opens the player',
+  testWidgets('a video offers resume, focused, and opens the player',
       (tester) async {
     final pushed = await pumpItem(tester, FakeMediaSource(), movie);
     expect(find.text('Invented Film 3'), findsOneWidget);
@@ -109,27 +109,5 @@ void main() {
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
     expect(fake.watchedCalls.single, (movie, true));
-  });
-
-  testWidgets('a show lists seasons, a season lists episodes', (tester) async {
-    final pushed = await pumpItem(
-        tester,
-        FakeMediaSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1'));
-    expect(find.text('Season 1'), findsOneWidget);
-    await tester.tap(find.text('Season 1'));
-    await tester.pumpAndSettle();
-    expect(pushed.single, '/s/acc1:owner:aa11/item/season/se1');
-  });
-
-  testWidgets('a season lists its episodes', (tester) async {
-    await pumpItem(
-        tester,
-        FakeMediaSource(),
-        const ItemRef(
-            sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se1'));
-    expect(find.text('Invented Episode 1'), findsOneWidget);
-    expect(find.text('Invented Episode 2'), findsOneWidget);
   });
 }
