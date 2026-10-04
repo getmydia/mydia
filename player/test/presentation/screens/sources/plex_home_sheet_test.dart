@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +38,7 @@ void main() {
   late MockAuthStorage storage;
   late List<SourceId> switched;
   bool homeUsersFail = false;
+  Completer<void>? guestGate;
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     store = InMemorySourceStore();
@@ -53,6 +56,9 @@ void main() {
           return request.url.queryParameters['pin'] == '1234'
               ? http.Response(kidSwitchJson, 201)
               : http.Response(wrongPinJson, 401);
+        case 'POST /api/v2/home/users/guest02/switch':
+          await guestGate?.future;
+          return http.Response(guestSwitchJson, 201);
         case 'GET /api/v2/resources':
           return http.Response(_kidResources, 200);
       }
@@ -90,7 +96,10 @@ void main() {
     return container;
   }
 
-  setUp(() => homeUsersFail = false);
+  setUp(() {
+    homeUsersFail = false;
+    guestGate = null;
+  });
 
   testWidgets('lists the Home users with a lock on protected ones',
       (tester) async {
@@ -128,6 +137,26 @@ void main() {
         const SourceId('acc1:kid0001:abc123'));
     expect(find.byKey(const Key('plex-home-user-kid0001')), findsNothing,
         reason: 'the sheet closes after a switch');
+  });
+
+  testWidgets('a switch still completes when the sheet is dismissed mid-way',
+      (tester) async {
+    guestGate = Completer<void>();
+    final container = await pump(tester);
+    await tester.tap(find.byKey(const Key('plex-home-user-guest02')));
+    await tester.pump();
+    Navigator.of(
+            tester.element(find.byKey(const Key('plex-home-user-guest02'))))
+        .pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('plex-home-user-guest02')), findsNothing);
+
+    guestGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(switched, [const SourceId('acc1:guest02:abc123')]);
+    expect(container.read(activeSourceIdProvider),
+        const SourceId('acc1:guest02:abc123'));
   });
 
   testWidgets('a failed user list shows an error', (tester) async {

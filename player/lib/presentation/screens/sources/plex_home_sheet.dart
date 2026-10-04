@@ -45,8 +45,14 @@ class _PlexHomeSheet extends ConsumerStatefulWidget {
 }
 
 class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
-  late final Future<List<PlexHomeUser>> _users = _load();
+  late final Future<List<PlexHomeUser>> _users;
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _users = _load();
+  }
 
   Future<List<PlexHomeUser>> _load() async {
     final switcher = await ref.read(plexHomeSwitcherProvider.future);
@@ -57,6 +63,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
     if (_busy) return;
     final toaster = Toaster.of(context);
     final navigator = Navigator.of(context);
+    final container = ProviderScope.containerOf(context, listen: false);
     final switcher = await ref.read(plexHomeSwitcherProvider.future);
     if (!mounted) return;
     setState(() => _busy = true);
@@ -74,8 +81,7 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
         try {
           await run(pin);
         } on SourceException catch (e) {
-          if (e.kind == SourceErrorKind.wrongPin) return e.viewerMessage;
-          failure = e;
+          return e.viewerMessage;
         } catch (e) {
           failure = e;
         }
@@ -105,16 +111,17 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
       if (mounted) setState(() => _busy = false);
       return;
     }
-    if (!mounted) return;
+    // The switch is already persisted, so finish it even when the sheet was
+    // dismissed meanwhile; only touch the sheet itself while it is mounted.
     // A live source caches its token; rebuild the account's sources so
     // they read the new user's.
-    for (final source in ref.read(sourcesProvider)) {
+    for (final source in container.read(sourcesProvider)) {
       if (source.account.id == widget.account.id) {
-        ref.invalidate(mediaSourceProvider(source.id));
+        container.invalidate(mediaSourceProvider(source.id));
       }
     }
-    ref.read(selectedSourceIdProvider.notifier).select(target);
-    navigator.pop();
+    container.read(selectedSourceIdProvider.notifier).select(target);
+    if (mounted) navigator.pop();
     widget.onSwitched(target);
   }
 
