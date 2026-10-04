@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_guest_client.dart';
@@ -6,6 +8,25 @@ import 'package:player/domain/sources/source_error.dart';
 import 'package:player/graphql/queries/guest_mydia.graphql.dart';
 
 import 'fake_mydia_transport.dart';
+
+/// Holds the first answer until [gate] completes.
+class _GatedTransport extends FakeMydiaTransport {
+  final gate = Completer<void>();
+  bool _first = true;
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+  }) async {
+    if (_first) {
+      _first = false;
+      await gate.future;
+    }
+    return super.send(query, variables, token: token);
+  }
+}
 
 void main() {
   late FakeMydiaTransport transport;
@@ -94,9 +115,55 @@ void main() {
     transport.handlers['RefreshAccessToken'] =
         (_) => throw const SourceException.unauthorized();
     final client = build();
-    await expectLater(client.request(documentNodeQueryGuestInstanceIdentity),
-        throwsA(isA<SourceException>()));
+    await expectLater(
+        client.request(documentNodeQueryGuestInstanceIdentity),
+        throwsA(isA<SourceException>()
+            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
     expect(unauthorized, 1);
+    expect(saved, isEmpty);
+  });
+
+  test('a refresh that fails transiently does not flag the account', () async {
+    transport.validTokens = {};
+    transport.handlers['RefreshAccessToken'] =
+        (_) => throw const SourceException.unreachable();
+    final client = build();
+    await expectLater(
+        client.request(documentNodeQueryGuestInstanceIdentity),
+        throwsA(isA<SourceException>()
+            .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)));
+    expect(unauthorized, 0);
+    expect(saved, isEmpty);
+    expect(client.status.value, SourceConnectionStatus.unreachable);
+  });
+
+  test('a retry rejected again flags the account', () async {
+    transport.validTokens = {};
+    final client = build();
+    await expectLater(
+        client.request(documentNodeQueryGuestInstanceIdentity),
+        throwsA(isA<SourceException>()
+            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
+    expect(unauthorized, 1);
+  });
+
+  test('a late rejection of the old token retries without a second refresh',
+      () async {
+    transport.validTokens = {'fresh'};
+    final gated = _GatedTransport()
+      ..validTokens = transport.validTokens
+      ..handlers.addAll(transport.handlers);
+    transport = gated;
+    final client = build();
+    final late = client.request(documentNodeQueryGuestInstanceIdentity);
+    await Future<void>.delayed(Duration.zero);
+    await client.request(documentNodeQueryGuestInstanceIdentity);
+    gated.gate.complete();
+    await late;
+    expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
+        hasLength(1));
+    expect(transport.calls.last.token, 'fresh');
+    expect(unauthorized, 0);
   });
 
   test('an unreachable server sets the status and rethrows', () async {

@@ -58,18 +58,30 @@ class MydiaGuestClient {
     Map<String, dynamic> variables = const {},
   ]) async {
     final query = printNode(document);
-    final current = await credentials();
+    final sentWith = (await credentials()).accessToken;
     try {
-      return await _send(query, variables, current.accessToken);
+      return await _send(query, variables, sentWith);
     } on SourceException catch (e) {
       if (e.kind != SourceErrorKind.unauthorized) rethrow;
-      final fresh = await (_refreshing ??=
-          _refresh().whenComplete(() => _refreshing = null));
+      // A refresh may have finished while this request was in flight.
+      final latest = _credentials?.accessToken;
+      final String? fresh;
+      if (latest != null && latest != sentWith) {
+        fresh = latest;
+      } else {
+        fresh = await (_refreshing ??=
+            _refresh().whenComplete(() => _refreshing = null));
+      }
       if (fresh == null) {
         _onUnauthorized();
         rethrow;
       }
-      return _send(query, variables, fresh);
+      try {
+        return await _send(query, variables, fresh);
+      } on SourceException catch (retry) {
+        if (retry.kind == SourceErrorKind.unauthorized) _onUnauthorized();
+        rethrow;
+      }
     }
   }
 
@@ -87,23 +99,26 @@ class MydiaGuestClient {
     }
   }
 
-  /// A fresh access token, or null when this device cannot get one itself.
+  /// A fresh access token, or null when this device cannot re-authenticate
+  /// (no device token, the server refused it, or it answered with no token).
+  /// Any other failure, such as an unreachable server, propagates.
   Future<String?> _refresh() async {
     final current = await credentials();
     final deviceToken = current.deviceToken;
     if (deviceToken == null) return null;
+    final Map<String, dynamic> data;
     try {
-      final data =
-          await _transport.send(_refreshMutation, {'deviceToken': deviceToken});
-      final token = (data['refreshAccessToken'] as Map?)?['token'];
-      if (token is! String || token.isEmpty) return null;
-      final next = current.copyWith(accessToken: token);
-      _credentials = next;
-      await _save(next);
-      return token;
-    } on SourceException {
-      return null;
+      data = await _send(_refreshMutation, {'deviceToken': deviceToken}, null);
+    } on SourceException catch (e) {
+      if (e.kind == SourceErrorKind.unauthorized) return null;
+      rethrow;
     }
+    final token = (data['refreshAccessToken'] as Map?)?['token'];
+    if (token is! String || token.isEmpty) return null;
+    final next = current.copyWith(accessToken: token);
+    _credentials = next;
+    await _save(next);
+    return token;
   }
 
   void dispose() => _status.dispose();
