@@ -40,11 +40,21 @@ class SourceNavList extends ConsumerWidget {
     required this.sourceId,
     required this.location,
     required this.onNavigate,
+    this.selectedRowFocusNode,
   });
 
   final SourceId sourceId;
   final String location;
   final ValueChanged<String> onNavigate;
+
+  /// Node for the row matching [location], so the shell can focus the
+  /// sidebar deliberately when the viewer presses left at the content edge.
+  ///
+  /// Falls back to Home when no row matches, such as `/s/<id>/item/...`,
+  /// for the reason `SidebarContent` documents on its own node: otherwise the
+  /// node attaches to nothing and a remote cannot reach the sidebar from the
+  /// routes it does not list.
+  final FocusNode? selectedRowFocusNode;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -61,9 +71,19 @@ class SourceNavList extends ConsumerWidget {
       AsyncData(value: AuthStatus.authenticated) => true,
       _ => false,
     };
+    final libraryTargets = [
+      for (final library in libraries)
+        '$root/library/${Uri.encodeComponent(library.ref.id)}',
+    ];
+    final matched = location == root ||
+        (searchable && location == '$root/search') ||
+        libraryTargets.contains(location);
+    // The row carrying the shell's node: the selected one, else Home.
+    String focusTarget() => matched ? location : root;
     SidebarRow row(String key, IconData icon, String label, String target) =>
         SidebarRow(
           key: ValueKey('source-nav-$key'),
+          focusNode: target == focusTarget() ? selectedRowFocusNode : null,
           icon: icon,
           selectedIcon: icon,
           label: label,

@@ -207,6 +207,7 @@ class SidebarContent extends ConsumerWidget {
               sourceId: SourceId(thirdPartyId),
               location: location,
               onNavigate: onNavigate,
+              selectedRowFocusNode: selectedRowFocusNode,
             ),
           )
         else

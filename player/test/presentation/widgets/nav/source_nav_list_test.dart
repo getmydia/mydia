@@ -27,6 +27,7 @@ Future<List<String>> _pump(
   FakeMediaSource? source,
   AuthStatus auth = AuthStatus.authenticated,
   String location = '/s/acc1:owner:aa11',
+  FocusNode? focusNode,
 }) async {
   final navigations = <String>[];
   await tester.pumpWidget(ProviderScope(
@@ -41,6 +42,7 @@ Future<List<String>> _pump(
           sourceId: fakeSourceId,
           location: location,
           onNavigate: navigations.add,
+          selectedRowFocusNode: focusNode,
         ),
       ),
     ),
@@ -99,5 +101,36 @@ void main() {
     final settingsTop =
         tester.getTopLeft(find.byKey(const ValueKey('source-nav-settings'))).dy;
     expect(tester.getTopLeft(find.text('Series')).dy, lessThan(settingsTop));
+  });
+
+  group('the shell focus node', () {
+    // Which row's subtree holds the node's context.
+    bool attachedTo(FocusNode node, String rowKey) {
+      final context = node.context;
+      if (context == null) return false;
+      var found = false;
+      context.visitAncestorElements((e) {
+        if (e.widget.key == ValueKey(rowKey)) found = true;
+        return !found;
+      });
+      return found;
+    }
+
+    testWidgets('sits on the row for the current location', (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await _pump(tester,
+          location: '/s/acc1:owner:aa11/library/shows', focusNode: node);
+      expect(attachedTo(node, 'source-nav-library-shows'), isTrue);
+      expect(attachedTo(node, 'source-nav-home'), isFalse);
+    });
+
+    testWidgets('falls back to Home when no row matches', (tester) async {
+      final node = FocusNode();
+      addTearDown(node.dispose);
+      await _pump(tester,
+          location: '/s/acc1:owner:aa11/item/x', focusNode: node);
+      expect(attachedTo(node, 'source-nav-home'), isTrue);
+    });
   });
 }
