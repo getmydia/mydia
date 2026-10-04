@@ -15,6 +15,11 @@ defmodule Mydia.Metadata.Structs.MediaMetadata do
   # `@required_versions` so those blobs get refreshed. Blobs written before
   # this field existed load as 0.
   #
+  # The stamp asserts the struct was parsed from a full provider fetch. Code
+  # that builds a struct from partial data (a search result, a matcher rewrap)
+  # and persists it would carry the current version without the fields the
+  # version promises.
+  #
   # 1: TVDB `characters` mapped into `cast` (3ac79ecd4).
   @schema_version 1
 

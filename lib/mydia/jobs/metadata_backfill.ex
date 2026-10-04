@@ -19,9 +19,9 @@ defmodule Mydia.Jobs.MetadataBackfill do
 
   Runs daily. Refreshes are enqueued `@stagger_seconds` apart with
   `scheduled_in`, so a version bump that selects a whole library spreads its
-  relay load over hours instead of arriving as a burst. The query matches
-  nothing once the library is repaired, so the job settles into costing one
-  read. Idempotent and safe to re-run.
+  relay load over hours instead of arriving as a burst. Once the library is
+  repaired nothing is enqueued, but each run still reads the metadata of every
+  TV show. Idempotent and safe to re-run.
   """
 
   use Oban.Worker,
