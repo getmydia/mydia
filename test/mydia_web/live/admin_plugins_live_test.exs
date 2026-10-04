@@ -391,6 +391,19 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert has_element?(view, "#approval-capabilities")
       assert has_element?(view, "#approval-capabilities-group-talks_to", "discord.com")
       assert has_element?(view, "#approval-capabilities-also", "reacts to new titles")
+
+      also_text =
+        view
+        |> element("#approval-capabilities-also")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+        |> String.replace(~r/\s+/, " ")
+        |> String.trim()
+
+      assert also_text =~ "reacts to new titles."
+      refute also_text =~ " ."
+      refute also_text =~ " ,"
       refute render(view) =~ "Review this carefully"
       refute has_element?(view, "#approval-capabilities [data-new]")
       assert has_element?(view, "#confirm-approval")

@@ -905,9 +905,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
       <p :if={@summary.also != []} id={"#{@id}-also"} class="text-xs text-base-content/60">
         Also:
         <%= for {line, index} <- Enum.with_index(@summary.also) do %>
-          <span data-new={line.new? && "true"}>
-            {line.label}<span :if={line.new?} class="text-warning font-medium"> (new)</span>
-          </span>{also_separator(
+          <span data-new={line.new? && "true"}>{line.label}<span :if={line.new?} class="text-warning font-medium"> (new)</span></span>{also_separator(
             index,
             length(@summary.also)
           )}
