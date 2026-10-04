@@ -27,12 +27,17 @@ class SidebarContent extends ConsumerWidget {
     required this.location,
     required this.onNavigate,
     required this.isOffline,
+    this.onSwitchSource,
     this.backToMydiaWidget,
     this.selectedRowFocusNode,
   });
 
   final String location;
   final ValueChanged<String> onNavigate;
+
+  /// Where a server switch navigates, when it should differ from
+  /// [onNavigate]. The mobile drawer uses it to stay open across a switch.
+  final ValueChanged<String>? onSwitchSource;
   final bool isOffline;
   final Widget? backToMydiaWidget;
 
@@ -186,7 +191,11 @@ class SidebarContent extends ConsumerWidget {
             ],
           ),
         ),
-        SourceSwitcher(onNavigate: onNavigate),
+        SourceSwitcher(
+          location: location,
+          onNavigate: onNavigate,
+          onSwitchSource: onSwitchSource,
+        ),
         if (editing && thirdPartyId == null)
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
@@ -198,6 +207,7 @@ class SidebarContent extends ConsumerWidget {
               sourceId: SourceId(thirdPartyId),
               location: location,
               onNavigate: onNavigate,
+              selectedRowFocusNode: selectedRowFocusNode,
             ),
           )
         else

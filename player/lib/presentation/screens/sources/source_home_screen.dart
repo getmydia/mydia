@@ -10,9 +10,9 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
-import '../../widgets/app_shell.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
+import 'source_drawer_button.dart';
 import 'source_error_view.dart';
 import 'source_poster_row.dart';
 
@@ -94,19 +94,12 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The mobile shell's scaffold exists only in the narrow layout; there it
-    // owns the drawer that holds this source's navigation.
-    final mobileShell = AppShell.scaffoldKey.currentState;
+    final drawerButton = SourceDrawerButton.maybe(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
-          if (mobileShell != null)
-            IconButton(
-              key: const Key('source-open-drawer'),
-              icon: const Icon(Icons.menu),
-              onPressed: mobileShell.openDrawer,
-            ),
+          if (drawerButton != null) drawerButton,
           Expanded(
             child:
                 Text(title, style: Theme.of(context).textTheme.headlineSmall),
