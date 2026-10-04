@@ -1052,5 +1052,6 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   defp origin_badge({:source, _id}, name),
     do: {"Third-party · #{name}", "badge-warning badge-outline"}
 
+  defp origin_badge(:unknown, _name), do: {"Unknown source", "badge-ghost"}
   defp origin_badge(_removed, _name), do: {"Source removed", "badge-ghost"}
 end

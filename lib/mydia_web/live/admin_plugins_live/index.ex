@@ -434,7 +434,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
     multi_instance = Map.get(config.manifest || %{}, "multi_instance", false) == true
-    origin = Sources.origin(config)
+    origin = origin_of(config)
 
     %{
       multi_instance: multi_instance,
@@ -478,6 +478,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     do: text
 
   defp description_of(_), do: nil
+
+  # A row that never recorded where it came from is not one whose source was
+  # removed; `Sources.origin/1` folds both into `:removed`.
+  defp origin_of(%{source_url: nil, plugin_source_id: nil}), do: :unknown
+  defp origin_of(config), do: Sources.origin(config)
 
   defp source_name({:source, _} = origin), do: Sources.origin_name(origin)
   defp source_name(_origin), do: nil

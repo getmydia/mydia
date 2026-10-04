@@ -862,6 +862,22 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert html =~ "Sideloaded"
     end
 
+    test "a plugin with no recorded source says so instead of claiming it was removed", %{
+      conn: conn
+    } do
+      seed_plugin("notifier", "Notifier", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Unknown source")
+    end
+
+    test "a plugin whose source host is not the store reads as source removed", %{conn: conn} do
+      seed_from("notifier", "Notifier", "https://gone.example.com/notifier-1.0.0.tar")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Source removed")
+    end
+
     test "a third-party plugin's badge names its source" do
       html =
         render_component(&Components.source_badge/1,
