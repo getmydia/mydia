@@ -15,6 +15,7 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/plex_sign_in_controller.dart';
 
+import '../../../core/sources/plex/plex_home_fixtures.dart';
 import '../../../core/sources/plex/plex_tv_client_test.dart' show resourcesJson;
 import '../../../test_utils/mock_auth_storage.dart';
 
@@ -33,6 +34,7 @@ Future<void> until(bool Function() condition) async {
 void main() {
   late String? pinToken;
   late String? pinBody;
+  late String? homeUsersBody;
   late MockAuthStorage storage;
   late InMemorySourceStore store;
   late ProviderContainer container;
@@ -40,6 +42,7 @@ void main() {
   setUp(() {
     pinToken = null;
     pinBody = null;
+    homeUsersBody = null;
     storage = MockAuthStorage();
     store = InMemorySourceStore();
     final client = MockClient((request) async {
@@ -54,6 +57,11 @@ void main() {
           return http.Response(
               jsonEncode({'uuid': 'u1', 'username': 'quill', 'title': 'Quill'}),
               200);
+        case 'GET /api/v2/home/users':
+          final body = homeUsersBody;
+          return body == null
+              ? http.Response('', 404)
+              : http.Response(body, 200);
         case 'GET /api/v2/resources':
           return http.Response(resourcesJson, 200);
       }
@@ -175,5 +183,64 @@ void main() {
     expect(await storage.read('source/$accountId/owner/aa11/token'),
         'server-token-1');
     expect(await storage.read('source/$accountId/owner/bb22/token'), isNull);
+  });
+
+  test('stores the Home users as profiles and the chosen servers', () async {
+    homeUsersBody = homeUsersJson;
+    pinToken = 'acct-token';
+    await controller().start();
+    await until(() => state() is PlexSignInChoosing);
+    controller().toggle('bb22');
+    await controller().save();
+
+    final record = (await store.load()).accounts.single;
+    expect(record.account.activeProfileId, 'owner');
+    expect([for (final p in record.profiles) p.id],
+        ['owner', 'kid0001', 'guest02']);
+    expect(record.profiles[1].protected, isTrue);
+    expect(record.chosenServerIds, ['aa11']);
+  });
+
+  test('re-auth resets a switched account to the owner', () async {
+    homeUsersBody = homeUsersJson;
+    pinToken = 'first';
+    await controller().start();
+    await until(() => state() is PlexSignInChoosing);
+    await controller().save();
+    final saved = (await store.load()).accounts.single;
+    final accountId = saved.account.id;
+
+    // As if the viewer had switched to Pip.
+    await store.putAccount(saved.copyWith(
+      account: saved.account.copyWith(activeProfileId: 'kid0001'),
+      servers: [
+        for (final s in saved.servers)
+          if (s.id == 'aa11')
+            SourceServer(
+                id: 'aa11',
+                accountId: accountId,
+                profileId: 'kid0001',
+                name: s.name,
+                machineIdentifier: 'aa11'),
+      ],
+    ));
+    await storage.write('source/$accountId/kid0001/user_token', 'kid-token');
+    await storage.write('source/$accountId/kid0001/aa11/token', 'kid-srv');
+    container.invalidate(sourceRecordsProvider);
+    await container.read(sourceRecordsProvider.future);
+
+    container.listen(plexSignInProvider(accountId), (_, __) {});
+    final again = container.read(plexSignInProvider(accountId).notifier);
+    pinToken = 'second';
+    await again.start();
+    await until(() =>
+        container.read(plexSignInProvider(accountId)) is PlexSignInChoosing);
+    await again.save();
+
+    final record = (await store.load()).accounts.single;
+    expect(record.account.activeProfileId, 'owner');
+    expect({for (final s in record.servers) s.profileId}, {'owner'});
+    expect(await storage.read('source/$accountId/kid0001/user_token'), isNull);
+    expect(await storage.read('source/$accountId/kid0001/aa11/token'), isNull);
   });
 }
