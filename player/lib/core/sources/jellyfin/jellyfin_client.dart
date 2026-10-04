@@ -125,6 +125,16 @@ class JellyfinClient {
   Future<Map<String, dynamic>> get(String path, [Map<String, String>? query]) =>
       _json('GET', path, query, null);
 
+  /// An endpoint that answers a bare JSON array, such as `/Items/Latest`.
+  Future<List<Map<String, dynamic>>> getList(String path,
+      [Map<String, String>? query]) async {
+    final json = await _decoded('GET', path, query, null);
+    return [
+      for (final m in (json is List ? json : const []))
+        if (m is Map) m.cast<String, dynamic>(),
+    ];
+  }
+
   Future<Map<String, dynamic>> post(
     String path, {
     Map<String, String>? query,
@@ -150,16 +160,24 @@ class JellyfinClient {
     Map<String, String>? query,
     Object? body,
   ) async {
+    final json = await _decoded(method, path, query, body);
+    return json is Map ? json.cast<String, dynamic>() : const {};
+  }
+
+  Future<Object?> _decoded(
+    String method,
+    String path,
+    Map<String, String>? query,
+    Object? body,
+  ) async {
     final response = await _send(method, path, query, body);
-    if (response.bodyBytes.isEmpty) return const {};
-    final Object? json;
+    if (response.bodyBytes.isEmpty) return null;
     try {
-      json = jsonDecode(utf8.decode(response.bodyBytes));
+      return jsonDecode(utf8.decode(response.bodyBytes));
     } on FormatException {
       throw const SourceException.server(
           'The Jellyfin server sent a response this app cannot read.');
     }
-    return json is Map ? json.cast<String, dynamic>() : const {};
   }
 
   Future<http.Response> _send(

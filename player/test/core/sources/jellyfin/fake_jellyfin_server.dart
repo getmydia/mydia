@@ -186,6 +186,13 @@ class FakeJellyfinServer {
     }
 
     if (failing.contains(path)) return http.Response('', 500);
+    if (request.method == 'GET' && path == '/Items/Latest') {
+      // A bare array, unlike every other list endpoint.
+      return _json([
+        {...movie(3), 'DateCreated': '2024-05-03T10:00:00.0000000Z'},
+        {...movie(1), 'DateCreated': '2024-05-01T10:00:00.0000000Z'},
+      ]);
+    }
     if (request.method == 'GET' && path == '/UserItems/Resume') {
       return _json(
           {'Items': resumeItems, 'TotalRecordCount': resumeItems.length});

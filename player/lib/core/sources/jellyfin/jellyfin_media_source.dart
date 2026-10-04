@@ -20,7 +20,8 @@ class JellyfinMediaSource extends MediaSource
         ContinueWatching,
         Similar,
         Favorites,
-        NextUp {
+        NextUp,
+        RecentlyAdded {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -45,6 +46,7 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.similar,
         SourceCapability.favorites,
         SourceCapability.nextUp,
+        SourceCapability.recentlyAdded,
       };
 
   @override
@@ -118,7 +120,7 @@ class JellyfinMediaSource extends MediaSource
       'SortBy': sort.id == 'SortName' ? 'SortName' : '${sort.id},SortName',
       'SortOrder': descending ? 'Descending' : 'Ascending',
       if (filters.isNotEmpty) 'Filters': filters,
-      'Fields': 'ChildCount',
+      'Fields': 'ChildCount,$jellyfinSortFields',
       'EnableImageTypes': 'Primary,Backdrop,Thumb',
     });
     return _page(body, start);
@@ -262,6 +264,23 @@ class JellyfinMediaSource extends MediaSource
       ...resume,
       ..._maps(bodies[1]).where((m) => !resumingShows.contains(m['SeriesId'])),
     ]
+        .map((m) => jellyfinSummary(id, m))
+        .whereType<ItemSummary>()
+        .take(_rowLimit)
+        .toList();
+  }
+
+  /// Every library at once: with no `ParentId`, Jellyfin answers the newest
+  /// items across the user's views, episodes grouped under their show.
+  @override
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final items = await client.getList('/Items/Latest', {
+      ..._user,
+      'Limit': '$_rowLimit',
+      'Fields': 'DateCreated',
+      ..._rowImages,
+    });
+    return items
         .map((m) => jellyfinSummary(id, m))
         .whereType<ItemSummary>()
         .take(_rowLimit)
