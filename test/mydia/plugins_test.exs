@@ -860,6 +860,34 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "ensure_bundled/0 manifest reconciliation" do
+    test "a bundled plugin cannot be removed, so ensure_bundled never resurrects it" do
+      {:ok, _config} =
+        Settings.create_plugin_config(%{
+          slug: "webhook-notifier",
+          name: "Webhook Notifier",
+          version: "1.0.0",
+          source_url: "bundled",
+          enabled: false,
+          granted_capabilities: %{"net:http" => ["discord.com"]},
+          settings: %{"delivery" => "durable"},
+          manifest: %{
+            "slug" => "webhook-notifier",
+            "name" => "Webhook Notifier",
+            "version" => "1.0.0",
+            "capabilities" => %{"net:http" => ["discord.com"]}
+          }
+        })
+
+      assert {:error, %Mydia.Plugins.Error{type: :unsupported, message: message}} =
+               Plugins.remove("webhook-notifier")
+
+      assert message =~ "disable it instead"
+
+      assert :ok = Plugins.ensure_bundled()
+      config = Settings.get_plugin_config_by_slug("webhook-notifier")
+      refute config.enabled
+    end
+
     test "refreshes manifest and exact effective grant while preserving enabled state and settings" do
       settings = %{
         "target" => "ntfy",
