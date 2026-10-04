@@ -357,14 +357,14 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
       end
 
-      assert text.("#install-fresh") == "Install"
-      assert text.("#install-stale") == "Update to v1.1.0"
-      assert text.("#install-sideloaded") == "Install store version"
-      assert text.("#catalog-state-current") == "Installed"
-      assert text.("#catalog-state-builtin") == "Bundled"
-      assert doc |> LazyHTML.query("#install-current") |> Enum.empty?()
-      assert doc |> LazyHTML.query("#install-builtin") |> Enum.empty?()
-      assert text.("#catalog-row-stale") =~ "(installed v1.0.0)"
+      assert text.("#install-official-fresh") == "Install"
+      assert text.("#install-official-stale") == "Update to v1.1.0"
+      assert text.("#install-official-sideloaded") == "Install store version"
+      assert text.("#catalog-state-official-current") == "Installed"
+      assert text.("#catalog-state-official-builtin") == "Bundled"
+      assert doc |> LazyHTML.query("#install-official-current") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#install-official-builtin") |> Enum.empty?()
+      assert text.("#catalog-row-official-stale") =~ "(installed v1.0.0)"
     end
 
     test "third-party entries carry a badge and a namespaced id" do
@@ -390,7 +390,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       doc =
         render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
 
-      key = "fixture-tool--src-" <> sid
+      key = "src-#{sid}-fixture-tool"
 
       refute doc |> LazyHTML.query("#install-#{key}") |> Enum.empty?()
 
@@ -420,9 +420,10 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       doc =
         render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
 
-      assert doc |> LazyHTML.query("#install-fixture-tool") |> LazyHTML.text() =~ "Replace"
+      assert doc |> LazyHTML.query("#install-official-fixture-tool") |> LazyHTML.text() =~
+               "Replace"
 
-      assert doc |> LazyHTML.query("#catalog-row-fixture-tool") |> LazyHTML.text() =~
+      assert doc |> LazyHTML.query("#catalog-row-official-fixture-tool") |> LazyHTML.text() =~
                "a removed source"
     end
 
@@ -483,7 +484,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       send(view.pid, {:event_created, %{type: "unrelated", actor_id: nil}})
       render(view)
 
-      key = "fixture-tool--src-" <> third_sid
+      key = "src-#{third_sid}-fixture-tool"
       view |> element("#install-#{key}") |> render_click()
 
       assert has_element?(
@@ -493,12 +494,14 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
              )
     end
 
-    test "a source key never equals an official slug ending in its id prefix" do
+    test "a source key never equals an official key, whatever the slug" do
       sid = Ecto.UUID.generate()
-      lookalike = "foo-" <> String.slice(sid, 0, 8)
+      source_key = Components.catalog_key(%{source_id: sid, slug: "foo"})
 
-      refute Components.catalog_key(%{source_id: sid, slug: "foo"}) ==
-               Components.catalog_key(%{source_id: nil, slug: lookalike})
+      # Slugs may contain `-`, so try official slugs built to mimic a source key.
+      for lookalike <- ["foo--src-" <> sid, "src-#{sid}-foo", "foo-" <> String.slice(sid, 0, 8)] do
+        refute Components.catalog_key(%{source_id: nil, slug: lookalike}) == source_key
+      end
     end
 
     test "the button is disabled while a browse is in flight" do
