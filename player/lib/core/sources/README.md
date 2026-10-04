@@ -130,12 +130,26 @@ uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature`
 (downloads, cast, library refresh, its connection's link path); the
 screen checks before using any of them.
 
+Source episodes get Up Next. `SourcePlaybackSession.seasonEpisodes` walks
+show, season, episodes, and plays each entry's `defaultVersionId`.
+
 Plex, Stash and Jellyfin report progress through `PeriodicProgressReporter`: every
 10 seconds, on every play and pause, and on a seek (a position jump of more
 than 3 seconds). Watched is marked once per playback, at the same 90%
 threshold `ProgressService` uses for Mydia.
 
 ## Screens
+
+Plex and Jellyfin movies, shows, seasons and episodes open on the same
+detail screens as Mydia (`/s/:sourceId/movie|show|season|episode/:id`,
+`source_detail_routes.dart`), fed by `detail_providers.dart`.
+`SourceItemScreen` serves Stash videos and folders; the generic item route
+redirects the other kinds to their detail route. Actions only Mydia has
+appear by `DetailFeature`; a source gets Watched and Favorite when it lists
+`watchedState` and `favorites` (`sourceFeatures`). Cast and trailer come
+with the item. Similar and next up are the `Similar` and `NextUp`
+capabilities. A failed similar rail is hidden, and a failed next up leaves
+the show's hero on its first episode.
 
 Source screens show messages through the app's toast (`Toaster`), not a
 `SnackBar`, and reserve dock clearance with `DockInsets` so content is not
@@ -173,3 +187,6 @@ skips that directory.
 3. A `SourcePlaybackSession` subclass and a case in
    `playbackSessionFor`.
 4. An add flow under `presentation/screens/sources/`.
+5. Map `cast`, `contentRating`, `show` and `season` in the item detail, and
+   `overview`, `airDate` and `defaultVersionId` in summaries, so the shared
+   detail screens and Up Next have what they need.
