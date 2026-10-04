@@ -80,6 +80,13 @@ void main() {
     expect(find.byType(SourceErrorView), findsOneWidget);
   });
 
+  testWidgets('a source show on the generic route redirects to the show',
+      (tester) async {
+    final router = await pumpRouterAt(tester, '/s/$_id/item/show/s1');
+    expect(find.byType(ShowDetailScreen), findsOneWidget);
+    expect(router.state.uri.path, '/s/$_id/show/s1');
+  });
+
   testWidgets('a source episode opens the episode screen', (tester) async {
     await pumpRouterAt(tester, '/s/$_id/item/episode/e1');
     expect(find.byType(EpisodeDetailScreen), findsOneWidget);
@@ -93,6 +100,8 @@ void main() {
   testWidgets('Mydia-only controls are absent on a source movie',
       (tester) async {
     await pumpRouterAt(tester, '/s/$_id/movie/m1');
+    expect(find.text('Invented Film 1'), findsWidgets);
+    expect(find.text('Watched'), findsOneWidget);
     expect(find.text('Download'), findsNothing);
     expect(find.text('Info'), findsNothing);
     expect(find.text('Favorite'), findsNothing);
