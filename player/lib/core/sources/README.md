@@ -68,6 +68,33 @@ to the owner.
 with the chosen and stored server ids, so an inactive user's leftovers go
 when the account is removed.
 
+## Locks
+
+A server can be `locked` (listed with a badge, opens after authenticating)
+or `hidden` (in no list until the app is unlocked). The mode is stored per
+server id on the account record (`serverLocks`), so every Plex Home user
+shares it and removing the account removes it. `putAccount` carries the
+stored locks over a fresh sign-in. The Mydia login cannot be locked.
+
+`SourceLockController` is true while unlocked, memory only, so a cold start
+is locked. It relocks one minute after the app goes to the background,
+unless a locked or hidden source is playing (`hold()` from the player
+route), in which case it relocks when that playback ends.
+
+Unlocking uses `local_auth` (Face ID, Touch ID, fingerprint, Windows Hello,
+device passcode) where `isDeviceSupported()`, and a PIN everywhere else
+(Linux, a TV or phone with no screen lock). The PIN is set with the first
+lock on every device, as the backup: PBKDF2 in `AuthStorage` under
+`app_lock/`, five free tries, then a doubling delay from 30 seconds. Forgot
+PIN removes every account with a lock.
+
+`thirdPartySourcesProvider` drops hidden sources while locked, and the
+router sends any `/s/<id>/...` of a locked or hidden source to `/unlock`.
+That screen never names a source, and "Show hidden servers" is always
+offered, so nothing on screen says whether anything is hidden. While a
+locked source is open, Android sets `FLAG_SECURE`, iOS blurs the window
+when it resigns active, and MPRIS shows "Mydia" with no title or artwork.
+
 ## HTTP and errors
 
 `SourceHttp` turns non-2xx answers into typed source errors. It has an

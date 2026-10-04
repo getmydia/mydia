@@ -7,6 +7,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -42,6 +43,23 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                     "releaseMulticastLock" -> {
                         releaseMulticastLock()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.mydia.player/privacy")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setSecure" -> {
+                        // An open locked or hidden server: blank the app
+                        // switcher thumbnail and refuse screenshots.
+                        if (call.argument<Boolean>("secure") == true) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
                         result.success(null)
                     }
                     else -> result.notImplemented()

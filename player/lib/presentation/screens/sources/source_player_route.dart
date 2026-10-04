@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
@@ -83,6 +84,24 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       _params.fileId,
     );
   }();
+
+  void Function()? _releaseLock;
+
+  @override
+  void initState() {
+    super.initState();
+    // Playback from a locked or hidden source keeps the app unlocked until
+    // it stops, so a background relock never cuts the stream.
+    if (ref.read(sourceLocksProvider).containsKey(widget.sourceId)) {
+      _releaseLock = ref.read(sourceLockProvider.notifier).hold();
+    }
+  }
+
+  @override
+  void dispose() {
+    _releaseLock?.call();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

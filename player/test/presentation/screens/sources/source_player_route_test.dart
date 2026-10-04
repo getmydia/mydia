@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
@@ -92,5 +93,42 @@ void main() {
     router.go('/s/x/player/b?fileId=f');
     await tester.pumpAndSettle();
     expect(tester.state(find.byType(SourcePlayerRoute)), isNot(same(first)));
+  });
+
+  Future<ProviderContainer> pumpRoute(
+    WidgetTester tester,
+    Map<SourceId, SourceLock> locks,
+  ) async {
+    final container = ProviderContainer(overrides: [
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      sourceLocksProvider.overrideWithValue(locks),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: SourcePlayerRoute(
+          sourceId: fakeSourceId,
+          itemId: 'm1',
+          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=part-1'),
+        ),
+      ),
+    ));
+    return container;
+  }
+
+  testWidgets('playing a locked source holds the lock until the route goes',
+      (tester) async {
+    final container =
+        await pumpRoute(tester, {fakeSourceId: SourceLock.locked});
+    expect(container.read(sourceLockProvider.notifier).holding, isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    expect(container.read(sourceLockProvider.notifier).holding, isFalse);
+  });
+
+  testWidgets('playing an unlocked source holds nothing', (tester) async {
+    final container = await pumpRoute(tester, {});
+    expect(container.read(sourceLockProvider.notifier).holding, isFalse);
   });
 }
