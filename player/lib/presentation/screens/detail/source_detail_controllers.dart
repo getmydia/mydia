@@ -98,9 +98,9 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
   }
 
   @override
-  Future<void> setWatched(bool watched) {
+  Future<void> setWatched(bool watched) async {
     final watchedState = _capability<WatchedState>(ref, item);
-    return _write(
+    await _write(
       (m) => watched
           ? m.copyWith(progress: _progressWithWatched(m.progress, true))
           : m.copyWith(clearProgress: true),
@@ -109,10 +109,10 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
   }
 
   @override
-  Future<void> toggleFavorite() {
+  Future<void> toggleFavorite() async {
     final favorites = _capability<Favorites>(ref, item);
     final next = !(state.value?.isFavorite ?? false);
-    return _write(
+    await _write(
       (m) => m.copyWith(isFavorite: next),
       () => favorites.setFavorite(item, next),
     );
@@ -139,7 +139,8 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
       ref.watch(sourceItemProvider(item).future),
       ref.watch(sourceChildrenProvider(item).future),
     ).wait;
-    yield showViewFromSource(detail, seasons, features: features);
+    final first = showViewFromSource(detail, seasons, features: features);
+    yield first;
 
     final nextUp = source.as<NextUp>();
     if (nextUp == null) return;
@@ -151,11 +152,11 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
       return;
     }
     if (next != null) {
-      yield showViewFromSource(
-        detail,
-        seasons,
-        features: features,
-        nextUp: next,
+      // From the current view, so an optimistic favorite toggle made since
+      // the first yield survives.
+      yield (state.value ?? first).copyWith(
+        nextUpEpisodeId: next.ref.externalId,
+        nextUpSeasonNumber: next.parentIndex,
       );
     }
   }
@@ -251,6 +252,8 @@ class SourceSeasonNotifier extends AsyncNotifier<List<EpisodeView>>
       invalidate();
     } catch (_) {
       if (ref.mounted) state = AsyncData(loaded);
+      // A multi-call write may have partly landed: refetch the truth.
+      invalidate();
       rethrow;
     }
   }

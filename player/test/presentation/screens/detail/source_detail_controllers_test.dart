@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -77,6 +79,52 @@ void main() {
       throwsException,
     );
     expect(sub.read().value?.any((e) => e.watched), isFalse);
+  });
+
+  test('a partial this-and-previous failure stops and refetches', () async {
+    final source = _SecondWriteFailsSource();
+    final c = _container(source);
+    final DetailTarget show = SourceTarget(fakeShow.ref);
+    final key = (show: show, seasonNumber: 1);
+    final sub = c.listen(seasonEpisodesViewProvider(key), (_, __) {});
+    await _settle();
+    final second = sub.read().value![1];
+    final loads = source.seasonChildrenCalls;
+    await expectLater(
+      c
+          .read(seasonActionsProvider(key))
+          .episode(second, EpisodeWatchedAction.thisAndPrevious),
+      throwsException,
+    );
+    await _settle();
+    expect(source.watchedCalls, [(fakeEpisode(1).ref, true)]);
+    expect(source.seasonChildrenCalls, greaterThan(loads));
+  });
+
+  test('a missing capability fails the future instead of throwing', () async {
+    final c = _container(FakeMediaSource());
+    final target = SourceTarget(fakeMovie(1).ref);
+    c.listen(movieViewProvider(target), (_, __) {});
+    await _settle();
+    final future = c.read(movieActionsProvider(target)).toggleFavorite();
+    await expectLater(future, throwsStateError);
+  });
+
+  test('a late next up keeps an optimistic favorite', () async {
+    final source = _SlowNextUpSource();
+    final c = _container(source);
+    final target = SourceTarget(fakeShow.ref);
+    final sub = c.listen(showViewProvider(target), (_, __) {});
+    await _settle();
+    // The favorite write stays pending, so the show has not been refetched
+    // when next up lands.
+    final write = c.read(showActionsProvider(target)).toggleFavorite();
+    source.release.complete();
+    await _settle();
+    expect(sub.read().value?.nextUpEpisodeId, 'e2');
+    expect(sub.read().value?.isFavorite, isTrue);
+    source.favoriteGate.complete();
+    await write;
   });
 
   test('a season fills the episode season number from the request', () async {
@@ -202,4 +250,37 @@ class _NoParentIndexSource extends FakeDetailSource {
                 ),
             ])
           : super.children(parent, cursor: cursor);
+}
+
+class _SecondWriteFailsSource extends FakeDetailSource {
+  int seasonChildrenCalls = 0;
+
+  @override
+  Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) {
+    if (parent.kind == ItemKind.season) seasonChildrenCalls++;
+    return super.children(parent, cursor: cursor);
+  }
+
+  @override
+  Future<void> setWatched(ItemRef ref, bool watched) async {
+    if (watchedCalls.isNotEmpty) throw Exception('down');
+    watchedCalls.add((ref, watched));
+  }
+}
+
+class _SlowNextUpSource extends FakeDetailSource {
+  final release = Completer<void>();
+  final favoriteGate = Completer<void>();
+
+  @override
+  Future<void> setFavorite(ItemRef ref, bool favorite) async {
+    await favoriteGate.future;
+    return super.setFavorite(ref, favorite);
+  }
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async {
+    await release.future;
+    return super.nextUp(show);
+  }
 }
