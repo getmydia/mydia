@@ -8,20 +8,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/sources/plex/plex_identity.dart';
+import '../../../core/sources/plex/plex_providers.dart';
 import '../../../core/sources/plex/plex_tv_client.dart';
 import '../../../core/sources/source.dart';
-import '../../../core/sources/source_factories.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
-
-final plexTvClientProvider =
-    FutureProvider<PlexTvClient>((ref) async => PlexTvClient(
-          http: ref.watch(sourceHttpProvider),
-          identity: await ref.watch(plexIdentityProvider.future),
-        ));
 
 final plexPinPollIntervalProvider =
     Provider<Duration>((ref) => const Duration(seconds: 2));
