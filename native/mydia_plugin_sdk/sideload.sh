@@ -5,9 +5,11 @@ set -euo pipefail
 #
 # Builds a plugin crate to a wasm32-wasip2 component and drops it into the
 # operator override directory, so a running Mydia host picks up the new bytes on
-# the next activation with no restart. The loop is:
+# the next activation with no restart. That holds for a plugin that is already
+# installed, when PLUGINS_OVERRIDE_DIR was set before the server booted (it is
+# read at boot only). The loop is:
 #
-#   edit  ->  sideload.sh  ->  re-activate (admin toggle / reload)  ->  test
+#   edit  ->  sideload.sh  ->  Disable then Enable in Admin > System > Plugins  ->  test
 #
 # The override dir is the highest-precedence artifact layer in
 # Mydia.Plugins.resolve_artifact/2: a `<name>.wasm` placed there shadows the DB
@@ -80,4 +82,4 @@ dest="$override_dir/$stem.wasm"
 cp "$built" "$dest"
 
 echo "==> sideloaded $dest ($(wc -c <"$dest") bytes)"
-echo "    Re-activate the plugin (admin toggle, or Mydia.Plugins.reload/0) to load it."
+echo "    Disable then Enable the plugin in Admin > System > Plugins to load it."

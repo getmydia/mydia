@@ -21,6 +21,22 @@ void main() {
       publisher = NowPlayingPublisher((state) async => sent.add(state));
     });
 
+    test('redacts the title while the redaction applies', () {
+      var redact = true;
+      final redacting = NowPlayingPublisher(
+        (state) async => sent.add(state),
+        redact: () => redact,
+      );
+      final owner = Object();
+      redacting.claim(owner);
+      redacting.publish(owner, _playing);
+      expect(sent.single!.title, 'Mydia');
+      expect(sent.single!.isPlaying, isTrue);
+      redact = false;
+      redacting.publish(owner, _playing);
+      expect(sent.last!.title, 'The Long Aurora');
+    });
+
     test('the claimant publishes and clears', () {
       final owner = Object();
       publisher.claim(owner);

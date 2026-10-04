@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 
 class AddSourceScreen extends ConsumerWidget {
@@ -75,6 +76,23 @@ class ConnectOtherServerButton extends StatelessWidget {
       onPressed: () => context.push('/sources/add'),
       icon: const Icon(Icons.add_link),
       label: const Text('Connect another server instead'),
+    );
+  }
+}
+
+/// Under the login form too: with every server hidden and no Mydia, this is
+/// the only way back to them.
+class ShowHiddenSourcesButton extends StatelessWidget {
+  const ShowHiddenSourcesButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) return const SizedBox.shrink();
+    return TextButton.icon(
+      key: const Key('show-hidden-sources-login'),
+      onPressed: () => context.push(unlockLocation('/sources/manage')),
+      icon: const Icon(Icons.visibility_rounded),
+      label: const Text('Show hidden servers'),
     );
   }
 }

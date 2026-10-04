@@ -18,6 +18,8 @@ If you are starting from nothing, begin with a
 - [Automatic quality upgrades](automatic-quality-upgrades.md) - replace files that fall below your cutoff with better releases
 - [User management](manage-users.md) - roles, accounts, and the request system
 - [SSO/OIDC configuration](sso-oidc.md) - configure single sign-on
+- [Plugins](plugins.md) - install, configure, update and remove plugins
+- [Plugin sources](plugin-sources.md) - add a third-party plugin catalog
 - [PostgreSQL support](postgresql.md) - run Mydia on PostgreSQL instead of SQLite
 - [Reverse proxy](reverse-proxy.md) - put Mydia behind Nginx, Traefik, or Caddy
 - [Backup and restore](backup-restore.md) - back up and restore the database and configuration
@@ -25,5 +27,6 @@ If you are starting from nothing, begin with a
 - [Monitoring and logs](monitor-and-logs.md) - check health and view logs
 - [NixOS deployment](nixos.md) - deploy Mydia declaratively on NixOS
 - [Installing the player on Linux](install-player-linux.md) - install Mydia Player as a Flatpak or a tarball
+- [Plex, Jellyfin and Stash in the player](connect-other-servers.md) - browse and play from other media servers (experimental)
 - [Remote access](remote-access.md) - connect the mobile app to your instance from anywhere
 - [Beta builds](beta-builds.md) - try player prereleases on any platform

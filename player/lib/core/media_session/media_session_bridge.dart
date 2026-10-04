@@ -5,11 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../cache/poster_cache_manager.dart';
 import '../remote/remote_target_controller.dart';
+import '../sources/lock/source_lock_controller.dart';
 import '../window/desktop_window.dart';
 import 'media_session_state.dart';
 import 'now_playing_metadata_resolver.dart';
 import 'platform_media_session.dart';
 import 'system_media_session.dart';
+
+bool _never() => false;
 
 /// Downloads a poster and returns an absolute local path, or null.
 typedef ArtworkLoader = Future<String?> Function(String url);
@@ -24,7 +27,9 @@ class MediaSessionBridge {
     required NowPlayingMetadataResolver resolver,
     required ArtworkLoader loadArtwork,
     required Future<void> Function() raiseWindow,
-  })  : _controller = controller,
+    bool Function() redact = _never,
+  })  : _redact = redact,
+        _controller = controller,
         _createSession = createSession,
         _resolver = resolver,
         _loadArtwork = loadArtwork,
@@ -35,6 +40,7 @@ class MediaSessionBridge {
   final NowPlayingMetadataResolver _resolver;
   final ArtworkLoader _loadArtwork;
   final Future<void> Function() _raiseWindow;
+  final bool Function() _redact;
 
   SystemMediaSession _session = NoopMediaSession();
   final _subscriptions = <StreamSubscription<Object?>>[];
@@ -70,7 +76,8 @@ class MediaSessionBridge {
     final first = _controller.snapshot();
     NowPlayingMetadata? metadata;
     String? artworkPath;
-    if (first != null) {
+    final redacted = _redact();
+    if (first != null && !redacted) {
       metadata = await _resolver.resolve(
           mediaItemId: first.mediaItemId, episodeId: first.episodeId);
       final url = metadata?.posterUrl;
@@ -91,8 +98,23 @@ class MediaSessionBridge {
 
     // Re-read after the awaits so status and position are current. A player
     // swapped in meanwhile would have bumped the generation above.
-    final state = mediaSessionStateFrom(_controller.snapshot(),
+    var state = mediaSessionStateFrom(_controller.snapshot(),
         metadata: metadata, artworkPath: artworkPath);
+    // A locked or hidden source is playing: the lock screen and MPRIS say
+    // only that something is.
+    if (redacted && state.status != MediaSessionStatus.stopped) {
+      state = MediaSessionState(
+        status: state.status,
+        title: 'Mydia',
+        trackId: state.trackId,
+        duration: state.duration,
+        position: state.position,
+        volume: state.volume,
+        canSeek: state.canSeek,
+        canGoNext: state.canGoNext,
+        canGoPrevious: state.canGoPrevious,
+      );
+    }
     try {
       await _session.update(state);
     } catch (e) {
@@ -143,6 +165,7 @@ final mediaSessionBridgeProvider = Provider<MediaSessionBridge>((ref) {
     loadArtwork: (url) async =>
         (await PosterCacheManager().getSingleFile(url)).path,
     raiseWindow: raiseDesktopWindow,
+    redact: () => ref.read(sourceLockProvider.notifier).holding,
   );
   ref.onDispose(() => unawaited(bridge.dispose()));
   return bridge;

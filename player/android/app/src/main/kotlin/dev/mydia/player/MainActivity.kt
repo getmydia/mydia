@@ -7,12 +7,13 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.net.wifi.WifiManager
 import android.os.Build
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val channelName = "dev.mydia.player/notifications"
     private val multicastChannelName = "dev.mydia.player/multicast"
     private val codecChannelName = "dev.mydia.player/codecs"
@@ -42,6 +43,23 @@ class MainActivity : FlutterActivity() {
                     }
                     "releaseMulticastLock" -> {
                         releaseMulticastLock()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.mydia.player/privacy")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setSecure" -> {
+                        // An open locked or hidden server: blank the app
+                        // switcher thumbnail and refuse screenshots.
+                        if (call.argument<Boolean>("secure") == true) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
                         result.success(null)
                     }
                     else -> result.notImplemented()

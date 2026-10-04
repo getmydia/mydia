@@ -55,6 +55,22 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     config
   end
 
+  defp seed_from(slug, name, source_url) do
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        source_url: source_url,
+        manifest: manifest_map(slug, name),
+        wasm_module: guest_wasm(),
+        granted_capabilities: %{"net:http" => ["discord.com"]},
+        enabled: false
+      })
+
+    config
+  end
+
   defp seed_described_plugin(slug, name, description, opts) do
     {:ok, config} =
       Settings.create_plugin_config(%{
@@ -803,6 +819,77 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "lifecycle (R14)" do
+    test "a bundled plugin has no remove button but can still be disabled", %{conn: conn} do
+      seed_from("notifier", "Notifier", "bundled")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#toggle-notifier")
+      refute has_element?(view, "#remove-notifier")
+      assert has_element?(view, "#origin-badge-notifier", "Bundled")
+    end
+
+    test "a store plugin is removable and its confirm names what goes with it", %{conn: conn} do
+      seed_from("notifier", "Notifier", "https://plugins.mydia.dev/notifier-1.0.0.tar")
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Mydia store")
+
+      assert has_element?(
+               view,
+               ~s(#remove-notifier[data-confirm="Remove Notifier? This also deletes its settings, approvals and suggestions."])
+             )
+    end
+
+    test "the remove confirm counts a multi-instance plugin's servers" do
+      row = %{name: "Plex", multi_instance: true, instances: [%{}, %{}]}
+
+      assert Components.remove_confirm(row) ==
+               "Remove Plex? This also deletes its settings, approvals and suggestions, plus 2 configured servers."
+
+      assert Components.remove_confirm(%{row | instances: [%{}]}) =~ "plus 1 configured server."
+    end
+
+    test "a sideloaded plugin shows its origin" do
+      html =
+        render_component(&Components.source_badge/1,
+          id: "b",
+          origin: :sideloaded,
+          source_name: nil
+        )
+
+      assert html =~ "Sideloaded"
+    end
+
+    test "a plugin with no recorded source says so instead of claiming it was removed", %{
+      conn: conn
+    } do
+      seed_plugin("notifier", "Notifier", [])
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Unknown source")
+    end
+
+    test "a plugin whose source host is not the store reads as source removed", %{conn: conn} do
+      seed_from("notifier", "Notifier", "https://gone.example.com/notifier-1.0.0.tar")
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert has_element?(view, "#origin-badge-notifier", "Source removed")
+    end
+
+    test "a third-party plugin's badge names its source" do
+      html =
+        render_component(&Components.source_badge/1,
+          id: "b",
+          origin: {:source, "00000000-0000-0000-0000-000000000000"},
+          source_name: "Acme plugins"
+        )
+
+      assert html =~ "Third-party · Acme plugins"
+      assert html =~ "badge-warning"
+    end
+
     test "a plugin awaiting approval can be removed", %{conn: conn} do
       seed_plugin("notifier", "Notifier", [])
 
@@ -814,21 +901,17 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert Settings.get_plugin_config_by_slug("notifier") == nil
     end
 
-    test "a revoked plugin can be removed", %{conn: conn} do
+    test "the detail modal offers no revoke", %{conn: conn} do
       seed_plugin("notifier", "Notifier",
         enabled: true,
         granted: %{"net:http" => ["discord.com"]}
       )
 
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
-
       view |> element("#details-notifier") |> render_click()
-      view |> element("#detail-revoke-notifier") |> render_click()
 
-      view |> element("#remove-notifier") |> render_click()
-
-      refute has_element?(view, "#plugin-row-notifier")
-      assert Settings.get_plugin_config_by_slug("notifier") == nil
+      assert has_element?(view, "#detail-modal")
+      refute has_element?(view, "#detail-revoke-notifier")
     end
 
     test "remove deletes the plugin row", %{conn: conn} do

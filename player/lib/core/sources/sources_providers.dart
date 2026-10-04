@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../graphql/graphql_provider.dart';
+import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'mydia_source.dart';
 import 'source.dart';
@@ -52,8 +53,20 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     return result;
   }
 
-  Future<void> putAccount(SourceAccountRecord record) =>
-      _serialise(() => _write((store) => store.putAccount(record)));
+  /// A sign-in flow writes a fresh record with no locks. Keep the stored
+  /// record's locks for servers the new record still lists, so signing in
+  /// again never unhides a server.
+  Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+        final stored = _record(record.account.id);
+        final ids = {for (final s in record.servers) s.id};
+        final kept = {
+          for (final e in (stored?.serverLocks ?? const {}).entries)
+            if (ids.contains(e.key)) e.key: e.value,
+          ...record.serverLocks,
+        };
+        return _write(
+            (store) => store.putAccount(record.copyWith(serverLocks: kept)));
+      });
 
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
@@ -81,6 +94,33 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         await _write((store) => store.putAccount(record.copyWith(
               account: record.account.copyWith(needsReauth: value),
             )));
+      });
+
+  Future<void> setServerLock(
+          String accountId, String serverId, SourceLock lock) =>
+      _serialise(() async {
+        final record = _record(accountId);
+        if (record == null) return;
+        final locks = {...record.serverLocks}..remove(serverId);
+        if (lock != SourceLock.none) locks[serverId] = lock;
+        await _write(
+            (store) => store.putAccount(record.copyWith(serverLocks: locks)));
+      });
+
+  /// "Forgot PIN": every account with a locked or hidden server goes, with
+  /// its tokens. Nothing that was out of sight becomes visible.
+  ///
+  /// Runs as one queued write, so a lock still queued ahead of it is in the
+  /// snapshot it reads.
+  Future<void> removeLockedAccounts() => _serialise(() async {
+        final locked = [
+          for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+            if (r.serverLocks.isNotEmpty) r,
+        ];
+        for (final record in locked) {
+          await _write((store) => store.removeAccount(record.account.id));
+          await ref.read(sourceSecretsProvider).deleteAll(record);
+        }
       });
 
   Future<void> updateServers(
@@ -142,24 +182,59 @@ final sourcesLoadingProvider = Provider<bool>((ref) {
   return !records.hasValue && !records.hasError;
 });
 
-/// Plex, Stash and Jellyfin sources the viewer has added.
-final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
-  final snapshot = switch (ref.watch(sourceRecordsProvider)) {
-    AsyncData(:final value) => value,
-    _ => null,
+SourceSnapshot? _snapshotOf(Ref ref) =>
+    switch (ref.watch(sourceRecordsProvider)) {
+      AsyncData(:final value) => value,
+      _ => null,
+    };
+
+/// Every stored source with a lock, hidden ones included. Read this, never
+/// [thirdPartySourcesProvider], to ask how a source is locked.
+final sourceLocksProvider = Provider<Map<SourceId, SourceLock>>((ref) {
+  final snapshot = _snapshotOf(ref);
+  if (snapshot == null) return const {};
+  return {
+    for (final record in snapshot.accounts)
+      for (final source in record.sources)
+        if (record.lockOf(source.server.id) case final lock
+            when lock != SourceLock.none)
+          source.id: lock,
   };
+});
+
+/// Sources that ask to authenticate before they open: every locked or
+/// hidden one while the app is locked, none once it is unlocked.
+final gatedSourceIdsProvider = Provider<Set<SourceId>>((ref) {
+  if (ref.watch(sourceLockProvider)) return const {};
+  return ref.watch(sourceLocksProvider).keys.toSet();
+});
+
+/// Whether the window must stay out of screenshots and the app switcher:
+/// a locked or hidden source is open.
+final windowSecureProvider = Provider<bool>((ref) =>
+    ref.watch(sourceLockProvider) && ref.watch(sourceLocksProvider).isNotEmpty);
+
+/// Plex, Stash and Jellyfin sources the viewer has added, minus hidden ones
+/// while the app is locked. Everything that lists or counts sources reads
+/// this, so a hidden source leaves no trace, not even in the switcher's
+/// decision to appear.
+final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
+  final snapshot = _snapshotOf(ref);
   if (snapshot == null) return const [];
-  return [for (final account in snapshot.accounts) ...account.sources];
+  final unlocked = ref.watch(sourceLockProvider);
+  return [
+    for (final record in snapshot.accounts)
+      for (final source in record.sources)
+        if (unlocked || record.lockOf(source.server.id) != SourceLock.hidden)
+          source,
+  ];
 });
 
 /// The stored profiles of an account: a Plex account's Home users, the
 /// single owner for every other kind. Empty while loading or unknown.
 final accountProfilesProvider =
     Provider.family<List<SourceProfile>, String>((ref, accountId) {
-  final snapshot = switch (ref.watch(sourceRecordsProvider)) {
-    AsyncData(:final value) => value,
-    _ => null,
-  };
+  final snapshot = _snapshotOf(ref);
   return snapshot?.accounts
           .where((a) => a.account.id == accountId)
           .firstOrNull
@@ -234,15 +309,19 @@ final selectedSourceIdProvider =
     NotifierProvider<SelectedSourceNotifier, SourceId?>(
         SelectedSourceNotifier.new);
 
-/// The source the viewer is browsing: their pick while it still exists,
-/// otherwise the first source.
+/// The source the viewer is browsing: their pick while it still exists and
+/// is open, otherwise the first source that does not ask to unlock.
 final activeSourceIdProvider = Provider<SourceId?>((ref) {
   final sources = ref.watch(sourcesProvider);
+  final gated = ref.watch(gatedSourceIdsProvider);
   final selected = ref.watch(selectedSourceIdProvider);
-  if (selected != null && sources.any((s) => s.id == selected)) {
+  if (selected != null &&
+      !gated.contains(selected) &&
+      sources.any((s) => s.id == selected)) {
     return selected;
   }
-  return sources.isEmpty ? null : sources.first.id;
+  return sources.where((s) => !gated.contains(s.id)).firstOrNull?.id ??
+      sources.firstOrNull?.id;
 });
 
 /// The [MediaSource] for [id], or null when no such source exists.

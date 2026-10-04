@@ -17,13 +17,24 @@
         </h2>
 
         <div class="space-y-4">
-          <p
+          <div
             :if={@plugin_connections == [] and @account_links == []}
+            id="integrations-empty"
             class="text-sm text-base-content/60"
           >
-            No integrations are available. Install a plugin that supports connections, such as
-            Simkl Sync, to sync your watch history.
-          </p>
+            <%= if Mydia.Accounts.Authorization.is_admin?(@current_user) do %>
+              <p>No integrations yet. Install a plugin that connects to a service.</p>
+              <.link
+                id="integrations-browse-plugins"
+                navigate={~p"/admin/plugins"}
+                class="btn btn-sm btn-outline mt-2"
+              >
+                <.icon name="hero-puzzle-piece" class="w-4 h-4" /> Browse plugins
+              </.link>
+            <% else %>
+              <p>No integrations are available yet. Ask your administrator to install one.</p>
+            <% end %>
+          </div>
 
           <%!-- Generic plugin connections (U8) — host-run device flow --%>
           <div

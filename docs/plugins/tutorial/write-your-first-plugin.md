@@ -1,33 +1,36 @@
 # Write Your First Plugin
 
-By the end of this tutorial you'll have a plugin that logs a message every
-time media is added to your library, built as a WebAssembly component and
-running inside a real Mydia instance. It takes about 10 minutes.
+By the end of this tutorial you'll have a plugin that logs the title of every
+item added to your library, built as a WebAssembly component and running inside
+your own Mydia instance. It takes about 15 minutes, most of it the first
+compile.
 
 ## Prerequisites
 
-- A local Mydia checkout with the [devenv shell](../../contributing/setup.md)
-  working (`./dev shell` or `direnv allow`). Building the plugin needs the
-  `wasm32-wasip2` Rust target, which only the devenv/nix path provides, not
-  a plain Docker setup. If you're building outside the repo, add the target
-  yourself: `rustup target add wasm32-wasip2`, matching the Rust toolchain
-  Mydia pins (1.96.0, see [Development Setup](../../contributing/setup.md)) so
-  the component's WASI ABI stays compatible with the host.
-- A running Mydia instance you can activate plugins on (`./dev up`).
+- A Mydia checkout with the [development environment](../../contributing/setup.md)
+  working, and the server running in the background:
 
-## Step 1: Create the Crate
+    ```bash
+    ./dev up -d
+    ```
 
-A plugin is a `cdylib` crate that depends on `mydia-plugin-sdk`, which lives in
-the Mydia repository and is consumed as a git dependency rather than from
-crates.io.
-The starter at `native/mydia_plugin_sdk/examples/minimal` is exactly this
-layout if you want to copy it instead of typing it out.
+- [Rust](https://rustup.rs/) with `rustup`. Step 1 pins the compiler version
+  and the `wasm32-wasip2` target for you.
 
-`Cargo.toml`:
+## Step 1: Create the crate
+
+Create a library crate anywhere outside the Mydia checkout:
+
+```bash
+cargo new --lib my-plugin
+cd my-plugin
+```
+
+Replace `Cargo.toml` with this:
 
 ```toml
 [package]
-name = "my_plugin"
+name = "my-plugin"
 version = "0.1.0"
 edition = "2021"
 
@@ -35,7 +38,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.13.0-beta.1" }
+mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.16.0-beta.2" }
+serde_json = "1"
 
 [profile.release]
 opt-level = "z"
@@ -44,60 +48,46 @@ strip = true
 panic = "abort"
 ```
 
-!!! tip "Pin the SDK to a tag, not a branch"
-    The SDK is not on crates.io, so it is consumed as a git dependency. Pin it
-    to the release tag matching the Mydia host you are targeting, and bump it
-    deliberately when you move to a newer host. Tracking `branch = "master"`
-    instead means your build silently follows unreleased host changes, so a
-    rebuild months later can produce a component built against a different
-    contract than the one your host implements. See
-    [Host-version floor](../reference/host-api.md#host-version-floor) for how a
-    plugin declares the oldest host it supports.
+`panic = "abort"` makes a crashing handler trap cleanly instead of timing out.
 
-!!! warning "Always set `panic = \"abort\"`"
-    The sandbox denies stdio. A guest that panics and tries to print to stderr
-    on its way down trips a host-side limitation and times out instead of
-    failing cleanly. `panic = "abort"` traps immediately with no stderr write.
+Add a `rust-toolchain.toml` next to it. The compiler version has to match the
+one the Mydia host runs plugins with, and this file makes `cargo` install it
+and the WebAssembly target on first use:
 
-## Step 2: Write the Handler
+```toml
+[toolchain]
+channel = "1.96.0"
+targets = ["wasm32-wasip2"]
+```
 
-`src/lib.rs`:
+## Step 2: Write the handler
+
+Replace `src/lib.rs` with this:
 
 ```rust
+use mydia_plugin_sdk::host;
 use mydia_plugin_sdk::types::Event;
+use serde_json::Value;
 
 #[mydia_plugin_sdk::plugin]
 fn on_event(evt: Event) -> Result<String, String> {
-    Ok(format!("{{\"handled\":\"{}\"}}", evt.event))
+    let root: Value = serde_json::from_str(&evt.metadata_json)
+        .map_err(|e| format!("bad metadata_json: {e}"))?;
+    let title = root["metadata"]["title"].as_str().unwrap_or("an untitled item");
+
+    host::log("info", &format!("Added to the library: {title}"));
+    Ok("{}".to_string())
 }
 ```
 
-That is a complete plugin. The `#[mydia_plugin_sdk::plugin]` macro adapts your
-plain function onto the component's exported handler, so you never touch the
-generated bindings. The handler takes a typed
-[`Event`](../how-to/media-data.md#act-on-only-the-events-you-care-about) and
-returns a short JSON result string on success, or an error string the host
-records as a plugin error.
+The `#[mydia_plugin_sdk::plugin]` macro turns this plain function into the
+component's event handler. The event's detail, here the title, arrives as JSON
+in `metadata_json`. [`host::log`](../reference/host-functions.md#log) writes a
+line to the plugin's activity log and needs no capability.
 
-Because it's plain Rust, you can unit-test `on_event` directly with `cargo
-test`, no Wasm build and no running host required. See
-[Test without a host](../how-to/test-and-iterate.md#test-without-a-host) once
-you're ready to go deeper on that.
+## Step 3: Write the manifest
 
-## Step 3: Build the Component
-
-```bash
-cargo build --release --target wasm32-wasip2
-```
-
-The component lands at `target/wasm32-wasip2/release/my_plugin.wasm`. The
-SDK's `wit-bindgen` dependency generates the component bindings, so no system
-binding generator is required.
-
-## Step 4: Ship a Manifest
-
-A plugin needs a JSON manifest declaring its identity, the events it
-subscribes to, and the capabilities it wants. The smallest useful one:
+Save this as `manifest.json` in the crate directory:
 
 ```json
 {
@@ -110,53 +100,103 @@ subscribes to, and the capabilities it wants. The smallest useful one:
 }
 ```
 
-Save it as `priv/plugins/my-plugin.json` in your Mydia checkout. Mydia
-discovers every manifest under `priv/plugins/` and grants it the capabilities
-it declares, enabling it the next time the app boots, or the next time you
-open the admin Plugins page, whichever comes first: a manifest in that
-directory is trusted as part of the host release, the same mechanism the
-bundled webhook notifier and Simkl plugins use to register themselves, and
-for local development it's the natural way to get a brand-new manifest known
-to the host without a remote plugin index. Plugins installed from an index or
-remote package instead go through the manual review-and-approve flow. See the
-full field reference in [Manifest & Settings](../reference/manifest.md) when
-you need more than the basics.
+It names the plugin and asks for one capability: subscribing to the
+[`media_item.added`](../reference/events.md#media_itemadded) event. The full
+field list is in the [manifest reference](../reference/manifest.md).
 
-## Step 5: Load It and Watch It Run
-
-Point Mydia's plugin override directory at your build and drop the component
-in, named after the manifest slug (export this in the same environment the
-Phoenix server runs in, before the next step, so the bytes are there the
-first time Mydia looks for them):
+## Step 4: Build the component
 
 ```bash
-export PLUGINS_OVERRIDE_DIR=/path/mydia/reads
-cp target/wasm32-wasip2/release/my_plugin.wasm "$PLUGINS_OVERRIDE_DIR/my-plugin.wasm"
+cargo build --release --target wasm32-wasip2
 ```
 
-Open **Admin > System > Plugins**. Your plugin shows up in the installed
-list already approved and enabled with the capabilities it declared, and it
-runs the Wasm bytes you just dropped into the override directory.
+The first build downloads the toolchain and the SDK, then compiles. It ends with
+a `Finished` line, and the component is at
+`target/wasm32-wasip2/release/my_plugin.wasm`. Cargo turns the hyphen in the
+crate name into an underscore in the filename.
 
-Now add or import a movie or show. Open the plugin's activity log: you'll see
-the `on_event` result recorded for the `media_item.added` event you just
-triggered.
+## Step 5: Install it
 
-That's the whole loop: build, install once, drop in new bytes, reload, test.
-For the repeatable version of this, plus the `sideload.sh` shortcut for repo
-contributors, see [Test and iterate](../how-to/test-and-iterate.md).
+Run this from your Mydia checkout, with absolute paths to the two files. Replace
+`/path/to/my-plugin` with the directory from step 1:
 
-## What You Just Did
+```bash
+./dev mix mydia.plugin install \
+  /path/to/my-plugin/target/wasm32-wasip2/release/my_plugin.wasm \
+  /path/to/my-plugin/manifest.json \
+  --approve
+```
 
-You built a Wasm component from a single typed handler function, declared what
-it wants to react to in a manifest, and watched Mydia run it against a real
-event with no host restart in between. Everything past this point is the same
-shape: subscribe to more events, request more capabilities, reach for host
-functions to read data or make calls.
+It ends with `Installed and activated my-plugin 0.1.0.` While the server is
+running you'll also see a `Failed to bind iroh endpoint` error earlier in the
+output. That's expected: the task starts a second copy of the app, and the
+running server already holds the network port.
 
-- For task-by-task recipes (notifications, reading media data, two-way sync),
-  see the [how-to guides](../how-to/notifications.md).
-- For the full event, capability, and manifest contract, see the
-  [reference](../reference/host-api.md).
-- For why the platform is shaped this way, see
-  [The plugin model](../explanation/plugin-model.md).
+The task runs separately from the server, so restart the server to load the
+plugin:
+
+```bash
+./dev restart
+```
+
+## Step 6: Run it
+
+Sign in to Mydia as an admin and open **Admin > System > Plugins**. **My Plugin**
+is listed and enabled. Then:
+
+1. Click **Logs** on the My Plugin row.
+2. Open the **Test** tab, pick `media_item.added` in the event list, and click
+   **Run test**.
+3. Switch to the **Activity** tab.
+
+You'll see this line, badged `test`:
+
+```text
+Added to the library: Test Movie
+```
+
+The Test tab sent your plugin a synthetic `media_item.added` event, and your
+handler logged its title. A real item added to your library produces the same
+line with its own title.
+
+## Step 7: Change it and run it again
+
+In `src/lib.rs`, change the log line:
+
+```rust
+    host::log("info", &format!("Just added: {title}"));
+```
+
+Rebuild, install the new build and restart, using the commands from steps 4 and
+5:
+
+```bash
+cargo build --release --target wasm32-wasip2 \
+  --manifest-path /path/to/my-plugin/Cargo.toml
+```
+
+```bash
+./dev mix mydia.plugin install \
+  /path/to/my-plugin/target/wasm32-wasip2/release/my_plugin.wasm \
+  /path/to/my-plugin/manifest.json \
+  --approve
+./dev restart
+```
+
+Run the test from **Logs > Test** again. The Activity tab now shows `Just added:
+Test Movie`.
+
+That is the whole development loop. To remove the plugin when you're done, click
+the trash icon on its row in **Admin > System > Plugins**.
+
+## Where to go next
+
+- [Test and iterate](../how-to/test-and-iterate.md) shortens this loop and covers
+  the Logs modal, unit tests and installing on a real server.
+- The [how-to guides](../how-to/notifications.md) cover notifications, reading
+  media data and two-way sync.
+- The [events](../reference/events.md), [capabilities](../reference/capabilities.md)
+  and [host functions](../reference/host-functions.md) references list what a
+  plugin can listen to and call.
+- [The plugin model](../explanation/plugin-model.md) explains why plugins are
+  sandboxed and approved the way they are.

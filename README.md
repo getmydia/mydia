@@ -125,6 +125,9 @@ and [Custom Formats](docs/configuration/custom-formats.md).
 A cross-platform app that streams your library from anywhere over an encrypted
 peer-to-peer connection. No port forwarding, no VPN.
 
+It can also browse and play from Plex, Jellyfin and Stash servers. This is
+experimental: [Connect Plex, Jellyfin or Stash](https://docs.mydia.dev/latest/using/how-to/connect-other-servers/).
+
 <p align="center">
   <img src="screenshots/player-desktop.png" alt="Mydia Player on the desktop" width="800" />
 </p>

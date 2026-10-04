@@ -17,24 +17,10 @@ with `RW`); that is the public key admins will see.
 
 ## 2. Write `index.json`
 
-```json
-{
-  "version": 2,
-  "name": "Example Plugins",
-  "public_key": "RW...",
-  "plugins": [
-    {
-      "package_url": "https://example.com/packages/fixture-tool/1.0.0.wasm",
-      "integrity": "sha256:<sha256 of the .wasm file>",
-      "manifest": { "...": "the plugin's manifest.json" }
-    }
-  ]
-}
-```
-
-`public_key` must be the key you sign with. The `integrity` hash is what ties
-each package to your signature, so compute it from the exact file you host
-(`sha256sum fixture-tool.wasm`).
+List each plugin with its package URL, the SHA-256 of the `.wasm` you host
+(`sha256sum fixture-tool.wasm`) and its manifest, and put the public key from
+step 1 in `public_key`. The fields and rules are in the
+[plugin source format](../reference/plugin-source-format.md).
 
 ## 3. Sign and host it
 
@@ -62,12 +48,9 @@ plugin_sources:
     public_key: RW...
 ```
 
-## What admins see
+## What operators see
 
-Plugins from your source carry a "Third-party" badge, and the install dialog
-says Mydia has not reviewed them. A plugin installed from your source only
-takes updates from your source. If your catalog lists a slug that is already
-installed from somewhere else, installing it is an explicit replace.
+See [Add a third-party plugin source](../../using/how-to/plugin-sources.md).
 
 To test a plugin before publishing, sideload it instead
-([test and reload loop](test-and-iterate.md)).
+([test and iterate](test-and-iterate.md)).

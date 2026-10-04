@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
@@ -87,6 +88,12 @@ class SourceSwitcher extends ConsumerWidget {
         onNavigate('/sources/add');
       case ManageServers():
         onNavigate('/sources/manage');
+      case ToggleHidden():
+        if (ref.read(sourceLockProvider)) {
+          ref.read(sourceLockProvider.notifier).lock();
+        } else {
+          onNavigate(unlockLocation('/sources/manage'));
+        }
       case PickSource(:final source) when source.account.needsReauth:
         onNavigate('/sources/add/${source.kind.name}'
             '?account=${source.account.id}');
