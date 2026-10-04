@@ -487,6 +487,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         card,
         const SizedBox(height: 16),
         const ConnectOtherServerButton(),
+        const ShowHiddenSourcesButton(),
       ],
     );
   }

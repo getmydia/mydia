@@ -152,8 +152,9 @@ String? appRedirect({
   final isLoginRoute = location == '/login';
   final isDownloadsRoute = location == '/downloads';
   final isPlayerRoute = location.startsWith('/player');
-  // Reached from the login screen's "Connect another server instead".
-  final isAddSourceRoute = location.startsWith('/sources/add');
+  // Reached from the login screen's "Connect another server instead" and
+  // "Show hidden servers" (Manage servers, after the unlock screen).
+  final isAddSourceRoute = location.startsWith('/sources');
   // Third-party server screens, and the screens that manage them.
   final isSourceRoute =
       location.startsWith('/s/') || location.startsWith('/sources');

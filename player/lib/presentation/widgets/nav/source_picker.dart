@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/layout/breakpoints.dart';
+import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -32,6 +33,11 @@ final class AddServer extends PickerChoice {
 
 final class ManageServers extends PickerChoice {
   const ManageServers();
+}
+
+/// Show hidden servers behind the unlock screen, or lock again.
+final class ToggleHidden extends PickerChoice {
+  const ToggleHidden();
 }
 
 /// Switch which Plex Home user [account] acts as.
@@ -214,6 +220,8 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
   @override
   Widget build(BuildContext context) {
     final sources = ref.watch(switchableSourcesProvider);
+    final locks = ref.watch(sourceLocksProvider);
+    final unlocked = ref.watch(sourceLockProvider);
     // Not a ListView: that builds lazily, so a current row below the fold
     // would never attach `_currentNode` and the focus request would do nothing.
     return SingleChildScrollView(
@@ -230,6 +238,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 _SourceRow(
                   source: source,
                   isCurrent: source.id == widget.currentId,
+                  locked: !unlocked && locks[source.id] == SourceLock.locked,
                   focusNode:
                       source.id == widget.currentId ? _currentNode : null,
                   onTap: () => _pick(PickSource(source)),
@@ -269,6 +278,15 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 isSelected: false,
                 onTap: () => _pick(const ManageServers()),
               ),
+              SidebarRow(
+                key: const ValueKey('source-switcher-hidden'),
+                icon: unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
+                selectedIcon:
+                    unlocked ? Icons.lock_rounded : Icons.visibility_rounded,
+                label: unlocked ? 'Lock now' : 'Show hidden servers',
+                isSelected: false,
+                onTap: () => _pick(const ToggleHidden()),
+              ),
             ],
           ],
         ));
@@ -302,12 +320,14 @@ class _SourceRow extends StatelessWidget {
   const _SourceRow({
     required this.source,
     required this.isCurrent,
+    required this.locked,
     required this.focusNode,
     required this.onTap,
   });
 
   final Source source;
   final bool isCurrent;
+  final bool locked;
   final FocusNode? focusNode;
   final VoidCallback onTap;
 
@@ -329,7 +349,18 @@ class _SourceRow extends StatelessWidget {
                 ? '${source.displayName} (sign in again)'
                 : source.displayName,
             isSelected: isCurrent,
-            badge: status == null ? null : SourceStatusDot(status),
+            badge: locked
+                ? Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.lock_rounded,
+                        size: 12,
+                        key: ValueKey(
+                            'source-switcher-lock-${source.id.value}')),
+                    if (status != null) ...[
+                      const SizedBox(width: 4),
+                      SourceStatusDot(status),
+                    ],
+                  ])
+                : (status == null ? null : SourceStatusDot(status)),
             onTap: onTap,
           ),
         );

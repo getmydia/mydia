@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
@@ -12,6 +13,7 @@ import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'plex_home_sheet.dart';
+import 'source_lock_sheet.dart';
 
 class ManageSourcesScreen extends ConsumerWidget {
   const ManageSourcesScreen({super.key});
@@ -19,6 +21,13 @@ class ManageSourcesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final records = ref.watch(sourceRecordsProvider);
+    final unlocked = ref.watch(sourceLockProvider);
+    List<SourceAccountRecord> visible(SourceSnapshot s) => [
+          for (final r in s.accounts)
+            if (unlocked ||
+                r.servers.any((sv) => r.lockOf(sv.id) != SourceLock.hidden))
+              r,
+        ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Other servers'),
@@ -32,14 +41,25 @@ class ManageSourcesScreen extends ConsumerWidget {
         ],
       ),
       body: switch (records) {
-        AsyncData(:final value) when value.accounts.isEmpty => const Center(
-            child: Text('No servers yet.'),
+        AsyncData(:final value) when visible(value).isEmpty => ListView(
+            padding: const EdgeInsets.all(16),
+            children: const [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No servers yet.')),
+              ),
+              ShowHiddenSourcesRow(),
+            ],
           ),
         AsyncData(:final value) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              for (final record in value.accounts)
-                _AccountCard(key: ValueKey(record.account.id), record: record),
+              for (final record in visible(value))
+                _AccountCard(
+                    key: ValueKey(record.account.id),
+                    record: record,
+                    unlocked: unlocked),
+              const ShowHiddenSourcesRow(),
             ],
           ),
         AsyncError() =>
@@ -51,9 +71,10 @@ class ManageSourcesScreen extends ConsumerWidget {
 }
 
 class _AccountCard extends ConsumerWidget {
-  const _AccountCard({super.key, required this.record});
+  const _AccountCard({super.key, required this.record, required this.unlocked});
 
   final SourceAccountRecord record;
+  final bool unlocked;
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -108,15 +129,27 @@ class _AccountCard extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
             for (final server in record.servers)
-              ListTile(
-                key: ValueKey('manage-server-${server.id}'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text(server.name),
-                subtitle: server.gone
-                    ? const Text('No longer on this account')
-                    : (!server.presence ? const Text('Offline') : null),
-              ),
+              if (unlocked || record.lockOf(server.id) != SourceLock.hidden)
+                ListTile(
+                  key: ValueKey('manage-server-${server.id}'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(server.name),
+                  subtitle: server.gone
+                      ? const Text('No longer on this account')
+                      : (!server.presence ? const Text('Offline') : null),
+                  trailing: IconButton(
+                    key: Key('manage-lock-${server.id}'),
+                    tooltip: 'Lock',
+                    icon: Icon(switch (record.lockOf(server.id)) {
+                      SourceLock.none => Icons.lock_open_rounded,
+                      SourceLock.locked => Icons.lock_rounded,
+                      SourceLock.hidden => Icons.visibility_off_rounded,
+                    }),
+                    onPressed: () =>
+                        changeServerLock(context, ref, record, server),
+                  ),
+                ),
             Wrap(
               spacing: 8,
               children: [

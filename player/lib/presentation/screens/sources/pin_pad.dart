@@ -135,7 +135,9 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
     return AlertDialog(
       key: const Key('pin-setup-dialog'),
       title: Text(_first == null ? 'Choose a PIN' : 'Enter it again'),
-      content: Column(
+      // Scrolls: the pad plus this text is taller than a landscape phone.
+      content: SingleChildScrollView(
+          child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Text('It unlocks locked and hidden servers when Face ID or '
@@ -158,7 +160,7 @@ class _PinSetupDialogState extends State<_PinSetupDialog> {
             },
           ),
         ],
-      ),
+      )),
       actions: [
         TextButton(
           key: const Key('pin-setup-cancel'),

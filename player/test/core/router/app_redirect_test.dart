@@ -164,5 +164,10 @@ void main() {
       expect(goGated(AuthStatus.unauthenticated, '/', thirdParty: [locked]),
           unlockLocation('/s/acc1:owner:srv9'));
     });
+
+    test('Manage servers is reachable signed out with every server hidden', () {
+      expect(goGated(AuthStatus.unauthenticated, '/sources/manage'),
+          isNot('/login'));
+    });
   });
 }
