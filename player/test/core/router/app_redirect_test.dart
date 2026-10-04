@@ -130,6 +130,21 @@ void main() {
       );
     });
 
+    test('a percent-encoded source id is still gated', () {
+      const location = '/s/acc1%3Aowner%3Asrv9/item/movie/1';
+      expect(
+        appRedirect(
+          auth: const AsyncData(AuthStatus.authenticated),
+          location: location,
+          fullLocation: location,
+          sourcesLoading: false,
+          thirdParty: const [],
+          gated: gated,
+        ),
+        unlockLocation(location),
+      );
+    });
+
     test('other sources and Mydia routes are untouched', () {
       expect(goGated(AuthStatus.authenticated, '/s/acc2:owner:x'), isNull);
       expect(goGated(AuthStatus.authenticated, '/movies'), isNull);

@@ -113,7 +113,15 @@ class PlayerRouteParams {
 SourceId? _sourceIdIn(String location) {
   if (!location.startsWith('/s/')) return null;
   final segment = location.substring(3).split('/').first;
-  return segment.isEmpty ? null : SourceId(segment);
+  if (segment.isEmpty) return null;
+  // matchedLocation stays percent-encoded; the route decodes it later.
+  try {
+    return SourceId(Uri.decodeComponent(segment));
+  } on ArgumentError {
+    return SourceId(segment);
+  } on FormatException {
+    return SourceId(segment);
+  }
 }
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
