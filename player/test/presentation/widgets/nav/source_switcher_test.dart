@@ -91,6 +91,41 @@ void main() {
     expect(navigations, ['/s/acc1:owner:srv9']);
   });
 
+  testWidgets('a Plex account with Home users shows who is active',
+      (tester) async {
+    final container = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(_FixedAuth.new),
+      thirdPartySourcesProvider.overrideWithValue(const [_plexSource]),
+      accountProfilesProvider('acc1').overrideWithValue(const [
+        SourceProfile(
+            id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
+        SourceProfile(
+            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      ]),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(body: SourceSwitcher(onNavigate: (_) {})),
+      ),
+    ));
+    final caption =
+        find.byKey(const ValueKey('source-switcher-switch-user-acc1'));
+    expect(caption, findsOneWidget);
+    expect(find.descendant(of: caption, matching: find.textContaining('Owner')),
+        findsOneWidget);
+  });
+
+  testWidgets('a Plex account with one user has a plain caption',
+      (tester) async {
+    await _pump(tester, thirdParty: const [_plexSource], navigations: []);
+    expect(find.byKey(const ValueKey('source-switcher-switch-user-acc1')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('source-switcher-account-acc1')),
+        findsOneWidget);
+  });
+
   testWidgets('selecting Mydia navigates to the existing home', (tester) async {
     final navigations = <String>[];
     await _pump(tester, thirdParty: [_plexSource], navigations: navigations);

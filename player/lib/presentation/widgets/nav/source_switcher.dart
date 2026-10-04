@@ -9,6 +9,7 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../screens/sources/plex_home_sheet.dart';
 import 'sidebar_row.dart';
 
 class SourceSwitcher extends ConsumerWidget {
@@ -29,7 +30,12 @@ class SourceSwitcher extends ConsumerWidget {
         children: [
           for (final group in _groupByAccount(sources)) ...[
             if (group.first.kind != SourceKind.mydia)
-              _AccountCaption(account: group.first.account),
+              _AccountCaption(
+                account: group.first.account,
+                activeServerId:
+                    group.where((s) => s.id == active).firstOrNull?.server.id,
+                onNavigate: onNavigate,
+              ),
             for (final source in group)
               _SourceRow(
                 source: source,
@@ -77,24 +83,70 @@ class SourceSwitcher extends ConsumerWidget {
       };
 }
 
-class _AccountCaption extends StatelessWidget {
-  const _AccountCaption({required this.account});
+class _AccountCaption extends ConsumerWidget {
+  const _AccountCaption({
+    required this.account,
+    required this.activeServerId,
+    required this.onNavigate,
+  });
 
   final ProviderAccount account;
+  final String? activeServerId;
+  final ValueChanged<String> onNavigate;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      key: ValueKey('source-switcher-account-${account.id}'),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-      child: Text(
-        account.displayName,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: Theme.of(context)
-            .textTheme
-            .labelSmall
-            ?.copyWith(color: AppColors.textSecondary),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = Theme.of(context)
+        .textTheme
+        .labelSmall
+        ?.copyWith(color: AppColors.textSecondary);
+    final profiles = account.kind == SourceKind.plex
+        ? ref.watch(accountProfilesProvider(account.id))
+        : const <SourceProfile>[];
+    if (profiles.length < 2) {
+      return Padding(
+        key: ValueKey('source-switcher-account-${account.id}'),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+        child: Text(
+          account.displayName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: style,
+        ),
+      );
+    }
+    final activeName = profiles
+        .firstWhere((p) => p.id == account.activeProfileId,
+            orElse: () => profiles.first)
+        .name;
+    return InkWell(
+      key: ValueKey('source-switcher-switch-user-${account.id}'),
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => showPlexHomeSheet(
+        context,
+        account: account,
+        serverId: activeServerId,
+        onSwitched: (id) => onNavigate('/s/${id.value}'),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${account.displayName} · $activeName',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: style,
+              ),
+            ),
+            const Tooltip(
+              message: 'Switch user',
+              child: Icon(Icons.swap_horiz_rounded,
+                  size: 14, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }

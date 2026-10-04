@@ -11,6 +11,7 @@ import '../../../core/sources/store/source_records.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
+import 'plex_home_sheet.dart';
 
 class ManageSourcesScreen extends ConsumerWidget {
   const ManageSourcesScreen({super.key});
@@ -119,6 +120,17 @@ class _AccountCard extends ConsumerWidget {
             Wrap(
               spacing: 8,
               children: [
+                if (account.kind == SourceKind.plex &&
+                    record.profiles.length > 1)
+                  OutlinedButton(
+                    key: Key('manage-switch-user-${account.id}'),
+                    onPressed: () => showPlexHomeSheet(
+                      context,
+                      account: account,
+                      onSwitched: (id) => context.go('/s/${id.value}'),
+                    ),
+                    child: const Text('Switch user'),
+                  ),
                 OutlinedButton(
                   key: Key('manage-reauth-${account.id}'),
                   onPressed: () => context.push(
