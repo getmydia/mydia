@@ -77,8 +77,8 @@ Future<void> _runProgressiveDownload(
   if (selectedResolution == null || !context.mounted) return;
 
   final downloadService = ref.read(unifiedDownloadJobServiceProvider);
-  final downloadManager = await ref.read(downloadManagerProvider.future);
   if (downloadService == null) return;
+  final managerFuture = ref.read(downloadManagerProvider.future);
 
   final jobs = _JobCallbacks(
     getDownloadUrl: (jobId) async {
@@ -112,6 +112,7 @@ Future<void> _runProgressiveDownload(
   );
 
   try {
+    final downloadManager = await managerFuture;
     await start(downloadManager, selectedResolution, jobs);
 
     if (context.mounted) {
