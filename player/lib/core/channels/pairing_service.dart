@@ -401,10 +401,15 @@ class PairingService {
     final instanceId = credentials.instanceId;
     if (instanceId != null) {
       await _authStorage.write(_StorageKeys.instanceId, instanceId);
+    } else {
+      await _authStorage.delete(_StorageKeys.instanceId);
     }
     final deviceToken = credentials.deviceToken;
     if (deviceToken != null) {
       await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
+    } else {
+      // A token left from an earlier pairing would be sent to this server.
+      await _authStorage.delete(_StorageKeys.deviceToken);
     }
   }
 

@@ -125,8 +125,10 @@ void main() {
       expect(await storage.read('pairing_device_token'), 'device-tok');
     });
 
-    test('leaves optional keys unwritten when absent', () async {
+    test('deletes stale optional keys when absent', () async {
       final service = PairingService(authStorage: storage);
+      await storage.write('instance_id', 'old-inst');
+      await storage.write('pairing_device_token', 'old-device-tok');
 
       await service.saveHomeCredentials(creds());
 
