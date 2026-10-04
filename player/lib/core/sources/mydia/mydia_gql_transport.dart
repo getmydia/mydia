@@ -95,10 +95,14 @@ class P2pMydiaTransport implements MydiaGqlTransport {
         variables: variables,
         authToken: token,
       );
-    } catch (e) {
-      // The p2p layer surfaces GraphQL errors and dial failures alike as
-      // plain exceptions; only the auth wording can be told apart.
-      if (isMydiaAuthError('$e')) throw const SourceException.unauthorized();
+    } on P2pGraphQLError catch (e) {
+      if (isMydiaAuthError(e.message)) {
+        throw const SourceException.unauthorized();
+      }
+      throw SourceException.server(e.message);
+    } catch (_) {
+      // Dial, connect and timeout failures never come from the server's
+      // answer, so they all mean it could not be reached.
       throw const SourceException.unreachable();
     }
   }

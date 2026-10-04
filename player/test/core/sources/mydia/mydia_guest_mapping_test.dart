@@ -28,6 +28,22 @@ void main() {
     expect(m.defaultVersionId, 'f-m-1');
   });
 
+  test('an image-based subtitle track is not offered', () {
+    final f = fx.file('f-1');
+    final subs = f['subtitles'] as List;
+    subs.add({
+      'trackId': 'sub-img',
+      'language': 'fr',
+      'title': 'French',
+      'format': 'pgs',
+      'embedded': false,
+      'deliverable': false,
+      'url': '/api/v1/subtitles/sub-img.vtt',
+    });
+    final v = mediaVersion(f, durationSeconds: 60);
+    expect(v.streams.map((s) => s.id), ['sub-1']);
+  });
+
   test('movie detail carries the version, sidecar subtitles and favorite', () {
     final d = movieDetail(s, fx.movie('m-1'));
     expect(d.summary.ref.externalId, 'm-1');

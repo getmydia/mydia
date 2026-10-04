@@ -9,11 +9,16 @@ import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/sources_providers.dart';
 
 class AddSourceScreen extends ConsumerWidget {
-  const AddSourceScreen({super.key});
+  const AddSourceScreen({super.key, this.isWeb = kIsWeb});
+
+  /// Third-party sources do not exist on web, so a guest Mydia added there
+  /// would vanish. Overridable for tests.
+  final bool isWeb;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hasMydia = ref.watch(mydiaPresentProvider);
+    final guestsUnavailable = hasMydia && isWeb;
     return Scaffold(
       appBar: AppBar(title: const Text('Add a server')),
       body: Center(
@@ -50,9 +55,13 @@ class AddSourceScreen extends ConsumerWidget {
                 key: const Key('add-source-mydia'),
                 leading: const Icon(Icons.dns_rounded),
                 title: const Text('Mydia'),
-                subtitle: Text(hasMydia
-                    ? "Add a friend's or family member's server"
-                    : 'Sign in to a Mydia server'),
+                enabled: !guestsUnavailable,
+                subtitle: Text(switch ((hasMydia, guestsUnavailable)) {
+                  (true, true) =>
+                    'Add more Mydia servers from the desktop or mobile app',
+                  (true, false) => "Add a friend's or family member's server",
+                  _ => 'Sign in to a Mydia server',
+                }),
                 onTap: () => hasMydia
                     ? context.push('/sources/add/mydia')
                     : context.go('/login'),

@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
+import 'package:player/core/router/app_router.dart'
+    show guestMydiaRouteRedirect;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/login/login_controller.dart'
     show GuestTarget;
@@ -94,6 +96,40 @@ void main() {
     await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('guest-marker')), findsOneWidget);
+  });
+
+  testWidgets('on web with a home Mydia, the tile is disabled with a hint',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+      ],
+      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+    ));
+    final tile =
+        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
+    expect(tile.enabled, isFalse);
+    expect(find.text('Add more Mydia servers from the desktop or mobile app'),
+        findsOneWidget);
+  });
+
+  testWidgets('on web without a home Mydia, the tile still signs in',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mydiaPresentProvider.overrideWith(() => _MydiaPresent(false)),
+      ],
+      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+    ));
+    final tile =
+        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
+    expect(tile.enabled, isTrue);
+    expect(find.text('Sign in to a Mydia server'), findsOneWidget);
+  });
+
+  test('the guest add route redirects home on web only', () {
+    expect(guestMydiaRouteRedirect(isWeb: true), '/');
+    expect(guestMydiaRouteRedirect(isWeb: false), isNull);
   });
 
   testWidgets(

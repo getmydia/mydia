@@ -137,6 +137,20 @@ void main() {
     expect(client.status.value, SourceConnectionStatus.unreachable);
   });
 
+  test('a refresh the server rejects with an error flags the account',
+      () async {
+    transport.validTokens = {};
+    transport.handlers['RefreshAccessToken'] = (_) =>
+        throw const SourceException.server('Invalid or revoked device token');
+    final client = build();
+    await expectLater(
+        client.request(documentNodeQueryGuestInstanceIdentity),
+        throwsA(isA<SourceException>()
+            .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
+    expect(unauthorized, 1);
+    expect(saved, isEmpty);
+  });
+
   test('a retry rejected again flags the account', () async {
     transport.validTokens = {};
     final client = build();

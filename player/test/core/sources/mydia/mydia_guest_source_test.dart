@@ -249,6 +249,7 @@ void main() {
     expect(next.ref.kind, ItemKind.episode);
     expect(next.index, 1);
     expect(next.parentIndex, 2);
+    expect(next.showTitle, 'Lantern Street s-1');
   });
 
   test('continue watching maps movies and episodes; remove sends the id',

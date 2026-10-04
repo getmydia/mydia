@@ -60,7 +60,9 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
     durationSeconds: durationSeconds,
     streams: [
       for (final sub in _list(file['subtitles']))
-        if (sub['embedded'] != true && sub['url'] is String)
+        if (sub['embedded'] != true &&
+            sub['deliverable'] != false &&
+            sub['url'] is String)
           MediaStreamInfo(
             id: sub['trackId'] as String,
             kind: MediaStreamKind.subtitle,

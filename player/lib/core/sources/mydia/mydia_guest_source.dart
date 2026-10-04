@@ -309,9 +309,12 @@ class MydiaGuestSource extends MediaSource
 
   @override
   Future<ItemSummary?> nextUp(ItemRef show) async {
-    final next = (await _show(show.externalId))['nextUp'];
+    final detail = await _show(show.externalId);
+    final next = detail['nextUp'];
     final episode = next is Map<String, dynamic> ? next['episode'] : null;
-    return episode is Map<String, dynamic> ? episodeSummary(id, episode) : null;
+    if (episode is! Map<String, dynamic>) return null;
+    // The nested episode carries no show, so the show's own title stands in.
+    return episodeSummary(id, episode, showTitle: detail['title'] as String?);
   }
 
   @override

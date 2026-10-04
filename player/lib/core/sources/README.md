@@ -93,10 +93,18 @@ wrong-instance check. A reinstalled server has new keys and rejects the
 stored token, which flags the account `needsReauth` through the 401 path.
 
 The first Mydia signed into is home. Adding the home instance as a guest is
-refused. Adding an existing guest again signs it in again: its credentials
+refused when the server's instance id matches home's stored instance id, when
+its p2p node is home's, or when the URL is the same as home's. A home that
+signed in by URL and password and is added again by claim code is not
+detected. Adding an existing guest again signs it in again: its credentials
 are replaced and `needsReauth` clears. Signing out of home keeps every
 guest, and the next Mydia signed into becomes home. A guest is never
 promoted.
+
+A guest server must run a build with this release's GraphQL fields
+(`serverCompatibility.instanceId`, sortable lists and `playlistMode`); an
+older server answers with GraphQL errors. Guests are not available in the web
+build, where third-party sources do not exist.
 
 A guest has its own transport, `MydiaGqlTransport`: an HTTP POST to
 `/api/graphql`, or `P2pService.sendGraphQLRequest` for a paired guest. It

@@ -232,7 +232,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final group in groupSourcesByAccount(sources)) ...[
-              if (group.first.kind != SourceKind.mydia)
+              if (group.first.id != SourceId.legacyMydia)
                 _AccountCaption(account: group.first.account),
               for (final source in group)
                 _SourceRow(

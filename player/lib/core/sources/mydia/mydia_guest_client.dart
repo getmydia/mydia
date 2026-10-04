@@ -101,7 +101,8 @@ class MydiaGuestClient {
 
   /// A fresh access token, or null when this device cannot re-authenticate
   /// (no device token, the server refused it, or it answered with no token).
-  /// Any other failure, such as an unreachable server, propagates.
+  /// An unreachable server propagates, so a flaky network never flags the
+  /// account.
   Future<String?> _refresh() async {
     final current = await credentials();
     final deviceToken = current.deviceToken;
@@ -110,8 +111,11 @@ class MydiaGuestClient {
     try {
       data = await _send(_refreshMutation, {'deviceToken': deviceToken}, null);
     } on SourceException catch (e) {
-      if (e.kind == SourceErrorKind.unauthorized) return null;
-      rethrow;
+      // The server answers a revoked or unknown device token with a plain
+      // GraphQL error, so any answer other than "could not reach it" means
+      // this device cannot re-authenticate.
+      if (e.kind == SourceErrorKind.unreachable) rethrow;
+      return null;
     }
     final token = (data['refreshAccessToken'] as Map?)?['token'];
     if (token is! String || token.isEmpty) return null;

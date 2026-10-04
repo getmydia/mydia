@@ -145,7 +145,7 @@ class _AccountCard extends ConsumerWidget {
                   SourceKind.plex => 'Plex account',
                   SourceKind.stash => 'Stash server',
                   SourceKind.jellyfin => 'Jellyfin user',
-                  // The Mydia login is not stored as a source account.
+                  // A guest Mydia server; home is not a stored account.
                   SourceKind.mydia => 'Mydia account',
                 },
                 style: Theme.of(context).textTheme.bodySmall),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -124,6 +125,10 @@ SourceId? _sourceIdIn(String location) {
     return SourceId(segment);
   }
 }
+
+/// Where `/sources/add/mydia` redirects: third-party sources do not exist on
+/// web, so a guest added there would vanish.
+String? guestMydiaRouteRedirect({bool isWeb = kIsWeb}) => isWeb ? '/' : null;
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
@@ -293,6 +298,7 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/add/mydia',
         name: 'add_source_mydia',
         parentNavigatorKey: rootNavigatorKey,
+        redirect: (context, state) => guestMydiaRouteRedirect(),
         builder: (context, state) => LoginScreen(
           guest: GuestTarget(
             reauthAccountId: state.uri.queryParameters['account'],

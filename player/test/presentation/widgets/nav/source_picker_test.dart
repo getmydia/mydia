@@ -119,6 +119,31 @@ void main() {
         findsNothing);
   });
 
+  testWidgets('a guest Mydia gets its account caption, home does not',
+      (tester) async {
+    const guest = Source(
+      account: ProviderAccount(
+        id: 'mguest',
+        kind: SourceKind.mydia,
+        displayName: 'Lakeside',
+        storageNamespace: 'source/mguest',
+        activeProfileId: 'owner',
+      ),
+      profile: SourceProfile(
+          id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+      server: SourceServer(
+          id: 'inst-2',
+          accountId: 'mguest',
+          profileId: 'owner',
+          name: 'Lakeside'),
+    );
+    await _open(tester, [guest]);
+    expect(find.byKey(const ValueKey('source-switcher-account-mguest')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('source-switcher-account-mydia')),
+        findsNothing);
+  });
+
   testWidgets('picking a source returns it and closes', (tester) async {
     final results = await _open(tester, [_source('acc1', 'aa11')]);
     await tester.tap(_row('acc1:owner:aa11'));
