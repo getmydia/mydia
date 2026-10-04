@@ -27,6 +27,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Logs
   alias Mydia.Plugins.Shelves
   alias Mydia.Settings
+  alias MydiaWeb.AdminPluginsLive.Components
 
   # Max log rows loaded into the detail timeline on open / filter.
   @log_limit 200
@@ -83,13 +84,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Capability approval (KTD6, AE1)
 
-  def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(catalog_of(socket.assigns.browse), &(&1.entry.slug == slug)) do
-      nil ->
-        {:noreply, socket}
-
-      %CatalogItem{entry: entry} ->
-        {:noreply, assign(socket, :approval, approval_from_entry(entry))}
+  def handle_event("review_install", %{"key" => key}, socket) do
+    case Enum.find(catalog_of(socket.assigns.browse), &(Components.catalog_key(&1.entry) == key)) do
+      nil -> {:noreply, socket}
+      %CatalogItem{} = item -> {:noreply, assign(socket, :approval, approval_from_item(item))}
     end
   end
 
@@ -310,7 +308,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     result = %BrowseResult{
       status: :empty,
       error: "store lookup failed",
-      source_count: length(Index.sources())
+      source_count: length(Index.sources()),
+      failed_count: 1
     }
 
     {:noreply, assign(socket, browse: result, browsing?: false)}
@@ -430,8 +429,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     assign(socket, :installed, rows)
   end
 
-  # Normalizes a config into a render row.
-  defp row(config) do
+  # Normalizes a config into a render row. Public so tests can build the same
+  # rows the store classifies (`Index.browse/1` reads `plugin_source_id`).
+  @doc false
+  def row(config) do
     capabilities = capabilities_of(config)
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
@@ -444,6 +445,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       name: config.name,
       version: config.version,
       source_url: config.source_url,
+      plugin_source_id: config.plugin_source_id,
       enabled: config.enabled,
       source: :index,
       capabilities: capabilities,
@@ -540,7 +542,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp catalog_of(nil), do: []
   defp catalog_of(%BrowseResult{catalog: catalog}), do: catalog
 
-  defp approval_from_entry(entry) do
+  defp approval_from_item(%CatalogItem{entry: entry} = item) do
     %{
       kind: :catalog,
       entry: entry,
@@ -550,8 +552,22 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       capabilities: entry.manifest.capabilities,
       ungranted: %{},
       settings_schema:
-        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema)
+        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema),
+      publisher: entry.source_id && publisher_label(entry),
+      replaces: if(item.state == :other_source, do: item.installed_from)
     }
+  end
+
+  # The name is whatever the catalog calls itself, so the host keeps a catalog
+  # named "Mydia" distinguishable.
+  defp publisher_label(%{source_name: name, source_url: url}) do
+    host = url && URI.parse(url).host
+
+    cond do
+      name && host -> "#{name} (#{host})"
+      name -> name
+      true -> host
+    end
   end
 
   defp approval_from_config(config) do
@@ -567,7 +583,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asks for on top of what was already approved.
       ungranted:
         (Plugins.needs_reapproval?(config) && Plugins.ungranted_capabilities(config)) || %{},
-      settings_schema: host_grant_schema_of(config)
+      settings_schema: host_grant_schema_of(config),
+      publisher: nil,
+      replaces: nil
     }
   end
 
@@ -603,6 +621,13 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       actor_id: slug,
       limit: @log_limit
     )
+  end
+
+  # A source removed between browse and confirm fails the foreign key.
+  defp error_message(%Ecto.Changeset{errors: errors}) do
+    if Keyword.has_key?(errors, :plugin_source_id),
+      do: "the plugin source was removed. Reopen the store and try again",
+      else: "the plugin could not be saved"
   end
 
   defp error_message(%{__struct__: _} = error) do

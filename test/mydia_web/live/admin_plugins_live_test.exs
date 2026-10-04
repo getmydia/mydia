@@ -59,7 +59,13 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   # :runtime_config on exit.
   defp put_plugin_sources(index_url) do
     base = Application.get_env(:mydia, :runtime_config) || Mydia.Config.Schema.defaults()
-    plugins = %{base.plugins | index_url: index_url, extra_source_urls: []}
+
+    plugins = %{
+      base.plugins
+      | index_url: index_url,
+        index_public_key: Mydia.MinisignFixtures.keypair().public
+    }
+
     Application.put_env(:mydia, :runtime_config, %{base | plugins: plugins})
   end
 
@@ -351,14 +357,151 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
         doc |> LazyHTML.query(selector) |> LazyHTML.text() |> String.trim()
       end
 
-      assert text.("#install-fresh") == "Install"
-      assert text.("#install-stale") == "Update to v1.1.0"
-      assert text.("#install-sideloaded") == "Install store version"
-      assert text.("#catalog-state-current") == "Installed"
-      assert text.("#catalog-state-builtin") == "Bundled"
-      assert doc |> LazyHTML.query("#install-current") |> Enum.empty?()
-      assert doc |> LazyHTML.query("#install-builtin") |> Enum.empty?()
-      assert text.("#catalog-row-stale") =~ "(installed v1.0.0)"
+      assert text.("#install-official-fresh") == "Install"
+      assert text.("#install-official-stale") == "Update to v1.1.0"
+      assert text.("#install-official-sideloaded") == "Install store version"
+      assert text.("#catalog-state-official-current") == "Installed"
+      assert text.("#catalog-state-official-builtin") == "Bundled"
+      assert doc |> LazyHTML.query("#install-official-current") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#install-official-builtin") |> Enum.empty?()
+      assert text.("#catalog-row-official-stale") =~ "(installed v1.0.0)"
+    end
+
+    test "third-party entries carry a badge and a namespaced id" do
+      sid = Ecto.UUID.generate()
+
+      entry = %Entry{
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        package_url: "https://x.test/p.wasm",
+        integrity: "sha256:ab",
+        manifest: nil,
+        source_id: sid,
+        source_name: "Example Plugins"
+      }
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [%CatalogItem{entry: entry, state: :not_installed}]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      key = "src-#{sid}-fixture-tool"
+
+      refute doc |> LazyHTML.query("#install-#{key}") |> Enum.empty?()
+
+      assert doc |> LazyHTML.query("#catalog-third-party-#{key}") |> LazyHTML.text() =~
+               "Example Plugins"
+    end
+
+    test "an entry installed from another source offers a replace naming it" do
+      entry = %Entry{
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        package_url: "https://x.test/p.wasm",
+        integrity: "sha256:ab",
+        manifest: nil
+      }
+
+      item = %CatalogItem{
+        entry: entry,
+        state: :other_source,
+        installed_version: "0.9.0",
+        installed_from: "a removed source"
+      }
+
+      browse = %BrowseResult{status: :available, source_count: 1, catalog: [item]}
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      assert doc |> LazyHTML.query("#install-official-fixture-tool") |> LazyHTML.text() =~
+               "Replace"
+
+      assert doc |> LazyHTML.query("#catalog-row-official-fixture-tool") |> LazyHTML.text() =~
+               "a removed source"
+    end
+
+    test "the store notes how many sources failed" do
+      browse = %BrowseResult{
+        status: :empty,
+        source_count: 2,
+        failed_count: 1,
+        error: "HTTP 404",
+        catalog: []
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      assert doc |> LazyHTML.query("#browse-error") |> LazyHTML.text() =~ "1 of 2 sources"
+    end
+
+    test "two sources listing one slug open the approval for the one clicked", %{conn: conn} do
+      third_sid = Ecto.UUID.generate()
+
+      entry = fn sid, name ->
+        %Entry{
+          slug: "fixture-tool",
+          name: "Fixture Tool",
+          version: "1.0.0",
+          package_url: "https://x.test/p.wasm",
+          integrity: "sha256:ab",
+          manifest: %Mydia.Plugins.Manifest{
+            slug: "fixture-tool",
+            name: "Fixture Tool",
+            version: "1.0.0"
+          },
+          source_id: sid,
+          source_url: "https://plugins.example.test/index.json",
+          source_name: name
+        }
+      end
+
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 2,
+        catalog: [
+          %CatalogItem{entry: entry.(nil, nil), state: :not_installed},
+          %CatalogItem{entry: entry.(third_sid, "Example Plugins"), state: :not_installed}
+        ]
+      }
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      # No catalog source is reachable in tests, so seed the browse result the
+      # store would hold, then let any message re-render the view.
+      :sys.replace_state(view.pid, fn state ->
+        socket = Phoenix.Component.assign(state.socket, browse: browse, store_open?: true)
+        %{state | socket: socket}
+      end)
+
+      send(view.pid, {:event_created, %{type: "unrelated", actor_id: nil}})
+      render(view)
+
+      key = "src-#{third_sid}-fixture-tool"
+      view |> element("#install-#{key}") |> render_click()
+
+      assert has_element?(
+               view,
+               "#approval-publisher-warning",
+               "Example Plugins (plugins.example.test)"
+             )
+    end
+
+    test "a source key never equals an official key, whatever the slug" do
+      sid = Ecto.UUID.generate()
+      source_key = Components.catalog_key(%{source_id: sid, slug: "foo"})
+
+      # Slugs may contain `-`, so try official slugs built to mimic a source key.
+      for lookalike <- ["foo--src-" <> sid, "src-#{sid}-foo", "foo-" <> String.slice(sid, 0, 8)] do
+        refute Components.catalog_key(%{source_id: nil, slug: lookalike}) == source_key
+      end
     end
 
     test "the button is disabled while a browse is in flight" do
@@ -413,6 +556,37 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       refute has_element?(view, "#approval-modal")
       assert Host.running?("webhook-notifier")
       assert render(view) =~ "active"
+    end
+
+    test "a third-party approval names the publisher and what it replaces" do
+      approval = %{
+        kind: :catalog,
+        slug: "fixture-tool",
+        name: "Fixture Tool",
+        version: "1.0.0",
+        capabilities: %{},
+        ungranted: %{},
+        settings_schema: [],
+        publisher: "Example Plugins",
+        replaces: "the Mydia plugin index"
+      }
+
+      render_approval = fn approval ->
+        render_component(&Components.approval_modal/1, approval: approval)
+        |> LazyHTML.from_fragment()
+      end
+
+      doc = render_approval.(approval)
+
+      assert doc |> LazyHTML.query("#approval-publisher-warning") |> LazyHTML.text() =~
+               "Example Plugins"
+
+      assert doc |> LazyHTML.query("#approval-replaces") |> LazyHTML.text() =~
+               "the Mydia plugin index"
+
+      doc = render_approval.(%{approval | publisher: nil, replaces: nil})
+      assert doc |> LazyHTML.query("#approval-publisher-warning") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#approval-replaces") |> Enum.empty?()
     end
 
     test "declining closes the modal without activating", %{conn: conn} do

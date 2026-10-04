@@ -54,7 +54,9 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     assert output =~ "wrote 1 plugin(s)"
 
     index = ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
-    assert index["version"] == 1
+    assert index["version"] == 2
+    assert index["name"] == "Mydia"
+    assert index["public_key"] =~ ~r/^RW/
     assert [entry] = index["plugins"]
 
     assert entry["package_url"] ==
@@ -105,7 +107,49 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     {_output, 0} =
       run(["--crates-dir", empty, "--wasm-dir", ctx.wasm_dir, "--out", ctx.out])
 
-    assert %{"version" => 1, "plugins" => []} =
+    assert %{"version" => 2, "plugins" => []} =
              ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
+  end
+
+  test "embeds a CRLF public key file without the carriage return", ctx do
+    empty = Path.join([ctx.out, "..", "empty"]) |> Path.expand()
+    File.mkdir_p!(empty)
+    pub = Path.join([ctx.out, "..", "crlf.pub"]) |> Path.expand()
+    File.write!(pub, "untrusted comment: minisign public key 0000\r\nRWQfakekey\r\n")
+
+    {_output, 0} =
+      run([
+        "--crates-dir",
+        empty,
+        "--wasm-dir",
+        ctx.wasm_dir,
+        "--out",
+        ctx.out,
+        "--public-key",
+        pub
+      ])
+
+    assert %{"public_key" => "RWQfakekey"} =
+             ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
+  end
+
+  test "refuses a public key file without a minisign key", ctx do
+    pub = Path.join([ctx.out, "..", "bad.pub"]) |> Path.expand()
+    File.mkdir_p!(Path.dirname(pub))
+    File.write!(pub, "untrusted comment: nothing here\nnot-a-key\n")
+
+    {output, 1} =
+      run([
+        "--crates-dir",
+        ctx.crates,
+        "--wasm-dir",
+        ctx.wasm_dir,
+        "--out",
+        ctx.out,
+        "--public-key",
+        pub
+      ])
+
+    assert output =~ "is not a minisign public key"
   end
 end

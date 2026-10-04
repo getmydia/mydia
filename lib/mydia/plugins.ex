@@ -49,6 +49,7 @@ defmodule Mydia.Plugins do
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
   alias Mydia.Plugins.Shelves
+  alias Mydia.Plugins.Sources
   alias Mydia.Settings
 
   @doc "Lists all registered plugin descriptors."
@@ -421,6 +422,7 @@ defmodule Mydia.Plugins do
     # Persist YAML/env-declared plugin instances and settings before plugins start
     # scheduling against them. Same boot-side-effect gate as bundled seeding.
     if Application.get_env(:mydia, :start_health_monitors, true) do
+      Mydia.Plugins.DeclaredSources.sync()
       Mydia.Plugins.RuntimeInstances.sync()
       DeclaredSettings.sync_all()
     end
@@ -1007,17 +1009,19 @@ defmodule Mydia.Plugins do
   @doc """
   Pure comparison: returns `%{slug, current, latest}` for each installed config
   that a catalog `entry` offers in a newer version (R14, no false positives on
-  equal versions).
+  equal versions). An installed plugin is only compared with entries from its
+  own origin (`Mydia.Plugins.Sources.origin/1`), so a third-party catalog cannot
+  announce an update for a plugin it did not install.
   """
   @spec detect_updates([Settings.PluginConfig.t()], [Index.Entry.t()]) :: [map()]
   def detect_updates(installed, entries) do
-    latest_by_slug =
-      entries
-      |> Enum.group_by(& &1.slug)
-      |> Map.new(fn {slug, es} -> {slug, latest_version(es)} end)
-
     Enum.flat_map(installed, fn config ->
-      latest = Map.get(latest_by_slug, config.slug)
+      origin = Sources.origin(config)
+
+      latest =
+        entries
+        |> Enum.filter(&(&1.slug == config.slug and Index.entry_origin(&1) == origin))
+        |> latest_version()
 
       if latest && Index.version_newer?(latest, config.version) do
         [%{slug: config.slug, current: config.version, latest: latest}]
@@ -1035,7 +1039,7 @@ defmodule Mydia.Plugins do
           entries
 
         {:error, error} ->
-          Logger.warning("update check could not fetch #{source}: #{inspect(error)}")
+          Logger.warning("update check could not fetch #{source.url}: #{inspect(error)}")
           []
       end
     end)
@@ -1074,6 +1078,7 @@ defmodule Mydia.Plugins do
       name: entry.name,
       version: entry.version,
       source_url: entry.package_url,
+      plugin_source_id: entry.source_id,
       integrity_hash: hash,
       manifest: manifest_to_map(entry.manifest),
       wasm_module: wasm,

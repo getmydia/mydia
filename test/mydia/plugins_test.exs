@@ -170,6 +170,39 @@ defmodule Mydia.PluginsTest do
       assert Host.running?("webhook-notifier")
     end
 
+    test "install pins the entry's source, and an official reinstall clears it", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      manifest = manifest!()
+      serve_package(bypass, wasm)
+
+      {:ok, source} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://third-party.test/index.json",
+          public_key: Mydia.MinisignFixtures.keypair().public
+        })
+
+      third_party = %{entry(bypass, manifest, wasm) | source_id: source.id}
+      assert {:ok, _} = Plugins.install(third_party, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == source.id
+
+      official = %{entry(bypass, manifest, wasm) | source_id: nil}
+      assert {:ok, _} = Plugins.install(official, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == nil
+    end
+
+    test "a source removed before install returns an error instead of raising", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      gone = %{entry(bypass, manifest!(), wasm) | source_id: Ecto.UUID.generate()}
+
+      assert {:error, %Ecto.Changeset{}} = Plugins.install(gone, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier") == nil
+    end
+
     test "a tampered package is rejected before anything is persisted", %{bypass: bypass} do
       wasm = guest_wasm()
       manifest = manifest!()
@@ -990,17 +1023,42 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "detect_updates/2 (R14)" do
-    defp config(slug, version), do: %Mydia.Settings.PluginConfig{slug: slug, version: version}
+    defp config(slug, version, source_id \\ nil) do
+      %Mydia.Settings.PluginConfig{
+        slug: slug,
+        version: version,
+        source_url: "https://plugins.mydia.dev/packages/#{slug}/#{version}.wasm",
+        plugin_source_id: source_id
+      }
+    end
 
-    defp avail(slug, version) do
+    defp avail(slug, version, source_id \\ nil) do
       %Entry{
         slug: slug,
         name: slug,
         version: version,
         package_url: "https://x/#{slug}.wasm",
         integrity: "sha256:ab",
-        manifest: manifest!()
+        manifest: manifest!(),
+        source_id: source_id
       }
+    end
+
+    test "a third-party catalog cannot update an official plugin" do
+      assert [] =
+               Plugins.detect_updates([config("p", "1.0.0")], [
+                 avail("p", "9.0.0", Ecto.UUID.generate())
+               ])
+    end
+
+    test "a sourced plugin updates only from its own source" do
+      mine = Ecto.UUID.generate()
+
+      assert [%{latest: "1.1.0"}] =
+               Plugins.detect_updates([config("p", "1.0.0", mine)], [
+                 avail("p", "9.0.0"),
+                 avail("p", "1.1.0", mine)
+               ])
     end
 
     test "flags a slug with a newer available version" do

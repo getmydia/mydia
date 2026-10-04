@@ -145,6 +145,7 @@ nav:
           - plugins/how-to/pages.md
           - plugins/how-to/shelves.md
           - plugins/how-to/test-and-iterate.md
+          - plugins/how-to/publish-a-source.md
       - Reference:
           - plugins/reference/manifest.md
           - plugins/reference/host-api.md

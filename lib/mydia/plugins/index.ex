@@ -7,24 +7,29 @@ defmodule Mydia.Plugins.Index do
   entry's `package_url` and verified against the entry's declared integrity hash
   before it is ever registered or activated (R12, AE4).
 
-  ## Trust model (KTD10)
+  ## Trust model
 
-  The catalog declares both the package URL and its hash, so the checksum proves
-  *transit* integrity, not authorship. v1 leans on:
+  Every catalog is signed with minisign (`index.json.minisig` beside
+  `index.json`). The official index's key is compiled in from
+  `priv/plugin_index/official.pub`; a third-party source's key is pinned when an
+  admin adds it (`Mydia.Plugins.Sources`) or declared with it in env/YAML. The
+  signature covers each entry's package `integrity` hash, so verifying the
+  catalog and then the package hash proves the bytes came from the key holder.
 
-    * **Mandatory HTTPS.** Source URLs are validated to be `https` at config time
-      (`Mydia.Config.Schema`); this module refuses any non-https URL again at
-      fetch time as defence in depth.
-    * **The SSRF gate.** Every catalog and package fetch is routed through
-      `Mydia.Plugins.Net.Gate`, so a source resolving to a private IP is refused
-      exactly like a plugin's own egress would be.
+  HTTPS and the SSRF gate (`Mydia.Plugins.Net.Gate`) still apply to every fetch.
+  A key change is never accepted in-band: the source reports `:key_changed`
+  until an admin removes and re-adds it. Only sideloading accepts unsigned code.
 
-  Cryptographic signing against a developer key is the deferred hardening.
+  There is no freshness check: a host can replay an older signed catalog.
+  Installed plugins are protected by `version_newer?/2`, but a fresh install may
+  get an older listed version.
 
   ## Catalog format
 
       {
-        "version": 1,
+        "version": 2,
+        "name": "My Plugins",
+        "public_key": "RWT…",
         "plugins": [
           {
             "slug": "webhook-notifier",
@@ -46,8 +51,16 @@ defmodule Mydia.Plugins.Index do
   alias Mydia.Plugins.Index.BrowseResult
   alias Mydia.Plugins.Index.CatalogItem
   alias Mydia.Plugins.Index.Entry
+  alias Mydia.Plugins.Index.Signature
+  alias Mydia.Plugins.Index.Source
+  alias Mydia.Plugins.Index.SourcePreview
   alias Mydia.Plugins.Manifest
   alias Mydia.Plugins.Net.Gate
+  alias Mydia.Plugins.Sources
+
+  @official_key_path Path.expand("../../../priv/plugin_index/official.pub", __DIR__)
+  @external_resource @official_key_path
+  @official_public_key @official_key_path |> File.read!() |> String.trim()
 
   # Packages are larger than a typical API response; allow more headroom than the
   # gate's default cap, but still bounded.
@@ -58,35 +71,150 @@ defmodule Mydia.Plugins.Index do
   def official_index_url, do: config().index_url
 
   @doc """
-  All configured source URLs: the official index plus any admin-added custom
-  sources (R13).
+  The official index as a source. Its key is compiled in unless `index_url` is
+  overridden, in which case config validation required `index_public_key`.
+  Nil when `index_url` is blank.
   """
-  @spec sources() :: [String.t()]
-  def sources do
+  @spec official_source() :: Source.t() | nil
+  def official_source do
     cfg = config()
-    [cfg.index_url | cfg.extra_source_urls] |> Enum.reject(&blank?/1) |> Enum.uniq()
+    override = Map.get(cfg, :index_public_key)
+    key_text = if blank?(override), do: @official_public_key, else: override
+
+    with false <- blank?(cfg.index_url),
+         {:ok, key} <- Signature.parse_public_key(key_text) do
+      %Source{url: cfg.index_url, name: "Mydia", public_key: key, official?: true}
+    else
+      _ -> nil
+    end
+  end
+
+  @doc "The official index first, then every enabled `plugin_sources` row."
+  @spec sources() :: [Source.t()]
+  def sources do
+    rows =
+      Enum.flat_map(Sources.enabled_sources(), fn row ->
+        case Signature.parse_public_key(row.public_key) do
+          {:ok, key} ->
+            [
+              %Source{
+                id: row.id,
+                url: row.url,
+                name: row.name || URI.parse(row.url).host,
+                public_key: key
+              }
+            ]
+
+          {:error, _} ->
+            []
+        end
+      end)
+
+    Enum.reject([official_source() | rows], &is_nil/1)
   end
 
   @doc """
-  Fetches and parses a catalog from `source_url` into a list of `%Entry{}`.
+  Fetches a catalog, verifies its signature against the source's pinned key and
+  parses it into a list of `%Entry{}`.
 
   Routes through the SSRF gate and rejects non-https sources. Each entry's
   embedded manifest is validated; a listing with an invalid manifest is dropped
-  (logged) rather than failing the whole catalog.
+  (logged) rather than failing the whole catalog. The outcome is recorded on the
+  source's row when it has one.
   """
-  @spec fetch_catalog(String.t(), keyword()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
-  def fetch_catalog(source_url, opts \\ []) do
-    with :ok <- require_https(source_url, opts),
-         {:ok, body} <- gate_get(source_url, opts),
-         {:ok, json} <- decode_json(body, "catalog") do
-      {:ok, parse_entries(json, source_url)}
+  @spec fetch_catalog(Source.t(), keyword()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
+  def fetch_catalog(%Source{} = source, opts \\ []) do
+    result =
+      with :ok <- require_https(source.url, opts),
+           {:ok, body} <- gate_get(source.url, opts),
+           {:ok, json} <- decode_json(body, "catalog"),
+           :ok <- same_embedded_key(json, source.public_key),
+           {:ok, minisig} <- gate_get(source.url <> ".minisig", opts),
+           :ok <- Signature.verify(body, minisig, source.public_key) do
+        {:ok, json, parse_entries(json, source)}
+      end
+
+    case result do
+      {:ok, json, entries} ->
+        Sources.record_fetch(
+          source.id,
+          {:ok, %{name: json["name"], plugin_count: length(entries)}}
+        )
+
+        {:ok, entries}
+
+      {:error, error} ->
+        Sources.record_fetch(source.id, {:error, describe_error(error)})
+        {:error, error}
+    end
+  end
+
+  @doc """
+  Fetches the catalog at `url` and verifies it against the key it embeds, so the
+  admin can see what adding it would pin (name, key fingerprint, plugin count).
+  """
+  @spec preview_source(String.t(), keyword()) :: {:ok, SourcePreview.t()} | {:error, Error.t()}
+  def preview_source(url, opts \\ []) do
+    url = String.trim(url)
+
+    with :ok <- require_https(url, opts),
+         {:ok, body} <- gate_get(url, opts),
+         {:ok, json} <- decode_json(body, "catalog"),
+         {:ok, key} <- embedded_key(json),
+         {:ok, minisig} <- gate_get(url <> ".minisig", opts),
+         :ok <- Signature.verify(body, minisig, key) do
+      source = %Source{url: url, name: json["name"] || URI.parse(url).host, public_key: key}
+
+      {:ok,
+       %SourcePreview{
+         url: url,
+         name: source.name,
+         public_key: key.encoded,
+         fingerprint: Signature.fingerprint(key),
+         plugin_count: length(parse_entries(json, source))
+       }}
+    end
+  end
+
+  @doc "Which origin a catalog entry belongs to, comparable with `Sources.origin/1`."
+  @spec entry_origin(Entry.t()) :: :official | {:source, binary()}
+  def entry_origin(%Entry{source_id: nil}), do: :official
+  def entry_origin(%Entry{source_id: id}), do: {:source, id}
+
+  defp embedded_key(%{"public_key" => text}) when is_binary(text) do
+    case Signature.parse_public_key(text) do
+      {:ok, key} ->
+        {:ok, key}
+
+      {:error, _} ->
+        {:error, Error.new(:signature_invalid, "catalog public_key is not a minisign key")}
+    end
+  end
+
+  defp embedded_key(_json),
+    do: {:error, Error.new(:signature_invalid, "catalog does not publish a signing key")}
+
+  # The embedded key is advisory, but when it names a different key the
+  # publisher rotated and the admin must re-add the source to trust it.
+  defp same_embedded_key(json, pinned) do
+    case embedded_key(json) do
+      {:ok, %{key_id: id, key: key} = embedded} when id != pinned.key_id or key != pinned.key ->
+        {:error,
+         Error.new(
+           :key_changed,
+           "signing key changed (catalog now names key #{Signature.fingerprint(embedded)})"
+         )}
+
+      _ ->
+        :ok
     end
   end
 
   @doc """
   Fetches every source and returns each listed plugin as a `CatalogItem`,
-  classified against `installed`: anything carrying `:slug`, `:version` and
-  `:source_url`, normally the admin page's installed rows.
+  classified against `installed`: anything carrying `:slug`, `:version`,
+  `:source_url` and `:plugin_source_id`, normally the admin page's installed
+  rows.
 
   A failing source records the first error message but does not discard the
   entries of sources that answered. `opts` accepts `:sources` (overrides
@@ -97,11 +225,11 @@ defmodule Mydia.Plugins.Index do
     {sources, fetch_opts} = Keyword.pop_lazy(opts, :sources, &sources/0)
     installed_by_slug = Map.new(installed, &{&1.slug, &1})
 
-    {entries, error} =
-      Enum.reduce(sources, {[], nil}, fn source, {acc, err} ->
+    {entries, error, failed} =
+      Enum.reduce(sources, {[], nil, 0}, fn source, {acc, err, failed} ->
         case fetch_catalog(source, fetch_opts) do
-          {:ok, found} -> {acc ++ found, err}
-          {:error, reason} -> {acc, err || describe_error(reason)}
+          {:ok, found} -> {acc ++ found, err, failed}
+          {:error, reason} -> {acc, err || describe_error(reason), failed + 1}
         end
       end)
 
@@ -109,6 +237,7 @@ defmodule Mydia.Plugins.Index do
       catalog: Enum.map(entries, &catalog_item(&1, Map.get(installed_by_slug, &1.slug))),
       status: browse_status(entries),
       error: error,
+      failed_count: failed,
       source_count: length(sources)
     }
   end
@@ -197,22 +326,22 @@ defmodule Mydia.Plugins.Index do
     end
   end
 
-  defp parse_entries(%{"plugins" => plugins}, source_url) when is_list(plugins) do
+  defp parse_entries(%{"plugins" => plugins}, source) when is_list(plugins) do
     plugins
-    |> Enum.map(&parse_entry(&1, source_url))
+    |> Enum.map(&parse_entry(&1, source))
     |> Enum.flat_map(fn
       {:ok, entry} ->
         [entry]
 
       {:error, error} ->
-        Logger.warning("dropping invalid catalog entry from #{source_url}: #{inspect(error)}")
+        Logger.warning("dropping invalid catalog entry from #{source.url}: #{inspect(error)}")
         []
     end)
   end
 
   defp parse_entries(_, _), do: []
 
-  defp parse_entry(%{} = raw, source_url) do
+  defp parse_entry(%{} = raw, source) do
     with {:ok, package_url} <- fetch_required(raw, "package_url"),
          {:ok, integrity} <- fetch_required(raw, "integrity"),
          {:ok, manifest} <- Manifest.parse(Map.get(raw, "manifest", %{})) do
@@ -226,7 +355,9 @@ defmodule Mydia.Plugins.Index do
          package_url: package_url,
          integrity: integrity,
          manifest: manifest,
-         source_url: source_url
+         source_url: source.url,
+         source_id: source.id,
+         source_name: source.name
        }}
     end
   end
@@ -249,28 +380,36 @@ defmodule Mydia.Plugins.Index do
   defp catalog_item(entry, nil), do: %CatalogItem{entry: entry, state: :not_installed}
 
   defp catalog_item(entry, installed) do
+    state = install_state(entry, installed)
+
     %CatalogItem{
       entry: entry,
-      state: install_state(entry, installed),
-      installed_version: installed.version
+      state: state,
+      installed_version: installed.version,
+      installed_from:
+        if(state == :other_source, do: Sources.origin_name(Sources.origin(installed)))
     }
   end
 
-  # A store version usually lives at a new, versioned package URL, so "installed
-  # from an index" is anything that is neither bundled nor sideloaded.
-  defp install_state(_entry, %{source_url: "bundled"}), do: :bundled
-
-  defp install_state(entry, %{source_url: source_url, version: version}) do
-    cond do
-      sideloaded?(source_url) -> :replace
-      entry.version == version -> :installed
-      version_newer?(entry.version, version) -> :update
-      true -> :replace
+  # A store version usually lives at a new, versioned package URL, so origin is
+  # decided by `Sources.origin/1`, not by the package URL.
+  defp install_state(entry, installed) do
+    case Sources.origin(installed) do
+      :bundled -> :bundled
+      :sideloaded -> :replace
+      origin -> version_state(origin == entry_origin(entry), entry, installed)
     end
   end
 
-  defp sideloaded?("file://" <> _), do: true
-  defp sideloaded?(_source_url), do: false
+  defp version_state(false, _entry, _installed), do: :other_source
+
+  defp version_state(true, entry, installed) do
+    cond do
+      entry.version == installed.version -> :installed
+      version_newer?(entry.version, installed.version) -> :update
+      true -> :replace
+    end
+  end
 
   defp describe_error(%{__exception__: true} = error), do: Exception.message(error)
   defp describe_error(other), do: inspect(other)

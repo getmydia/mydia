@@ -301,6 +301,26 @@ The older `PLUGIN_<N>_NAME`, `_VERSION`, `_ENABLED`, `_PRIORITY`,
 `_SOURCE_URL`, `_INTEGRITY_HASH` and `_GRANTED_CAPABILITIES` variables are
 ignored.
 
+### Plugin sources
+
+Extra signed plugin catalogs are declared with numbered variables, starting at 0.
+Both variables are required for each source.
+
+```bash
+PLUGINS_SOURCE_0_URL=https://example.com/index.json
+PLUGINS_SOURCE_0_PUBLIC_KEY=RWQ...
+```
+
+The URL must be `https`. The public key is the minisign key, the base64 line
+starting with `RW` in the publisher's `.pub` file. Declared sources show in
+Admin > System > Plugins > Plugin sources as read-only, with a "Declared" badge.
+Mydia trusts the declared key as given, and it replaces any key previously
+pinned for that URL at startup. Removing a declaration disables the source
+rather than deleting it. A missing key or an `http` URL is a config error at
+startup. Sources can also be added in the admin UI, which shows the key
+fingerprint to compare before you trust it. To publish a source of your own,
+see [Publish your own plugin source](../../plugins/how-to/publish-a-source.md).
+
 ## Indexers
 
 Configure multiple indexers using numbered variables (`<N>` = 1, 2, 3, etc.):

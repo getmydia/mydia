@@ -35,7 +35,8 @@ the host release and granted their declared capabilities on discovery.
     The how-to guides cover [sending notifications](how-to/notifications.md),
     [reading media and event data](how-to/media-data.md),
     [building a two-way sync](how-to/two-way-sync.md), and the
-    [test and reload loop](how-to/test-and-iterate.md).
+    [test and reload loop](how-to/test-and-iterate.md). To distribute plugins
+    yourself, see [publishing your own plugin source](how-to/publish-a-source.md).
 
 -   **Need the contract**
 

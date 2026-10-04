@@ -3,9 +3,12 @@ defmodule Mydia.Plugins.IndexTest do
   # audit event (Events.create_event_async runs synchronously under the sandbox).
   use Mydia.DataCase, async: true
 
+  import Mydia.MinisignFixtures
+
   alias Mydia.Plugins.Error
   alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.Entry
+  alias Mydia.Plugins.Index.{Signature, Source}
   alias Mydia.Settings.PluginConfig
 
   # Build a real (tiny) wasm module so the integrity hash is computed over actual
@@ -31,19 +34,6 @@ defmodule Mydia.Plugins.IndexTest do
     }
   end
 
-  defp catalog_json(package_url, integrity) do
-    Jason.encode!(%{
-      "version" => 1,
-      "plugins" => [
-        %{
-          "package_url" => package_url,
-          "integrity" => integrity,
-          "manifest" => manifest_json()
-        }
-      ]
-    })
-  end
-
   defp loopback, do: fn _ -> {:ok, [{127, 0, 0, 1}]} end
 
   setup do
@@ -51,83 +41,174 @@ defmodule Mydia.Plugins.IndexTest do
     {:ok, bypass: bypass}
   end
 
-  describe "fetch_catalog/2" do
-    test "fetches and parses a catalog into entries", %{bypass: bypass} do
-      wasm = wasm_fixture()
-      pkg_url = "http://allowed.test:#{bypass.port}/pkg.wasm"
+  defp catalog(package_url, integrity, extra \\ %{}) do
+    Map.merge(
+      %{
+        "version" => 2,
+        "name" => "Fixture Plugins",
+        "plugins" => [
+          %{"package_url" => package_url, "integrity" => integrity, "manifest" => manifest_json()}
+        ]
+      },
+      extra
+    )
+  end
 
-      Bypass.expect_once(bypass, "GET", "/index.json", fn conn ->
-        Plug.Conn.resp(conn, 200, catalog_json(pkg_url, "sha256:#{sha256_hex(wasm)}"))
-      end)
+  defp url(bypass, path), do: "http://allowed.test:#{bypass.port}#{path}"
+
+  defp source(bypass, path, keys, id \\ nil) do
+    {:ok, key} = Signature.parse_public_key(keys.public)
+    %Source{id: id, url: url(bypass, path), name: "Fixture Plugins", public_key: key}
+  end
+
+  # Serves `path` and its detached signature, signed by `keys`.
+  defp serve_signed(bypass, path, map, keys, opts \\ []) do
+    body = Jason.encode!(Map.put_new(map, "public_key", keys.public))
+    signer = Keyword.get(opts, :signer, keys)
+    Bypass.stub(bypass, "GET", path, fn conn -> Plug.Conn.resp(conn, 200, body) end)
+
+    Bypass.stub(bypass, "GET", path <> ".minisig", fn conn ->
+      Plug.Conn.resp(conn, 200, sign(body, signer))
+    end)
+  end
+
+  defp gate_opts, do: [allow_private: true, resolver: loopback()]
+
+  describe "fetch_catalog/2" do
+    test "fetches, verifies and parses a signed catalog", %{bypass: bypass} do
+      keys = keypair()
+      wasm = wasm_fixture()
+      pkg = url(bypass, "/pkg.wasm")
+      serve_signed(bypass, "/index.json", catalog(pkg, "sha256:#{sha256_hex(wasm)}"), keys)
+      id = Ecto.UUID.generate()
 
       assert {:ok, [%Entry{} = entry]} =
-               Index.fetch_catalog("http://allowed.test:#{bypass.port}/index.json",
-                 allow_private: true,
-                 resolver: loopback()
-               )
+               Index.fetch_catalog(source(bypass, "/index.json", keys, id), gate_opts())
 
       assert entry.slug == "webhook-notifier"
-      assert entry.version == "1.0.0"
-      assert entry.package_url == pkg_url
+      assert entry.package_url == pkg
+      assert entry.source_id == id
+      assert entry.source_name == "Fixture Plugins"
       assert entry.manifest.capabilities["net:http"] == ["discord.com"]
     end
 
-    test "R13: a custom source URL is fetched and parsed", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "GET", "/custom.json", fn conn ->
-        Plug.Conn.resp(conn, 200, catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+    test "refuses a catalog with no signature", %{bypass: bypass} do
+      keys = keypair()
+
+      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
+        Plug.Conn.resp(conn, 200, Jason.encode!(catalog("https://x.test/p.wasm", "sha256:ab")))
       end)
 
-      assert {:ok, [%Entry{slug: "webhook-notifier"}]} =
-               Index.fetch_catalog("http://allowed.test:#{bypass.port}/custom.json",
-                 allow_private: true,
-                 resolver: loopback()
-               )
+      Bypass.stub(bypass, "GET", "/index.json.minisig", fn conn ->
+        Plug.Conn.resp(conn, 404, "")
+      end)
+
+      assert {:error, %Error{type: :network_error}} =
+               Index.fetch_catalog(source(bypass, "/index.json", keys), gate_opts())
+    end
+
+    test "refuses a catalog signed by another key", %{bypass: bypass} do
+      keys = keypair()
+
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), keys,
+        signer: keypair()
+      )
+
+      assert {:error, %Error{type: :signature_invalid}} =
+               Index.fetch_catalog(source(bypass, "/index.json", keys), gate_opts())
+    end
+
+    test "reports a rotated key as key_changed", %{bypass: bypass} do
+      pinned = keypair()
+      rotated = keypair()
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), rotated)
+
+      assert {:error, %Error{type: :key_changed}} =
+               Index.fetch_catalog(source(bypass, "/index.json", pinned), gate_opts())
+    end
+
+    test "records success and failure on the source row", %{bypass: bypass} do
+      keys = keypair()
+
+      {:ok, row} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://allowed.test/#{bypass.port}/index.json",
+          public_key: keys.public
+        })
+
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), keys)
+      {:ok, _} = Index.fetch_catalog(source(bypass, "/index.json", keys, row.id), gate_opts())
+      assert %{plugin_count: 1, last_error: nil} = Repo.reload!(row)
+
+      {:error, _} =
+        Index.fetch_catalog(source(bypass, "/index.json", keypair(), row.id), gate_opts())
+
+      assert Repo.reload!(row).last_error =~ "key"
     end
 
     test "refuses a source resolving to a private IP (via the gate)" do
+      {:ok, key} = Signature.parse_public_key(keypair().public)
+      source = %Source{url: "https://source.test/index.json", name: "x", public_key: key}
+
       assert {:error, %Error{type: :blocked}} =
-               Index.fetch_catalog("https://source.test/index.json",
-                 resolver: fn _ -> {:ok, [{169, 254, 169, 254}]} end
-               )
+               Index.fetch_catalog(source, resolver: fn _ -> {:ok, [{169, 254, 169, 254}]} end)
     end
 
     test "rejects a non-https source URL at fetch time" do
-      assert {:error, %Error{type: :invalid_config, message: msg}} =
-               Index.fetch_catalog("http://insecure.test/index.json")
-
-      assert msg =~ "https"
+      {:ok, key} = Signature.parse_public_key(keypair().public)
+      source = %Source{url: "http://insecure.test/index.json", name: "x", public_key: key}
+      assert {:error, %Error{type: :invalid_config}} = Index.fetch_catalog(source)
     end
 
-    test "returns a clear error for malformed catalog JSON", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "GET", "/index.json", fn conn ->
+    test "returns a clear error for a signed body that is not JSON", %{bypass: bypass} do
+      keys = keypair()
+
+      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
         Plug.Conn.resp(conn, 200, "{not json")
       end)
 
+      Bypass.stub(bypass, "GET", "/index.json.minisig", fn conn ->
+        Plug.Conn.resp(conn, 200, sign("{not json", keys))
+      end)
+
       assert {:error, %Error{type: :invalid_config}} =
-               Index.fetch_catalog("http://allowed.test:#{bypass.port}/index.json",
-                 allow_private: true,
-                 resolver: loopback()
-               )
+               Index.fetch_catalog(source(bypass, "/index.json", keys), gate_opts())
     end
 
     test "drops a listing whose embedded manifest is invalid", %{bypass: bypass} do
-      bad =
-        Jason.encode!(%{
-          "version" => 1,
-          "plugins" => [
-            %{"package_url" => "http://x/p.wasm", "integrity" => "sha256:ab", "manifest" => %{}}
-          ]
-        })
+      keys = keypair()
 
-      Bypass.expect_once(bypass, "GET", "/index.json", fn conn ->
-        Plug.Conn.resp(conn, 200, bad)
+      bad = %{
+        "package_url" => "https://x.test/p.wasm",
+        "integrity" => "sha256:ab",
+        "manifest" => %{}
+      }
+
+      serve_signed(bypass, "/index.json", %{"version" => 2, "plugins" => [bad]}, keys)
+
+      assert {:ok, []} = Index.fetch_catalog(source(bypass, "/index.json", keys), gate_opts())
+    end
+  end
+
+  describe "preview_source/2" do
+    test "verifies against the embedded key and reports what would be pinned", %{bypass: bypass} do
+      keys = keypair()
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), keys)
+
+      assert {:ok, preview} = Index.preview_source(url(bypass, "/index.json"), gate_opts())
+      assert preview.name == "Fixture Plugins"
+      assert preview.public_key == keys.public
+      assert preview.fingerprint =~ ~r/^[0-9A-F]{16}$/
+      assert preview.plugin_count == 1
+    end
+
+    test "refuses a catalog that embeds no key", %{bypass: bypass} do
+      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
+        Plug.Conn.resp(conn, 200, Jason.encode!(%{"version" => 1, "plugins" => []}))
       end)
 
-      assert {:ok, []} =
-               Index.fetch_catalog("http://allowed.test:#{bypass.port}/index.json",
-                 allow_private: true,
-                 resolver: loopback()
-               )
+      assert {:error, %Error{type: :signature_invalid}} =
+               Index.preview_source(url(bypass, "/index.json"), gate_opts())
     end
   end
 
@@ -186,90 +267,163 @@ defmodule Mydia.Plugins.IndexTest do
   end
 
   describe "sources/0" do
-    test "includes the official index by default" do
-      assert Index.official_index_url() =~ "https://"
-      assert Index.official_index_url() in Index.sources()
+    test "starts with the official index and its compiled-in key" do
+      assert [%Source{official?: true, id: nil, url: url} | _] = Index.sources()
+      assert url == Index.official_index_url()
+    end
+
+    test "the official source pins the compiled-in key" do
+      assert [%Source{official?: true, public_key: key} | _] = Index.sources()
+      assert Signature.fingerprint(key) == "DE63E0C2E48917D0"
+    end
+
+    test "appends enabled source rows" do
+      {:ok, row} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://a.test/index.json",
+          public_key: keypair().public
+        })
+
+      assert Enum.any?(Index.sources(), &(&1.id == row.id))
     end
   end
 
   describe "browse/2" do
     alias Mydia.Plugins.Index.BrowseResult
 
-    defp browse_opts(bypass, paths) do
-      [
-        sources: Enum.map(paths, &"http://allowed.test:#{bypass.port}#{&1}"),
-        allow_private: true,
-        resolver: loopback()
-      ]
+    defp browse_opts(sources), do: [sources: sources] ++ gate_opts()
+
+    setup %{bypass: bypass} do
+      keys = keypair()
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), keys)
+
+      {:ok, row} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://fixture.test/index.json",
+          public_key: keys.public
+        })
+
+      %{keys: keys, src: source(bypass, "/index.json", keys, row.id), src_id: row.id}
     end
 
-    defp serve(bypass, path, body) do
-      Bypass.expect_once(bypass, "GET", path, fn conn -> Plug.Conn.resp(conn, 200, body) end)
-    end
-
-    test "lists every entry, installed or not", %{bypass: bypass} do
-      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
-
-      installed = [
-        %PluginConfig{
-          slug: "webhook-notifier",
-          version: "1.0.0",
-          source_url: "https://cdn.test/p-1.0.0.wasm"
-        }
-      ]
-
-      assert %BrowseResult{status: :available, error: nil, source_count: 1, catalog: [item]} =
-               Index.browse(installed, browse_opts(bypass, ["/index.json"]))
+    test "lists every entry, installed or not", %{src: src} do
+      assert %BrowseResult{
+               status: :available,
+               error: nil,
+               failed_count: 0,
+               source_count: 1,
+               catalog: [item]
+             } = Index.browse([], browse_opts([src]))
 
       assert item.entry.slug == "webhook-notifier"
     end
 
-    test "classifies each entry against what is installed", %{bypass: bypass} do
-      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
-        Plug.Conn.resp(conn, 200, catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
-      end)
+    test "classifies each entry against what is installed from the same source", %{
+      src: src,
+      src_id: id
+    } do
+      # The catalog lists webhook-notifier at 1.0.0, from source `id`.
+      ours = fn version ->
+        %PluginConfig{
+          slug: "webhook-notifier",
+          version: version,
+          source_url: "https://x.test/p.wasm",
+          plugin_source_id: id
+        }
+      end
 
-      # The catalog lists webhook-notifier at 1.0.0.
       cases = [
-        {nil, :not_installed, nil},
-        {{"bundled", "0.9.0"}, :bundled, "0.9.0"},
-        {{"https://cdn.test/p-1.0.0.wasm", "1.0.0"}, :installed, "1.0.0"},
-        {{"https://cdn.test/p-0.9.0.wasm", "0.9.0"}, :update, "0.9.0"},
-        {{"https://cdn.test/p-2.0.0.wasm", "2.0.0"}, :replace, "2.0.0"},
-        {{"file:///home/op/p.wasm", "1.0.0"}, :replace, "1.0.0"}
+        {nil, :not_installed},
+        {%PluginConfig{slug: "webhook-notifier", version: "0.9.0", source_url: "bundled"},
+         :bundled},
+        {ours.("1.0.0"), :installed},
+        {ours.("0.9.0"), :update},
+        {ours.("2.0.0"), :replace},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "1.0.0",
+           source_url: "file:///home/op/p.wasm"
+         }, :replace},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "0.9.0",
+           source_url: "https://plugins.mydia.dev/packages/webhook-notifier/0.9.0.wasm"
+         }, :other_source},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "0.9.0",
+           source_url: "https://gone.test/p.wasm"
+         }, :other_source}
       ]
 
-      for {installed, state, installed_version} <- cases do
-        configs =
-          case installed do
-            nil -> []
-            {url, v} -> [%PluginConfig{slug: "webhook-notifier", version: v, source_url: url}]
-          end
-
-        assert %BrowseResult{catalog: [item]} =
-                 Index.browse(configs, browse_opts(bypass, ["/index.json"]))
-
-        assert {item.state, item.installed_version} == {state, installed_version},
-               "installed as #{inspect(installed)}"
+      for {installed, state} <- cases do
+        configs = if installed, do: [installed], else: []
+        assert %BrowseResult{catalog: [item]} = Index.browse(configs, browse_opts([src]))
+        assert item.state == state, "installed as #{inspect(installed)}"
       end
     end
 
-    test "reports :empty when the source lists nothing", %{bypass: bypass} do
-      serve(bypass, "/index.json", Jason.encode!(%{"version" => 1, "plugins" => []}))
+    test "classifies a persisted third-party install the way the admin page builds its rows", %{
+      src: src,
+      src_id: id
+    } do
+      # The page hands Index.browse/1 its own row maps, not raw PluginConfig
+      # structs; the seam must carry plugin_source_id or every third-party
+      # install reads as installed from a removed source.
+      persisted = fn version ->
+        {:ok, config} =
+          Mydia.Settings.upsert_plugin_config(%{
+            slug: "webhook-notifier",
+            name: "Webhook Notifier",
+            version: version,
+            source_url: "https://x.test/p.wasm",
+            plugin_source_id: id
+          })
 
-      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 1} =
-               Index.browse([], browse_opts(bypass, ["/index.json"]))
+        MydiaWeb.AdminPluginsLive.Index.row(config)
+      end
+
+      assert %BrowseResult{catalog: [%{state: :installed}]} =
+               Index.browse([persisted.("1.0.0")], browse_opts([src]))
+
+      assert %BrowseResult{catalog: [%{state: :update}]} =
+               Index.browse([persisted.("0.9.0")], browse_opts([src]))
     end
 
-    test "keeps entries from a working source when another fails", %{bypass: bypass} do
-      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+    test "names the other source for :other_source", %{src: src} do
+      official = %PluginConfig{
+        slug: "webhook-notifier",
+        version: "0.9.0",
+        source_url: "https://plugins.mydia.dev/packages/w/0.9.0.wasm"
+      }
 
-      Bypass.expect_once(bypass, "GET", "/missing.json", fn conn ->
-        Plug.Conn.resp(conn, 404, "")
-      end)
+      assert %BrowseResult{catalog: [%{state: :other_source, installed_from: from}]} =
+               Index.browse([official], browse_opts([src]))
 
-      assert %BrowseResult{status: :available, catalog: [_], source_count: 2, error: error} =
-               Index.browse([], browse_opts(bypass, ["/index.json", "/missing.json"]))
+      assert from == "the Mydia plugin index"
+    end
+
+    test "reports :empty when the source lists nothing", %{bypass: bypass, keys: keys} do
+      serve_signed(bypass, "/empty.json", %{"version" => 2, "plugins" => []}, keys)
+
+      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 1} =
+               Index.browse([], browse_opts([source(bypass, "/empty.json", keys)]))
+    end
+
+    test "keeps entries from a working source when another fails", %{
+      bypass: bypass,
+      src: src,
+      keys: keys
+    } do
+      Bypass.stub(bypass, "GET", "/missing.json", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      assert %BrowseResult{
+               status: :available,
+               catalog: [_],
+               source_count: 2,
+               failed_count: 1,
+               error: error
+             } = Index.browse([], browse_opts([src, source(bypass, "/missing.json", keys)]))
 
       assert error =~ "HTTP 404"
     end

@@ -8,6 +8,13 @@
       updates={@updates}
     />
 
+    <div class="p-4 sm:p-6 pt-0 sm:pt-0">
+      <.live_component
+        module={MydiaWeb.AdminPluginsLive.SourcesComponent}
+        id="plugin-sources-card"
+      />
+    </div>
+
     <%!-- Store modal: always opens on Browse store; hidden while an approval is open --%>
     <%= if @store_open? and is_nil(@approval) do %>
       <MydiaWeb.AdminPluginsLive.Components.store_modal browse={@browse} />
