@@ -180,4 +180,39 @@ void main() {
     await proxy.stop(playback);
     expect(proxy.isRunning, isFalse);
   });
+
+  test('joinTarget waits for the bind rather than claiming a port-0 proxy',
+      () async {
+    final starting = proxy.start(owner: playback, targetPeer: 'home-peer');
+
+    expect(proxy.joinTarget(download), isFalse);
+    expect(proxy.isRunning, isFalse);
+    expect(proxy.port, 0);
+
+    await starting;
+    expect(proxy.joinTarget(download), isTrue);
+
+    await proxy.stop(playback);
+    expect(proxy.isRunning, isTrue);
+    await proxy.stop(download);
+    expect(proxy.isRunning, isFalse);
+  });
+
+  test('concurrent starts for one target share a single bound server',
+      () async {
+    await Future.wait([
+      proxy.start(owner: playback, targetPeer: 'home-peer'),
+      proxy.start(owner: download, targetPeer: 'home-peer'),
+    ]);
+    final port = proxy.port;
+    expect(port, isNot(0));
+
+    await proxy.stop(playback);
+    expect(proxy.isRunning, isTrue);
+    expect(proxy.port, port);
+    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+
+    await proxy.stop(download);
+    expect(proxy.isRunning, isFalse);
+  });
 }

@@ -140,9 +140,9 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     if (_server != null) return;
 
-    // Bind to loopback on ephemeral port
+    // Concurrent starts share one bind; each rolls back only its own claim.
     try {
-      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      await (_binding ??= _bindServer());
     } catch (_) {
       // Nothing is serving, so nothing should still be registered.
       _targets[target]?.owners.remove(owner);
@@ -152,21 +152,40 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       }
       rethrow;
     }
-    debugPrint('[LocalProxy] Started on http://127.0.0.1:${_server!.port}');
+  }
 
-    _server!.listen((HttpRequest request) {
-      _handleRequest(request);
-    });
+  /// The bind every concurrent [start] is waiting on, if one is in flight.
+  Future<void>? _binding;
+
+  Future<void> _bindServer() async {
+    try {
+      // Bind to loopback on ephemeral port
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      if (_targets.isEmpty) {
+        // Torn down while binding: nothing wants this server any more.
+        await server.close(force: true);
+        return;
+      }
+      _server = server;
+      debugPrint('[LocalProxy] Started on http://127.0.0.1:${server.port}');
+      server.listen((HttpRequest request) {
+        _handleRequest(request);
+      });
+    } finally {
+      _binding = null;
+    }
   }
 
   /// Holds [target] as it is already configured, without re-targeting it.
   ///
-  /// Returns false, holding nothing, when [target] is not being served. Unlike
+  /// Returns false, holding nothing, when [target] is not being served, which
+  /// includes the window while the first [start] is still binding: a caller
+  /// that joined then would build a URL for port 0. Unlike
   /// [start] this never changes the target's peer or token, for callers whose
   /// own copy of either may be stale.
   bool joinTarget(Object owner, {String target = MediaProxy.homeTarget}) {
     final entry = _targets[target];
-    if (entry == null) return false;
+    if (_server == null || entry == null) return false;
     entry.owners.add(owner);
     acquireLease(owner);
     return true;
