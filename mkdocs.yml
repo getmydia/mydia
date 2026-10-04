@@ -148,6 +148,7 @@ nav:
           - plugins/how-to/publish-a-source.md
       - Reference:
           - plugins/reference/manifest.md
+          - plugins/reference/plugin-source-format.md
           - plugins/reference/events.md
           - plugins/reference/capabilities.md
           - plugins/reference/limits.md
