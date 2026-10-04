@@ -154,7 +154,9 @@ String? appRedirect({
   final isPlayerRoute = location.startsWith('/player');
   // Reached from the login screen's "Connect another server instead" and
   // "Show hidden servers" (Manage servers, after the unlock screen).
-  final isAddSourceRoute = location.startsWith('/sources');
+  final isSignedOutSourcesRoute = location == '/sources/add' ||
+      location.startsWith('/sources/add/') ||
+      location == '/sources/manage';
   // Third-party server screens, and the screens that manage them.
   final isSourceRoute =
       location.startsWith('/s/') || location.startsWith('/sources');
@@ -162,7 +164,7 @@ String? appRedirect({
   if (authStatus == AuthStatus.unauthenticated &&
       !isLoginRoute &&
       !isUnlockRoute &&
-      !isAddSourceRoute) {
+      !isSignedOutSourcesRoute) {
     // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
     if (sourcesLoading) return null;
     if (thirdParty.isNotEmpty) {

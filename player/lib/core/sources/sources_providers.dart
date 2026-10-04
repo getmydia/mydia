@@ -109,15 +109,19 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
 
   /// "Forgot PIN": every account with a locked or hidden server goes, with
   /// its tokens. Nothing that was out of sight becomes visible.
-  Future<void> removeLockedAccounts() async {
-    final ids = [
-      for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
-        if (r.serverLocks.isNotEmpty) r.account.id,
-    ];
-    for (final id in ids) {
-      await removeAccount(id);
-    }
-  }
+  ///
+  /// Runs as one queued write, so a lock still queued ahead of it is in the
+  /// snapshot it reads.
+  Future<void> removeLockedAccounts() => _serialise(() async {
+        final locked = [
+          for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+            if (r.serverLocks.isNotEmpty) r,
+        ];
+        for (final record in locked) {
+          await _write((store) => store.removeAccount(record.account.id));
+          await ref.read(sourceSecretsProvider).deleteAll(record);
+        }
+      });
 
   Future<void> updateServers(
     String accountId,

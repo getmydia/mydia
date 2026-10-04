@@ -120,5 +120,17 @@ void main() {
       await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
       expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
     });
+
+    test('removeLockedAccounts sees a lock still queued ahead of it', () async {
+      final store = InMemorySourceStore();
+      await store.putAccount(plexRecord());
+      final c = _container(store);
+      await c.read(sourceRecordsProvider.future);
+      final notifier = c.read(sourceRecordsProvider.notifier);
+      final lock = notifier.setServerLock('acc1', 'abc123', SourceLock.locked);
+      final removal = notifier.removeLockedAccounts();
+      await Future.wait([lock, removal]);
+      expect((await store.load()).accounts, isEmpty);
+    });
   });
 }

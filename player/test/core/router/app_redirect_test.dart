@@ -36,6 +36,7 @@ void main() {
   test('the add-server flow is reachable from the login screen', () {
     expect(go(AuthStatus.unauthenticated, '/sources/add'), isNull);
     expect(go(AuthStatus.unauthenticated, '/sources/add/plex'), isNull);
+    expect(go(AuthStatus.unauthenticated, '/sources/manage'), isNull);
   });
 
   group('with Plex or Stash and no Mydia', () {
