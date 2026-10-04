@@ -33,8 +33,9 @@ window repeats the warning that the plugin comes from outside the Mydia index.
 
 ## Read the sources table
 
-The card lists the official **Mydia plugin index** and each source you added,
-with its URL, the key fingerprint, how many plugins it lists and its status. An
+The card lists the **Mydia plugin index**, marked with an **Official** badge,
+and each source you added. The columns are **Name**, **URL**, **Key** (the
+signing key fingerprint), **Plugins** (how many it lists) and **Status**. An
 error from the last refresh, such as a signature that no longer verifies, shows
 in the **Status** column.
 

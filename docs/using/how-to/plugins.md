@@ -78,7 +78,7 @@ allowed on their own **Integrations** page, under **Plugin permissions**.
 
 ## Update a plugin
 
-Mydia checks every source for newer versions once a day at 07:00 server time. A
+Mydia checks every source for newer versions once a day at 07:00 UTC. A
 plugin with a newer version gets an **update available** badge.
 
 1. Click **Browse store** and find the plugin.
