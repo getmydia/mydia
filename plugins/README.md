@@ -65,21 +65,18 @@ A guest built with a too-new Rust fails `Wasmex.Components.Component.new`, and
 a newer Mydia host (incompatible plugin contract)". The message points at the
 host and manifest rather than at the real cause.
 
-nix pins Rust via `rust-bin.stable.latest`, frozen by `flake.lock` at 1.96, while
-CI's `dtolnay/rust-toolchain@stable` and the Dockerfiles'
-`rustup --default-toolchain stable` fetched bleeding-edge stable at run time.
-Guests that validated green locally under nix at 0.2.6 went red in CI at 0.2.9.
+The Rust version is pinned in one place, `rust-toolchain.toml`. devenv, the
+Android nix shell, the `Dockerfile` and cargokit all read it, and the "Guard the
+Rust toolchain pin" step in `.github/workflows/ci.yml` fails the build if another
+file pins a version. The file's header explains what a `channel` bump moves on
+both the guest and host side. Re-run the plugin tests after any bump.
 
-Keep the Rust version pinned and in sync across all four guest-building toolchain
-sources: `nix/devShells/flake-module.nix` (the source of truth),
-`.github/workflows/ci.yml` (three `dtolnay/rust-toolchain@<ver>` steps), and
-`Dockerfile`, `Dockerfile.e2e` and `Dockerfile.dev` (`--default-toolchain <ver>`).
-Bump them together when nix moves.
-
-To diagnose, this shows the emitted WASI version:
+To diagnose, this shows the emitted WASI version. Run it inside the devenv shell,
+which provides `wasm-tools` (`devenv.nix`):
 
 ```bash
-nix develop .#rust -c bash -c 'cd plugins/<g> && cargo build --release --target wasm32-wasip2 && wasm-tools component wit target/wasm32-wasip2/release/<g>.wasm | grep wasi'
+cd plugins/<g> && cargo build --release --target wasm32-wasip2 \
+  && wasm-tools component wit target/wasm32-wasip2/release/<g>.wasm | grep wasi
 ```
 
 Raising the ceiling means bumping wasmex past 0.15.1.
