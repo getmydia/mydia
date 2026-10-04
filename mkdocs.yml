@@ -111,6 +111,7 @@ nav:
           - using/how-to/monitoring-with-prometheus.md
           - using/how-to/nixos.md
           - using/how-to/install-player-linux.md
+          - using/how-to/connect-other-servers.md
           - using/how-to/remote-access.md
           - using/how-to/beta-builds.md
       - Reference:
