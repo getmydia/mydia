@@ -22,6 +22,44 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   def ungranted_summary(capabilities),
     do: capabilities |> CapabilitySummary.flat_labels() |> Enum.join(", ")
 
+  # Below this a two-line clamp never hides anything, so no toggle is shown.
+  @description_toggle_chars 120
+
+  @doc """
+  A plugin's description, clamped to two lines with a client-side More/Less
+  toggle when it is long enough to be clipped. Renders nothing without text.
+  The text is manifest free text, so HEEx escapes it like any other value.
+  """
+  attr :id, :string, required: true
+  attr :text, :string, default: nil
+
+  def plugin_description(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :toggle?,
+        is_binary(assigns.text) and String.length(assigns.text) > @description_toggle_chars
+      )
+
+    ~H"""
+    <div :if={is_binary(@text) and @text != ""} id={@id} class="text-sm text-base-content/70">
+      <p id={"#{@id}-text"} class="line-clamp-2 whitespace-pre-line">{@text}</p>
+      <button
+        :if={@toggle?}
+        type="button"
+        id={"#{@id}-toggle"}
+        class="link link-hover text-xs"
+        phx-click={
+          JS.toggle_class("line-clamp-2", to: "##{@id}-text")
+          |> JS.toggle(to: "##{@id}-toggle > span", display: "inline")
+        }
+      >
+        <span>More</span><span class="hidden">Less</span>
+      </button>
+    </div>
+    """
+  end
+
   @doc """
   Renders the Plugins tab: the intro line and one compact summary row per
   installed plugin, with provenance and lifecycle actions. The store lives in
@@ -185,6 +223,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             needs re-approval
           </span>
         </div>
+        <.plugin_description id={"plugin-description-#{@plugin.slug}"} text={@plugin.description} />
         <p :if={@plugin.network_hosts != []} class="text-xs text-base-content/60 mt-1">
           <.icon name="hero-globe-alt" class="w-3 h-3 inline" />
           Can contact: {Enum.join(@plugin.network_hosts, ", ")}
@@ -263,16 +302,21 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           >
             Logs
           </.button>
-          <.button
-            id={"remove-#{@plugin.slug}"}
-            class="btn btn-ghost btn-sm join-item text-error"
-            phx-click="remove"
-            phx-value-slug={@plugin.slug}
-            data-confirm={"Remove #{@plugin.name}?"}
-          >
-            <.icon name="hero-trash" class="w-4 h-4" />
-          </.button>
         </div>
+
+        <%!-- Outside the join so it survives pending approval: a revoked
+              plugin is pending again, and removing it must stay possible. --%>
+        <.button
+          id={"remove-#{@plugin.slug}"}
+          class="btn btn-ghost btn-sm text-error"
+          phx-click="remove"
+          phx-value-slug={@plugin.slug}
+          data-confirm={"Remove #{@plugin.name}?"}
+          aria-label={"Remove #{@plugin.name}"}
+          title="Remove"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
+        </.button>
       </div>
     </div>
     """
@@ -353,9 +397,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             Third-party · {@item.entry.source_name}
           </span>
         </div>
-        <p :if={@item.entry.description} class="text-sm text-base-content/70 truncate">
-          {@item.entry.description}
-        </p>
+        <.plugin_description id={"catalog-description-#{@key}"} text={@item.entry.description} />
         <p :if={@item.state == :other_source} class="text-xs text-base-content/60">
           Installed from {@item.installed_from}
         </p>
@@ -508,6 +550,13 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     <div id="detail-modal" class="modal modal-open">
       <div class="modal-box max-w-2xl">
         <h3 class="text-lg font-bold">{@detail.name}</h3>
+        <p
+          :if={@detail.description}
+          id="detail-description"
+          class="text-sm text-base-content/70 mt-1 whitespace-pre-line"
+        >
+          {@detail.description}
+        </p>
 
         <div class="mt-4">
           <h4 class="font-semibold mb-2">Granted capabilities</h4>

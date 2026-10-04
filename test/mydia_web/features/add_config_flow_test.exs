@@ -207,7 +207,7 @@ defmodule MydiaWeb.Features.AddConfigFlowTest do
   end
 
   # Sets the library select's value directly rather than driving a native
-  # `<select>` through Wallaby's Query.select/Query.option: the "Root Folder"
+  # `<select>` through Wallaby's Query.select/Query.option: the "Library"
   # label sits beside the select as a sibling, not wrapped around it, so
   # there is no `<label for>` association for Query.select to resolve by
   # text. LiveView reads the form's live DOM value at submit time, not at

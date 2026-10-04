@@ -40,6 +40,14 @@ defmodule MydiaWeb.AddMediaComponentsTest do
 
   defp document(html), do: LazyHTML.from_fragment(html)
 
+  defp option_text(html, id) do
+    document(html)
+    |> LazyHTML.query(~s(select[name="config[library_path_id]"] option[value="#{id}"]))
+    |> LazyHTML.text()
+    |> to_string()
+    |> String.trim()
+  end
+
   describe "add_config_modal/1" do
     test "renders nothing but a closed dialog when config is nil" do
       html = render_modal(%{config: nil, quality_profiles: []})
@@ -86,28 +94,48 @@ defmodule MydiaWeb.AddMediaComponentsTest do
       assert selected == ["lib-1"]
     end
 
-    test "labels each library with its basename before its full path" do
-      # "/media/movies" cannot tell this apart from rendering the path alone:
-      # its own basename ("movies") is already a substring of the full path,
-      # so `html =~ "movies"` would pass even if Path.basename/1 were never
-      # called. "/srv/vault/cinema" cannot fake a pass that way: "cinema" is
-      # not a substring of the path's directory part ("/srv/vault"), so
-      # asserting basename-then-path only succeeds if the option's rendered
-      # text actually leads with the extracted basename.
+    test "labels each library with its name and no path" do
+      named = %{library("lib-1", "/srv/vault/cinema") | name: "Feature Films"}
+
       html =
         render_modal(%{
-          config: config(%{libraries: [library("lib-1", "/srv/vault/cinema")]}),
+          config: config(%{libraries: [named, library("lib-2", "/srv/vault/shorts")]}),
           quality_profiles: []
         })
 
-      option_text =
+      assert option_text(html, "lib-1") == "Feature Films"
+      # An unnamed library falls back to its folder name, still without the path.
+      assert option_text(html, "lib-2") == "shorts"
+    end
+
+    test "appends the path only when two libraries share a label" do
+      html =
+        render_modal(%{
+          config:
+            config(%{
+              libraries: [library("lib-1", "/disk1/movies"), library("lib-2", "/disk2/movies")]
+            }),
+          quality_profiles: []
+        })
+
+      assert option_text(html, "lib-1") == "movies (/disk1/movies)"
+      assert option_text(html, "lib-2") == "movies (/disk2/movies)"
+    end
+
+    test "titles the field Library" do
+      html = render_modal(%{config: config(), quality_profiles: []})
+
+      label =
         document(html)
-        |> LazyHTML.query(~s(select[name="config[library_path_id]"] option[value="lib-1"]))
+        |> LazyHTML.query(
+          ~s{.form-control:has(select[name="config[library_path_id]"]) .label-text}
+        )
+        |> Enum.at(0)
         |> LazyHTML.text()
-        |> to_string()
         |> String.trim()
 
-      assert option_text == "cinema · /srv/vault/cinema"
+      assert label == "Library"
+      refute html =~ "Root Folder"
     end
 
     test "omits the season monitoring field for a movie" do

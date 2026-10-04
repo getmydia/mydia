@@ -443,6 +443,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       instances: if(multi_instance, do: Mydia.Plugins.Instances.list(config.slug), else: []),
       slug: config.slug,
       name: config.name,
+      description: description_of(config),
       version: config.version,
       source_url: config.source_url,
       plugin_source_id: config.plugin_source_id,
@@ -470,6 +471,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp capabilities_of(%{manifest: %{"capabilities" => caps}}) when is_map(caps), do: caps
   defp capabilities_of(%{granted_capabilities: caps}) when is_map(caps), do: caps
   defp capabilities_of(_), do: %{}
+
+  defp description_of(%{manifest: %{"description" => text}}) when is_binary(text) and text != "",
+    do: text
+
+  defp description_of(_), do: nil
 
   defp settings_schema_of(%{manifest: %{"settings_schema" => schema}}) when is_list(schema),
     do: schema
@@ -593,6 +599,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     %{
       slug: config.slug,
       name: config.name,
+      description: description_of(config),
       enabled: config.enabled,
       granted: config.granted_capabilities || %{},
       ungranted: Plugins.ungranted_capabilities(config),

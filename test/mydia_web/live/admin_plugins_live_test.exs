@@ -55,6 +55,21 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
     config
   end
 
+  defp seed_described_plugin(slug, name, description, opts) do
+    {:ok, config} =
+      Settings.create_plugin_config(%{
+        slug: slug,
+        name: name,
+        version: "1.0.0",
+        manifest: Map.put(manifest_map(slug, name), "description", description),
+        wasm_module: guest_wasm(),
+        granted_capabilities: Keyword.get(opts, :granted, %{}),
+        enabled: false
+      })
+
+    config
+  end
+
   # Points the store at `index_url` only. The file's setup restores
   # :runtime_config on exit.
   defp put_plugin_sources(index_url) do
@@ -788,6 +803,34 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
   end
 
   describe "lifecycle (R14)" do
+    test "a plugin awaiting approval can be removed", %{conn: conn} do
+      seed_plugin("notifier", "Notifier", [])
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#remove-notifier") |> render_click()
+
+      refute has_element?(view, "#plugin-row-notifier")
+      assert Settings.get_plugin_config_by_slug("notifier") == nil
+    end
+
+    test "a revoked plugin can be removed", %{conn: conn} do
+      seed_plugin("notifier", "Notifier",
+        enabled: true,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      view |> element("#details-notifier") |> render_click()
+      view |> element("#detail-revoke-notifier") |> render_click()
+
+      view |> element("#remove-notifier") |> render_click()
+
+      refute has_element?(view, "#plugin-row-notifier")
+      assert Settings.get_plugin_config_by_slug("notifier") == nil
+    end
+
     test "remove deletes the plugin row", %{conn: conn} do
       seed_plugin("notifier", "Notifier",
         enabled: true,
@@ -1339,6 +1382,78 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       config = Settings.get_plugin_config_by_slug("webhook-notifier")
       assert config.settings["webhook_url"] == "https://env.example.com/x"
       assert config.settings["target"] == "ntfy"
+    end
+  end
+
+  describe "descriptions" do
+    @long_description String.duplicate(
+                        "Posts a note to the household channel whenever something lands. ",
+                        4
+                      )
+
+    test "a store row shows the full description, clamped, with a toggle" do
+      browse = %BrowseResult{
+        status: :available,
+        source_count: 1,
+        catalog: [
+          %CatalogItem{
+            entry: %Entry{
+              slug: "notifier",
+              name: "Notifier",
+              version: "1.0.0",
+              description: @long_description,
+              package_url: "https://cdn.test/notifier.wasm",
+              integrity: "sha256:ab",
+              manifest: nil
+            },
+            state: :not_installed
+          }
+        ]
+      }
+
+      doc =
+        render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
+
+      text =
+        doc |> LazyHTML.query("#catalog-description-official-notifier-text") |> LazyHTML.text()
+
+      assert String.trim(text) == String.trim(@long_description)
+
+      refute doc
+             |> LazyHTML.query("#catalog-description-official-notifier-toggle")
+             |> Enum.empty?()
+    end
+
+    test "a short description has no toggle" do
+      html = render_component(&Components.plugin_description/1, id: "d", text: "Posts events.")
+
+      doc = LazyHTML.from_fragment(html)
+      refute doc |> LazyHTML.query("#d-text") |> Enum.empty?()
+      assert doc |> LazyHTML.query("#d-toggle") |> Enum.empty?()
+    end
+
+    test "no description renders nothing" do
+      html = render_component(&Components.plugin_description/1, id: "d", text: nil)
+
+      assert LazyHTML.from_fragment(html) |> LazyHTML.query("#d") |> Enum.empty?()
+    end
+
+    test "an installed row and its details show the description", %{conn: conn} do
+      seed_described_plugin("notifier", "Notifier", @long_description,
+        granted: %{"net:http" => ["discord.com"]}
+      )
+
+      {:ok, view, _} = live(conn, ~p"/admin/plugins")
+
+      assert view |> element("#plugin-description-notifier-text") |> render() =~
+               "household channel"
+
+      assert has_element?(view, "#plugin-description-notifier-toggle[phx-click]")
+
+      view |> element("#details-notifier") |> render_click()
+
+      assert view |> element("#detail-modal #detail-description") |> render() =~
+               "household channel"
     end
   end
 end
