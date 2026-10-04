@@ -86,6 +86,20 @@ void main() {
       async.elapse(const Duration(seconds: 10));
 
       expect(dialed, isEmpty);
+
+      // The budget is restored too: a peer that burned two attempts gets all
+      // three again after reconnecting.
+      failDials = true;
+      peers.onDisconnected('home');
+      async.elapse(const Duration(seconds: 5));
+      expect(dialed, hasLength(2));
+
+      peers.onConnected('home');
+      dialed.clear();
+      peers.onDisconnected('home');
+      async.elapse(const Duration(seconds: 30));
+
+      expect(dialed, hasLength(3));
     });
   });
 

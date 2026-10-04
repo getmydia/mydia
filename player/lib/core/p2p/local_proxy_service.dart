@@ -141,12 +141,35 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     if (_server != null) return;
 
     // Bind to loopback on ephemeral port
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    try {
+      _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    } catch (_) {
+      // Nothing is serving, so nothing should still be registered.
+      _targets[target]?.owners.remove(owner);
+      if (_targets[target]?.owners.isEmpty ?? false) _targets.remove(target);
+      if (!_targets.values.any((t) => t.owners.contains(owner))) {
+        releaseLease(owner);
+      }
+      rethrow;
+    }
     debugPrint('[LocalProxy] Started on http://127.0.0.1:${_server!.port}');
 
     _server!.listen((HttpRequest request) {
       _handleRequest(request);
     });
+  }
+
+  /// Holds [target] as it is already configured, without re-targeting it.
+  ///
+  /// Returns false, holding nothing, when [target] is not being served. Unlike
+  /// [start] this never changes the target's peer or token, for callers whose
+  /// own copy of either may be stale.
+  bool joinTarget(Object owner, {String target = MediaProxy.homeTarget}) {
+    final entry = _targets[target];
+    if (entry == null) return false;
+    entry.owners.add(owner);
+    acquireLease(owner);
+    return true;
   }
 
   @override
@@ -171,7 +194,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> _tearDown() async {
     // Forced. An ordinary close stops the listener and returns, but leaves
     // connections already accepted to carry on being served — by a proxy
-    // whose target peer and auth token the next few lines null out. The
+    // whose targets (peers and auth tokens) `_targets.clear()` below drops. The
     // connection open here is the video pipeline's own: mpv holds a range
     // request for the whole file, so unforced it is left waiting on a socket
     // nothing will ever answer instead of seeing its stream end.

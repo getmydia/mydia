@@ -135,4 +135,49 @@ void main() {
     expect(await get(url), HttpStatus.ok);
     expect(p2p.calls.single.peer, 'guest-peer');
   });
+
+  test('a joiner keeps the home target alive after its starter stops',
+      () async {
+    await proxy.start(
+        owner: playback, targetPeer: 'home-peer', authToken: 'home-tok');
+
+    expect(proxy.joinTarget(download), isTrue);
+    await proxy.stop(playback);
+
+    expect(proxy.isRunning, isTrue);
+    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(p2p.calls.single.peer, 'home-peer');
+    expect(p2p.calls.single.authToken, 'home-tok');
+
+    await proxy.stop(download);
+    expect(proxy.isRunning, isFalse);
+  });
+
+  test('joinTarget refuses a target that is not served, and holds nothing',
+      () async {
+    expect(proxy.joinTarget(download), isFalse);
+    expect(proxy.hasOwners, isFalse);
+
+    await proxy.start(
+        owner: playback, targetPeer: 'guest-peer', target: 'mguest');
+    expect(proxy.joinTarget(download), isFalse);
+
+    await proxy.stop(playback, target: 'mguest');
+    expect(proxy.isRunning, isFalse,
+        reason: 'a refused join must not leave a lease behind');
+  });
+
+  test('one owner holding home and a guest releases them independently',
+      () async {
+    await proxy.start(owner: playback, targetPeer: 'home-peer');
+    await proxy.start(
+        owner: playback, targetPeer: 'guest-peer', target: 'mguest');
+
+    await proxy.stop(playback, target: 'mguest');
+    expect(proxy.isRunning, isTrue);
+    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+
+    await proxy.stop(playback);
+    expect(proxy.isRunning, isFalse);
+  });
 }
