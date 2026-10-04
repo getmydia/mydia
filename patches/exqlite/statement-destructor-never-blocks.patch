@@ -1,4 +1,4 @@
-Exqlite 0.40.0: never block a scheduler in the statement destructor.
+Exqlite 0.41.0: never block a scheduler in the statement destructor.
 
 Applied to deps/exqlite by `mix deps.patch` (@dep_patches in mix.exs), which
 runs after every `mix deps.get`, so dev, CI and the Docker image all build it.
