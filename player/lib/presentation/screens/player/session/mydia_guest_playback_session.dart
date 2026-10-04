@@ -155,7 +155,7 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
       MydiaGuestStreamResolver(
         client: _client,
         proxy: _proxy,
-        owner: _owner ?? this,
+        owner: _owner,
         target: _guest.source.account.id,
       );
 }
@@ -172,7 +172,8 @@ class MydiaGuestStreamResolver implements StreamResolver {
   final LocalProxyService Function() proxy;
 
   /// Holds the proxy target: the player screen, which releases it on exit.
-  final Object owner;
+  /// Null until `prepareStreaming` has named one.
+  final Object? owner;
 
   /// The proxy target key, the guest's account id.
   final String target;
@@ -181,9 +182,14 @@ class MydiaGuestStreamResolver implements StreamResolver {
   /// repeat start re-targets with the credentials as they are now, which
   /// picks up a refreshed token.
   Future<String> _proxyBase(MydiaGuestCredentials credentials) async {
+    final holder = owner;
+    if (holder == null) {
+      // A hold keyed on anything but the screen could never be released.
+      throw StateError('A p2p stream needs the screen that will release it.');
+    }
     final service = proxy();
     await service.start(
-      owner: owner,
+      owner: holder,
       targetPeer: credentials.nodeAddr!,
       authToken: credentials.accessToken,
       target: target,
@@ -248,7 +254,11 @@ class MydiaGuestStreamResolver implements StreamResolver {
           url: viaProxy
               ? MediaRoutes.hls(base, sessionId)
               : '$base/api/v1/hls/$sessionId/index.m3u8',
-          headers: const {},
+          // The guest's HLS routes need the token too; the proxy adds its
+          // own when the bytes travel over p2p.
+          headers: viaProxy
+              ? const {}
+              : {'Authorization': 'Bearer ${credentials.accessToken}'},
           sessionId: sessionId,
         );
     }

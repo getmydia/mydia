@@ -186,7 +186,7 @@ void main() {
       'playlistMode': 'FULL',
     });
     expect(source.url, 'https://lake.example/api/v1/hls/sess-1/index.m3u8');
-    expect(source.headers, isEmpty);
+    expect(source.headers, {'Authorization': 'Bearer access'});
     await transport.endSession();
     expect(varsOf('EndStreamingSession'), {'sessionId': 'sess-1'});
   });
@@ -296,6 +296,20 @@ void main() {
         throwsA(isA<SourceException>()));
     expect(await s.subtitleContent('sub-1'), isNull);
     expect(httpRequests, isEmpty);
+  });
+
+  test('a resolver built before prepareStreaming refuses to take the proxy',
+      () async {
+    final s = open(_p2p);
+    final detail = await s.loadDetail();
+    final resolver = s.createResolver(detail, detail.versions.first);
+    await expectLater(
+        resolver.resolve(
+            const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+            fileId: 'f-m-1',
+            startAt: Duration.zero),
+        throwsStateError);
+    expect(proxy.isRunning, isFalse);
   });
 
   test('playbackSessionFor builds a guest session only with a proxy', () {
