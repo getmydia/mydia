@@ -14,6 +14,7 @@ import 'package:player/presentation/screens/show/show_detail_screen.dart';
 import 'package:player/presentation/screens/sources/source_browse_providers.dart';
 import 'package:player/presentation/screens/sources/source_error_view.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
+import 'package:player/presentation/widgets/play_button.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../presentation/screens/sources/fake_media_source.dart';
@@ -27,15 +28,26 @@ class _OrphanSeason extends FakeMediaSource {
       const ItemDetail(summary: fakeSeason);
 }
 
+class _CountingSource extends FakeMediaSource {
+  int itemCalls = 0;
+
+  @override
+  Future<ItemDetail> item(ItemRef ref) {
+    itemCalls++;
+    return super.item(ref);
+  }
+}
+
 Future<GoRouter> pumpRouterAt(
   WidgetTester tester,
   String location, {
   FakeMediaSource? fake,
+  List<RouteBase> extraRoutes = const [],
 }) async {
   final router = GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: location,
-    routes: [sourceItemRoute(), ...sourceDetailRoutes()],
+    routes: [sourceItemRoute(), ...sourceDetailRoutes(), ...extraRoutes],
   );
   addTearDown(router.dispose);
   await tester.binding.setSurfaceSize(const Size(1280, 900));
@@ -66,6 +78,33 @@ void main() {
     await pumpRouterAt(tester, '/s/$_id/show/s1');
     expect(find.byType(ShowDetailScreen), findsOneWidget);
     expect(find.text('Invented Episode 1'), findsOneWidget);
+  });
+
+  testWidgets('a source movie is refetched after the player pops',
+      (tester) async {
+    final fake = _CountingSource();
+    await pumpRouterAt(
+      tester,
+      '/s/$_id/movie/m1',
+      fake: fake,
+      extraRoutes: [
+        GoRoute(
+          path: '/s/:sourceId/player/:itemId',
+          builder: (_, __) => const Scaffold(body: Text('player stub')),
+        ),
+      ],
+    );
+    final before = fake.itemCalls;
+    expect(before, greaterThan(0));
+
+    await tester.tap(find.byType(PlayButton));
+    await tester.pumpAndSettle();
+    expect(find.text('player stub'), findsOneWidget);
+
+    rootNavigatorKey.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(MovieDetailScreen), findsOneWidget);
+    expect(fake.itemCalls, greaterThan(before));
   });
 
   testWidgets('a season opens its show on that season', (tester) async {

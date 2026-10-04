@@ -2,7 +2,9 @@
 /// GraphQL controllers; nothing here changes how they fetch or invalidate.
 library;
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
 import '../../../domain/detail/detail_target.dart';
@@ -14,6 +16,29 @@ import '../show/show_detail_controller.dart';
 import 'detail_actions.dart';
 import 'mydia_detail_mapping.dart';
 import 'source_detail_controllers.dart';
+
+/// Opens the player at [location] from a detail screen. A source item's
+/// progress changes while playing, so once the player pops everything that
+/// shows it is refetched. Mydia targets keep the player's own invalidation
+/// rules.
+Future<void> pushPlayer(
+  BuildContext context,
+  WidgetRef ref,
+  DetailTarget target,
+  String location,
+) async {
+  // Capture before the await: the screen can be gone when the player pops.
+  final container = ref.container;
+  await context.push(location);
+  // The screen under the player is paused while covered, and invalidating a
+  // paused provider flushes it in the build that resumes it, which Riverpod
+  // rejects. Let that frame finish first.
+  await WidgetsBinding.instance.endOfFrame;
+  if (!context.mounted) return;
+  if (target case SourceTarget(:final ref)) {
+    invalidateSourceDetailWrites(container, ref);
+  }
+}
 
 typedef SeasonKey = ({DetailTarget show, int seasonNumber});
 

@@ -201,10 +201,6 @@ final sourceHubsProvider =
 void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) =>
     _invalidateWrites(ref.invalidate, item);
 
-/// [invalidateSourceItemWrites] for a provider or notifier.
-void invalidateSourceRefWrites(Ref ref, ItemRef item) =>
-    _invalidateWrites(ref.invalidate, item);
-
 /// [invalidateSourceItemWrites] through a container, for a write that
 /// finishes after its notifier is disposed: a `Ref` throws then, a container
 /// does not.

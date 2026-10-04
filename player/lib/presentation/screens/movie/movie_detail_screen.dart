@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -233,7 +232,7 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildContent(BuildContext context, WidgetRef ref, MovieView movie) {
     return CustomScrollView(
       slivers: [
-        _buildHeroSection(context, movie),
+        _buildHeroSection(context, ref, movie),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.only(top: 24),
@@ -442,7 +441,8 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeroSection(BuildContext context, MovieView movie) {
+  Widget _buildHeroSection(
+      BuildContext context, WidgetRef ref, MovieView movie) {
     return detailHeroAppBar(
       context: context,
       expandedHeight: 380,
@@ -516,7 +516,7 @@ class MovieDetailScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 16),
-                _buildHeroPlayControl(context, movie),
+                _buildHeroPlayControl(context, ref, movie),
               ],
             ),
           ),
@@ -529,10 +529,19 @@ class MovieDetailScreen extends ConsumerWidget {
   /// in this file) for readability: the overlay `Row` it lives in is already
   /// deeply nested inside the `background` `Stack` passed to
   /// `detailHeroAppBar`.
-  Widget _buildHeroPlayControl(BuildContext context, MovieView movie) {
+  Widget _buildHeroPlayControl(
+    BuildContext context,
+    WidgetRef ref,
+    MovieView movie,
+  ) {
     return HeroPlayControl(
       files: movie.files,
-      onFileSelected: (file) => context.push(moviePlayerLocation(movie, file)),
+      onFileSelected: (file) => pushPlayer(
+        context,
+        ref,
+        target,
+        moviePlayerLocation(movie, file),
+      ),
     );
   }
 }

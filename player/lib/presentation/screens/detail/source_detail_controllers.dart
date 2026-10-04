@@ -39,13 +39,20 @@ T _capability<T extends Object>(Ref ref, ItemRef item) {
 /// still works if the notifier was disposed while the write was in flight.
 void Function() _invalidator(Ref ref, ItemRef item) {
   final container = ref.container;
-  return () {
-    invalidateSourceContainerWrites(container, item);
-    container.invalidate(sourceMovieProvider);
-    container.invalidate(sourceShowProvider);
-    container.invalidate(sourceSeasonProvider);
-    container.invalidate(sourceEpisodeProvider);
-  };
+  return () => invalidateSourceDetailWrites(container, item);
+}
+
+/// Progress or watched state of [item] changed, here or in the player: its
+/// own item, its season and show, the detail notifiers built on them, and the
+/// home rows. The item and detail families are dropped whole because the
+/// season and show of [item] are not known without fetching them.
+void invalidateSourceDetailWrites(ProviderContainer container, ItemRef item) {
+  invalidateSourceContainerWrites(container, item);
+  container.invalidate(sourceItemProvider);
+  container.invalidate(sourceMovieProvider);
+  container.invalidate(sourceShowProvider);
+  container.invalidate(sourceSeasonProvider);
+  container.invalidate(sourceEpisodeProvider);
 }
 
 Progress? _progressWithWatched(Progress? existing, bool watched) {
