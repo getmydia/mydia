@@ -990,17 +990,42 @@ defmodule Mydia.PluginsTest do
   end
 
   describe "detect_updates/2 (R14)" do
-    defp config(slug, version), do: %Mydia.Settings.PluginConfig{slug: slug, version: version}
+    defp config(slug, version, source_id \\ nil) do
+      %Mydia.Settings.PluginConfig{
+        slug: slug,
+        version: version,
+        source_url: "https://plugins.mydia.dev/packages/#{slug}/#{version}.wasm",
+        plugin_source_id: source_id
+      }
+    end
 
-    defp avail(slug, version) do
+    defp avail(slug, version, source_id \\ nil) do
       %Entry{
         slug: slug,
         name: slug,
         version: version,
         package_url: "https://x/#{slug}.wasm",
         integrity: "sha256:ab",
-        manifest: manifest!()
+        manifest: manifest!(),
+        source_id: source_id
       }
+    end
+
+    test "a third-party catalog cannot update an official plugin" do
+      assert [] =
+               Plugins.detect_updates([config("p", "1.0.0")], [
+                 avail("p", "9.0.0", Ecto.UUID.generate())
+               ])
+    end
+
+    test "a sourced plugin updates only from its own source" do
+      mine = Ecto.UUID.generate()
+
+      assert [%{latest: "1.1.0"}] =
+               Plugins.detect_updates([config("p", "1.0.0", mine)], [
+                 avail("p", "9.0.0"),
+                 avail("p", "1.1.0", mine)
+               ])
     end
 
     test "flags a slug with a newer available version" do

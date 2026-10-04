@@ -208,8 +208,9 @@ defmodule Mydia.Plugins.Index do
 
   @doc """
   Fetches every source and returns each listed plugin as a `CatalogItem`,
-  classified against `installed`: anything carrying `:slug`, `:version` and
-  `:source_url`, normally the admin page's installed rows.
+  classified against `installed`: anything carrying `:slug`, `:version`,
+  `:source_url` and `:plugin_source_id`, normally the admin page's installed
+  rows.
 
   A failing source records the first error message but does not discard the
   entries of sources that answered. `opts` accepts `:sources` (overrides
@@ -220,11 +221,11 @@ defmodule Mydia.Plugins.Index do
     {sources, fetch_opts} = Keyword.pop_lazy(opts, :sources, &sources/0)
     installed_by_slug = Map.new(installed, &{&1.slug, &1})
 
-    {entries, error} =
-      Enum.reduce(sources, {[], nil}, fn source, {acc, err} ->
+    {entries, error, failed} =
+      Enum.reduce(sources, {[], nil, 0}, fn source, {acc, err, failed} ->
         case fetch_catalog(source, fetch_opts) do
-          {:ok, found} -> {acc ++ found, err}
-          {:error, reason} -> {acc, err || describe_error(reason)}
+          {:ok, found} -> {acc ++ found, err, failed}
+          {:error, reason} -> {acc, err || describe_error(reason), failed + 1}
         end
       end)
 
@@ -232,6 +233,7 @@ defmodule Mydia.Plugins.Index do
       catalog: Enum.map(entries, &catalog_item(&1, Map.get(installed_by_slug, &1.slug))),
       status: browse_status(entries),
       error: error,
+      failed_count: failed,
       source_count: length(sources)
     }
   end
@@ -374,28 +376,36 @@ defmodule Mydia.Plugins.Index do
   defp catalog_item(entry, nil), do: %CatalogItem{entry: entry, state: :not_installed}
 
   defp catalog_item(entry, installed) do
+    state = install_state(entry, installed)
+
     %CatalogItem{
       entry: entry,
-      state: install_state(entry, installed),
-      installed_version: installed.version
+      state: state,
+      installed_version: installed.version,
+      installed_from:
+        if(state == :other_source, do: Sources.origin_name(Sources.origin(installed)))
     }
   end
 
-  # A store version usually lives at a new, versioned package URL, so "installed
-  # from an index" is anything that is neither bundled nor sideloaded.
-  defp install_state(_entry, %{source_url: "bundled"}), do: :bundled
-
-  defp install_state(entry, %{source_url: source_url, version: version}) do
-    cond do
-      sideloaded?(source_url) -> :replace
-      entry.version == version -> :installed
-      version_newer?(entry.version, version) -> :update
-      true -> :replace
+  # A store version usually lives at a new, versioned package URL, so origin is
+  # decided by `Sources.origin/1`, not by the package URL.
+  defp install_state(entry, installed) do
+    case Sources.origin(installed) do
+      :bundled -> :bundled
+      :sideloaded -> :replace
+      origin -> version_state(origin == entry_origin(entry), entry, installed)
     end
   end
 
-  defp sideloaded?("file://" <> _), do: true
-  defp sideloaded?(_source_url), do: false
+  defp version_state(false, _entry, _installed), do: :other_source
+
+  defp version_state(true, entry, installed) do
+    cond do
+      entry.version == installed.version -> :installed
+      version_newer?(entry.version, installed.version) -> :update
+      true -> :replace
+    end
+  end
 
   defp describe_error(%{__exception__: true} = error), do: Exception.message(error)
   defp describe_error(other), do: inspect(other)

@@ -9,6 +9,7 @@ defmodule Mydia.Plugins.Index.BrowseResult do
 
   `error` is set when a source failed. It can accompany either status, because
   one failing source does not hide the entries of the sources that answered.
+  `failed_count` is the number of sources that could not be fetched or verified.
   """
 
   alias Mydia.Plugins.Index.CatalogItem
@@ -19,8 +20,9 @@ defmodule Mydia.Plugins.Index.BrowseResult do
           catalog: [CatalogItem.t()],
           status: status(),
           error: String.t() | nil,
-          source_count: non_neg_integer()
+          source_count: non_neg_integer(),
+          failed_count: non_neg_integer()
         }
 
-  defstruct catalog: [], status: :empty, error: nil, source_count: 0
+  defstruct catalog: [], status: :empty, error: nil, source_count: 0, failed_count: 0
 end

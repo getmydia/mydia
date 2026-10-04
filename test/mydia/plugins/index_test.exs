@@ -34,19 +34,6 @@ defmodule Mydia.Plugins.IndexTest do
     }
   end
 
-  defp catalog_json(package_url, integrity) do
-    Jason.encode!(%{
-      "version" => 1,
-      "plugins" => [
-        %{
-          "package_url" => package_url,
-          "integrity" => integrity,
-          "manifest" => manifest_json()
-        }
-      ]
-    })
-  end
-
   defp loopback, do: fn _ -> {:ok, [{127, 0, 0, 1}]} end
 
   setup do
@@ -299,81 +286,112 @@ defmodule Mydia.Plugins.IndexTest do
   describe "browse/2" do
     alias Mydia.Plugins.Index.BrowseResult
 
-    defp browse_opts(bypass, paths) do
-      [
-        sources: Enum.map(paths, &"http://allowed.test:#{bypass.port}#{&1}"),
-        allow_private: true,
-        resolver: loopback()
-      ]
+    defp browse_opts(sources), do: [sources: sources] ++ gate_opts()
+
+    setup %{bypass: bypass} do
+      keys = keypair()
+      serve_signed(bypass, "/index.json", catalog("https://x.test/p.wasm", "sha256:ab"), keys)
+
+      {:ok, row} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://fixture.test/index.json",
+          public_key: keys.public
+        })
+
+      %{keys: keys, src: source(bypass, "/index.json", keys, row.id), src_id: row.id}
     end
 
-    defp serve(bypass, path, body) do
-      Bypass.expect_once(bypass, "GET", path, fn conn -> Plug.Conn.resp(conn, 200, body) end)
-    end
-
-    test "lists every entry, installed or not", %{bypass: bypass} do
-      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
-
-      installed = [
-        %PluginConfig{
-          slug: "webhook-notifier",
-          version: "1.0.0",
-          source_url: "https://cdn.test/p-1.0.0.wasm"
-        }
-      ]
-
-      assert %BrowseResult{status: :available, error: nil, source_count: 1, catalog: [item]} =
-               Index.browse(installed, browse_opts(bypass, ["/index.json"]))
+    test "lists every entry, installed or not", %{src: src} do
+      assert %BrowseResult{
+               status: :available,
+               error: nil,
+               failed_count: 0,
+               source_count: 1,
+               catalog: [item]
+             } = Index.browse([], browse_opts([src]))
 
       assert item.entry.slug == "webhook-notifier"
     end
 
-    test "classifies each entry against what is installed", %{bypass: bypass} do
-      Bypass.stub(bypass, "GET", "/index.json", fn conn ->
-        Plug.Conn.resp(conn, 200, catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
-      end)
+    test "classifies each entry against what is installed from the same source", %{
+      src: src,
+      src_id: id
+    } do
+      # The catalog lists webhook-notifier at 1.0.0, from source `id`.
+      ours = fn version ->
+        %PluginConfig{
+          slug: "webhook-notifier",
+          version: version,
+          source_url: "https://x.test/p.wasm",
+          plugin_source_id: id
+        }
+      end
 
-      # The catalog lists webhook-notifier at 1.0.0.
       cases = [
-        {nil, :not_installed, nil},
-        {{"bundled", "0.9.0"}, :bundled, "0.9.0"},
-        {{"https://cdn.test/p-1.0.0.wasm", "1.0.0"}, :installed, "1.0.0"},
-        {{"https://cdn.test/p-0.9.0.wasm", "0.9.0"}, :update, "0.9.0"},
-        {{"https://cdn.test/p-2.0.0.wasm", "2.0.0"}, :replace, "2.0.0"},
-        {{"file:///home/op/p.wasm", "1.0.0"}, :replace, "1.0.0"}
+        {nil, :not_installed},
+        {%PluginConfig{slug: "webhook-notifier", version: "0.9.0", source_url: "bundled"},
+         :bundled},
+        {ours.("1.0.0"), :installed},
+        {ours.("0.9.0"), :update},
+        {ours.("2.0.0"), :replace},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "1.0.0",
+           source_url: "file:///home/op/p.wasm"
+         }, :replace},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "0.9.0",
+           source_url: "https://plugins.mydia.dev/packages/webhook-notifier/0.9.0.wasm"
+         }, :other_source},
+        {%PluginConfig{
+           slug: "webhook-notifier",
+           version: "0.9.0",
+           source_url: "https://gone.test/p.wasm"
+         }, :other_source}
       ]
 
-      for {installed, state, installed_version} <- cases do
-        configs =
-          case installed do
-            nil -> []
-            {url, v} -> [%PluginConfig{slug: "webhook-notifier", version: v, source_url: url}]
-          end
-
-        assert %BrowseResult{catalog: [item]} =
-                 Index.browse(configs, browse_opts(bypass, ["/index.json"]))
-
-        assert {item.state, item.installed_version} == {state, installed_version},
-               "installed as #{inspect(installed)}"
+      for {installed, state} <- cases do
+        configs = if installed, do: [installed], else: []
+        assert %BrowseResult{catalog: [item]} = Index.browse(configs, browse_opts([src]))
+        assert item.state == state, "installed as #{inspect(installed)}"
       end
     end
 
-    test "reports :empty when the source lists nothing", %{bypass: bypass} do
-      serve(bypass, "/index.json", Jason.encode!(%{"version" => 1, "plugins" => []}))
+    test "names the other source for :other_source", %{src: src} do
+      official = %PluginConfig{
+        slug: "webhook-notifier",
+        version: "0.9.0",
+        source_url: "https://plugins.mydia.dev/packages/w/0.9.0.wasm"
+      }
 
-      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 1} =
-               Index.browse([], browse_opts(bypass, ["/index.json"]))
+      assert %BrowseResult{catalog: [%{state: :other_source, installed_from: from}]} =
+               Index.browse([official], browse_opts([src]))
+
+      assert from == "the Mydia plugin index"
     end
 
-    test "keeps entries from a working source when another fails", %{bypass: bypass} do
-      serve(bypass, "/index.json", catalog_json("http://allowed.test/p.wasm", "sha256:ab"))
+    test "reports :empty when the source lists nothing", %{bypass: bypass, keys: keys} do
+      serve_signed(bypass, "/empty.json", %{"version" => 2, "plugins" => []}, keys)
 
-      Bypass.expect_once(bypass, "GET", "/missing.json", fn conn ->
-        Plug.Conn.resp(conn, 404, "")
-      end)
+      assert %BrowseResult{status: :empty, catalog: [], error: nil, source_count: 1} =
+               Index.browse([], browse_opts([source(bypass, "/empty.json", keys)]))
+    end
 
-      assert %BrowseResult{status: :available, catalog: [_], source_count: 2, error: error} =
-               Index.browse([], browse_opts(bypass, ["/index.json", "/missing.json"]))
+    test "keeps entries from a working source when another fails", %{
+      bypass: bypass,
+      src: src,
+      keys: keys
+    } do
+      Bypass.stub(bypass, "GET", "/missing.json", fn conn -> Plug.Conn.resp(conn, 404, "") end)
+
+      assert %BrowseResult{
+               status: :available,
+               catalog: [_],
+               source_count: 2,
+               failed_count: 1,
+               error: error
+             } = Index.browse([], browse_opts([src, source(bypass, "/missing.json", keys)]))
 
       assert error =~ "HTTP 404"
     end
