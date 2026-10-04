@@ -1,7 +1,7 @@
 # Bundled plugin guests
 
 Guests are wasip2 **components** (WIT `mydia:plugin@1.6.0`, built on the
-`mydia-plugin-sdk` crate and the `#[mydia::plugin]` macro), which the host runs
+`mydia-plugin-sdk` crate and the `#[mydia_plugin_sdk::plugin]` macro), which the host runs
 via `Wasmex.Components.*`. They migrated from `wasm32-unknown-unknown` core
 modules.
 
@@ -24,35 +24,33 @@ than service-named, and the host renders all UI from declarative steps.
 | `webhook_notifier` | Discord, ntfy and custom webhooks on library events. |
 | `plex` | Plex media servers: sign-in, server discovery, library refresh, two-way watched sync, Plex Home profiles. Multi-instance. |
 
-## Build them via nix, not the Docker dev container
+## Building the guests
 
-The running Docker dev container only has `wasm32-unknown-unknown` installed. The
-`Dockerfile.dev` `rustup target add wasm32-wasip2` change needs an image rebuild
-to take effect. So `./dev mix compile` graceful-skips the `:plugins` compiler and
-warns that the artifact is stale.
+Inside the devenv shell the Rust toolchain already has `wasm32-wasip2` and
+`wasm-tools`. `./dev mix compile` runs the `:plugins` Mix compiler
+(`lib/mix/tasks/compile/plugins.ex`), which builds every crate under `plugins/`
+and writes `priv/plugins/<name>.wasm`, so the normal dev loop needs nothing
+extra. If `cargo` or the `wasm32-wasip2` target is missing, the compiler skips
+with a loud warning and leaves any existing artifact in place.
 
-To produce a component artifact for tests, build via nix and let the placed
-`priv/plugins/<name>.wasm` persist, since Docker skips and keeps it:
-
-Run this from the repository root:
+To build one guest by hand, from the repository root inside the devenv shell:
 
 ```bash
-nix develop .#default -c cargo build --release --target wasm32-wasip2 \
+cargo build --release --target wasm32-wasip2 \
   --manifest-path plugins/<name>/Cargo.toml
 cp plugins/<name>/target/wasm32-wasip2/release/<name>.wasm \
   priv/plugins/<name>.wasm   # gitignored; CI rebuilds it
 ```
 
-Both `nix develop .#default` and `.#rust` have `wasm32-wasip2` and `wasm-tools`.
 Host and sandbox tests use checked-in component fixtures under
 `test/support/fixtures/plugins/*/`, because WAT cannot express components.
 
-Two accepted residuals under Wasmex 0.15 component stores, documented in the
-`lib/mydia/plugins/host.ex` moduledoc: there is no fuel or CPU metering, and
-`StoreLimits` caps memory only at instantiation rather than on runtime grow. A
-guest that writes to denied stderr on a trap trips a wasmtime-wasi sync
-`block_on` panic, so use `panic = "abort"` or `process::abort()` to make guests
-trap cleanly.
+The runtime limits, and what the sandbox does and does not enforce, are listed
+in [Limits](../docs/plugins/reference/limits.md); the reasoning is in
+[The plugin model](../docs/plugins/explanation/plugin-model.md). One guest-side
+trap to know about: a guest that writes to denied stderr on a trap trips a
+wasmtime-wasi sync `block_on` panic, so use `panic = "abort"` or
+`process::abort()` to make guests trap cleanly.
 
 ## The guest WASI version is pinned to the Rust toolchain
 
@@ -84,7 +82,7 @@ To diagnose, this shows the emitted WASI version:
 nix develop .#rust -c bash -c 'cd plugins/<g> && cargo build --release --target wasm32-wasip2 && wasm-tools component wit target/wasm32-wasip2/release/<g>.wasm | grep wasi'
 ```
 
-Raising the ceiling instead means bumping wasmex past 0.14.
+Raising the ceiling means bumping wasmex past 0.15.1.
 
 ## A new guest needs per-crate nix vendoring
 

@@ -1,8 +1,8 @@
 # Building Plugins
 
 This section is for developers building Mydia plugins. If you just want to use a
-plugin someone else wrote, install and configure it from the admin UI; you do
-not need any of this.
+plugin someone else wrote, [install and configure it](../using/how-to/plugins.md) as an
+operator; you do not need any of this.
 
 Mydia plugins are small, sandboxed programs that react to what happens in your
 library. When a movie is added, a download completes, a file is imported, or
@@ -16,10 +16,9 @@ A plugin is a WebAssembly **component** written in Rust against the
 `mydia-plugin-sdk` crate. You write one typed handler function; the SDK turns it
 into a component the host can load. The plugin runs in a sandbox with no ambient
 network, filesystem, or OS access. The only way out is through a small set of
-capability-gated host functions you declare up front. Plugins installed from an
-index or remote package are approved by the operator before they ever run;
-plugins shipped in Mydia's own `priv/plugins/` directory are trusted as part of
-the host release and granted their declared capabilities on discovery.
+capability-gated host functions you declare up front. Operators approve
+what a plugin may do before it runs; [the plugin model](explanation/plugin-model.md)
+explains the trust rules.
 
 ## Where to start
 
@@ -34,17 +33,20 @@ the host release and granted their declared capabilities on discovery.
 
     The how-to guides cover [sending notifications](how-to/notifications.md),
     [reading media and event data](how-to/media-data.md),
-    [building a two-way sync](how-to/two-way-sync.md), and the
-    [test and reload loop](how-to/test-and-iterate.md). To distribute plugins
+    [building a two-way sync](how-to/two-way-sync.md),
+    [custom pages](how-to/pages.md), [home shelves](how-to/shelves.md), a
+    [setup wizard](how-to/setup-wizard.md), and the
+    [test and iterate loop](how-to/test-and-iterate.md). To distribute plugins
     yourself, see [publishing your own plugin source](how-to/publish-a-source.md).
 
 -   **Need the contract**
 
-    The [events](reference/events.md), [capabilities](reference/capabilities.md),
-    [host functions](reference/host-functions.md) and
-    [guest exports](reference/guest-exports.md) references cover the
-    runtime contract. The
-    [manifest schema](reference/manifest.md) covers every manifest field.
+    The [manifest](reference/manifest.md), [events](reference/events.md),
+    [capabilities](reference/capabilities.md),
+    [host functions](reference/host-functions.md),
+    [guest exports](reference/guest-exports.md), [limits](reference/limits.md)
+    and [plugin source format](reference/plugin-source-format.md) pages cover
+    the runtime contract.
 
 -   **Want to know why**
 
