@@ -15,7 +15,7 @@ import 'watch_indicator.dart';
 /// rail: a thumbnail with inline progress/watched overlays, the episode code +
 /// title beneath, and corner action overlays (download + watched-status menu).
 ///
-/// Progress and watched state are read only from [Episode.progress] with
+/// Progress and watched state are read only from [EpisodeView.progress] with
 /// null-safe access — `progress` is nullable and absent for never-played
 /// episodes, and recomputing completion from raw player duration is a known
 /// defect during HLS transcode. No duration math happens here.
@@ -151,7 +151,9 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
                 child: DetailArtImage(
                   art: _episode.still,
                   slot: ArtSlot.still,
-                  placeholder: (_) => _buildPlaceholder(),
+                  placeholder: (_) =>
+                      Container(color: AppColors.surfaceVariant),
+                  fallback: (_) => _buildPlaceholder(),
                   errorWidget: (_) => _buildPlaceholder(),
                 ),
               ),

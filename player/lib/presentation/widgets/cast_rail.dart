@@ -84,7 +84,9 @@ class _CastCard extends StatelessWidget {
               child: DetailArtImage(
                 art: member.photo,
                 slot: ArtSlot.person,
-                placeholder: (context) => _fallbackAvatar(),
+                placeholder: (context) =>
+                    Container(color: AppColors.surfaceVariant),
+                fallback: (context) => _fallbackAvatar(),
                 errorWidget: (context) => _fallbackAvatar(),
               ),
             ),

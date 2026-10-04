@@ -20,13 +20,21 @@ class DetailArtImage extends ConsumerWidget {
     required this.slot,
     this.fit = BoxFit.cover,
     this.placeholder,
+    this.fallback,
     this.errorWidget,
   });
 
   final DetailArt? art;
   final ArtSlot slot;
   final BoxFit fit;
+
+  /// Shown while the picture loads. Defaults to nothing.
   final WidgetBuilder? placeholder;
+
+  /// Shown when there is no art at all. Defaults to [placeholder].
+  final WidgetBuilder? fallback;
+
+  /// Shown when the picture fails to load. Defaults to [fallback].
   final WidgetBuilder? errorWidget;
 
   BaseCacheManager? get _cache => switch (slot) {
@@ -38,19 +46,20 @@ class DetailArtImage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final empty = placeholder ?? (_) => const SizedBox.shrink();
+    final loading = placeholder ?? (_) => const SizedBox.shrink();
+    final missing = fallback ?? loading;
     final decodeWidth = slot == ArtSlot.backdrop || slot == ArtSlot.still
         ? viewportDecodeWidth(context, sourceWidth: backdropSourceWidth)
         : null;
     return switch (art) {
-      null => empty(context),
+      null => missing(context),
       UrlArt(:final url) => ArtworkImage(
           imageUrl: url,
           fit: fit,
           cacheManager: _cache,
           decodeWidth: decodeWidth,
-          placeholder: empty,
-          errorWidget: errorWidget ?? empty,
+          placeholder: loading,
+          errorWidget: errorWidget ?? missing,
         ),
     };
   }
