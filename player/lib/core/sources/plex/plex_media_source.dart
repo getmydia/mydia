@@ -14,7 +14,13 @@ import 'plex_mapping.dart';
 import 'plex_server_client.dart';
 
 class PlexMediaSource extends MediaSource
-    implements WatchedState, Searchable, ContinueWatching, HomeHubs {
+    implements
+        WatchedState,
+        Searchable,
+        ContinueWatching,
+        HomeHubs,
+        Similar,
+        NextUp {
   PlexMediaSource({
     required this.source,
     required this.client,
@@ -33,6 +39,8 @@ class PlexMediaSource extends MediaSource
         SourceCapability.searchable,
         SourceCapability.continueWatching,
         SourceCapability.hubs,
+        SourceCapability.similar,
+        SourceCapability.nextUp,
       };
 
   @override
@@ -186,6 +194,39 @@ class PlexMediaSource extends MediaSource
               library: hub.library,
             ),
     ];
+  }
+
+  @override
+  Future<List<ItemSummary>> similar(ItemRef ref) async {
+    final Map<String, dynamic> body;
+    try {
+      body = await client.container(
+        '/library/metadata/${ref.externalId}/similar',
+        {'count': '$_rowLimit'},
+      );
+    } on SourceException catch (e) {
+      // Older servers have no similar endpoint.
+      if (e.kind == SourceErrorKind.notFound) return const [];
+      rethrow;
+    }
+    return [
+      for (final m in (body['Metadata'] as List? ?? const []))
+        if (m is Map) plexSummary(id, m.cast<String, dynamic>()),
+    ].whereType<ItemSummary>().take(_rowLimit).toList();
+  }
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async {
+    final body = await client.container(
+        '/library/metadata/${show.externalId}', {'includeOnDeck': '1'});
+    final list = body['Metadata'] as List? ?? const [];
+    if (list.isEmpty || list.first is! Map) return null;
+    final onDeck = (list.first as Map)['OnDeck'];
+    final metadata = onDeck is Map ? onDeck['Metadata'] : null;
+    if (metadata is! List || metadata.isEmpty || metadata.first is! Map) {
+      return null;
+    }
+    return plexSummary(id, (metadata.first as Map).cast<String, dynamic>());
   }
 
   @override

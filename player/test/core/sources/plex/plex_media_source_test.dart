@@ -65,6 +65,60 @@ void main() {
     );
   });
 
+  const movie = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101');
+
+  test('item detail carries cast, content rating and parents', () async {
+    final source = build().source;
+    final detail = await source.item(movie);
+    expect(detail.contentRating, 'PG');
+    expect(detail.cast.single.name, 'Ana Bergström');
+    expect(detail.cast.single.role, 'Kira Solt');
+    expect(detail.cast.single.photo, isNotNull);
+
+    final page = await source.children(
+      const ItemRef(sourceId: sid, kind: ItemKind.season, externalId: '301'),
+    );
+    expect(page.items.first.overview, 'An invented episode.');
+    expect(page.items.first.airDate, '2024-01-01');
+    expect(page.items.first.defaultVersionId, '501');
+
+    final episode = await source.item(
+      const ItemRef(sourceId: sid, kind: ItemKind.episode, externalId: '401'),
+    );
+    expect(episode.show?.externalId, '201');
+    expect(episode.show?.kind, ItemKind.show);
+    expect(episode.season?.externalId, '301');
+    expect(episode.season?.kind, ItemKind.season);
+  });
+
+  test('similar lists the server picks', () async {
+    final similar = await build().source.as<Similar>()!.similar(movie);
+    expect(similar.map((i) => i.ref.externalId), ['102', '103']);
+  });
+
+  test('next up reads the show on deck', () async {
+    final next = await build().source.as<NextUp>()!.nextUp(
+          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
+        );
+    expect(next?.ref.externalId, '402');
+  });
+
+  test('a show with nothing on deck has no next up', () async {
+    final b = build();
+    b.server.nothingOnDeck = true;
+    final next = await b.source.as<NextUp>()!.nextUp(
+          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
+        );
+    expect(next, isNull);
+  });
+
+  test('a missing similar endpoint reads as none', () async {
+    final similar = await build().source.as<Similar>()!.similar(
+          const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '105'),
+        );
+    expect(similar, isEmpty);
+  });
+
   test('lists movie and show sections, not music', () async {
     final libraries = await build().source.libraries();
     expect([for (final l in libraries) l.title], ['Films', 'Series']);
@@ -113,7 +167,7 @@ void main() {
     expect(detail.summary.title, 'The Lantern Keeper');
     expect(detail.overview, startsWith('A keeper'));
     expect(detail.genres, ['Drama']);
-    expect(detail.people, ['Ines Varga']);
+    expect(detail.people, ['Ana Bergström']);
     final version = detail.versions.single;
     expect(version.id, '21');
     expect(version.streamPath, '/library/parts/21/1700000000/file.mkv');
