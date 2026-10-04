@@ -283,13 +283,20 @@ class _LazyGuestTransport implements MydiaGqlTransport {
 
   final Ref _ref;
   final Future<MydiaGuestCredentials> Function() _load;
-  MydiaGqlTransport? _transport;
+  Future<MydiaGqlTransport>? _transport;
 
-  Future<MydiaGqlTransport> _resolve() async {
-    final cached = _transport;
-    if (cached != null) return cached;
+  /// One build for concurrent first requests; a failure clears it.
+  Future<MydiaGqlTransport> _resolve() => _transport ??= _build().then(
+        (t) => t,
+        onError: (Object e, StackTrace st) {
+          _transport = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
+
+  Future<MydiaGqlTransport> _build() async {
     final c = await _load();
-    return _transport = c.isP2p
+    return c.isP2p
         ? P2pMydiaTransport(
             p2p: _ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
         : HttpMydiaTransport(

@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
+import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_guest_secrets.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
@@ -15,6 +19,64 @@ import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/toast_harness.dart';
+
+class _RecordingP2p extends P2pService {
+  final unwatched = <String>[];
+  @override
+  void unwatchPeer(String peer) => unwatched.add(peer);
+}
+
+class _UnreadableStorage extends MockAuthStorage {
+  @override
+  Future<String?> read(String key) async => throw StateError('keychain locked');
+}
+
+SourceAccountRecord _guestRecord() => SourceAccountRecord(
+      account: const ProviderAccount(
+        id: 'mguest',
+        kind: SourceKind.mydia,
+        displayName: 'Lakeside',
+        storageNamespace: 'source/mguest',
+        activeProfileId: 'owner',
+      ),
+      profiles: const [
+        SourceProfile(
+            id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+      ],
+      servers: const [
+        SourceServer(
+            id: 'inst-2',
+            accountId: 'mguest',
+            profileId: 'owner',
+            name: 'Lakeside'),
+      ],
+      addedAtMs: 0,
+    );
+
+Future<InMemorySourceStore> _removeGuest(
+  WidgetTester tester,
+  MockAuthStorage storage,
+  P2pService p2p,
+) async {
+  final store = InMemorySourceStore();
+  await store.putAccount(_guestRecord());
+  await tester.pumpWidget(ProviderScope(
+    overrides: [
+      authStateProvider.overrideWith(_Authenticated.new),
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      p2pServiceProvider.overrideWithValue(p2p),
+    ],
+    child: const MaterialApp(
+        builder: toastLayerBuilder, home: ManageSourcesScreen()),
+  ));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('manage-remove-mguest')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('manage-remove-confirm')));
+  await tester.pumpAndSettle();
+  return store;
+}
 
 class _Authenticated extends AuthStateNotifier {
   @override
@@ -159,5 +221,36 @@ void main() {
     expect((await store.load()).accounts.single.lockOf('abc123'),
         SourceLock.locked);
     expect(await pins.check('4821'), isA<PinAccepted>());
+  });
+
+  testWidgets('removing a p2p guest stops watching its node', (tester) async {
+    final storage = MockAuthStorage();
+    final p2p = _RecordingP2p();
+    await writeGuestCredentials(
+        SourceSecrets(storage),
+        _guestRecord().account,
+        const MydiaGuestCredentials(
+            instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
+    final store = await _removeGuest(tester, storage, p2p);
+    expect(p2p.unwatched, ['{"id":"n1"}']);
+    expect((await store.load()).accounts, isEmpty);
+  });
+
+  testWidgets('removing a guest with a garbage secret still removes it',
+      (tester) async {
+    final storage = MockAuthStorage();
+    await storage.write('source/mguest/account_token', 'not json');
+    final p2p = _RecordingP2p();
+    final store = await _removeGuest(tester, storage, p2p);
+    expect(p2p.unwatched, isEmpty);
+    expect((await store.load()).accounts, isEmpty);
+  });
+
+  testWidgets('removing a guest whose secret cannot be read still removes it',
+      (tester) async {
+    final p2p = _RecordingP2p();
+    final store = await _removeGuest(tester, _UnreadableStorage(), p2p);
+    expect(p2p.unwatched, isEmpty);
+    expect((await store.load()).accounts, isEmpty);
   });
 }

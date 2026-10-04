@@ -11,11 +11,28 @@ import '../../../core/sources/mydia/mydia_guest_secrets.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
+import '../../../core/sources/store/source_secrets.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
+
+/// A guest Mydia reached over p2p stops being watched. Unreadable credentials
+/// must not block the removal.
+Future<void> unwatchGuestPeer(
+  SourceSecrets secrets,
+  P2pService p2p,
+  ProviderAccount account,
+) async {
+  if (account.kind != SourceKind.mydia) return;
+  try {
+    final nodeAddr = (await readGuestCredentials(secrets, account))?.nodeAddr;
+    if (nodeAddr != null) p2p.unwatchPeer(nodeAddr);
+  } catch (e) {
+    debugPrint('[Sources] Could not stop watching the guest peer: $e');
+  }
+}
 
 class ManageSourcesScreen extends ConsumerWidget {
   const ManageSourcesScreen({super.key});
@@ -101,27 +118,14 @@ class _AccountCard extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final toaster = Toaster.of(context);
-    await _unwatchGuestPeer(ref);
+    await unwatchGuestPeer(ref.read(sourceSecretsProvider),
+        ref.read(p2pServiceProvider), record.account);
     try {
       await ref
           .read(sourceRecordsProvider.notifier)
           .removeAccount(record.account.id);
     } catch (_) {
       toaster.show('Could not remove this account.', kind: ToastKind.error);
-    }
-  }
-
-  /// A guest Mydia reached over p2p stops being watched. Unreadable
-  /// credentials must not block the removal.
-  Future<void> _unwatchGuestPeer(WidgetRef ref) async {
-    if (record.account.kind != SourceKind.mydia) return;
-    try {
-      final c = await readGuestCredentials(
-          ref.read(sourceSecretsProvider), record.account);
-      final nodeAddr = c?.nodeAddr;
-      if (nodeAddr != null) ref.read(p2pServiceProvider).unwatchPeer(nodeAddr);
-    } catch (e) {
-      debugPrint('[Sources] Could not stop watching the guest peer: $e');
     }
   }
 

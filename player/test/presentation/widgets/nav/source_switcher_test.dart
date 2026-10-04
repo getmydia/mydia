@@ -249,4 +249,13 @@ void main() {
         SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id), mydia);
     expect(SourceSwitcher.currentFor([plex], '/sources/manage', plex.id), plex);
   });
+
+  test('currentFor names home, not a guest listed first, off a source route',
+      () {
+    final mydia = Source.legacyMydia();
+    final guest = _guest();
+    expect(
+        SourceSwitcher.currentFor([guest, mydia], '/sources/manage', guest.id),
+        mydia);
+  });
 }
