@@ -103,9 +103,21 @@ error for every request.
 | `body` | `string` | A text body. |
 
 The host sets the security headers itself, listed under
-[Page response headers](#page-response-headers). A malformed response
-becomes a 502, a timeout a 504, and a plugin whose page slots are all busy
-answers 503 with `Retry-After`. The numbers are in [Limits](limits.md#pages).
+[Page response headers](#page-response-headers). The numbers are in
+[Limits](limits.md#pages).
+
+When the guest does not answer, the host answers for it. These responses have an
+empty body:
+
+| Status | When |
+|--------|------|
+| 401 | The frame token is missing, invalid, expired or issued for another plugin, or its user no longer exists. |
+| 404 | The plugin is disabled or not approved for `surfaces:page`, or does not exist. |
+| 413 | The request body is over the limit. |
+| 415 | The request body is not UTF-8 text. |
+| 502 | The guest returned `Err`, or a malformed response (a status outside 200 to 599). |
+| 503 | All of the plugin's page slots are busy. The response carries `Retry-After`. |
+| 504 | The call timed out. |
 
 During an `on-http` call the page host functions act as the signed-in user: see
 [Page writes](host-functions.md#page-writes). `search` and `data-list` read as

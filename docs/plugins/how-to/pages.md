@@ -222,9 +222,10 @@ The host serves your response with its own security headers, so the page can
 only call itself and loads nothing from another origin. Mydia's stylesheet is at
 `/assets/css/app.css`, so daisyUI classes work. The headers are listed under
 [Page response headers](../reference/guest-exports.md#page-response-headers).
-Body size, timeouts and the 502, 503 and 504 answers are in
-[Limits](../reference/limits.md#pages). When the host answers 503 with
-`Retry-After`, show a "try again" message rather than an error.
+Body size and timeouts are in [Limits](../reference/limits.md#pages). The
+statuses the host answers with (401, 404, 413, 415, 502, 503, 504) are listed
+under [`on-http`](../reference/guest-exports.md#on-http). When the host answers
+503 with `Retry-After`, show a "try again" message rather than an error.
 
 ## Undo and the activity page
 

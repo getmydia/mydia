@@ -48,13 +48,24 @@ the build and install steps, see [Test and iterate](test-and-iterate.md).
 - `connection.auth_header` is the header the host adds when you call
   [`link-request`](../reference/host-functions.md#link-request). The token never
   reaches your code.
-- A plugin needs at least one event subscription, so this one subscribes to
-  `media_file.imported`, the event a real plugin would use to refresh the
-  server's library.
+- A manifest must declare at least one of `events:subscribe`, `surfaces:page`
+  or `surfaces:shelf` (see [`events:subscribe`](../reference/capabilities.md#eventssubscribe)).
+  This plugin subscribes to `media_file.imported`, the event a real plugin would
+  use to refresh the server's library.
 
 All fields are in the [manifest reference](../reference/manifest.md).
 
 ## 2. Return a form first
+
+The crate layout is the one from the
+[tutorial](../tutorial/write-your-first-plugin.md), with one extra dependency.
+In `Cargo.toml`:
+
+```toml
+[dependencies]
+mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.16.0-beta.2" }
+serde_json = "1"
+```
 
 Use the `setup` and `check_health` arguments of the plugin macro. The host calls
 `setup` with `step = "start"` when the operator adds the instance, so the first
@@ -224,8 +235,8 @@ Mydia users. Their records are under [Screens](../reference/guest-exports.md#scr
 
 ## 5. Build and install
 
-Build the component and install it with the files from the previous steps, as
-described in [Test and iterate](test-and-iterate.md):
+Build the component and install it with the manifest from step 1. The
+[Test and iterate](test-and-iterate.md) guide covers this loop in full:
 
 ```bash
 cargo build --release --target wasm32-wasip2
