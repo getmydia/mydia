@@ -71,9 +71,10 @@ for version in "${ordered[@]}"; do
   previous_build="$build"
 done
 
-# Every value has to clear every number the previous formula could give a 0.x
-# version (major*10M + minor*100k + patch*1k + slot tops out below 10M), or an
-# existing Android install cannot update onto the new scheme.
+# The lowest number the new formula gives any 0.15+ version (0.15.0-dev.0) has
+# to clear every number the previous formula could give a 0.x version (it
+# topped out below 10M), or an existing Android install cannot update onto the
+# new scheme.
 [ "$($SCRIPT 0.15.0-dev.0)" -gt 9999999 ] || note_failure "floor: new numbers must clear the old formula's 0.x ceiling"
 
 # Rejections.

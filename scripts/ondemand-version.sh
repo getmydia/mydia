@@ -23,6 +23,9 @@ commit="${1-}"
 [ -n "$commit" ] || die "usage: ondemand-version.sh <commit>"
 git rev-parse --verify --quiet "${commit}^{commit}" >/dev/null || die "not a commit: $commit"
 
+# Release tags are cut on master's first-parent line, so the nearest tag by
+# ancestry is also the newest release on that line, and the first-parent count
+# from it grows with every merge.
 # Player release tags only: plugins-v* and metadata-relay-v* do not match.
 if anchor=$(git describe --tags --match 'v[0-9]*' --abbrev=0 "$commit" 2>/dev/null); then
   k=$(git rev-list --first-parent --count "${anchor}..${commit}")
