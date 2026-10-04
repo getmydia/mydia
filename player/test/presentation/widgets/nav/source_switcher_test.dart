@@ -35,6 +35,23 @@ Source _plex({bool needsReauth = false}) => Source(
       ),
     );
 
+Source _guest() => const Source(
+      account: ProviderAccount(
+        id: 'mguest',
+        kind: SourceKind.mydia,
+        displayName: 'Lakeside',
+        storageNamespace: 'source/mguest',
+        activeProfileId: 'owner',
+      ),
+      profile: SourceProfile(
+          id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+      server: SourceServer(
+          id: 'inst-2',
+          accountId: 'mguest',
+          profileId: 'owner',
+          name: 'Lakeside'),
+    );
+
 class _Calls {
   final navigations = <String>[];
   final switches = <String>[];
@@ -171,6 +188,18 @@ void main() {
     expect(container.read(activeSourceIdProvider), _plex().id);
     expect(calls.switches, ['/s/acc1:owner:srv9']);
     expect(calls.navigations, isEmpty);
+  });
+
+  testWidgets('a guest Mydia is captioned and opens its own routes',
+      (tester) async {
+    final (_, calls) = await _pump(tester,
+        thirdParty: [_guest()], location: '/s/mguest:owner:inst-2');
+    expect(find.text('Mydia · Lakeside'), findsOneWidget);
+    await _openAndTap(tester, const ValueKey('source-switcher-mydia'));
+    expect(calls.switches, ['/']);
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-mguest:owner:inst-2'));
+    expect(calls.switches.last, '/s/mguest:owner:inst-2');
   });
 
   testWidgets('switching to Mydia goes home', (tester) async {

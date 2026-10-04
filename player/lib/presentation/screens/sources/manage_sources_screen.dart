@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
+import '../../../core/sources/mydia/mydia_guest_secrets.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
@@ -99,12 +101,27 @@ class _AccountCard extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final toaster = Toaster.of(context);
+    await _unwatchGuestPeer(ref);
     try {
       await ref
           .read(sourceRecordsProvider.notifier)
           .removeAccount(record.account.id);
     } catch (_) {
       toaster.show('Could not remove this account.', kind: ToastKind.error);
+    }
+  }
+
+  /// A guest Mydia reached over p2p stops being watched. Unreadable
+  /// credentials must not block the removal.
+  Future<void> _unwatchGuestPeer(WidgetRef ref) async {
+    if (record.account.kind != SourceKind.mydia) return;
+    try {
+      final c = await readGuestCredentials(
+          ref.read(sourceSecretsProvider), record.account);
+      final nodeAddr = c?.nodeAddr;
+      if (nodeAddr != null) ref.read(p2pServiceProvider).unwatchPeer(nodeAddr);
+    } catch (e) {
+      debugPrint('[Sources] Could not stop watching the guest peer: $e');
     }
   }
 
