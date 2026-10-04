@@ -38,19 +38,17 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
   end
 
   def handle_event("preview", %{"url" => url}, socket) do
-    opts = preview_opts()
-
     {:noreply,
      socket
      |> assign(previewing?: true, preview: nil, error: nil, form: to_form(%{"url" => url}))
-     |> start_async(:preview, fn -> Index.preview_source(url, opts) end)}
+     |> start_async(:preview, fn -> Index.preview_source(url) end)}
   end
 
   def handle_event("confirm_add", _params, %{assigns: %{preview: preview}} = socket)
       when not is_nil(preview) do
     attrs = %{url: preview.url, name: preview.name, public_key: preview.public_key}
 
-    case Sources.add_source(attrs, preview_opts()) do
+    case Sources.add_source(attrs) do
       {:ok, _} ->
         {:noreply, socket |> assign(adding?: false, preview: nil) |> load_sources()}
 
@@ -242,9 +240,6 @@ defmodule MydiaWeb.AdminPluginsLive.SourcesComponent do
     </div>
     """
   end
-
-  # Test seam: lets a test reach a local server over http. Empty in production.
-  defp preview_opts, do: Application.get_env(:mydia, :plugin_source_preview_opts, [])
 
   defp load_sources(socket) do
     assign(socket, official: Index.official_source(), sources: Sources.list_sources())

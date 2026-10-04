@@ -24,11 +24,11 @@ defmodule MydiaWeb.AdminPluginSourcesLiveTest do
     {:ok, token, _} = Mydia.Auth.Guardian.encode_and_sign(user)
 
     original_runtime = Application.get_env(:mydia, :runtime_config)
-    original_opts = Application.get_env(:mydia, :plugin_source_preview_opts)
+    original_opts = Application.get_env(:mydia, :plugin_index_opts)
 
     on_exit(fn ->
       restore(:runtime_config, original_runtime)
-      restore(:plugin_source_preview_opts, original_opts)
+      restore(:plugin_index_opts, original_opts)
     end)
 
     conn =
@@ -86,7 +86,7 @@ defmodule MydiaWeb.AdminPluginSourcesLiveTest do
         &Plug.Conn.resp(&1, 200, sign(body, keys))
       )
 
-      Application.put_env(:mydia, :plugin_source_preview_opts,
+      Application.put_env(:mydia, :plugin_index_opts,
         allow_private: true,
         resolver: fn _ -> {:ok, [{127, 0, 0, 1}]} end
       )

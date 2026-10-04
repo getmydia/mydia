@@ -30,7 +30,7 @@ defmodule Mydia.Plugins.PluginSource do
     timestamps(type: :utc_datetime_usec)
   end
 
-  @doc "`opts[:allow_private]` waives the https rule, the seam `Index.preview_source/2` honors."
+  @doc "`opts[:allow_private]` waives the https rule, `Sources.add_source/2` supplies it through `Index.seam_opts/1`."
   def changeset(source, attrs, opts \\ []) do
     source
     |> cast(attrs, [:url, :name, :public_key, :enabled])

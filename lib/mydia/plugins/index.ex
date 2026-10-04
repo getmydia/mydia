@@ -66,6 +66,11 @@ defmodule Mydia.Plugins.Index do
   # gate's default cap, but still bounded.
   @package_max_bytes 33_554_432
 
+  # `config :mydia, :plugin_index_opts` is a test seam, unset in every shipped
+  # config. It lets a browser test reach a loopback http store through the UI,
+  # where no caller can pass opts. Only these keys are honored.
+  @seam_keys [:allow_private, :resolver]
+
   @doc "The configured official index URL (R13 default)."
   @spec official_index_url() :: String.t()
   def official_index_url, do: config().index_url
@@ -114,6 +119,19 @@ defmodule Mydia.Plugins.Index do
   end
 
   @doc """
+  `opts` merged over the `:plugin_index_opts` test seam (only `:allow_private`
+  and `:resolver`), caller opts winning. Every fetch here applies it, and
+  `Sources.add_source/2` applies it to the changeset's https rule.
+  """
+  @spec seam_opts(keyword()) :: keyword()
+  def seam_opts(opts \\ []) do
+    :mydia
+    |> Application.get_env(:plugin_index_opts, [])
+    |> Keyword.take(@seam_keys)
+    |> Keyword.merge(opts)
+  end
+
+  @doc """
   Fetches a catalog, verifies its signature against the source's pinned key and
   parses it into a list of `%Entry{}`.
 
@@ -124,6 +142,8 @@ defmodule Mydia.Plugins.Index do
   """
   @spec fetch_catalog(Source.t(), keyword()) :: {:ok, [Entry.t()]} | {:error, Error.t()}
   def fetch_catalog(%Source{} = source, opts \\ []) do
+    opts = seam_opts(opts)
+
     result =
       with :ok <- require_https(source.url, opts),
            {:ok, body} <- gate_get(source.url, opts),
@@ -156,6 +176,7 @@ defmodule Mydia.Plugins.Index do
   @spec preview_source(String.t(), keyword()) :: {:ok, SourcePreview.t()} | {:error, Error.t()}
   def preview_source(url, opts \\ []) do
     url = String.trim(url)
+    opts = seam_opts(opts)
 
     with :ok <- require_https(url, opts),
          {:ok, body} <- gate_get(url, opts),
@@ -253,6 +274,8 @@ defmodule Mydia.Plugins.Index do
   @spec fetch_package(Entry.t(), keyword()) ::
           {:ok, %{wasm: binary(), hash: String.t()}} | {:error, Error.t()}
   def fetch_package(%Entry{package_url: url, integrity: declared}, opts \\ []) do
+    opts = seam_opts(opts)
+
     with :ok <- require_https(url, opts),
          {:ok, wasm} <- gate_get(url, Keyword.put_new(opts, :max_bytes, @package_max_bytes)) do
       verify_integrity(wasm, declared)
@@ -414,8 +437,9 @@ defmodule Mydia.Plugins.Index do
   defp describe_error(%{__exception__: true} = error), do: Exception.message(error)
   defp describe_error(other), do: inspect(other)
 
-  # HTTPS is the v1 trust anchor; the `:allow_private` test seam (loopback Bypass)
-  # also relaxes the scheme check, matching the gate's seam.
+  # HTTPS is the v1 trust anchor; the `:allow_private` test seam (loopback Bypass),
+  # passed per call or arriving through `seam_opts/1`, also relaxes the scheme
+  # check, matching the gate's seam.
   defp require_https(url, opts) do
     cond do
       Keyword.get(opts, :allow_private, false) -> :ok
