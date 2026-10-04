@@ -108,7 +108,13 @@ jobs:
           else
             # After the nearest release tag the commit descends from, so it
             # sorts above that release and below the next one.
-            VERSION=$(./scripts/ondemand-version.sh "$SHA")
+            # A published build must sit on master's first-parent line, or a
+            # branch build could outrank the master build made after it merges.
+            if [ "$INPUT_DRY_RUN" = "true" ]; then
+              VERSION=$(./scripts/ondemand-version.sh "$SHA")
+            else
+              VERSION=$(./scripts/ondemand-version.sh --mainline origin/master "$SHA")
+            fi
           fi
 
           # From the version, so the build number follows build order across

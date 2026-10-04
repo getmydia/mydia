@@ -24,14 +24,16 @@ note_failure() { echo "FAIL: $*" >&2; fail=1; }
 
 expect_version() {
   local label="$1" want="$2" commit="$3" got
-  got="$(cd "$REPO" && "$SCRIPT" "$commit" 2>&1)" || got="(failed) $got"
+  shift 3
+  got="$(cd "$REPO" && "$SCRIPT" "$@" "$commit" 2>&1)" || got="(failed) $got"
   [ "$want" = "$got" ] || note_failure "$label: got '$got', wanted '$want'"
   "$BUILD_NUMBER" "$want" >/dev/null || note_failure "$label: build-number.sh rejects '$want'"
 }
 
 expect_failure() {
   local label="$1" commit="$2"
-  if (cd "$REPO" && "$SCRIPT" "$commit" >/dev/null 2>&1); then
+  shift 2
+  if (cd "$REPO" && "$SCRIPT" "$@" "$commit" >/dev/null 2>&1); then
     note_failure "$label: should have failed"
   fi
 }
@@ -55,8 +57,14 @@ git -C "$REPO" checkout -q -b feature
 commit f1; commit f2; commit f3
 expect_version "feature branch counts its own commits" "0.16.0-beta.2.dev.3" feature
 git -C "$REPO" checkout -q master
+expect_failure "an unmerged feature tip is not on mainline" feature --mainline master
+expect_version "an unmerged feature tip still versions without --mainline" "0.16.0-beta.2.dev.3" feature
 git -C "$REPO" merge -q --no-ff -m "merge feature" feature
 expect_version "a merge is one first-parent step" "0.16.0-beta.2.dev.1" HEAD
+expect_version "a mainline commit keeps its version" "0.16.0-beta.2.dev.1" HEAD --mainline master
+expect_version "without --mainline a side-branch commit still versions" "0.16.0-beta.2.dev.2" feature~1
+expect_failure "a commit reachable only through a merged side branch" feature~1 --mainline master
+expect_failure "a merged feature tip is still off the first-parent line" feature --mainline master
 
 commit six
 tag plugins-v2026.10.2

@@ -2,7 +2,11 @@
 #
 # Print the version an on-demand player build carries.
 #
-#   scripts/ondemand-version.sh <commit>
+#   scripts/ondemand-version.sh [--mainline <ref>] <commit>
+#
+# With --mainline, the commit must be on <ref>'s first-parent history. A branch
+# build counts its own commits, so it would outrank the master build made after
+# the branch merges (a merge is one first-parent step); publishing it is refused.
 #
 # The version is anchored on the nearest release tag the commit descends from,
 # so a dev build sorts above the release it follows and below the next one:
@@ -19,9 +23,31 @@ export LC_ALL=C.UTF-8
 
 die() { echo "ondemand-version: $*" >&2; exit 1; }
 
+usage="usage: ondemand-version.sh [--mainline <ref>] <commit>"
+mainline=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mainline)
+      [ $# -ge 2 ] || die "$usage"
+      mainline="$2"
+      shift 2
+      ;;
+    *) break ;;
+  esac
+done
+
 commit="${1-}"
-[ -n "$commit" ] || die "usage: ondemand-version.sh <commit>"
-git rev-parse --verify --quiet "${commit}^{commit}" >/dev/null || die "not a commit: $commit"
+[ -n "$commit" ] || die "$usage"
+sha=$(git rev-parse --verify --quiet "${commit}^{commit}") || die "not a commit: $commit"
+
+if [ -n "$mainline" ]; then
+  git rev-parse --verify --quiet "${mainline}^{commit}" >/dev/null || die "not a commit: $mainline"
+  # Into a variable first: grep -q closing the pipe early would SIGPIPE
+  # rev-list and fail the pipeline under pipefail even on a match.
+  line=$(git rev-list --first-parent "$mainline")
+  printf '%s\n' "$line" | grep -qxF "$sha" \
+    || die "$commit is not on $mainline's first-parent history; use dry_run, or version_override to publish it deliberately"
+fi
 
 # Release tags are cut on master's first-parent line. Both the anchor lookup
 # and the count below follow first parents only, so a tag that exists only on
