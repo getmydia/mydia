@@ -222,6 +222,13 @@ class FakePlexServer {
             },
           ],
         });
+      case '/library/recentlyAdded':
+        return _container({
+          'Metadata': [
+            {..._movie('104', 'Paper Harbour', 2023), 'addedAt': 1700200000},
+            {..._movie('102', 'Saltwater Clocks', 2021), 'addedAt': 1700100000},
+          ],
+        });
       case '/hubs/continueWatching/items':
         return _container({
           'size': 2,
