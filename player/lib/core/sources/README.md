@@ -171,6 +171,20 @@ Jellyfin cannot dismiss a Next Up episode, so
 `canRemoveFromContinueWatching` is false for one and the row's menu offers
 Details only.
 
+### Shared sort and recently added
+
+Each source tags the sort options it already offers with a `SharedSort`
+(`title`, `added`, `released`), so a view over several servers can ask
+each library for the same order without knowing its sort ids. Untagged
+options (rating, random, last watched) have no cross-server meaning.
+Summaries carry `sortTitle`, `addedAt` and `lastPlayedAt` where the server
+sends them: Plex `titleSort`, `addedAt`, `lastViewedAt` (Unix seconds);
+Jellyfin `SortName` and `DateCreated` (only when `Fields` asks) and
+`UserData.LastPlayedDate`; Stash `created_at` and `last_played_at`, no sort
+title. `RecentlyAdded` is Plex `/library/recentlyAdded`, Jellyfin
+`/Items/Latest` with no `ParentId` (a bare JSON array, read with
+`JellyfinClient.getList`), and Stash scenes by `created_at`.
+
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the
@@ -181,8 +195,8 @@ skips that directory.
 
 1. A `MediaSource` subclass with its mapping and client, plus the shared
    contract suite in `test/core/sources/media_source_contract.dart`.
-   `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites` and `NextUp` are
-   optional; a source that implements one also lists the matching
+   `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites`, `NextUp` and
+   `RecentlyAdded` are optional; a source that implements one also lists the matching
    `SourceCapability`.
 2. A `SourceKind` value and a case in `source_factories.dart`.
 3. A `SourcePlaybackSession` subclass and a case in
@@ -190,4 +204,6 @@ skips that directory.
 4. An add flow under `presentation/screens/sources/`.
 5. Map `cast`, `contentRating`, `show` and `season` in the item detail, and
    `overview`, `airDate` and `defaultVersionId` in summaries, so the shared
-   detail screens and Up Next have what they need.
+   detail screens and Up Next have what they need. Tag existing sort
+   options with `SharedSort` and fill `sortTitle`, `addedAt` and
+   `lastPlayedAt` where the server has them.
