@@ -1036,7 +1036,7 @@ defmodule Mydia.Plugins do
           entries
 
         {:error, error} ->
-          Logger.warning("update check could not fetch #{source}: #{inspect(error)}")
+          Logger.warning("update check could not fetch #{source.url}: #{inspect(error)}")
           []
       end
     end)
