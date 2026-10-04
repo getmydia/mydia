@@ -72,6 +72,7 @@ defmodule Mydia.Media.LibraryListing do
   use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
   `total_size` is the bytes on disk across every matching row, not only the
   page, so a filtered listing can report what the filter actually costs.
+
   While searching, rows whose title, original title or year match come first
   and rows that match only through their overview follow, each group in
   `:sort_by` order. `description_match_start_id` is the id of the first
@@ -96,8 +97,13 @@ defmodule Mydia.Media.LibraryListing do
       |> build_rows()
       |> filter_quality(Keyword.get(opts, :quality))
       |> filter_progress(Keyword.get(opts, :progress))
-      |> sort(Keyword.get(opts, :sort_by))
       |> search(query)
+
+    # Sorted after the search so a sort that queries per row (added_*) only
+    # sees the matches, not the whole filtered library.
+    sort_by = Keyword.get(opts, :sort_by)
+    title_rows = sort(title_rows, sort_by)
+    description_rows = sort(description_rows, sort_by)
 
     rows = title_rows ++ description_rows
 
@@ -320,19 +326,25 @@ defmodule Mydia.Media.LibraryListing do
     end)
   end
 
-  # Splits the sorted rows into those whose title, original title or year
-  # match and those that match only through their overview, dropping the rest.
-  # Enum.split_with/2 keeps order, so each group stays in sort order.
+  # Splits the rows into those whose title, original title or year match and
+  # those that match only through their overview, dropping the rest. Each row
+  # is classified once. The caller sorts each group, so this runs before the
+  # sort and keeps the sort's per-row work to the matches.
   defp search(rows, ""), do: {rows, []}
 
   defp search(rows, query) do
     query = String.downcase(query)
 
-    rows
-    |> Enum.filter(fn %LibraryRow{item: item} ->
-      title_match?(item, query) or contains?(overview(item.metadata), query)
-    end)
-    |> Enum.split_with(fn %LibraryRow{item: item} -> title_match?(item, query) end)
+    {title, description} =
+      Enum.reduce(rows, {[], []}, fn %LibraryRow{item: item} = row, {title, description} ->
+        cond do
+          title_match?(item, query) -> {[row | title], description}
+          contains?(overview(item.metadata), query) -> {title, [row | description]}
+          true -> {title, description}
+        end
+      end)
+
+    {Enum.reverse(title), Enum.reverse(description)}
   end
 
   defp title_match?(item, query) do

@@ -1400,6 +1400,8 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       |> element("#library-search-form")
       |> render_change(%{"search" => "heron"})
 
+      assert has_element?(view, "#search-description-divider")
+
       view
       |> element("#grid-item-#{overview_match.id} button[phx-click='toggle_item_monitored']")
       |> render_click()
@@ -1410,11 +1412,12 @@ defmodule MydiaWeb.MediaLive.IndexTest do
     test "list view shows the divider too", %{conn: conn} do
       media_item_fixture(%{title: "Wren Hollow", type: "movie"})
 
-      media_item_fixture(%{
-        title: "Basalt Steps",
-        type: "movie",
-        metadata: %{"overview" => "A wren sings"}
-      })
+      overview_match =
+        media_item_fixture(%{
+          title: "Basalt Steps",
+          type: "movie",
+          metadata: %{"overview" => "A wren sings"}
+        })
 
       {:ok, view, _html} = live(conn, ~p"/movies")
 
@@ -1427,6 +1430,11 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       |> render_change(%{"search" => "wren"})
 
       assert has_element?(view, "#search-description-divider", "Matched in description")
+
+      assert has_element?(
+               view,
+               "#media-items > [id$='#{overview_match.id}'] #search-description-divider"
+             )
     end
 
     test "toggling monitored rebuilds the card from a fresh row", %{conn: conn} do
