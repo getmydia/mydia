@@ -206,6 +206,111 @@ defmodule Mydia.Media.LibraryListingTest do
       assert titles(page(user, search: nil)) |> length() == 2
     end
 
+    test "search lists title matches before description-only matches, each in sort order", %{
+      user: user
+    } do
+      media_item_fixture(%{title: "Harbor Lights", metadata: %{"overview" => "A quiet town"}})
+
+      media_item_fixture(%{
+        title: "Amber Lantern",
+        metadata: %{"overview" => "Fog over the harbor"}
+      })
+
+      media_item_fixture(%{title: "Zinc Harbor", metadata: %{"overview" => "Dockworkers strike"}})
+
+      media_item_fixture(%{
+        title: "Cedar Mile",
+        metadata: %{"overview" => "A harbor pilot retires"}
+      })
+
+      assert titles(page(user, search: "harbor", sort_by: "title_asc")) ==
+               ["Harbor Lights", "Zinc Harbor", "Amber Lantern", "Cedar Mile"]
+
+      assert titles(page(user, search: "harbor", sort_by: "title_desc")) ==
+               ["Zinc Harbor", "Harbor Lights", "Cedar Mile", "Amber Lantern"]
+    end
+
+    test "search keeps tiers under added and size sorts", %{user: user} do
+      old_title = media_item_fixture(%{title: "Old Signal"})
+
+      %{media_item_id: old_title.id, size: 100}
+      |> media_file_fixture()
+      |> backdate_media_file(~U[2024-01-01 00:00:00Z])
+
+      new_overview =
+        media_item_fixture(%{title: "Brass Window", metadata: %{"overview" => "A signal fire"}})
+
+      %{media_item_id: new_overview.id, size: 900}
+      |> media_file_fixture()
+      |> backdate_media_file(~U[2025-06-01 00:00:00Z])
+
+      assert titles(page(user, search: "signal", sort_by: "added_desc")) ==
+               ["Old Signal", "Brass Window"]
+
+      assert titles(page(user, search: "signal", sort_by: "size_desc")) ==
+               ["Old Signal", "Brass Window"]
+    end
+
+    test "original title and year matches are title-tier", %{user: user} do
+      media_item_fixture(%{title: "Glass Orchard", original_title: "Verger de Verre", year: 2011})
+      media_item_fixture(%{title: "Aspen Verger"})
+
+      media_item_fixture(%{
+        title: "Aaron Field",
+        metadata: %{"overview" => "A verger tends the chapel"}
+      })
+
+      media_item_fixture(%{title: "Moss Ridge", year: 2011})
+      media_item_fixture(%{title: "Able Coast", metadata: %{"overview" => "Set in 2011"}})
+
+      verger = page(user, search: "verger")
+      assert titles(verger) == ["Aspen Verger", "Glass Orchard", "Aaron Field"]
+
+      year = page(user, search: "2011")
+      assert titles(year) == ["Glass Orchard", "Moss Ridge", "Able Coast"]
+    end
+
+    test "description_match_start_id names the first description-only row on every page", %{
+      user: user
+    } do
+      for n <- 1..3, do: media_item_fixture(%{title: "Comet #{n}"})
+
+      first_overview =
+        media_item_fixture(%{title: "Alpha Drift", metadata: %{"overview" => "A comet returns"}})
+
+      media_item_fixture(%{title: "Beta Drift", metadata: %{"overview" => "Comet dust"}})
+
+      first = page(user, search: "comet", sort_by: "title_asc", offset: 0, limit: 3)
+      assert titles(first) == ["Comet 1", "Comet 2", "Comet 3"]
+      assert first.description_match_start_id == first_overview.id
+
+      second = page(user, search: "comet", sort_by: "title_asc", offset: 3, limit: 3)
+      assert titles(second) == ["Alpha Drift", "Beta Drift"]
+      assert second.description_match_start_id == first_overview.id
+    end
+
+    test "description_match_start_id is nil without a search or description matches", %{
+      user: user
+    } do
+      media_item_fixture(%{title: "Tidewater", metadata: %{"overview" => "Salt marsh"}})
+
+      assert page(user, search: "").description_match_start_id == nil
+      assert page(user, search: nil).description_match_start_id == nil
+      assert page(user, search: "tide").description_match_start_id == nil
+      assert page(user, search: "no match anywhere").description_match_start_id == nil
+    end
+
+    test "description_match_start_id is the first row when nothing matches by title", %{
+      user: user
+    } do
+      media_item_fixture(%{title: "Rust Bell", metadata: %{"overview" => "An iron foundry"}})
+      first = media_item_fixture(%{title: "Flint Gate", metadata: %{"overview" => "Iron ore"}})
+
+      listing = page(user, search: "iron", sort_by: "title_asc")
+      assert titles(listing) == ["Flint Gate", "Rust Bell"]
+      assert listing.description_match_start_id == first.id
+    end
+
     test "the quality filter matches a show on any episode's resolution", %{user: user} do
       show = media_item_fixture(%{type: "tv_show", title: "Sharp Coastline"})
       first = episode_fixture(%{media_item_id: show.id})

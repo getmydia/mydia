@@ -60,7 +60,8 @@ defmodule Mydia.Media.LibraryListing do
           has_more?: boolean(),
           visible_ids: MapSet.t(binary()),
           empty?: boolean(),
-          total_size: non_neg_integer()
+          total_size: non_neg_integer(),
+          description_match_start_id: binary() | nil
         }
 
   @doc """
@@ -71,6 +72,11 @@ defmodule Mydia.Media.LibraryListing do
   use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
   `total_size` is the bytes on disk across every matching row, not only the
   page, so a filtered listing can report what the filter actually costs.
+  While searching, rows whose title, original title or year match come first
+  and rows that match only through their overview follow, each group in
+  `:sort_by` order. `description_match_start_id` is the id of the first
+  overview-only row across the whole result, not only the page, or nil when
+  there is none, so the caller can mark where that group starts.
 
   Filter options go to `Mydia.Media.media_items_query/2`, along with the
   scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
@@ -82,22 +88,26 @@ defmodule Mydia.Media.LibraryListing do
     user_id = Keyword.fetch!(opts, :user_id)
     limit = Keyword.fetch!(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
+    query = Keyword.get(opts, :search) || ""
 
-    rows =
+    {title_rows, description_rows} =
       scope
       |> Media.media_items_query(Keyword.take(opts, @filter_keys))
       |> build_rows()
-      |> search(Keyword.get(opts, :search) || "")
       |> filter_quality(Keyword.get(opts, :quality))
       |> filter_progress(Keyword.get(opts, :progress))
       |> sort(Keyword.get(opts, :sort_by))
+      |> search(query)
+
+    rows = title_rows ++ description_rows
 
     %{
       rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
       has_more?: length(rows) > offset + limit,
       visible_ids: MapSet.new(rows, & &1.id),
       empty?: rows == [],
-      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum()
+      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum(),
+      description_match_start_id: description_rows |> List.first() |> row_id()
     }
   end
 
@@ -310,17 +320,28 @@ defmodule Mydia.Media.LibraryListing do
     end)
   end
 
-  defp search(rows, ""), do: rows
+  # Splits the sorted rows into those whose title, original title or year
+  # match and those that match only through their overview, dropping the rest.
+  # Enum.split_with/2 keeps order, so each group stays in sort order.
+  defp search(rows, ""), do: {rows, []}
 
   defp search(rows, query) do
     query = String.downcase(query)
 
-    Enum.filter(rows, fn %LibraryRow{item: item} ->
-      contains?(item.title, query) or contains?(item.original_title, query) or
-        contains?(item.year && to_string(item.year), query) or
-        contains?(overview(item.metadata), query)
+    rows
+    |> Enum.filter(fn %LibraryRow{item: item} ->
+      title_match?(item, query) or contains?(overview(item.metadata), query)
     end)
+    |> Enum.split_with(fn %LibraryRow{item: item} -> title_match?(item, query) end)
   end
+
+  defp title_match?(item, query) do
+    contains?(item.title, query) or contains?(item.original_title, query) or
+      contains?(item.year && to_string(item.year), query)
+  end
+
+  defp row_id(nil), do: nil
+  defp row_id(%LibraryRow{id: id}), do: id
 
   defp contains?(nil, _query), do: false
   defp contains?(text, query), do: String.contains?(String.downcase(text), query)
