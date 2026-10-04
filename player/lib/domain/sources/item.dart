@@ -93,6 +93,9 @@ class ItemSummary {
     this.overview,
     this.airDate,
     this.defaultVersionId,
+    this.sortTitle,
+    this.addedAt,
+    this.lastPlayedAt,
   });
 
   final ItemRef ref;
@@ -123,6 +126,17 @@ class ItemSummary {
   /// The version an episode list entry plays by default, when the listing
   /// names one without a detail call.
   final String? defaultVersionId;
+
+  /// The server's sort title, when it has one apart from [title].
+  final String? sortTitle;
+
+  /// When the item joined the server's library.
+  final DateTime? addedAt;
+
+  /// When this viewer last played it. Null when they never did, or when the
+  /// server does not say (a Jellyfin Next Up episode, an unplayed Plex
+  /// on-deck item).
+  final DateTime? lastPlayedAt;
 }
 
 enum MediaStreamKind { audio, subtitle }

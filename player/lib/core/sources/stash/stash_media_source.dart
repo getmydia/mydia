@@ -15,7 +15,7 @@ import 'stash_documents.dart';
 import 'stash_mapping.dart';
 
 class StashMediaSource extends MediaSource
-    implements WatchedState, Searchable, ContinueWatching {
+    implements WatchedState, Searchable, ContinueWatching, RecentlyAdded {
   StashMediaSource({
     required this.source,
     required this.client,
@@ -33,6 +33,7 @@ class StashMediaSource extends MediaSource
         SourceCapability.watchedState,
         SourceCapability.searchable,
         SourceCapability.continueWatching,
+        SourceCapability.recentlyAdded,
       };
 
   @override
@@ -134,6 +135,19 @@ class StashMediaSource extends MediaSource
       },
       'scene_filter': {
         'resume_time': {'value': 0, 'modifier': 'GREATER_THAN'},
+      },
+    });
+    return _page(data, 1, 20).items;
+  }
+
+  @override
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final data = await client.query(stashFindScenes, {
+      'filter': {
+        'page': 1,
+        'per_page': 20,
+        'sort': 'created_at',
+        'direction': 'DESC',
       },
     });
     return _page(data, 1, 20).items;

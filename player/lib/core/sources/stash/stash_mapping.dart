@@ -10,9 +10,16 @@ const stashScenesLibraryId = 'scenes';
 
 const stashSortOptions = [
   SortOption(
-      id: 'created_at', label: 'Recently added', descendingByDefault: true),
-  SortOption(id: 'title', label: 'Title'),
-  SortOption(id: 'date', label: 'Date', descendingByDefault: true),
+      id: 'created_at',
+      label: 'Recently added',
+      descendingByDefault: true,
+      shared: SharedSort.added),
+  SortOption(id: 'title', label: 'Title', shared: SharedSort.title),
+  SortOption(
+      id: 'date',
+      label: 'Date',
+      descendingByDefault: true,
+      shared: SharedSort.released),
   SortOption(id: 'rating', label: 'Rating', descendingByDefault: true),
   SortOption(id: 'play_count', label: 'Most played', descendingByDefault: true),
   SortOption(
@@ -42,6 +49,9 @@ Map<String, dynamic>? _firstFile(Map<String, dynamic> scene) {
       : null;
 }
 
+DateTime? _instant(Object? value) =>
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
+
 ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
   final id = scene['id'] as String;
   final file = _firstFile(scene);
@@ -65,6 +75,8 @@ ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
       watched: ((scene['play_count'] as int?) ?? 0) > 0,
       progressSeconds: (scene['resume_time'] as num?)?.round(),
     ),
+    addedAt: _instant(scene['created_at']),
+    lastPlayedAt: _instant(scene['last_played_at']),
   );
 }
 

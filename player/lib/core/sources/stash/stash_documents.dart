@@ -3,7 +3,7 @@
 library;
 
 const _sceneFields = '''
-  id title details date rating100 play_count resume_time
+  id title details date rating100 play_count resume_time created_at last_played_at
   files { id path basename duration video_codec audio_codec width height bit_rate format }
   paths { screenshot caption }
   captions { language_code caption_type }

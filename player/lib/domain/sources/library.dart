@@ -22,17 +22,25 @@ class LibraryRef {
   int get hashCode => Object.hash(sourceId, id);
 }
 
+/// What a source's own sort option means across servers. The All servers
+/// grids sort by these and ask each library for the option tagged with one.
+enum SharedSort { title, added, released }
+
 @immutable
 class SortOption {
   const SortOption({
     required this.id,
     required this.label,
     this.descendingByDefault = false,
+    this.shared,
   });
 
   final String id;
   final String label;
   final bool descendingByDefault;
+
+  /// Null for an option with no cross-server meaning (rating, random).
+  final SharedSort? shared;
 }
 
 @immutable

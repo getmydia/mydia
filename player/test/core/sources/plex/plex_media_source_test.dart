@@ -98,6 +98,15 @@ void main() {
     expect(similar.map((i) => i.ref.externalId), ['102', '103']);
   });
 
+  test('recently added asks Plex for 20 and keeps its order', () async {
+    final b = build();
+    final items = await b.source.recentlyAdded();
+    expect(items.map((i) => i.ref.externalId), ['104', '102']);
+    final request = b.server.requests
+        .lastWhere((r) => r.url.path == '/library/recentlyAdded');
+    expect(request.url.queryParameters['X-Plex-Container-Size'], '20');
+  });
+
   test('next up reads the show on deck', () async {
     final next = await build().source.as<NextUp>()!.nextUp(
           const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),

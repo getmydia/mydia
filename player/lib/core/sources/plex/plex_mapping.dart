@@ -8,12 +8,17 @@ import '../../../domain/sources/library.dart';
 import '../source.dart';
 
 const plexSortOptions = [
-  SortOption(id: 'titleSort', label: 'Title'),
-  SortOption(id: 'addedAt', label: 'Recently added', descendingByDefault: true),
+  SortOption(id: 'titleSort', label: 'Title', shared: SharedSort.title),
+  SortOption(
+      id: 'addedAt',
+      label: 'Recently added',
+      descendingByDefault: true,
+      shared: SharedSort.added),
   SortOption(
       id: 'originallyAvailableAt',
       label: 'Release date',
-      descendingByDefault: true),
+      descendingByDefault: true,
+      shared: SharedSort.released),
   SortOption(id: 'audienceRating', label: 'Rating', descendingByDefault: true),
   SortOption(
       id: 'lastViewedAt', label: 'Last watched', descendingByDefault: true),
@@ -51,6 +56,10 @@ Library? plexLibrary(SourceId sourceId, Map<String, dynamic> d) {
 }
 
 int? _seconds(Object? ms) => ms is num ? (ms / 1000).round() : null;
+
+DateTime? _epoch(Object? seconds) => seconds is num
+    ? DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round(), isUtc: true)
+    : null;
 
 ArtworkRef? _art(Object? path) =>
     path is String && path.isNotEmpty ? ArtworkRef(path) : null;
@@ -120,6 +129,9 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
     overview: m['summary'] as String?,
     airDate: m['originallyAvailableAt'] as String?,
     defaultVersionId: _firstPartId(m),
+    sortTitle: m['titleSort'] as String?,
+    addedAt: _epoch(m['addedAt']),
+    lastPlayedAt: _epoch(m['lastViewedAt']),
   );
 }
 
