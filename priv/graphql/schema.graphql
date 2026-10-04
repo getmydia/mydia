@@ -1474,6 +1474,9 @@ type ServerCompatibility {
 
   "Oldest player version this server would rather you ran"
   recommendedPlayerVersion: String!
+
+  "This server's remote access instance ID, the one its pairing QR codes carry. Null until remote access has been enabled once."
+  instanceId: String
 }
 
 "One dated item on the player's calendar"

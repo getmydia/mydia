@@ -25,4 +25,32 @@ defmodule MydiaWeb.Schema.ServerCompatibilityTest do
     assert is_binary(compat["version"])
     assert compat["version"] != ""
   end
+
+  @instance_query """
+  query {
+    serverCompatibility {
+      instanceId
+    }
+  }
+  """
+
+  describe "instanceId" do
+    test "is null before remote access has ever been enabled", %{conn: conn} do
+      conn = post(conn, "/api/graphql", %{"query" => @instance_query})
+
+      assert %{"data" => %{"serverCompatibility" => %{"instanceId" => nil}}} =
+               json_response(conn, 200)
+    end
+
+    test "is the remote access instance id once one exists", %{conn: conn} do
+      {:ok, config} = Mydia.RemoteAccess.initialize_config()
+
+      conn = post(conn, "/api/graphql", %{"query" => @instance_query})
+
+      assert %{"data" => %{"serverCompatibility" => %{"instanceId" => id}}} =
+               json_response(conn, 200)
+
+      assert id == config.instance_id
+    end
+  end
 end
