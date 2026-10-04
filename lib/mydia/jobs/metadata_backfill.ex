@@ -2,7 +2,7 @@ defmodule Mydia.Jobs.MetadataBackfill do
   @moduledoc """
   Repairs media items that need a metadata refresh to become correct.
 
-  Two cases qualify. Items stored with no `metadata` at all render as an empty
+  Three cases qualify. Items stored with no `metadata` at all render as an empty
   poster placeholder forever; approving a media request used to create them,
   which is fixed at the source in `Mydia.MediaRequests.approve_request/3`. TV
   shows missing either provider id make Discover show an Add button for
@@ -10,9 +10,18 @@ defmodule Mydia.Jobs.MetadataBackfill do
   dies on the `tvdb_id` unique index, and with neither it silently creates a
   second row for the same show.
 
-  Runs daily. The query matches nothing once the library is repaired, so the
-  job settles into costing one read, and a self-hosted operator never has to
-  find and repair these by hand. Idempotent and safe to re-run.
+  The third is metadata stored before its parser learned a field. Nothing else
+  reaches those items reliably: refresh-all covers monitored items only. When
+  parsing starts producing a field that older blobs lack, bump
+  `MediaMetadata`'s `@schema_version` and add the affected provider and type to
+  `@required_versions` here. These refreshes skip episodes, since a version
+  bump describes the show blob only.
+
+  Runs daily. Refreshes are enqueued `@stagger_seconds` apart with
+  `scheduled_in`, so a version bump that selects a whole library spreads its
+  relay load over hours instead of arriving as a burst. The query matches
+  nothing once the library is repaired, so the job settles into costing one
+  read. Idempotent and safe to re-run.
   """
 
   use Oban.Worker,
@@ -29,48 +38,63 @@ defmodule Mydia.Jobs.MetadataBackfill do
 
   alias Mydia.Jobs.MetadataRefresh
   alias Mydia.Media.MediaItem
+  alias Mydia.Media.Refresh
+  alias Mydia.Metadata.Structs.MediaMetadata
   alias Mydia.Repo
 
-  # Delay between batches to avoid hammering the relay once the refreshes run.
-  @batch_delay_ms 2_000
-  @batch_size 10
+  @stagger_seconds 15
+
+  # {provider, media_item.type} => minimum MediaMetadata schema_version.
+  # 1: TVDB shows stored before cast was parsed from TVDB `characters`.
+  @required_versions %{{:tvdb, "tv_show"} => 1}
+
+  @repair_types Enum.uniq(["tv_show" | Enum.map(Map.keys(@required_versions), &elem(&1, 1))])
+
+  # A library large enough to outlast the 24 hours between runs must not have
+  # its still-scheduled refreshes queued a second time.
+  @refresh_unique [
+    period: :infinity,
+    keys: [:media_item_id],
+    states: [:available, :scheduled, :executing, :retryable]
+  ]
 
   @spec perform(Oban.Job.t()) :: :ok
   @impl Oban.Worker
   def perform(%Oban.Job{}) do
-    ids =
+    repairs =
       from(m in MediaItem,
-        where:
-          is_nil(m.metadata) or
-            (m.type == "tv_show" and (is_nil(m.tmdb_id) or is_nil(m.tvdb_id))),
-        select: struct(m, [:id, :metadata]),
+        where: is_nil(m.metadata) or m.type in ^@repair_types,
+        select: struct(m, [:id, :type, :metadata, :metadata_source, :tmdb_id, :tvdb_id]),
         order_by: [asc: m.title]
       )
       |> Repo.all()
-      |> Enum.filter(&needs_backfill?/1)
-      |> Enum.map(& &1.id)
-
-    total = length(ids)
-
-    if total == 0 do
-      :ok
-    else
-      Logger.info("[MetadataBackfill] Found #{total} media items needing repair")
-
-      ids
-      |> Enum.chunk_every(@batch_size)
-      |> Enum.with_index()
-      |> Enum.each(fn {batch, batch_index} ->
-        if batch_index > 0 do
-          Process.sleep(@batch_delay_ms)
+      |> Enum.flat_map(fn item ->
+        case repair(item) do
+          :none -> []
+          mode -> [{item.id, mode}]
         end
-
-        Enum.each(batch, &enqueue_refresh/1)
       end)
 
-      Logger.info("[MetadataBackfill] Enqueued #{total} metadata refreshes")
+    if repairs != [] do
+      Logger.info("[MetadataBackfill] Found #{length(repairs)} media items needing repair")
 
-      :ok
+      repairs
+      |> Enum.with_index()
+      |> Enum.each(fn {{id, mode}, index} ->
+        enqueue_refresh(id, mode, index * @stagger_seconds)
+      end)
+    end
+
+    :ok
+  end
+
+  defp repair(%MediaItem{metadata: nil}), do: :full
+
+  defp repair(%MediaItem{} = item) do
+    cond do
+      missing_cross_reference?(item) -> :full
+      outdated?(item) -> :metadata_only
+      true -> :none
     end
   end
 
@@ -78,18 +102,32 @@ defmodule Mydia.Jobs.MetadataBackfill do
   # cross-provider id storage has `external_ids` nil, which means we have never
   # asked its provider for a cross-reference. Anything written since always
   # carries the map, even when every entry inside is nil, so a show that
-  # neither provider cross-references drops out of this filter after one
-  # refresh instead of being re-enqueued every night.
-  defp needs_backfill?(%MediaItem{metadata: nil}), do: true
-  defp needs_backfill?(%MediaItem{metadata: %{external_ids: ids}}) when is_map(ids), do: false
-  defp needs_backfill?(%MediaItem{}), do: true
+  # neither provider cross-references drops out after one refresh instead of
+  # being re-enqueued every night.
+  defp missing_cross_reference?(
+         %MediaItem{type: "tv_show", metadata: %MediaMetadata{external_ids: ids}} = item
+       )
+       when not is_map(ids),
+       do: is_nil(item.tmdb_id) or is_nil(item.tvdb_id)
 
-  defp enqueue_refresh(media_item_id) do
+  defp missing_cross_reference?(%MediaItem{}), do: false
+
+  # Keyed by the provider the refresh would actually call, not the blob's
+  # `provider` field, which older blobs may store as `:metadata_relay`.
+  defp outdated?(%MediaItem{metadata: %MediaMetadata{} = metadata} = item) do
+    {_id, provider} = Refresh.resolve_provider(item)
+    required = Map.get(@required_versions, {provider, item.type}, 0)
+    (metadata.schema_version || 0) < required
+  end
+
+  defp outdated?(%MediaItem{}), do: false
+
+  defp enqueue_refresh(media_item_id, mode, delay_seconds) do
     # Singular Oban.insert/1, never insert_all/1: uniqueness on Basic and Lite
-    # is only applied by the singular path, so insert_all would queue duplicate
-    # refreshes on every daily run.
-    %{media_item_id: media_item_id}
-    |> MetadataRefresh.new()
+    # is only applied by the singular path.
+    media_item_id
+    |> refresh_args(mode)
+    |> MetadataRefresh.new(scheduled_in: delay_seconds, unique: @refresh_unique)
     |> Oban.insert()
     |> case do
       {:ok, _job} ->
@@ -103,4 +141,7 @@ defmodule Mydia.Jobs.MetadataBackfill do
         :ok
     end
   end
+
+  defp refresh_args(id, :full), do: %{media_item_id: id}
+  defp refresh_args(id, :metadata_only), do: %{media_item_id: id, fetch_episodes: false}
 end
