@@ -3519,9 +3519,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // `_fetchSeasonEpisodes` would load the wrong list, the controller's
     // current index would resolve to -1, and up-next would be dead for that
     // entire season.
-    context.go(
-      '/player/episode/$episodeId?fileId=$fileId&title=${Uri.encodeComponent(title)}&showId=${widget.showId}&seasonNumber=$seasonNumber',
-    );
+    context.go(_session.episodeLocation(
+      episodeId: episodeId,
+      fileId: fileId,
+      title: title,
+      seasonNumber: seasonNumber,
+      showId: widget.showId,
+    ));
   }
 
   /// Saves the current position under this widget's own identity; see

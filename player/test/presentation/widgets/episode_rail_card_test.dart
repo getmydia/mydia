@@ -5,6 +5,7 @@ import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/models/progress.dart';
+import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/watch_indicator.dart';
 
@@ -46,9 +47,8 @@ Future<void> _pump(
         child: MaterialApp(
           home: Scaffold(
             body: EpisodeRailCard(
-              episode: episode,
-              showTitle: 'Test Show',
-              showId: 'show-1',
+              episode: episodeViewFromMydia(episode, show: null),
+              onWatchedAction: (_) async {},
               onTap: onTap,
               selected: selected,
             ),

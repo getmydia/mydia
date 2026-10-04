@@ -64,6 +64,18 @@ class MydiaPlaybackSession implements PlaybackSession {
   Set<PlaybackFeature> get features => PlaybackFeature.values.toSet();
 
   @override
+  String episodeLocation({
+    required String episodeId,
+    required String fileId,
+    required String title,
+    required int seasonNumber,
+    required String? showId,
+  }) =>
+      '/player/episode/$episodeId?fileId=$fileId'
+      '&title=${Uri.encodeComponent(title)}&showId=$showId'
+      '&seasonNumber=$seasonNumber';
+
+  @override
   Future<ProgressReporter> openProgress() async {
     final deps = _streaming;
     if (deps == null) {

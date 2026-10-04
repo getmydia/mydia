@@ -1,98 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../widgets/artwork_image.dart';
-import '../../../core/cache/artwork_decode.dart';
-import '../../../core/cache/poster_cache_manager.dart';
+import '../../widgets/detail_art_image.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../../core/downloads/bulk_download_helper.dart';
-import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
-import '../../../core/downloads/download_service.dart';
+import '../../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../../domain/detail/detail_target.dart';
+import '../../../domain/detail/detail_views.dart';
+import '../detail/detail_actions.dart';
+import '../detail/detail_links.dart';
+import '../detail/detail_providers.dart';
+import '../detail/detail_similar_rail.dart';
+import '../detail/mydia_downloads.dart';
 import 'show_detail_controller.dart';
-import 'season_episodes_controller.dart';
-import '../../../domain/models/show_detail.dart';
-import '../../../domain/models/season_info.dart';
-import '../../../domain/models/download.dart';
-import '../../../domain/models/episode.dart';
-import '../../../domain/models/watch_status.dart';
+import 'show_season_section.dart';
 import '../../widgets/detail_hero_app_bar.dart';
-import '../../widgets/episode_rail.dart';
 import '../../widgets/freshness_header.dart';
-import '../../widgets/quality_download_dialog.dart';
-import '../../../core/graphql/watch/query_key.dart';
 import '../../../core/player/resume_plan.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/cast_rail.dart';
-import '../../widgets/content_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
-import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
-import '../../widgets/watch_indicator.dart';
-import '../../widgets/toast/toaster.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
 /// docs/superpowers/specs/2026-08-05-player-detail-page-infuse-redesign-design.md.
 const double _kHeroBreakpoint = 700;
 
-/// The `&resume=` suffix for a hero Play tap, or an empty string when playback
-/// should start from the beginning.
+/// The position a hero Play tap resumes from, or null when playback should
+/// start from the beginning.
 ///
 /// The pre-redesign next-up button asked the server's `nextUp.state` whether
 /// this was a continue-watching item. The redesigned hero can point at any
 /// episode in the season, not just next-up, so eligibility comes from that
 /// episode's own progress: saved progress present, not yet watched, and past
 /// the minimum position [shouldPassResume] enforces.
-String _resumeSuffix(Episode episode) {
+int? _resumeSeconds(EpisodeView episode) {
   final progress = episode.progress;
   final pass = shouldPassResume(
     isContinueState: progress != null,
     positionSeconds: progress?.positionSeconds,
     watched: progress?.watched ?? false,
   );
-  return pass ? '&resume=${progress!.positionSeconds}' : '';
+  return pass ? progress!.positionSeconds : null;
 }
 
 class ShowDetailScreen extends ConsumerWidget {
-  final String id;
+  ShowDetailScreen({super.key, required String id})
+      : target = MydiaTarget(DetailKind.show, id),
+        initialSeason = null;
 
-  const ShowDetailScreen({
+  const ShowDetailScreen.target({
     super.key,
-    required this.id,
+    required this.target,
+    this.initialSeason,
   });
+
+  final DetailTarget target;
+
+  /// Opened from a season: start on it rather than next up.
+  final int? initialSeason;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final showAsync = ref.watch(showDetailControllerProvider(id));
-    final selectedSeason = ref.watch(selectedSeasonProvider(id));
+    final showAsync = ref.watch(showViewProvider(target));
+    final selectedSeason = ref.watch(selectedSeasonProvider(target.key));
 
     // This is a full-window route (pushed outside the shell), and so the sole
     // owner of the title-bar band here: the body has to sit under
     // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
     // band on top of the hero's own title row a second time.
-    return WindowChromeInsets.removeBand(
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        body: Column(
-          children: [
-            FreshnessHeader(
-              queryKeys: [
-                QueryKeys.showDetail(id),
-                QueryKeys.seasonEpisodes(id, selectedSeason),
-              ],
-              topInset: freshnessTopInset(context, appBarHeight: 0),
-            ),
-            Expanded(
-              child: showAsync.when(
-                data: (show) => _buildContent(context, ref, show),
-                loading: () => _buildLoadingState(context),
-                error: (error, stack) => _buildErrorState(context, ref, error),
+    return _InitialSeasonSeed(
+      showKey: target.key,
+      season: initialSeason,
+      child: WindowChromeInsets.removeBand(
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          body: Column(
+            children: [
+              FreshnessHeader(
+                queryKeys: freshnessKeys(target, seasonNumber: selectedSeason),
+                topInset: freshnessTopInset(context, appBarHeight: 0),
               ),
-            ),
-          ],
+              Expanded(
+                child: showAsync.when(
+                  data: (show) => _buildContent(context, ref, show),
+                  loading: () => _buildLoadingState(context),
+                  error: (error, stack) =>
+                      _buildErrorState(context, ref, error),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -109,7 +110,7 @@ class ShowDetailScreen extends ConsumerWidget {
 
   /// Exposes [_buildErrorState] for the same reason as
   /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
-  /// button reads `showDetailControllerProvider(id).notifier` from it, even
+  /// button reads `showActionsProvider(target)` from it, even
   /// though nothing is watched during build.
   @visibleForTesting
   Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
@@ -223,9 +224,8 @@ class ShowDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
-                    onPressed: () => ref
-                        .read(showDetailControllerProvider(id).notifier)
-                        .refresh(),
+                    onPressed: () =>
+                        ref.read(showActionsProvider(target)).refresh(),
                     icon: const Icon(Icons.refresh_rounded),
                     label: const Text('Try Again'),
                     style: FilledButton.styleFrom(
@@ -242,25 +242,6 @@ class ShowDetailScreen extends ConsumerWidget {
         ),
       ],
     );
-  }
-
-  /// Resolves which episode the hero describes: the one matching
-  /// [selectedEpisodeId] if it's in the currently-loaded [episodes] list,
-  /// otherwise the first episode of that list. The fallback matters for two
-  /// real cases: a fully-watched show has no `nextUp`, so the
-  /// default-selection seed in `_buildContent` never fires and
-  /// `selectedEpisodeId` stays null forever; and switching seasons leaves
-  /// `selectedEpisodeId` pointing at an episode from the *previous* season,
-  /// which never matches the newly-loaded list. Either case previously left
-  /// the hero stuck on a permanent loading spinner instead of falling back
-  /// to something sensible.
-  Episode? _resolveSelectedEpisode(
-    String? selectedEpisodeId,
-    List<Episode> episodes,
-  ) {
-    if (episodes.isEmpty) return null;
-    return episodes.where((e) => e.id == selectedEpisodeId).firstOrNull ??
-        episodes.first;
   }
 
   /// Carries the viewport back to the hero after a rail selection.
@@ -283,29 +264,32 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, WidgetRef ref, ShowDetail show) {
-    final selectedEpisodeId = ref.watch(selectedEpisodeProvider(id));
+  Widget _buildContent(BuildContext context, WidgetRef ref, ShowView show) {
+    final key = target.key;
+    final selectedEpisodeId = ref.watch(selectedEpisodeProvider(key));
 
-    if (selectedEpisodeId == null && show.nextUp != null) {
+    // A screen opened on a season never seeds next up: that would pull the
+    // selection back off the season it was opened on.
+    final nextUpId = show.nextUpEpisodeId;
+    final nextUpSeason = show.nextUpSeasonNumber;
+    if (selectedEpisodeId == null &&
+        initialSeason == null &&
+        nextUpId != null &&
+        nextUpSeason != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final nextUp = show.nextUp!.episode;
-        ref.read(selectedEpisodeProvider(id).notifier).select(nextUp.id);
-        ref
-            .read(selectedSeasonProvider(id).notifier)
-            .select(nextUp.seasonNumber);
+        ref.read(selectedEpisodeProvider(key).notifier).select(nextUpId);
+        ref.read(selectedSeasonProvider(key).notifier).select(nextUpSeason);
       });
     }
 
-    final selectedSeason = ref.watch(selectedSeasonProvider(id));
+    final selectedSeason = ref.watch(selectedSeasonProvider(key));
     final episodesAsync = ref.watch(
-      seasonEpisodesControllerProvider(
-        showId: id,
-        seasonNumber: selectedSeason,
+      seasonEpisodesViewProvider(
+        (show: target, seasonNumber: selectedSeason),
       ),
     );
-    final episodes = episodesAsync.value ?? const <Episode>[];
-    final selectedEpisode =
-        _resolveSelectedEpisode(selectedEpisodeId, episodes);
+    final episodes = episodesAsync.value ?? const <EpisodeView>[];
+    final selectedEpisode = resolveSelectedEpisode(selectedEpisodeId, episodes);
 
     return CustomScrollView(
       slivers: [
@@ -319,22 +303,12 @@ class ShowDetailScreen extends ConsumerWidget {
             child: CastRail(members: show.cast),
           ),
         ),
-        if (show.similar.isNotEmpty)
-          SliverToBoxAdapter(
-            child: ContentRail(
-              title: 'Similar in your library',
-              // Collapsed by default: you open a show to reach its episodes,
-              // and a strip of other titles between the cast and the seasons
-              // pulls against that.
-              collapsible: true,
-              items: show.similar,
-              onItemTap: (itemId, type) => context.push(
-                type.toLowerCase() == 'movie'
-                    ? '/movie/$itemId'
-                    : '/show/$itemId',
-              ),
-            ),
-          ),
+        // Collapsed by default: you open a show to reach its episodes, and a
+        // strip of other titles between the cast and the seasons pulls
+        // against that.
+        SliverToBoxAdapter(
+          child: DetailSimilarRail(show: show, collapsible: true),
+        ),
         SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,13 +320,12 @@ class ShowDetailScreen extends ConsumerWidget {
                 _buildOverview(context, show),
                 const SizedBox(height: 24),
               ],
-              if (show.seasons.isNotEmpty)
-                _buildSeasonSelector(context, ref, show),
+              if (show.seasons.isNotEmpty) ShowSeasonSection(show: show),
               const SizedBox(height: 8),
             ],
           ),
         ),
-        _buildEpisodeList(context, ref),
+        ShowEpisodeList(show: show, onRevealHero: _revealHero),
         const SliverDockGap(),
       ],
     );
@@ -360,8 +333,8 @@ class ShowDetailScreen extends ConsumerWidget {
 
   Widget _buildHeroSection(
     BuildContext context,
-    ShowDetail show,
-    Episode? selectedEpisode,
+    ShowView show,
+    EpisodeView? selectedEpisode,
   ) {
     return detailHeroAppBar(
       context: context,
@@ -371,24 +344,12 @@ class ShowDetailScreen extends ConsumerWidget {
         fit: StackFit.expand,
         children: [
           // Background image
-          if (show.artwork.backdropUrl != null)
-            ArtworkImage(
-              imageUrl: show.artwork.backdropUrl!,
-              fit: BoxFit.cover,
-              cacheManager: BackdropCacheManager(),
-              decodeWidth: viewportDecodeWidth(
-                context,
-                sourceWidth: backdropSourceWidth,
-              ),
-              placeholder: (context) => Container(
-                color: AppColors.surface,
-              ),
-              errorWidget: (context) => Container(
-                color: AppColors.surface,
-              ),
-            )
-          else
-            Container(color: AppColors.surface),
+          DetailArtImage(
+            art: show.backdrop,
+            slot: ArtSlot.backdrop,
+            placeholder: (_) => Container(color: AppColors.surface),
+            errorWidget: (_) => Container(color: AppColors.surface),
+          ),
 
           // Gradient overlay
           Container(
@@ -468,8 +429,8 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEpisodeContextPill(ShowDetail show, Episode episode) {
-    final isNextUp = show.nextUp?.episode.id == episode.id;
+  Widget _buildEpisodeContextPill(ShowView show, EpisodeView episode) {
+    final isNextUp = show.nextUpEpisodeId == episode.id;
     final label = isNextUp
         ? 'Next Up · S${episode.seasonNumber} E${episode.episodeNumber}'
         : 'S${episode.seasonNumber} · E${episode.episodeNumber}';
@@ -498,28 +459,26 @@ class ShowDetailScreen extends ConsumerWidget {
   /// `detailHeroAppBar`.
   Widget _buildHeroPlayControl(
     BuildContext context,
-    ShowDetail show,
-    Episode episode,
+    ShowView show,
+    EpisodeView episode,
   ) {
     return HeroPlayControl(
       files: episode.files,
-      onFileSelected: (file) {
-        final title = '${show.title} - ${episode.episodeCode}';
-        context.push(
-          '/player/episode/${episode.id}?fileId=${file.id}'
-          '&title=${Uri.encodeComponent(title)}&showId=$id'
-          '&seasonNumber=${episode.seasonNumber}'
-          '${_resumeSuffix(episode)}',
-        );
-      },
+      onFileSelected: (file) => context.push(
+        episodePlayerLocation(
+          episode,
+          file,
+          resumeSeconds: _resumeSeconds(episode),
+        ),
+      ),
     );
   }
 
   Widget _buildEpisodeHeroBody(
     BuildContext context,
     WidgetRef ref,
-    ShowDetail show,
-    Episode? selectedEpisode,
+    ShowView show,
+    EpisodeView? selectedEpisode,
   ) {
     if (selectedEpisode == null) {
       return const Padding(
@@ -573,46 +532,65 @@ class ShowDetailScreen extends ConsumerWidget {
   Widget _buildActionColumn(
     BuildContext context,
     WidgetRef ref,
-    ShowDetail show,
-    Episode episode, {
+    ShowView show,
+    EpisodeView episode, {
     required bool compact,
   }) {
+    final seasonKey = (show: target, seasonNumber: episode.seasonNumber);
+    final mydiaShow = show.mydia;
+    final mydiaEpisode = episode.mydia;
+    final canDownload = isDownloadSupported &&
+        mydiaShow != null &&
+        mydiaEpisode != null &&
+        show.features.contains(DetailFeature.download) &&
+        episode.files.isNotEmpty;
     return DetailActionRow(
       compact: compact,
-      watched: episode.progress?.watched ?? false,
-      onToggleWatched: () => episode.progress?.watched ?? false
-          ? ref
-              .read(seasonEpisodesControllerProvider(
-                      showId: id, seasonNumber: episode.seasonNumber)
-                  .notifier)
-              .markEpisodeUnwatched(episode)
-          : ref
-              .read(seasonEpisodesControllerProvider(
-                      showId: id, seasonNumber: episode.seasonNumber)
-                  .notifier)
-              .markEpisodeWatched(episode),
+      watched: episode.watched,
+      showWatched: show.features.contains(DetailFeature.watched),
+      // No failure toast, as before: the hero toggle never raised one.
+      onToggleWatched: () => ref.read(seasonActionsProvider(seasonKey)).episode(
+            episode,
+            episode.watched
+                ? EpisodeWatchedAction.unwatched
+                : EpisodeWatchedAction.watched,
+          ),
       isFavorite: show.isFavorite,
+      showFavorite: show.features.contains(DetailFeature.favorite),
       onToggleFavorite: () =>
-          ref.read(showDetailControllerProvider(id).notifier).toggleFavorite(),
-      onDownload: () => _startEpisodeDownload(context, ref, show, episode),
+          ref.read(showActionsProvider(target)).toggleFavorite(),
+      onDownload: canDownload
+          ? () => startMydiaEpisodeDownload(
+                context,
+                ref,
+                episode: mydiaEpisode,
+                showId: mydiaShow.id,
+                showTitle: mydiaShow.title,
+                showPosterUrl: mydiaShow.artwork.posterUrl,
+              )
+          : null,
       trailerUrl: show.trailerUrl,
-      showDownload: isDownloadSupported && episode.files.isNotEmpty,
+      showDownload: canDownload,
       // Per-episode, not per-show: the hero's Download action downloads
       // the selected episode.
-      isDownloaded:
-          ref.watch(isMediaDownloadedProvider(episode.id)).value ?? false,
-      onShowMediaInfo: episode.files.isEmpty
+      isDownloaded: mydiaEpisode == null
+          ? false
+          : ref.watch(isMediaDownloadedProvider(mydiaEpisode.id)).value ??
+              false,
+      onShowMediaInfo: mydiaEpisode == null ||
+              !show.features.contains(DetailFeature.mediaInfo) ||
+              episode.files.isEmpty
           ? null
           : () => showMediaInfo(
                 context: context,
-                id: episode.id,
+                id: mydiaEpisode.id,
                 target: MediaInfoTarget.episode,
               ),
     );
   }
 
   Widget _buildTagColumn(
-      BuildContext context, ShowDetail show, Episode episode) {
+      BuildContext context, ShowView show, EpisodeView episode) {
     final tags = <String>[
       if (episode.runtimeDisplay.isNotEmpty) episode.runtimeDisplay,
       if (episode.files.isNotEmpty && episode.files.first.resolution != null)
@@ -682,116 +660,17 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// Progressive-download flow for the hero's Download action, adapted from
-  /// `EpisodeDownloadButton._handleDownload` since the hero isn't that
-  /// widget — it needs the same quality-dialog → `startProgressiveDownload`
-  /// sequence, just driven by whichever episode is currently selected.
-  Future<void> _startEpisodeDownload(
-    BuildContext context,
-    WidgetRef ref,
-    ShowDetail show,
-    Episode episode,
-  ) async {
-    final isDownloadedAsync = ref.read(isMediaDownloadedProvider(episode.id));
-    final isDownloaded = isDownloadedAsync.value ?? false;
-
-    if (isDownloaded) {
-      if (context.mounted) {
-        showToast(context, 'Already downloaded');
-      }
-    } else if (episode.files.isNotEmpty) {
-      final selectedResolution = await showQualityDownloadDialog(
-        context,
-        contentType: 'episode',
-        contentId: episode.id,
-        title: '${show.title} - ${episode.episodeCode}',
-      );
-
-      if (selectedResolution != null && context.mounted) {
-        final downloadService = ref.read(unifiedDownloadJobServiceProvider);
-        final downloadManager = await ref.read(downloadManagerProvider.future);
-
-        if (downloadService != null) {
-          try {
-            await downloadManager.startProgressiveDownload(
-              mediaId: episode.id,
-              title: '${show.title} - ${episode.episodeCode}: ${episode.title}',
-              contentType: 'episode',
-              resolution: selectedResolution,
-              mediaType: MediaType.episode,
-              posterUrl: episode.thumbnailUrl,
-              overview: episode.overview,
-              runtime: episode.runtime,
-              seasonNumber: episode.seasonNumber,
-              episodeNumber: episode.episodeNumber,
-              showId: show.id,
-              showTitle: show.title,
-              showPosterUrl: show.artwork.posterUrl,
-              thumbnailUrl: episode.thumbnailUrl,
-              airDate: episode.airDate,
-              getDownloadUrl: (jobId) async {
-                return await downloadService.getDownloadUrl(jobId);
-              },
-              prepareDownload: () async {
-                final status = await downloadService.prepareDownload(
-                  contentType: 'episode',
-                  id: episode.id,
-                  resolution: selectedResolution,
-                );
-                return (
-                  jobId: status.jobId,
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                );
-              },
-              getJobStatus: (jobId) async {
-                final status = await downloadService.getJobStatus(jobId);
-                return (
-                  status: status.status.name,
-                  progress: status.progress,
-                  fileSize: status.currentFileSize,
-                  error: status.error,
-                );
-              },
-              cancelJob: (jobId) async {
-                await downloadService.cancelJob(jobId);
-              },
-            );
-
-            if (context.mounted) {
-              showToast(
-                context,
-                'Download started',
-                kind: ToastKind.success,
-              );
-            }
-          } catch (e) {
-            if (context.mounted) {
-              showToast(
-                context,
-                'Failed to start download: $e',
-                kind: ToastKind.error,
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
   /// Status chip only. Content rating and genres live in the hero's tag row
   /// now — repeating them here rendered each one twice on the page.
-  Widget _buildMetadata(BuildContext context, ShowDetail show) {
+  Widget _buildMetadata(BuildContext context, ShowView show) {
     final items = <Widget>[];
+    final status = show.status;
 
-    if (show.statusDisplay.isNotEmpty) {
+    if (status != null && status.isNotEmpty) {
       items.add(_buildMetadataChip(
         context,
-        show.statusDisplay,
-        show.statusDisplay == 'Ended'
-            ? AppColors.textSecondary
-            : AppColors.success,
+        status,
+        status == 'Ended' ? AppColors.textSecondary : AppColors.success,
       ));
     }
 
@@ -826,7 +705,7 @@ class ShowDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildOverview(BuildContext context, ShowDetail show) {
+  Widget _buildOverview(BuildContext context, ShowView show) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -863,610 +742,37 @@ class ShowDetailScreen extends ConsumerWidget {
       ),
     );
   }
-
-  Widget _buildSeasonSelector(
-      BuildContext context, WidgetRef ref, ShowDetail show) {
-    final selectedSeason = ref.watch(selectedSeasonProvider(id));
-    // Only show seasons that have files available in Mydia
-    final availableSeasons = show.seasons.where((s) => s.hasFiles).toList();
-
-    if (availableSeasons.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    // Auto-select first available season if current selection has no files
-    final hasSelectedSeasonFiles = availableSeasons.any(
-      (s) => s.seasonNumber == selectedSeason,
-    );
-    if (!hasSelectedSeasonFiles) {
-      // Schedule the update for after the current build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref
-            .read(selectedSeasonProvider(id).notifier)
-            .select(availableSeasons.first.seasonNumber);
-      });
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Episodes',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const Spacer(),
-              if (isDownloadSupported)
-                _BulkDownloadButton(
-                  showId: id,
-                  show: show,
-                  selectedSeason: selectedSeason,
-                  availableSeasons: availableSeasons,
-                ),
-              // Season watched actions render on web too, where downloads are
-              // unsupported — so they live outside the isDownloadSupported gate.
-              _SeasonActionsButton(
-                showId: id,
-                selectedSeason: selectedSeason,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 44,
-          child: HorizontalWheelScroll(
-            builder: (context, controller) => ListView.builder(
-              controller: controller,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: availableSeasons.length,
-              itemBuilder: (context, index) {
-                final season = availableSeasons[index];
-                final unwatched =
-                    season.watchStatus?.unwatchedEpisodeCount ?? 0;
-                final isSelected = season.seasonNumber == selectedSeason;
-
-                return Padding(
-                  key: ValueKey('season-chip-${season.seasonNumber}'),
-                  padding: const EdgeInsets.only(right: 10),
-                  child: _SeasonChip(
-                    label: 'Season ${season.seasonNumber}',
-                    unwatched: unwatched,
-                    watchStatus: season.watchStatus,
-                    isSelected: isSelected,
-                    onTap: () {
-                      ref
-                          .read(selectedSeasonProvider(id).notifier)
-                          .select(season.seasonNumber);
-                    },
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEpisodeList(BuildContext context, WidgetRef ref) {
-    final selectedSeason = ref.watch(selectedSeasonProvider(id));
-    final showAsync = ref.watch(showDetailControllerProvider(id));
-    final show = showAsync.value;
-
-    final episodesAsync = ref.watch(
-      seasonEpisodesControllerProvider(
-        showId: id,
-        seasonNumber: selectedSeason,
-      ),
-    );
-
-    return episodesAsync.when(
-      data: (episodes) {
-        if (episodes.isEmpty) {
-          return SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.tv_off_rounded,
-                        size: 48,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No episodes found',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'This season has no episodes available',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }
-
-        return SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            // Builder so the tap handler closes over a context *inside* the
-            // CustomScrollView. _buildEpisodeList receives _buildContent's
-            // context, which sits outside it, and _revealHero needs the
-            // enclosing Scrollable.
-            child: Builder(
-              builder: (railContext) => EpisodeRail(
-                episodes: episodes,
-                showTitle: show?.title ?? 'Unknown Show',
-                showId: show?.id,
-                showPosterUrl: show?.artwork.posterUrl,
-                // Resolved through the same helper the hero uses, so the rail
-                // highlights whichever episode the hero describes — including
-                // the fallback cases where the selected id matches nothing in
-                // this season's list.
-                selectedEpisodeId: _resolveSelectedEpisode(
-                  ref.watch(selectedEpisodeProvider(id)),
-                  episodes,
-                )?.id,
-                // The rail picks; the hero plays. Tapping a card used to
-                // resolve a file and launch the player, which gave the show
-                // page's own tap a different meaning from every other card in
-                // the app and left no route to the episode's details.
-                onEpisodeTap: (episode) {
-                  ref
-                      .read(selectedEpisodeProvider(id).notifier)
-                      .select(episode.id);
-                  if (episode.seasonNumber != selectedSeason) {
-                    ref
-                        .read(selectedSeasonProvider(id).notifier)
-                        .select(episode.seasonNumber);
-                  }
-                  _revealHero(railContext);
-                },
-              ),
-            ),
-          ),
-        );
-      },
-      loading: () => const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(40),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      ),
-      error: (error, stack) => SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.error_outline_rounded,
-                    size: 32,
-                    color: AppColors.error,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Failed to load episodes',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-class _BulkDownloadButton extends ConsumerWidget {
-  final String showId;
-  final ShowDetail show;
-  final int selectedSeason;
-  final List<SeasonInfo> availableSeasons;
-
-  const _BulkDownloadButton({
-    required this.showId,
-    required this.show,
-    required this.selectedSeason,
-    required this.availableSeasons,
+/// Selects [season] once, on the first frame of a screen opened from a season.
+/// The latch lives in this State, so a later season tap is never reverted.
+class _InitialSeasonSeed extends ConsumerStatefulWidget {
+  const _InitialSeasonSeed({
+    required this.showKey,
+    required this.season,
+    required this.child,
   });
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.download_rounded,
-        color: AppColors.textSecondary,
-        size: 22,
-      ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      style: const ButtonStyle(
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      ),
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      onSelected: (value) {
-        if (value == 'season') {
-          _handleBulkDownload(
-            context,
-            ref,
-            [selectedSeason],
-          );
-        } else if (value == 'all') {
-          _handleBulkDownload(
-            context,
-            ref,
-            availableSeasons.map((s) => s.seasonNumber).toList(),
-          );
-        }
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'season',
-          child: Row(
-            children: [
-              const Icon(Icons.folder_rounded, size: 18),
-              const SizedBox(width: 12),
-              Text('Download Season $selectedSeason'),
-            ],
-          ),
-        ),
-        if (availableSeasons.length > 1)
-          const PopupMenuItem(
-            value: 'all',
-            child: Row(
-              children: [
-                Icon(Icons.folder_copy_rounded, size: 18),
-                SizedBox(width: 12),
-                Text('Download All Seasons'),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  Future<void> _handleBulkDownload(
-    BuildContext context,
-    WidgetRef ref,
-    List<int> seasonNumbers,
-  ) async {
-    // Fetch episodes for all requested seasons
-    final allEpisodes = <Episode>[];
-    for (final seasonNumber in seasonNumbers) {
-      try {
-        final episodes = await ref.read(
-          seasonEpisodesControllerProvider(
-            showId: showId,
-            seasonNumber: seasonNumber,
-          ).future,
-        );
-        allEpisodes
-            .addAll(episodes.where((e) => e.hasFile && e.files.isNotEmpty));
-      } catch (e) {
-        debugPrint('Failed to fetch episodes for season $seasonNumber: $e');
-      }
-    }
-
-    if (allEpisodes.isEmpty) {
-      if (context.mounted) {
-        showToast(context, 'No downloadable episodes found');
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
-    // Show quality dialog using the first episode's ID
-    final selectedResolution = await showQualityDownloadDialog(
-      context,
-      contentType: 'episode',
-      contentId: allEpisodes.first.id,
-      title: seasonNumbers.length == 1
-          ? '${show.title} - Season ${seasonNumbers.first}'
-          : '${show.title} - All Seasons',
-    );
-
-    if (selectedResolution == null || !context.mounted) return;
-
-    // Get download services
-    final downloadJobService = ref.read(unifiedDownloadJobServiceProvider);
-    if (downloadJobService == null) {
-      if (context.mounted) {
-        showToast(
-          context,
-          'Download service not available',
-          kind: ToastKind.error,
-        );
-      }
-      return;
-    }
-
-    final downloadManager = await ref.read(downloadManagerProvider.future);
-
-    // Build sets for skip checks
-    final downloadedMediaIds = <String>{};
-    final queueMediaIds = <String>{};
-
-    for (final episode in allEpisodes) {
-      if (downloadManager.isMediaDownloaded(episode.id)) {
-        downloadedMediaIds.add(episode.id);
-      }
-    }
-
-    final queueAsync = ref.read(downloadQueueProvider);
-    if (queueAsync.hasValue) {
-      for (final task in queueAsync.value!) {
-        queueMediaIds.add(task.mediaId);
-      }
-    }
-
-    // Start bulk downloads
-    final result = await startBulkEpisodeDownloads(
-      episodes: allEpisodes,
-      resolution: selectedResolution,
-      showId: showId,
-      showTitle: show.title,
-      showPosterUrl: show.artwork.posterUrl,
-      downloadManager: downloadManager,
-      downloadJobService: downloadJobService,
-      isMediaDownloaded: (id) => downloadedMediaIds.contains(id),
-      isMediaInQueue: (id) => queueMediaIds.contains(id),
-    );
-
-    if (!context.mounted) return;
-
-    // Show the result
-    final message = _buildResultMessage(result);
-    showToast(
-      context,
-      message,
-      icon: result.queued > 0 ? Icons.download_rounded : null,
-    );
-  }
-
-  String _buildResultMessage(BulkDownloadResult result) {
-    if (result.queued == 0 && result.skipped > 0) {
-      return 'All ${result.skipped} episodes already downloaded or queued';
-    }
-    final parts = <String>[];
-    parts.add(
-        'Queued ${result.queued} episode${result.queued != 1 ? 's' : ''} for download');
-    if (result.skipped > 0) {
-      parts.add('${result.skipped} already downloaded');
-    }
-    if (result.failed > 0) {
-      parts.add('${result.failed} failed');
-    }
-    return parts.join(', ');
-  }
-}
-
-/// Overflow menu in the "Episodes" title row that marks the currently selected
-/// season watched or unwatched. Renders on all platforms (including web, where
-/// downloads are unsupported), so it sits outside the download-support gate.
-class _SeasonActionsButton extends ConsumerWidget {
-  final String showId;
-  final int selectedSeason;
-
-  const _SeasonActionsButton({
-    required this.showId,
-    required this.selectedSeason,
-  });
+  final String showKey;
+  final int? season;
+  final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return PopupMenuButton<String>(
-      icon: const Icon(
-        Icons.more_vert_rounded,
-        color: AppColors.textSecondary,
-        size: 22,
-      ),
-      tooltip: 'Season actions',
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      style: const ButtonStyle(
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      ),
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      onSelected: (value) => _handleSeasonAction(context, ref, value),
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'season_watched',
-          child: Row(
-            children: [
-              Icon(Icons.visibility_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Mark season watched'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'season_unwatched',
-          child: Row(
-            children: [
-              Icon(Icons.visibility_off_rounded, size: 18),
-              SizedBox(width: 12),
-              Text('Mark season unwatched'),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _handleSeasonAction(
-    BuildContext context,
-    WidgetRef ref,
-    String value,
-  ) async {
-    final controller = ref.read(
-      seasonEpisodesControllerProvider(
-        showId: showId,
-        seasonNumber: selectedSeason,
-      ).notifier,
-    );
-
-    try {
-      if (value == 'season_watched') {
-        await controller.markSeasonWatched();
-      } else if (value == 'season_unwatched') {
-        await controller.markSeasonUnwatched();
-      }
-    } catch (_) {
-      if (context.mounted) {
-        showToast(
-          context,
-          'Could not update season watched status',
-          kind: ToastKind.error,
-        );
-      }
-    }
-  }
+  ConsumerState<_InitialSeasonSeed> createState() => _InitialSeasonSeedState();
 }
 
-class _SeasonChip extends StatefulWidget {
-  final String label;
-  final int unwatched;
-  final WatchStatus? watchStatus;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _SeasonChip({
-    required this.label,
-    required this.unwatched,
-    required this.watchStatus,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  State<_SeasonChip> createState() => _SeasonChipState();
-}
-
-class _SeasonChipState extends State<_SeasonChip>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
+class _InitialSeasonSeedState extends ConsumerState<_InitialSeasonSeed> {
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 100),
-      vsync: this,
-    );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    final season = widget.season;
+    if (season == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(selectedSeasonProvider(widget.showKey).notifier).select(season);
+    });
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        widget.onTap();
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: ScaleTransition(
-        scale: _scaleAnimation,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: widget.isSelected ? AppColors.primary : AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: widget.isSelected
-                  ? AppColors.primary
-                  : AppColors.divider.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color:
-                      widget.isSelected ? Colors.white : AppColors.textPrimary,
-                ),
-              ),
-              if (widget.unwatched > 0) ...[
-                const SizedBox(width: 6),
-                WatchIndicator(status: widget.watchStatus),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }

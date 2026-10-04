@@ -17,8 +17,8 @@ class DetailActionRow extends StatelessWidget {
   final bool watched;
   final VoidCallback onToggleWatched;
   final bool isFavorite;
-  final VoidCallback onToggleFavorite;
-  final VoidCallback onDownload;
+  final VoidCallback? onToggleFavorite;
+  final VoidCallback? onDownload;
   final String? trailerUrl;
 
   /// Whether to show the Download button at all. Defaults to `true`; callers
@@ -44,42 +44,53 @@ class DetailActionRow extends StatelessWidget {
   /// row takes only the width its buttons need, however many are showing.
   final bool compact;
 
+  /// False hides Watched, for a server that cannot record it.
+  final bool showWatched;
+
+  /// False hides Favorite, for a server without favorites.
+  final bool showFavorite;
+
   const DetailActionRow({
     super.key,
     required this.watched,
     required this.onToggleWatched,
     required this.isFavorite,
-    required this.onToggleFavorite,
-    required this.onDownload,
+    this.onToggleFavorite,
+    this.onDownload,
     required this.trailerUrl,
     this.showDownload = true,
     this.isDownloaded = false,
     this.onShowMediaInfo,
     this.compact = false,
+    this.showWatched = true,
+    this.showFavorite = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final trailerUrl = this.trailerUrl;
     final actions = <Widget>[
-      _ActionButton(
-        icon: watched
-            ? Icons.check_circle_rounded
-            : Icons.check_circle_outline_rounded,
-        label: 'Watched',
-        highlighted: watched,
-        highlightColor: AppColors.success,
-        onTap: onToggleWatched,
-      ),
-      _ActionButton(
-        icon:
-            isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-        label: 'Favorite',
-        highlighted: isFavorite,
-        highlightColor: AppColors.error,
-        onTap: onToggleFavorite,
-      ),
-      if (showDownload)
+      if (showWatched)
+        _ActionButton(
+          icon: watched
+              ? Icons.check_circle_rounded
+              : Icons.check_circle_outline_rounded,
+          label: 'Watched',
+          highlighted: watched,
+          highlightColor: AppColors.success,
+          onTap: onToggleWatched,
+        ),
+      if (showFavorite && onToggleFavorite != null)
+        _ActionButton(
+          icon: isFavorite
+              ? Icons.favorite_rounded
+              : Icons.favorite_border_rounded,
+          label: 'Favorite',
+          highlighted: isFavorite,
+          highlightColor: AppColors.error,
+          onTap: onToggleFavorite!,
+        ),
+      if (showDownload && onDownload != null)
         _ActionButton(
           icon: isDownloaded
               ? Icons.download_done_rounded
@@ -87,7 +98,7 @@ class DetailActionRow extends StatelessWidget {
           label: 'Download',
           highlighted: isDownloaded,
           highlightColor: AppColors.success,
-          onTap: onDownload,
+          onTap: onDownload!,
         ),
       if (trailerUrl != null)
         _ActionButton(

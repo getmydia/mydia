@@ -131,8 +131,8 @@ class SelectedSeason extends _$SelectedSeason {
 // user already made — every time the show query re-resolves (e.g. after an
 // unrelated favorite toggle invalidation). `ShowDetailScreen` sets the actual
 // default (next-unwatched episode) via a post-frame callback once, the same
-// self-correction idiom `_buildSeasonSelector` already uses for season
-// selection — see show_detail_screen.dart.
+// self-correction idiom `ShowSeasonSection` already uses for season
+// selection, see show_season_section.dart.
 @riverpod
 class SelectedEpisode extends _$SelectedEpisode {
   @override

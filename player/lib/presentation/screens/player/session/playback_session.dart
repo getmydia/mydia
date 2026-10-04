@@ -73,4 +73,13 @@ abstract interface class PlaybackSession {
     required void Function(String message) onProgress,
     required bool Function() isCurrent,
   });
+
+  /// Where the player goes to play another episode of the same show.
+  String episodeLocation({
+    required String episodeId,
+    required String fileId,
+    required String title,
+    required int seasonNumber,
+    required String? showId,
+  });
 }
