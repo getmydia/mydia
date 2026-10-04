@@ -45,6 +45,20 @@ defmodule Mydia.Plugins.DeclaredSourcesTest do
     assert [%PluginSource{declared: false, enabled: false}] = Sources.list_sources()
   end
 
+  test "two declarations of one URL with different keys keep the first and warn" do
+    first = keypair().public
+
+    declare([
+      %PluginSourceDecl{url: "https://a.test/index.json", public_key: first},
+      %PluginSourceDecl{url: "https://a.test/index.json", public_key: keypair().public}
+    ])
+
+    log = ExUnit.CaptureLog.capture_log(fn -> :ok = DeclaredSources.sync() end)
+
+    assert log =~ "https://a.test/index.json"
+    assert [%PluginSource{public_key: ^first}] = Sources.list_sources()
+  end
+
   test "a UI-added row with the same URL becomes declared" do
     {:ok, _} =
       Sources.add_source(%{url: "https://a.test/index.json", public_key: keypair().public})

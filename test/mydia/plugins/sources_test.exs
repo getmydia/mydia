@@ -33,6 +33,34 @@ defmodule Mydia.Plugins.SourcesTest do
     assert %{url: [_]} = errors_on(cs)
   end
 
+  test "add_source refuses the official index URL" do
+    assert {:error, cs} =
+             Sources.add_source(%{
+               url: Mydia.Plugins.Index.official_index_url(),
+               public_key: keypair().public
+             })
+
+    assert %{url: [msg]} = errors_on(cs)
+    assert msg =~ "official"
+  end
+
+  test "a long name is refused on add and truncated when a catalog supplies it" do
+    long = String.duplicate("x", 200)
+
+    assert {:error, cs} =
+             Sources.add_source(%{
+               url: "https://long.test/i.json",
+               public_key: keypair().public,
+               name: long
+             })
+
+    assert %{name: [_]} = errors_on(cs)
+
+    source = add!()
+    :ok = Sources.record_fetch(source.id, {:ok, %{name: long, plugin_count: 1}})
+    assert String.length(Repo.reload!(source).name) == 80
+  end
+
   test "remove_source refuses a declared row and nulls installs of a removed one" do
     source = add!()
 

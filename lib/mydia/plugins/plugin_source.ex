@@ -7,7 +7,10 @@ defmodule Mydia.Plugins.PluginSource do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias Mydia.Plugins.Index
   alias Mydia.Plugins.Index.Signature
+
+  @name_max 80
 
   @primary_key {:id, :binary_id, autogenerate: true}
 
@@ -38,13 +41,32 @@ defmodule Mydia.Plugins.PluginSource do
         do: [],
         else: [url: "must be an https URL"]
     end)
+    |> validate_not_official()
+    |> validate_length(:name, max: @name_max)
     |> put_key_id()
     |> unique_constraint(:url)
   end
 
+  # The name comes from the catalog, so a long one is truncated rather than
+  # failing the fetch record.
   def status_changeset(source, attrs) do
-    cast(source, attrs, [:name, :last_error, :last_fetched_at, :plugin_count])
+    source
+    |> cast(attrs, [:name, :last_error, :last_fetched_at, :plugin_count])
+    |> update_change(:name, &String.slice(&1, 0, @name_max))
   end
+
+  defp validate_not_official(changeset) do
+    validate_change(changeset, :url, fn :url, url ->
+      if same_url?(url, Index.official_index_url()),
+        do: [url: "is the official plugin index"],
+        else: []
+    end)
+  end
+
+  defp same_url?(url, official) when is_binary(official) and official != "",
+    do: String.trim_trailing(url, "/") == String.trim_trailing(official, "/")
+
+  defp same_url?(_url, _official), do: false
 
   defp put_key_id(changeset) do
     case get_field(changeset, :public_key) do

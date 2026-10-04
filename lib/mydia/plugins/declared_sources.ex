@@ -5,7 +5,9 @@ defmodule Mydia.Plugins.DeclaredSources do
   admin UI shows read-only. The declared key is authoritative on every boot.
 
   A row whose declaration disappeared is kept, disabled and no longer declared,
-  rather than deleted, so a mistyped env var never orphans installed plugins.
+  rather than deleted, so removing a declaration never deletes the plugins
+  installed from it. (A malformed declaration, such as a missing key or an http
+  URL, fails config validation at boot and never reaches this module.)
   """
 
   import Ecto.Query
@@ -18,7 +20,7 @@ defmodule Mydia.Plugins.DeclaredSources do
 
   @spec sync() :: :ok
   def sync do
-    declared = Enum.uniq_by(RuntimeConfig.get_runtime_plugin_sources(), & &1.url)
+    declared = dedupe(RuntimeConfig.get_runtime_plugin_sources())
     urls = MapSet.new(declared, & &1.url)
 
     Enum.each(declared, &upsert/1)
@@ -29,6 +31,21 @@ defmodule Mydia.Plugins.DeclaredSources do
     |> Enum.each(&release/1)
 
     :ok
+  end
+
+  # Keeps the first declaration of a URL; a later one with another key is dropped loudly.
+  defp dedupe(declarations) do
+    declarations
+    |> Enum.group_by(& &1.url)
+    |> Enum.each(fn {url, [first | rest]} ->
+      if Enum.any?(rest, &(&1.public_key != first.public_key)),
+        do:
+          Logger.warning(
+            "plugin source #{url} is declared twice with different keys; keeping the first"
+          )
+    end)
+
+    Enum.uniq_by(declarations, & &1.url)
   end
 
   defp upsert(decl) do

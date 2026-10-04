@@ -20,6 +20,10 @@ defmodule Mydia.Plugins.Index do
   A key change is never accepted in-band: the source reports `:key_changed`
   until an admin removes and re-adds it. Only sideloading accepts unsigned code.
 
+  There is no freshness check: a host can replay an older signed catalog.
+  Installed plugins are protected by `version_newer?/2`, but a fresh install may
+  get an older listed version.
+
   ## Catalog format
 
       {
