@@ -302,16 +302,21 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           >
             Logs
           </.button>
-          <.button
-            id={"remove-#{@plugin.slug}"}
-            class="btn btn-ghost btn-sm join-item text-error"
-            phx-click="remove"
-            phx-value-slug={@plugin.slug}
-            data-confirm={"Remove #{@plugin.name}?"}
-          >
-            <.icon name="hero-trash" class="w-4 h-4" />
-          </.button>
         </div>
+
+        <%!-- Outside the join so it survives pending approval: a revoked
+              plugin is pending again, and removing it must stay possible. --%>
+        <.button
+          id={"remove-#{@plugin.slug}"}
+          class="btn btn-ghost btn-sm text-error"
+          phx-click="remove"
+          phx-value-slug={@plugin.slug}
+          data-confirm={"Remove #{@plugin.name}?"}
+          aria-label={"Remove #{@plugin.name}"}
+          title="Remove"
+        >
+          <.icon name="hero-trash" class="w-4 h-4" />
+        </.button>
       </div>
     </div>
     """
