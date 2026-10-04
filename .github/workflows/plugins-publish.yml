@@ -82,6 +82,9 @@ jobs:
           umask 077
           key=$(mktemp)
           trap 'rm -f "$key"' EXIT
+          # The key was made with `minisign -G -W` (no password), so signing
+          # never prompts. A password-protected key would fail here, not hang:
+          # stdin is not a terminal in Actions.
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
           minisign -S -s "$key" -m build/site/index.json -t "mydia plugin index ${GITHUB_REF_NAME}"
           minisign -V -p priv/plugin_index/official.pub -m build/site/index.json

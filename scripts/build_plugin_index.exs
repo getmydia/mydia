@@ -39,12 +39,7 @@ defmodule BuildPluginIndex do
     base_url = String.trim_trailing(opts[:base_url] || @default_base_url, "/")
     crates_dir = opts[:crates_dir] || "plugins-extra"
 
-    public_key =
-      (opts[:public_key] || "priv/plugin_index/official.pub")
-      |> File.read!()
-      |> String.split("\n", trim: true)
-      |> Enum.reject(&String.starts_with?(&1, "untrusted comment:"))
-      |> List.first() || fail("public key file is empty")
+    public_key = read_public_key(opts[:public_key] || "priv/plugin_index/official.pub")
 
     name = opts[:name] || "Mydia"
 
@@ -63,6 +58,28 @@ defmodule BuildPluginIndex do
     catalog = %{"version" => 2, "name" => name, "public_key" => public_key, "plugins" => entries}
     File.write!(index_path, JSON.encode!(catalog))
     IO.puts("wrote #{length(entries)} plugin(s) to #{index_path}")
+  end
+
+  # The key line of a minisign .pub file, trimmed so a CRLF checkout cannot
+  # embed a "\r" that Mydia would then fail to match against its pinned key.
+  defp read_public_key(path) do
+    lines =
+      case File.read(path) do
+        {:ok, text} -> String.split(text, "\n")
+        {:error, reason} -> fail("cannot read #{path}: #{:file.format_error(reason)}")
+      end
+
+    key =
+      lines
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "untrusted comment:")))
+      |> List.first()
+
+    case key do
+      "RW" <> _ -> key
+      nil -> fail("#{path} has no public key line")
+      _ -> fail("#{path} is not a minisign public key")
+    end
   end
 
   # Two crates with one slug would write the same package path, the second

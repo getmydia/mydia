@@ -110,4 +110,46 @@ defmodule Mydia.Scripts.BuildPluginIndexTest do
     assert %{"version" => 2, "plugins" => []} =
              ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
   end
+
+  test "embeds a CRLF public key file without the carriage return", ctx do
+    empty = Path.join([ctx.out, "..", "empty"]) |> Path.expand()
+    File.mkdir_p!(empty)
+    pub = Path.join([ctx.out, "..", "crlf.pub"]) |> Path.expand()
+    File.write!(pub, "untrusted comment: minisign public key 0000\r\nRWQfakekey\r\n")
+
+    {_output, 0} =
+      run([
+        "--crates-dir",
+        empty,
+        "--wasm-dir",
+        ctx.wasm_dir,
+        "--out",
+        ctx.out,
+        "--public-key",
+        pub
+      ])
+
+    assert %{"public_key" => "RWQfakekey"} =
+             ctx.out |> Path.join("index.json") |> File.read!() |> Jason.decode!()
+  end
+
+  test "refuses a public key file without a minisign key", ctx do
+    pub = Path.join([ctx.out, "..", "bad.pub"]) |> Path.expand()
+    File.mkdir_p!(Path.dirname(pub))
+    File.write!(pub, "untrusted comment: nothing here\nnot-a-key\n")
+
+    {output, 1} =
+      run([
+        "--crates-dir",
+        ctx.crates,
+        "--wasm-dir",
+        ctx.wasm_dir,
+        "--out",
+        ctx.out,
+        "--public-key",
+        pub
+      ])
+
+    assert output =~ "is not a minisign public key"
+  end
 end
