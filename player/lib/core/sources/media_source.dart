@@ -26,6 +26,7 @@ enum SourceCapability {
   similar,
   favorites,
   nextUp,
+  recentlyAdded,
 }
 
 /// How the player currently reaches a source.

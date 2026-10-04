@@ -50,3 +50,10 @@ abstract interface class NextUp {
   /// The episode the viewer would play next in [show], or null.
   Future<ItemSummary?> nextUp(ItemRef show);
 }
+
+/// What joined the server's libraries most recently. A source implementing
+/// this also lists [SourceCapability.recentlyAdded].
+abstract interface class RecentlyAdded {
+  /// Newest first, at most 20.
+  Future<List<ItemSummary>> recentlyAdded();
+}
