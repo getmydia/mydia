@@ -669,6 +669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1018,6 +1022,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -2245,6 +2305,8 @@
       
         
       
+        
+      
     
     
     
@@ -2553,6 +2615,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../test-and-iterate/" class="md-nav__link">
         
   
@@ -2623,6 +2713,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2685,7 +2785,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2706,14 +2806,154 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/host-api/" class="md-nav__link">
+      <a href="../../reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -3199,7 +3439,7 @@ and build on the same typed <code>Event</code> handler.</p>
 its indexing returns <code>Null</code> for missing keys instead of panicking, which keeps
 the snippets short and safe. Add it to <code>Cargo.toml</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[dependencies]</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">mydia-plugin-sdk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/getmydia/mydia"</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"v0.13.0-beta.1"</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">mydia-plugin-sdk</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">git</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"https://github.com/getmydia/mydia"</span><span class="p">,</span><span class="w"> </span><span class="n">tag</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"v0.16.0-beta.2"</span><span class="w"> </span><span class="p">}</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">serde_json</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"1"</span>
 </code></pre></div>
 <div class="admonition tip">
@@ -3245,7 +3485,7 @@ overview, year, and more.</p>
 any secrets. The <code>media_item</code> projection includes <code>title</code>, <code>original_title</code>,
 <code>year</code>, <code>overview</code>, <code>tagline</code>, <code>genres</code>, <code>runtime</code>, <code>rating</code>, <code>poster_path</code>,
 the external IDs (<code>tmdb_id</code>, <code>tvdb_id</code>, <code>imdb_id</code>), and more. See the
-<a href="../../reference/host-api/#host-functions">Reference</a> for the full field list.</p>
+<a href="../../reference/host-functions/#data-read"><code>data-read</code></a> reference for the full field list.</p>
 <h2 id="read-operator-settings">Read operator settings</h2>
 <p><strong>Goal:</strong> let the operator configure your plugin (a webhook URL, an API token, a
 choice of target), and read those values at runtime.</p>
@@ -3313,9 +3553,8 @@ and ignores the rest.</p>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">}</span>
 </code></pre></div>
 <p>The host only delivers events you subscribed to, but matching on <code>evt.event</code>
-keeps a multi-purpose plugin readable and lets you skip events cheaply. The v1
-catalog is <code>media_item.added</code>, <code>media_item.updated</code>, <code>media_item.removed</code>,
-<code>media_file.imported</code>, <code>download.completed</code>, and <code>download.failed</code>.</p>
+keeps a multi-purpose plugin readable and lets you skip events cheaply. The
+event names and their payloads are in the <a href="../../reference/events/#event-catalog">events reference</a>.</p>
 <h2 id="report-a-result-the-host-records">Report a result the host records</h2>
 <p><strong>Goal:</strong> tell the host what happened so it shows up in the plugin's activity.</p>
 <p>The handler returns <code>Result&lt;String, String&gt;</code>:</p>
@@ -3344,7 +3583,7 @@ that should land in the plugin's activity log. It is ungated and fire-and-forget
 <ul>
 <li><a href="../notifications/">Send notifications</a> - push what you read here to an external service</li>
 <li><a href="../two-way-sync/">Build a two-way sync</a> - the same reads, plus per-user connections and write-back</li>
-<li><a href="../test-and-iterate/">Test and iterate</a> - the build and reload loop</li>
+<li><a href="../test-and-iterate/">Test and iterate</a> - install, fire test events, read logs</li>
 </ul>
 
 

@@ -669,6 +669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1018,6 +1022,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -2245,6 +2305,8 @@
       
         
       
+        
+      
     
     
     
@@ -2488,21 +2550,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-the-host-sets" class="md-nav__link">
+  <a href="#know-the-limits" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What the host sets
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#limits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Limits
+        Know the limits
       
     </span>
   </a>
@@ -2555,6 +2606,34 @@
     
   
     Fill a shelf
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
   
 
     
@@ -2645,6 +2724,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2707,7 +2796,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2728,14 +2817,154 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/host-api/" class="md-nav__link">
+      <a href="../../reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -3171,21 +3400,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#what-the-host-sets" class="md-nav__link">
+  <a href="#know-the-limits" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What the host sets
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#limits" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Limits
+        Know the limits
       
     </span>
   </a>
@@ -3242,7 +3460,8 @@ step. The real, larger example is the assistant plugin in
 <code>plugins-extra/assistant_openai</code>.</p>
 <p>For the concepts (grants, ceilings, the journal), see
 <a href="../../explanation/plugin-model/#pages-and-writes-on-a-users-behalf">Pages and writes on a user's behalf</a>.
-For every field and function, see the <a href="../../reference/host-api/#14-host-functions-and-the-page-export">host API</a>.</p>
+For every field and function, see the <a href="../../reference/guest-exports/#on-http"><code>on-http</code></a> and the
+<a href="../../reference/host-functions/#page-writes">page writes</a>.</p>
 <h2 id="1-declare-the-page">1. Declare the page</h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">"slug"</span><span class="p">:</span><span class="w"> </span><span class="s2">"shelf-notes"</span><span class="p">,</span>
@@ -3427,34 +3646,21 @@ modal (the plugin cannot draw or answer it), then replies with one message:</p>
   the user changes theme. Set it on your <code>&lt;html&gt;</code> so daisyUI's theme variables
   match the host. Without it your page follows the operating system theme.</li>
 </ul>
-<h2 id="what-the-host-sets">What the host sets</h2>
-<p>The host serves your response with its own headers, so a plugin cannot loosen
-them:</p>
-<ul>
-<li><code>content-security-policy</code>: <code>default-src 'self' 'unsafe-inline'</code> (inline
-  scripts and styles work), <code>connect-src 'self'</code> (the page can only call
-  itself), images from <code>self</code>, <code>data:</code> and the two artwork hosts, <code>sandbox
-  allow-scripts allow-forms</code>, and <code>frame-ancestors 'self'</code>. Load nothing from
-  another origin.</li>
-<li><code>cache-control: private, no-store</code>, <code>x-content-type-options: nosniff</code> and
-  <code>referrer-policy: no-referrer</code>.</li>
-<li>Of the headers you return, only <code>content-type</code> is kept.</li>
-</ul>
-<p>Mydia's own stylesheet is available to your page at <code>/assets/css/app.css</code>, so
-daisyUI classes such as <code>btn</code>, <code>chat-bubble</code> and <code>card</code> work without shipping CSS.</p>
-<h2 id="limits">Limits</h2>
-<ul>
-<li>Bodies are text. Requests over 1 MiB get 413 and non-UTF-8 bodies get 415.</li>
-<li>A slow call ends with 504. When all of the plugin's page slots are in use for
-  more than a couple of seconds the host answers 503 with <code>Retry-After</code>; show a
-  "try again" message rather than an error.</li>
-<li>A disabled or unapproved plugin answers 404, and a stale or missing token 401.</li>
-</ul>
+<h2 id="know-the-limits">Know the limits</h2>
+<p>The host serves your response with its own security headers, so the page can
+only call itself and loads nothing from another origin. Mydia's stylesheet is at
+<code>/assets/css/app.css</code>, so daisyUI classes work. The headers are listed under
+<a href="../../reference/guest-exports/#page-response-headers">Page response headers</a>.
+Body size and timeouts are in <a href="../../reference/limits/#pages">Limits</a>. The
+statuses the host answers with (401, 404, 413, 415, 502, 503, 504) are listed
+under <a href="../../reference/guest-exports/#on-http"><code>on-http</code></a>. When the host answers
+503 with <code>Retry-After</code>, show a "try again" message rather than an error.</p>
 <h2 id="undo-and-the-activity-page">Undo and the activity page</h2>
 <p>Every write a page makes is journaled for the user. Users find them at
 <code>/plugins/shelf-notes/activity</code> (linked from the page's header) and can undo a
-single change or a whole batch. Administrators set the longest grant each role
-may give a plugin in the plugin's settings, under role ceilings.</p>
+single change or a whole batch. Operators set how long a grant may last for each
+role, as described in
+<a href="../../../using/how-to/plugins/#let-plugins-make-changes-for-people">Let plugins make changes for people</a>.</p>
 <h2 id="try-it">Try it</h2>
 <p>Build the guest and sideload it as in
 <a href="../test-and-iterate/">Test and iterate</a>. The fixture used by Mydia's own tests,

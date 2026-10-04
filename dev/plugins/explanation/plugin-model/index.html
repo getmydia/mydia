@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://docs.mydia.dev/dev/plugins/explanation/plugin-model/">
       
       
-        <link rel="prev" href="../../reference/host-api/">
+        <link rel="prev" href="../../reference/guest-exports/">
       
       
         <link rel="next" href="../../../contributing/setup/">
@@ -669,6 +669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1018,6 +1022,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -2243,6 +2303,8 @@
       
         
       
+        
+      
     
     
     
@@ -2438,6 +2500,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../how-to/setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../how-to/test-and-iterate/" class="md-nav__link">
         
   
@@ -2508,6 +2598,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2570,7 +2670,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2591,14 +2691,154 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/host-api/" class="md-nav__link">
+      <a href="../../reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -2818,6 +3058,17 @@
     <span class="md-ellipsis">
       
         What the host-version floor is for
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-the-sdk-is-pinned-to-a-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the SDK is pinned to a tag
       
     </span>
   </a>
@@ -3192,6 +3443,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#why-the-sdk-is-pinned-to-a-tag" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why the SDK is pinned to a tag
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -3215,10 +3477,13 @@
 <h1 id="the-plugin-model">The Plugin Model</h1>
 <p>This page explains why Mydia plugins are shaped the way they are: why a Wasm
 component instead of an embedded scripting language, how the capability
-sandbox works, what its current limits actually are, and what the
-host-version floor buys an operator running a self-hosted instance. For the
+sandbox works, what its current limits actually are, who gets trusted
+and why, and what the host-version floor buys an operator running a self-hosted instance. For the
 mechanical contract (the event schema, the capability table, the manifest
-fields), see the <a href="../../reference/host-api/">reference</a> and
+fields), see the <a href="../../reference/events/">events</a>,
+<a href="../../reference/capabilities/">capabilities</a>,
+<a href="../../reference/host-functions/">host functions</a> and
+<a href="../../reference/guest-exports/">guest exports</a> references and the
 <a href="../../reference/manifest/">manifest schema</a>. For hands-on steps, see the
 <a href="../../tutorial/write-your-first-plugin/">tutorial</a> and the
 <a href="../../how-to/notifications/">how-to guides</a>.</p>
@@ -3257,24 +3522,19 @@ plain typed handler function onto the component's exported interface, so plugin
 authors never hand-write the generated binding boilerplate.</p>
 <h2 id="exports-imports-and-the-contract-version">Exports, imports, and the contract version</h2>
 <p>A plugin is a Wasm <strong>component</strong> built for <code>wasm32-wasip2</code> against the
-canonical WIT contract <code>mydia:plugin@1.5.0</code>, living at
+canonical WIT contract <code>mydia:plugin@1.6.0</code>, living at
 <code>native/mydia_plugin_sdk/wit/plugin.wit</code>.</p>
-<p>It <strong>exports</strong> <code>handler.on-event</code>, called for each event it subscribed to,
-<code>handler.on-schedule</code>, called on a fixed interval, and, from 1.5,
-<code>handler.setup</code>, which drives the setup wizard the host renders, and
-<code>handler.check-health</code>, which the host calls to show an instance's health. A
-plugin that serves its own pages also exports <code>page.on-http</code> (from 1.4). The
-SDK macro generates all of these exports, and one a plugin does not implement
-returns an error. It
-<strong>imports</strong> the host's capabilities: <code>http-request</code>, <code>data-read</code> and <code>log</code>
-from 1.0; the key-value store, <code>data-list</code>, watch-state writes and
-per-user connections from 1.1 to 1.3; the page functions from 1.4; and account
-links, store listing and batch writes, and sync-run reports from 1.5. Every import is enforced
-server-side on every call; there is no path around it.</p>
+<p>It <strong>exports</strong> handlers the host calls (events, schedules, the setup wizard,
+health checks, pages, shelves) and <strong>imports</strong> the host's capabilities (HTTP,
+data reads, the key-value store, watch-state writes, and so on). The SDK macro
+generates the exports, and one a plugin does not implement returns an error.
+Every import is enforced server-side on every call; there is no path around it.
+Which function arrived in which contract version is listed in
+<a href="../../reference/host-functions/#contract-versions">Contract versions</a>.</p>
 <p>The package version in the WIT file <strong>is</strong> the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
 cases) rather than by breaking existing signatures. That's what lets a plugin
-built against <code>1.0</code> keep running unmodified against a <code>1.5</code> host: the host
+built against <code>1.0</code> keep running unmodified against a <code>1.6</code> host: the host
 detects the guest's contract version from its bytes at instantiation and
 serves the matching interface, rather than forcing every plugin to track the
 host's latest release.</p>
@@ -3302,6 +3562,10 @@ endpoint probing, pagination, parsing remote IDs, crawling the remote library
 to build mappings, and the reconcile loop that decides what to pull and push.
 The plugin's working state (checkpoints, cursors, mapping caches) lives in its
 own store and is opaque to the host.</p>
+<p>The same thinking shapes the write functions. Marking something watched is
+idempotent, so a plugin can replay a sync after a crash and land in the same
+place. Favoriting is additive only: no host function removes a favorite, so a
+deletion on a remote list can never strip curation the user did in Mydia.</p>
 <p>Three consequences follow:</p>
 <ul>
 <li><strong>A plugin never keeps the only copy of a host noun.</strong> Storing account links
@@ -3337,49 +3601,62 @@ media record, hold a key/value store, run on a schedule) is a named
 declaration and approves it before the plugin runs at all. A plugin can never
 widen its own grant at runtime; there's no equivalent of asking for permission
 mid-execution the way a mobile app might.</p>
-<p>Third-party plugin grants never auto-expand. A plugin installed from an index or
-remote package runs only with the capability set an administrator approved, and
-a revised manifest that asks for more remains on its old grant until explicit
-re-approval.</p>
+<p>A third-party grant only widens when an operator approves it. A revised
+manifest that asks for more, whether a new capability class, a new <code>net:http</code>
+host or a new subscribed event, keeps running on its old grant, and calls
+against anything newly declared come back <code>Denied</code> until re-approval. The
+reason is that the operator approved a specific set, and a plugin update is not
+a second chance to enlarge it unnoticed. See
+<a href="../../reference/capabilities/#grants-and-approval">Grants and approval</a> for the
+rules and <a href="../../../using/how-to/plugins/">Install and manage plugins</a> for what
+the operator sees.</p>
 <p>Image-bundled system plugins are the deliberate exception. They are delivered as
 part of the trusted Mydia host release, so discovery grants their complete
 shipped capability set and enables a new system plugin. Later host upgrades
 replace that grant with the bundled manifest's current effective set, including
 settings-derived HTTP hosts. Upgrades preserve whether the administrator has
-since enabled or disabled the plugin.</p>
+since enabled or disabled the plugin. Because the release is the source of
+truth, Remove and Revoke are not final for a bundled plugin: the next
+reconciliation restores the shipped capabilities and re-seeds a removed row
+approved and enabled. Disable is the control that persists.</p>
 <p>What both cases share is the guarantee worth trusting: what a plugin may do is
 fixed in the <code>granted_capabilities</code> the host stores, and the host re-checks that
 grant on every call rather than trusting the manifest.</p>
-<p>It's worth being precise about what third-party grants not auto-expanding does
-<strong>not</strong> mean. Revising a third-party manifest to declare a new capability class,
-a new <code>net:http</code> host, or a new subscribed event does not return the plugin to
-unapproved, and it does not grant the new capability either. The stored grant is
-left exactly as it was, and the plugin keeps running on it. Calls against
-anything newly declared come back <code>Denied</code> until an operator re-approves.</p>
-<p>What changed is that this is no longer silent. Mydia compares each installed
-plugin's declared capabilities against its grant, value by value, so a new host
-in an allowlist or a new event in <code>events:subscribe</code> counts just as much as a
-whole new class. A plugin whose manifest has outgrown its grant is badged
-<strong>needs re-approval</strong> in Admin &gt; System &gt; Plugins, its row names what it is asking
-for beyond what you approved, and its <strong>Review &amp; re-approve</strong> button opens the
-same approval modal with the new capabilities called out separately from the
-rest. Re-approving grants the currently requested set. The host also logs a
-warning naming the ungranted capabilities whenever such a plugin starts, so
-non-bundled capability drift is visible in the server log as well as in the UI.</p>
-<p>For a third-party plugin, nothing about the safety property moved: the grant
-still only widens when an operator approves it, saving unrelated plugin settings
-will not pull newly declared hosts into the allowlist, and until you re-approve,
-the plugin runs on exactly what it had. A bundled system plugin is trusted
-differently on purpose: its grant tracks the manifest in the host release the
-administrator chose to run, and enabling or disabling it stays their decision.</p>
+<p>There is a third path, for the plugin you are still writing. A <strong>sideloaded</strong>
+plugin is installed from a <code>.wasm</code> file and manifest on the operator's own disk,
+with <code>mix mydia.plugin install</code> in development or <code>mydia-cli plugin install</code> in
+production. Its bytes are trusted the way the override directory is: the file
+came from the operator, so there is no catalog hash to verify against. Its
+capabilities are not trusted. It installs inactive and waits for approval like
+any index plugin, unless the operator passes <code>--approve</code>, which grants the
+declared set on the spot. Skipping approval is an explicit act by the person who
+built the plugin, not a default. Reinstalling replaces the bytes and clears the
+grant, as a fresh install would, and a bundled slug is refused because its bytes
+come from the image.</p>
 <p>This is also why <code>net:http</code> is an exact-hostname allowlist with no wildcards:
 a wildcard subdomain grant is effectively an open exfiltration channel, since
 the plugin author (or someone who compromises their supply chain later)
 controls what any subdomain of that wildcard resolves to. The full capability
-table and its host functions are in the <a href="../../reference/host-api/">reference</a>;
+table is in <a href="../../reference/capabilities/">Capabilities</a> and its host functions
+are in <a href="../../reference/host-functions/">Host functions</a>;
 what matters here is the shape of the guarantee: the host, not the plugin,
 decides what "having a capability" actually allows on every single call, not
 just the first one.</p>
+<p>The same reasoning explains the settings that name a host. An operator who runs
+their own ntfy server or webhook cannot be listed in a manifest the author wrote
+in advance, so a <code>url</code> setting can be marked host-granting: the host, never the
+guest, derives the allowlist entry from the value the operator typed. The plugin
+computes nothing, and Mydia stays agnostic about the target. A connection's
+device flow follows the same rule: its code, poll and verification URLs must sit
+on declared <code>net:http</code> hosts, so the link the host renders in trusted UI cannot
+become a phishing surface.</p>
+<p>Two capabilities reach across users, and they are consent-scoped for that
+reason. <code>users:connections</code> and <code>data:read playback_progress</code> let a plugin see
+linked accounts and watch history and mark items watched on a user's behalf, so
+the approval screen says exactly that. A user becomes visible to a plugin only
+after they connect it on the Integrations page. Outside a page call,
+<code>data-list playback_progress</code> returns rows only for connected users, and the
+write functions are refused for a user with no active connection.</p>
 <h2 id="two-honest-limitations">Two honest limitations</h2>
 <p>The sandbox is real, but it isn't complete, and plugin authors will find the
 edges eventually, so it's worth stating them plainly rather than letting
@@ -3399,7 +3676,8 @@ someone discover them the hard way:</p>
   underlying OS thread of a wedged guest isn't reclaimed until it yields on
   its own.</li>
 </ul>
-<p>Both are accepted trade-offs of the current Wasm component runtime, not design
+<p>The exact numbers are on the <a href="../../reference/limits/">limits</a> page. Both are
+accepted trade-offs of the current Wasm component runtime, not design
 choices Mydia is defending as sufficient on their own. They're one reason
 Mydia's plugin model leans on a <strong>curated, trusted set of plugins</strong> rather
 than treating the sandbox as the sole safety boundary against an arbitrary,
@@ -3462,11 +3740,34 @@ host version any given installation is running. <code>min_host_version</code> le
 plugin that genuinely needs a capability, event, or host function added in a
 specific release say so explicitly. Mydia refuses to activate a plugin whose
 floor exceeds the running host with a clear "requires mydia &gt;= X" message,
-rather than instantiating it anyway and failing in a way that looks like a
-mysterious runtime bug. Combined with the additive-evolution rule above, this
-is what makes it safe for a <code>1.0</code> plugin and a <code>1.1</code> plugin to both run
-correctly against the same host, and for that host to be upgraded without
-breaking either.</p>
+before instantiation, rather than instantiating it anyway and failing in a way
+that looks like a mysterious runtime bug. A guest that imports a function newer
+than the host serves cannot link, so the floor lets an older host decline it
+cleanly instead. Combined with the additive-evolution rule above, this is what
+makes it safe for a <code>1.0</code> plugin and a <code>1.1</code> plugin to both run correctly
+against the same host, and for that host to be upgraded without breaking either. The functions by version are in
+<a href="../../reference/host-functions/#contract-versions">Contract versions</a>.</p>
+<p>The rules are few, and each follows from that purpose:</p>
+<ul>
+<li>The floor is a <strong>Mydia release version</strong>, not a contract version. Contract
+  numbers describe the interface; operators and authors reason in releases.</li>
+<li><strong>Pre-release tags are ignored.</strong> A <code>0.16.0-beta.1</code> host meets a <code>0.16.0</code>
+  floor, because a beta carries the feature the floor names.</li>
+<li><strong>Development builds (<code>-dev</code>) meet any floor</strong>, so working from source never
+  blocks a plugin under test.</li>
+<li><strong>Bundled plugins are exempt</strong>, since they ship with the host that runs them.</li>
+<li><strong>Absent means no floor.</strong> Most plugins never need one.</li>
+</ul>
+<p>A floor that cannot be parsed on either side does not block activation. The
+field itself must be a semantic version or the manifest is rejected; see the
+<a href="../../reference/manifest/#host-version-floor">manifest reference</a>.</p>
+<h2 id="why-the-sdk-is-pinned-to-a-tag">Why the SDK is pinned to a tag</h2>
+<p>The SDK is not on crates.io, so a plugin depends on it as a git dependency. A
+tag is the right pin because it names the host release a plugin targets. A
+branch would follow unreleased host changes, and a rebuild months later could
+produce a component built against a different contract than the one you tested.
+Pinning makes upgrading a deliberate act: move the tag when you move to a newer
+host, and raise <code>min_host_version</code> if you start using something it added.</p>
 
 
 
@@ -3504,7 +3805,7 @@ breaking either.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../reference/host-api/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Host API Reference">
+          <a href="../../reference/guest-exports/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Guest exports">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3514,7 +3815,7 @@ breaking either.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Host API Reference
+                Guest exports
               </div>
             </div>
           </a>

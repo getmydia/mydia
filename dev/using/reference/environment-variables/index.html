@@ -679,6 +679,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1031,6 +1035,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -1699,6 +1759,17 @@
   
     <nav class="md-nav" aria-label="Plugins">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#plugin-file-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin file overrides
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#plugin-sources" class="md-nav__link">
@@ -2613,6 +2684,8 @@
       
         
       
+        
+      
     
     
     
@@ -2805,6 +2878,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../plugins/how-to/setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../plugins/how-to/test-and-iterate/" class="md-nav__link">
         
   
@@ -2875,6 +2976,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2934,7 +3045,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2955,14 +3066,154 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../plugins/reference/host-api/" class="md-nav__link">
+      <a href="../../../plugins/reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -3533,6 +3784,17 @@
   
     <nav class="md-nav" aria-label="Plugins">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#plugin-file-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugin file overrides
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#plugin-sources" class="md-nav__link">
@@ -4163,7 +4425,7 @@ host/port.</p>
 </code></pre></div>
 <h2 id="media-servers">Media Servers</h2>
 <p>Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
-The easiest setup is Admin &gt; Media servers &gt; Add server &gt; Plex, which signs in
+The easiest setup is Admin &gt; Configuration &gt; Media Servers &gt; Add server &gt; Plex, which signs in
 with your Plex account and finds your servers. To declare a server in the
 environment instead:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">PLUGIN_PLEX_0_NAME</span><span class="o">=</span><span class="s2">"Living room"</span>
@@ -4181,10 +4443,12 @@ restarts (it defaults to <code>plex-&lt;N&gt;</code>): renaming it creates a new
 old one stays behind as a disabled server you can delete in the UI.</p>
 <p><code>MEDIA_SERVER_&lt;N&gt;_*</code> variables with <code>MEDIA_SERVER_&lt;N&gt;_TYPE=plex</code> still work and
 are translated into Plex instances, but they are deprecated: Mydia logs a
-warning at startup and shows a banner on the Media servers page. Rename them to
+warning at startup and shows a banner on the Media Servers page. Rename them to
 <code>PLUGIN_PLEX_&lt;N&gt;_*</code>. Jellyfin keeps using <code>MEDIA_SERVER_&lt;N&gt;_*</code>.</p>
 <h2 id="plugins">Plugins</h2>
-<p>Settings for an installed plugin can come from the environment. Install and
+<p>How to install, approve and update plugins is in
+<a href="../../how-to/plugins/">Install and manage plugins</a>. Settings for an installed
+plugin can come from the environment. Install and
 approve the plugin in the admin UI (or with <code>mydia-cli plugin install</code>) first;
 these variables only fill in its settings.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">PLUGIN_0_SLUG</span><span class="o">=</span>assistant-openai
@@ -4204,11 +4468,20 @@ the Settings dialog.</p>
 <p>The older <code>PLUGIN_&lt;N&gt;_NAME</code>, <code>_VERSION</code>, <code>_ENABLED</code>, <code>_PRIORITY</code>,
 <code>_SOURCE_URL</code>, <code>_INTEGRITY_HASH</code> and <code>_GRANTED_CAPABILITIES</code> variables are
 ignored.</p>
+<h3 id="plugin-file-overrides">Plugin file overrides</h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">PLUGINS_OVERRIDE_DIR</span><span class="o">=</span>/config/plugin-overrides
+</code></pre></div>
+<p>A directory of <code>&lt;slug&gt;.wasm</code> files that replace the bytes of the plugin with
+that slug, including a bundled one. The variable is read once at startup, so
+restart after changing it. Replacing a <code>.wasm</code> file inside the directory needs
+no restart: disable and enable that plugin to load it. It is meant for testing a
+patched build; see
+<a href="../../../plugins/how-to/test-and-iterate/#replace-a-bundled-plugins-bytes">Replace a bundled plugin's bytes</a>.</p>
 <h3 id="plugin-sources">Plugin sources</h3>
 <p>Extra signed plugin catalogs are declared with numbered variables, starting at 0.
 Both variables are required for each source.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">PLUGINS_SOURCE_0_URL</span><span class="o">=</span>https://example.com/index.json
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">PLUGINS_SOURCE_0_PUBLIC_KEY</span><span class="o">=</span>RWQ...
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">PLUGINS_SOURCE_0_URL</span><span class="o">=</span>https://example.com/index.json
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nv">PLUGINS_SOURCE_0_PUBLIC_KEY</span><span class="o">=</span>RWQ...
 </code></pre></div>
 <p>The URL must be <code>https</code>. The public key is the minisign key, the base64 line
 starting with <code>RW</code> in the publisher's <code>.pub</code> file. Declared sources show in
@@ -4288,25 +4561,25 @@ see <a href="../../../plugins/how-to/publish-a-source/">Publish your own plugin 
 </tbody>
 </table>
 <p><strong>Indexer Types:</strong> <code>prowlarr</code>, <code>jackett</code>, <code>newznab</code>, <code>public</code></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Prowlarr</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nv">INDEXER_1_NAME</span><span class="o">=</span>Prowlarr
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nv">INDEXER_1_TYPE</span><span class="o">=</span>prowlarr
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nv">INDEXER_1_BASE_URL</span><span class="o">=</span>http://prowlarr:9696
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="nv">INDEXER_1_API_KEY</span><span class="o">=</span>your-prowlarr-api-key
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># Jackett</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="nv">INDEXER_2_NAME</span><span class="o">=</span>Jackett
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="nv">INDEXER_2_TYPE</span><span class="o">=</span>jackett
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="c1"># Newznab (works with any Newznab-compatible indexer)</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZB<span class="w"> </span>Indexer
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>newznab
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>https://indexer.example
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-newznab-api-key
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="c1"># Optional; defaults to /api</span>
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="nv">INDEXER_3_API_PATH</span><span class="o">=</span>/api
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Prowlarr</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nv">INDEXER_1_NAME</span><span class="o">=</span>Prowlarr
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nv">INDEXER_1_TYPE</span><span class="o">=</span>prowlarr
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="nv">INDEXER_1_BASE_URL</span><span class="o">=</span>http://prowlarr:9696
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="nv">INDEXER_1_API_KEY</span><span class="o">=</span>your-prowlarr-api-key
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># Jackett</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="nv">INDEXER_2_NAME</span><span class="o">=</span>Jackett
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="nv">INDEXER_2_TYPE</span><span class="o">=</span>jackett
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="nv">INDEXER_2_BASE_URL</span><span class="o">=</span>http://jackett:9117
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="nv">INDEXER_2_API_KEY</span><span class="o">=</span>your-jackett-api-key
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="c1"># Newznab (works with any Newznab-compatible indexer)</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="nv">INDEXER_3_NAME</span><span class="o">=</span>NZB<span class="w"> </span>Indexer
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="nv">INDEXER_3_TYPE</span><span class="o">=</span>newznab
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="nv">INDEXER_3_BASE_URL</span><span class="o">=</span>https://indexer.example
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="nv">INDEXER_3_API_KEY</span><span class="o">=</span>your-newznab-api-key
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="c1"># Optional; defaults to /api</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="nv">INDEXER_3_API_PATH</span><span class="o">=</span>/api
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Legacy <code>nzbhydra2</code> type</p>

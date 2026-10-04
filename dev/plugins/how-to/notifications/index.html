@@ -669,6 +669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1018,6 +1022,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../using/how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -2245,6 +2305,8 @@
       
         
       
+        
+      
     
     
     
@@ -2509,6 +2571,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../test-and-iterate/" class="md-nav__link">
         
   
@@ -2579,6 +2669,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2641,7 +2741,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2662,14 +2762,154 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/host-api/" class="md-nav__link">
+      <a href="../../reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -3141,15 +3381,13 @@ the same typed <code>Event</code> handler.</p>
 <a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="nb">Ok</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">r#"{{"delivered":{},"status":{}}}"#</span><span class="p">,</span><span class="w"> </span><span class="n">resp</span><span class="p">.</span><span class="n">ok</span><span class="p">,</span><span class="w"> </span><span class="n">resp</span><span class="p">.</span><span class="n">status</span><span class="p">))</span>
 <a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
 </code></pre></div>
-<p><code>host::http_request</code> is gated by your <code>net:http</code> grant. The host re-validates
-the URL host against your allowlist and runs an SSRF check on every call, so a
-request to a host you did not declare is denied.</p>
-<div class="admonition warning">
-<p class="admonition-title"><code>net:http</code> hosts are exact, no wildcards</p>
-<p>List the exact hostnames you contact (<code>example.com</code>, <code>discord.com</code>). A
-wildcard subdomain would be a data-exfiltration channel, so the host refuses
-them.</p>
-</div>
+<p><code>host::http_request</code> is gated by your <code>net:http</code> grant: a request to a host you
+did not list is denied. List the exact hostnames you contact. The matching
+rules are under <a href="../../reference/capabilities/#nethttp"><code>net:http</code></a>, and the
+response size and timeout are in <a href="../../reference/limits/#network">Limits</a>.
+The call and its errors are described under
+<a href="../../reference/host-functions/#http-request"><code>http-request</code></a>. Subscribe only to
+names from the <a href="../../reference/events/#event-catalog">events reference</a>.</p>
 <h2 id="send-to-discord-ntfy-or-a-custom-webhook">Send to Discord, ntfy, or a custom webhook</h2>
 <p><strong>Goal:</strong> shape the request body for a specific notification service. The body
 is just a string, so you build whatever the target expects.</p>

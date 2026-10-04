@@ -669,6 +669,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1018,6 +1022,62 @@
     
   
     SSO/OIDC Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../using/how-to/plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install and manage plugins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../using/how-to/plugin-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add a third-party plugin source
   
 
     
@@ -2243,6 +2303,8 @@
       
         
       
+        
+      
     
     
     
@@ -2438,6 +2500,34 @@
   
   
     <li class="md-nav__item">
+      <a href="how-to/setup-wizard/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a media-server plugin with a setup wizard
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="how-to/test-and-iterate/" class="md-nav__link">
         
   
@@ -2508,6 +2598,16 @@
       
         
       
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
     
     
     
@@ -2570,7 +2670,7 @@
   <span class="md-ellipsis">
     
   
-    Manifest &amp; Settings
+    Manifest
   
 
     
@@ -2591,14 +2691,154 @@
   
   
     <li class="md-nav__item">
-      <a href="reference/host-api/" class="md-nav__link">
+      <a href="reference/plugin-source-format/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Host API Reference
+    Plugin source format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Events
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/capabilities/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Capabilities
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/limits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/host-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="reference/guest-exports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guest exports
   
 
     
@@ -3022,8 +3262,8 @@
 
 <h1 id="building-plugins">Building Plugins</h1>
 <p>This section is for developers building Mydia plugins. If you just want to use a
-plugin someone else wrote, install and configure it from the admin UI; you do
-not need any of this.</p>
+plugin someone else wrote, <a href="../using/how-to/plugins/">install and configure it</a> as an
+operator; you do not need any of this.</p>
 <p>Mydia plugins are small, sandboxed programs that react to what happens in your
 library. When a movie is added, a download completes, a file is imported, or
 someone finishes watching something, Mydia hands the event to your plugin and
@@ -3035,10 +3275,10 @@ state both ways. The bundled Simkl plugin does all of this.</p>
 <code>mydia-plugin-sdk</code> crate. You write one typed handler function; the SDK turns it
 into a component the host can load. The plugin runs in a sandbox with no ambient
 network, filesystem, or OS access. The only way out is through a small set of
-capability-gated host functions you declare up front. Plugins installed from an
-index or remote package are approved by the operator before they ever run;
-plugins shipped in Mydia's own <code>priv/plugins/</code> directory are trusted as part of
-the host release and granted their declared capabilities on discovery.</p>
+capability-gated host functions you declare up front. Operators approve what a
+third-party plugin may do before it runs, while plugins bundled with Mydia get
+their declared permissions on discovery; <a href="explanation/plugin-model/">the plugin model</a>
+explains the trust rules.</p>
 <h2 id="where-to-start">Where to start</h2>
 <div class="grid cards">
 <ul>
@@ -3051,15 +3291,20 @@ working plugin logging on <code>media_item.added</code> in about 10 minutes.</p>
 <p><strong>Have a specific task</strong></p>
 <p>The how-to guides cover <a href="how-to/notifications/">sending notifications</a>,
 <a href="how-to/media-data/">reading media and event data</a>,
-<a href="how-to/two-way-sync/">building a two-way sync</a>, and the
-<a href="how-to/test-and-iterate/">test and reload loop</a>. To distribute plugins
+<a href="how-to/two-way-sync/">building a two-way sync</a>,
+<a href="how-to/pages/">custom pages</a>, <a href="how-to/shelves/">home shelves</a>, a
+<a href="how-to/setup-wizard/">setup wizard</a>, and the
+<a href="how-to/test-and-iterate/">test and iterate loop</a>. To distribute plugins
 yourself, see <a href="how-to/publish-a-source/">publishing your own plugin source</a>.</p>
 </li>
 <li>
 <p><strong>Need the contract</strong></p>
-<p>The <a href="reference/host-api/">host API reference</a> is the event catalog,
-capability classes, and host functions. The
-<a href="reference/manifest/">manifest schema</a> covers every manifest field.</p>
+<p>The <a href="reference/manifest/">manifest</a>, <a href="reference/events/">events</a>,
+<a href="reference/capabilities/">capabilities</a>,
+<a href="reference/host-functions/">host functions</a>,
+<a href="reference/guest-exports/">guest exports</a>, <a href="reference/limits/">limits</a>
+and <a href="reference/plugin-source-format/">plugin source format</a> pages cover
+the runtime contract.</p>
 </li>
 <li>
 <p><strong>Want to know why</strong></p>
