@@ -27,6 +27,16 @@ export const ASSET_PATTERNS = {
 
 export const PLATFORMS = Object.keys(ASSET_PATTERNS)
 
+const STABLE_SLOT = 90000
+
+// Each prerelease band owns M blocks of 1,000. Block offset 0 is the
+// prerelease itself; offsets 1..999 are the on-demand builds made after it.
+const PRERELEASE_BANDS = {
+  alpha: { base: 10000, max: 19 },
+  beta: { base: 30000, max: 29 },
+  rc: { base: 60000, max: 29 },
+}
+
 /**
  * The build number for a version string.
  *
@@ -38,94 +48,68 @@ export const PLATFORMS = Object.keys(ASSET_PATTERNS)
  */
 export function buildNumber(version) {
   const v = String(version).replace(/^v/, '')
-  const [core, ...rest] = v.split(/[-+]/)
-  const suffix = v.slice(core.length + 1)
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-(.+)|\+(.+))?$/.exec(v)
+  if (!match) throw new Error(`unparseable version: ${version}`)
 
-  const [major, minor, patch] = core.split('.').map((part) => Number(part))
-  if (![major, minor, patch].every((n) => Number.isInteger(n) && n >= 0)) {
-    throw new Error(`unparseable version: ${version}`)
+  const [, majorText, minorText, patchText, prerelease, metadata] = match
+  const major = Number(majorText)
+  const minor = Number(minorText)
+  const patch = Number(patchText)
+
+  // Mirrors scripts/build-number.sh's magnitude guard: past these values the
+  // sum below overflows Android's versionCode ceiling or the next field.
+  if (major > 20) {
+    throw new Error(`major above 20 overflows Android's versionCode ceiling: ${version}`)
+  }
+  if (minor > 99) throw new Error(`minor above 99 overflows its field: ${version}`)
+  if (patch > 9) throw new Error(`patch above 9 overflows its field: ${version}`)
+
+  return (
+    major * 100000000 + minor * 1000000 + patch * 100000 + slotFor(version, prerelease, metadata)
+  )
+}
+
+function slotFor(version, prerelease, metadata) {
+  if (metadata !== undefined) {
+    const refresh = /^refresh\.(\d+)$/.exec(metadata)
+    if (!refresh) throw new Error(`unrecognised version suffix: ${version}`)
+    const n = Number(refresh[1])
+    if (n < 1 || n > 99) throw new Error(`refresh counter must be 1..99: ${version}`)
+    return STABLE_SLOT + n
+  }
+  if (prerelease === undefined) return STABLE_SLOT
+
+  // The dot is optional in the prerelease itself because 36 existing tags
+  // predate it (v0.8.1-rc13, v0.9.0-beta2). The .dev.K tail is only ever
+  // written by CI and always has its dots.
+  const parts = /^(dev|alpha|beta|rc)\.?(\d+)(?:\.dev\.(\d+))?$/i.exec(prerelease)
+  if (!parts) throw new Error(`unrecognised version suffix: ${version}`)
+  const band = parts[1].toLowerCase()
+  const n = Number(parts[2])
+  const tail = parts[3]
+
+  if (band === 'dev') {
+    if (tail !== undefined) {
+      throw new Error(`a dev build cannot carry a second dev tail: ${version}`)
+    }
+    if (n > 9999) {
+      throw new Error(`dev counter above 9999 would collide with the alpha band: ${version}`)
+    }
+    return n
   }
 
-  // Mirrors scripts/build-number.sh's own magnitude guard: past these values
-  // the multiplication below overflows Android's versionCode ceiling, so
-  // reject here rather than silently return a number no device can install.
-  if (major > 209) {
-    throw new Error(`major above 209 overflows Android's versionCode ceiling: ${version}`)
+  const { base, max } = PRERELEASE_BANDS[band]
+  if (n > max) {
+    throw new Error(`${band} counter above ${max} would collide with the next band: ${version}`)
   }
-  if (minor > 99) {
-    throw new Error(`minor above 99 overflows its field: ${version}`)
+  const k = tail === undefined ? 0 : Number(tail)
+  if (tail !== undefined && k < 1) {
+    throw new Error(`dev tail must start at 1; dev.0 is the prerelease itself: ${version}`)
   }
-  if (patch > 99) {
-    throw new Error(`patch above 99 overflows its field: ${version}`)
+  if (k > 999) {
+    throw new Error(`dev tail above 999 would collide with ${band}.${n + 1}: ${version}`)
   }
-
-  // Bands in semver maturity order, each with its own counter space so
-  // beta.1 and rc.1 cannot land on the same number. The dot is optional in
-  // dev/alpha/beta/rc because 36 existing tags predate it (v0.8.1-rc13,
-  // v0.9.0-beta2). refresh has no such history and its only producer (CI)
-  // always writes the dot, so refresh requires it, matching
-  // scripts/build-number.sh exactly. Each band also mirrors that script's
-  // overflow guard: a counter large enough to reach into the next band
-  // would silently collide with it, defeating the "own counter space"
-  // guarantee this comment makes.
-  const BANDS = [
-    {
-      pattern: /^dev\.?(\d+)$/,
-      base: 0,
-      validate: (n) => {
-        if (n > 299) {
-          throw new Error(`dev counter above 299 would collide with the alpha band: ${version}`)
-        }
-      },
-    },
-    {
-      pattern: /^alpha\.?(\d+)$/,
-      base: 300,
-      validate: (n) => {
-        if (n > 199) {
-          throw new Error(`alpha counter above 199 would collide with the beta band: ${version}`)
-        }
-      },
-    },
-    {
-      pattern: /^beta\.?(\d+)$/,
-      base: 500,
-      validate: (n) => {
-        if (n > 199) {
-          throw new Error(`beta counter above 199 would collide with the rc band: ${version}`)
-        }
-      },
-    },
-    {
-      pattern: /^rc\.?(\d+)$/,
-      base: 700,
-      validate: (n) => {
-        if (n > 199) {
-          throw new Error(`rc counter above 199 would collide with the stable slot: ${version}`)
-        }
-      },
-    },
-    {
-      pattern: /^refresh\.(\d+)$/,
-      base: 900,
-      validate: (n) => {
-        if (n < 1 || n > 99) {
-          throw new Error(`refresh counter must be 1..99: ${version}`)
-        }
-      },
-    },
-  ]
-
-  let slot = 900
-  if (rest.length > 0) {
-    const band = BANDS.find(({ pattern }) => pattern.test(suffix))
-    if (!band) throw new Error(`unrecognised version suffix: ${version}`)
-    const n = Number(suffix.match(band.pattern)[1])
-    band.validate(n)
-    slot = band.base + n
-  }
-
-  return major * 10000000 + minor * 100000 + patch * 1000 + slot
+  return base + n * 1000 + k
 }
 
 function entryFromRelease(release, platform) {
