@@ -28,6 +28,13 @@ Open **Add a server** in any of these ways:
 
 Then pick the kind of server.
 
+!!! note "Plain `http://` is for your own network"
+    The examples below use `http://` addresses on a home network. For a
+    server anywhere else, enter its `https://` address. Outside your
+    network (Tailscale counts as yours), the player refuses a plain
+    `http://` Jellyfin address, and a Stash one when you give it an API
+    key, so your credentials are never sent in the clear.
+
 ### Plex
 
 1. Choose **Plex**. The player shows a code.
