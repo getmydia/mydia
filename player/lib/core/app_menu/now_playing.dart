@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../sources/lock/source_lock_controller.dart';
 import 'app_menu_channel.dart';
 
 /// What the Dock menu shows about current playback.
@@ -66,9 +67,13 @@ Future<void> sendNowPlaying(
 /// overwrite what the new screen reported. Only the latest [claim]ant may
 /// [publish] or [clear].
 class NowPlayingPublisher {
-  NowPlayingPublisher(this._send);
+  NowPlayingPublisher(this._send, {bool Function()? redact})
+      : _redact = redact ?? (() => false);
 
   final Future<void> Function(NowPlaying?) _send;
+
+  /// True while the title must not leave the app (a locked source plays).
+  final bool Function() _redact;
   Object? _owner;
   NowPlaying? _current;
 
@@ -86,7 +91,15 @@ class NowPlayingPublisher {
   }
 
   void publish(Object owner, NowPlaying state) {
-    if (!identical(_owner, owner) || state == _current) return;
+    if (!identical(_owner, owner)) return;
+    if (_redact()) {
+      state = NowPlaying(
+        title: 'Mydia',
+        isPlaying: state.isPlaying,
+        hasNext: state.hasNext,
+      );
+    }
+    if (state == _current) return;
     _current = state;
     unawaited(_send(state));
   }
@@ -104,5 +117,6 @@ class NowPlayingPublisher {
 final nowPlayingPublisherProvider = Provider<NowPlayingPublisher>(
   (ref) => NowPlayingPublisher(
     appMenuSupported ? sendNowPlaying : (_) async {},
+    redact: () => ref.read(sourceLockProvider.notifier).holding,
   ),
 );

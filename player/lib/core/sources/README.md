@@ -68,6 +68,39 @@ to the owner.
 with the chosen and stored server ids, so an inactive user's leftovers go
 when the account is removed.
 
+## Locks
+
+A server can be `locked` (listed with a badge, opens after authenticating)
+or `hidden` (in no list until the app is unlocked). The mode is stored per
+server id on the account record (`serverLocks`), so every Plex Home user
+shares it and removing the account removes it. `putAccount` carries the
+stored locks over a fresh sign-in. The Mydia login cannot be locked.
+
+`SourceLockController` is true while unlocked, memory only, so a cold start
+is locked. It relocks one minute after the app goes to the background,
+unless a locked or hidden source is playing (`hold()` from the player
+route), in which case it relocks when that playback ends. A Dart timer does
+not count time the device slept, so the grace is also checked against the
+wall clock when the app resumes.
+
+Unlocking uses `local_auth` (Face ID, Touch ID, fingerprint, Windows Hello,
+device passcode) where `isDeviceSupported()`, and a PIN everywhere else
+(Linux, a TV or phone with no screen lock). The PIN is set with the first
+lock on every device, as the backup: PBKDF2 in `AuthStorage` under
+`app_lock/`, five free tries, then a doubling delay from 30 seconds (wall
+clock time, capped, and an unreadable stored block counts as blocked). The
+device passcode also unlocks, because device auth allows it. Forgot
+PIN removes every account with a lock.
+
+`thirdPartySourcesProvider` drops hidden sources while locked, and the
+router sends any `/s/<id>/...` of a locked or hidden source to `/unlock`.
+That screen never names a source, and "Show hidden servers" is always
+offered, so nothing on screen says whether anything is hidden. Whenever
+the app is unlocked and any server has a lock, Android sets `FLAG_SECURE` and
+iOS blurs the window when it resigns active. While a locked source plays,
+MPRIS and the macOS Dock now-playing menu show "Mydia" with no title or
+artwork.
+
 ## HTTP and errors
 
 `SourceHttp` turns non-2xx answers into typed source errors. It has an

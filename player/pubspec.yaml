@@ -69,6 +69,7 @@ dependencies:
   uuid: ^4.5.1
   connectivity_plus: ^7.3.1
   device_info_plus: ^13.2.0
+  local_auth: ^3.0.0
   package_info_plus: ^10.2.1
   # Parses crash stack traces into frames for core/crash_reporting. Already
   # resolved transitively; declared so the import is not an undeclared
