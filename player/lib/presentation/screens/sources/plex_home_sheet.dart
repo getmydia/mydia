@@ -163,6 +163,13 @@ class _PlexHomeSheetState extends ConsumerState<_PlexHomeSheet> {
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
+                if (users.isEmpty) {
+                  return const Padding(
+                    key: Key('plex-home-empty'),
+                    padding: EdgeInsets.all(24),
+                    child: Text('This account has no other Plex Home users.'),
+                  );
+                }
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

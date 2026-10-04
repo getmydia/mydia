@@ -38,6 +38,7 @@ void main() {
   late MockAuthStorage storage;
   late List<SourceId> switched;
   bool homeUsersFail = false;
+  bool homeUsersGone = false;
   Completer<void>? guestGate;
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
@@ -49,6 +50,7 @@ void main() {
     final client = MockClient((request) async {
       switch ('${request.method} ${request.url.path}') {
         case 'GET /api/v2/home/users':
+          if (homeUsersGone) return http.Response('', 404);
           return homeUsersFail
               ? http.Response('', 500)
               : http.Response(homeUsersJson, 200);
@@ -98,6 +100,7 @@ void main() {
 
   setUp(() {
     homeUsersFail = false;
+    homeUsersGone = false;
     guestGate = null;
   });
 
@@ -163,5 +166,11 @@ void main() {
     homeUsersFail = true;
     await pump(tester);
     expect(find.byKey(const Key('plex-home-error')), findsOneWidget);
+  });
+
+  testWidgets('a dissolved Home says there are no other users', (tester) async {
+    homeUsersGone = true;
+    await pump(tester);
+    expect(find.byKey(const Key('plex-home-empty')), findsOneWidget);
   });
 }
