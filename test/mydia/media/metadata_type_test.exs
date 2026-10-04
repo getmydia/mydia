@@ -7,6 +7,53 @@ defmodule Mydia.Media.MetadataTypeTest do
   alias Mydia.Metadata.Structs.{MediaMetadata, CastMember, CrewMember, SeasonInfo}
 
   describe "type safety and round-trip conversion" do
+    test "schema_version survives a database round trip" do
+      {:ok, media_item} =
+        Media.create_media_item(
+          Scope.unrestricted(),
+          %{
+            type: "tv_show",
+            title: "The Lantern Keepers",
+            year: 2019,
+            metadata: %MediaMetadata{
+              provider_id: "7001",
+              provider: :tvdb,
+              media_type: :tv_show,
+              title: "The Lantern Keepers",
+              schema_version: 1
+            }
+          },
+          skip_episode_refresh: true
+        )
+
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
+
+      assert reloaded.metadata.schema_version == 1
+    end
+
+    test "a blob written without schema_version loads as version 0" do
+      {:ok, media_item} =
+        Media.create_media_item(
+          Scope.unrestricted(),
+          %{
+            type: "tv_show",
+            title: "The Lantern Keepers",
+            year: 2019,
+            metadata: %{
+              "provider_id" => "7001",
+              "provider" => "tvdb",
+              "media_type" => "tv_show",
+              "title" => "The Lantern Keepers"
+            }
+          },
+          skip_episode_refresh: true
+        )
+
+      reloaded = Media.get_media_item!(Scope.unrestricted(), media_item.id)
+
+      assert reloaded.metadata.schema_version == 0
+    end
+
     test "loading media item from database returns MediaMetadata struct, not plain map" do
       # Create a media item with full metadata
       {:ok, media_item} =
