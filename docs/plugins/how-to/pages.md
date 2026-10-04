@@ -216,37 +216,22 @@ Details worth knowing:
   the user changes theme. Set it on your `<html>` so daisyUI's theme variables
   match the host. Without it your page follows the operating system theme.
 
-## What the host sets
+## Know the limits
 
-The host serves your response with its own headers, so a plugin cannot loosen
-them:
-
-- `content-security-policy`: `default-src 'self' 'unsafe-inline'` (inline
-  scripts and styles work), `connect-src 'self'` (the page can only call
-  itself), images from `self`, `data:` and the two artwork hosts, `sandbox
-  allow-scripts allow-forms`, and `frame-ancestors 'self'`. Load nothing from
-  another origin.
-- `cache-control: private, no-store`, `x-content-type-options: nosniff` and
-  `referrer-policy: no-referrer`.
-- Of the headers you return, only `content-type` is kept.
-
-Mydia's own stylesheet is available to your page at `/assets/css/app.css`, so
-daisyUI classes such as `btn`, `chat-bubble` and `card` work without shipping CSS.
-
-## Limits
-
-- Bodies are text. Requests over 1 MiB get 413 and non-UTF-8 bodies get 415.
-- A slow call ends with 504. When all of the plugin's page slots are in use for
-  more than a couple of seconds the host answers 503 with `Retry-After`; show a
-  "try again" message rather than an error.
-- A disabled or unapproved plugin answers 404, and a stale or missing token 401.
+The host serves your response with its own security headers, so the page can
+only call itself and loads nothing from another origin. Mydia's stylesheet is at
+`/assets/css/app.css`, so daisyUI classes work. The headers are listed under
+[Page response headers](../reference/guest-exports.md#page-response-headers).
+Body size, timeouts and the 502, 503 and 504 answers are in
+[Limits](../reference/limits.md#pages). When the host answers 503 with
+`Retry-After`, show a "try again" message rather than an error.
 
 ## Undo and the activity page
 
 Every write a page makes is journaled for the user. Users find them at
 `/plugins/shelf-notes/activity` (linked from the page's header) and can undo a
-single change or a whole batch. Administrators set the longest grant each role
-may give a plugin in the plugin's settings, under role ceilings.
+single change or a whole batch. Operators set how long a grant may last for each
+role.
 
 ## Try it
 

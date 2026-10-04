@@ -144,6 +144,7 @@ nav:
           - plugins/how-to/two-way-sync.md
           - plugins/how-to/pages.md
           - plugins/how-to/shelves.md
+          - plugins/how-to/setup-wizard.md
           - plugins/how-to/test-and-iterate.md
           - plugins/how-to/publish-a-source.md
       - Reference:

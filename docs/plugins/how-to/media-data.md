@@ -11,7 +11,7 @@ the snippets short and safe. Add it to `Cargo.toml`:
 
 ```toml
 [dependencies]
-mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.13.0-beta.1" }
+mydia-plugin-sdk = { git = "https://github.com/getmydia/mydia", tag = "v0.16.0-beta.2" }
 serde_json = "1"
 ```
 
@@ -154,9 +154,8 @@ fn on_event(evt: Event) -> Result<String, String> {
 ```
 
 The host only delivers events you subscribed to, but matching on `evt.event`
-keeps a multi-purpose plugin readable and lets you skip events cheaply. The v1
-catalog is `media_item.added`, `media_item.updated`, `media_item.removed`,
-`media_file.imported`, `download.completed`, and `download.failed`.
+keeps a multi-purpose plugin readable and lets you skip events cheaply. The
+event names and their payloads are in the [events reference](../reference/events.md#event-catalog).
 
 ## Report a result the host records
 

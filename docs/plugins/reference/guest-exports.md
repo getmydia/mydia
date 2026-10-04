@@ -102,8 +102,8 @@ error for every request.
 | `headers` | `list<tuple<string, string>>` | The host keeps only `content-type`. |
 | `body` | `string` | A text body. |
 
-The host sets the security headers itself: see
-[Serve a page](../how-to/pages.md#what-the-host-sets). A malformed response
+The host sets the security headers itself, listed under
+[Page response headers](#page-response-headers). A malformed response
 becomes a 502, a timeout a 504, and a plugin whose page slots are all busy
 answers 503 with `Retry-After`. The numbers are in [Limits](limits.md#pages).
 
@@ -117,6 +117,23 @@ calls. Because a page call and an event call can overlap, keep page state in
 per-user store keys.
 
 <!-- source: native/mydia_plugin_sdk/wit/plugin.wit:305-328,702-708; lib/mydia_web/controllers/plugin_page_controller.ex -->
+
+### Page response headers
+
+The host serves every page response with its own headers, so a plugin cannot
+loosen them:
+
+| Header | Value |
+|--------|-------|
+| `content-security-policy` | `default-src 'self' 'unsafe-inline'`, `connect-src 'self'`, `img-src 'self' data: https://image.tmdb.org https://artworks.thetvdb.com`, `sandbox allow-scripts allow-forms` and `frame-ancestors 'self'`. Inline scripts and styles work. Nothing loads from another origin, and the page can only call itself. |
+| `cache-control` | `private, no-store` |
+| `x-content-type-options` | `nosniff` |
+| `referrer-policy` | `no-referrer` |
+
+Of the headers a guest returns, only `content-type` is kept. Mydia's own
+stylesheet is served to pages at `/assets/css/app.css`.
+
+<!-- source: lib/mydia_web/controllers/plugin_page_controller.ex:30-37,177-180 -->
 
 ## setup
 

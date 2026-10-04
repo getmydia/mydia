@@ -96,8 +96,8 @@ An outbound request is allowed only to a host in `net:http`. See
 | Timeout | 504 | `plugins.page_timeout_ms`. |
 | No free page slot | 503 with `Retry-After: 2` | See [Runtime](#runtime). |
 
-The security headers and the rest of the page contract are in
-[Serve a page](../how-to/pages.md#what-the-host-sets).
+The security headers are in
+[Page response headers](guest-exports.md#page-response-headers).
 
 <!-- source: lib/mydia_web/controllers/plugin_page_controller.ex:24-28,92-100,137 -->
 
