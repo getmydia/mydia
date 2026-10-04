@@ -51,7 +51,7 @@ panic = "abort"
     instead means your build silently follows unreleased host changes, so a
     rebuild months later can produce a component built against a different
     contract than the one your host implements. See
-    [Host-version floor](../reference/host-api.md#host-version-floor) for how a
+    [Host-version floor](../reference/manifest.md#host-version-floor) for how a
     plugin declares the oldest host it supports.
 
 !!! warning "Always set `panic = \"abort\"`"
@@ -157,6 +157,8 @@ functions to read data or make calls.
 - For task-by-task recipes (notifications, reading media data, two-way sync),
   see the [how-to guides](../how-to/notifications.md).
 - For the full event, capability, and manifest contract, see the
-  [reference](../reference/host-api.md).
+  [events](../reference/events.md), [capabilities](../reference/capabilities.md),
+  [host functions](../reference/host-functions.md) and
+  [manifest](../reference/manifest.md) references.
 - For why the platform is shaped this way, see
   [The plugin model](../explanation/plugin-model.md).

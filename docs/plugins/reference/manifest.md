@@ -316,7 +316,8 @@ never sees the token.
   `client_id` is the public/embeddable id; an operator can override it via a
   `client_id` setting.
 - The plugin reaches the connected account with `connection-request`, which
-  attaches the bearer token host-side (see the [Reference](host-api.md)).
+  attaches the bearer token host-side (see
+  [`connection-request`](host-functions.md#connection-request)).
 
 `auth_header` sets how the host attaches a link's token, as `"Name: value"`
 with `{token}` in the value, for example `"X-Plex-Token: {token}"`. It
@@ -340,4 +341,4 @@ floor.
 The plugin contract evolves additively: new functions, records, variant cases,
 and optional fields are added without breaking existing plugins. Only a removal
 or a signature change bumps the major ABI version. For the full contract and
-versioning rules, see the [Reference](host-api.md#evolving-the-contract).
+versioning rules, see [Contract versions](host-functions.md#contract-versions).

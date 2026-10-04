@@ -5,7 +5,8 @@ its [manifest](manifest.md) and the operator grants. Capabilities are
 deny-by-default and checked by the host on every call. A plugin cannot widen
 its own grant.
 
-Host functions named below are described in the [host API reference](host-api.md).
+Host functions named below are described in [Host functions](host-functions.md). The exports a capability unlocks
+are in [Guest exports](guest-exports.md).
 
 ## Grants and approval
 

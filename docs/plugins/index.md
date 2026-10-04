@@ -40,8 +40,10 @@ the host release and granted their declared capabilities on discovery.
 
 -   **Need the contract**
 
-    The [host API reference](reference/host-api.md) is the event catalog,
-    capability classes, and host functions. The
+    The [events](reference/events.md), [capabilities](reference/capabilities.md),
+    [host functions](reference/host-functions.md) and
+    [guest exports](reference/guest-exports.md) references cover the
+    runtime contract. The
     [manifest schema](reference/manifest.md) covers every manifest field.
 
 -   **Want to know why**

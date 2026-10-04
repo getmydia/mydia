@@ -151,7 +151,8 @@ nav:
           - plugins/reference/events.md
           - plugins/reference/capabilities.md
           - plugins/reference/limits.md
-          - plugins/reference/host-api.md
+          - plugins/reference/host-functions.md
+          - plugins/reference/guest-exports.md
       - Explanation:
           - plugins/explanation/plugin-model.md
   - Contributing:

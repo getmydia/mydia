@@ -65,7 +65,7 @@ fn on_event(evt: Event) -> Result<String, String> {
 any secrets. The `media_item` projection includes `title`, `original_title`,
 `year`, `overview`, `tagline`, `genres`, `runtime`, `rating`, `poster_path`,
 the external IDs (`tmdb_id`, `tvdb_id`, `imdb_id`), and more. See the
-[Reference](../reference/host-api.md#host-functions) for the full field list.
+[`data-read`](../reference/host-functions.md#data-read) reference for the full field list.
 
 ## Read operator settings
 

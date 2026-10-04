@@ -8,7 +8,8 @@ step. The real, larger example is the assistant plugin in
 
 For the concepts (grants, ceilings, the journal), see
 [Pages and writes on a user's behalf](../explanation/plugin-model.md#pages-and-writes-on-a-users-behalf).
-For every field and function, see the [host API](../reference/host-api.md#14-host-functions-and-the-page-export).
+For every field and function, see the [`on-http`](../reference/guest-exports.md#on-http) and the
+[page writes](../reference/host-functions.md#page-writes).
 
 ## 1. Declare the page
 

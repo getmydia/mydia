@@ -6,7 +6,7 @@ what the user should not see, stores the result and draws the rail. This guide
 declares a "Staff picks" shelf and fills it from a plugin.
 
 For every field and function, see the
-[host API](../reference/host-api.md#fill-shelf-16) and the
+[`fill-shelf`](../reference/guest-exports.md#fill-shelf) reference and the
 [manifest reference](../reference/manifest.md#shelves).
 
 ## 1. Declare the shelf

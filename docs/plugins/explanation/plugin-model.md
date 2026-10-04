@@ -5,7 +5,10 @@ component instead of an embedded scripting language, how the capability
 sandbox works, what its current limits actually are, and what the
 host-version floor buys an operator running a self-hosted instance. For the
 mechanical contract (the event schema, the capability table, the manifest
-fields), see the [reference](../reference/host-api.md) and
+fields), see the [events](../reference/events.md),
+[capabilities](../reference/capabilities.md),
+[host functions](../reference/host-functions.md) and
+[guest exports](../reference/guest-exports.md) references and the
 [manifest schema](../reference/manifest.md). For hands-on steps, see the
 [tutorial](../tutorial/write-your-first-plugin.md) and the
 [how-to guides](../how-to/notifications.md).
@@ -185,7 +188,8 @@ This is also why `net:http` is an exact-hostname allowlist with no wildcards:
 a wildcard subdomain grant is effectively an open exfiltration channel, since
 the plugin author (or someone who compromises their supply chain later)
 controls what any subdomain of that wildcard resolves to. The full capability
-table and its host functions are in the [reference](../reference/host-api.md);
+table is in [Capabilities](../reference/capabilities.md) and its host functions
+are in [Host functions](../reference/host-functions.md);
 what matters here is the shape of the guarantee: the host, not the plugin,
 decides what "having a capability" actually allows on every single call, not
 just the first one.
