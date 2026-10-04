@@ -157,8 +157,14 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
   defp entries_for("surfaces:shelf", _, new_values),
     do: flag(:adds, "Suggestions on each person's Home page", new_values)
 
-  defp entries_for("events:subscribe", events, new_values),
-    do: flag(:also, "reacts to " <> join_and(Enum.map(events, &event_phrase/1)), new_values)
+  # Approved and newly requested events are separate lines, so a re-approval
+  # marks only the events that are actually new.
+  defp entries_for("events:subscribe", events, new_values) do
+    {added, kept} = Enum.split_with(events, &(is_list(new_values) and &1 in new_values))
+    added_prefix = if kept == [], do: "reacts to ", else: "also reacts to "
+
+    event_line(kept, "reacts to ", false) ++ event_line(added, added_prefix, true)
+  end
 
   defp entries_for("schedule:interval", _, new_values),
     do: flag(:also, "runs on a schedule", new_values)
@@ -176,6 +182,11 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummary do
   end
 
   defp flag(group, label, new_values), do: [{group, %Line{label: label, new?: new_values != nil}}]
+
+  defp event_line([], _prefix, _new?), do: []
+
+  defp event_line(events, prefix, new?),
+    do: [{:also, %Line{label: prefix <> join_and(Enum.map(events, &event_phrase/1)), new?: new?}}]
 
   defp host_field_entries(schema) do
     for field <- Manifest.host_granting_fields(schema) do

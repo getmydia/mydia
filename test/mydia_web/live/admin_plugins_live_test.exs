@@ -568,7 +568,14 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       # One grouped list, with only the widened values badged.
       assert has_element?(view, "#approval-reapproval-note", "2 things")
       assert has_element?(view, "#approval-capabilities-group-can_see [data-new]", "Media items")
-      assert has_element?(view, "#approval-capabilities-also [data-new]")
+
+      assert has_element?(
+               view,
+               "#approval-capabilities-also [data-new]",
+               "also reacts to finished downloads"
+             )
+
+      refute has_element?(view, "#approval-capabilities-also [data-new]", "new titles")
       refute has_element?(view, "#approval-capabilities-group-talks_to [data-new]")
       assert has_element?(view, "#confirm-approval", "Re-approve")
 

@@ -108,6 +108,24 @@ defmodule MydiaWeb.AdminPluginsLive.CapabilitySummaryTest do
              ]
     end
 
+    test "a widened event list badges only the new events" do
+      requested = %{"events:subscribe" => ["media_item.added", "download.completed"]}
+
+      widened =
+        CapabilitySummary.build(requested, new: %{"events:subscribe" => ["download.completed"]})
+
+      assert Enum.map(widened.also, &{&1.label, &1.new?}) == [
+               {"reacts to new titles", false},
+               {"also reacts to finished downloads", true}
+             ]
+
+      fresh = CapabilitySummary.build(requested, new: requested)
+
+      assert Enum.map(fresh.also, &{&1.label, &1.new?}) == [
+               {"reacts to new titles and finished downloads", true}
+             ]
+    end
+
     test "marks only the ungranted values as new" do
       requested = %{
         "net:http" => ["api.simkl.com"],
