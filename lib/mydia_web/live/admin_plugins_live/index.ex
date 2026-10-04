@@ -26,6 +26,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Log
   alias Mydia.Plugins.Logs
   alias Mydia.Plugins.Shelves
+  alias Mydia.Plugins.Sources
   alias Mydia.Settings
   alias MydiaWeb.AdminPluginsLive.Components
 
@@ -437,6 +438,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     settings_schema = settings_schema_of(config)
     granted = config.granted_capabilities || %{}
     multi_instance = Map.get(config.manifest || %{}, "multi_instance", false) == true
+    origin = Sources.origin(config)
 
     %{
       multi_instance: multi_instance,
@@ -448,7 +450,11 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       source_url: config.source_url,
       plugin_source_id: config.plugin_source_id,
       enabled: config.enabled,
-      source: :index,
+      origin: origin,
+      source_name: source_name(origin),
+      # Bundled code ships in the image and ensure_bundled re-seeds a missing
+      # row, so disabling is its only off switch.
+      removable: origin != :bundled,
       capabilities: capabilities,
       granted: granted,
       # A revised manifest never widens a grant, so an approved plugin can end up
@@ -476,6 +482,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     do: text
 
   defp description_of(_), do: nil
+
+  defp source_name({:source, _} = origin), do: Sources.origin_name(origin)
+  defp source_name(_origin), do: nil
 
   defp settings_schema_of(%{manifest: %{"settings_schema" => schema}}) when is_list(schema),
     do: schema

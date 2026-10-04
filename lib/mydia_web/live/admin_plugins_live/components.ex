@@ -201,7 +201,11 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <div class="flex items-center gap-2 flex-wrap">
           <span class="font-medium truncate">{@plugin.name}</span>
           <span class="text-xs text-base-content/50">v{@plugin.version}</span>
-          <.source_badge source={@plugin.source} />
+          <.source_badge
+            id={"origin-badge-#{@plugin.slug}"}
+            origin={@plugin.origin}
+            source_name={@plugin.source_name}
+          />
           <span class={[
             "badge badge-sm",
             (@plugin.enabled && "badge-success") || "badge-ghost"
@@ -307,11 +311,12 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <%!-- Outside the join so it survives pending approval: a revoked
               plugin is pending again, and removing it must stay possible. --%>
         <.button
+          :if={@plugin.removable}
           id={"remove-#{@plugin.slug}"}
           class="btn btn-ghost btn-sm text-error"
           phx-click="remove"
           phx-value-slug={@plugin.slug}
-          data-confirm={"Remove #{@plugin.name}?"}
+          data-confirm={remove_confirm(@plugin)}
           aria-label={"Remove #{@plugin.name}"}
           title="Remove"
         >
@@ -321,6 +326,21 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     </div>
     """
   end
+
+  @doc false
+  # The Remove confirm names what is deleted with the plugin, so removing is
+  # never mistaken for disabling.
+  def remove_confirm(plugin) do
+    "Remove #{plugin.name}? This also deletes its settings, approvals and suggestions" <>
+      servers_suffix(plugin) <> "."
+  end
+
+  defp servers_suffix(%{multi_instance: true, instances: [_]}), do: ", plus 1 configured server"
+
+  defp servers_suffix(%{multi_instance: true, instances: [_ | _] = instances}),
+    do: ", plus #{length(instances)} configured servers"
+
+  defp servers_suffix(_plugin), do: ""
 
   @doc """
   The per-plugin Settings button.
@@ -1020,20 +1040,26 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   defp group_icon(:can_change), do: "hero-pencil-square"
   defp group_icon(:adds), do: "hero-squares-plus"
 
-  @doc "A small source-provenance badge (index/db)."
-  attr :source, :atom, required: true
+  @doc "Where an installed plugin came from, as a small badge."
+  attr :id, :string, required: true
+  attr :origin, :any, required: true
+  attr :source_name, :string, default: nil
 
   def source_badge(assigns) do
-    {label, cls} =
-      case assigns.source do
-        :index -> {"index", "badge-ghost"}
-        _ -> {"db", "badge-ghost"}
-      end
-
+    {label, cls} = origin_badge(assigns.origin, assigns.source_name)
     assigns = assign(assigns, label: label, cls: cls)
 
     ~H"""
-    <span class={["badge badge-sm", @cls]}>{@label}</span>
+    <span id={@id} class={["badge badge-sm max-w-full truncate", @cls]}>{@label}</span>
     """
   end
+
+  defp origin_badge(:bundled, _name), do: {"Bundled", "badge-ghost"}
+  defp origin_badge(:official, _name), do: {"Mydia store", "badge-ghost"}
+  defp origin_badge(:sideloaded, _name), do: {"Sideloaded", "badge-ghost"}
+
+  defp origin_badge({:source, _id}, name),
+    do: {"Third-party · #{name}", "badge-warning badge-outline"}
+
+  defp origin_badge(_removed, _name), do: {"Source removed", "badge-ghost"}
 end
