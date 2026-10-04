@@ -463,9 +463,13 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
-  @doc "DOM-safe key for a catalog entry: the slug for official entries, slug plus source prefix otherwise."
+  @doc """
+  DOM-safe key for a catalog entry: the bare slug for official entries, and the
+  slug, `--src-` and the full source id otherwise, so a third-party key cannot
+  equal an official slug that merely ends in a source id prefix.
+  """
   def catalog_key(%{source_id: nil, slug: slug}), do: slug
-  def catalog_key(%{source_id: id, slug: slug}), do: "#{slug}-#{String.slice(id, 0, 8)}"
+  def catalog_key(%{source_id: id, slug: slug}), do: "#{slug}--src-#{id}"
 
   defp install_label(%{state: :other_source}), do: "Replace"
   defp install_label(%{state: :update, entry: entry}), do: "Update to v#{entry.version}"

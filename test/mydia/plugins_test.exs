@@ -170,6 +170,39 @@ defmodule Mydia.PluginsTest do
       assert Host.running?("webhook-notifier")
     end
 
+    test "install pins the entry's source, and an official reinstall clears it", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      manifest = manifest!()
+      serve_package(bypass, wasm)
+
+      {:ok, source} =
+        Mydia.Plugins.Sources.add_source(%{
+          url: "https://third-party.test/index.json",
+          public_key: Mydia.MinisignFixtures.keypair().public
+        })
+
+      third_party = %{entry(bypass, manifest, wasm) | source_id: source.id}
+      assert {:ok, _} = Plugins.install(third_party, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == source.id
+
+      official = %{entry(bypass, manifest, wasm) | source_id: nil}
+      assert {:ok, _} = Plugins.install(official, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier").plugin_source_id == nil
+    end
+
+    test "a source removed before install returns an error instead of raising", %{
+      bypass: bypass
+    } do
+      wasm = guest_wasm()
+      serve_package(bypass, wasm)
+      gone = %{entry(bypass, manifest!(), wasm) | source_id: Ecto.UUID.generate()}
+
+      assert {:error, %Ecto.Changeset{}} = Plugins.install(gone, gate_opts())
+      assert Settings.get_plugin_config_by_slug("webhook-notifier") == nil
+    end
+
     test "a tampered package is rejected before anything is persisted", %{bypass: bypass} do
       wasm = guest_wasm()
       manifest = manifest!()

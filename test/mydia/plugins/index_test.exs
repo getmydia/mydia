@@ -103,7 +103,7 @@ defmodule Mydia.Plugins.IndexTest do
         Plug.Conn.resp(conn, 404, "")
       end)
 
-      assert {:error, %Error{}} =
+      assert {:error, %Error{type: :network_error}} =
                Index.fetch_catalog(source(bypass, "/index.json", keys), gate_opts())
     end
 
@@ -272,6 +272,11 @@ defmodule Mydia.Plugins.IndexTest do
       assert url == Index.official_index_url()
     end
 
+    test "the official source pins the compiled-in key" do
+      assert [%Source{official?: true, public_key: key} | _] = Index.sources()
+      assert Signature.fingerprint(key) == "DE63E0C2E48917D0"
+    end
+
     test "appends enabled source rows" do
       {:ok, row} =
         Mydia.Plugins.Sources.add_source(%{
@@ -356,6 +361,33 @@ defmodule Mydia.Plugins.IndexTest do
         assert %BrowseResult{catalog: [item]} = Index.browse(configs, browse_opts([src]))
         assert item.state == state, "installed as #{inspect(installed)}"
       end
+    end
+
+    test "classifies a persisted third-party install the way the admin page builds its rows", %{
+      src: src,
+      src_id: id
+    } do
+      # The page hands Index.browse/1 its own row maps, not raw PluginConfig
+      # structs; the seam must carry plugin_source_id or every third-party
+      # install reads as installed from a removed source.
+      persisted = fn version ->
+        {:ok, config} =
+          Mydia.Settings.upsert_plugin_config(%{
+            slug: "webhook-notifier",
+            name: "Webhook Notifier",
+            version: version,
+            source_url: "https://x.test/p.wasm",
+            plugin_source_id: id
+          })
+
+        MydiaWeb.AdminPluginsLive.Index.row(config)
+      end
+
+      assert %BrowseResult{catalog: [%{state: :installed}]} =
+               Index.browse([persisted.("1.0.0")], browse_opts([src]))
+
+      assert %BrowseResult{catalog: [%{state: :update}]} =
+               Index.browse([persisted.("0.9.0")], browse_opts([src]))
     end
 
     test "names the other source for :other_source", %{src: src} do

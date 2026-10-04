@@ -98,5 +98,6 @@ defmodule Mydia.Settings.PluginConfig do
       message: "must be lowercase alphanumeric with - or _"
     )
     |> unique_constraint(:slug)
+    |> foreign_key_constraint(:plugin_source_id)
   end
 end

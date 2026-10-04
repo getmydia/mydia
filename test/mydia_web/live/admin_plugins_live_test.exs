@@ -354,7 +354,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       doc =
         render_component(&Components.store_modal/1, browse: browse) |> LazyHTML.from_fragment()
 
-      key = "fixture-tool-" <> String.slice(sid, 0, 8)
+      key = "fixture-tool--src-" <> sid
 
       refute doc |> LazyHTML.query("#install-#{key}") |> Enum.empty?()
 
@@ -421,6 +421,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
             version: "1.0.0"
           },
           source_id: sid,
+          source_url: "https://plugins.example.test/index.json",
           source_name: name
         }
       end
@@ -446,10 +447,22 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       send(view.pid, {:event_created, %{type: "unrelated", actor_id: nil}})
       render(view)
 
-      key = "fixture-tool-" <> String.slice(third_sid, 0, 8)
+      key = "fixture-tool--src-" <> third_sid
       view |> element("#install-#{key}") |> render_click()
 
-      assert has_element?(view, "#approval-publisher-warning", "Example Plugins")
+      assert has_element?(
+               view,
+               "#approval-publisher-warning",
+               "Example Plugins (plugins.example.test)"
+             )
+    end
+
+    test "a source key never equals an official slug ending in its id prefix" do
+      sid = Ecto.UUID.generate()
+      lookalike = "foo-" <> String.slice(sid, 0, 8)
+
+      refute Components.catalog_key(%{source_id: sid, slug: "foo"}) ==
+               Components.catalog_key(%{source_id: nil, slug: lookalike})
     end
 
     test "the button is disabled while a browse is in flight" do
