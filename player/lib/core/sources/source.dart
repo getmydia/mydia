@@ -2,7 +2,7 @@
 ///
 /// Three levels, so a change to one never reshapes the others. A
 /// [ProviderAccount] is a credential, a [SourceProfile] is who acts with it
-/// (a Plex Home user, later), and a [SourceServer] is what the viewer
+/// (a Plex Home user), and a [SourceServer] is what the viewer
 /// browses. A [Source] is one of each, and is what the switcher lists and
 /// routes address.
 library;
@@ -14,6 +14,10 @@ enum SourceKind { mydia, plex, stash, jellyfin }
 /// Storage namespace of the one Mydia login that predates sources. Its
 /// credentials stay under `AuthService`'s original keys, unmigrated.
 const kLegacyStorageNamespace = 'legacy';
+
+/// Profile id of the account holder: Mydia's and Stash's only profile, and
+/// a Plex account's admin. Other Plex Home users use their plex.tv uuid.
+const kOwnerProfileId = 'owner';
 
 final _sourceIdComponent = RegExp(r'^[A-Za-z0-9_-]+$');
 
@@ -86,13 +90,17 @@ class ProviderAccount {
         'needsReauth': needsReauth,
       };
 
-  ProviderAccount copyWith({String? displayName, bool? needsReauth}) =>
+  ProviderAccount copyWith({
+    String? displayName,
+    bool? needsReauth,
+    String? activeProfileId,
+  }) =>
       ProviderAccount(
         id: id,
         kind: kind,
         displayName: displayName ?? this.displayName,
         storageNamespace: storageNamespace,
-        activeProfileId: activeProfileId,
+        activeProfileId: activeProfileId ?? this.activeProfileId,
         needsReauth: needsReauth ?? this.needsReauth,
       );
 
@@ -111,7 +119,8 @@ class ProviderAccount {
       id, kind, displayName, storageNamespace, activeProfileId, needsReauth);
 }
 
-/// Who is acting. Mydia and Stash always have exactly one, the owner.
+/// Who is acting. Mydia and Stash always have exactly one, the owner; a Plex
+/// account has one per Plex Home user.
 @immutable
 class SourceProfile {
   const SourceProfile({
@@ -119,6 +128,7 @@ class SourceProfile {
     required this.accountId,
     required this.name,
     required this.isOwner,
+    this.protected = false,
   });
 
   factory SourceProfile.fromJson(Map<String, dynamic> json) => SourceProfile(
@@ -126,6 +136,7 @@ class SourceProfile {
         accountId: json['accountId'] as String,
         name: json['name'] as String,
         isOwner: json['isOwner'] as bool,
+        protected: json['protected'] as bool? ?? false,
       );
 
   final String id;
@@ -133,8 +144,16 @@ class SourceProfile {
   final String name;
   final bool isOwner;
 
-  Map<String, dynamic> toJson() =>
-      {'id': id, 'accountId': accountId, 'name': name, 'isOwner': isOwner};
+  /// Switching to this Plex Home user asks for their PIN.
+  final bool protected;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'accountId': accountId,
+        'name': name,
+        'isOwner': isOwner,
+        'protected': protected,
+      };
 
   @override
   bool operator ==(Object other) =>
@@ -142,10 +161,11 @@ class SourceProfile {
       other.id == id &&
       other.accountId == accountId &&
       other.name == name &&
-      other.isOwner == isOwner;
+      other.isOwner == isOwner &&
+      other.protected == protected;
 
   @override
-  int get hashCode => Object.hash(id, accountId, name, isOwner);
+  int get hashCode => Object.hash(id, accountId, name, isOwner, protected);
 }
 
 /// One way to reach a server. Plex advertises several (LAN, WAN, relay);

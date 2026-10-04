@@ -116,4 +116,48 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('an old record reads with no PIN flags and its servers as chosen', () {
+    final json = plexRecord().toJson();
+    (json['profiles'] as List)
+        .cast<Map<String, dynamic>>()
+        .single
+        .remove('protected');
+    json.remove('chosenServerIds');
+    final record = SourceAccountRecord.fromJson(json);
+    expect(record.profiles.single.protected, isFalse);
+    expect(record.chosenServerIds, isNull);
+    expect(record.chosenServers, ['abc123']);
+  });
+
+  test('PIN flags and the chosen servers round-trip', () {
+    final record = plexRecord().copyWith(
+      profiles: const [
+        SourceProfile(
+            id: 'owner', accountId: 'acc1', name: 'Quill', isOwner: true),
+        SourceProfile(
+            id: 'kid0001',
+            accountId: 'acc1',
+            name: 'Pip',
+            isOwner: false,
+            protected: true),
+      ],
+      chosenServerIds: ['abc123', 'zz99'],
+    );
+    final copy = SourceAccountRecord.fromJson(record.toJson());
+    expect(copy.profiles, record.profiles);
+    expect(copy.profiles.last.protected, isTrue);
+    expect(copy.chosenServers, ['abc123', 'zz99']);
+  });
+
+  test('copyWith can change the active profile', () {
+    final account = plexRecord().account.copyWith(activeProfileId: 'kid0001');
+    expect(account.activeProfileId, 'kid0001');
+    expect(account.displayName, 'quill');
+  });
+
+  test('rejects a chosen server id that would break SourceId', () {
+    expect(() => plexRecord().copyWith(chosenServerIds: ['has:colon']),
+        throwsArgumentError);
+  });
 }
