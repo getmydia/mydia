@@ -18,6 +18,7 @@ class PlexMediaSource extends MediaSource
         WatchedState,
         Searchable,
         ContinueWatching,
+        RecentlyAdded,
         HomeHubs,
         Similar,
         NextUp {
@@ -38,6 +39,7 @@ class PlexMediaSource extends MediaSource
         SourceCapability.watchedState,
         SourceCapability.searchable,
         SourceCapability.continueWatching,
+        SourceCapability.recentlyAdded,
         SourceCapability.hubs,
         SourceCapability.similar,
         SourceCapability.nextUp,
@@ -158,6 +160,18 @@ class PlexMediaSource extends MediaSource
   @override
   Future<List<ItemSummary>> continueWatching() async {
     final body = await client.container('/hubs/continueWatching/items', {
+      'X-Plex-Container-Start': '0',
+      'X-Plex-Container-Size': '$_rowLimit',
+    });
+    return [
+      for (final m in (body['Metadata'] as List? ?? const []))
+        if (m is Map) plexSummary(id, m.cast<String, dynamic>()),
+    ].whereType<ItemSummary>().take(_rowLimit).toList();
+  }
+
+  @override
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final body = await client.container('/library/recentlyAdded', {
       'X-Plex-Container-Start': '0',
       'X-Plex-Container-Size': '$_rowLimit',
     });

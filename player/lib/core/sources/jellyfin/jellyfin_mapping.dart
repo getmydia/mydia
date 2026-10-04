@@ -31,11 +31,17 @@ ItemKind? jellyfinItemKind(String? type) => switch (type) {
     };
 
 const jellyfinSortOptions = [
-  SortOption(id: 'SortName', label: 'Title'),
+  SortOption(id: 'SortName', label: 'Title', shared: SharedSort.title),
   SortOption(
-      id: 'DateCreated', label: 'Recently added', descendingByDefault: true),
+      id: 'DateCreated',
+      label: 'Recently added',
+      descendingByDefault: true,
+      shared: SharedSort.added),
   SortOption(
-      id: 'PremiereDate', label: 'Release date', descendingByDefault: true),
+      id: 'PremiereDate',
+      label: 'Release date',
+      descendingByDefault: true,
+      shared: SharedSort.released),
   SortOption(id: 'CommunityRating', label: 'Rating', descendingByDefault: true),
 ];
 
@@ -43,6 +49,9 @@ const jellyfinFilterOptions = [
   FilterOption(id: 'IsUnplayed', label: 'Unwatched'),
   FilterOption(id: 'IsResumable', label: 'In progress'),
 ];
+
+/// The `Fields` a merged grid or row needs on top of the defaults.
+const jellyfinSortFields = 'SortName,DateCreated';
 
 /// `IncludeItemTypes` for browsing a library of [kind].
 String jellyfinItemTypes(LibraryKind kind) => switch (kind) {
@@ -119,8 +128,16 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
     airDate: _isoDate(json['PremiereDate']),
     // An item's own id is the id of its primary media source.
     defaultVersionId: id,
+    sortTitle: json['SortName'] as String?,
+    // A show or season's newest episode arrival, when the response carries it.
+    addedAt:
+        _instant(json['DateLastMediaAdded']) ?? _instant(json['DateCreated']),
+    lastPlayedAt: _instant(user['LastPlayedDate']),
   );
 }
+
+DateTime? _instant(Object? value) =>
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
 
 /// The `yyyy-MM-dd` head of an ISO timestamp; shorter strings pass as is.
 String? _isoDate(Object? value) => value is String && value.isNotEmpty

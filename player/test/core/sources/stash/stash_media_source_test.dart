@@ -120,6 +120,37 @@ void main() {
         '/scene/2/caption?lang=en&type=srt');
   });
 
+  test('a scene carries added and last played, no sort title', () async {
+    final b = build();
+    final detail = await b.source.item(
+        ItemRef(sourceId: b.source.id, kind: ItemKind.video, externalId: '2'));
+    expect(detail.summary.addedAt, DateTime.utc(2024, 2, 2, 10));
+    expect(detail.summary.lastPlayedAt, DateTime.utc(2024, 6, 2, 20));
+    expect(detail.summary.sortTitle, isNull);
+  });
+
+  test('recently added sorts by created_at, newest first, 20 at most',
+      () async {
+    final b = build();
+    final items = await b.source.recentlyAdded();
+    expect(items.first.ref.externalId, '5');
+    final filter = b.server.operations
+        .lastWhere((o) => o.$1 == 'FindScenes')
+        .$2['filter'] as Map;
+    expect(filter['sort'], 'created_at');
+    expect(filter['direction'], 'DESC');
+    expect(filter['per_page'], 20);
+  });
+
+  test('sort options tag title, added and released', () {
+    final shared = {for (final o in stashSortOptions) o.id: o.shared};
+    expect(shared['title'], SharedSort.title);
+    expect(shared['created_at'], SharedSort.added);
+    expect(shared['date'], SharedSort.released);
+    expect(shared.entries.where((e) => e.value != null).map((e) => e.key),
+        unorderedEquals(['title', 'created_at', 'date']));
+  });
+
   test('watched writes add a play or reset the count', () async {
     final b = build();
     const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');

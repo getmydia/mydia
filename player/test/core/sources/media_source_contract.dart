@@ -125,5 +125,34 @@ void runMediaSourceContract(
       final next = await nextUp.nextUp(show);
       expect(next?.ref.kind, ItemKind.episode);
     });
+
+    test('recently added is listed, newest first and at most 20', () async {
+      final f = await setUp();
+      final recent = f.source.as<RecentlyAdded>();
+      expect(recent != null,
+          f.source.capabilities.contains(SourceCapability.recentlyAdded));
+      if (recent == null) return;
+      final items = await recent.recentlyAdded();
+      expect(items, isNotEmpty);
+      expect(items.length, lessThanOrEqualTo(20));
+      final dates = [for (final i in items) i.addedAt];
+      expect(dates, everyElement(isNotNull));
+      for (var i = 1; i < dates.length; i++) {
+        expect(dates[i]!.isAfter(dates[i - 1]!), isFalse,
+            reason: 'item $i is newer than item ${i - 1}');
+      }
+    });
+
+    test('no library tags a shared sort twice', () async {
+      final f = await setUp();
+      for (final library in await f.source.libraries()) {
+        final shared = [
+          for (final o in library.sortOptions)
+            if (o.shared case final s?) s,
+        ];
+        expect(shared.toSet(), hasLength(shared.length),
+            reason: '${library.title} tags a shared sort twice');
+      }
+    });
   });
 }

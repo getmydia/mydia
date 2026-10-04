@@ -215,4 +215,52 @@ void main() {
         sid, {'Id': 'a', 'Type': 'Movie', 'PremiereDate': '2024'})!;
     expect(s.airDate, '2024');
   });
+
+  test('a summary carries sort title, added and last played', () {
+    final s = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.movie(1),
+      'SortName': 'lantern bay 0001',
+      'DateCreated': '2024-03-01T10:00:00.0000000Z',
+      'UserData': {
+        'Played': true,
+        'LastPlayedDate': '2024-04-02T21:30:00.0000000Z',
+      },
+    })!;
+    expect(s.sortTitle, 'lantern bay 0001');
+    expect(s.addedAt, DateTime.utc(2024, 3, 1, 10));
+    expect(s.lastPlayedAt, DateTime.utc(2024, 4, 2, 21, 30));
+  });
+
+  test('a show takes addedAt from its newest episode arrival', () {
+    final both = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.show,
+      'DateCreated': '2020-01-01T00:00:00.0000000Z',
+      'DateLastMediaAdded': '2024-05-04T10:00:00.0000000Z',
+    })!;
+    expect(both.addedAt, DateTime.utc(2024, 5, 4, 10));
+    final only = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.show,
+      'DateCreated': '2020-01-01T00:00:00.0000000Z',
+    })!;
+    expect(only.addedAt, DateTime.utc(2020, 1, 1));
+  });
+
+  test('parsed instants are UTC', () {
+    final s = jellyfinSummary(sid, {
+      ...FakeJellyfinServer.movie(1),
+      'DateCreated': '2024-03-01T12:00:00+02:00',
+    })!;
+    expect(s.addedAt, DateTime.utc(2024, 3, 1, 10));
+    expect(s.addedAt!.isUtc, isTrue);
+  });
+
+  test('sort options tag title, added and released', () {
+    final shared = {for (final o in jellyfinSortOptions) o.id: o.shared};
+    expect(shared, {
+      'SortName': SharedSort.title,
+      'DateCreated': SharedSort.added,
+      'PremiereDate': SharedSort.released,
+      'CommunityRating': null,
+    });
+  });
 }

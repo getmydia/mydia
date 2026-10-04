@@ -26,6 +26,8 @@ class FakeStashServer {
         'rating100': 80,
         'play_count': plays,
         'resume_time': resume,
+        'created_at': '2024-0$n-0${n}T10:00:00Z',
+        'last_played_at': plays > 0 ? '2024-06-0${n}T20:00:00Z' : null,
         'files': [
           {
             'id': '9$n',
@@ -101,6 +103,9 @@ class FakeStashServer {
         var all = sceneFilter.containsKey('resume_time')
             ? [scene(4, resume: 120), scene(2, resume: 300)]
             : [for (var n = 1; n <= 5; n++) scene(n)];
+        if (filter['sort'] == 'created_at' && filter['direction'] == 'DESC') {
+          all = all.reversed.toList();
+        }
         if (q != null) {
           all = all.where((s) => '${s['title']}'.contains(q)).toList();
         }

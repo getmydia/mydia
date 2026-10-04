@@ -317,4 +317,31 @@ void main() {
         sourceId: jellyfinSid, kind: ItemKind.season, externalId: 'season1'));
     expect(b.server.requests.last.url.queryParameters['Fields'], 'Overview');
   });
+
+  test('recently added reads the bare array from /Items/Latest', () async {
+    final b = build();
+    final items = await b.source.recentlyAdded();
+    expect(items.map((i) => i.ref.externalId), ['show1', 'm3', 'm1']);
+    expect(items.first.addedAt, DateTime.utc(2024, 5, 4, 10));
+    final q = b.server.requests
+        .lastWhere((r) => r.url.path == '/Items/Latest')
+        .url
+        .queryParameters;
+    expect(q['Limit'], '20');
+    expect(q['Fields'], contains('DateCreated'));
+    expect(q['Fields'], contains('DateLastMediaAdded'));
+    expect(q.containsKey('ParentId'), isFalse);
+  });
+
+  test('browse asks for the sort fields', () async {
+    final b = build();
+    final library = (await b.source.libraries())
+        .firstWhere((l) => l.kind == LibraryKind.movies);
+    await b.source.browse(library.ref, const BrowseQuery());
+    final q = b.server.requests
+        .lastWhere((r) => r.url.path == '/Items')
+        .url
+        .queryParameters;
+    expect(q['Fields'], 'ChildCount,SortName,DateCreated');
+  });
 }
