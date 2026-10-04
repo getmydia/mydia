@@ -2354,6 +2354,8 @@
       
         
       
+        
+      
     
     
     
@@ -2554,6 +2556,34 @@
     
   
     Test and Iterate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../plugins/how-to/publish-a-source/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Publish your own plugin source
   
 
     
@@ -3228,12 +3258,23 @@ variables; see <a href="../environment-variables/#media-servers">Media Servers</
 <p>Environment variables override these; see
 <a href="../environment-variables/#plugins">Plugins</a>. <code>plugin_installs:</code> is no longer
 read.</p>
-<p>Three plugin limits live in the <code>plugins:</code> block:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">plugins</span><span class="p">:</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">setup_timeout_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30000</span><span class="w">       </span><span class="c1"># time allowed for one setup wizard step</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">store_max_keys</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span><span class="w">       </span><span class="c1"># stored entries per instance</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">store_max_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">268435456</span><span class="w">    </span><span class="c1"># stored bytes per instance (256 MiB)</span>
+<p>Signed plugin sources can be declared under <code>plugin_sources</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nt">plugin_sources</span><span class="p">:</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://example.com/index.json</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span><span class="nt">public_key</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">RW...</span>
 </code></pre></div>
+<p><code>PLUGINS_SOURCE_&lt;N&gt;_URL</code> and <code>PLUGINS_SOURCE_&lt;N&gt;_PUBLIC_KEY</code> environment
+variables add to these sources, they do not replace them. See
+<a href="../environment-variables/#plugin-sources">Plugin sources</a>.</p>
+<p>Three plugin limits live in the <code>plugins:</code> block:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">plugins</span><span class="p">:</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="nt">setup_timeout_ms</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30000</span><span class="w">       </span><span class="c1"># time allowed for one setup wizard step</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="nt">store_max_keys</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1000000</span><span class="w">       </span><span class="c1"># stored entries per instance</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="nt">store_max_bytes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">268435456</span><span class="w">    </span><span class="c1"># stored bytes per instance (256 MiB)</span>
+</code></pre></div>
+<p><code>plugins.index_url</code> can point at a staging official index, but then
+<code>plugins.index_public_key</code> is required. <code>plugins.extra_source_urls</code> is no longer
+read and logs a warning; declare sources with <code>plugin_sources</code> instead.</p>
 
 
 
