@@ -141,10 +141,6 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     apply_lifecycle(socket, fn -> Plugins.set_enabled(slug, enable?) end, "Updated #{slug}.")
   end
 
-  def handle_event("revoke", %{"slug" => slug}, socket) do
-    apply_lifecycle(socket, fn -> Plugins.revoke(slug) end, "Revoked #{slug}.")
-  end
-
   def handle_event("remove", %{"slug" => slug}, socket) do
     apply_lifecycle(socket, fn -> Plugins.remove(slug) end, "Removed #{slug}.")
   end

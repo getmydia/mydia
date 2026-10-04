@@ -308,8 +308,8 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           </.button>
         </div>
 
-        <%!-- Outside the join so it survives pending approval: a revoked
-              plugin is pending again, and removing it must stay possible. --%>
+        <%!-- Outside the join so it survives pending approval.
+              A plugin awaiting approval must stay removable. --%>
         <.button
           :if={@plugin.removable}
           id={"remove-#{@plugin.slug}"}
@@ -549,7 +549,7 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   defp things(n), do: "#{n} things"
 
   @doc """
-  Per-plugin detail modal: granted capabilities + host grants + Revoke.
+  Per-plugin detail modal: granted capabilities and host grants.
 
   Operational surfaces (activity log, network requests, Test) live in the
   dedicated `logs_modal/1`, reached via the row's Logs button.
@@ -609,15 +609,6 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
             phx-value-slug={@detail.slug}
           >
             <.icon name="hero-document-text" class="w-4 h-4" /> View logs
-          </.button>
-          <.button
-            id={"detail-revoke-#{@detail.slug}"}
-            class="btn btn-warning btn-sm"
-            phx-click="revoke"
-            phx-value-slug={@detail.slug}
-            data-confirm="Revoke all capabilities and deactivate this plugin?"
-          >
-            Revoke capabilities
           </.button>
           <.button class="btn btn-ghost btn-sm" phx-click="close_detail">
             Close

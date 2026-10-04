@@ -885,21 +885,17 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       assert Settings.get_plugin_config_by_slug("notifier") == nil
     end
 
-    test "a revoked plugin can be removed", %{conn: conn} do
+    test "the detail modal offers no revoke", %{conn: conn} do
       seed_plugin("notifier", "Notifier",
         enabled: true,
         granted: %{"net:http" => ["discord.com"]}
       )
 
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
-
       view |> element("#details-notifier") |> render_click()
-      view |> element("#detail-revoke-notifier") |> render_click()
 
-      view |> element("#remove-notifier") |> render_click()
-
-      refute has_element?(view, "#plugin-row-notifier")
-      assert Settings.get_plugin_config_by_slug("notifier") == nil
+      assert has_element?(view, "#detail-modal")
+      refute has_element?(view, "#detail-revoke-notifier")
     end
 
     test "remove deletes the plugin row", %{conn: conn} do
