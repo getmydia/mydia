@@ -290,6 +290,18 @@ void main() {
     expect(httpRequests.single.headers['Authorization'], 'Bearer access');
   });
 
+  test('an HTTP guest lists its sidecar subtitle tracks', () async {
+    final detail = await open(_direct).detail();
+    expect(detail!.serverSubtitleTracks!.map((t) => t.id), ['sub-1']);
+  });
+
+  test('a p2p guest lists no sidecar tracks it cannot fetch', () async {
+    final detail = await open(_p2p).detail();
+    expect(detail, isNotNull);
+    expect(detail!.serverSubtitleTracks, isNull);
+    expect(detail.savedDurationSeconds, isNotNull);
+  });
+
   test('a p2p guest has no subtitle files yet', () async {
     final s = open(_p2p);
     await expectLater(s.fetchText('/api/v1/subtitles/sub-1.vtt'),

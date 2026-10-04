@@ -299,8 +299,23 @@ class MydiaGuestSource extends MediaSource
   }
 
   @override
-  Future<void> setFavorite(ItemRef ref, bool favorite) async {
-    // The server only toggles, so read the current state first.
+  Future<void> setFavorite(ItemRef ref, bool favorite) {
+    // The server only toggles, so the read-check-toggle runs one at a time
+    // per item; two overlapping calls would both read the old state.
+    final key = ref.externalId;
+    final previous = _favoriteChains[key] ?? Future<void>.value();
+    final run = previous.then((_) => _setFavorite(ref, favorite));
+    final tail = run.then<void>((_) {}, onError: (Object _) {});
+    _favoriteChains[key] = tail;
+    tail.whenComplete(() {
+      if (identical(_favoriteChains[key], tail)) _favoriteChains.remove(key);
+    });
+    return run;
+  }
+
+  final Map<String, Future<void>> _favoriteChains = {};
+
+  Future<void> _setFavorite(ItemRef ref, bool favorite) async {
     final current = (await item(ref)).isFavorite;
     if (current == favorite) return;
     await _q(

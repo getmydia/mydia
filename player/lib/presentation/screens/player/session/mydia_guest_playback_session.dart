@@ -127,6 +127,22 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
   List<CandidateStrategy> candidatesFor(MediaVersion version) =>
       _offered ?? jellyfinCandidates(version, null);
 
+  /// A p2p guest cannot serve sidecar subtitle files ([fetchText] refuses
+  /// them), so it lists none rather than tracks that can never load.
+  @override
+  Future<PlaybackDetail?> detail() async {
+    final base = await super.detail();
+    if (base == null || base.serverSubtitleTracks == null) return base;
+    final credentials = await _client.credentials();
+    if (!credentials.isP2p) return base;
+    return PlaybackDetail(
+      savedPositionSeconds: base.savedPositionSeconds,
+      savedDurationSeconds: base.savedDurationSeconds,
+      lastWatchedAt: base.lastWatchedAt,
+      runtimeMinutes: base.runtimeMinutes,
+    );
+  }
+
   @override
   Future<String> fetchText(String path) async {
     final credentials = await _client.credentials();

@@ -184,6 +184,24 @@ void main() {
     expect(toggles.single.vars, {'mediaItemId': 'm-1'});
   });
 
+  test('concurrent setFavorite calls for one item toggle once', () async {
+    final b = build();
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1');
+    var favorite = true;
+    b.t.handlers['MovieDetail'] = (v) =>
+        {'movie': fx.movie(v['id'] as String)..['isFavorite'] = favorite};
+    b.t.handlers['ToggleFavorite'] = (_) {
+      favorite = !favorite;
+      return <String, dynamic>{};
+    };
+    await Future.wait([
+      b.source.setFavorite(ref, false),
+      b.source.setFavorite(ref, false),
+    ]);
+    expect(
+        b.t.calls.where((c) => c.operation == 'ToggleFavorite'), hasLength(1));
+  });
+
   test('search drops episode results it cannot place', () async {
     final results = await build().source.search('a');
     expect(results.map((r) => r.ref.externalId), ['m-1']);
