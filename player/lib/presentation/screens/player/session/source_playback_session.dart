@@ -202,6 +202,25 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   Future<List<String>?> rememberAudioLanguage(String language) async => null;
 
   @override
+  String episodeLocation({
+    required String episodeId,
+    required String fileId,
+    required String title,
+    required int seasonNumber,
+    required String? showId,
+  }) =>
+      Uri(
+        path: '/s/${source.id.value}/player/$episodeId',
+        queryParameters: {
+          'kind': 'episode',
+          'fileId': fileId,
+          'title': title,
+          if (showId != null) 'showId': showId,
+          'seasonNumber': '$seasonNumber',
+        },
+      ).toString();
+
+  @override
   Future<void> writeSubtitlePreference({
     required String fileId,
     required SubtitleTrack? resolved,

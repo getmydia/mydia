@@ -132,6 +132,16 @@ class FakePlaybackSession implements PlaybackSession {
   Future<ProgressReporter> openProgress() async => progress;
 
   @override
+  String episodeLocation({
+    required String episodeId,
+    required String fileId,
+    required String title,
+    required int seasonNumber,
+    required String? showId,
+  }) =>
+      '/fake/episode/$episodeId';
+
+  @override
   Future<StreamingPreparation> prepareStreaming({
     required Object owner,
     required void Function(String message) onProgress,
