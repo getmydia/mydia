@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'core/build_channel.dart';
 import 'core/app_menu/app_menu_channel.dart';
 import 'core/app_menu/now_playing.dart';
+import 'core/sources/lock/source_lock_controller.dart';
 import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/sources/connection/connection_refresh_bus.dart';
@@ -461,6 +462,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(sourceLockProvider.notifier).onLifecycle(state);
     if (state == AppLifecycleState.resumed) {
       ref
           .read(connectionRefreshBusProvider)
