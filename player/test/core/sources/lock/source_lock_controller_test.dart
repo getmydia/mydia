@@ -17,8 +17,10 @@ class _Auth implements DeviceAuth {
   Future<DeviceAuthResult> authenticate() async => result;
 }
 
-ProviderContainer _container(DeviceAuthResult result, {PinStore? pins}) {
+ProviderContainer _container(DeviceAuthResult result,
+    {PinStore? pins, DateTime Function()? clock}) {
   final c = ProviderContainer(overrides: [
+    if (clock != null) lockClockProvider.overrideWithValue(clock),
     deviceAuthProvider.overrideWithValue(_Auth(result)),
     pinStoreProvider.overrideWithValue(
         pins ?? PinStore(MockAuthStorage(), iterations: 1000)),
@@ -99,6 +101,69 @@ void main() {
       release(); // idempotent
       expect(lock.holding, isFalse);
       expect(c.read(sourceLockProvider), isFalse);
+    });
+  });
+
+  group('wall clock relock', () {
+    var wall = DateTime.utc(2026, 10, 4, 12);
+    setUp(() => wall = DateTime.utc(2026, 10, 4, 12));
+
+    ProviderContainer unlocked(FakeAsync async) {
+      final c = _container(DeviceAuthResult.success, clock: () => wall);
+      c.read(sourceLockProvider.notifier).unlockWithDevice();
+      async.flushMicrotasks();
+      expect(c.read(sourceLockProvider), isTrue);
+      return c;
+    }
+
+    test('locks on resume when the device slept past the grace', () {
+      fakeAsync((async) {
+        final c = unlocked(async);
+        final lock = c.read(sourceLockProvider.notifier);
+        lock.onLifecycle(AppLifecycleState.paused);
+        wall = wall.add(const Duration(minutes: 2)); // timers never elapse
+        lock.onLifecycle(AppLifecycleState.resumed);
+        expect(c.read(sourceLockProvider), isFalse);
+      });
+    });
+
+    test('a short absence stays unlocked', () {
+      fakeAsync((async) {
+        final c = unlocked(async);
+        final lock = c.read(sourceLockProvider.notifier);
+        lock.onLifecycle(AppLifecycleState.paused);
+        wall = wall.add(const Duration(seconds: 30));
+        lock.onLifecycle(AppLifecycleState.resumed);
+        expect(c.read(sourceLockProvider), isTrue);
+      });
+    });
+
+    test('holding defers the resume relock until release', () {
+      fakeAsync((async) {
+        final c = unlocked(async);
+        final lock = c.read(sourceLockProvider.notifier);
+        final release = lock.hold();
+        lock.onLifecycle(AppLifecycleState.paused);
+        wall = wall.add(const Duration(minutes: 2));
+        lock.onLifecycle(AppLifecycleState.resumed);
+        expect(c.read(sourceLockProvider), isTrue);
+        release();
+        expect(c.read(sourceLockProvider), isFalse);
+      });
+    });
+
+    test('an unlock that completes in the background still relocks', () {
+      fakeAsync((async) {
+        final c = _container(DeviceAuthResult.success, clock: () => wall);
+        final lock = c.read(sourceLockProvider.notifier);
+        lock.onLifecycle(AppLifecycleState.paused);
+        lock.unlockWithDevice();
+        async.flushMicrotasks();
+        expect(c.read(sourceLockProvider), isTrue);
+        wall = wall.add(const Duration(minutes: 2));
+        lock.onLifecycle(AppLifecycleState.resumed);
+        expect(c.read(sourceLockProvider), isFalse);
+      });
     });
   });
 

@@ -99,7 +99,14 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
 
   @override
   void dispose() {
-    _releaseLock?.call();
+    // Releasing can lock, which changes provider state: not while the tree
+    // is being finalized.
+    final release = _releaseLock;
+    if (release != null) {
+      final binding = WidgetsBinding.instance;
+      binding.addPostFrameCallback((_) => release());
+      binding.scheduleFrame();
+    }
     super.dispose();
   }
 

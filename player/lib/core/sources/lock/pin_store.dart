@@ -36,6 +36,7 @@ class PinStore {
   static const _failuresKey = 'app_lock/pin_failures';
   static const _blockedUntilKey = 'app_lock/pin_blocked_until';
   static const _freeAttempts = 5;
+  static const _maxBackoffExponent = 10;
   static const _firstDelay = Duration(seconds: 30);
   static final _pinPattern = RegExp(r'^\d{4,6}$');
 
@@ -64,7 +65,10 @@ class PinStore {
   }
 
   Future<PinCheck> check(String pin) async {
-    final blockedUntil = await _blockedUntil();
+    final raw = await _storage.read(_blockedUntilKey);
+    final blockedUntil = raw == null ? null : DateTime.tryParse(raw);
+    // An unreadable block fails closed.
+    if (raw != null && blockedUntil == null) return _block(_firstDelay);
     if (blockedUntil != null && _now().isBefore(blockedUntil)) {
       return PinBlocked(blockedUntil);
     }
@@ -72,11 +76,16 @@ class PinStore {
       await _resetFailures();
       return const PinAccepted();
     }
-    final failures = int.parse(await _storage.read(_failuresKey) ?? '0') + 1;
+    final failures =
+        (int.tryParse(await _storage.read(_failuresKey) ?? '') ?? 0) + 1;
     await _storage.write(_failuresKey, '$failures');
     if (failures < _freeAttempts) return const PinRejected();
-    final until =
-        _now().add(_firstDelay * pow(2, failures - _freeAttempts).toInt());
+    final exponent = min(failures - _freeAttempts, _maxBackoffExponent);
+    return _block(_firstDelay * pow(2, exponent).toInt());
+  }
+
+  Future<PinBlocked> _block(Duration delay) async {
+    final until = _now().add(delay);
     await _storage.write(_blockedUntilKey, until.toUtc().toIso8601String());
     return PinBlocked(until);
   }
@@ -87,18 +96,22 @@ class PinStore {
   }
 
   Future<bool> _matches(String pin) async {
-    final stored = await _storage.read(_hashKey);
-    final parts = stored?.split(r'$');
-    if (parts == null || parts.length != 4 || parts[0] != 'v1') return false;
-    final expected = base64Decode(parts[3]);
-    final actual =
-        await _derive(pin, base64Decode(parts[2]), int.parse(parts[1]));
-    if (actual.length != expected.length) return false;
-    var diff = 0;
-    for (var i = 0; i < actual.length; i++) {
-      diff |= actual[i] ^ expected[i];
+    try {
+      final stored = await _storage.read(_hashKey);
+      final parts = stored?.split(r'$');
+      if (parts == null || parts.length != 4 || parts[0] != 'v1') return false;
+      final expected = base64Decode(parts[3]);
+      final actual =
+          await _derive(pin, base64Decode(parts[2]), int.parse(parts[1]));
+      if (actual.length != expected.length) return false;
+      var diff = 0;
+      for (var i = 0; i < actual.length; i++) {
+        diff |= actual[i] ^ expected[i];
+      }
+      return diff == 0;
+    } catch (_) {
+      return false;
     }
-    return diff == 0;
   }
 
   Future<List<int>> _derive(String pin, List<int> salt, int rounds) async {
@@ -108,11 +121,6 @@ class PinStore {
       bits: 256,
     ).deriveKeyFromPassword(password: pin, nonce: salt);
     return key.extractBytes();
-  }
-
-  Future<DateTime?> _blockedUntil() async {
-    final raw = await _storage.read(_blockedUntilKey);
-    return raw == null ? null : DateTime.tryParse(raw);
   }
 
   Future<void> _resetFailures() async {

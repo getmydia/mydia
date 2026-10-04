@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/sources/lock/device_auth.dart';
 import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -12,6 +13,13 @@ import 'package:player/presentation/screens/sources/source_player_route.dart';
 
 import '../../../core/sources/plex/plex_media_source_test.dart' as plex;
 import 'fake_media_source.dart';
+
+class _AllowAuth implements DeviceAuth {
+  @override
+  Future<bool> available() async => true;
+  @override
+  Future<DeviceAuthResult> authenticate() async => DeviceAuthResult.success;
+}
 
 void main() {
   test('builds a Plex session for a Plex source, none for others', () {
@@ -100,6 +108,7 @@ void main() {
     Map<SourceId, SourceLock> locks,
   ) async {
     final container = ProviderContainer(overrides: [
+      deviceAuthProvider.overrideWithValue(_AllowAuth()),
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       sourceLocksProvider.overrideWithValue(locks),
     ]);
@@ -124,7 +133,26 @@ void main() {
     expect(container.read(sourceLockProvider.notifier).holding, isTrue);
 
     await tester.pumpWidget(const SizedBox());
+    await tester.pump();
     expect(container.read(sourceLockProvider.notifier).holding, isFalse);
+  });
+
+  testWidgets('a deferred relock fires after the frame, not in dispose',
+      (tester) async {
+    final container =
+        await pumpRoute(tester, {fakeSourceId: SourceLock.locked});
+    final lock = container.read(sourceLockProvider.notifier);
+    await lock.unlockWithDevice();
+    expect(container.read(sourceLockProvider), isTrue);
+    // Expire the grace while holding.
+    lock.onLifecycle(AppLifecycleState.paused);
+    await tester.pump(kRelockGrace + const Duration(seconds: 1));
+    expect(container.read(sourceLockProvider), isTrue);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(container.read(sourceLockProvider), isFalse);
   });
 
   testWidgets('playing an unlocked source holds nothing', (tester) async {

@@ -17,8 +17,14 @@ const kRelockGrace = Duration(minutes: 1);
 String unlockLocation(String next) =>
     '/unlock?next=${Uri.encodeQueryComponent(next)}';
 
+/// Wall clock for the relock check. A Dart timer does not count time the
+/// device slept, so the grace is also compared against this on resume.
+final lockClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
+
 class SourceLockController extends Notifier<bool> {
   Timer? _relock;
+  DateTime? _backgroundedAt;
+  bool _inBackground = false;
   int _holds = 0;
   bool _lockWhenReleased = false;
 
@@ -46,6 +52,7 @@ class SourceLockController extends Notifier<bool> {
   void lock() {
     _relock?.cancel();
     _relock = null;
+    _backgroundedAt = null;
     _lockWhenReleased = false;
     state = false;
   }
@@ -66,13 +73,27 @@ class SourceLockController extends Notifier<bool> {
   void onLifecycle(AppLifecycleState lifecycle) {
     switch (lifecycle) {
       case AppLifecycleState.paused || AppLifecycleState.hidden:
-        if (state && _relock == null) _relock = Timer(kRelockGrace, _expire);
+        _inBackground = true;
+        if (state) _armRelock();
       case AppLifecycleState.resumed:
+        _inBackground = false;
+        final since = _backgroundedAt;
         _relock?.cancel();
         _relock = null;
+        _backgroundedAt = null;
+        if (state &&
+            since != null &&
+            ref.read(lockClockProvider)().difference(since) >= kRelockGrace) {
+          _expire();
+        }
       case AppLifecycleState.inactive || AppLifecycleState.detached:
         break;
     }
+  }
+
+  void _armRelock() {
+    _backgroundedAt ??= ref.read(lockClockProvider)();
+    _relock ??= Timer(kRelockGrace, _expire);
   }
 
   void _expire() {
@@ -87,6 +108,7 @@ class SourceLockController extends Notifier<bool> {
   void _unlock() {
     _lockWhenReleased = false;
     state = true;
+    if (_inBackground) _armRelock();
   }
 }
 

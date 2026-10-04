@@ -25,6 +25,7 @@ class ManageSourcesScreen extends ConsumerWidget {
     List<SourceAccountRecord> visible(SourceSnapshot s) => [
           for (final r in s.accounts)
             if (unlocked ||
+                r.servers.isEmpty ||
                 r.servers.any((sv) => r.lockOf(sv.id) != SourceLock.hidden))
               r,
         ];

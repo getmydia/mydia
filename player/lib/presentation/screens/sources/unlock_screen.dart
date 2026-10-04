@@ -31,7 +31,11 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
 
   String get _next {
     final next = widget.next;
-    if (next == null || !next.startsWith('/') || next.startsWith('//')) {
+    if (next == null ||
+        !next.startsWith('/') ||
+        next.startsWith('//') ||
+        next.startsWith('/unlock') ||
+        next.contains(r'\')) {
       return '/';
     }
     return next;
