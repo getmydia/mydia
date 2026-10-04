@@ -255,6 +255,10 @@ defmodule Mydia.Plugins.Manifest do
   @spec data_namespaces() :: [String.t()]
   def data_namespaces, do: @data_namespaces
 
+  @doc "Returns the v1 `surfaces:write` values (allowed write surfaces)."
+  @spec write_surfaces() :: [String.t()]
+  def write_surfaces, do: @write_surfaces
+
   @doc """
   Parses and validates a manifest from a JSON string or an already-decoded map.
 

@@ -65,7 +65,7 @@ defmodule Mydia.Plugins.Capabilities do
   @doc """
   Renders a capability set as a compact, log-friendly string
   (`net:http [api.example.com], state:kv`). Host-owned prose for the admin UI
-  lives in `MydiaWeb.AdminPluginsLive.Components.capability_label/2` instead.
+  lives in `MydiaWeb.AdminPluginsLive.CapabilitySummary` instead.
   """
   @spec summary(set()) :: String.t()
   def summary(set) when map_size(set) == 0, do: "(none)"

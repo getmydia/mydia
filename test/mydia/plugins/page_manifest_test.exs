@@ -6,7 +6,7 @@ defmodule Mydia.Plugins.PageManifestTest do
   alias Mydia.Plugins.Plugin
   alias Mydia.Plugins.Registry
   alias Mydia.Settings
-  alias MydiaWeb.AdminPluginsLive.Components
+  alias MydiaWeb.AdminPluginsLive.CapabilitySummary
 
   defp page_manifest(overrides \\ %{}) do
     Map.merge(
@@ -165,22 +165,21 @@ defmodule Mydia.Plugins.PageManifestTest do
   end
 
   describe "admin capability rendering" do
-    test "new capabilities get a real label and icon" do
-      for class <- ["surfaces:page", "data:search", "net:private"] do
-        label = Components.capability_label(class, ["ollama.lan"])
-        refute label =~ "(none)"
-        refute label =~ "#{class}:"
-        refute Components.capability_icon(class) == "hero-key"
-      end
+    test "page-era capabilities get host-owned labels in the right groups" do
+      summary =
+        CapabilitySummary.build(%{
+          "surfaces:page" => [],
+          "data:search" => [],
+          "net:private" => ["ollama.lan"],
+          "surfaces:write" => ["media:add"]
+        })
 
-      assert Components.capability_label("net:private", ["ollama.lan"]) =~ "ollama.lan"
-      assert Components.capability_label("surfaces:write", ["media:add"]) =~ "media"
-    end
+      by_key = Map.new(summary.groups, &{&1.key, Enum.map(&1.lines, fn l -> l.label end)})
 
-    test "private-network access and page writes are sensitive" do
-      assert Components.sensitive_capability?("net:private")
-      assert Components.sensitive_capability?("data:search")
-      refute Components.sensitive_capability?("surfaces:page")
+      assert by_key.talks_to == ["ollama.lan (private network)"]
+      assert by_key.can_see == ["Search your library as the person using it"]
+      assert by_key.can_change == ["Add media"]
+      assert by_key.adds == ["Its own page"]
     end
   end
 end
