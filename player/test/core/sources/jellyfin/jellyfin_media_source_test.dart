@@ -279,4 +279,38 @@ void main() {
       expect(body, {'PlaybackPositionTicks': 0});
     });
   });
+
+  test('similar, next up and favorites call the right endpoints', () async {
+    final b = build();
+    b.server.nextUpItems = [FakeJellyfinServer.episode(2)];
+    const movie =
+        ItemRef(sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm1');
+    const show = ItemRef(
+        sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1');
+    expect(
+        b.source.capabilities,
+        containsAll([
+          SourceCapability.similar,
+          SourceCapability.favorites,
+          SourceCapability.nextUp,
+        ]));
+    expect(await b.source.as<Similar>()!.similar(movie), hasLength(2));
+    final next = await b.source.as<NextUp>()!.nextUp(show);
+    expect(next?.ref.kind, ItemKind.episode);
+    expect(b.server.requests.last.url.queryParameters['seriesId'], 'show1');
+    expect(
+        await b.source.as<NextUp>()!.nextUp(const ItemRef(
+            sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'other')),
+        isNull);
+    await b.source.as<Favorites>()!.setFavorite(movie, true);
+    await b.source.as<Favorites>()!.setFavorite(movie, false);
+    expect(b.server.favoriteCalls, [('POST', 'm1'), ('DELETE', 'm1')]);
+  });
+
+  test('season children ask for overviews', () async {
+    final b = build();
+    await b.source.children(const ItemRef(
+        sourceId: jellyfinSid, kind: ItemKind.season, externalId: 'season1'));
+    expect(b.server.requests.last.url.queryParameters['Fields'], 'Overview');
+  });
 }

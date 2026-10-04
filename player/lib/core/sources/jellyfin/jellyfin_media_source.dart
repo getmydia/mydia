@@ -14,7 +14,13 @@ import 'jellyfin_mapping.dart';
 import 'jellyfin_playback_info.dart';
 
 class JellyfinMediaSource extends MediaSource
-    implements WatchedState, Searchable, ContinueWatching {
+    implements
+        WatchedState,
+        Searchable,
+        ContinueWatching,
+        Similar,
+        Favorites,
+        NextUp {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -36,6 +42,9 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.watchedState,
         SourceCapability.searchable,
         SourceCapability.continueWatching,
+        SourceCapability.similar,
+        SourceCapability.favorites,
+        SourceCapability.nextUp,
       };
 
   @override
@@ -151,6 +160,7 @@ class JellyfinMediaSource extends MediaSource
           ..._user,
           'ParentId': parent.externalId,
           'IncludeItemTypes': 'Episode',
+          'Fields': 'Overview',
           'SortBy': 'IndexNumber',
           ...pageQuery,
         }),
@@ -183,6 +193,34 @@ class JellyfinMediaSource extends MediaSource
     });
     return _page(body, 0).items;
   }
+
+  @override
+  Future<List<ItemSummary>> similar(ItemRef ref) async {
+    final body = await client.get('/Items/${ref.externalId}/Similar', {
+      ..._user,
+      'Limit': '$_rowLimit',
+      ..._rowImages,
+    });
+    return _page(body, 0).items;
+  }
+
+  @override
+  Future<ItemSummary?> nextUp(ItemRef show) async {
+    final body = await client.get('/Shows/NextUp', {
+      ..._user,
+      'seriesId': show.externalId,
+      'Limit': '1',
+      ..._rowImages,
+    });
+    return _page(body, 0).items.firstOrNull;
+  }
+
+  @override
+  Future<void> setFavorite(ItemRef ref, bool favorite) => client.send(
+        favorite ? 'POST' : 'DELETE',
+        '/UserFavoriteItems/${ref.externalId}',
+        query: _user,
+      );
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) => client.send(
