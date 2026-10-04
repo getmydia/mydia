@@ -189,9 +189,7 @@ class MydiaGuestSource extends MediaSource
     switch (parent.kind) {
       case ItemKind.show:
         final show = await _show(parent.externalId);
-        final art = show['artwork'];
-        final url = art is Map<String, dynamic> ? art['posterUrl'] : null;
-        final poster = url is String && url.isNotEmpty ? ArtworkRef(url) : null;
+        final poster = showPoster(show);
         final items = [
           for (final s in _maps(show['seasons']))
             seasonSummary(id, parent.externalId, s, poster: poster),
@@ -251,7 +249,10 @@ class MydiaGuestSource extends MediaSource
       case ItemKind.show:
         final show = await _show(ref.externalId);
         for (final s in _maps(show['seasons'])) {
-          await _markSeason(ref.externalId, s['seasonNumber'] as int, watched);
+          // A season the server sent without a number cannot be addressed.
+          final number = s['seasonNumber'];
+          if (number is! int) continue;
+          await _markSeason(ref.externalId, number, watched);
         }
       default:
         throw const SourceException.unsupported();

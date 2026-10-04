@@ -221,6 +221,10 @@ ItemDetail showDetail(SourceId sid, Map<String, dynamic> s) => ItemDetail(
       ],
     );
 
+/// The poster a show's seasons borrow.
+ArtworkRef? showPoster(Map<String, dynamic> show) =>
+    _art(_map(show['artwork'])['posterUrl']);
+
 ItemDetail seasonDetail(
     SourceId sid, Map<String, dynamic> show, int seasonNumber) {
   final showId = show['id'] as String;
@@ -229,8 +233,7 @@ ItemDetail seasonDetail(
           .firstOrNull ??
       {'seasonNumber': seasonNumber};
   return ItemDetail(
-    summary: seasonSummary(sid, showId, season,
-        poster: _art(_map(show['artwork'])['posterUrl'])),
+    summary: seasonSummary(sid, showId, season, poster: showPoster(show)),
     overview: show['overview'] as String?,
     show: _ref(sid, ItemKind.show, showId),
   );

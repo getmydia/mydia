@@ -1,3 +1,4 @@
+import 'package:player/domain/sources/source_error.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/mydia/mydia_guest_client.dart';
@@ -27,7 +28,8 @@ const guest = Source(
       id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
 );
 
-({MydiaGuestSource source, FakeMydiaTransport t}) build() {
+({MydiaGuestSource source, FakeMydiaTransport t}) build(
+    {void Function()? onDispose}) {
   final t = FakeMydiaTransport();
   final movies = [for (var i = 1; i <= 5; i++) fx.movie('m-$i')];
   t.handlers['GuestMovies'] = (v) {
@@ -111,7 +113,11 @@ const guest = Source(
     save: (_) async {},
     onUnauthorized: () {},
   );
-  return (source: MydiaGuestSource(source: guest, client: client), t: t);
+  return (
+    source:
+        MydiaGuestSource(source: guest, client: client, onDispose: onDispose),
+    t: t
+  );
 }
 
 void main() {
@@ -173,8 +179,9 @@ void main() {
         .setFavorite(ref, true); // fixture movie is already a favorite
     expect(b.t.calls.where((c) => c.operation == 'ToggleFavorite'), isEmpty);
     await b.source.setFavorite(ref, false);
-    expect(
-        b.t.calls.where((c) => c.operation == 'ToggleFavorite'), hasLength(1));
+    final toggles = b.t.calls.where((c) => c.operation == 'ToggleFavorite');
+    expect(toggles, hasLength(1));
+    expect(toggles.single.vars, {'mediaItemId': 'm-1'});
   });
 
   test('search drops episode results it cannot place', () async {
@@ -201,5 +208,108 @@ void main() {
     expect(s.as<Favorites>(), isNotNull);
     expect(s.as<NextUp>(), isNotNull);
     expect(s.as<HomeHubs>(), isNull);
+  });
+
+  const show = ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1');
+
+  test('similar caps at 20 and never answers the show itself', () async {
+    final b = build();
+    b.t.handlers['TvShowDetail'] = (v) {
+      final s = fx.show('s-1');
+      s['similar'] = [
+        {
+          'id': 's-1',
+          'type': 'TV_SHOW',
+          'title': 'Self',
+          'year': 2019,
+          'artwork': null
+        },
+        for (var i = 0; i < 24; i++)
+          {
+            'id': 'x-$i',
+            'type': 'TV_SHOW',
+            'title': 'Other $i',
+            'year': 2018,
+            'artwork': null
+          },
+      ];
+      return {'tvShow': s};
+    };
+    final items = await b.source.similar(show);
+    expect(items, hasLength(20));
+    expect(items.map((i) => i.ref), isNot(contains(show)));
+    final movies = await b.source.similar(
+        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+    expect(movies, isEmpty);
+  });
+
+  test('next up is the fixture episode', () async {
+    final next = await build().source.nextUp(show);
+    expect(next!.ref.externalId, 'e-21');
+    expect(next.ref.kind, ItemKind.episode);
+    expect(next.index, 1);
+    expect(next.parentIndex, 2);
+  });
+
+  test('continue watching maps movies and episodes; remove sends the id',
+      () async {
+    final b = build();
+    b.t.handlers['GuestContinueWatching'] = (_) => {
+          'continueWatching': [
+            {
+              'id': 'm-1',
+              'type': 'MOVIE',
+              'title': 'A',
+              'progress': null,
+              'files': <Object>[]
+            },
+            {
+              'id': 'e-1',
+              'type': 'EPISODE',
+              'title': 'B',
+              'showTitle': 'S',
+              'seasonNumber': 1,
+              'episodeNumber': 3,
+              'progress': null,
+              'files': <Object>[]
+            },
+          ]
+        };
+    final rows = await b.source.continueWatching();
+    expect(rows.map((r) => r.ref.kind), [ItemKind.movie, ItemKind.episode]);
+    expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
+    await b.source.removeFromContinueWatching(rows.last.ref);
+    expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
+    expect(b.t.calls.last.vars, {'mediaItemId': 'e-1'});
+  });
+
+  test('browsing an unknown library is not found', () async {
+    expect(
+      build().source.browse(
+          const LibraryRef(sourceId: sid, id: 'nope'), const BrowseQuery()),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.notFound)),
+    );
+  });
+
+  test('dispose calls onDispose', () {
+    var disposed = 0;
+    build(onDispose: () => disposed++).source.dispose();
+    expect(disposed, 1);
+  });
+
+  test('marking a show skips a season with no number', () async {
+    final b = build();
+    b.t.handlers['TvShowDetail'] = (v) {
+      final s = fx.show('s-1');
+      s['seasons'] = <dynamic>[
+        ...(s['seasons'] as List),
+        <String, dynamic>{'episodeCount': 1},
+      ];
+      return {'tvShow': s};
+    };
+    await b.source.setWatched(show, true);
+    expect(b.t.calls.where((c) => c.operation == 'MarkSeasonWatched'),
+        hasLength(2));
   });
 }
