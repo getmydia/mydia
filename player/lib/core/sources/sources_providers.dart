@@ -94,6 +94,24 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             store.putAccount(record.copyWith(servers: update(record.servers))));
       });
 
+  /// Replaces [accountId]'s record with what [update] returns. [update]
+  /// runs inside the write queue and may do its own async work first (a
+  /// Plex Home switch writes tokens there), so no other write interleaves.
+  /// Null, and nothing written, when the account is gone or [update]
+  /// returns null.
+  Future<SourceAccountRecord?> updateRecord(
+    String accountId,
+    Future<SourceAccountRecord?> Function(SourceAccountRecord current) update,
+  ) =>
+      _serialise(() async {
+        final record = _record(accountId);
+        if (record == null) return null;
+        final next = await update(record);
+        if (next == null) return null;
+        await _write((store) => store.putAccount(next));
+        return next;
+      });
+
   SourceAccountRecord? _record(String accountId) =>
       _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
 
@@ -132,6 +150,21 @@ final thirdPartySourcesProvider = Provider<List<Source>>((ref) {
   };
   if (snapshot == null) return const [];
   return [for (final account in snapshot.accounts) ...account.sources];
+});
+
+/// The stored profiles of an account: a Plex account's Home users, the
+/// single owner for every other kind. Empty while loading or unknown.
+final accountProfilesProvider =
+    Provider.family<List<SourceProfile>, String>((ref, accountId) {
+  final snapshot = switch (ref.watch(sourceRecordsProvider)) {
+    AsyncData(:final value) => value,
+    _ => null,
+  };
+  return snapshot?.accounts
+          .where((a) => a.account.id == accountId)
+          .firstOrNull
+          ?.profiles ??
+      const [];
 });
 
 /// Whether the legacy Mydia login has credentials.

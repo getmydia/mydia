@@ -7,7 +7,9 @@ package is the layer that makes them look alike to the screens.
 
 A `ProviderAccount` is a credential (a plex.tv sign-in, a Stash API key,
 a Jellyfin user's token, the Mydia login). A `SourceProfile` is who acts
-with it; Plex Home users become profiles later. A Jellyfin account is one
+with it: the owner, or for Plex each Plex
+Home user. The admin is always profile `owner`; other Home users use their
+plex.tv uuid. A Jellyfin account is one
 user on one server; its profile id is the Jellyfin user id, which every
 per-user call sends as `userId`. A `SourceServer` is what the viewer browses. A
 `Source` is one of each, and `SourceId` (`account:profile:server`) is what
@@ -25,8 +27,10 @@ non-Mydia account.
 - Accounts, profiles and servers: Hive box `source_accounts`, one JSON
   record per account (`HiveSourceStore`).
 - Tokens: `AuthStorage` (secure storage) under the account's namespace,
-  `source/<accountId>/account_token` (plex.tv token, Stash API key,
-  Jellyfin access token) and
+  `source/<accountId>/account_token` (plex.tv admin token, Stash API key,
+  Jellyfin access token),
+  `source/<accountId>/<profileId>/user_token` (the active Plex Home user's
+  plex.tv token; the owner falls back to the account token) and
   `source/<accountId>/<profileId>/<serverId>/token` (`SourceSecrets`).
   A record is written only after its tokens.
 
@@ -41,6 +45,28 @@ the expected server id, moving to a better-ranked one when it answers
 LAN). It looks again on resume, on a network change, after a failed
 request and every 15 minutes, re-reading `connections[]` from plex.tv.
 A stream already playing keeps the URL it opened with.
+
+## Plex Home
+
+A Plex account has one active Home user (`activeProfileId`). Its record
+lists every Home user as a profile, refreshed at sign-in and when the
+switch-user sheet opens, but stores only the active user's servers and
+tokens. `chosenServerIds` remembers which servers the viewer picked; each
+user is shown the ones plex.tv lists for them.
+
+`PlexHomeSwitcher.switchTo` asks plex.tv every time
+(`POST /api/v2/home/users/{uuid}/switch`, `pin=` for a protected user), so
+a PIN is checked on every switch and none is stored. It writes the new
+user's tokens, then the record (inside the records write queue), then
+deletes the previous user's tokens; a failed write deletes the new tokens
+and keeps the old record. Switching to the already-active user deletes the
+tokens of servers they no longer see. Rediscovery reads the active user's
+token, so it sees that user's servers. Signing in again resets the account
+to the owner.
+
+`SourceSecrets.deleteAll` deletes server tokens for every profile crossed
+with the chosen and stored server ids, so an inactive user's leftovers go
+when the account is removed.
 
 ## HTTP and errors
 

@@ -529,7 +529,23 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       view |> element("#approve-webhook-notifier") |> render_click()
       assert has_element?(view, "#approval-modal")
       assert has_element?(view, "#approval-capabilities")
-      assert render(view) =~ "discord.com"
+      assert has_element?(view, "#approval-capabilities-group-talks_to", "discord.com")
+      assert has_element?(view, "#approval-capabilities-also", "reacts to new titles")
+
+      also_text =
+        view
+        |> element("#approval-capabilities-also")
+        |> render()
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.text()
+        |> String.replace(~r/\s+/, " ")
+        |> String.trim()
+
+      assert also_text =~ "reacts to new titles."
+      refute also_text =~ " ."
+      refute also_text =~ " ,"
+      refute render(view) =~ "Review this carefully"
+      refute has_element?(view, "#approval-capabilities [data-new]")
       assert has_element?(view, "#confirm-approval")
 
       # Approving activates the plugin.
@@ -689,9 +705,10 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       html = render(view)
       assert html =~ "needs re-approval"
-      # Host-owned plain language for the ungranted values, not raw class names.
-      assert html =~ "download.completed"
-      assert html =~ "media_item"
+      # Host-owned plain language for the ungranted values, not raw identifiers.
+      assert html =~ "finished downloads"
+      assert html =~ "Media items"
+      refute html =~ "download.completed"
     end
 
     test "a normally approved plugin carries no re-approval treatment", %{conn: conn} do
@@ -719,9 +736,19 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       view |> element("#approve-notifier") |> render_click()
       assert has_element?(view, "#approval-modal")
-      # The modal separates what is new from the full set being granted.
-      assert has_element?(view, "#approval-new-capabilities")
-      assert has_element?(view, "#approval-ungranted")
+      # One grouped list, with only the widened values badged.
+      assert has_element?(view, "#approval-reapproval-note", "2 things")
+      assert has_element?(view, "#approval-capabilities-group-can_see [data-new]", "Media items")
+
+      assert has_element?(
+               view,
+               "#approval-capabilities-also [data-new]",
+               "also reacts to finished downloads"
+             )
+
+      refute has_element?(view, "#approval-capabilities-also [data-new]", "new titles")
+      refute has_element?(view, "#approval-capabilities-group-talks_to [data-new]")
+      assert has_element?(view, "#confirm-approval", "Re-approve")
 
       view |> element("#confirm-approval") |> render_click()
 
@@ -741,6 +768,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
 
       assert has_element?(view, "#detail-ungranted")
       assert has_element?(view, "#detail-ungranted-capabilities")
+      assert has_element?(view, "#detail-ungranted-capabilities-group-can_see", "Media items")
     end
 
     test "declining leaves the grant untouched", %{conn: conn} do
@@ -888,8 +916,12 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       {:ok, view, _} = live(conn, ~p"/admin/plugins")
 
       view |> element("#approve-webhook-notifier") |> render_click()
-      assert has_element?(view, "#approval-host-grant")
-      assert render(view) =~ "Webhook / server URL"
+
+      assert has_element?(
+               view,
+               "#approval-capabilities-group-talks_to",
+               "The server you enter in Webhook / server URL"
+             )
     end
 
     test "a plugin without a settings schema shows a disabled Settings button with a reason",
@@ -1118,7 +1150,7 @@ defmodule MydiaWeb.AdminPluginsLiveTest do
       {:ok, view, _html} = live(conn, ~p"/admin/plugins")
       view |> element("#details-plex") |> render_click()
 
-      refute has_element?(view, "#detail-host-grant")
+      refute render(view) =~ "The server you enter in"
     end
 
     test "a multi_instance plugin with page writes keeps Settings button enabled", %{conn: conn} do

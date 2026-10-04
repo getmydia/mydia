@@ -8,20 +8,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/sources/plex/plex_identity.dart';
+import '../../../core/sources/plex/plex_providers.dart';
 import '../../../core/sources/plex/plex_tv_client.dart';
 import '../../../core/sources/source.dart';
-import '../../../core/sources/source_factories.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
-
-final plexTvClientProvider =
-    FutureProvider<PlexTvClient>((ref) async => PlexTvClient(
-          http: ref.watch(sourceHttpProvider),
-          identity: await ref.watch(plexIdentityProvider.future),
-        ));
 
 final plexPinPollIntervalProvider =
     Provider<Duration>((ref) => const Duration(seconds: 2));
@@ -74,6 +67,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
   bool _checking = false;
   String? _token;
   PlexUser? _user;
+  List<PlexHomeUser> _homeUsers = const [];
 
   @override
   PlexSignInState build() {
@@ -120,6 +114,12 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       _poll?.cancel();
       _token = token;
       _user = await tv.user(token);
+      try {
+        _homeUsers = await tv.homeUsers(token);
+      } on SourceException {
+        // Home users are optional: sign in as the owner alone.
+        _homeUsers = const [];
+      }
       final servers = await tv.servers(token);
       if (!ref.mounted) return;
       state = servers.isEmpty
@@ -167,14 +167,18 @@ class PlexSignInController extends Notifier<PlexSignInState> {
               .firstOrNull;
       final accountId =
           existing?.account.id ?? const Uuid().v4().replaceAll('-', '');
-      final account = existing?.account
-              .copyWith(displayName: user.username, needsReauth: false) ??
+      final account = existing?.account.copyWith(
+            displayName: user.username,
+            needsReauth: false,
+            // Signing in again always starts as the owner.
+            activeProfileId: kOwnerProfileId,
+          ) ??
           ProviderAccount(
             id: accountId,
             kind: SourceKind.plex,
             displayName: user.username,
             storageNamespace: SourceSecrets.newStorageNamespace(accountId),
-            activeProfileId: 'owner',
+            activeProfileId: kOwnerProfileId,
           );
       final chosen = [
         for (final r in current.servers)
@@ -188,7 +192,7 @@ class PlexSignInController extends Notifier<PlexSignInState> {
       for (final r in chosen) {
         await secrets.writeServerToken(
           account: account,
-          profileId: 'owner',
+          profileId: kOwnerProfileId,
           serverId: r.clientIdentifier,
           token: r.accessToken,
         );
@@ -198,15 +202,22 @@ class PlexSignInController extends Notifier<PlexSignInState> {
         account: account,
         profiles: [
           SourceProfile(
-              id: 'owner',
-              accountId: accountId,
-              name: user.title,
-              isOwner: true),
+            id: kOwnerProfileId,
+            accountId: accountId,
+            name: user.title,
+            isOwner: true,
+            protected:
+                _homeUsers.where((u) => u.admin).firstOrNull?.protected ??
+                    false,
+          ),
+          for (final u in _homeUsers)
+            if (!u.admin) u.toProfile(accountId),
         ],
         servers: [
           for (final r in chosen)
-            r.toServer(accountId: accountId, profileId: 'owner'),
+            r.toServer(accountId: accountId, profileId: kOwnerProfileId),
         ],
+        chosenServerIds: [for (final r in chosen) r.clientIdentifier],
         addedAtMs: existing?.addedAtMs ?? DateTime.now().millisecondsSinceEpoch,
       );
       await ref.read(sourceRecordsProvider.notifier).putAccount(record);
@@ -222,6 +233,10 @@ class PlexSignInController extends Notifier<PlexSignInState> {
             serverId: dropped.id,
           );
         }
+        // The owner too: a leftover owner user token (from a switch back to
+        // the owner) would shadow the fresh account token.
+        await secrets.deleteUserToken(
+            account, existing.account.activeProfileId);
       }
       // A live source caches its token; rebuild it so it reads the new one.
       for (final source in record.sources) {
