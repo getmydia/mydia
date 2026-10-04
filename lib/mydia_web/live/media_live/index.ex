@@ -88,6 +88,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:user_collections, [])
      |> assign(:all_visible_ids, MapSet.new())
      |> assign(:total_size, 0)
+     |> assign(:description_match_start_id, nil)
      |> stream(:media_items, [])}
   end
 
@@ -158,6 +159,7 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:media_items_empty?, true)
         |> assign(:all_visible_ids, MapSet.new())
         |> assign(:total_size, 0)
+        |> assign(:description_match_start_id, nil)
         |> assign(:has_more, false)
         |> stream(:media_items, [], reset: true)
     end
@@ -950,6 +952,9 @@ defmodule MydiaWeb.MediaLive.Index do
     # Every matching id, not only the page, for "Select All".
     |> assign(:all_visible_ids, listing.visible_ids)
     |> assign(:total_size, listing.total_size)
+    # Every page carries the same id, computed over the whole result, so the
+    # divider lands on the right card whichever page brings it in.
+    |> assign(:description_match_start_id, listing.description_match_start_id)
     |> stream(:media_items, listing.rows, reset: reset?)
   end
 
