@@ -1,7 +1,7 @@
 # Build a media-server plugin with a setup wizard
 
 A media-server plugin lets an operator add one or more servers from
-Admin > Media servers. Mydia renders the wizard: your plugin only says which
+Admin > Configuration > Media Servers. Mydia renders the wizard: your plugin only says which
 screen comes next. This guide builds the connection part of a plugin for an
 invented media server called Tallyho. It asks for a server address and an API
 key, checks them, stores the key, and reports the server's health afterwards.
@@ -40,7 +40,7 @@ the build and install steps, see [Test and iterate](test-and-iterate.md).
 - `multi_instance` lets an operator add several Tallyho servers. Each instance
   has its own store, credentials and health.
 - `category: "media_server"` lists the plugin in the **Add server** menu on
-  Admin > Media servers.
+  Admin > Configuration > Media Servers.
 - `setup: true` tells the host to create instances through your `setup` export.
 - `net:http` is empty because the server address is not known in advance. The
   address the operator types into a `url` field is approved for that instance
@@ -246,7 +246,7 @@ cargo build --release --target wasm32-wasip2
 
 ## 6. Add an instance
 
-Open **Admin > Media servers**, choose **Add server**, and pick **Tallyho**. The
+Open **Admin > Configuration > Media Servers**, choose **Add server**, and pick **Tallyho**. The
 wizard opens with your form. Enter a server address and an API key. When the
 check passes, the `done` screen closes the wizard and the instance appears in the
 list with its health. Choosing **Add server** again adds a second instance.

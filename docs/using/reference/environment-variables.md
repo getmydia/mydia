@@ -248,7 +248,7 @@ DOWNLOAD_CLIENT_8_COMPLETED_FOLDER=/downloads/complete
 ## Media Servers
 
 Plex runs as a bundled plugin. Each Plex server is an instance, numbered from 0.
-The easiest setup is Admin > Media servers > Add server > Plex, which signs in
+The easiest setup is Admin > Configuration > Media Servers > Add server > Plex, which signs in
 with your Plex account and finds your servers. To declare a server in the
 environment instead:
 
@@ -270,7 +270,7 @@ old one stays behind as a disabled server you can delete in the UI.
 
 `MEDIA_SERVER_<N>_*` variables with `MEDIA_SERVER_<N>_TYPE=plex` still work and
 are translated into Plex instances, but they are deprecated: Mydia logs a
-warning at startup and shows a banner on the Media servers page. Rename them to
+warning at startup and shows a banner on the Media Servers page. Rename them to
 `PLUGIN_PLEX_<N>_*`. Jellyfin keeps using `MEDIA_SERVER_<N>_*`.
 
 ## Plugins

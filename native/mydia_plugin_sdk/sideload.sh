@@ -9,7 +9,7 @@ set -euo pipefail
 # installed, when PLUGINS_OVERRIDE_DIR was set before the server booted (it is
 # read at boot only). The loop is:
 #
-#   edit  ->  sideload.sh  ->  Disable then Enable in Admin > Plugins  ->  test
+#   edit  ->  sideload.sh  ->  Disable then Enable in Admin > System > Plugins  ->  test
 #
 # The override dir is the highest-precedence artifact layer in
 # Mydia.Plugins.resolve_artifact/2: a `<name>.wasm` placed there shadows the DB

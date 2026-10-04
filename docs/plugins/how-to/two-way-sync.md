@@ -187,7 +187,7 @@ service side cannot strip local Favorites.
 
 ## Next steps
 
-- [Test and iterate](test-and-iterate.md) - build, sideload, and reload without a full release cycle
+- [Test and iterate](test-and-iterate.md) - install a build, fire test events, and read logs
 - [Read media and event data](media-data.md) - the `data:read` and `surfaces:write` calls this recipe leans on
 - [Manifest reference](../reference/manifest.md) - the `connection` descriptor, `schedule`, and every capability string
 - [Host functions reference](../reference/host-functions.md) - exact signatures for [`connections-list`](../reference/host-functions.md#connections-list), [`connection-request`](../reference/host-functions.md#connection-request), [`ensure-watched`](../reference/host-functions.md#ensure-watched), and [`ensure-favorite`](../reference/host-functions.md#ensure-favorite)

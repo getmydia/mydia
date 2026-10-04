@@ -55,18 +55,13 @@ A plugin is a Wasm **component** built for `wasm32-wasip2` against the
 canonical WIT contract `mydia:plugin@1.6.0`, living at
 `native/mydia_plugin_sdk/wit/plugin.wit`.
 
-It **exports** `handler.on-event`, called for each event it subscribed to,
-`handler.on-schedule`, called on a fixed interval, and, from 1.5,
-`handler.setup`, which drives the setup wizard the host renders, and
-`handler.check-health`, which the host calls to show an instance's health. A
-plugin that serves its own pages also exports `page.on-http` (from 1.4), and
-one that fills a shelf exports `handler.fill-shelf` (from 1.6). The SDK macro
-generates all of these exports, and one a plugin does not implement returns an
-error. It **imports** the host's capabilities: `http-request`, `data-read` and `log`
-from 1.0; the key-value store, `data-list`, watch-state writes and
-per-user connections from 1.1 to 1.3; the page functions from 1.4; and account
-links, store listing and batch writes, and sync-run reports from 1.5. Contract 1.6 added no imports. Every import is enforced
-server-side on every call; there is no path around it.
+It **exports** handlers the host calls (events, schedules, the setup wizard,
+health checks, pages, shelves) and **imports** the host's capabilities (HTTP,
+data reads, the key-value store, watch-state writes, and so on). The SDK macro
+generates the exports, and one a plugin does not implement returns an error.
+Every import is enforced server-side on every call; there is no path around it.
+Which function arrived in which contract version is listed in
+[Contract versions](../reference/host-functions.md#contract-versions).
 
 The package version in the WIT file **is** the ABI version, and the contract
 is meant to evolve additively (new functions, new record fields, new variant
@@ -148,10 +143,15 @@ declaration and approves it before the plugin runs at all. A plugin can never
 widen its own grant at runtime; there's no equivalent of asking for permission
 mid-execution the way a mobile app might.
 
-Third-party plugin grants never auto-expand. A plugin installed from an index or
-remote package runs only with the capability set an administrator approved, and
-a revised manifest that asks for more remains on its old grant until explicit
-re-approval.
+A third-party grant only widens when an operator approves it. A revised
+manifest that asks for more, whether a new capability class, a new `net:http`
+host or a new subscribed event, keeps running on its old grant, and calls
+against anything newly declared come back `Denied` until re-approval. The
+reason is that the operator approved a specific set, and a plugin update is not
+a second chance to enlarge it unnoticed. See
+[Grants and approval](../reference/capabilities.md#grants-and-approval) for the
+rules and [Install and manage plugins](../../using/how-to/plugins.md) for what
+the operator sees.
 
 Image-bundled system plugins are the deliberate exception. They are delivered as
 part of the trusted Mydia host release, so discovery grants their complete
@@ -178,30 +178,6 @@ declared set on the spot. Skipping approval is an explicit act by the person who
 built the plugin, not a default. Reinstalling replaces the bytes and clears the
 grant, as a fresh install would, and a bundled slug is refused because its bytes
 come from the image.
-
-It's worth being precise about what third-party grants not auto-expanding does
-**not** mean. Revising a third-party manifest to declare a new capability class,
-a new `net:http` host, or a new subscribed event does not return the plugin to
-unapproved, and it does not grant the new capability either. The stored grant is
-left exactly as it was, and the plugin keeps running on it. Calls against
-anything newly declared come back `Denied` until an operator re-approves.
-
-What changed is that this is no longer silent. Mydia compares each installed
-plugin's declared capabilities against its grant, value by value, so a new host
-in an allowlist or a new event in `events:subscribe` counts just as much as a
-whole new class. A plugin whose manifest has outgrown its grant is flagged in
-Admin > System > Plugins with what it is asking for beyond what was approved
-(see [Install and manage plugins](../../using/how-to/plugins.md#when-a-plugin-asks-for-more-than-you-approved)).
-Re-approving grants the currently requested set. The host also logs a
-warning naming the ungranted capabilities whenever such a plugin starts, so
-non-bundled capability drift is visible in the server log as well as in the UI.
-
-For a third-party plugin, nothing about the safety property moved: the grant
-still only widens when an operator approves it, saving unrelated plugin settings
-will not pull newly declared hosts into the allowlist, and until you re-approve,
-the plugin runs on exactly what it had. A bundled system plugin is trusted
-differently on purpose: its grant tracks the manifest in the host release the
-administrator chose to run, and enabling or disabling it stays their decision.
 
 This is also why `net:http` is an exact-hostname allowlist with no wildcards:
 a wildcard subdomain grant is effectively an open exfiltration channel, since
@@ -327,12 +303,12 @@ plugin that genuinely needs a capability, event, or host function added in a
 specific release say so explicitly. Mydia refuses to activate a plugin whose
 floor exceeds the running host with a clear "requires mydia >= X" message,
 before instantiation, rather than instantiating it anyway and failing in a way
-that looks like a mysterious runtime bug. A guest that uses a 1.5 function sets
-the floor to the first release that serves it, and an older host declines it
-cleanly instead of failing to link. Combined with the additive-evolution rule
-above, this is what makes it safe for a `1.0` plugin and a `1.1` plugin to both
-run correctly against the same host, and for that host to be upgraded without
-breaking either.
+that looks like a mysterious runtime bug. A guest that imports a function newer
+than the host serves cannot link, so the floor lets an older host decline it
+cleanly instead. Combined with the additive-evolution rule above, this is what
+makes it safe for a `1.0` plugin and a `1.1` plugin to both run correctly
+against the same host, and for that host to be upgraded without breaking either. The functions by version are in
+[Contract versions](../reference/host-functions.md#contract-versions).
 
 The rules are few, and each follows from that purpose:
 
@@ -356,5 +332,4 @@ tag is the right pin because it names the host release a plugin targets. A
 branch would follow unreleased host changes, and a rebuild months later could
 produce a component built against a different contract than the one you tested.
 Pinning makes upgrading a deliberate act: move the tag when you move to a newer
-host, and raise `min_host_version` if you start using something it added. The
-current tag is `v0.16.0-beta.2`.
+host, and raise `min_host_version` if you start using something it added.

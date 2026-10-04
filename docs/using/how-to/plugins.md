@@ -61,7 +61,7 @@ they differ from plugin to plugin.
 Click **Save settings**. **Settings** is greyed out with a tooltip while the
 plugin awaits approval or if it has nothing to configure. Plugins that connect
 to a media server are configured per server instead, on
-[Media servers](#media-server-plugins).
+[Media Servers](#media-server-plugins).
 
 ### Let plugins make changes for people
 
@@ -154,8 +154,8 @@ is built in.
    settings.
 
 On the **Plugins** page such a plugin's **Settings** button is greyed out with
-"Configured per server on Media servers". You can also declare servers in your
-configuration; see [Media servers](../reference/environment-variables.md#media-servers).
+"Configured per server on Media Servers". You can also declare servers in your
+configuration; see [Media Servers](../reference/environment-variables.md#media-servers).
 
 ## Link your account to a plugin
 

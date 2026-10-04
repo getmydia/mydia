@@ -192,4 +192,4 @@ that should land in the plugin's activity log. It is ungated and fire-and-forget
 
 - [Send notifications](notifications.md) - push what you read here to an external service
 - [Build a two-way sync](two-way-sync.md) - the same reads, plus per-user connections and write-back
-- [Test and iterate](test-and-iterate.md) - the build and reload loop
+- [Test and iterate](test-and-iterate.md) - install, fire test events, read logs

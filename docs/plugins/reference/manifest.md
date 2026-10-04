@@ -45,7 +45,7 @@ grant is stored separately (see [Capabilities](capabilities.md#grants-and-approv
 | `delivery` | string | no | `"inline"` | Read for plugins bundled with Mydia only: `durable` (an Oban job, retried, at-least-once) or `inline` (synchronous, not retried). Any other value becomes `inline`. Plugins installed from an index or sideloaded always run `inline`. |
 | `min_host_version` | string | no | none | The lowest Mydia release that can run the plugin. A semantic version, or the manifest is rejected. The rules are in [What the host-version floor is for](../explanation/plugin-model.md#what-the-host-version-floor-is-for). |
 | `multi_instance` | boolean | no | `false` | `true` lets operators add several instances, each with its own settings, store, links and schedule. Any non-boolean value is rejected. |
-| `category` | string | no | none | Where the host lists instances. The only value is `media_server`, which puts them on Admin > Media servers. Any other value is rejected. |
+| `category` | string | no | none | Where the host lists instances. The only value is `media_server`, which puts them on Admin > Configuration > Media Servers. Any other value is rejected. |
 | `setup` | boolean | no | `false` | `true` when the plugin exports [`setup`](guest-exports.md#setup): the host then creates instances through the setup wizard instead of the plain settings form. Any non-boolean value is rejected. |
 | `capabilities` | object | yes | none | Must be a non-empty object. At least one of `events:subscribe`, `surfaces:page` or `surfaces:shelf` must be present. The classes, values and rules are in [Capabilities](capabilities.md). Events are in [Events](events.md). |
 | `settings_schema` | array | no | `[]` | Operator-editable fields. See [Settings schema](#settings-schema). |
@@ -84,7 +84,7 @@ Any other `type` is rejected.
 | `type` | string | all | Required. One of the types above. |
 | `label` | string | all | Form label shown to the operator. |
 | `hint` | string | all | Help text shown under the field. A non-empty string when present. Keep `label` short and put examples and caveats here. |
-| `required` | boolean | all | Accepted and ignored by the settings form: the field is not marked and an empty value is not rejected. Validate in your handler. (Setup wizard fields, which a guest returns from `setup`, do enforce their own `required`.) |
+| `required` | boolean | all | Accepted and ignored by the settings form: the field is not marked and an empty value is not rejected. Validate in your handler. (Setup wizard fields, which a guest returns from `setup`, do enforce their own `required`.) |<!-- Verified: Manifest.validate_settings_schema (lib/mydia/plugins/manifest.ex) never reads `required`; settings_modal/settings_field (lib/mydia_web/live/admin_plugins_live/components.ex) do not render it; save only validates url fields (Mydia.Plugins.validate_url_settings). Wizard enforcement: lib/mydia/plugins/setup.ex:198. -->
 | `options` | array of strings | `enum` | Required for `enum`: a non-empty list of non-blank strings. |
 | `grants_host` | boolean | `url` only | See [Host-granting fields](#host-granting-fields). Rejected on any other type. |
 | `allow_private` | boolean | `url` with `grants_host` | See [Private network hosts](#private-network-hosts). Rejected elsewhere. |

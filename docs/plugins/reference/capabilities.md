@@ -71,8 +71,7 @@ holding this capability.
 A list of hostnames the plugin may contact, matched exactly against the host of
 each request URL.
 
-- No wildcards. A hostname containing `*` is rejected, because a wildcard
-  subdomain is an exfiltration channel.
+- No wildcards: a hostname containing `*` is rejected.
 - A bare hostname only: no scheme, port, path or userinfo, and no surrounding
   whitespace. An empty or blank entry is rejected.
 - The host re-checks the URL on every call and runs an SSRF gate that refuses
