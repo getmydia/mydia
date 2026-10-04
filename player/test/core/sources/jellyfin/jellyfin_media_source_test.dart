@@ -67,15 +67,19 @@ const jellyfinSid =
 }
 
 void main() {
-  runMediaSourceContract(
-      'Jellyfin',
-      () async => ContractFixture(
-            source: build().source,
-            library: const LibraryRef(sourceId: jellyfinSid, id: 'lib-movies'),
-            playable: const ItemRef(
-                sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2'),
-            libraryItemCount: 5,
-          ));
+  runMediaSourceContract('Jellyfin', () async {
+    final b = build();
+    b.server.nextUpItems = [FakeJellyfinServer.episode(2)];
+    return ContractFixture(
+      source: b.source,
+      library: const LibraryRef(sourceId: jellyfinSid, id: 'lib-movies'),
+      playable: const ItemRef(
+          sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2'),
+      libraryItemCount: 5,
+      show: const ItemRef(
+          sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1'),
+    );
+  });
 
   test('lists film and show libraries, not music', () async {
     final libraries = await build().source.libraries();

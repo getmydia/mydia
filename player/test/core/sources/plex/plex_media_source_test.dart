@@ -62,6 +62,8 @@ void main() {
         externalId: '101',
       ),
       libraryItemCount: FakePlexServer.movies.length,
+      show:
+          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: '201'),
     );
   });
 

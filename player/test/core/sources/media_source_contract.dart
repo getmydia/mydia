@@ -10,6 +10,7 @@ class ContractFixture {
     required this.library,
     required this.playable,
     required this.libraryItemCount,
+    this.show,
   });
 
   final MediaSource source;
@@ -18,6 +19,9 @@ class ContractFixture {
   /// A movie or video with one playable version.
   final ItemRef playable;
   final int libraryItemCount;
+
+  /// A show with a next-up episode; null skips the next-up case.
+  final ItemRef? show;
 }
 
 /// What every Plex and Stash implementation must do, over that source's
@@ -91,6 +95,35 @@ void runMediaSourceContract(
           caps.contains(SourceCapability.continueWatching));
       expect(f.source.as<HomeHubs>() != null,
           caps.contains(SourceCapability.hubs));
+    });
+
+    test('a source that lists a capability returns it', () async {
+      final f = await setUp();
+      final caps = f.source.capabilities;
+      expect(f.source.as<Similar>() != null,
+          caps.contains(SourceCapability.similar));
+      expect(f.source.as<Favorites>() != null,
+          caps.contains(SourceCapability.favorites));
+      expect(f.source.as<NextUp>() != null,
+          caps.contains(SourceCapability.nextUp));
+    });
+
+    test('similar never answers the item itself', () async {
+      final f = await setUp();
+      final similar = f.source.as<Similar>();
+      if (similar == null) return;
+      final items = await similar.similar(f.playable);
+      expect(items.map((i) => i.ref), isNot(contains(f.playable)));
+      expect(items.length, lessThanOrEqualTo(20));
+    });
+
+    test('next up for a show is one of its episodes', () async {
+      final f = await setUp();
+      final nextUp = f.source.as<NextUp>();
+      final show = f.show;
+      if (nextUp == null || show == null) return;
+      final next = await nextUp.nextUp(show);
+      expect(next?.ref.kind, ItemKind.episode);
     });
   });
 }
