@@ -276,6 +276,13 @@ MydiaGuestSource buildGuestMydiaSource(Ref ref, Source source) {
   return MydiaGuestSource(source: source, client: client);
 }
 
+/// How [c]'s server is reached: p2p to its node, else HTTP to its URL.
+MydiaGqlTransport guestTransportFor(Ref ref, MydiaGuestCredentials c) => c.isP2p
+    ? P2pMydiaTransport(
+        p2p: ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
+    : HttpMydiaTransport(
+        serverUrl: c.serverUrl!, http: ref.read(sourceHttpProvider));
+
 /// Builds the real transport from the stored credentials on first use and
 /// keeps it. A failed load is not kept: the next request tries again.
 class _LazyGuestTransport implements MydiaGqlTransport {
@@ -295,12 +302,7 @@ class _LazyGuestTransport implements MydiaGqlTransport {
       );
 
   Future<MydiaGqlTransport> _build() async {
-    final c = await _load();
-    return c.isP2p
-        ? P2pMydiaTransport(
-            p2p: _ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
-        : HttpMydiaTransport(
-            serverUrl: c.serverUrl!, http: _ref.read(sourceHttpProvider));
+    return guestTransportFor(_ref, await _load());
   }
 
   @override

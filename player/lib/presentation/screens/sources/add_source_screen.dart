@@ -51,10 +51,11 @@ class AddSourceScreen extends ConsumerWidget {
                 leading: const Icon(Icons.dns_rounded),
                 title: const Text('Mydia'),
                 subtitle: Text(hasMydia
-                    ? 'Multiple Mydia servers: coming soon'
+                    ? "Add a friend's or family member's server"
                     : 'Sign in to a Mydia server'),
-                enabled: !hasMydia,
-                onTap: hasMydia ? null : () => context.go('/login'),
+                onTap: () => hasMydia
+                    ? context.push('/sources/add/mydia')
+                    : context.go('/login'),
               ),
             ],
           ),

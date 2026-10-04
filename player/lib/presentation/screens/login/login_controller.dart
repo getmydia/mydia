@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter_riverpod/flutter_riverpod.dart' show Provider;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/channels/pairing_service.dart';
@@ -7,6 +8,10 @@ import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
+import '../../../core/sources/mydia/guest_mydia_saver.dart';
+import '../../../core/sources/mydia/mydia_guest_credentials.dart';
+import '../../../core/sources/source.dart';
+import '../../../domain/sources/source_error.dart';
 
 // Re-export QrPairingData so UI can import from one place
 export '../../../core/channels/pairing_service.dart' show QrPairingData;
@@ -82,6 +87,33 @@ enum ClaimCodeStatus {
   error,
 }
 
+/// The pairing service over the app's P2P service (already initialized in
+/// app.dart). A provider so tests can pair without a network.
+final pairingServiceProvider = Provider<PairingService>(
+  (ref) => PairingService(p2pService: ref.read(p2pServiceProvider)),
+);
+
+/// Names this device to the server it pairs with. A provider so tests need
+/// no platform plugin.
+final loginDeviceInfoProvider =
+    Provider<DeviceInfoService>((ref) => DeviceInfoService());
+
+/// Marks a login as adding a guest Mydia server rather than signing in to
+/// home. With [reauthAccountId] it must be that guest's own server.
+class GuestTarget {
+  const GuestTarget({this.reauthAccountId});
+
+  final String? reauthAccountId;
+}
+
+/// The viewer-facing message for a failure of the guest save, or null for
+/// any other error.
+String? _guestErrorMessage(Object e) => switch (e) {
+      GuestIsHomeException() => 'This is already your home server.',
+      SourceException() => e.viewerMessage,
+      _ => null,
+    };
+
 /// State for the login screen.
 class LoginState {
   const LoginState({
@@ -93,6 +125,7 @@ class LoginState {
     this.claimCodeMessage,
     this.credentialsNotPersisted = false,
     this.totpChallenge,
+    this.guestSource,
   });
 
   final ConnectionMode mode;
@@ -111,6 +144,9 @@ class LoginState {
   /// Set while a password login waits for a TOTP or recovery code.
   final TotpChallenge? totpChallenge;
 
+  /// The guest Mydia source a successful guest add produced.
+  final SourceId? guestSource;
+
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
@@ -121,6 +157,7 @@ class LoginState {
     bool? credentialsNotPersisted,
     TotpChallenge? totpChallenge,
     bool clearTotpChallenge = false,
+    SourceId? guestSource,
   }) {
     return LoginState(
       mode: mode ?? this.mode,
@@ -133,6 +170,7 @@ class LoginState {
           credentialsNotPersisted ?? this.credentialsNotPersisted,
       totpChallenge:
           clearTotpChallenge ? null : (totpChallenge ?? this.totpChallenge),
+      guestSource: guestSource ?? this.guestSource,
     );
   }
 
@@ -162,7 +200,7 @@ class LoginController extends _$LoginController {
   /// 2. Dial that node over p2p
   /// 3. Submit the claim code and register this device
   /// 4. Store credentials and complete pairing
-  Future<void> pairWithClaimCode(String claimCode) async {
+  Future<void> pairWithClaimCode(String claimCode, {GuestTarget? guest}) async {
     state = state.copyWith(
       isLoading: true,
       error: null,
@@ -171,12 +209,8 @@ class LoginController extends _$LoginController {
     );
 
     try {
-      // Get the P2P service from the provider (already initialized in app.dart)
-      final p2pService = ref.read(p2pServiceProvider);
-      final pairingService = PairingService(
-        p2pService: p2pService,
-      );
-      final deviceInfo = DeviceInfoService();
+      final pairingService = ref.read(pairingServiceProvider);
+      final deviceInfo = ref.read(loginDeviceInfoProvider);
       final deviceName = await deviceInfo.getDeviceName();
 
       final result = await pairingService.pairWithClaimCodeOnly(
@@ -216,6 +250,11 @@ class LoginController extends _$LoginController {
 
       if (!result.success) {
         throw Exception(result.error ?? 'Pairing failed');
+      }
+
+      if (guest != null) {
+        await _finishGuestPairing(result.credentials!, guest);
+        return;
       }
 
       // Before the mounted check: the server has already registered this
@@ -313,12 +352,31 @@ class LoginController extends _$LoginController {
   Future<void> login(
     String serverUrl,
     String username,
-    String password,
-  ) async {
+    String password, {
+    GuestTarget? guest,
+  }) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final authService = ref.read(authServiceProvider);
+
+      if (guest != null) {
+        final outcome = await authService.requestLogin(
+          serverUrl: serverUrl,
+          username: username,
+          password: password,
+        );
+        if (!ref.mounted) return;
+        switch (outcome) {
+          case TotpChallenge():
+            state = state.copyWith(isLoading: false, totpChallenge: outcome);
+          case LoginGranted():
+            await _finishGuestLogin(outcome, guest);
+          case LoginSuccess():
+            break;
+        }
+        return;
+      }
 
       // Call the GraphQL login method from AuthService
       final outcome = await authService.loginWithGraphQL(
@@ -338,6 +396,12 @@ class LoginController extends _$LoginController {
     } catch (e) {
       // Check if still mounted before updating state
       if (!ref.mounted) return;
+
+      final guestMessage = _guestErrorMessage(e);
+      if (guestMessage != null) {
+        state = state.copyWith(isLoading: false, error: guestMessage);
+        return;
+      }
 
       // Extract a user-friendly error message
       String errorMessage = 'Login failed. Please check your credentials.';
@@ -364,7 +428,7 @@ class LoginController extends _$LoginController {
   }
 
   /// Submits the code for a pending [LoginState.totpChallenge].
-  Future<void> submitTotpCode(String code) async {
+  Future<void> submitTotpCode(String code, {GuestTarget? guest}) async {
     final challenge = state.totpChallenge;
     if (challenge == null) return;
 
@@ -372,6 +436,13 @@ class LoginController extends _$LoginController {
 
     try {
       final authService = ref.read(authServiceProvider);
+      if (guest != null) {
+        final granted = await authService.requestTotp(
+            challenge: challenge, code: code.trim());
+        if (!ref.mounted) return;
+        await _finishGuestLogin(granted, guest);
+        return;
+      }
       await authService.verifyTotp(challenge: challenge, code: code.trim());
       if (!ref.mounted) return;
       await _finishPasswordLogin(authService);
@@ -379,7 +450,10 @@ class LoginController extends _$LoginController {
       if (!ref.mounted) return;
 
       final errorStr = e.toString();
-      if (errorStr.contains('Sign-in expired')) {
+      final guestMessage = _guestErrorMessage(e);
+      if (guestMessage != null) {
+        state = state.copyWith(isLoading: false, error: guestMessage);
+      } else if (errorStr.contains('Sign-in expired')) {
         state = state.copyWith(
           isLoading: false,
           clearTotpChallenge: true,
@@ -408,6 +482,59 @@ class LoginController extends _$LoginController {
     state = state.copyWith(clearTotpChallenge: true, error: null);
   }
 
+  /// Saves a paired guest. Home's session, connection mode and `pairing_*`
+  /// keys are never touched.
+  Future<void> _finishGuestPairing(
+    PairingCredentials c,
+    GuestTarget guest,
+  ) =>
+      _saveGuest(
+        MydiaGuestCredentials(
+          instanceId: c.instanceId ?? '',
+          accessToken: c.accessToken,
+          mediaToken: c.mediaToken,
+          deviceToken: c.deviceToken,
+          instanceName: c.instanceName,
+          nodeAddr: c.serverNodeAddr,
+        ),
+        guest,
+        claimCodeStatus: ClaimCodeStatus.paired,
+        claimCodeMessage: 'Paired successfully!',
+      );
+
+  Future<void> _finishGuestLogin(LoginGranted g, GuestTarget guest) =>
+      _saveGuest(
+        MydiaGuestCredentials(
+          instanceId: '',
+          accessToken: g.token,
+          serverUrl: normalizeMydiaUrl(g.serverUrl),
+          username: g.username,
+        ),
+        guest,
+      );
+
+  Future<void> _saveGuest(
+    MydiaGuestCredentials credentials,
+    GuestTarget guest, {
+    ClaimCodeStatus? claimCodeStatus,
+    String? claimCodeMessage,
+  }) async {
+    final id = await saveGuestMydia(
+      ref,
+      credentials,
+      reauthAccountId: guest.reauthAccountId,
+    );
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      isLoading: false,
+      success: true,
+      guestSource: id,
+      clearTotpChallenge: true,
+      claimCodeStatus: claimCodeStatus,
+      claimCodeMessage: claimCodeMessage,
+    );
+  }
+
   Future<void> _finishPasswordLogin(AuthService authService) async {
     // Update the auth state provider to trigger UI updates
     await ref.read(authStateProvider.notifier).refresh();
@@ -425,7 +552,8 @@ class LoginController extends _$LoginController {
   ///
   /// Uses the PairingService to pair using data scanned from a QR code.
   /// The QR code contains the relay URL, instance ID, public key, and claim code.
-  Future<void> pairWithQrCode(QrPairingData qrData) async {
+  Future<void> pairWithQrCode(QrPairingData qrData,
+      {GuestTarget? guest}) async {
     state = state.copyWith(
       isLoading: true,
       error: null,
@@ -434,12 +562,8 @@ class LoginController extends _$LoginController {
     );
 
     try {
-      // Get the P2P service from the provider (already initialized in app.dart)
-      final p2pService = ref.read(p2pServiceProvider);
-      final pairingService = PairingService(
-        p2pService: p2pService,
-      );
-      final deviceInfo = DeviceInfoService();
+      final pairingService = ref.read(pairingServiceProvider);
+      final deviceInfo = ref.read(loginDeviceInfoProvider);
       final deviceName = await deviceInfo.getDeviceName();
 
       final result = await pairingService.pairWithQrData(
@@ -473,6 +597,11 @@ class LoginController extends _$LoginController {
 
       if (!result.success) {
         throw Exception(result.error ?? 'Pairing failed');
+      }
+
+      if (guest != null) {
+        await _finishGuestPairing(result.credentials!, guest);
+        return;
       }
 
       // Before the mounted check: the server has already registered this

@@ -16,6 +16,8 @@ import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/login/login_controller.dart'
+    show GuestTarget;
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -285,6 +287,16 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => JellyfinConnectScreen(
           reauthAccountId: state.uri.queryParameters['account'],
+        ),
+      ),
+      GoRoute(
+        path: '/sources/add/mydia',
+        name: 'add_source_mydia',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => LoginScreen(
+          guest: GuestTarget(
+            reauthAccountId: state.uri.queryParameters['account'],
+          ),
         ),
       ),
 

@@ -20,6 +20,23 @@ class LoginSuccess extends LoginOutcome {
   const LoginSuccess();
 }
 
+/// The server granted a session that nothing has stored yet. Only
+/// [AuthService.requestLogin] returns it; [AuthService.loginWithGraphQL]
+/// stores the grant as home's session and answers [LoginSuccess].
+class LoginGranted extends LoginOutcome {
+  const LoginGranted({
+    required this.serverUrl,
+    required this.token,
+    required this.userId,
+    required this.username,
+  });
+
+  final String serverUrl;
+  final String token;
+  final String userId;
+  final String username;
+}
+
 /// The password was right and the account has two-factor authentication.
 /// Pass this to [AuthService.verifyTotp] with the user's code.
 class TotpChallenge extends LoginOutcome {
@@ -45,10 +62,18 @@ class TotpChallenge extends LoginOutcome {
 class AuthService {
   /// [storage] is injectable for tests. Production callers use the default,
   /// which is the platform-appropriate implementation.
-  AuthService({AuthStorage? storage}) : _storage = storage ?? getAuthStorage();
+  AuthService({
+    AuthStorage? storage,
+    DeviceInfoService? deviceInfo,
+    GraphQLClient Function(String serverUrl)? clientFactory,
+  })  : _storage = storage ?? getAuthStorage(),
+        _deviceInfo = deviceInfo ?? DeviceInfoService(),
+        _clientFactory =
+            clientFactory ?? ((url) => createGraphQLClient(url, null));
 
   final AuthStorage _storage;
-  final DeviceInfoService _deviceInfo = DeviceInfoService();
+  final DeviceInfoService _deviceInfo;
+  final GraphQLClient Function(String serverUrl) _clientFactory;
 
   /// Whether durability can still be guaranteed for credential writes.
   ///
@@ -195,6 +220,28 @@ class AuthService {
     required String username,
     required String password,
   }) async {
+    final outcome = await requestLogin(
+      serverUrl: serverUrl,
+      username: username,
+      password: password,
+    );
+    if (outcome is! LoginGranted) return outcome;
+    try {
+      await _storeGrant(outcome);
+    } catch (e) {
+      throw Exception('Login error: $e');
+    }
+    return const LoginSuccess();
+  }
+
+  /// Asks the server for a session without storing anything: a
+  /// [LoginGranted], or a [TotpChallenge] when the account needs a code.
+  /// Throws on failure.
+  Future<LoginOutcome> requestLogin({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async {
     final normalizedUrl = serverUrl.endsWith('/')
         ? serverUrl.substring(0, serverUrl.length - 1)
         : serverUrl;
@@ -204,7 +251,7 @@ class AuthService {
       final deviceName = await _deviceInfo.getDeviceName();
       final platform = _deviceInfo.getPlatform();
 
-      final client = createGraphQLClient(normalizedUrl, null);
+      final client = _clientFactory(normalizedUrl);
 
       final result = await client.mutate(
         MutationOptions(
@@ -243,13 +290,12 @@ class AuthService {
         );
       }
 
-      await _storeLoginSession(
+      return _grant(
         serverUrl: normalizedUrl,
         token: loginData.token,
         userId: loginData.user?.id,
         username: loginData.user?.username ?? username,
       );
-      return const LoginSuccess();
     } catch (e) {
       throw Exception('Login error: $e');
     }
@@ -260,8 +306,21 @@ class AuthService {
     required TotpChallenge challenge,
     required String code,
   }) async {
+    final granted = await requestTotp(challenge: challenge, code: code);
     try {
-      final client = createGraphQLClient(challenge.serverUrl, null);
+      await _storeGrant(granted);
+    } catch (e) {
+      throw Exception('Verification error: $e');
+    }
+  }
+
+  /// Completes a [TotpChallenge] without storing the session.
+  Future<LoginGranted> requestTotp({
+    required TotpChallenge challenge,
+    required String code,
+  }) async {
+    try {
+      final client = _clientFactory(challenge.serverUrl);
 
       final result = await client.mutate(
         MutationOptions(
@@ -285,7 +344,7 @@ class AuthService {
         throw Exception('No data returned from verifyTotp mutation');
       }
 
-      await _storeLoginSession(
+      return _grant(
         serverUrl: challenge.serverUrl,
         token: data.token,
         userId: data.user?.id,
@@ -302,22 +361,29 @@ class AuthService {
         : result.exception.toString();
   }
 
-  Future<void> _storeLoginSession({
+  LoginGranted _grant({
     required String serverUrl,
     required String? token,
     required String? userId,
     required String username,
-  }) async {
+  }) {
     if (token == null || userId == null) {
       throw Exception('Server returned no token');
     }
-    await setSession(
-      token: token,
+    return LoginGranted(
       serverUrl: serverUrl,
+      token: token,
       userId: userId,
       username: username,
     );
   }
+
+  Future<void> _storeGrant(LoginGranted g) => setSession(
+        token: g.token,
+        serverUrl: g.serverUrl,
+        userId: g.userId,
+        username: g.username,
+      );
 
   /// Login with username and password via the REST API (legacy).
   ///
