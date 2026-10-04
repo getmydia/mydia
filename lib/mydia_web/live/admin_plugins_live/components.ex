@@ -185,7 +185,9 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
         <div :if={@browse} class="mt-4 space-y-3">
           <div :if={@browse.error} id="browse-error" class="alert alert-error">
             <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
-            <span>Could not reach a plugin source: {@browse.error}</span>
+            <span>
+              {@browse.failed_count} of {@browse.source_count} sources could not be loaded: {@browse.error}
+            </span>
           </div>
 
           <div
@@ -408,9 +410,11 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
   attr :item, Mydia.Plugins.Index.CatalogItem, required: true
 
   def catalog_row(assigns) do
+    assigns = assign(assigns, :key, catalog_key(assigns.item.entry))
+
     ~H"""
     <div
-      id={"catalog-row-#{@item.entry.slug}"}
+      id={"catalog-row-#{@key}"}
       class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4"
     >
       <div class="flex-1 min-w-0">
@@ -423,25 +427,35 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           >
             (installed v{@item.installed_version})
           </span>
+          <span
+            :if={@item.entry.source_id}
+            id={"catalog-third-party-#{@key}"}
+            class="badge badge-sm badge-warning badge-outline max-w-full truncate"
+          >
+            Third-party · {@item.entry.source_name}
+          </span>
         </div>
         <p :if={@item.entry.description} class="text-sm text-base-content/70 truncate">
           {@item.entry.description}
         </p>
+        <p :if={@item.state == :other_source} class="text-xs text-base-content/60">
+          Installed from {@item.installed_from}
+        </p>
       </div>
       <span
         :if={@item.state in [:installed, :bundled]}
-        id={"catalog-state-#{@item.entry.slug}"}
+        id={"catalog-state-#{@key}"}
         class="badge badge-sm badge-ghost"
       >
         {if(@item.state == :bundled, do: "Bundled", else: "Installed")}
       </span>
       <.button
-        :if={@item.state in [:not_installed, :update, :replace]}
-        id={"install-#{@item.entry.slug}"}
+        :if={@item.state in [:not_installed, :update, :replace, :other_source]}
+        id={"install-#{@key}"}
         variant="primary"
         class="btn btn-primary btn-sm"
         phx-click="review_install"
-        phx-value-slug={@item.entry.slug}
+        phx-value-key={@key}
       >
         {install_label(@item)}
       </.button>
@@ -449,6 +463,11 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
     """
   end
 
+  @doc "DOM-safe key for a catalog entry: the slug for official entries, slug plus source prefix otherwise."
+  def catalog_key(%{source_id: nil, slug: slug}), do: slug
+  def catalog_key(%{source_id: id, slug: slug}), do: "#{slug}-#{String.slice(id, 0, 8)}"
+
+  defp install_label(%{state: :other_source}), do: "Replace"
   defp install_label(%{state: :update, entry: entry}), do: "Update to v#{entry.version}"
   defp install_label(%{state: :replace}), do: "Install store version"
   defp install_label(_item), do: "Install"
@@ -480,6 +499,30 @@ defmodule MydiaWeb.AdminPluginsLive.Components do
           running on the older grant, and calls into anything new are denied until you re-approve.
           Approval is all-or-nothing.
         </p>
+
+        <div
+          :if={@approval[:publisher]}
+          id="approval-publisher-warning"
+          class="alert alert-warning mt-3 text-sm"
+        >
+          <.icon name="hero-exclamation-triangle" class="w-5 h-5" />
+          <span>
+            This plugin comes from {@approval.publisher}, not the Mydia plugin index. Mydia has not
+            reviewed it; you are trusting whoever holds that source's signing key.
+          </span>
+        </div>
+        <div
+          :if={@approval[:replaces]}
+          id="approval-replaces"
+          class="alert alert-info mt-3 text-sm"
+        >
+          <.icon name="hero-arrow-path" class="w-5 h-5" />
+          <span>
+            This replaces {@approval.name} from {@approval.replaces}. Future updates will come from {@approval[
+              :publisher
+            ] || "the Mydia plugin index"}.
+          </span>
+        </div>
 
         <div class="my-4 space-y-2">
           <div

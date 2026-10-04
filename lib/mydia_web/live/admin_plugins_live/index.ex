@@ -27,6 +27,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   alias Mydia.Plugins.Logs
   alias Mydia.Plugins.Shelves
   alias Mydia.Settings
+  alias MydiaWeb.AdminPluginsLive.Components
 
   # Max log rows loaded into the detail timeline on open / filter.
   @log_limit 200
@@ -83,13 +84,10 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
 
   ## Capability approval (KTD6, AE1)
 
-  def handle_event("review_install", %{"slug" => slug}, socket) do
-    case Enum.find(catalog_of(socket.assigns.browse), &(&1.entry.slug == slug)) do
-      nil ->
-        {:noreply, socket}
-
-      %CatalogItem{entry: entry} ->
-        {:noreply, assign(socket, :approval, approval_from_entry(entry))}
+  def handle_event("review_install", %{"key" => key}, socket) do
+    case Enum.find(catalog_of(socket.assigns.browse), &(Components.catalog_key(&1.entry) == key)) do
+      nil -> {:noreply, socket}
+      %CatalogItem{} = item -> {:noreply, assign(socket, :approval, approval_from_item(item))}
     end
   end
 
@@ -310,7 +308,8 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
     result = %BrowseResult{
       status: :empty,
       error: "store lookup failed",
-      source_count: length(Index.sources())
+      source_count: length(Index.sources()),
+      failed_count: 1
     }
 
     {:noreply, assign(socket, browse: result, browsing?: false)}
@@ -540,7 +539,7 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
   defp catalog_of(nil), do: []
   defp catalog_of(%BrowseResult{catalog: catalog}), do: catalog
 
-  defp approval_from_entry(entry) do
+  defp approval_from_item(%CatalogItem{entry: entry} = item) do
     %{
       kind: :catalog,
       entry: entry,
@@ -550,7 +549,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       capabilities: entry.manifest.capabilities,
       ungranted: %{},
       settings_schema:
-        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema)
+        if(entry.manifest.multi_instance, do: [], else: entry.manifest.settings_schema),
+      publisher: entry.source_id && entry.source_name,
+      replaces: if(item.state == :other_source, do: item.installed_from)
     }
   end
 
@@ -567,7 +568,9 @@ defmodule MydiaWeb.AdminPluginsLive.Index do
       # asks for on top of what was already approved.
       ungranted:
         (Plugins.needs_reapproval?(config) && Plugins.ungranted_capabilities(config)) || %{},
-      settings_schema: host_grant_schema_of(config)
+      settings_schema: host_grant_schema_of(config),
+      publisher: nil,
+      replaces: nil
     }
   end
 

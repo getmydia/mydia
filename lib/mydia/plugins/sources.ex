@@ -27,8 +27,9 @@ defmodule Mydia.Plugins.Sources do
   @spec get_source(binary()) :: PluginSource.t() | nil
   def get_source(id), do: Repo.get(PluginSource, id)
 
-  @spec add_source(map()) :: {:ok, PluginSource.t()} | {:error, Ecto.Changeset.t()}
-  def add_source(attrs), do: %PluginSource{} |> PluginSource.changeset(attrs) |> Repo.insert()
+  @spec add_source(map(), keyword()) :: {:ok, PluginSource.t()} | {:error, Ecto.Changeset.t()}
+  def add_source(attrs, opts \\ []),
+    do: %PluginSource{} |> PluginSource.changeset(attrs, opts) |> Repo.insert()
 
   @spec remove_source(PluginSource.t()) :: {:ok, PluginSource.t()} | {:error, :declared}
   def remove_source(%PluginSource{declared: true}), do: {:error, :declared}

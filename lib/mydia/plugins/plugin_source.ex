@@ -27,13 +27,16 @@ defmodule Mydia.Plugins.PluginSource do
     timestamps(type: :utc_datetime_usec)
   end
 
-  def changeset(source, attrs) do
+  @doc "`opts[:allow_private]` waives the https rule, the seam `Index.preview_source/2` honors."
+  def changeset(source, attrs, opts \\ []) do
     source
     |> cast(attrs, [:url, :name, :public_key, :enabled])
     |> update_change(:url, &String.trim/1)
     |> validate_required([:url, :public_key])
     |> validate_change(:url, fn :url, url ->
-      if URI.parse(url).scheme == "https", do: [], else: [url: "must be an https URL"]
+      if Keyword.get(opts, :allow_private, false) or URI.parse(url).scheme == "https",
+        do: [],
+        else: [url: "must be an https URL"]
     end)
     |> put_key_id()
     |> unique_constraint(:url)
