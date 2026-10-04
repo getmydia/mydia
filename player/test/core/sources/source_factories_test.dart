@@ -249,6 +249,53 @@ void main() {
     expect(resourceCalls, 1);
   });
 
+  test('a Home user re-reads plex.tv with their own token', () async {
+    final resourceTokens = <String?>[];
+    final inner = plex.client;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v2/resources') {
+        resourceTokens.add(request.headers['X-Plex-Token']);
+        return http.Response(resourcesJson, 200);
+      }
+      return http.Response.fromStream(await inner.send(request));
+    });
+    final kidRecord = SourceAccountRecord(
+      account: atticRecord.account.copyWith(activeProfileId: 'kid0001'),
+      profiles: const [
+        SourceProfile(
+            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      ],
+      servers: [
+        SourceServer(
+          id: FakePlexServer.machineId,
+          accountId: 'acc1',
+          profileId: 'kid0001',
+          name: 'Attic',
+          machineIdentifier: FakePlexServer.machineId,
+          connections: [
+            ServerConnection(uri: FakePlexServer.base, local: true)
+          ],
+        ),
+      ],
+      addedAtMs: 0,
+    );
+    final c = await containerFor(
+      record: kidRecord,
+      http: SourceHttp(client: client),
+      secrets: {
+        'source/acc1/account_token': 'acct',
+        'source/acc1/kid0001/user_token': 'kid-token',
+        'source/acc1/kid0001/aa11/token': FakePlexServer.token,
+      },
+    );
+    c.listen(
+        mediaSourceProvider(const SourceId('acc1:kid0001:aa11')), (_, __) {});
+    c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
+    await settle();
+    expect(resourceTokens, isNotEmpty);
+    expect(resourceTokens, everyElement('kid-token'));
+  });
+
   group('Jellyfin', () {
     late FakeJellyfinServer jellyfin;
     late ProviderContainer jf;

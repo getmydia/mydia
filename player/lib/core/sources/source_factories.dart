@@ -134,7 +134,7 @@ Future<List<ServerConnection>> _rediscoverPlex(
       source.server.connections;
 }
 
-/// Null when there is nothing to report: no stored token, or the provider
+/// Null when there is nothing to report: no stored user token, or the provider
 /// was disposed meanwhile.
 Future<List<PlexResource>?> _fetchPlexResources(
   Ref ref,
@@ -143,12 +143,13 @@ Future<List<PlexResource>?> _fetchPlexResources(
   SourceSecrets secrets,
   Future<PlexIdentity> identity,
 ) async {
-  final accountToken = await secrets.accountToken(source.account);
-  if (accountToken == null) return null;
+  // The active Home user's token: plex.tv lists what that user can see.
+  final userToken = await secrets.userToken(source.account, source.profile.id);
+  if (userToken == null) return null;
   final tv = PlexTvClient(http: http, identity: await identity);
   final List<PlexResource> resources;
   try {
-    resources = await tv.servers(accountToken);
+    resources = await tv.servers(userToken);
   } on SourceException catch (e) {
     if (e.kind == SourceErrorKind.unauthorized) _flagReauth(ref, source);
     rethrow;
