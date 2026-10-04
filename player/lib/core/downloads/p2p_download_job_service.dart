@@ -165,7 +165,9 @@ class P2pDownloadJobService implements DownloadJobService {
     // Take a hold on the shared proxy either way, but only configure it when
     // nothing else has. Downloads and playback serve from one proxy, and
     // holding nothing is what let the player's `dispose()` stop it out from
-    // under a transfer in progress.
+    // under a transfer in progress. When the home target is already served
+    // this joins it as an owner, so it also outlives the owner that started
+    // it.
     //
     // The split matters: `start` re-targets a proxy that is already running,
     // and the peer and token here were captured when this service was built.
@@ -177,9 +179,7 @@ class P2pDownloadJobService implements DownloadJobService {
     // finishing, so once any download has run the proxy stays up for the rest
     // of the session. That is a loopback listener with no traffic on it,
     // which beats a download dying mid-transfer.
-    if (_localProxy.isRunning) {
-      _localProxy.acquireLease(this);
-    } else {
+    if (!_localProxy.joinTarget(this)) {
       await _localProxy.start(
         owner: this,
         targetPeer: _serverNodeAddr,

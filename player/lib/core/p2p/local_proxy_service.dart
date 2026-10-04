@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -30,15 +31,17 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
 ///
 /// Direct stream: /direct/{file_id}/stream
 /// Download: /download/{job_id}/file
+///
+/// A guest instance's target prefixes any of these with `/t/{target}`.
 class LocalProxyService with MediaProxyLeases implements MediaProxy {
   final P2pService _p2p;
   HttpServer? _server;
 
-  /// The peer ID to send HLS requests to
-  String? _targetPeer;
+  /// Where each target's requests go, keyed by target. Home is
+  /// [MediaProxy.homeTarget].
+  final Map<String, _ProxyTarget> _targets = {};
 
-  /// Auth token for HLS requests
-  String? _authToken;
+  static final _targetKey = RegExp(r'^[A-Za-z0-9_-]+$');
 
   /// Unguessable path prefix required on every request while LAN-exposed.
   /// A path prefix rather than a query parameter because HLS segment URLs are
@@ -117,30 +120,86 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     required Object owner,
     required String targetPeer,
     String? authToken,
+    String target = MediaProxy.homeTarget,
   }) async {
+    if (!_targetKey.hasMatch(target)) {
+      throw ArgumentError.value(target, 'target', 'must match [A-Za-z0-9_-]+');
+    }
     acquireLease(owner);
 
-    if (_server != null) {
+    final entry = _targets[target];
+    if (entry == null) {
+      _targets[target] = _ProxyTarget(targetPeer, authToken)..owners.add(owner);
+    } else {
       // Update config if already running
-      _targetPeer = targetPeer;
-      _authToken = authToken;
-      return;
+      entry
+        ..peer = targetPeer
+        ..authToken = authToken
+        ..owners.add(owner);
     }
 
-    _targetPeer = targetPeer;
-    _authToken = authToken;
+    if (_server != null) return;
 
-    // Bind to loopback on ephemeral port
-    _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    debugPrint('[LocalProxy] Started on http://127.0.0.1:${_server!.port}');
+    // Concurrent starts share one bind; each rolls back only its own claim.
+    try {
+      await (_binding ??= _bindServer());
+    } catch (_) {
+      // Nothing is serving, so nothing should still be registered.
+      _targets[target]?.owners.remove(owner);
+      if (_targets[target]?.owners.isEmpty ?? false) _targets.remove(target);
+      if (!_targets.values.any((t) => t.owners.contains(owner))) {
+        releaseLease(owner);
+      }
+      rethrow;
+    }
+  }
 
-    _server!.listen((HttpRequest request) {
-      _handleRequest(request);
-    });
+  /// The bind every concurrent [start] is waiting on, if one is in flight.
+  Future<void>? _binding;
+
+  Future<void> _bindServer() async {
+    try {
+      // Bind to loopback on ephemeral port
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      if (_targets.isEmpty) {
+        // Torn down while binding: nothing wants this server any more.
+        await server.close(force: true);
+        return;
+      }
+      _server = server;
+      debugPrint('[LocalProxy] Started on http://127.0.0.1:${server.port}');
+      server.listen((HttpRequest request) {
+        _handleRequest(request);
+      });
+    } finally {
+      _binding = null;
+    }
+  }
+
+  /// Holds [target] as it is already configured, without re-targeting it.
+  ///
+  /// Returns false, holding nothing, when [target] is not being served, which
+  /// includes the window while the first [start] is still binding: a caller
+  /// that joined then would build a URL for port 0. Unlike
+  /// [start] this never changes the target's peer or token, for callers whose
+  /// own copy of either may be stale.
+  bool joinTarget(Object owner, {String target = MediaProxy.homeTarget}) {
+    final entry = _targets[target];
+    if (_server == null || entry == null) return false;
+    entry.owners.add(owner);
+    acquireLease(owner);
+    return true;
   }
 
   @override
-  Future<void> stop(Object owner) async {
+  Future<void> stop(Object owner,
+      {String target = MediaProxy.homeTarget}) async {
+    final entry = _targets[target];
+    if (entry == null || !entry.owners.remove(owner)) return;
+    if (entry.owners.isEmpty) _targets.remove(target);
+
+    // The owner may still hold another target.
+    if (_targets.values.any((t) => t.owners.contains(owner))) return;
     if (!releaseLease(owner)) return;
     await _tearDown();
   }
@@ -154,15 +213,14 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> _tearDown() async {
     // Forced. An ordinary close stops the listener and returns, but leaves
     // connections already accepted to carry on being served — by a proxy
-    // whose target peer and auth token the next few lines null out. The
+    // whose targets (peers and auth tokens) `_targets.clear()` below drops. The
     // connection open here is the video pipeline's own: mpv holds a range
     // request for the whole file, so unforced it is left waiting on a socket
     // nothing will ever answer instead of seeing its stream end.
     await _cancelActiveSources();
     await _server?.close(force: true);
     _server = null;
-    _targetPeer = null;
-    _authToken = null;
+    _targets.clear();
     _lanToken = null;
     _lanAddress = null;
     debugPrint('[LocalProxy] Stopped');
@@ -257,9 +315,6 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> setLanAccess(bool enabled) async {
     if (enabled == isLanAccessible) return;
 
-    final peer = _targetPeer;
-    final token = _authToken;
-
     if (enabled) {
       final address = await resolveLanAddress();
       if (address == null) {
@@ -281,7 +336,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     await _server?.close(force: true);
     _server = null;
 
-    if (peer == null) {
+    if (_targets.isEmpty) {
       // Nothing to rebind: there is no proxy running to expose. Drop the
       // address and token again so `isLanAccessible` does not claim a
       // listener that was never created.
@@ -295,8 +350,6 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       enabled ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4,
       0,
     );
-    _targetPeer = peer;
-    _authToken = token;
     _server!.listen(_handleRequest);
 
     debugPrint(
@@ -316,6 +369,10 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// The video player should use this URL to start playback.
   @override
   String buildHlsUrl(String sessionId) => MediaRoutes.hls(_urlBase, sessionId);
+
+  @override
+  String targetBaseUrl(String target) =>
+      target == MediaProxy.homeTarget ? _urlBase : '$_urlBase/t/$target';
 
   /// Build the base URL for HLS content. Manifests use relative segment URLs,
   /// which resolve against this base — including the LAN token prefix.
@@ -353,10 +410,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     final path = status.path;
     debugPrint('[LocalProxy] ${request.method} $path');
+    final (targetKey, routePath) = _splitTarget(path);
+    final target = _targets[targetKey];
 
     // The routing table is shared with the browser's Service Worker rather
     // than repeated here: both have to take apart the same URLs the same way.
-    switch (MediaRoutes.resolve(path)) {
+    switch (MediaRoutes.resolve(routePath)) {
       case MediaRouteFailure(:final statusCode, :final message):
         request.response.statusCode = statusCode;
         _setCorsHeaders(request.response);
@@ -364,10 +423,11 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
         await request.response.close();
 
       case final MediaRouteMatch route when route.kind == MediaRouteKind.hls:
-        await _handleHlsRequest(request, route);
+        await _handleHlsRequest(request, route, target);
 
       case final MediaRouteMatch route:
-        await _forwardRangeRequest(request: request, route: route);
+        await _forwardRangeRequest(
+            request: request, route: route, target: target);
     }
   }
 
@@ -401,14 +461,27 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<int> debugHandlePath(String path) async =>
       _authorizeAndStripPrefix(path).statusCode;
 
+  /// Splits `/t/<key>/rest` into its target and `/rest`. Any other path is
+  /// home's.
+  static (String, String) _splitTarget(String path) {
+    if (!path.startsWith('/t/')) return (MediaProxy.homeTarget, path);
+    final rest = path.substring('/t/'.length);
+    final slash = rest.indexOf('/');
+    if (slash <= 0) return ('', path);
+    return (rest.substring(0, slash), rest.substring(slash));
+  }
+
   Future<void> _handleHlsRequest(
-      HttpRequest request, MediaRouteMatch route) async {
+    HttpRequest request,
+    MediaRouteMatch route,
+    _ProxyTarget? target,
+  ) async {
     final sw = Stopwatch()..start();
     try {
       final sessionId = route.sessionId;
       final hlsPath = route.path;
 
-      if (_targetPeer == null) {
+      if (target == null) {
         request.response.statusCode = HttpStatus.serviceUnavailable;
         _setCorsHeaders(request.response);
         request.response.write('No target peer configured');
@@ -426,12 +499,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
       // Forward to P2P
       final response = await _p2p.sendHlsRequest(
-        peer: _targetPeer!,
+        peer: target.peer,
         sessionId: sessionId,
         path: hlsPath,
         rangeStart: rangeStart,
         rangeEnd: rangeEnd,
-        authToken: _authToken,
+        authToken: target.authToken,
       );
       final p2pRequestMs = sw.elapsedMilliseconds;
 
@@ -491,6 +564,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<void> _forwardRangeRequest({
     required HttpRequest request,
     required MediaRouteMatch route,
+    required _ProxyTarget? target,
   }) async {
     final sessionId = route.sessionId;
     final path = route.path;
@@ -508,8 +582,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     // opened. The dispatcher does not await this, so anything that escapes
     // here surfaces as an unhandled async error rather than a response.
     try {
-      final peer = _targetPeer;
-      if (peer == null) {
+      if (target == null) {
         response.statusCode = HttpStatus.serviceUnavailable;
         _setCorsHeaders(response);
         response.write('No target peer configured');
@@ -523,12 +596,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       final P2pRangeStream upstream;
       try {
         upstream = await _p2p.openRangeStream(
-          peer: peer,
+          peer: target.peer,
           sessionId: sessionId,
           path: path,
           rangeStart: rangeStart,
           rangeEnd: rangeEnd,
-          authToken: _authToken,
+          authToken: target.authToken,
         );
       } catch (e) {
         debugPrint('[LocalProxy] P2P stream error for $sessionId: $e');
@@ -690,4 +763,15 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     return (start, end);
   }
+}
+
+class _ProxyTarget {
+  _ProxyTarget(this.peer, this.authToken);
+
+  String peer;
+  String? authToken;
+
+  /// Identity-keyed, for the same reason as `MediaProxyLeases._owners`.
+  final Set<Object> owners =
+      LinkedHashSet<Object>(equals: identical, hashCode: identityHashCode);
 }

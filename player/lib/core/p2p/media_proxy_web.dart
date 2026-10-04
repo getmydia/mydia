@@ -74,6 +74,15 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }
 
   @override
+  String targetBaseUrl(String target) {
+    if (target != MediaProxy.homeTarget) {
+      throw UnsupportedError(
+          'The web media proxy serves the home instance only');
+    }
+    return baseUrl;
+  }
+
+  @override
   String buildHlsUrl(String sessionId) => MediaRoutes.hls(baseUrl, sessionId);
 
   @override
@@ -85,7 +94,13 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
     required Object owner,
     required String targetPeer,
     String? authToken,
+    String target = MediaProxy.homeTarget,
   }) async {
+    if (target != MediaProxy.homeTarget) {
+      // A web build is served by one instance and only ever talks to it.
+      throw UnsupportedError(
+          'The web media proxy serves the home instance only');
+    }
     acquireLease(owner);
 
     // Assigned before the await so a request that arrives while an already
@@ -110,7 +125,9 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  Future<void> stop(Object owner) async {
+  Future<void> stop(Object owner,
+      {String target = MediaProxy.homeTarget}) async {
+    if (target != MediaProxy.homeTarget) return;
     if (!releaseLease(owner)) return;
     await _tearDown();
   }

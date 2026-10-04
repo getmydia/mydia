@@ -11,6 +11,7 @@ import 'package:player/native/lib.dart';
 import '../logging/log_sink.dart';
 import 'peer_wait.dart';
 import 'relay_list.dart';
+import 'watched_peers.dart';
 
 /// The iroh relay compiled into this build.
 ///
@@ -206,10 +207,19 @@ class P2pService {
   P2pConnectionType _currentConnectionType = P2pConnectionType.none;
   String? _cachedRelayUrl;
 
-  // Auto-reconnect state
-  String? _lastDialedEndpointAddr;
-  int _autoReconnectAttempts = 0;
-  Timer? _autoReconnectTimer;
+  // Auto-reconnect state, one entry per server this device uses.
+  late final WatchedPeers _watchedPeers = WatchedPeers(
+    nodeIdFor: _nodeIdFor,
+    isConnected: (nodeId) => _connectedPeers.contains(nodeId),
+    dial: (endpointAddrJson) async {
+      // Don't reconnect a service that was reset or disposed meanwhile.
+      if (_host == null || !_isInitialized) return;
+      debugPrint('[P2P] Auto-reconnecting...');
+      await dial(endpointAddrJson);
+    },
+    maxAttempts: _maxAutoReconnectAttempts,
+    delay: _autoReconnectDelay,
+  );
 
   // Subscription to the native host's event stream. Must be cancelled before
   // the host is dropped or the status controllers are closed: the Rust host
@@ -496,10 +506,7 @@ class P2pService {
           _currentConnectionType = _parseConnectionType(connectionType);
           // Another player connecting says nothing about the server link, so
           // it must not cancel a redial that is still pending for it.
-          if (_isDialedPeer(peerId)) {
-            _autoReconnectAttempts = 0;
-            _autoReconnectTimer?.cancel();
-          }
+          _watchedPeers.onConnected(peerId);
           if (!_peerConnectedController.isClosed) {
             _peerConnectedController.add(peerId);
           }
@@ -521,13 +528,11 @@ class P2pService {
             _currentConnectionType = P2pConnectionType.none;
           }
           _emitStatus();
-          // Only the dialed server is worth redialing. Another player's
+          // Only watched servers are worth redialing. Another player's
           // connection comes and goes with remote control, and counting
           // those against the attempt cap would spend it before the server
           // link ever dropped.
-          if (_isDialedPeer(peerId)) {
-            _scheduleAutoReconnect();
-          }
+          _watchedPeers.onDisconnected(peerId);
         } else if (event == 'relay_connected') {
           debugPrint('[P2P] Connected to relay');
           _isRelayConnected = true;
@@ -583,45 +588,6 @@ class P2pService {
     _statusController.add(status);
   }
 
-  /// Schedule an auto-reconnect attempt after a disconnect event.
-  /// Uses the cached [_lastDialedEndpointAddr] to re-dial the peer.
-  /// Caps attempts at [_maxAutoReconnectAttempts] to avoid infinite loops.
-  void _scheduleAutoReconnect() {
-    final addr = _lastDialedEndpointAddr;
-    if (addr == null) return;
-    if (_autoReconnectAttempts >= _maxAutoReconnectAttempts) {
-      debugPrint(
-          '[P2P] Auto-reconnect attempts exhausted ($_autoReconnectAttempts/$_maxAutoReconnectAttempts)');
-      return;
-    }
-
-    // Cancel any pending reconnect timer
-    _autoReconnectTimer?.cancel();
-
-    _autoReconnectAttempts++;
-    debugPrint(
-        '[P2P] Scheduling auto-reconnect attempt $_autoReconnectAttempts/$_maxAutoReconnectAttempts '
-        'in ${_autoReconnectDelay.inSeconds}s');
-
-    _autoReconnectTimer = Timer(_autoReconnectDelay, () async {
-      // Don't reconnect if already connected or disposed
-      if (_host == null || !_isInitialized) return;
-      if (isConnectedToPeer(addr)) {
-        debugPrint('[P2P] Already reconnected, skipping auto-reconnect');
-        return;
-      }
-
-      try {
-        debugPrint('[P2P] Auto-reconnecting...');
-        await dial(addr);
-      } catch (e) {
-        debugPrint('[P2P] Auto-reconnect failed: $e');
-        // Schedule another attempt if we haven't exhausted retries
-        _scheduleAutoReconnect();
-      }
-    });
-  }
-
   /// Dial a peer using their EndpointAddr JSON.
   /// This is the primary way to connect to a peer in iroh.
   Future<void> dial(String endpointAddrJson) async {
@@ -661,13 +627,6 @@ class P2pService {
   String? _nodeIdFor(String peer) =>
       peer.startsWith('{') ? _extractNodeIdFromEndpointAddr(peer) : peer;
 
-  /// Whether [peerId] is the server this service last dialed, the only peer
-  /// auto-reconnect tracks.
-  bool _isDialedPeer(String peerId) {
-    final dialed = _lastDialedEndpointAddr;
-    return dialed != null && _nodeIdFor(dialed) == peerId;
-  }
-
   /// Check if we're currently connected to a peer.
   /// The peer can be specified as either a bare node ID or an EndpointAddr JSON.
   bool isConnectedToPeer(String peer) {
@@ -687,13 +646,14 @@ class P2pService {
 
     if (_host == null) throw Exception("P2P host initialization failed");
 
-    // Cache for auto-reconnect on disconnect
-    _lastDialedEndpointAddr = endpointAddrJson;
+    // Watched for auto-reconnect on disconnect, beside any other server.
+    _watchedPeers.watch(endpointAddrJson);
+    final watchedId = _nodeIdFor(endpointAddrJson);
 
     // Check if already connected
     if (isConnectedToPeer(endpointAddrJson)) {
       debugPrint('[P2P] Already connected to peer');
-      _autoReconnectAttempts = 0;
+      if (watchedId != null) _watchedPeers.resetAttempts(watchedId);
       return;
     }
 
@@ -715,8 +675,12 @@ class P2pService {
     }
 
     // Reset reconnect counter on successful dial
-    _autoReconnectAttempts = 0;
+    if (watchedId != null) _watchedPeers.resetAttempts(watchedId);
   }
+
+  /// Stop redialing [peer] (a node id or EndpointAddr JSON) when it drops.
+  /// For a server the viewer removed.
+  void unwatchPeer(String peer) => _watchedPeers.unwatch(peer);
 
   /// The host, waiting for startup first when a request arrives before it.
   ///
@@ -954,9 +918,7 @@ class P2pService {
     // Abandon any in-flight _initialize before tearing state down, so it
     // cannot publish its host over the one the next initialize() builds.
     _initGeneration++;
-    _autoReconnectTimer?.cancel();
-    _autoReconnectAttempts = 0;
-    _lastDialedEndpointAddr = null;
+    _watchedPeers.clear();
     _detachNativeSubscriptions('reset');
     _host = null;
     _isInitialized = false;
@@ -1036,7 +998,7 @@ class P2pService {
   Future<void> dispose() async {
     _disposed = true;
     _initGeneration++;
-    _autoReconnectTimer?.cancel();
+    _watchedPeers.clear();
     // Cancel before closing the controllers below: the Rust host is only
     // dropped when it is garbage collected, not synchronously here, so a
     // live subscription can otherwise still fire into a closed controller.
