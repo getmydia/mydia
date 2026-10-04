@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -294,6 +296,73 @@ void main() {
     await settle();
     expect(resourceTokens, isNotEmpty);
     expect(resourceTokens, everyElement('kid-token'));
+  });
+
+  test('a re-read begun before a switch does not touch the new profile',
+      () async {
+    final release = Completer<void>();
+    var resourceCalls = 0;
+    final inner = plex.client;
+    final client = MockClient((request) async {
+      if (request.url.path == '/api/v2/resources') {
+        resourceCalls++;
+        await release.future;
+        return http.Response(resourcesJson, 200);
+      }
+      return http.Response.fromStream(await inner.send(request));
+    });
+    SourceServer server(String id, String profileId) => SourceServer(
+          id: id,
+          accountId: 'acc1',
+          profileId: profileId,
+          name: id,
+          machineIdentifier: id,
+          connections: [
+            ServerConnection(uri: FakePlexServer.base, local: true)
+          ],
+        );
+    final kidRecord = SourceAccountRecord(
+      account: atticRecord.account.copyWith(activeProfileId: 'kid0001'),
+      profiles: const [
+        SourceProfile(
+            id: 'kid0001', accountId: 'acc1', name: 'Pip', isOwner: false),
+      ],
+      servers: [server(FakePlexServer.machineId, 'kid0001')],
+      addedAtMs: 0,
+    );
+    final c = await containerFor(
+      record: kidRecord,
+      http: SourceHttp(client: client),
+      secrets: {
+        'source/acc1/account_token': 'acct',
+        'source/acc1/kid0001/user_token': 'kid-token',
+        'source/acc1/kid0001/aa11/token': FakePlexServer.token,
+      },
+    );
+    c.listen(
+        mediaSourceProvider(const SourceId('acc1:kid0001:aa11')), (_, __) {});
+    c.read(connectionRefreshBusProvider).ping(ConnectionRefreshReason.resume);
+    await settle();
+    expect(resourceCalls, 1, reason: 'the kid re-read is in flight');
+
+    // The viewer switches back to the owner meanwhile; cc33 is a server the
+    // reply below does not list.
+    await c.read(sourceRecordsProvider.notifier).updateRecord(
+          'acc1',
+          (current) async => current.copyWith(
+            account: current.account.copyWith(activeProfileId: 'owner'),
+            servers: [
+              server(FakePlexServer.machineId, 'owner'),
+              server('cc33', 'owner'),
+            ],
+          ),
+        );
+    release.complete();
+    await settle();
+
+    final record = c.read(sourceRecordsProvider).requireValue.accounts.single;
+    expect(record.account.activeProfileId, 'owner');
+    expect(record.servers.where((s) => s.gone), isEmpty);
   });
 
   group('Jellyfin', () {

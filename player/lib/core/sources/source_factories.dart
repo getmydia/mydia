@@ -104,8 +104,9 @@ PlexMediaSource _plex(Ref ref, Source source) {
   );
 }
 
-/// In-flight plex.tv re-reads, one per account: every server of an account
-/// shares the answer instead of asking plex.tv once each.
+/// In-flight plex.tv re-reads, one per account and profile: every server of a
+/// profile shares the answer instead of asking plex.tv once each, and a source
+/// of another profile never joins a read made with the previous user's token.
 final _plexRediscoveriesProvider =
     Provider<Map<String, Future<List<PlexResource>?>>>((ref) => {});
 
@@ -119,13 +120,13 @@ Future<List<ServerConnection>> _rediscoverPlex(
   Future<PlexIdentity> identity,
   Map<String, Future<List<PlexResource>?>> inFlight,
 ) async {
-  final accountId = source.account.id;
-  final resources = await (inFlight[accountId] ??=
+  final key = '${source.account.id}/${source.profile.id}';
+  final resources = await (inFlight[key] ??=
       _fetchPlexResources(ref, source, http, secrets, identity)
           .whenComplete(() {
     // A block body: `remove` returns this very future, and a returned
     // future would be awaited by itself.
-    inFlight.remove(accountId);
+    inFlight.remove(key);
   }));
   return resources
           ?.where((r) => r.clientIdentifier == source.server.id)
@@ -155,9 +156,14 @@ Future<List<PlexResource>?> _fetchPlexResources(
     rethrow;
   }
   if (!ref.mounted) return null;
-  await ref.read(sourceRecordsProvider.notifier).updateServers(
+  // Only while this source's profile is still the active one: after a switch
+  // these resources describe the old user's view, not the new profile's.
+  await ref.read(sourceRecordsProvider.notifier).updateRecord(
         source.account.id,
-        (servers) => reconcilePlexServers(servers, resources),
+        (current) async => current.account.activeProfileId == source.profile.id
+            ? current.copyWith(
+                servers: reconcilePlexServers(current.servers, resources))
+            : null,
       );
   return resources;
 }
