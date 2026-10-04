@@ -4,8 +4,8 @@
 #
 #   tool/apply-channel.sh [--names-only] [--root <player dir>] <version>
 #
-# The channel comes from the version: -beta.N is beta, -dev.N is dev,
-# anything else is stable. Beta and dev builds get "Mydia Player Beta" /
+# The channel comes from the version: a -dev.N or .dev.N anywhere is dev,
+# -beta.N is beta, anything else is stable. Beta and dev builds get "Mydia Player Beta" /
 # "Mydia Player Dev" as their display name on every platform and a badged
 # launcher icon. Stable edits nothing, so a release build is byte-identical
 # to one made without this script.
@@ -38,12 +38,14 @@ done
 version="${1:?usage: apply-channel.sh [--names-only] [--root dir] <version>}"
 
 case "$version" in
-  *-beta.*) channel=beta; name="Mydia Player Beta" ;;
-  *-dev.*)  channel=dev;  name="Mydia Player Dev" ;;
+  # First: an on-demand build made after a prerelease still carries that
+  # prerelease's name (0.16.0-beta.2.dev.16), and it is a dev build.
+  *-dev.*|*.dev.*) channel=dev;  name="Mydia Player Dev" ;;
+  *-beta.*)        channel=beta; name="Mydia Player Beta" ;;
   *-*)
     echo "::warning::apply-channel: unrecognised prerelease '$version', branding as stable" >&2
     channel=stable; name="Mydia Player" ;;
-  *)        channel=stable; name="Mydia Player" ;;
+  *)               channel=stable; name="Mydia Player" ;;
 esac
 
 # Replace one expected pattern in one file, or die. $1 file, $2 perl regex with

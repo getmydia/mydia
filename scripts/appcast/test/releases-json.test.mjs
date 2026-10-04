@@ -55,7 +55,7 @@ const devBuilds = [
 test('picks the newest stable per platform', () => {
   const model = buildReleasesModel([stable], [])
   assert.equal(model.platforms.android.stable.version, '0.15.0')
-  assert.equal(model.platforms.android.stable.build, 1500900)
+  assert.equal(model.platforms.android.stable.build, 15090000)
   assert.equal(
     model.platforms.android.stable.url,
     'https://github.example.invalid/mydia-player-android-v0.15.0.apk',
@@ -123,6 +123,7 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     '0.15.0',
     '0.15.1',
     '1.15.0',
+    '0.015.0',
     '0.15.0-dev.4',
     '0.15.0-alpha.3',
     '0.15.0-beta.2',
@@ -130,19 +131,21 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     '0.15.0-beta2',
     'v0.8.1-rc13',
     '0.15.0+refresh.2',
-    // Boundary pairs: the highest counter each band accepts before it would
-    // overflow into the next one.
-    '0.15.0-dev.299',
-    '0.15.0-alpha.199',
-    '0.15.0-beta.199',
-    '0.15.0-rc.199',
+    '0.16.0-beta.2.dev.16',
+    '0.16.0-rc13.dev.4',
+    // Boundary values: the highest counter each band and dev tail accepts
+    // before it would overflow into its neighbour.
+    '0.15.0-dev.9999',
+    '0.15.0-alpha.19',
+    '0.15.0-beta.29',
+    '0.15.0-rc.29',
+    '0.15.0-alpha.19.dev.999',
     '0.15.0+refresh.99',
-    // Boundary values for the major/minor/patch magnitude guard: the highest
-    // value each field accepts before it would overflow Android's
-    // versionCode ceiling.
-    '209.0.0',
+    // Boundary values for the major/minor/patch guard.
+    '20.0.0',
     '0.99.0',
-    '0.0.99',
+    '0.0.9',
+    '20.99.9+refresh.99',
   ]
 
   for (const version of accepted) {
@@ -152,23 +155,26 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
     assert.equal(String(buildNumber(version)), shell, `mismatch for ${version}`)
   }
 
-  // Inputs both implementations must refuse. execFileSync throws on a
-  // non-zero exit, so there is no number to compare here: the assertion is
-  // that both sides reject, not that their outputs match. Each of the first
-  // five is the first counter that overflows its band; the last is the
-  // no-dot refresh form the shell has never accepted (CI's only producer
-  // always writes the dot).
+  // Inputs both implementations must refuse: the first counter past each band
+  // and dev tail, a dev tail of 0 (the prerelease itself), a dev tail on a dev
+  // build, the no-dot refresh form, and the first value past each version
+  // field.
   const rejected = [
-    '0.15.0-dev.300',
-    '0.15.0-alpha.200',
-    '0.15.0-beta.200',
-    '0.15.0-rc.200',
+    '0.15.0-dev.10000',
+    '0.15.0-alpha.20',
+    '0.15.0-beta.30',
+    '0.15.0-rc.30',
+    '0.15.0-beta.2.dev.0',
+    '0.15.0-beta.2.dev.1000',
+    '0.15.0-beta.2.dev',
+    '0.15.0-dev.1.dev.2',
+    '0.15.0+refresh.0',
     '0.15.0+refresh.100',
     '0.15.0+refresh2',
     // First value that overflows each of the major/minor/patch fields.
-    '210.0.0',
+    '21.0.0',
     '0.100.0',
-    '0.0.100',
+    '0.0.10',
   ]
 
   for (const version of rejected) {
@@ -177,6 +183,29 @@ test('buildNumber agrees with scripts/build-number.sh', () => {
       `shell should have rejected ${version}`,
     )
     assert.throws(() => buildNumber(version), `buildNumber should have rejected ${version}`)
+  }
+})
+
+test('buildNumber orders builds by when they were made', () => {
+  const ordered = [
+    '0.16.0-dev.5',
+    '0.16.0-alpha.1',
+    '0.16.0-alpha.1.dev.3',
+    '0.16.0-beta.2',
+    '0.16.0-beta.2.dev.16',
+    '0.16.0-beta.2.dev.17',
+    '0.16.0-beta.3',
+    '0.16.0-rc.1',
+    '0.16.0-rc.1.dev.1',
+    '0.16.0',
+    '0.16.0+refresh.1',
+    '0.17.0-dev.1',
+  ]
+  for (let i = 1; i < ordered.length; i++) {
+    assert.ok(
+      buildNumber(ordered[i]) > buildNumber(ordered[i - 1]),
+      `${ordered[i]} should rank above ${ordered[i - 1]}`,
+    )
   }
 })
 

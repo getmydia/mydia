@@ -59,6 +59,8 @@ check_channel() {
 
 check_channel 0.16.0-beta.3 beta 'Mydia Player Beta'
 check_channel 0.17.0-dev.42 dev 'Mydia Player Dev'
+check_channel 0.16.0-beta.2.dev.16 dev 'Mydia Player Dev'
+check_channel 0.16.0-rc.1.dev.3 dev 'Mydia Player Dev'
 
 # crlf: check that files with CRLF endings (as git checks out on Windows) work
 fresh_copy

@@ -87,5 +87,36 @@ void main() {
       // suffix the running dev build carries.
       expect(VersionComparator.isNewer('0.16.0-dev.7', '0.15.2'), isFalse);
     });
+
+    test(
+        'a dev build made after a prerelease sorts above it and below the '
+        'next one', () {
+      const beta2 = '0.16.0-beta.2';
+      const afterBeta2 = '0.16.0-beta.2.dev.16';
+      const laterAfterBeta2 = '0.16.0-beta.2.dev.17';
+      const beta3 = '0.16.0-beta.3';
+
+      expect(VersionComparator.isNewer(beta2, afterBeta2), isTrue);
+      expect(VersionComparator.isNewer(afterBeta2, laterAfterBeta2), isTrue);
+      expect(VersionComparator.isNewer(afterBeta2, beta3), isTrue);
+      expect(VersionComparator.isNewer(beta3, afterBeta2), isFalse);
+      expect(VersionComparator.isNewer(afterBeta2, '0.16.0-rc.1'), isTrue);
+      expect(VersionComparator.isNewer(afterBeta2, '0.16.0'), isTrue);
+    });
+
+    test('a dev counter in the tail compares numerically', () {
+      expect(
+        VersionComparator.isNewer(
+            '0.16.0-beta.2.dev.9', '0.16.0-beta.2.dev.10'),
+        isTrue,
+      );
+    });
+
+    test('a build from the old dev shape updates onto the new one', () {
+      expect(
+        VersionComparator.isNewer('0.16.0-dev.20', '0.16.0-beta.2.dev.16'),
+        isTrue,
+      );
+    });
   });
 }
