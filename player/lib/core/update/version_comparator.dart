@@ -112,7 +112,8 @@ class VersionComparator {
   }
 
   /// The maturity bands a prerelease suffix can start with, in ascending
-  /// order. Mirrors the BANDS table in scripts/appcast/lib/releases-json.mjs,
+  /// order. Mirrors the PRERELEASE_BANDS table and dev band in
+  /// scripts/appcast/lib/releases-json.mjs,
   /// which is the ground truth: it is what assigns every build's build
   /// number, including Android's versionCode, so an update comparison that
   /// disagreed with this order could point a dev install backwards at a beta,
@@ -122,6 +123,9 @@ class VersionComparator {
   /// A leading identifier outside this list (which the feed's own generator
   /// never produces; buildNumber() rejects anything else before publishing)
   /// falls through to plain identifier comparison against the other side.
+  ///
+  /// A ".dev.K" tail after a prerelease needs no entry here: it shares the
+  /// prerelease's leading identifiers and the longer list ranks higher.
   static const _prereleaseBands = ['dev', 'alpha', 'beta', 'rc'];
 
   /// Compares two prerelease suffixes such as "dev.7", "beta.12" or the
