@@ -277,7 +277,7 @@ class JellyfinMediaSource extends MediaSource
     final items = await client.getList('/Items/Latest', {
       ..._user,
       'Limit': '$_rowLimit',
-      'Fields': 'DateCreated',
+      'Fields': 'DateCreated,DateLastMediaAdded',
       ..._rowImages,
     });
     return items

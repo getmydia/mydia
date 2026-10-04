@@ -189,6 +189,12 @@ class FakeJellyfinServer {
     if (request.method == 'GET' && path == '/Items/Latest') {
       // A bare array, unlike every other list endpoint.
       return _json([
+        // A grouped series: old DateCreated, newest episode arrival.
+        {
+          ...show,
+          'DateCreated': '2020-01-01T00:00:00.0000000Z',
+          'DateLastMediaAdded': '2024-05-04T10:00:00.0000000Z',
+        },
         {...movie(3), 'DateCreated': '2024-05-03T10:00:00.0000000Z'},
         {...movie(1), 'DateCreated': '2024-05-01T10:00:00.0000000Z'},
       ]);

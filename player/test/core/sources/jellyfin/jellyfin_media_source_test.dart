@@ -321,14 +321,15 @@ void main() {
   test('recently added reads the bare array from /Items/Latest', () async {
     final b = build();
     final items = await b.source.recentlyAdded();
-    expect(items.map((i) => i.ref.externalId), ['m3', 'm1']);
-    expect(items.first.addedAt, DateTime.utc(2024, 5, 3, 10));
+    expect(items.map((i) => i.ref.externalId), ['show1', 'm3', 'm1']);
+    expect(items.first.addedAt, DateTime.utc(2024, 5, 4, 10));
     final q = b.server.requests
         .lastWhere((r) => r.url.path == '/Items/Latest')
         .url
         .queryParameters;
     expect(q['Limit'], '20');
     expect(q['Fields'], contains('DateCreated'));
+    expect(q['Fields'], contains('DateLastMediaAdded'));
     expect(q.containsKey('ParentId'), isFalse);
   });
 

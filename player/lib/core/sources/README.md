@@ -183,7 +183,10 @@ Jellyfin `SortName` and `DateCreated` (only when `Fields` asks) and
 `UserData.LastPlayedDate`; Stash `created_at` and `last_played_at`, no sort
 title. `RecentlyAdded` is Plex `/library/recentlyAdded`, Jellyfin
 `/Items/Latest` with no `ParentId` (a bare JSON array, read with
-`JellyfinClient.getList`), and Stash scenes by `created_at`.
+`JellyfinClient.getList`), and Stash scenes by `created_at`. Jellyfin
+groups new episodes under their show, whose `addedAt` comes from
+`DateLastMediaAdded` (the show's own `DateCreated` is when it was first
+added); browse keeps `DateCreated` to match the server's sort.
 
 ## Tests
 
@@ -196,8 +199,8 @@ skips that directory.
 1. A `MediaSource` subclass with its mapping and client, plus the shared
    contract suite in `test/core/sources/media_source_contract.dart`.
    `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites`, `NextUp` and
-   `RecentlyAdded` are optional; a source that implements one also lists the matching
-   `SourceCapability`.
+   `RecentlyAdded` are optional; a source that implements one also lists
+   the matching `SourceCapability`.
 2. A `SourceKind` value and a case in `source_factories.dart`.
 3. A `SourcePlaybackSession` subclass and a case in
    `playbackSessionFor`.

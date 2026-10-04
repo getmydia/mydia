@@ -133,7 +133,9 @@ class ItemSummary {
   /// When the item joined the server's library.
   final DateTime? addedAt;
 
-  /// When this viewer last played it.
+  /// When this viewer last played it. Null when they never did, or when the
+  /// server does not say (a Jellyfin Next Up episode, an unplayed Plex
+  /// on-deck item).
   final DateTime? lastPlayedAt;
 }
 

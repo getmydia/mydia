@@ -50,7 +50,7 @@ Map<String, dynamic>? _firstFile(Map<String, dynamic> scene) {
 }
 
 DateTime? _instant(Object? value) =>
-    value is String ? DateTime.tryParse(value) : null;
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
 
 ItemSummary stashSummary(SourceId sourceId, Map<String, dynamic> scene) {
   final id = scene['id'] as String;

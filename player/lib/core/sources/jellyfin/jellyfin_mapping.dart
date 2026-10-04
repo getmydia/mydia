@@ -129,13 +129,15 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
     // An item's own id is the id of its primary media source.
     defaultVersionId: id,
     sortTitle: json['SortName'] as String?,
-    addedAt: _instant(json['DateCreated']),
+    // A show or season's newest episode arrival, when the response carries it.
+    addedAt:
+        _instant(json['DateLastMediaAdded']) ?? _instant(json['DateCreated']),
     lastPlayedAt: _instant(user['LastPlayedDate']),
   );
 }
 
 DateTime? _instant(Object? value) =>
-    value is String ? DateTime.tryParse(value) : null;
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
 
 /// The `yyyy-MM-dd` head of an ISO timestamp; shorter strings pass as is.
 String? _isoDate(Object? value) => value is String && value.isNotEmpty
