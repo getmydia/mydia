@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -9,8 +11,9 @@ import 'package:player/core/sources/store/source_store.dart';
 import '../../../test_utils/mock_auth_storage.dart';
 import 'source_json_test.dart' show plexRecord;
 
-ProviderContainer _container(InMemorySourceStore store) {
+ProviderContainer _container(InMemorySourceStore store, {SourceCache? cache}) {
   final c = ProviderContainer(overrides: [
+    if (cache != null) sourceCacheProvider.overrideWithValue(cache),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
   ]);
@@ -119,6 +122,24 @@ void main() {
       await c.read(sourceRecordsProvider.future);
       await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
       expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
+    });
+
+    test('removeLockedAccounts deletes the removed accounts cached data',
+        () async {
+      final store = InMemorySourceStore();
+      await store.putAccount(plexRecord()
+          .copyWith(serverLocks: const {'abc123': SourceLock.locked}));
+      await store.putAccount(_otherAccount());
+      final cache = InMemorySourceCache();
+      final lockedKey = QueryKey('acc1:owner:abc123/hubs');
+      final keptKey = QueryKey('acc2:owner:def456/hubs');
+      await cache.write(lockedKey, const [], DateTime.now());
+      await cache.write(keptKey, const [], DateTime.now());
+      final c = _container(store, cache: cache);
+      await c.read(sourceRecordsProvider.future);
+      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+      expect(cache.read(lockedKey), isNull);
+      expect(cache.read(keptKey), isNotNull);
     });
 
     test('removeLockedAccounts drops the removed accounts All servers choices',

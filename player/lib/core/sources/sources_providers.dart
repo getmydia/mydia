@@ -11,6 +11,7 @@ import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../graphql/graphql_provider.dart';
 import 'all_servers_inclusion.dart';
+import 'cache/source_cache.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
 import 'mydia/home_mydia_browse.dart';
@@ -98,6 +99,8 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         if (record != null) {
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
+        // Keyed by id, so it needs no record.
+        await ref.read(sourceCacheProvider).deleteAccount(accountId);
       });
 
   /// Never throws: a selection that cannot be remembered still applies for
@@ -155,6 +158,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             await _dropAllServersChoices(store, id);
           });
           await ref.read(sourceSecretsProvider).deleteAll(record);
+          await ref.read(sourceCacheProvider).deleteAccount(id);
         }
       });
 
