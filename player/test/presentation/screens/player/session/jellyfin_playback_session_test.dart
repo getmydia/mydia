@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cast/receiver_profile.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/player/device_profile.dart';
+import 'package:player/core/sources/transcode_codecs.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/jellyfin_playback_session.dart';
@@ -184,5 +186,38 @@ void main() {
     expect(progress['IsPaused'], isTrue);
     expect(progress['PlaySessionId'], 'ps1');
     expect(progress['MediaSourceId'], 'm2');
+  });
+
+  test('receiver mode puts api_key in the HLS URL and asks for H.264',
+      () async {
+    final o = open();
+    await o.session.candidates(CandidateScope.file);
+    final version = (await o.session.loadDetail()).versions.first;
+    final resolver = JellyfinStreamResolver(
+      client: o.session.jellyfinClient,
+      itemId: 'm2',
+      version: version,
+      playSessionId: 'ps',
+      codecs: transcodeCodecs(receiverDeviceProfile),
+      onPlayMethod: (_) {},
+      forReceiver: true,
+    );
+
+    final stream = await resolver.resolve(
+      const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.fallbackFromFailure,
+      ),
+      fileId: 'm2',
+      startAt: Duration.zero,
+    );
+
+    final url = Uri.parse(stream.url);
+    expect(url.queryParameters['api_key'], FakeJellyfinServer.token);
+    expect(url.queryParameters['VideoCodec'], 'h264');
+    expect(url.queryParameters['AudioCodec'], 'aac,mp3');
+    expect(stream.headers, isEmpty);
   });
 }

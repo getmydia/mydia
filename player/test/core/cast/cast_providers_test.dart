@@ -215,7 +215,7 @@ void main() {
       protocol: CastProtocolKind.chromecast,
     );
 
-    const launch = CastLaunchRequest(
+    final launch = CastLaunchRequest(
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',

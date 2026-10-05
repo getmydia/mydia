@@ -336,4 +336,8 @@ void main() {
         isA<MydiaGuestPlaybackSession>());
     expect(playbackSessionFor(source, _movie, 'f-m-1'), isNull);
   });
+
+  test('a guest session cannot cast', () {
+    expect(open(_direct).features, isNot(contains(PlaybackFeature.cast)));
+  });
 }

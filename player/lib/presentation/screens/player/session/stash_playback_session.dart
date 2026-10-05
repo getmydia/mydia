@@ -9,7 +9,9 @@ import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/stash/stash_client.dart';
 import '../../../../core/sources/stash/stash_documents.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
+import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
 /// Stash's `StreamingResolutionEnum` for a rung height; the original when
@@ -32,6 +34,11 @@ class StashPlaybackSession extends SourcePlaybackSession {
         super(source: source);
 
   final StashMediaSource _stash;
+
+  StashClient get stashClient => _stash.client;
+
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [
@@ -57,13 +64,50 @@ class StashPlaybackSession extends SourcePlaybackSession {
   @override
   StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
       StashStreamResolver(client: _stash.client, sceneId: item.externalId);
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      StashStreamResolver(
+          client: _stash.client, sceneId: item.externalId, forReceiver: true);
+
+  /// Stash serves every caption as WebVTT from its caption route.
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+      MediaVersion version) async {
+    final credential = await _stash.client.receiverQuery();
+    return [
+      for (final s in version.streams)
+        if (s.kind == MediaStreamKind.subtitle && s.externalPath != null)
+          CastSubtitleTrack(
+            trackId: s.id,
+            url: await _stash.client.url(s.externalPath!).then((u) => u.replace(
+                    queryParameters: {
+                      ...u.queryParameters,
+                      ...credential
+                    }).toString()),
+            label: s.title ?? s.language ?? 'Subtitles',
+            language: s.language ?? 'und',
+          ),
+    ];
+  }
 }
 
 class StashStreamResolver implements StreamResolver {
-  StashStreamResolver({required this.client, required this.sceneId});
+  StashStreamResolver({
+    required this.client,
+    required this.sceneId,
+    this.forReceiver = false,
+  });
 
   final StashClient client;
   final String sceneId;
+
+  /// A cast receiver cannot send headers, so the API key rides in the URL.
+  final bool forReceiver;
 
   @override
   Future<ResolvedStream> resolve(
@@ -76,9 +120,17 @@ class StashStreamResolver implements StreamResolver {
       HlsPlan(:final rung) => '/scene/$sceneId/stream.m3u8'
           '?resolution=${stashResolutionFor(rung.height)}',
     };
+    final url = await client.url(path);
+    if (!forReceiver) {
+      return ResolvedStream(
+          url: url.toString(), headers: await client.headers());
+    }
     return ResolvedStream(
-      url: (await client.url(path)).toString(),
-      headers: await client.headers(),
+      url: url.replace(queryParameters: {
+        ...url.queryParameters,
+        ...await client.receiverQuery(),
+      }).toString(),
+      headers: const {},
     );
   }
 

@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cast/receiver_profile.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/quality_rung.dart';
+import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
@@ -39,6 +41,29 @@ void main() {
     expect(tracks.single.id, '33');
     expect(tracks.single.language, 'spa');
     expect(tracks.single.embedded, isFalse);
+  });
+
+  group('receiverSubtitleIdFor', () {
+    test('null means off', () async {
+      expect(await open().session.receiverSubtitleIdFor(null), isNull);
+    });
+
+    test('a sidecar id matches its source stream', () async {
+      const local = SubtitleTrack(id: '33', language: 'spa');
+      expect(await open().session.receiverSubtitleIdFor(local), '33');
+    });
+
+    test('an mpv track is matched by language', () async {
+      const local = SubtitleTrack(id: 'mk_2', language: 'ENG', embedded: true);
+      expect(await open().session.receiverSubtitleIdFor(local), '34');
+    });
+
+    test('no matching stream gives null', () async {
+      const local = SubtitleTrack(id: 'mk_3', language: 'fre', embedded: true);
+      expect(await open().session.receiverSubtitleIdFor(local), isNull);
+      const unknown = SubtitleTrack(id: 'mk_4', language: 'und');
+      expect(await open().session.receiverSubtitleIdFor(unknown), isNull);
+    });
   });
 
   test('fetches an external subtitle body', () async {
@@ -150,5 +175,89 @@ void main() {
     expect(await o.session.detail(), isNull);
     o.server.status = null;
     expect(await o.session.detail(), isNotNull);
+  });
+
+  test('receiver mode puts the token in the transcode URL, not headers',
+      () async {
+    final o = open();
+    final detail = await o.session.loadDetail();
+    final version = detail.versions.single;
+    final resolver = PlexStreamResolver(
+      client: o.session.plexClient,
+      ratingKey: '101',
+      version: version,
+      mediaIndex: 0,
+      playbackId: 'pb',
+      profile: receiverDeviceProfile,
+      forReceiver: true,
+    );
+
+    final stream = await resolver.resolve(
+      const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.fallbackFromFailure,
+      ),
+      fileId: '21',
+      startAt: Duration.zero,
+    );
+
+    final url = Uri.parse(stream.url);
+    expect(url.queryParameters['X-Plex-Token'], FakePlexServer.token);
+    expect(url.queryParameters['subtitles'], 'none');
+    expect(stream.headers, isEmpty);
+  });
+
+  test('receiver mode burns the chosen subtitle after selecting it on the part',
+      () async {
+    final o = open();
+    final version = (await o.session.loadDetail()).versions.single;
+    final resolver = PlexStreamResolver(
+      client: o.session.plexClient,
+      ratingKey: '101',
+      version: version,
+      mediaIndex: 0,
+      playbackId: 'pb',
+      profile: receiverDeviceProfile,
+      forReceiver: true,
+      burnSubtitleStreamId: '33',
+    );
+
+    final stream = await resolver.resolve(
+      const HlsPlan(
+        strategy: HlsStrategy.transcode,
+        rung: QualityRung.original,
+        adaptive: false,
+        reason: PlanReason.fallbackFromFailure,
+      ),
+      fileId: '21',
+      startAt: Duration.zero,
+    );
+
+    final put = o.server.requests.firstWhere((r) => r.method == 'PUT');
+    expect(put.url.path, '/library/parts/21');
+    expect(put.url.queryParameters['subtitleStreamID'], '33');
+    expect(put.url.queryParameters['allParts'], '1');
+    expect(Uri.parse(stream.url).queryParameters['subtitles'], 'burn');
+  });
+
+  test('local mode still keeps the token out of the URL', () async {
+    final o = open();
+    final version = (await o.session.loadDetail()).versions.single;
+    final stream = await PlexStreamResolver(
+      client: o.session.plexClient,
+      ratingKey: '101',
+      version: version,
+      mediaIndex: 0,
+      playbackId: 'pb',
+    ).resolve(const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+        fileId: '21', startAt: Duration.zero);
+    expect(stream.url, isNot(contains(FakePlexServer.token)));
+    expect(stream.headers['X-Plex-Token'], FakePlexServer.token);
+  });
+
+  test('a Plex session can cast', () {
+    expect(open().session.features, contains(PlaybackFeature.cast));
   });
 }

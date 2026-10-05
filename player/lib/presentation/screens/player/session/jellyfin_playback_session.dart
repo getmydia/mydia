@@ -3,6 +3,7 @@
 /// dashboard shows.
 library;
 
+import '../../../../core/cast/receiver_profile.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/device_profile.dart';
@@ -13,6 +14,7 @@ import '../../../../core/sources/jellyfin/jellyfin_mapping.dart';
 import '../../../../core/sources/jellyfin/jellyfin_media_source.dart';
 import '../../../../core/sources/jellyfin/jellyfin_playback_info.dart';
 import '../../../../core/sources/transcode_codecs.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
 import 'playback_session_types.dart';
@@ -56,6 +58,8 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
         super(source: source);
 
   final JellyfinMediaSource _jellyfin;
+
+  JellyfinClient get jellyfinClient => _jellyfin.client;
   final DeviceProfile? _profile;
 
   Future<JellyfinPlaybackInfo>? _info;
@@ -90,6 +94,9 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
     });
     return fresh;
   }
+
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
 
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async {
@@ -144,6 +151,43 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
         codecs: transcodeCodecs(_profile),
         onPlayMethod: (method) => _playMethod = method,
       );
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      JellyfinStreamResolver(
+        client: _jellyfin.client,
+        itemId: item.externalId,
+        version: version,
+        playSessionId: _loaded?.playSessionId ?? '',
+        codecs: transcodeCodecs(receiverDeviceProfile),
+        onPlayMethod: (method) => _playMethod = method,
+        forReceiver: true,
+      );
+
+  /// Jellyfin converts any text track, embedded or sidecar, to WebVTT.
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+      MediaVersion version) async {
+    final credential = await _jellyfin.client.receiverQuery();
+    return [
+      for (final s in version.streams)
+        if (s.kind == MediaStreamKind.subtitle &&
+            !isImageSubtitleCodec(s.codec))
+          CastSubtitleTrack(
+            trackId: s.id,
+            url: (await _jellyfin.client.url(
+                    '/Videos/${item.externalId}/${version.id}/Subtitles/${s.id}/Stream.vtt',
+                    credential))
+                .toString(),
+            label: s.title ?? s.language ?? 'Subtitles',
+            language: s.language ?? 'und',
+          ),
+    ];
+  }
 }
 
 class JellyfinStreamResolver implements StreamResolver {
@@ -154,6 +198,7 @@ class JellyfinStreamResolver implements StreamResolver {
     required this.playSessionId,
     required this.codecs,
     required this.onPlayMethod,
+    this.forReceiver = false,
   });
 
   final JellyfinClient client;
@@ -162,6 +207,9 @@ class JellyfinStreamResolver implements StreamResolver {
   final String playSessionId;
   final ({List<String> video, List<String> audio}) codecs;
   final void Function(String method) onPlayMethod;
+
+  /// A cast receiver cannot send headers, so the token rides in the URL.
+  final bool forReceiver;
   int _starts = 0;
 
   @override
@@ -170,7 +218,10 @@ class JellyfinStreamResolver implements StreamResolver {
     required String fileId,
     required Duration startAt,
   }) async {
-    final headers = await client.headers();
+    final headers =
+        forReceiver ? const <String, String>{} : await client.headers();
+    final credential =
+        forReceiver ? await client.receiverQuery() : const <String, String>{};
     switch (plan) {
       case DirectPlayPlan():
         onPlayMethod('DirectPlay');
@@ -179,6 +230,7 @@ class JellyfinStreamResolver implements StreamResolver {
             'static': 'true',
             'mediaSourceId': version.id,
             'playSessionId': playSessionId,
+            ...credential,
           }))
               .toString(),
           headers: headers,
@@ -213,6 +265,7 @@ class JellyfinStreamResolver implements StreamResolver {
             if (rung.maxBitrateKbps case final kbps?)
               'MaxStreamingBitrate': '${kbps * 1000}',
             if (rung.height case final height?) 'MaxHeight': '$height',
+            ...credential,
           }))
               .toString(),
           headers: headers,

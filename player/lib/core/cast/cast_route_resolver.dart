@@ -55,6 +55,10 @@ class CastRoute {
   /// check.
   final List<CastSubtitleTrack> subtitles;
 
+  /// The server re-encodes the video for this route; a load failure has
+  /// nothing further to fall back to.
+  final bool transcoded;
+
   const CastRoute({
     required this.mediaUrl,
     required this.kind,
@@ -63,6 +67,7 @@ class CastRoute {
     this.mediaToken,
     this.startOffset = Duration.zero,
     this.subtitles = const [],
+    this.transcoded = false,
   });
 }
 

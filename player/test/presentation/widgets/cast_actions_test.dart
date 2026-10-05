@@ -283,7 +283,7 @@ void main() {
       // from the overlay button.
       await manager.startCast(
         device: _device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',

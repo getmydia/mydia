@@ -38,6 +38,10 @@ class PlexServerClient {
     };
   }
 
+  /// [headers] as query parameters, for a cast receiver that cannot send
+  /// headers. Plex reads every `X-Plex-*` parameter from the query too.
+  Future<Map<String, String>> receiverQuery() => headers();
+
   /// [path] may carry its own query; [query] is merged over it.
   Future<Uri> url(String path, [Map<String, String>? query]) async =>
       _resolve(await connection.base(), path, query);
