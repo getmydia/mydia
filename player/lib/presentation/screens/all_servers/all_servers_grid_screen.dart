@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sources/source.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
 import '../sources/source_drawer_button.dart';
@@ -30,6 +31,10 @@ class AllServersGridScreen extends ConsumerWidget {
     final names = ref.watch(allServersNamesProvider);
     final state = grid.value;
     final items = stillIncluded(names, state?.items ?? const []);
+    final skipped = [
+      for (final id in state?.skipped ?? const <SourceId>[])
+        if (names[id] case final name?) name,
+    ];
     void retry() => ref.invalidate(allServersGridProvider(kind));
 
     return Scaffold(
@@ -58,13 +63,13 @@ class AllServersGridScreen extends ConsumerWidget {
               ],
             ),
           ),
-          if (state != null && state.skipped.isNotEmpty)
+          if (state != null && skipped.isNotEmpty)
             Padding(
               key: const Key('all-sort-skipped-note'),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(
                 'Not sorted by ${_sortLabel(state.sort)} on '
-                '${state.skipped.map((id) => names[id] ?? id.value).join(', ')}',
+                '${skipped.join(', ')}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),

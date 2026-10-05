@@ -35,13 +35,19 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
     final sources = ref.watch(sourcesProvider);
     String name(SourceId id) =>
         sources.where((s) => s.id == id).firstOrNull?.displayName ?? id.value;
+    // A result can outlive a server leaving the set (relocked, switched off);
+    // only servers still included are named.
+    final included = {
+      for (final s in ref.watch(allServersSourcesProvider)) s.id
+    };
+    final unavailable = widget.unavailable.where(included.contains).toList();
     final signIn = ref.watch(allServersNeedSignInProvider);
     final theme = Theme.of(context);
     return Column(children: [
-      if (widget.unavailable.isNotEmpty && !_dismissed)
+      if (unavailable.isNotEmpty && !_dismissed)
         MaterialBanner(
           key: const Key('all-unavailable-banner'),
-          content: Text('${widget.unavailable.map(name).join(', ')} '
+          content: Text('${unavailable.map(name).join(', ')} '
               'unavailable, showing other servers'),
           actions: [
             TextButton(
