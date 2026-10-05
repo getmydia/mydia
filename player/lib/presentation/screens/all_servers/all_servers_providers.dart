@@ -58,6 +58,7 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
   final LibraryKind kind;
   SharedSort _sort = SharedSort.title;
   MergedGrid? _grid;
+  int _build = 0;
 
   AllServersGridState _from(MergedGrid g, {bool loadingMore = false}) =>
       AllServersGridState(
@@ -71,15 +72,22 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
 
   @override
   Future<AllServersGridState> build() async {
-    final grid = await ref.watch(allServersReaderProvider).grid(kind, _sort);
+    // Only the newest build may install its grid; a superseded or failed
+    // build leaves none, so nothing pages a grid that did not become current.
+    final build = ++_build;
+    _grid = null;
+    final reader = ref.watch(allServersReaderProvider);
+    final grid = await reader.grid(kind, _sort);
     await grid.loadMore();
-    _grid = grid;
+    if (build == _build) _grid = grid;
     return _from(grid);
   }
 
   void setSort(SharedSort sort) {
     if (sort == _sort) return;
     _sort = sort;
+    // The old grid is stale from here on, before the rebuild starts.
+    _grid = null;
     ref.invalidateSelf();
   }
 
@@ -87,6 +95,7 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
     final grid = _grid;
     final current = state.value;
     if (grid == null ||
+        state.isLoading ||
         current == null ||
         current.loadingMore ||
         !grid.hasMore) {
@@ -95,8 +104,9 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
     state = AsyncData(_from(grid, loadingMore: true));
     try {
       await grid.loadMore();
-    } catch (_) {
-      // loadingMore must not stick.
+    } catch (e) {
+      // loadingMore must not stick; what is already shown stays.
+      debugPrint('All servers: loading more failed: $e');
     }
     // A sort change while paging replaced the grid; drop this page.
     if (!ref.mounted || !identical(grid, _grid)) return;
@@ -136,6 +146,7 @@ class AllServersSearchNotifier
 
   /// Runs the last query again, for the error view's retry.
   void retry() {
+    _timer?.cancel();
     final text = _lastQuery;
     if (text.isNotEmpty) _run(text);
   }
