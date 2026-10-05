@@ -6,6 +6,7 @@ import '../download_locations.dart';
 import 'download_artwork.dart';
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/layout/breakpoints.dart';
+import '../../../../core/playback/local_playback_progress.dart';
 import '../../../../core/playback/playback_progress_providers.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../domain/models/download.dart';
@@ -126,7 +127,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     final store = ref.watch(playbackProgressStoreProvider).value;
     if (store == null) return const SizedBox.shrink();
 
-    final progress = store.get(media.mediaId);
+    final progress = store.get(progressKey(media.itemRef));
     if (progress == null || progress.durationSeconds <= 0) {
       return const SizedBox.shrink();
     }
