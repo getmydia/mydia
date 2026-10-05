@@ -41,7 +41,11 @@ Future<void> startItemDownload(
   }
   final downloadable =
       ref.read(mediaSourceProvider(item.sourceId))?.as<Downloadable>();
-  if (downloadable == null) return;
+  if (downloadable == null) {
+    showToast(context, 'This server is not available to download from',
+        kind: ToastKind.error);
+    return;
+  }
 
   final option = await pickDownloadOption(
     context,
