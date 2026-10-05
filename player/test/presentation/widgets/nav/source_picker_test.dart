@@ -7,6 +7,7 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/presentation/widgets/nav/sidebar_row.dart';
 import 'package:player/presentation/widgets/nav/source_picker.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
@@ -47,7 +48,7 @@ Source _source(
 Future<List<PickerChoice?>> _open(
   WidgetTester tester,
   List<Source> sources, {
-  SourceId currentId = SourceId.legacyMydia,
+  SourceId? currentId = SourceId.legacyMydia,
   Size size = const Size(800, 600),
   Map<SourceId, FakeMediaSource> fakes = const {},
   List<SourceProfile> profiles = const [],
@@ -117,6 +118,28 @@ void main() {
     await tester.tap(_row('all'));
     await tester.pumpAndSettle();
     expect(results.single, isA<PickAllServers>());
+  });
+
+  testWidgets('at /all the All servers row is current and no source row is',
+      (tester) async {
+    final guest = _source('acc1', 'aa11');
+    final results = await _open(
+      tester,
+      [guest],
+      currentId: null,
+      included: [
+        FakeMergedSource(Source.legacyMydia()),
+        FakeMergedSource(guest)
+      ],
+    );
+    bool selected(Finder f) => tester.widget<SidebarRow>(f).isSelected;
+    expect(selected(_row('all')), isTrue);
+    expect(selected(_row('mydia')), isFalse);
+    expect(selected(_row(guest.id.value)), isFalse);
+    expect(tester.widget<SidebarRow>(_row('all')).focusNode?.hasFocus, isTrue);
+    await tester.tap(_row('mydia'));
+    await tester.pumpAndSettle();
+    expect(results.single, isA<PickSource>());
   });
 
   testWidgets('no All servers row with fewer than two', (tester) async {

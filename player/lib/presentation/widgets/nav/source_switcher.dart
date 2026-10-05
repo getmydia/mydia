@@ -15,8 +15,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
-import '../../screens/all_servers/all_servers_cards.dart' show allServersRoot;
-import 'all_servers_nav_list.dart' show isAllServersLocation;
+import 'all_servers_nav_list.dart' show allServersRoot, isAllServersLocation;
 import 'source_nav_list.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
 
@@ -82,7 +81,10 @@ class SourceSwitcher extends ConsumerWidget {
     WidgetRef ref,
     Source current,
   ) async {
-    final choice = await showSourcePicker(anchorContext, currentId: current.id);
+    final choice = await showSourcePicker(
+      anchorContext,
+      currentId: isAllServersLocation(location) ? null : current.id,
+    );
     // The header outlives the picker in practice, but `ref` is dead once it
     // unmounts and the analyzer cannot see that.
     if (choice == null || !anchorContext.mounted) return;

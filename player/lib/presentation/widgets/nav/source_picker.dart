@@ -60,7 +60,7 @@ final class SwitchUser extends PickerChoice {
 /// inside until they do.
 Future<PickerChoice?> showSourcePicker(
   BuildContext anchorContext, {
-  required SourceId currentId,
+  required SourceId? currentId,
 }) {
   final list = SourcePickerList(currentId: currentId);
   if (!Breakpoints.isDesktop(anchorContext)) {
@@ -191,8 +191,9 @@ class SourcePickerList extends ConsumerStatefulWidget {
   const SourcePickerList({super.key, required this.currentId});
 
   /// The source the header names. Its row is selected and takes focus, so a
-  /// remote's first press moves from where the viewer already is.
-  final SourceId currentId;
+  /// remote's first press moves from where the viewer already is. Null means
+  /// the All servers views are on screen: that row is current instead.
+  final SourceId? currentId;
 
   @override
   ConsumerState<SourcePickerList> createState() => _SourcePickerListState();
@@ -239,10 +240,11 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
             if (ref.watch(allServersSourcesProvider).length >= 2)
               SidebarRow(
                 key: const ValueKey('source-switcher-all'),
+                focusNode: widget.currentId == null ? _currentNode : null,
                 icon: Icons.layers_rounded,
                 selectedIcon: Icons.layers_rounded,
                 label: 'All servers',
-                isSelected: false,
+                isSelected: widget.currentId == null,
                 onTap: () => _pick(const PickAllServers()),
               ),
             for (final group in groupSourcesByAccount(sources)) ...[

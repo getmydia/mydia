@@ -10,16 +10,19 @@ import '../../../core/sources/source.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../widgets/nav/all_servers_nav_list.dart'
+    show allServersMoviesLocation, allServersShowsLocation;
 import '../../widgets/source_artwork.dart';
 import '../detail/detail_links.dart';
 import '../sources/source_browse_providers.dart';
 import 'all_servers_providers.dart';
 
-const allServersRoot = '/all';
-const allServersSearchLocation = '/all/search';
+export '../../widgets/nav/all_servers_nav_list.dart'
+    show allServersRoot, allServersSearchLocation;
 
-String allServersLibraryLocation(LibraryKind kind) =>
-    kind == LibraryKind.shows ? '/all/shows' : '/all/movies';
+String allServersLibraryLocation(LibraryKind kind) => kind == LibraryKind.shows
+    ? allServersShowsLocation
+    : allServersMoviesLocation;
 
 /// Home items open Mydia's own detail screens; every other server's open
 /// the shared ones under `/s/`.
