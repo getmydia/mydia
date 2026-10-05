@@ -35,6 +35,7 @@ import '../../../core/player/thumbnail_service.dart';
 import '../../../core/player/tracks_ready.dart';
 import '../../../core/playback/isolated_fetches.dart';
 import '../../../core/playback/playback_progress_providers.dart';
+import '../../../core/playback/local_playback_progress.dart' show progressKey;
 import '../../../core/playback/playback_progress_store.dart';
 import '../../../core/startup/startup_timeline.dart';
 import '../../../core/utils/file_utils.dart' as file_utils;
@@ -92,6 +93,7 @@ import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
+import '../../../domain/sources/item.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/playback/server_features.dart';
@@ -382,6 +384,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Every GraphQL data call this screen makes goes through here.
   late final PlaybackSession _session;
+
+  /// Where the local position of the item being played is stored.
+  String get _progressKey => progressKey(_session.item);
 
   /// Set once the 90% watched threshold is first crossed, so the invalidation
   /// fires once per playback rather than on every position tick.
@@ -955,7 +960,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     fetchSeason: (season) => _session.seasonEpisodes(season),
     isDownloaded: (episodeId) async {
       final manager = await ref.read(downloadManagerProvider.future);
-      return manager.getDownloadedMediaById(episodeId) != null;
+      return manager.getDownloaded(ItemRef(
+              sourceId: _session.item.sourceId,
+              kind: ItemKind.episode,
+              externalId: episodeId)) !=
+          null;
     },
     navigate: _navigateToEpisode,
     playingSignal: () {
@@ -1062,6 +1071,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             showId: widget.showId,
             seasonNumber: widget.seasonNumber,
           ),
+          offline: () => ref.read(authStateProvider).maybeWhen(
+                data: (s) => s == AuthStatus.offlineMode,
+                orElse: () => false,
+              ),
           streaming: MydiaStreamingDeps(
             serverUrl: () => ref.read(serverUrlProvider.future),
             authToken: () => ref.read(authTokenProvider.future),
@@ -1486,23 +1499,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _autoplayBlocked = false;
       });
 
-      // Check if we're in offline mode
-      final authState = ref.read(authStateProvider);
-      final playsDownloads =
-          _session.features.contains(PlaybackFeature.downloads);
-      final isOfflineMode = playsDownloads &&
-          authState.maybeWhen(
-            data: (status) => status == AuthStatus.offlineMode,
-            orElse: () => false,
-          );
+      final isOfflineMode = !_session.reachable;
 
-      // Check for downloaded content first (before any network operations)
-      // Only Mydia has downloads. A third-party id can collide with a
-      // Mydia download's id, so it is never looked up.
-      final downloadedMedia = playsDownloads
-          ? (await ref.read(downloadManagerProvider.future))
-              .getDownloadedMediaById(widget.mediaId)
-          : null;
+      // Check for downloaded content first (before any network operations).
+      // Looked up under the session's own source, so a third-party id never
+      // finds a home download that happens to share it.
+      final downloadedMedia = kIsWeb
+          ? null
+          : (await ref.read(downloadManagerProvider.future))
+              .getDownloaded(_session.item);
       if (!_isCurrentLoad(gen)) return;
 
       // In offline mode, only downloaded content can be played
@@ -1549,7 +1554,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         // `runtime` is catalog metadata that can be missing or approximate.
         // Without either, `shouldOfferResume` declines and this path silently
         // loses its prompt.
-        final localProgress = _progressStore?.get(widget.mediaId);
+        final localProgress = _progressStore?.get(_progressKey);
         _savedPositionSeconds = localProgress?.positionSeconds;
         _savedDurationSeconds = localProgress?.durationSeconds;
         _totalDuration =
@@ -1627,7 +1632,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // offline session the server never heard about. The more
           // recently-updated side wins.
           final reconciled = pickNewerProgress(
-            local: _progressStore?.get(widget.mediaId),
+            local: _progressStore?.get(_progressKey),
             serverPositionSeconds: _savedPositionSeconds,
             serverDurationSeconds: _savedDurationSeconds,
             serverLastWatchedAt: _serverLastWatchedAt,
@@ -3550,6 +3555,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // writes straight to the server, which is reachable by definition.
     final store = _progressStore;
     final progressService = _progressService;
+    // Built from the arguments, not `_session.item`, so a save mid-switch
+    // credits the file being replaced; only the source comes from the session.
+    final item = ItemRef(
+      sourceId: _session.item.sourceId,
+      kind: mediaType == 'episode' ? ItemKind.episode : ItemKind.movie,
+      externalId: mediaId,
+    );
     if (_isDownloadedSource && store != null) {
       final position = player.state.position;
       final duration = _totalDuration ?? player.state.duration;
@@ -3564,7 +3576,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
-          mediaId: mediaId,
+          item: item,
           mediaType: mediaType,
           position: position,
           duration: duration,
@@ -3573,14 +3585,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         return;
       }
 
+      final now = DateTime.now();
       await recordLocalProgress(
         store: store,
-        mediaId: mediaId,
+        item: item,
         mediaType: mediaType,
         position: position,
         duration: duration,
-        now: DateTime.now(),
+        now: now,
       );
+      if (progressService == null || !_session.reachable) return;
+      await progressService.save(player,
+          mediaType: mediaType, mediaId: mediaId);
+      // A third-party reporter swallows its own failures, so a save that
+      // returns is the best signal there is; the flush covers the rest.
+      try {
+        await store.markSynced(progressKey(item), now);
+      } catch (e) {
+        debugPrint('Could not mark progress synced: $e');
+      }
+      return;
     }
 
     if (progressService == null) return;

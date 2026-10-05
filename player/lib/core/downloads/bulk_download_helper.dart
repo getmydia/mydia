@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-import '../../domain/models/download.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/models/movie_detail.dart';
-import 'download_job_service.dart';
+import '../../domain/sources/item.dart';
 import 'download_service.dart';
+import 'mydia_download_metadata.dart';
 
 /// Result of a bulk download operation.
 class BulkDownloadResult {
@@ -32,7 +33,6 @@ Future<BulkDownloadResult> startBulkEpisodeDownloads({
   required String showTitle,
   required String? showPosterUrl,
   required DownloadService downloadManager,
-  required DownloadJobService downloadJobService,
   required bool Function(String mediaId) isMediaDownloaded,
   required bool Function(String mediaId) isMediaInQueue,
 }) async {
@@ -48,51 +48,16 @@ Future<BulkDownloadResult> startBulkEpisodeDownloads({
     }
 
     try {
-      await downloadManager.startProgressiveDownload(
-        mediaId: episode.id,
-        title: '$showTitle - ${episode.episodeCode}: ${episode.title}',
-        contentType: 'episode',
-        resolution: resolution,
-        mediaType: MediaType.episode,
-        posterUrl: episode.thumbnailUrl,
-        overview: episode.overview,
-        runtime: episode.runtime,
-        seasonNumber: episode.seasonNumber,
-        episodeNumber: episode.episodeNumber,
-        showId: showId,
-        showTitle: showTitle,
-        showPosterUrl: showPosterUrl,
-        thumbnailUrl: episode.thumbnailUrl,
-        airDate: episode.airDate,
-        getDownloadUrl: (jobId) async {
-          return await downloadJobService.getDownloadUrl(jobId);
-        },
-        prepareDownload: () async {
-          final status = await downloadJobService.prepareDownload(
-            contentType: 'episode',
-            id: episode.id,
-            resolution: resolution,
-          );
-          return (
-            jobId: status.jobId,
-            status: status.status.name,
-            progress: status.progress,
-            fileSize: status.currentFileSize,
-          );
-        },
-        getJobStatus: (jobId) async {
-          final status = await downloadJobService.getJobStatus(jobId);
-          return (
-            status: status.status.name,
-            progress: status.progress,
-            fileSize: status.currentFileSize,
-            error: status.error,
-          );
-        },
-        cancelJob: (jobId) async {
-          await downloadJobService.cancelJob(jobId);
-        },
-      );
+      await downloadManager.start(DownloadRequest(
+        ref: homeMydiaRef(ItemKind.episode, episode.id),
+        optionId: resolution,
+        metadata: mydiaEpisodeMetadata(
+          episode,
+          showId: showId,
+          showTitle: showTitle,
+          showPosterUrl: showPosterUrl,
+        ),
+      ));
       queued++;
     } catch (e) {
       debugPrint('Failed to queue download for ${episode.episodeCode}: $e');
@@ -111,7 +76,6 @@ Future<BulkDownloadResult> startBulkMovieDownloads({
   required List<MovieDetail> movies,
   required String resolution,
   required DownloadService downloadManager,
-  required DownloadJobService downloadJobService,
   required bool Function(String mediaId) isMediaDownloaded,
   required bool Function(String mediaId) isMediaInQueue,
 }) async {
@@ -127,49 +91,11 @@ Future<BulkDownloadResult> startBulkMovieDownloads({
     }
 
     try {
-      await downloadManager.startProgressiveDownload(
-        mediaId: movie.id,
-        title: movie.title,
-        contentType: 'movie',
-        resolution: resolution,
-        mediaType: MediaType.movie,
-        posterUrl: movie.artwork.posterUrl,
-        overview: movie.overview,
-        runtime: movie.runtime,
-        genres: movie.genres,
-        rating: movie.rating,
-        backdropUrl: movie.artwork.backdropUrl,
-        year: movie.year,
-        contentRating: movie.contentRating,
-        getDownloadUrl: (jobId) async {
-          return await downloadJobService.getDownloadUrl(jobId);
-        },
-        prepareDownload: () async {
-          final status = await downloadJobService.prepareDownload(
-            contentType: 'movie',
-            id: movie.id,
-            resolution: resolution,
-          );
-          return (
-            jobId: status.jobId,
-            status: status.status.name,
-            progress: status.progress,
-            fileSize: status.currentFileSize,
-          );
-        },
-        getJobStatus: (jobId) async {
-          final status = await downloadJobService.getJobStatus(jobId);
-          return (
-            status: status.status.name,
-            progress: status.progress,
-            fileSize: status.currentFileSize,
-            error: status.error,
-          );
-        },
-        cancelJob: (jobId) async {
-          await downloadJobService.cancelJob(jobId);
-        },
-      );
+      await downloadManager.start(DownloadRequest(
+        ref: homeMydiaRef(ItemKind.movie, movie.id),
+        optionId: resolution,
+        metadata: mydiaMovieMetadata(movie),
+      ));
       queued++;
     } catch (e) {
       debugPrint('Failed to queue download for movie ${movie.title}: $e');

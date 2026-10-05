@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../widgets/artwork_image.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
@@ -14,11 +13,14 @@ import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
+import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
 import '../../../core/theme/colors.dart';
+import 'download_locations.dart';
 import 'series_downloads_screen.dart';
+import 'widgets/download_artwork.dart';
 import 'widgets/download_recovery_banner.dart';
 
 export 'widgets/download_recovery_banner.dart'
@@ -91,24 +93,33 @@ class DownloadsScreen extends ConsumerWidget {
     final items = <String, DownloadGroup>{};
 
     // Helper to safely get show ID/Title
-    String getGroupKey(bool isEpisode, String? showId, String mediaId) {
-      if (isEpisode && showId != null) return showId;
-      return mediaId;
+    // Ids are only unique within a source, so the key carries the source.
+    String getGroupKey(
+        SourceId source, bool isEpisode, String? showId, String mediaId) {
+      return '${source.value}|${isEpisode && showId != null ? showId : mediaId}';
     }
+
+    String groupItemId(bool isEpisode, String? showId, String mediaId) =>
+        isEpisode && showId != null ? showId : mediaId;
 
     // Process Active Downloads
     if (downloadQueueAsync.hasValue) {
       for (final task in downloadQueueAsync.value!) {
         final isEpisode = task.mediaType == 'episode';
-        final key = getGroupKey(isEpisode, task.showId, task.mediaId);
+        final key =
+            getGroupKey(task.source, isEpisode, task.showId, task.mediaId);
 
         if (!items.containsKey(key)) {
           items[key] = DownloadGroup(
             id: key,
+            sourceId: task.source,
+            itemId: groupItemId(isEpisode, task.showId, task.mediaId),
             title:
                 isEpisode ? (task.showTitle ?? 'Unknown Series') : task.title,
             posterUrl: isEpisode ? task.showPosterUrl : task.posterUrl,
             backdropUrl: task.backdropUrl,
+            posterPath: task.posterPath,
+            backdropPath: task.backdropPath,
             type: isEpisode ? GroupType.series : GroupType.movie,
             updatedAt: task.createdAt,
           );
@@ -124,15 +135,20 @@ class DownloadsScreen extends ConsumerWidget {
     if (downloadedMediaAsync.hasValue) {
       for (final media in downloadedMediaAsync.value!) {
         final isEpisode = media.mediaType == 'episode';
-        final key = getGroupKey(isEpisode, media.showId, media.mediaId);
+        final key =
+            getGroupKey(media.source, isEpisode, media.showId, media.mediaId);
 
         if (!items.containsKey(key)) {
           items[key] = DownloadGroup(
             id: key,
+            sourceId: media.source,
+            itemId: groupItemId(isEpisode, media.showId, media.mediaId),
             title:
                 isEpisode ? (media.showTitle ?? 'Unknown Series') : media.title,
             posterUrl: isEpisode ? media.showPosterUrl : media.posterUrl,
             backdropUrl: media.backdropUrl,
+            posterPath: media.posterPath,
+            backdropPath: media.backdropPath,
             type: isEpisode ? GroupType.series : GroupType.movie,
             updatedAt: media.downloadedAt,
           );
@@ -335,7 +351,8 @@ class DownloadsScreen extends ConsumerWidget {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (context) => SeriesDownloadsScreen(
-                showId: group.id,
+                sourceId: group.sourceId,
+                showId: group.itemId,
                 showTitle: group.title,
                 showPosterUrl: group.posterUrl,
                 backdropUrl: group.backdropUrl,
@@ -346,10 +363,8 @@ class DownloadsScreen extends ConsumerWidget {
           if (activeTask != null) {
             await _showCancelDialog(context, ref, activeTask);
           } else if (group.downloads.isNotEmpty) {
-            final media = group.downloads.first;
-            await context.push<void>(
-              '/player/movie/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}',
-            );
+            await context
+                .push<void>(downloadedPlayLocation(group.downloads.first));
           }
         }
       },
@@ -365,24 +380,16 @@ class DownloadsScreen extends ConsumerWidget {
                 // Poster image
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: group.posterUrl != null
-                      ? ArtworkImage(
-                          imageUrl: group.posterUrl!,
-                          fit: BoxFit.cover,
-                          cacheManager: PosterCacheManager(),
-                          placeholder: (_) =>
-                              Container(color: AppColors.surfaceVariant),
-                          errorWidget: (_) => Container(
-                            color: AppColors.surfaceVariant,
-                            child: const Icon(Icons.movie,
-                                color: AppColors.textSecondary),
-                          ),
-                        )
-                      : Container(
-                          color: AppColors.surfaceVariant,
-                          child: const Icon(Icons.movie,
-                              color: AppColors.textSecondary),
-                        ),
+                  child: DownloadArtwork(
+                    localPath: group.posterPath,
+                    fallbackUrl: group.posterUrl,
+                    cacheManager: PosterCacheManager(),
+                    placeholder: (_) => Container(
+                      color: AppColors.surfaceVariant,
+                      child: const Icon(Icons.movie,
+                          color: AppColors.textSecondary),
+                    ),
+                  ),
                 ),
 
                 // Active overlay + progress ring
@@ -719,10 +726,8 @@ class DownloadsScreen extends ConsumerWidget {
                   onTap: () {
                     Navigator.pop(sheetContext);
                     if (group.downloads.isNotEmpty) {
-                      final media = group.downloads.first;
-                      context.push(
-                        '/player/movie/${media.mediaId}?fileId=offline&title=${Uri.encodeComponent(media.title)}',
-                      );
+                      context.push<void>(
+                          downloadedPlayLocation(group.downloads.first));
                     }
                   },
                 ),
@@ -747,7 +752,8 @@ class DownloadsScreen extends ConsumerWidget {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (context) => SeriesDownloadsScreen(
-                          showId: group.id,
+                          sourceId: group.sourceId,
+                          showId: group.itemId,
                           showTitle: group.title,
                           showPosterUrl: group.posterUrl,
                           backdropUrl: group.backdropUrl,
@@ -801,7 +807,7 @@ class DownloadsScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       final manager = await ref.read(downloadManagerProvider.future);
       for (final media in group.downloads) {
-        await manager.deleteDownload(media.mediaId);
+        await manager.deleteDownload(media.itemRef);
       }
     }
   }
@@ -834,7 +840,7 @@ class DownloadsScreen extends ConsumerWidget {
 
     if (confirmed == true && context.mounted) {
       final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeriesDownloads(group.id);
+      await manager.deleteSeriesDownloads(group.sourceId, group.itemId);
     }
   }
 
@@ -1270,24 +1276,15 @@ class DownloadsScreen extends ConsumerWidget {
           SizedBox(
             width: 90,
             height: 160,
-            child: posterUrl != null
-                ? ArtworkImage(
-                    imageUrl: posterUrl,
-                    fit: BoxFit.cover,
-                    cacheManager: PosterCacheManager(),
-                    placeholder: (_) =>
-                        Container(color: AppColors.surfaceVariant),
-                    errorWidget: (_) => Container(
-                      color: AppColors.surfaceVariant,
-                      child: const Icon(Icons.movie,
-                          color: AppColors.textSecondary),
-                    ),
-                  )
-                : Container(
-                    color: AppColors.surfaceVariant,
-                    child:
-                        const Icon(Icons.movie, color: AppColors.textSecondary),
-                  ),
+            child: DownloadArtwork(
+              localPath: task.posterPath,
+              fallbackUrl: posterUrl,
+              cacheManager: PosterCacheManager(),
+              placeholder: (_) => Container(
+                color: AppColors.surfaceVariant,
+                child: const Icon(Icons.movie, color: AppColors.textSecondary),
+              ),
+            ),
           ),
           // Info
           Expanded(
@@ -1744,10 +1741,17 @@ enum GroupType { movie, series }
 
 // Helper class for grouping downloads
 class DownloadGroup {
+  /// Composite `source|item` key, unique across sources.
   final String id;
+  final SourceId sourceId;
+
+  /// The raw show id (series) or media id (movie) within [sourceId].
+  final String itemId;
   final String title;
   final String? posterUrl;
   final String? backdropUrl;
+  final String? posterPath;
+  final String? backdropPath;
   final GroupType type;
   DateTime updatedAt;
   final List<DownloadTask> activeTasks = [];
@@ -1755,9 +1759,13 @@ class DownloadGroup {
 
   DownloadGroup({
     required this.id,
+    required this.sourceId,
+    required this.itemId,
     required this.title,
     this.posterUrl,
     this.backdropUrl,
+    this.posterPath,
+    this.backdropPath,
     required this.type,
     required this.updatedAt,
   });

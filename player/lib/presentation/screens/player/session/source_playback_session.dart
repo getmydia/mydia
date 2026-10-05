@@ -39,6 +39,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   });
 
   final MediaSource source;
+  @override
   final ItemRef item;
 
   /// The version the viewer picked; the first one when it is gone.
@@ -117,6 +118,9 @@ abstract class SourcePlaybackSession implements PlaybackSession {
 
   @override
   Set<PlaybackFeature> get features => const {};
+
+  @override
+  bool get reachable => source.connection != SourceConnectionStatus.unreachable;
 
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async {
@@ -210,8 +214,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   }
 
   @override
-  Future<ProgressReporter> openProgress() =>
-      throw UnsupportedError('only Mydia plays downloaded files');
+  Future<ProgressReporter> openProgress() => Future.value(createProgress());
 
   /// Null when the source cannot say. Detection is additive, so a failure
   /// costs the skip button and nothing else.

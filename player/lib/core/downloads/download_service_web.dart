@@ -7,6 +7,9 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/models/download_request.dart';
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
 import 'download_service.dart';
 
 /// Downloads are not supported on web.
@@ -66,10 +69,10 @@ class _WebDownloadDatabase implements DownloadDatabase {
   DownloadedMedia? getMedia(String id) => null;
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) => null;
+  DownloadedMedia? getMediaFor(ItemRef ref) => null;
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
   List<DownloadedMedia> getAllMedia() => [];
@@ -97,7 +100,17 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  void setJobService(dynamic jobService) {
+  void setArtworkFetcher(ArtworkFetcher fetcher) {
+    // No-op on web
+  }
+
+  @override
+  void setDiscreetSources(bool Function(SourceId source) isDiscreet) {
+    // No-op on web
+  }
+
+  @override
+  void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op on web
   }
 
@@ -117,71 +130,8 @@ class _WebDownloadService implements DownloadService {
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override
-  Future<DownloadTask> startDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    int? fileSize,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    throw UnsupportedError('Downloads are not supported on web');
-  }
-
-  @override
-  Future<DownloadTask> startProgressiveDownload({
-    required String mediaId,
-    required String title,
-    required String contentType,
-    required String resolution,
-    required MediaType mediaType,
-    String? posterUrl,
-    required Future<String> Function(String jobId) getDownloadUrl,
-    required Future<
-                ({String jobId, String status, double progress, int? fileSize})>
-            Function()
-        prepareDownload,
-    required Future<
-                ({
-                  String status,
-                  double progress,
-                  int? fileSize,
-                  String? error
-                })>
-            Function(String jobId)
-        getJobStatus,
-    Future<void> Function(String jobId)? cancelJob,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    throw UnsupportedError('Downloads are not supported on web');
+  Future<DownloadTask> start(DownloadRequest request) async {
+    throw UnsupportedError('Downloads are not supported');
   }
 
   @override
@@ -210,7 +160,7 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  Future<void> deleteDownload(String mediaId) async {
+  Future<void> deleteDownload(ItemRef ref) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
@@ -230,14 +180,27 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  Future<int> deleteSeriesDownloads(String showId) async {
+  Future<int> deleteSeriesDownloads(SourceId source, String showId) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
   @override
-  Future<int> deleteSeasonDownloads(String showId, int seasonNumber) async {
+  Future<int> deleteSeasonDownloads(
+      SourceId source, String showId, int seasonNumber) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
+
+  @override
+  ({int count, int bytes}) accountDownloads(String accountId) =>
+      (count: 0, bytes: 0);
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async => 0;
+
+  @override
+  Future<int> deleteDownloadsOfUnknownAccounts(
+          Set<String> knownAccountIds) async =>
+      0;
 
   @override
   List<DownloadTask> getActiveDownloads() => [];
@@ -246,10 +209,10 @@ class _WebDownloadService implements DownloadService {
   List<DownloadedMedia> getDownloadedMedia() => [];
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => null;
+  DownloadedMedia? getDownloaded(ItemRef ref) => null;
 
   @override
   int getTotalStorageUsed() => 0;

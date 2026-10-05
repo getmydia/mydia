@@ -3,12 +3,15 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'jellyfin_client.dart';
 import 'jellyfin_mapping.dart';
@@ -23,7 +26,9 @@ class JellyfinMediaSource extends MediaSource
         Favorites,
         NextUp,
         RecentlyAdded,
-        SkipSegments {
+        SkipSegments,
+        Downloadable,
+        ProgressSync {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -50,7 +55,28 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.nextUp,
         SourceCapability.recentlyAdded,
         SourceCapability.skipSegments,
+        SourceCapability.downloadable,
+        SourceCapability.progressSync,
       };
+
+  /// `send` throws a `SourceException` on a transport failure or any non-2xx
+  /// answer, so a refused push leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    await client.send('POST', '/Sessions/Playing/Stopped', body: {
+      'ItemId': ref.externalId,
+      'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
+    });
+    if (watched) {
+      await client.send('POST', '/UserPlayedItems/${ref.externalId}',
+          query: {'userId': client.userId});
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => client.connection.status.value;
@@ -85,6 +111,19 @@ class JellyfinMediaSource extends MediaSource
   /// Library kinds by id, so paging does not re-fetch `/UserViews` on every
   /// page. Filled by [libraries].
   Map<String, LibraryKind>? _libraryKinds;
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) =>
+      originalOptions(this, ref);
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
+        this,
+        ref,
+        url: (v) => client.url('/Videos/${ref.externalId}/stream',
+            {'static': 'true', 'mediaSourceId': v.id}),
+        headers: client.headers,
+      );
 
   @override
   Future<List<Library>> libraries() async {

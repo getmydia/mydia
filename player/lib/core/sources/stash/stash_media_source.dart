@@ -4,18 +4,27 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'stash_client.dart';
 import 'stash_documents.dart';
 import 'stash_mapping.dart';
 
 class StashMediaSource extends MediaSource
-    implements WatchedState, Searchable, ContinueWatching, RecentlyAdded {
+    implements
+        WatchedState,
+        Searchable,
+        ContinueWatching,
+        RecentlyAdded,
+        Downloadable,
+        ProgressSync {
   StashMediaSource({
     required this.source,
     required this.client,
@@ -34,7 +43,42 @@ class StashMediaSource extends MediaSource
         SourceCapability.searchable,
         SourceCapability.continueWatching,
         SourceCapability.recentlyAdded,
+        SourceCapability.downloadable,
+        SourceCapability.progressSync,
       };
+
+  /// `query` throws on a transport failure, a non-2xx answer and a GraphQL
+  /// `errors` body, so a refused push leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    final saved = await client.query(stashSaveActivity, {
+      'id': ref.externalId,
+      'resume_time': positionSeconds.toDouble(),
+      'playDuration': 0.0,
+    });
+    _requireResult(saved, 'sceneSaveActivity');
+    if (watched) {
+      final played = await client.query(stashAddPlay, {'id': ref.externalId});
+      _requireResult(played, 'sceneAddPlay');
+    }
+  }
+
+  /// `query` answers `{}` for a 2xx with no `data`, which is not a result: the
+  /// mutation may never have run, and the record must stay unsynced.
+  /// `sceneSaveActivity` is a Boolean, so `false` is Stash declining the save;
+  /// `sceneAddPlay` answers an object, which only has to be present.
+  static void _requireResult(Map<String, dynamic> data, String key) {
+    final result = data[key];
+    if (result == null || result == false) {
+      throw const SourceException.server(
+          'Stash did not confirm the saved progress.');
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => client.connection.status.value;
@@ -45,6 +89,19 @@ class StashMediaSource extends MediaSource
 
   @override
   T? as<T extends Object>() => this is T ? this as T : null;
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) =>
+      originalOptions(this, ref);
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
+        this,
+        ref,
+        url: (v) =>
+            client.url(v.streamPath ?? '/scene/${ref.externalId}/stream'),
+        headers: client.headers,
+      );
 
   @override
   Future<List<Library>> libraries() async => [

@@ -1,9 +1,13 @@
 /// A guest Mydia server browsed as a source.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:gql/ast.dart' show DocumentNode;
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -11,6 +15,8 @@ import '../../../domain/sources/source_error.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
 import '../../../graphql/mutations/toggle_favorite.graphql.dart';
+import '../../../graphql/mutations/update_episode_progress.graphql.dart';
+import '../../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/guest_mydia.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
@@ -18,11 +24,17 @@ import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/search.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/queries/show_detail.graphql.dart';
+import '../../p2p/local_proxy_service.dart';
+import '../../p2p/media_route.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
+import '../../downloads/download_job_service.dart';
+import 'guest_download_job_service.dart';
+import 'guest_proxy.dart';
 import 'mydia_guest_client.dart';
 import 'mydia_guest_mapping.dart';
+import 'mydia_transcode_job.dart';
 
 const _sorts = [
   SortOption(id: 'TITLE', label: 'Title', shared: SharedSort.title),
@@ -64,10 +76,14 @@ class MydiaGuestSource extends MediaSource
         Favorites,
         NextUp,
         Similar,
-        SkipSegments {
+        SkipSegments,
+        Downloadable,
+        ProgressSync {
   MydiaGuestSource({
     required this.source,
     required this.client,
+    this.proxy,
+    this.homeJobs,
     ValueListenable<SourceConnectionStatus>? status,
     void Function()? onDispose,
   })  : _status = status,
@@ -77,6 +93,16 @@ class MydiaGuestSource extends MediaSource
   final Source source;
   final MydiaGuestClient client;
 
+  /// The shared local proxy, which carries a paired guest's file bytes.
+  /// Required to download from a paired guest; home never uses it.
+  final LocalProxyService Function()? proxy;
+
+  /// Set only for home Mydia: its own download job service (HTTP media-token
+  /// URL or the home p2p proxy), or null while signed out or connecting.
+  /// When provided, downloads use it and never touch the guest GraphQL job
+  /// service or [proxy]. A guest leaves it null.
+  final DownloadJobService? Function()? homeJobs;
+
   /// Overrides [MydiaGuestClient.status] when the connection is owned
   /// elsewhere: home Mydia's follows its auth state.
   final ValueListenable<SourceConnectionStatus>? _status;
@@ -84,6 +110,7 @@ class MydiaGuestSource extends MediaSource
 
   @override
   Set<SourceCapability> get capabilities => const {
+        SourceCapability.downloadable,
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
@@ -93,7 +120,39 @@ class MydiaGuestSource extends MediaSource
         SourceCapability.nextUp,
         SourceCapability.similar,
         SourceCapability.skipSegments,
+        SourceCapability.progressSync,
       };
+
+  /// `request` throws a `SourceException` on a transport failure, an auth
+  /// failure it cannot refresh past and a GraphQL error, so a refused push
+  /// leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    final episode = ref.kind == ItemKind.episode;
+    await client.request(
+      episode
+          ? documentNodeMutationUpdateEpisodeProgress
+          : documentNodeMutationUpdateMovieProgress,
+      {
+        episode ? 'episodeId' : 'movieId': ref.externalId,
+        'positionSeconds': positionSeconds,
+        'durationSeconds': durationSeconds,
+      },
+    );
+    if (watched) {
+      await client.request(
+        episode
+            ? documentNodeMutationMarkEpisodeWatched
+            : documentNodeMutationMarkMovieWatched,
+        {episode ? 'episodeId' : 'movieId': ref.externalId},
+      );
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => statusListenable.value;
@@ -337,6 +396,63 @@ class MydiaGuestSource extends MediaSource
     return MediaSegment.forFile(data, root: root, fileId: fileId);
   }
 
+  late final GuestDownloadJobService _jobs =
+      GuestDownloadJobService(request: client.request);
+
+  DownloadJobService _service() {
+    final home = homeJobs;
+    if (home == null) return _jobs;
+    return home() ?? (throw const SourceException.unreachable());
+  }
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
+      (await _service().getOptions(mydiaContentType(ref.kind), ref.externalId))
+          .options;
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
+    final service = _service();
+    return MydiaTranscodeJob(
+      jobs: service,
+      contentType: mydiaContentType(ref.kind),
+      id: ref.externalId,
+      resolution: optionId,
+      // HTTP signs the URL with the media token and p2p points at the local
+      // proxy, so a home URL carries everything and needs no headers.
+      fileFor: homeJobs != null
+          ? (jobId) async => DirectFile(
+              url: await service.getDownloadUrl(jobId), extension: 'mp4')
+          : _file,
+    );
+  }
+
+  bool _holdsProxy = false;
+
+  LocalProxyService _proxy() =>
+      proxy?.call() ??
+      (throw StateError('A guest download needs a local proxy'));
+
+  Future<DirectFile> _file(String jobId) async {
+    final credentials = await client.credentials();
+    if (credentials.isP2p) {
+      // The hold lasts as long as the source: nothing observes a download
+      // finishing, so [dispose] is where it is let go.
+      _holdsProxy = true;
+      final base = await guestProxyBase(_proxy(), credentials,
+          owner: this, target: source.account.id);
+      return DirectFile(
+          url: MediaRoutes.download(base, jobId), extension: 'mp4');
+    }
+    final server = credentials.serverUrl?.replaceFirst(RegExp(r'/+$'), '');
+    if (server == null) throw const SourceException.unreachable();
+    return DirectFile(
+      url: '$server/api/v1/download/job/$jobId/file',
+      headers: {'Authorization': 'Bearer ${credentials.accessToken}'},
+      extension: 'mp4',
+    );
+  }
+
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
     final data =
@@ -404,6 +520,9 @@ class MydiaGuestSource extends MediaSource
 
   @override
   void dispose() {
+    // Only a p2p download ever took a hold, so a source that never
+    // downloaded must not touch the shared proxy.
+    if (_holdsProxy) unawaited(_proxy().release(this));
     client.dispose();
     _onDispose?.call();
   }

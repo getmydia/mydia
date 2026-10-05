@@ -99,26 +99,6 @@ DownloadJobService? unifiedDownloadJobService(Ref ref) {
   return ref.watch(downloadJobServiceProvider);
 }
 
-/// Provider for fetching download quality options.
-///
-/// [contentType] must be either "movie" or "episode"
-/// [id] is the media item ID (movie ID or episode ID)
-///
-/// Returns available quality options with estimated file sizes.
-/// Automatically uses the correct service based on connection mode.
-@riverpod
-Future<DownloadOptionsResponse> downloadOptions(
-  Ref ref,
-  String contentType,
-  String id,
-) async {
-  final service = ref.watch(unifiedDownloadJobServiceProvider);
-  if (service == null) {
-    throw Exception('Download service not available');
-  }
-  return await service.getOptions(contentType, id);
-}
-
 /// Provider for monitoring download job status with auto-polling.
 ///
 /// [jobId] is the unique job identifier.

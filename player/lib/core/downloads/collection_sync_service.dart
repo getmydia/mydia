@@ -7,13 +7,14 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/models/download_request.dart';
 import '../../domain/models/movie_detail.dart';
 import '../../domain/models/recently_added_item.dart';
+import '../../domain/sources/item.dart';
 import '../../presentation/screens/movie/movie_detail_controller.dart';
 import '../../presentation/screens/show/season_episodes_controller.dart';
 import '../../presentation/screens/show/show_detail_controller.dart';
 import 'bulk_download_helper.dart';
-import 'download_job_providers.dart';
 import 'download_providers.dart';
 
 /// Result of syncing a collection's items for download.
@@ -43,11 +44,6 @@ Future<CollectionSyncResult> syncCollectionItems({
   required String resolution,
   required WidgetRef ref,
 }) async {
-  final downloadJobService = ref.read(unifiedDownloadJobServiceProvider);
-  if (downloadJobService == null) {
-    throw Exception('Download service not available');
-  }
-
   final downloadManager = await ref.read(downloadManagerProvider.future);
 
   // Build skip sets
@@ -61,8 +57,11 @@ Future<CollectionSyncResult> syncCollectionItems({
     }
   }
 
-  bool isDownloaded(String id) =>
-      downloadedIds.contains(id) || downloadManager.isMediaDownloaded(id);
+  bool Function(String) isDownloadedAs(ItemKind kind) => (id) =>
+      downloadedIds.contains(id) ||
+      downloadManager.isDownloaded(homeMydiaRef(kind, id));
+  final isMovieDownloaded = isDownloadedAs(ItemKind.movie);
+  final isEpisodeDownloaded = isDownloadedAs(ItemKind.episode);
   bool isInQueue(String id) => queueIds.contains(id);
 
   // Partition items
@@ -79,7 +78,7 @@ Future<CollectionSyncResult> syncCollectionItems({
     final movieDetails = <MovieDetail>[];
     for (final item in movieItems) {
       // Skip if already downloaded/queued (avoid fetching details)
-      if (isDownloaded(item.id) || isInQueue(item.id)) {
+      if (isMovieDownloaded(item.id) || isInQueue(item.id)) {
         skipped++;
         continue;
       }
@@ -101,8 +100,7 @@ Future<CollectionSyncResult> syncCollectionItems({
         movies: movieDetails,
         resolution: resolution,
         downloadManager: downloadManager,
-        downloadJobService: downloadJobService,
-        isMediaDownloaded: isDownloaded,
+        isMediaDownloaded: isMovieDownloaded,
         isMediaInQueue: isInQueue,
       );
       moviesQueued += result.queued;
@@ -141,8 +139,7 @@ Future<CollectionSyncResult> syncCollectionItems({
               showTitle: show.title,
               showPosterUrl: show.artwork.posterUrl,
               downloadManager: downloadManager,
-              downloadJobService: downloadJobService,
-              isMediaDownloaded: isDownloaded,
+              isMediaDownloaded: isEpisodeDownloaded,
               isMediaInQueue: isInQueue,
             );
             episodesQueued += result.queued;

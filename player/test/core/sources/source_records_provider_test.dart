@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/downloads/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -11,6 +15,7 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
+import '../../test_utils/no_downloads.dart';
 import 'store/source_json_test.dart' show plexRecord;
 
 class _Unauthenticated extends AuthStateNotifier {
@@ -34,6 +39,16 @@ class _ChoicesFailStore extends InMemorySourceStore {
       throw StateError('disk full');
 }
 
+class _Recorder extends Fake implements DownloadService {
+  final deleted = <String>[];
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async {
+    deleted.add(accountId);
+    return 0;
+  }
+}
+
 void main() {
   late InMemorySourceStore store;
   late MockAuthStorage storage;
@@ -47,6 +62,7 @@ void main() {
     container = ProviderContainer(overrides: [
       sourceCacheProvider.overrideWithValue(cache),
       authStateProvider.overrideWith(_Unauthenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);
@@ -87,6 +103,146 @@ void main() {
     expect(await storage.read('source/acc1/account_token'), isNull);
   });
 
+  test('removal completes when the download manager never builds', () async {
+    final saved = downloadLookupTimeout;
+    downloadLookupTimeout = const Duration(milliseconds: 50);
+    addTearDown(() => downloadLookupTimeout = saved);
+    final stuck = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(_Unauthenticated.new),
+      downloadManagerProvider
+          .overrideWith((ref) => Completer<DownloadService>().future),
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+    ]);
+    addTearDown(stuck.dispose);
+    await store.putAccount(plexRecord());
+    await stuck.read(sourceRecordsProvider.future);
+    await stuck.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect(stuck.read(thirdPartySourcesProvider), isEmpty);
+  });
+
+  group('download cleanup of a removed account', () {
+    Future<(ProviderContainer, Completer<DownloadService>, _Recorder)>
+        heldManager() async {
+      final gate = Completer<DownloadService>();
+      final c = ProviderContainer(overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceCacheProvider.overrideWithValue(cache),
+        downloadManagerProvider.overrideWith((ref) => gate.future),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ]);
+      addTearDown(c.dispose);
+      await store.putAccount(plexRecord());
+      await c.read(sourceRecordsProvider.future);
+      return (c, gate, _Recorder());
+    }
+
+    test('a normal removal deletes the account downloads', () async {
+      final (c, gate, recorder) = await heldManager();
+      final removal =
+          c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+      gate.complete(recorder);
+      await removal;
+      expect(recorder.deleted, ['acc1']);
+    });
+
+    test('an account re-added during the wait keeps its downloads', () async {
+      final (c, gate, recorder) = await heldManager();
+      final notifier = c.read(sourceRecordsProvider.notifier);
+      final removal = notifier.removeAccount('acc1');
+      await notifier.putAccount(plexRecord());
+      gate.complete(recorder);
+      await removal;
+      expect(recorder.deleted, isEmpty);
+    });
+  });
+
+  group('download cleanup outside the write queue', () {
+    const timeout = Duration(milliseconds: 200);
+
+    ProviderContainer stuckContainer() {
+      final saved = downloadLookupTimeout;
+      downloadLookupTimeout = timeout;
+      addTearDown(() => downloadLookupTimeout = saved);
+      final c = ProviderContainer(overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceCacheProvider.overrideWithValue(cache),
+        downloadManagerProvider
+            .overrideWith((ref) => Completer<DownloadService>().future),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    SourceAccountRecord locked(SourceAccountRecord r) =>
+        r.copyWith(serverLocks: const {'abc123': SourceLock.locked});
+
+    SourceAccountRecord second() {
+      final base = plexRecord();
+      final server = base.servers.single;
+      return SourceAccountRecord(
+        account: const ProviderAccount(
+          id: 'acc2',
+          kind: SourceKind.plex,
+          displayName: 'wren',
+          storageNamespace: 'source/acc2',
+          activeProfileId: 'owner',
+        ),
+        profiles: const [
+          SourceProfile(
+              id: 'owner', accountId: 'acc2', name: 'Wren', isOwner: true),
+        ],
+        servers: [
+          SourceServer(
+            id: 'abc123',
+            accountId: 'acc2',
+            profileId: 'owner',
+            name: 'Basement',
+            machineIdentifier: 'def456',
+            owned: true,
+            httpsRequired: true,
+            connections: server.connections,
+          ),
+        ],
+        addedAtMs: base.addedAtMs,
+      );
+    }
+
+    test('removeLockedAccounts waits for the manager once, not per account',
+        () async {
+      await store.putAccount(locked(plexRecord()));
+      await store.putAccount(locked(second()));
+      final c = stuckContainer();
+      await c.read(sourceRecordsProvider.future);
+
+      final watch = Stopwatch()..start();
+      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+      watch.stop();
+
+      expect(watch.elapsed, lessThan(timeout * 2));
+      expect((await store.load()).accounts, isEmpty);
+    });
+
+    test('a write queued during the download wait is not blocked', () async {
+      await store.putAccount(plexRecord());
+      final c = stuckContainer();
+      await c.read(sourceRecordsProvider.future);
+      final notifier = c.read(sourceRecordsProvider.notifier);
+
+      final removal = notifier.removeAccount('acc1');
+      final watch = Stopwatch()..start();
+      await notifier.putAccount(second());
+      final putTook = watch.elapsed;
+      await removal;
+
+      expect(putTook, lessThan(timeout));
+      expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
+    });
+  });
+
   test('setIncludedInAllServers persists and updates state', () async {
     await container.read(sourceRecordsProvider.future);
     const id = SourceId('acc1:owner:abc123');
@@ -119,6 +275,7 @@ void main() {
       authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => failing),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      noDownloadsOverride,
     ]);
     addTearDown(c.dispose);
     await failing.putAccount(plexRecord());
@@ -140,6 +297,7 @@ void main() {
 
     final restarted = ProviderContainer(overrides: [
       authStateProvider.overrideWith(_Unauthenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);

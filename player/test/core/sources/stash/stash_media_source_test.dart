@@ -7,6 +7,7 @@ import 'package:player/core/sources/stash/stash_client.dart';
 import 'package:player/core/sources/stash/stash_mapping.dart';
 import 'package:player/core/sources/stash/stash_media_source.dart';
 import 'package:player/core/sources/store/source_records.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -120,6 +121,15 @@ void main() {
         '/scene/2/caption?lang=en&type=srt');
   });
 
+  test('resolves the original file with the API key in a header', () async {
+    final plan = await build().source.resolve(
+        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+        'original') as DirectFile;
+    expect(Uri.parse(plan.url).path, '/scene/2/stream');
+    expect(plan.headers['ApiKey'], FakeStashServer.apiKey);
+    expect(plan.url, isNot(contains(FakeStashServer.apiKey)));
+  });
+
   test('a scene carries added and last played, no sort title', () async {
     final b = build();
     final detail = await b.source.item(
@@ -158,6 +168,34 @@ void main() {
     expect(b.server.operations.last.$1, 'AddPlay');
     await b.source.as<WatchedState>()!.setWatched(ref, false);
     expect(b.server.operations.last.$1, 'ResetPlayCount');
+  });
+
+  test('pushProgress throws when the answer carries no mutation result',
+      () async {
+    final b = build();
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
+    final sync = b.source.as<ProgressSync>()!;
+    await sync.pushProgress(ref,
+        positionSeconds: 30, durationSeconds: 100, watched: true);
+
+    b.server.emptyMutationAnswers = true;
+    await expectLater(
+      sync.pushProgress(ref,
+          positionSeconds: 30, durationSeconds: 100, watched: false),
+      throwsA(isA<SourceException>()),
+    );
+  });
+
+  test('a false sceneSaveActivity is not a confirmed save', () async {
+    final b = build();
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
+    final sync = b.source.as<ProgressSync>()!;
+    b.server.saveActivityAnswer = false;
+    await expectLater(
+      sync.pushProgress(ref,
+          positionSeconds: 30, durationSeconds: 100, watched: false),
+      throwsA(isA<SourceException>()),
+    );
   });
 
   test('a schema without a field is unsupported, not a crash', () async {

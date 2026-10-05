@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/downloads/download_job_providers.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/episode.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/widgets/episode_download_button.dart';
+
+import '../screens/detail/download_fakes.dart';
 
 Episode _episode({
   bool hasFile = true,
@@ -37,10 +42,13 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isMediaDownloadedProvider(episode.id)
+          isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id))
               .overrideWith((ref) => downloaded),
-          downloadOptionsProvider('episode', episode.id).overrideWith(
-              (ref) => Completer<DownloadOptionsResponse>().future),
+          downloadManagerProvider
+              .overrideWith((ref) async => EmptyDownloadService()),
+          mediaSourceProvider(SourceId.legacyMydia).overrideWithValue(
+              DownloadableFakeSource(
+                  options: Completer<List<DownloadOption>>().future)),
         ],
         child: MaterialApp(
           home: Scaffold(

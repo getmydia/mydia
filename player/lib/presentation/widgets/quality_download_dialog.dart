@@ -1,42 +1,46 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/downloads/download_job_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/download_option.dart';
-import 'toast/toaster.dart';
 
-/// Dialog for selecting download quality before starting a progressive download.
+/// Dialog for choosing what to download before a download starts.
 ///
-/// Shows available quality options (1080p, 720p, 480p) with estimated file sizes.
-/// Fetches options from the server and handles loading/error states.
-class QualityDownloadDialog extends ConsumerStatefulWidget {
-  final String contentType;
-  final String contentId;
+/// Shows the options the source offers (1080p, 720p, original) with estimated
+/// file sizes, handling loading and error states. A source that offers only
+/// its original file gets a plain confirmation instead of a list of one.
+class QualityDownloadDialog extends StatefulWidget {
   final String title;
+  final Future<List<DownloadOption>> options;
 
   const QualityDownloadDialog({
     super.key,
-    required this.contentType,
-    required this.contentId,
     required this.title,
+    required this.options,
   });
 
   @override
-  ConsumerState<QualityDownloadDialog> createState() =>
-      _QualityDownloadDialogState();
+  State<QualityDownloadDialog> createState() => _QualityDownloadDialogState();
 }
 
-class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
+class _QualityDownloadDialogState extends State<QualityDownloadDialog> {
   String? _selectedResolution;
   bool _isStartingDownload = false;
 
+  static bool _isLoneOriginal(List<DownloadOption> options) =>
+      options.length == 1 && options.first.resolution == 'original';
+
   @override
   Widget build(BuildContext context) {
-    final optionsAsync = ref.watch(
-      downloadOptionsProvider(widget.contentType, widget.contentId),
+    return FutureBuilder<List<DownloadOption>>(
+      future: widget.options,
+      builder: (context, snapshot) => _buildDialog(context, snapshot),
     );
+  }
 
+  Widget _buildDialog(
+    BuildContext context,
+    AsyncSnapshot<List<DownloadOption>> snapshot,
+  ) {
     return AlertDialog(
       backgroundColor: AppColors.surface,
       title: Column(
@@ -61,19 +65,21 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
       ),
       content: SizedBox(
         width: double.maxFinite,
-        child: optionsAsync.when(
-          data: (response) => _buildOptionsContent(context, response),
-          loading: () => _buildLoadingContent(),
-          error: (error, stack) => _buildErrorContent(context, error),
-        ),
+        child: switch (snapshot) {
+          AsyncSnapshot(hasError: true, :final error) =>
+            _buildErrorContent(context, error!),
+          AsyncSnapshot(hasData: true, :final data) =>
+            _buildOptionsContent(context, data!),
+          _ => _buildLoadingContent(),
+        },
       ),
-      actions: _buildActions(context, optionsAsync),
+      actions: _buildActions(context, snapshot.data),
     );
   }
 
   Widget _buildOptionsContent(
-      BuildContext context, DownloadOptionsResponse response) {
-    if (response.options.isEmpty) {
+      BuildContext context, List<DownloadOption> options) {
+    if (options.isEmpty) {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -94,8 +100,19 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
       );
     }
 
+    if (_isLoneOriginal(options)) {
+      final option = options.first;
+      final container = option.container;
+      return Text(
+        'Download original, ${option.formattedSize}'
+        '${container == null ? '' : ' ${container.toUpperCase()}'}?',
+        key: const Key('download-confirm-original'),
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
     // Sort options: pre-transcoded first, then by resolution
-    final sortedOptions = List<DownloadOption>.from(response.options)
+    final sortedOptions = List<DownloadOption>.from(options)
       ..sort((a, b) {
         // Pre-transcoded options first
         if (a.isPreTranscoded && !b.isPreTranscoded) return -1;
@@ -138,6 +155,7 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
     final isSelected = _selectedResolution == option.resolution;
 
     return InkWell(
+      key: Key('download-option-${option.resolution}'),
       onTap: _isStartingDownload
           ? null
           : () {
@@ -290,27 +308,18 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(height: 16),
-        TextButton(
-          onPressed: () {
-            ref.invalidate(
-              downloadOptionsProvider(widget.contentType, widget.contentId),
-            );
-          },
-          child: const Text('Retry'),
-        ),
       ],
     );
   }
 
   List<Widget> _buildActions(
     BuildContext context,
-    AsyncValue<DownloadOptionsResponse> optionsAsync,
+    List<DownloadOption>? options,
   ) {
-    final hasOptions =
-        optionsAsync.hasValue && optionsAsync.value!.options.isNotEmpty;
-    final canDownload =
-        hasOptions && _selectedResolution != null && !_isStartingDownload;
+    final hasOptions = options != null && options.isNotEmpty;
+    final canDownload = hasOptions &&
+        (_isLoneOriginal(options) || _selectedResolution != null) &&
+        !_isStartingDownload;
 
     return [
       TextButton(
@@ -326,7 +335,7 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
         ),
       ),
       ElevatedButton(
-        onPressed: canDownload ? _startDownload : null,
+        onPressed: canDownload ? () => _startDownload(options) : null,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
@@ -347,48 +356,30 @@ class _QualityDownloadDialogState extends ConsumerState<QualityDownloadDialog> {
     ];
   }
 
-  Future<void> _startDownload() async {
-    if (_selectedResolution == null) return;
+  /// Hands the choice back; the caller starts the download.
+  void _startDownload(List<DownloadOption> options) {
+    final chosen = _isLoneOriginal(options)
+        ? options.first
+        : options.where((o) => o.resolution == _selectedResolution).firstOrNull;
+    if (chosen == null) return;
 
     setState(() {
       _isStartingDownload = true;
     });
-
-    try {
-      // Return the selected resolution - the caller will handle the download
-      if (mounted) {
-        Navigator.of(context).pop(_selectedResolution);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isStartingDownload = false;
-        });
-        showToast(
-          context,
-          'Failed to start download: $e',
-          kind: ToastKind.error,
-        );
-      }
-    }
+    Navigator.of(context).pop(chosen);
   }
 }
 
-/// Shows the quality download dialog and returns the selected resolution.
+/// Shows the download dialog and returns the chosen option.
 ///
 /// Returns null if the dialog was cancelled.
-Future<String?> showQualityDownloadDialog(
+Future<DownloadOption?> pickDownloadOption(
   BuildContext context, {
-  required String contentType,
-  required String contentId,
   required String title,
-}) async {
-  return showDialog<String>(
-    context: context,
-    builder: (context) => QualityDownloadDialog(
-      contentType: contentType,
-      contentId: contentId,
-      title: title,
-    ),
-  );
-}
+  required Future<List<DownloadOption>> options,
+}) =>
+    showDialog<DownloadOption>(
+      context: context,
+      builder: (context) =>
+          QualityDownloadDialog(title: title, options: options),
+    );

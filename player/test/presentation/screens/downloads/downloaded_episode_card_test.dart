@@ -13,8 +13,11 @@ import '../../../test_utils/mock_network_images.dart';
 DownloadedMedia _media({
   String quality = '1080p',
   String? thumbnailUrl = 'https://example.test/ep.jpg',
+  String? sourceId,
 }) {
   return DownloadedMedia(
+    sourceId: sourceId,
+    itemKind: sourceId == null ? null : 'episode',
     id: 'd1',
     mediaId: 'ep-1',
     title: 'Pilot',
@@ -93,6 +96,27 @@ void main() {
       tester,
       media: _media(),
       progress: LocalPlaybackProgress(
+        mediaId: 'ep-1',
+        mediaType: 'episode',
+        positionSeconds: 300,
+        durationSeconds: 1200,
+        updatedAt: DateTime(2026, 1, 1),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('downloaded-episode-resume-bar')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('renders the resume bar for a third-party download',
+      (tester) async {
+    await _pump(
+      tester,
+      media: _media(sourceId: 'plex-acct:srv'),
+      progress: LocalPlaybackProgress(
+        sourceId: 'plex-acct:srv',
         mediaId: 'ep-1',
         mediaType: 'episode',
         positionSeconds: 300,

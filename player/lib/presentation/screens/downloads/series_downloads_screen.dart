@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../widgets/artwork_image.dart';
+import 'widgets/download_artwork.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/quality_badge.dart';
@@ -13,6 +14,7 @@ import 'widgets/downloaded_episode_rail.dart';
 import 'widgets/series_downloads_dialogs.dart';
 
 class SeriesDownloadsScreen extends ConsumerWidget {
+  final SourceId sourceId;
   final String showId;
   final String showTitle;
   final String? showPosterUrl;
@@ -20,6 +22,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   const SeriesDownloadsScreen({
     super.key,
+    required this.sourceId,
     required this.showId,
     required this.showTitle,
     this.showPosterUrl,
@@ -38,11 +41,13 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     // Filter for this show
     final showDownloads = downloaded
         .where((m) =>
-            m.showId == showId || (m.showId == null && m.mediaId == showId))
+            m.source == sourceId &&
+            (m.showId == showId || (m.showId == null && m.mediaId == showId)))
         .toList();
     final showQueue = queue
         .where((t) =>
-            t.showId == showId || (t.showId == null && t.mediaId == showId))
+            t.source == sourceId &&
+            (t.showId == showId || (t.showId == null && t.mediaId == showId)))
         .toList();
 
     // Sort by Season/Episode
@@ -114,6 +119,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                   final deleted = await showDeleteAllDialog(
                     context,
                     ref,
+                    sourceId: sourceId,
                     showId: showId,
                     showTitle: showTitle,
                     totalCount: showDownloads.length + showQueue.length,
@@ -162,16 +168,15 @@ class SeriesDownloadsScreen extends ConsumerWidget {
           fit: StackFit.expand,
           children: [
             // Backdrop image
-            if (backdropUrl != null)
-              ArtworkImage(
-                imageUrl: backdropUrl!,
-                fit: BoxFit.cover,
-                cacheManager: BackdropCacheManager(),
-                placeholder: (context) => Container(color: AppColors.surface),
-                errorWidget: (context) => Container(color: AppColors.surface),
-              )
-            else
-              Container(color: AppColors.surface),
+            DownloadArtwork(
+              localPath: showDownloads
+                  .map((d) => d.backdropPath)
+                  .whereType<String>()
+                  .firstOrNull,
+              fallbackUrl: backdropUrl,
+              cacheManager: BackdropCacheManager(),
+              placeholder: (context) => Container(color: AppColors.surface),
+            ),
 
             // Multi-stop gradient overlay
             Container(
@@ -199,7 +204,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   // Poster
-                  _buildPoster(),
+                  _buildPoster(showDownloads),
                   const SizedBox(width: 16),
                   // Title and stats
                   Expanded(
@@ -238,7 +243,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPoster() {
+  Widget _buildPoster(List<DownloadedMedia> showDownloads) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -255,25 +260,19 @@ class SeriesDownloadsScreen extends ConsumerWidget {
         child: SizedBox(
           width: 100,
           height: 150,
-          child: showPosterUrl != null
-              ? ArtworkImage(
-                  imageUrl: showPosterUrl!,
-                  fit: BoxFit.cover,
-                  cacheManager: PosterCacheManager(),
-                  placeholder: (context) => Container(
-                    color: AppColors.surfaceVariant,
-                  ),
-                  errorWidget: (context) => Container(
-                    color: AppColors.surfaceVariant,
-                    child: const Icon(Icons.tv_rounded,
-                        color: AppColors.textSecondary),
-                  ),
-                )
-              : Container(
-                  color: AppColors.surfaceVariant,
-                  child: const Icon(Icons.tv_rounded,
-                      color: AppColors.textSecondary),
-                ),
+          child: DownloadArtwork(
+            localPath: showDownloads
+                .map((d) => d.posterPath)
+                .whereType<String>()
+                .firstOrNull,
+            fallbackUrl: showPosterUrl,
+            cacheManager: PosterCacheManager(),
+            placeholder: (context) => Container(
+              color: AppColors.surfaceVariant,
+              child:
+                  const Icon(Icons.tv_rounded, color: AppColors.textSecondary),
+            ),
+          ),
         ),
       ),
     );
@@ -450,6 +449,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 onPressed: () => showDeleteSeasonDialog(
                   context,
                   ref,
+                  sourceId: sourceId,
                   showId: showId,
                   showTitle: showTitle,
                   seasonNumber: seasonNumber,

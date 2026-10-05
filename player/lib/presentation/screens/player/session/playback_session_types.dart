@@ -118,9 +118,6 @@ enum WriteOutcome { done, failed, unavailable }
 /// What the screen may do beyond playing the session's item. A
 /// Plex, Stash or Jellyfin session has none of these; Mydia has all.
 enum PlaybackFeature {
-  /// A local file may stand in for the stream, and offline mode applies.
-  downloads,
-
   /// Hand playback to a cast target.
   cast,
 

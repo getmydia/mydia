@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
-import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_guest_source.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
@@ -154,6 +154,7 @@ void main() {
       expect(source.connection, SourceConnectionStatus.remote);
       expect(source.capabilities, contains(SourceCapability.searchable));
       expect(source.as<Searchable>(), isNotNull);
+      expect(source.as<Downloadable>(), isNotNull);
     });
 
     test('home status follows auth without rebuilding the source', () {

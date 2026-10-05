@@ -20,13 +20,13 @@ enum DetailFeature {
   watched,
   favorite,
 
-  /// Mydia downloads. Reads `mydia`.
+  /// Download to this device.
   download,
 
   /// Mydia's media info sheet. Reads `mydia`.
   mediaInfo,
 
-  /// Mydia's per-season and whole-show download menu.
+  /// Download a whole season (Mydia also offers the whole show).
   seasonDownload,
 }
 

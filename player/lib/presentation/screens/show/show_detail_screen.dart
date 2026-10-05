@@ -11,7 +11,8 @@ import '../detail/detail_actions.dart';
 import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_similar_rail.dart';
-import '../detail/mydia_downloads.dart';
+import '../detail/download_metadata.dart';
+import '../detail/start_download.dart';
 import 'show_detail_controller.dart';
 import 'show_season_section.dart';
 import '../../widgets/detail_hero_app_bar.dart';
@@ -541,11 +542,9 @@ class ShowDetailScreen extends ConsumerWidget {
     required bool compact,
   }) {
     final seasonKey = (show: target, seasonNumber: episode.seasonNumber);
-    final mydiaShow = show.mydia;
     final mydiaEpisode = episode.mydia;
+    final item = itemRefOf(episode.target);
     final canDownload = isDownloadSupported &&
-        mydiaShow != null &&
-        mydiaEpisode != null &&
         show.features.contains(DetailFeature.download) &&
         episode.files.isNotEmpty;
     return DetailActionRow(
@@ -564,23 +563,15 @@ class ShowDetailScreen extends ConsumerWidget {
       onToggleFavorite: () =>
           ref.read(showActionsProvider(target)).toggleFavorite(),
       onDownload: canDownload
-          ? () => startMydiaEpisodeDownload(
-                context,
-                ref,
-                episode: mydiaEpisode,
-                showId: mydiaShow.id,
-                showTitle: mydiaShow.title,
-                showPosterUrl: mydiaShow.artwork.posterUrl,
-              )
+          ? () => startItemDownload(context, ref,
+              item: item, metadata: episodeDownloadMetadata(episode))
           : null,
       trailerUrl: show.trailerUrl,
       showDownload: canDownload,
       // Per-episode, not per-show: the hero's Download action downloads
       // the selected episode.
-      isDownloaded: mydiaEpisode == null
-          ? false
-          : ref.watch(isMediaDownloadedProvider(mydiaEpisode.id)).value ??
-              false,
+      isDownloaded: canDownload &&
+          (ref.watch(isItemDownloadedProvider(item)).value ?? false),
       onShowMediaInfo: mydiaEpisode == null ||
               !show.features.contains(DetailFeature.mediaInfo) ||
               episode.files.isEmpty

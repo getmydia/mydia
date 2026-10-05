@@ -6,6 +6,7 @@ import 'package:player/core/sources/plex/plex_media_source.dart';
 import 'package:player/core/sources/plex/plex_server_client.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_http.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -208,6 +209,14 @@ void main() {
     );
     expect(subs.first.externalPath, '/library/streams/33');
     expect(subs.last.externalPath, isNull);
+  });
+
+  test('resolves the original file with the token in a header', () async {
+    final plan = await build().source.resolve(movie, 'original') as DirectFile;
+    expect(Uri.parse(plan.url).path, '/library/parts/21/1700000000/file.mkv');
+    expect(plan.headers['X-Plex-Token'], FakePlexServer.token);
+    expect(plan.url, isNot(contains(FakePlexServer.token)));
+    expect(plan.extension, 'mkv');
   });
 
   test('walks show, season, episodes', () async {

@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/player/progress_service.dart';
+import 'package:player/domain/models/download_request.dart';
+import 'package:player/domain/sources/item.dart';
 
 class RecordingProgressService extends Fake implements ProgressService {
   final movies = <(String, Duration, Duration)>[];
@@ -197,7 +199,7 @@ void main() {
       await saveDownloadedProgress(
         store: store,
         progressService: service,
-        mediaId: 'movie-1',
+        item: homeMydiaRef(ItemKind.movie, 'movie-1'),
         mediaType: 'movie',
         position: const Duration(seconds: 900),
         duration: const Duration(seconds: 5400),
@@ -227,7 +229,7 @@ void main() {
       await saveDownloadedProgress(
         store: store,
         progressService: service,
-        mediaId: 'movie-1',
+        item: homeMydiaRef(ItemKind.movie, 'movie-1'),
         mediaType: 'movie',
         position: const Duration(seconds: 900),
         duration: const Duration(seconds: 5400),
@@ -246,7 +248,7 @@ void main() {
       await saveDownloadedProgress(
         store: store,
         progressService: _ThrowingProgressService(),
-        mediaId: 'ep-1',
+        item: homeMydiaRef(ItemKind.episode, 'ep-1'),
         mediaType: 'episode',
         position: const Duration(seconds: 900),
         duration: const Duration(seconds: 5400),
@@ -266,7 +268,7 @@ void main() {
       await saveDownloadedProgress(
         store: store,
         progressService: service,
-        mediaId: 'ep-1',
+        item: homeMydiaRef(ItemKind.episode, 'ep-1'),
         mediaType: 'episode',
         position: const Duration(seconds: 900),
         duration: const Duration(seconds: 5400),

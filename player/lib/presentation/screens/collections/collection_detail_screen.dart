@@ -7,6 +7,9 @@ import 'collections_controller.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/media_poster.dart';
 import '../../widgets/quality_download_dialog.dart';
+import '../detail/start_download.dart';
+import '../../../domain/models/download_request.dart' show homeMydiaRef;
+import '../../../domain/sources/item.dart' show ItemKind;
 import '../../widgets/toast/toaster.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
 import '../../../core/downloads/collection_sync_service.dart';
@@ -358,11 +361,8 @@ class _CollectionDownloadButtonState
     return widget.items.first.id;
   }
 
-  String _getProbeContentType() {
-    final movies = widget.items.where((i) => i.isMovie);
-    if (movies.isNotEmpty) return 'movie';
-    return 'episode';
-  }
+  ItemKind _getProbeKind() =>
+      widget.items.any((i) => i.isMovie) ? ItemKind.movie : ItemKind.episode;
 
   Future<void> _startSync(String resolution) async {
     if (_isSyncing) return;
@@ -422,15 +422,17 @@ class _CollectionDownloadButtonState
   }
 
   Future<void> _handleDownloadTap() async {
-    final selectedResolution = await showQualityDownloadDialog(
+    final selectedOption = await pickDownloadOption(
       context,
-      contentType: _getProbeContentType(),
-      contentId: _getProbeContentId(),
       title: _getCollectionName(),
+      options: homeMydiaDownloadOptions(
+        ref,
+        homeMydiaRef(_getProbeKind(), _getProbeContentId()),
+      ),
     );
 
-    if (selectedResolution == null || !mounted) return;
-    await _startSync(selectedResolution);
+    if (selectedOption == null || !mounted) return;
+    await _startSync(selectedOption.resolution);
   }
 
   Future<void> _handleSyncNow() async {

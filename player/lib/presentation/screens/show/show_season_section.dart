@@ -11,6 +11,7 @@ import '../../widgets/watch_indicator.dart';
 import '../detail/detail_providers.dart';
 import 'show_bulk_download_button.dart';
 import 'show_detail_controller.dart';
+import 'source_season_download_button.dart';
 
 /// Resolves which episode the hero describes: the one matching
 /// [selectedEpisodeId] if it's in the currently-loaded [episodes] list,
@@ -88,15 +89,20 @@ class ShowSeasonSection extends ConsumerWidget {
               ),
               const Spacer(),
               if (isDownloadSupported &&
-                  mydia != null &&
                   show.features.contains(DetailFeature.seasonDownload))
-                ShowBulkDownloadButton(
-                  showId: mydia.id,
-                  show: mydia,
-                  selectedSeason: selectedSeason,
-                  availableSeasons:
-                      mydia.seasons.where((s) => s.hasFiles).toList(),
-                ),
+                if (mydia != null)
+                  ShowBulkDownloadButton(
+                    showId: mydia.id,
+                    show: mydia,
+                    selectedSeason: selectedSeason,
+                    availableSeasons:
+                        mydia.seasons.where((s) => s.hasFiles).toList(),
+                  )
+                else if (availableSeasons
+                        .where((s) => s.number == selectedSeason)
+                        .firstOrNull
+                    case final season?)
+                  SourceSeasonDownloadButton(show: show, season: season),
               // Season watched actions render on web too, where downloads are
               // unsupported, so they live outside the isDownloadSupported gate.
               if (show.features.contains(DetailFeature.watched))
