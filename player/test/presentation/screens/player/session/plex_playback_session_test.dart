@@ -232,4 +232,8 @@ void main() {
     expect(stream.url, isNot(contains(FakePlexServer.token)));
     expect(stream.headers['X-Plex-Token'], FakePlexServer.token);
   });
+
+  test('a Plex session can cast', () {
+    expect(open().session.features, contains(PlaybackFeature.cast));
+  });
 }

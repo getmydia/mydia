@@ -116,6 +116,7 @@ import 'player_key_bindings.dart';
 import 'player_screen_views.dart';
 import 'segment_skipper.dart';
 import 'session/playback_session_types.dart';
+import 'session/source_playback_session.dart';
 import 'audio_track_detection.dart';
 import 'remote_control_mapping.dart';
 import 'stats_context_builder.dart';
@@ -1372,15 +1373,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
       await manager.startCast(
         device: target,
-        request: CastLaunchRequest(
-          fileId: fileId,
-          mediaId: widget.mediaId,
-          mediaType: widget.mediaType,
-          showId: widget.showId,
+        request: CastLaunchRequest.forContent(
+          content: _castContent(fileId),
           title: widget.title ?? 'Untitled',
           duration: _knownCastDuration(),
           startPosition: plan.position,
-          subtitles: _castSubtitleTracks(),
+          subtitles: _session is SourcePlaybackSession
+              ? const []
+              : _castSubtitleTracks(),
         ),
       );
       // The target and the session coexist deliberately: the target is what
@@ -5557,6 +5557,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   /// Show the cast device picker dialog, then hand the selected device to
   /// [CastSessionManager] to resolve a route and start playback.
+  /// What a cast of the current item plays. A third-party item carries no
+  /// Mydia ids; its receiver subtitles come from the source, not from the
+  /// local track list.
+  CastContent _castContent(String fileId) => switch (_session) {
+        final SourcePlaybackSession s =>
+          SourceCastContent(item: s.item, versionId: s.fileId),
+        _ => MydiaCastContent(
+            fileId: fileId,
+            mediaId: widget.mediaId,
+            mediaType: widget.mediaType,
+            showId: widget.showId,
+          ),
+      };
+
   Future<void> _showCastDevicePicker() async {
     if (!_castSupported) return;
     final device = await showCastDevicePicker(context);
@@ -5586,11 +5600,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       await pushToRemoteTarget(
         startCast: () => manager.startCast(
           device: device,
-          request: CastLaunchRequest(
-            fileId: widget.fileId,
-            mediaId: widget.mediaId,
-            mediaType: widget.mediaType,
-            showId: widget.showId,
+          request: CastLaunchRequest.forContent(
+            content: _castContent(widget.fileId),
             title: widget.title ?? 'Untitled',
             startPosition: startPosition,
             // The receiver cannot work this out for itself: Mydia's HLS
@@ -5600,8 +5611,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             // from the candidates metadata), falling back to whatever the
             // local player managed to work out.
             duration: _knownCastDuration(),
-            subtitles: offeredSubtitles,
-            selectedSubtitleTrackId: selectedSubtitleTrackId,
+            subtitles:
+                _session is SourcePlaybackSession ? const [] : offeredSubtitles,
+            selectedSubtitleTrackId: _session is SourcePlaybackSession
+                ? _selectedSubtitleTrack?.id
+                : selectedSubtitleTrackId,
           ),
         ),
         stopLocal: () async => await _player?.pause(),

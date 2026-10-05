@@ -11,6 +11,7 @@ import '../../../../core/sources/stash/stash_documents.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
+import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
 /// Stash's `StreamingResolutionEnum` for a rung height; the original when
@@ -35,6 +36,9 @@ class StashPlaybackSession extends SourcePlaybackSession {
   final StashMediaSource _stash;
 
   StashClient get stashClient => _stash.client;
+
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [

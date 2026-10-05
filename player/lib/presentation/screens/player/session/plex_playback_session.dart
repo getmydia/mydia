@@ -16,6 +16,7 @@ import '../../../../core/sources/transcode_codecs.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
+import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
 List<CandidateStrategy> plexCandidates(MediaVersion v) => [
@@ -64,6 +65,9 @@ class PlexPlaybackSession extends SourcePlaybackSession {
 
   /// One per playback; each transcode start gets its own session on top.
   final String _playbackId = const Uuid().v4();
+
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
 
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) =>

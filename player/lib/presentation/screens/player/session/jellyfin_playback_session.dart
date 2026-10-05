@@ -96,6 +96,9 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
   }
 
   @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.cast};
+
+  @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async {
     try {
       await _playbackInfo();
