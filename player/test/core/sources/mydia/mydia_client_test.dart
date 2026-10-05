@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gql/language.dart' show parseString;
+import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/player/device_profile.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
@@ -546,6 +547,69 @@ void main() {
         transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
         isEmpty,
       );
+    });
+  });
+
+  group('server compatibility', () {
+    test(
+        'fetches server compatibility declaration and handles older servers returning null',
+        () async {
+      transport.handlers['ServerCompatibility'] = (_) => {
+            'serverCompatibility': {
+              'version': '1.2.3',
+              'minPlayerVersion': '1.0.0',
+              'recommendedPlayerVersion': '1.2.0',
+              '__typename': 'ServerCompatibility',
+            },
+            '__typename': 'RootQueryType',
+          };
+
+      final client = build();
+      final info = await client.fetchCompatibility();
+
+      expect(info, isA<ServerCompatibilityInfo>());
+      expect(info!.version, '1.2.3');
+      expect(info.minPlayerVersion, '1.0.0');
+      expect(info.recommendedPlayerVersion, '1.2.0');
+      expect(
+        transport.calls.where((c) => c.operation == 'ServerCompatibility'),
+        hasLength(1),
+      );
+
+      // Gracefully handles responses without explicit __typename
+      transport.handlers['ServerCompatibility'] = (_) => {
+            'serverCompatibility': {
+              'version': '2.0.0',
+              'minPlayerVersion': '1.5.0',
+              'recommendedPlayerVersion': '2.0.0',
+            },
+          };
+      final infoNoTypename = await client.fetchCompatibility();
+      expect(infoNoTypename, isNotNull);
+      expect(infoNoTypename!.version, '2.0.0');
+
+      // Server returns null for compatibility
+      transport.handlers['ServerCompatibility'] = (_) => {
+            'serverCompatibility': null,
+            '__typename': 'RootQueryType',
+          };
+
+      expect(await client.fetchCompatibility(), isNull);
+    });
+
+    test('returns null on transport failure or unknown field error', () async {
+      final client = build();
+
+      // Unknown field error (older server without this field)
+      transport.handlers['ServerCompatibility'] = (_) =>
+          throw const SourceException.server(
+              'Cannot query field "serverCompatibility"');
+      expect(await client.fetchCompatibility(), isNull);
+
+      // Transport failure / unreachable
+      transport.handlers['ServerCompatibility'] =
+          (_) => throw const SourceException.unreachable();
+      expect(await client.fetchCompatibility(), isNull);
     });
   });
 }

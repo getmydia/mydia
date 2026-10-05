@@ -9,6 +9,8 @@ import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
 import '../../../graphql/mutations/refresh_media_token.graphql.dart';
+import '../../../graphql/queries/server_compatibility.graphql.dart';
+import '../../compatibility/compatibility_verdict.dart';
 import '../../player/device_profile.dart';
 import '../media_source.dart';
 import 'mydia_credentials.dart';
@@ -164,6 +166,39 @@ class MydiaClient {
     }
     final separator = path.contains('?') ? '&' : '?';
     return '$baseUrl$path${separator}token=$token';
+  }
+
+  /// Fetches the server's compatibility declaration, or null if we cannot tell.
+  ///
+  /// Returns null on older servers predating this feature, an absent declaration,
+  /// or any transport/parsing failure.
+  Future<ServerCompatibilityInfo?> fetchCompatibility() async {
+    try {
+      final data = await request(documentNodeQueryServerCompatibility);
+      final rawCompat = data['serverCompatibility'];
+      if (rawCompat is! Map) return null;
+
+      final compatMap = Map<String, dynamic>.from(rawCompat);
+      final payload = <String, dynamic>{
+        '__typename': data['__typename'] ?? 'RootQueryType',
+        'serverCompatibility': {
+          '__typename': 'ServerCompatibility',
+          ...compatMap,
+        },
+      };
+
+      final compat =
+          Query$ServerCompatibility.fromJson(payload).serverCompatibility;
+      if (compat == null) return null;
+
+      return ServerCompatibilityInfo(
+        version: compat.version,
+        minPlayerVersion: compat.minPlayerVersion,
+        recommendedPlayerVersion: compat.recommendedPlayerVersion,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>> _send(
