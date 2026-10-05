@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/merged/merged_search.dart';
@@ -47,6 +48,7 @@ class AllServersSearchScreen extends ConsumerWidget {
         AsyncData(:final value) when value.value.isEmpty =>
           const Center(child: Text('Nothing found.')),
         AsyncData(:final value) => ListView(
+            padding: EdgeInsets.only(bottom: DockInsets.bottomOf(context)),
             children: [
               AllServersBanner(
                   unavailable: value.unavailable, onRetry: notifier.retry),
