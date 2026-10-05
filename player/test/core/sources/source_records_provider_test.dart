@@ -111,6 +111,91 @@ void main() {
     expect(stuck.read(thirdPartySourcesProvider), isEmpty);
   });
 
+  group('download cleanup outside the write queue', () {
+    const timeout = Duration(milliseconds: 200);
+
+    ProviderContainer stuckContainer() {
+      final saved = downloadLookupTimeout;
+      downloadLookupTimeout = timeout;
+      addTearDown(() => downloadLookupTimeout = saved);
+      final c = ProviderContainer(overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceCacheProvider.overrideWithValue(cache),
+        downloadManagerProvider
+            .overrideWith((ref) => Completer<DownloadService>().future),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    SourceAccountRecord locked(SourceAccountRecord r) =>
+        r.copyWith(serverLocks: const {'abc123': SourceLock.locked});
+
+    SourceAccountRecord second() {
+      final base = plexRecord();
+      final server = base.servers.single;
+      return SourceAccountRecord(
+        account: const ProviderAccount(
+          id: 'acc2',
+          kind: SourceKind.plex,
+          displayName: 'wren',
+          storageNamespace: 'source/acc2',
+          activeProfileId: 'owner',
+        ),
+        profiles: const [
+          SourceProfile(
+              id: 'owner', accountId: 'acc2', name: 'Wren', isOwner: true),
+        ],
+        servers: [
+          SourceServer(
+            id: 'abc123',
+            accountId: 'acc2',
+            profileId: 'owner',
+            name: 'Basement',
+            machineIdentifier: 'def456',
+            owned: true,
+            httpsRequired: true,
+            connections: server.connections,
+          ),
+        ],
+        addedAtMs: base.addedAtMs,
+      );
+    }
+
+    test('removeLockedAccounts waits for the manager once, not per account',
+        () async {
+      await store.putAccount(locked(plexRecord()));
+      await store.putAccount(locked(second()));
+      final c = stuckContainer();
+      await c.read(sourceRecordsProvider.future);
+
+      final watch = Stopwatch()..start();
+      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+      watch.stop();
+
+      expect(watch.elapsed, lessThan(timeout * 2));
+      expect((await store.load()).accounts, isEmpty);
+    });
+
+    test('a write queued during the download wait is not blocked', () async {
+      await store.putAccount(plexRecord());
+      final c = stuckContainer();
+      await c.read(sourceRecordsProvider.future);
+      final notifier = c.read(sourceRecordsProvider.notifier);
+
+      final removal = notifier.removeAccount('acc1');
+      final watch = Stopwatch()..start();
+      await notifier.putAccount(second());
+      final putTook = watch.elapsed;
+      await removal;
+
+      expect(putTook, lessThan(timeout));
+      expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
+    });
+  });
+
   test('setIncludedInAllServers persists and updates state', () async {
     await container.read(sourceRecordsProvider.future);
     const id = SourceId('acc1:owner:abc123');
