@@ -4,6 +4,8 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:gql/ast.dart' show DocumentNode;
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -18,11 +20,16 @@ import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/search.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/queries/show_detail.graphql.dart';
+import '../../p2p/local_proxy_service.dart';
+import '../../p2p/media_route.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
+import 'guest_download_job_service.dart';
+import 'guest_proxy.dart';
 import 'mydia_guest_client.dart';
 import 'mydia_guest_mapping.dart';
+import 'mydia_transcode_job.dart';
 
 const _sorts = [
   SortOption(id: 'TITLE', label: 'Title'),
@@ -43,20 +50,26 @@ class MydiaGuestSource extends MediaSource
         Favorites,
         NextUp,
         Similar,
-        SkipSegments {
+        SkipSegments,
+        Downloadable {
   MydiaGuestSource({
     required this.source,
     required this.client,
+    required this.proxy,
     void Function()? onDispose,
   }) : _onDispose = onDispose;
 
   @override
   final Source source;
   final MydiaGuestClient client;
+
+  /// The shared local proxy, which carries a paired guest's file bytes.
+  final LocalProxyService Function() proxy;
   final void Function()? _onDispose;
 
   @override
   Set<SourceCapability> get capabilities => const {
+        SourceCapability.downloadable,
         SourceCapability.progressReporting,
         SourceCapability.watchedState,
         SourceCapability.searchable,
@@ -317,6 +330,41 @@ class MydiaGuestSource extends MediaSource
         : files.firstOrNull?['id'];
     if (fileId is! String) return const [];
     return MediaSegment.forFile(data, root: root, fileId: fileId);
+  }
+
+  late final GuestDownloadJobService _jobs =
+      GuestDownloadJobService(request: client.request);
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
+      (await _jobs.getOptions(mydiaContentType(ref.kind), ref.externalId))
+          .options;
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async =>
+      MydiaTranscodeJob(
+        jobs: _jobs,
+        contentType: mydiaContentType(ref.kind),
+        id: ref.externalId,
+        resolution: optionId,
+        fileFor: _file,
+      );
+
+  Future<DirectFile> _file(String jobId) async {
+    final credentials = await client.credentials();
+    if (credentials.isP2p) {
+      final base = await guestProxyBase(proxy(), credentials,
+          owner: this, target: source.account.id);
+      return DirectFile(
+          url: MediaRoutes.download(base, jobId), extension: 'mp4');
+    }
+    final server = credentials.serverUrl?.replaceFirst(RegExp(r'/+$'), '');
+    if (server == null) throw const SourceException.unreachable();
+    return DirectFile(
+      url: '$server/api/v1/download/job/$jobId/file',
+      headers: {'Authorization': 'Bearer ${credentials.accessToken}'},
+      extension: 'mp4',
+    );
   }
 
   @override

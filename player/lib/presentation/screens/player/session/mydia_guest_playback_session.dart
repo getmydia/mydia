@@ -17,6 +17,7 @@ import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/periodic_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
+import '../../../../core/sources/mydia/guest_proxy.dart';
 import '../../../../core/sources/mydia/mydia_guest_client.dart';
 import '../../../../core/sources/mydia/mydia_guest_credentials.dart';
 import '../../../../core/sources/mydia/mydia_guest_source.dart';
@@ -203,14 +204,7 @@ class MydiaGuestStreamResolver implements StreamResolver {
       // A hold keyed on anything but the screen could never be released.
       throw StateError('A p2p stream needs the screen that will release it.');
     }
-    final service = proxy();
-    await service.start(
-      owner: holder,
-      targetPeer: credentials.nodeAddr!,
-      authToken: credentials.accessToken,
-      target: target,
-    );
-    return service.targetBaseUrl(target);
+    return guestProxyBase(proxy(), credentials, owner: holder, target: target);
   }
 
   Future<String> _startSession(

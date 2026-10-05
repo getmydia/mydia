@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia_source.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
@@ -141,8 +142,9 @@ void main() {
       expect(source, isA<MydiaSource>());
       expect(source!.kind, SourceKind.mydia);
       expect(source.connection, SourceConnectionStatus.remote);
-      expect(source.capabilities, isEmpty);
-      expect(source.as<Object>(), isNull);
+      expect(source.capabilities, {SourceCapability.downloadable});
+      expect(source.as<Downloadable>(), isNotNull);
+      expect(source.as<WatchedState>(), isNull);
     });
 
     test('is null for an unknown id', () {
@@ -162,7 +164,8 @@ void main() {
 
   group('MydiaSource.connection', () {
     SourceConnectionStatus status(AsyncValue<AuthStatus> auth) =>
-        MydiaSource(source: Source.legacyMydia(), auth: auth).connection;
+        MydiaSource(source: Source.legacyMydia(), auth: auth, jobs: () => null)
+            .connection;
 
     test('maps auth state to a connection status', () {
       expect(status(const AsyncLoading<AuthStatus>()),

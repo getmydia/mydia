@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
+import '../downloads/download_job_providers.dart';
 import '../graphql/graphql_provider.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
@@ -336,8 +337,11 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
   final MediaSource media = switch (source.kind) {
-    SourceKind.mydia when source.id == SourceId.legacyMydia =>
-      MydiaSource(source: source, auth: ref.watch(authStateProvider)),
+    SourceKind.mydia when source.id == SourceId.legacyMydia => MydiaSource(
+        source: source,
+        auth: ref.watch(authStateProvider),
+        jobs: () => ref.read(unifiedDownloadJobServiceProvider),
+      ),
     SourceKind.mydia ||
     SourceKind.plex ||
     SourceKind.stash ||

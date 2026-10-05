@@ -4,25 +4,35 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/models/download_option.dart';
+import '../../domain/models/download_plan.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
+import '../../domain/sources/source_error.dart';
 import '../auth/auth_status.dart';
+import '../downloads/download_job_service.dart';
+import 'capabilities.dart';
 import 'media_source.dart';
+import 'mydia/mydia_transcode_job.dart';
 import 'source.dart';
 
-class MydiaSource extends MediaSource {
-  MydiaSource({required this.source, required this.auth});
+class MydiaSource extends MediaSource implements Downloadable {
+  MydiaSource({required this.source, required this.auth, required this.jobs});
 
   @override
   final Source source;
 
   final AsyncValue<AuthStatus> auth;
 
-  /// Empty on purpose. Mydia's screens predate this layer and consult
-  /// nothing here; capabilities are declared as its controllers move
-  /// behind [MediaSource].
+  /// The home job service, or null while signed out or still connecting.
+  final DownloadJobService? Function() jobs;
+
+  /// Only downloads go through this layer so far. Mydia's screens predate it
+  /// and consult nothing else here; capabilities are declared as its
+  /// controllers move behind [MediaSource].
   @override
-  Set<SourceCapability> get capabilities => const {};
+  Set<SourceCapability> get capabilities =>
+      const {SourceCapability.downloadable};
 
   /// Reachable Mydia reports [SourceConnectionStatus.remote]: the existing
   /// connection layer does not distinguish a LAN route from a remote one.
@@ -42,7 +52,30 @@ class MydiaSource extends MediaSource {
   ValueListenable<SourceConnectionStatus> get statusListenable => _status;
 
   @override
-  T? as<T extends Object>() => null;
+  T? as<T extends Object>() => this is T ? this as T : null;
+
+  DownloadJobService _service() =>
+      jobs() ?? (throw const SourceException.unreachable());
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
+      (await _service().getOptions(mydiaContentType(ref.kind), ref.externalId))
+          .options;
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
+    final service = _service();
+    return MydiaTranscodeJob(
+      jobs: service,
+      contentType: mydiaContentType(ref.kind),
+      id: ref.externalId,
+      resolution: optionId,
+      // HTTP signs the URL with the media token; p2p points at the local
+      // proxy. Either way the URL carries everything and needs no headers.
+      fileFor: (jobId) async => DirectFile(
+          url: await service.getDownloadUrl(jobId), extension: 'mp4'),
+    );
+  }
 
   // Mydia's screens predate this interface and stay on their own
   // controllers. Moving them behind it is a later, opt-in migration.

@@ -9,6 +9,7 @@ void main() {
   final source = MydiaSource(
     source: Source.legacyMydia(),
     auth: const AsyncData(AuthStatus.authenticated),
+    jobs: () => null,
   );
 
   test('exposes its status as a listenable', () {

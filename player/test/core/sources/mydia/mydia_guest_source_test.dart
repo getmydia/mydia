@@ -115,8 +115,11 @@ const guest = Source(
     onUnauthorized: () {},
   );
   return (
-    source:
-        MydiaGuestSource(source: guest, client: client, onDispose: onDispose),
+    source: MydiaGuestSource(
+        source: guest,
+        client: client,
+        proxy: () => throw StateError('no proxy in this test'),
+        onDispose: onDispose),
     t: t
   );
 }
