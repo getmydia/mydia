@@ -16,17 +16,26 @@ abstract interface class SourceStore {
   Future<void> putAccount(SourceAccountRecord record);
   Future<void> removeAccount(String accountId);
   Future<void> setActive(SourceId? id);
+
+  /// Replaces every "Include in All servers" choice.
+  Future<void> setAllServers(Map<SourceId, bool> choices);
 }
 
 class InMemorySourceStore implements SourceStore {
   final _accounts = <String, SourceAccountRecord>{};
   SourceId? _active;
+  Map<SourceId, bool> _allServers = const {};
 
   @override
   Future<SourceSnapshot> load() async => SourceSnapshot(
         accounts: _sorted(_accounts.values),
         activeId: _active,
+        allServers: Map.unmodifiable(_allServers),
       );
+
+  @override
+  Future<void> setAllServers(Map<SourceId, bool> choices) async =>
+      _allServers = Map.of(choices);
 
   @override
   Future<void> putAccount(SourceAccountRecord record) async =>
@@ -45,6 +54,7 @@ class HiveSourceStore implements SourceStore {
 
   static const boxName = 'source_accounts';
   static const _activeKey = 'active';
+  static const _allServersKey = 'all_servers';
   static const _accountPrefix = 'account:';
 
   static Future<HiveSourceStore> open() async {
@@ -71,8 +81,30 @@ class HiveSourceStore implements SourceStore {
     return SourceSnapshot(
       accounts: _sorted(accounts),
       activeId: active == null ? null : SourceId(active),
+      allServers: _readAllServers(),
     );
   }
+
+  Map<SourceId, bool> _readAllServers() {
+    final raw = _box.get(_allServersKey);
+    if (raw == null) return const {};
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final e in json.entries) SourceId(e.key): e.value as bool,
+      };
+    } catch (e) {
+      // Like an unreadable account: the choices reset, nothing else fails.
+      debugPrint('[Sources] Skipping unreadable All servers choices: $e');
+      return const {};
+    }
+  }
+
+  @override
+  Future<void> setAllServers(Map<SourceId, bool> choices) => _box.put(
+        _allServersKey,
+        jsonEncode({for (final e in choices.entries) e.key.value: e.value}),
+      );
 
   @override
   Future<void> putAccount(SourceAccountRecord record) => _box.put(

@@ -56,6 +56,31 @@ void main() {
     expect(await storage.read('source/acc1/account_token'), isNull);
   });
 
+  test('setIncludedInAllServers persists and updates state', () async {
+    await container.read(sourceRecordsProvider.future);
+    const id = SourceId('acc1:owner:abc123');
+    await container
+        .read(sourceRecordsProvider.notifier)
+        .setIncludedInAllServers(id, false);
+    expect((await store.load()).allServers, {id: false});
+    expect(container.read(allServersChoicesProvider), {id: false});
+  });
+
+  test('removing an account drops its All servers choices', () async {
+    await store.putAccount(plexRecord());
+    await store.setAllServers({
+      const SourceId('mydia'): false,
+      const SourceId('acc1:owner:abc123'): true,
+      const SourceId('acc10:owner:zz'): true,
+    });
+    await container.read(sourceRecordsProvider.future);
+    await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect((await store.load()).allServers, {
+      const SourceId('mydia'): false,
+      const SourceId('acc10:owner:zz'): true,
+    });
+  });
+
   test('the active source survives a restart', () async {
     await store.putAccount(plexRecord());
     await container.read(sourceRecordsProvider.future);

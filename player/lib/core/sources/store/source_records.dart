@@ -115,11 +115,20 @@ class SourceAccountRecord {
 
 @immutable
 class SourceSnapshot {
-  const SourceSnapshot({required this.accounts, this.activeId});
+  const SourceSnapshot({
+    required this.accounts,
+    this.activeId,
+    this.allServers = const {},
+  });
 
   static const empty = SourceSnapshot(accounts: []);
 
   /// Oldest first.
   final List<SourceAccountRecord> accounts;
   final SourceId? activeId;
+
+  /// The viewer's "Include in All servers" choices. A source with no entry
+  /// takes its kind's default. Lives beside the accounts so home Mydia,
+  /// which has no record, can have one.
+  final Map<SourceId, bool> allServers;
 }

@@ -9,8 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../graphql/graphql_provider.dart';
+import 'all_servers_inclusion.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
+import 'mydia/home_mydia_browse.dart';
 import 'mydia_source.dart';
 import 'source.dart';
 import 'source_factories.dart';
@@ -70,7 +72,16 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
 
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
-        await _write((store) => store.removeAccount(accountId));
+        final choices = {
+          for (final e in (_current?.allServers ?? const {}).entries)
+            if (!e.key.value.startsWith('$accountId:')) e.key: e.value,
+        };
+        await _write((store) async {
+          await store.removeAccount(accountId);
+          if (choices.length != (_current?.allServers.length ?? 0)) {
+            await store.setAllServers(choices);
+          }
+        });
         if (record != null) {
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
@@ -105,6 +116,13 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         if (lock != SourceLock.none) locks[serverId] = lock;
         await _write(
             (store) => store.putAccount(record.copyWith(serverLocks: locks)));
+      });
+
+  Future<void> setIncludedInAllServers(SourceId id, bool included) =>
+      _serialise(() async {
+        final snapshot = await future;
+        final next = {...snapshot.allServers, id: included};
+        await _write((store) => store.setAllServers(next));
       });
 
   /// "Forgot PIN": every account with a locked or hidden server goes, with
@@ -346,6 +364,38 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   };
   ref.onDispose(media.dispose);
   return media;
+});
+
+/// The viewer's "Include in All servers" choices; empty until they load.
+final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
+    (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {});
+
+/// Included sources the merged views read, home Mydia first. Leaves out
+/// what is locked away and what needs signing in again.
+final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
+  final choices = ref.watch(allServersChoicesProvider);
+  final gated = ref.watch(gatedSourceIdsProvider);
+  return [
+    for (final s in ref.watch(sourcesProvider))
+      if (!s.account.needsReauth &&
+          !gated.contains(s.id) &&
+          includedInAllServers(s, choices))
+        if ((s.id == SourceId.legacyMydia
+                ? ref.watch(homeMydiaBrowseSourceProvider)
+                : ref.watch(mediaSourceProvider(s.id)))
+            case final media?)
+          media,
+  ];
+});
+
+/// Included sources the merged views left out because they need signing in
+/// again, so the views can say so.
+final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
+  final choices = ref.watch(allServersChoicesProvider);
+  return [
+    for (final s in ref.watch(sourcesProvider))
+      if (s.account.needsReauth && includedInAllServers(s, choices)) s,
+  ];
 });
 
 /// Where `/s/:sourceId` lands before its screen builds: home Mydia keeps its

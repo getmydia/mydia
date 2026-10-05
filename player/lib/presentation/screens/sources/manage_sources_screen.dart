@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/p2p/p2p_service.dart';
+import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
 import '../../../core/sources/mydia/mydia_guest_secrets.dart';
 import '../../../core/sources/source.dart';
@@ -41,6 +42,7 @@ class ManageSourcesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final records = ref.watch(sourceRecordsProvider);
     final unlocked = ref.watch(sourceLockProvider);
+    final mydiaPresent = ref.watch(mydiaPresentProvider);
     List<SourceAccountRecord> visible(SourceSnapshot s) => [
           for (final r in s.accounts)
             if (unlocked ||
@@ -61,7 +63,8 @@ class ManageSourcesScreen extends ConsumerWidget {
         ],
       ),
       body: switch (records) {
-        AsyncData(:final value) when visible(value).isEmpty => ListView(
+        AsyncData(:final value) when visible(value).isEmpty && !mydiaPresent =>
+          ListView(
             padding: const EdgeInsets.all(16),
             children: const [
               Padding(
@@ -74,6 +77,7 @@ class ManageSourcesScreen extends ConsumerWidget {
         AsyncData(:final value) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (mydiaPresent) const _HomeMydiaCard(),
               for (final record in visible(value))
                 _AccountCard(
                     key: ValueKey(record.account.id),
@@ -88,6 +92,48 @@ class ManageSourcesScreen extends ConsumerWidget {
       },
     );
   }
+}
+
+/// The "Include in All servers" switch for one source.
+class _AllServersSwitch extends ConsumerWidget {
+  const _AllServersSwitch({required this.source});
+
+  final Source source;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SwitchListTile(
+        key: ValueKey('manage-all-servers-${source.id.value}'),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Include in All servers'),
+        value:
+            includedInAllServers(source, ref.watch(allServersChoicesProvider)),
+        onChanged: (on) => ref
+            .read(sourceRecordsProvider.notifier)
+            .setIncludedInAllServers(source.id, on),
+      );
+}
+
+/// This device's own Mydia has no stored account, so it gets a card of its
+/// own to hold its switch.
+class _HomeMydiaCard extends StatelessWidget {
+  const _HomeMydiaCard();
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Mydia', style: Theme.of(context).textTheme.titleMedium),
+              Text("This device's home server",
+                  style: Theme.of(context).textTheme.bodySmall),
+              _AllServersSwitch(source: Source.legacyMydia()),
+            ],
+          ),
+        ),
+      );
 }
 
 class _AccountCard extends ConsumerWidget {
@@ -151,7 +197,8 @@ class _AccountCard extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 8),
             for (final server in record.servers)
-              if (unlocked || record.lockOf(server.id) != SourceLock.hidden)
+              if (unlocked ||
+                  record.lockOf(server.id) != SourceLock.hidden) ...[
                 ListTile(
                   key: ValueKey('manage-server-${server.id}'),
                   dense: true,
@@ -172,6 +219,13 @@ class _AccountCard extends ConsumerWidget {
                         changeServerLock(context, ref, record, server),
                   ),
                 ),
+                // A server that is gone has no source, hence no switch.
+                if (record.sources
+                        .where((s) => s.server.id == server.id)
+                        .firstOrNull
+                    case final source?)
+                  _AllServersSwitch(source: source),
+              ],
             Wrap(
               spacing: 8,
               children: [
