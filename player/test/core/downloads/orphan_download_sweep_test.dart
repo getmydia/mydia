@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/downloads/orphan_download_sweep.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/models/download.dart';
@@ -20,14 +21,38 @@ class _Records extends SourceRecordsNotifier {
 
   @override
   Future<SourceSnapshot> build() => _load();
+
+  void emit(SourceSnapshot next) => state = AsyncData(next);
+
+  void fail() => state = AsyncError(StateError('boom'), StackTrace.empty);
 }
+
+SourceAccountRecord _secondAccount() => SourceAccountRecord(
+      account: const ProviderAccount(
+        id: 'acc2',
+        kind: SourceKind.plex,
+        displayName: 'harbor',
+        storageNamespace: 'source/acc2',
+        activeProfileId: 'owner',
+      ),
+      profiles: const [
+        SourceProfile(
+            id: 'owner', accountId: 'acc2', name: 'Harbor', isOwner: true),
+      ],
+      servers: const [],
+      addedAtMs: 1700000000000,
+    );
 
 class _RecordingService extends Fake implements DownloadService {
   final calls = <Set<String>>[];
 
+  /// When set, each call waits for it before answering.
+  Completer<void>? gate;
+
   @override
   Future<int> deleteDownloadsOfUnknownAccounts(Set<String> known) async {
     calls.add(known);
+    await gate?.future;
     return 0;
   }
 }
@@ -122,7 +147,7 @@ void main() {
       expect(service.calls, isEmpty);
     });
 
-    test('runs once per session', () async {
+    test('does not sweep again while the accounts are unchanged', () async {
       final container = build(() async => const SourceSnapshot(accounts: []));
       container.read(orphanDownloadSweepProvider);
       await settle();
@@ -131,6 +156,88 @@ void main() {
       await settle();
       expect(service.calls, hasLength(1));
       expect(service.calls.single, isEmpty);
+    });
+
+    test('sweeps again when an account is removed after the first sweep',
+        () async {
+      final container = build(() async =>
+          SourceSnapshot(accounts: [plexRecord(), _secondAccount()]));
+      container.read(orphanDownloadSweepProvider);
+      await settle();
+      expect(service.calls, [
+        {'acc1', 'acc2'}
+      ]);
+
+      (container.read(sourceRecordsProvider.notifier) as _Records)
+          .emit(SourceSnapshot(accounts: [plexRecord()]));
+      await settle();
+
+      expect(service.calls, [
+        {'acc1', 'acc2'},
+        {'acc1'},
+      ]);
+    });
+
+    test('a snapshot change during a sweep uses the fresh account set',
+        () async {
+      final managerGate = Completer<DownloadService>();
+      service = _RecordingService();
+      final container = ProviderContainer(overrides: [
+        downloadManagerProvider.overrideWith((ref) => managerGate.future),
+        sourceRecordsProvider.overrideWith(() => _Records(() async =>
+            SourceSnapshot(accounts: [plexRecord(), _secondAccount()]))),
+      ]);
+      addTearDown(container.dispose);
+      container.read(orphanDownloadSweepProvider);
+      await settle();
+
+      // The account goes while the sweep still waits for the manager.
+      (container.read(sourceRecordsProvider.notifier) as _Records)
+          .emit(SourceSnapshot(accounts: [plexRecord()]));
+      await settle();
+      managerGate.complete(service);
+      await settle();
+
+      expect(service.calls, [
+        {'acc1'}
+      ]);
+    });
+
+    test('a change during a running sweep runs one more afterwards', () async {
+      final container = build(() async =>
+          SourceSnapshot(accounts: [plexRecord(), _secondAccount()]));
+      service.gate = Completer<void>();
+      container.read(orphanDownloadSweepProvider);
+      await settle();
+      expect(service.calls, hasLength(1));
+
+      final notifier =
+          container.read(sourceRecordsProvider.notifier) as _Records;
+      notifier.emit(SourceSnapshot(accounts: [plexRecord()]));
+      await settle();
+      // Collapsed into the running sweep, not started alongside it.
+      expect(service.calls, hasLength(1));
+
+      service.gate!.complete();
+      await settle();
+      expect(service.calls, [
+        {'acc1', 'acc2'},
+        {'acc1'},
+      ]);
+    });
+
+    test('never sweeps on a later load or error', () async {
+      final container =
+          build(() async => SourceSnapshot(accounts: [plexRecord()]));
+      container.read(orphanDownloadSweepProvider);
+      await settle();
+      expect(service.calls, hasLength(1));
+
+      (container.read(sourceRecordsProvider.notifier) as _Records).fail();
+      await settle();
+      container.invalidate(sourceRecordsProvider);
+      await settle();
+      expect(service.calls, hasLength(1));
     });
   });
 }

@@ -64,7 +64,9 @@ Rules that are easy to break:
   records fails the task for good.
 - Any transport failure with no HTTP response (`connectionError`, a timeout,
   `unknown`) parks the task as `interrupted`, whether or not bytes are on disk,
-  so it resumes with a Range request. HTTP error statuses keep their own
+  so it resumes with a Range request. Progress saves are throttled, so a park
+  or failure saves the file's real length and matching progress in its own
+  save. HTTP error statuses keep their own
   handling. Dio does not wrap an error from a streamed body, so `fetchRange`
   converts one into a `connectionError` `DioException` whose message is only
   the error's type name: the platform's text names the URL, and home Mydia's
@@ -166,11 +168,13 @@ are being removed, and the cancel does not call the server (the credentials
 are going). The removal waits at most `downloadLookupTimeout` (5 seconds) for
 the download manager and then carries on without it, so it never hangs on
 startup. That cleanup is best effort, so `orphanDownloadSweepProvider`
-(`orphan_download_sweep.dart`, watched in AppShell) retries it: once per app
-session, only on native, and only after the source records have loaded
-successfully (never while loading or after an error, when the known accounts
-are not known), it calls `deleteDownloadsOfUnknownAccounts` with the stored
-account ids. That deletes the tasks, media rows and files of every account
+(`orphan_download_sweep.dart`, watched in AppShell) retries it: on native
+only, whenever a successfully loaded records snapshot has a different set of
+account ids than the last sweep (the first load counts; never while loading or
+after an error, when the known accounts are not known), it calls
+`deleteDownloadsOfUnknownAccounts` with the stored account ids, read fresh
+after the download manager is ready. Runs never overlap: a change during a run
+triggers one more run afterwards. That deletes the tasks, media rows and files of every account
 that is not stored, matched on the source id's account prefix, and never
 touches home Mydia. It is a separate provider so the keep-alive
 `downloadManagerProvider` still never watches the source providers. Downloads from another Plex Home user stay on disk but are not listed
