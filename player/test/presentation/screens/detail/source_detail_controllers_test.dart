@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:async' as dart_async;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:player/core/graphql/watch/fetch_log.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
@@ -254,17 +256,24 @@ void main() {
   test('a real server error still reaches the show view', () async {
     final source = FakeDetailSource()
       ..itemError = const SourceException.notFound();
-    final c = _container(source);
+    // No automatic retry, which would report the failure as a loading state.
+    final c = ProviderContainer(
+      retry: (_, __) => null,
+      overrides: [mediaSourceProvider(fakeSourceId).overrideWithValue(source)],
+    );
+    addTearDown(c.dispose);
     final sub =
         c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, __) {});
     await _settle();
-    // Riverpod reports its automatic retry as a loading state, so the proof
-    // that the error surfaced is the retry refetching the item (the first
-    // retry fires after 200ms).
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    expect(sub.read().hasValue, isFalse);
-    expect(source.itemCalls, greaterThan(1),
+    final state = sub.read();
+    expect(state, isA<AsyncError<ShowView>>(),
         reason: 'the build is current, so the error is not swallowed');
+    // The record `.wait` wraps the failure: (item error, children error).
+    final wait = state.error! as ParallelWaitError;
+    final (itemFailure, childrenFailure) = wait.errors as (Object?, Object?);
+    expect((itemFailure! as dart_async.AsyncError).error,
+        same(const SourceException.notFound()));
+    expect(childrenFailure, isNull, reason: 'children were fetched fine');
   });
 
   test('a movie view updates when the fresh item lands after the cached one',
