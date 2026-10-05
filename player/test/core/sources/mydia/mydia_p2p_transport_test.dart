@@ -56,4 +56,36 @@ void main() {
   test('P2pGraphQLError prints like the Exception it replaces', () {
     expect(const P2pGraphQLError('boom').toString(), 'Exception: boom');
   });
+
+  test('passes device profile and auth token to P2pService', () async {
+    final p2p = _RecordingP2p();
+    final transport = P2pMydiaTransport(p2p: p2p, nodeAddr: 'node');
+    await transport.send(
+      '{ a }',
+      {},
+      token: 'tok-1',
+      deviceProfile: 'prof-val',
+    );
+    expect(p2p.lastToken, 'tok-1');
+    expect(p2p.lastDeviceProfile, 'prof-val');
+  });
+}
+
+class _RecordingP2p extends P2pService {
+  String? lastToken;
+  String? lastDeviceProfile;
+
+  @override
+  Future<Map<String, dynamic>> sendGraphQLRequest({
+    required String peer,
+    required String query,
+    Map<String, dynamic>? variables,
+    String? operationName,
+    String? authToken,
+    String? deviceProfile,
+  }) async {
+    lastToken = authToken;
+    lastDeviceProfile = deviceProfile;
+    return {'ok': true};
+  }
 }

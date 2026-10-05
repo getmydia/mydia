@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gql/language.dart' show parseString;
+import 'package:player/core/player/device_profile.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -20,12 +21,14 @@ class _GatedTransport extends FakeMydiaTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async {
     if (_first) {
       _first = false;
       await gate.future;
     }
-    return super.send(query, variables, token: token);
+    return super
+        .send(query, variables, token: token, deviceProfile: deviceProfile);
   }
 }
 
@@ -36,8 +39,11 @@ void main() {
 
   late int loads;
 
-  MydiaClient build(
-          {String? deviceToken = 'device', String token = 'access'}) =>
+  MydiaClient build({
+    String? deviceToken = 'device',
+    String token = 'access',
+    GetDeviceProfile? getDeviceProfile,
+  }) =>
       MydiaClient(
         transport: transport,
         load: () async {
@@ -49,6 +55,7 @@ void main() {
         },
         save: (c) async => saved.add(c),
         onUnauthorized: () => unauthorized++,
+        getDeviceProfile: getDeviceProfile,
       );
 
   setUp(() {
@@ -364,5 +371,22 @@ void main() {
       throwsA(isA<SourceException>()),
     );
     expect(transport.calls.map((c) => c.operation), ['GetItem']);
+  });
+
+  test(
+      'attaches device profile header once probe resolves, sends without when null',
+      () async {
+    DeviceProfile? currentProfile;
+    final client = build(getDeviceProfile: () => currentProfile);
+
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
+    expect(transport.calls.single.deviceProfile, isNull);
+
+    const profile = DeviceProfile.webDefault();
+    currentProfile = profile;
+
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
+    expect(transport.calls.length, 2);
+    expect(transport.calls.last.deviceProfile, profile.toHeaderValue());
   });
 }

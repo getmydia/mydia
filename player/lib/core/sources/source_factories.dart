@@ -65,7 +65,8 @@ MediaSource buildHomeMydiaSource(Ref ref, Source source) {
   ref.listen<AsyncValue<AuthStatus>>(
       authStateProvider, (_, next) => status.value = homeMydiaStatus(next));
   ref.onDispose(status.dispose);
-  final client = MydiaClient(
+  final client = buildMydiaClient(
+    ref,
     transport:
         HomeMydiaTransport(() => ref.read(asyncGraphqlClientProvider.future)),
     load: () async =>
@@ -292,6 +293,25 @@ Future<List<ServerConnection>> _rediscoverJellyfin(
   return fresh;
 }
 
+/// Builds a [MydiaClient] for [transport], wired to inject the session's
+/// device profile header once detected.
+MydiaClient buildMydiaClient(
+  Ref ref, {
+  required MydiaGqlTransport transport,
+  required Future<MydiaCredentials> Function() load,
+  required Future<void> Function(MydiaCredentials) save,
+  required void Function() onUnauthorized,
+  GetDeviceProfile? getDeviceProfile,
+}) =>
+    MydiaClient(
+      transport: transport,
+      load: load,
+      save: save,
+      onUnauthorized: onUnauthorized,
+      getDeviceProfile: getDeviceProfile ??
+          () => ref.read(deviceProfileHolderProvider).profile,
+    );
+
 /// A Mydia server's source. Its credentials are read on first use, so
 /// the source builds synchronously.
 MydiaSource buildMydiaSource(Ref ref, Source source) {
@@ -299,7 +319,8 @@ MydiaSource buildMydiaSource(Ref ref, Source source) {
   Future<MydiaCredentials> load() async =>
       await readMydiaCredentials(secrets, source.account) ??
       (throw const SourceException.unauthorized());
-  final client = MydiaClient(
+  final client = buildMydiaClient(
+    ref,
     transport: _LazyMydiaTransport(ref, load),
     load: load,
     save: (c) => writeMydiaCredentials(secrets, source.account, c),
@@ -353,6 +374,8 @@ class _LazyMydiaTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async =>
-      (await _resolve()).send(query, variables, token: token);
+      (await _resolve())
+          .send(query, variables, token: token, deviceProfile: deviceProfile);
 }

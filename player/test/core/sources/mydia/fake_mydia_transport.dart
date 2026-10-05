@@ -9,8 +9,13 @@ class FakeMydiaTransport implements MydiaGqlTransport {
   final Map<String,
           FutureOr<Map<String, dynamic>> Function(Map<String, dynamic> vars)>
       handlers = {};
-  final List<({String operation, Map<String, dynamic> vars, String? token})>
-      calls = [];
+  final List<
+      ({
+        String operation,
+        Map<String, dynamic> vars,
+        String? token,
+        String? deviceProfile,
+      })> calls = [];
 
   /// Tokens the server accepts. Any other token answers unauthorized.
   Set<String> validTokens = {'access'};
@@ -27,9 +32,15 @@ class FakeMydiaTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async {
     final op = operationOf(query);
-    calls.add((operation: op, vars: variables, token: token));
+    calls.add((
+      operation: op,
+      vars: variables,
+      token: token,
+      deviceProfile: deviceProfile,
+    ));
     if (unreachable) throw const SourceException.unreachable();
     if (op != 'RefreshAccessToken' && !validTokens.contains(token)) {
       throw const SourceException.unauthorized();

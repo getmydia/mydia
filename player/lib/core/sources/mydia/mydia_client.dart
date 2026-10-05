@@ -1,15 +1,20 @@
 /// A Mydia server's requests, with its own token refresh.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:gql/ast.dart' show DocumentNode, OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
+import '../../player/device_profile.dart';
 import '../media_source.dart';
 import 'mydia_credentials.dart';
 import 'mydia_gql_transport.dart';
 import 'schema_downgrade.dart';
+
+typedef GetDeviceProfile = FutureOr<DeviceProfile?> Function();
 
 /// Unauthenticated on the server on purpose: the device token is the proof.
 const _refreshMutation = r'''
@@ -27,15 +32,18 @@ class MydiaClient {
     required Future<MydiaCredentials> Function() load,
     required Future<void> Function(MydiaCredentials) save,
     required void Function() onUnauthorized,
+    GetDeviceProfile? getDeviceProfile,
   })  : _transport = transport,
         _load = load,
         _save = save,
-        _onUnauthorized = onUnauthorized;
+        _onUnauthorized = onUnauthorized,
+        _getDeviceProfile = getDeviceProfile;
 
   final MydiaGqlTransport _transport;
   final Future<MydiaCredentials> Function() _load;
   final Future<void> Function(MydiaCredentials) _save;
   final void Function() _onUnauthorized;
+  final GetDeviceProfile? _getDeviceProfile;
   MydiaCredentials? _credentials;
   Future<MydiaCredentials>? _loading;
   Future<String?>? _refreshing;
@@ -60,8 +68,11 @@ class MydiaClient {
   ]) async {
     final query = printNode(document);
     final sentWith = (await credentials()).accessToken;
+    final profile = await _getDeviceProfile?.call();
+    final headerValue = profile?.toHeaderValue();
     try {
-      return await _send(query, variables, sentWith);
+      return await _send(query, variables, sentWith,
+          deviceProfile: headerValue);
     } on SourceException catch (e) {
       if (e.kind != SourceErrorKind.unauthorized) rethrow;
       // A refresh may have finished while this request was in flight.
@@ -77,7 +88,7 @@ class MydiaClient {
         rethrow;
       }
       try {
-        return await _send(query, variables, fresh);
+        return await _send(query, variables, fresh, deviceProfile: headerValue);
       } on SourceException catch (retry) {
         if (retry.kind == SourceErrorKind.unauthorized) _onUnauthorized();
         rethrow;
@@ -117,9 +128,14 @@ class MydiaClient {
   }
 
   Future<Map<String, dynamic>> _send(
-      String query, Map<String, dynamic> variables, String? token) async {
+    String query,
+    Map<String, dynamic> variables,
+    String? token, {
+    String? deviceProfile,
+  }) async {
     try {
-      final data = await _transport.send(query, variables, token: token);
+      final data = await _transport.send(query, variables,
+          token: token, deviceProfile: deviceProfile);
       _status.value = _transport.reachedVia;
       return data;
     } on SourceException catch (e) {
