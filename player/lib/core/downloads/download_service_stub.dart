@@ -167,6 +167,11 @@ class _StubDownloadService implements DownloadService {
   Future<int> deleteAccountDownloads(String accountId) async => 0;
 
   @override
+  Future<int> deleteDownloadsOfUnknownAccounts(
+          Set<String> knownAccountIds) async =>
+      0;
+
+  @override
   List<DownloadTask> getActiveDownloads() => [];
 
   @override

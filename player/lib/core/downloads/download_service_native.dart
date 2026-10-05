@@ -1341,14 +1341,21 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  Future<int> deleteAccountDownloads(String accountId) async {
+  Future<int> deleteAccountDownloads(String accountId) =>
+      _deleteDownloadsWhere((source) => _ofAccount(source, accountId));
+
+  @override
+  Future<int> deleteDownloadsOfUnknownAccounts(Set<String> knownAccountIds) =>
+      _deleteDownloadsWhere((source) =>
+          source != SourceId.legacyMydia &&
+          !knownAccountIds.contains(source.value.split(':').first));
+
+  Future<int> _deleteDownloadsWhere(bool Function(SourceId) matches) async {
     if (_database == null) return 0;
     // Tasks first, so an in-flight download cannot finish and save a media
     // row for the removed account while the files are being deleted.
-    final tasks = _database!
-        .getAllTasks()
-        .where((t) => _ofAccount(t.source, accountId))
-        .toList();
+    final tasks =
+        _database!.getAllTasks().where((t) => matches(t.source)).toList();
     for (final task in tasks) {
       // The account's credentials are going, so a server-side job cannot be
       // cancelled; skipping it also keeps removal off the network.
@@ -1357,10 +1364,8 @@ class _NativeDownloadService implements DownloadService {
       await _database!.deleteTask(task.id);
     }
     var count = 0;
-    final media = _database!
-        .getAllMedia()
-        .where((m) => _ofAccount(m.source, accountId))
-        .toList();
+    final media =
+        _database!.getAllMedia().where((m) => matches(m.source)).toList();
     for (final m in media) {
       await _deleteMediaFiles(m);
       await _database!.deleteMedia(m.id);

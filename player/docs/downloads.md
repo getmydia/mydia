@@ -69,6 +69,19 @@ Rules that are easy to break:
   converts one into a `connectionError` `DioException` whose message is only
   the error's type name: the platform's text names the URL, and home Mydia's
   carries a token. Transport drops still count as recovery attempts.
+- The transcode job calls (`prepare` and `status`) go through `_guardJobCall`,
+  which maps a dropped connection the same way. The home HTTP job service
+  throws `http` `ClientException`, `SocketException` or `HttpException`, and a
+  timeout is a `TimeoutException`; those park the task as a counted attempt. A
+  guest or p2p `SourceException` of kind `unreachable` parks it uncounted, as
+  `_resolve` does. `DeadJobException`, `_TaskFailure` and every other error
+  propagate unchanged, so a long remote transcode is resumed by the sweep
+  with its `transcodeJobId` kept instead of failing.
+- Progress is persisted and emitted at most every 500 ms (`_clock`) or every
+  4 MiB, whichever comes first, and the state at the end of each fetch is
+  always written. A large file arrives in tens of thousands of chunks, and
+  each save is a Hive write plus an Android notification update. The speed
+  tracker still sees every chunk.
 - No saved `error` keeps a URL query: `_runTask` strips `?...` from any URL in
   an error text (`stripUrlQueries`) at the save point.
 - For a `DirectFile` the size the response reports replaces the plan's
@@ -152,7 +165,15 @@ so an in-flight download cannot finish and write a media row while the files
 are being removed, and the cancel does not call the server (the credentials
 are going). The removal waits at most `downloadLookupTimeout` (5 seconds) for
 the download manager and then carries on without it, so it never hangs on
-startup. Downloads from another Plex Home user stay on disk but are not listed
+startup. That cleanup is best effort, so `orphanDownloadSweepProvider`
+(`orphan_download_sweep.dart`, watched in AppShell) retries it: once per app
+session, only on native, and only after the source records have loaded
+successfully (never while loading or after an error, when the known accounts
+are not known), it calls `deleteDownloadsOfUnknownAccounts` with the stored
+account ids. That deletes the tasks, media rows and files of every account
+that is not stored, matched on the source id's account prefix, and never
+touches home Mydia. It is a separate provider so the keep-alive
+`downloadManagerProvider` still never watches the source providers. Downloads from another Plex Home user stay on disk but are not listed
 while a different user is active.
 
 ## Tests

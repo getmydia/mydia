@@ -133,6 +133,11 @@ abstract class DownloadService {
   /// Cancels and deletes them. Returns how many records went.
   Future<int> deleteAccountDownloads(String accountId);
 
+  /// Deletes the downloads of every third-party account not in
+  /// [knownAccountIds], for removals whose cleanup never ran. Home Mydia's are
+  /// never touched. Returns how many records went.
+  Future<int> deleteDownloadsOfUnknownAccounts(Set<String> knownAccountIds);
+
   List<DownloadTask> getActiveDownloads();
   List<DownloadedMedia> getDownloadedMedia();
   bool isDownloaded(ItemRef ref);

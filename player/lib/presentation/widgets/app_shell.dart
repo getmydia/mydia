@@ -9,6 +9,7 @@ import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
@@ -368,6 +369,7 @@ class _AppShellState extends ConsumerState<AppShell>
     // not autoDispose — to keep listening for the rest of the session.
     ref.watch(progressFlushProvider);
     ref.watch(sourceProgressFlushProvider);
+    ref.watch(orphanDownloadSweepProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey
