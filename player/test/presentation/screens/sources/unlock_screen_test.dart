@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -37,20 +39,30 @@ class _Unauthenticated extends AuthStateNotifier {
   AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
 }
 
+late GoRouter _router;
+
+/// Opens the unlock screen at `/unlock?next=/done`, or, given [pushed],
+/// pushes that location over an `/origin` screen.
 Future<ProviderContainer> _pump(
   WidgetTester tester,
   DeviceAuth auth,
   PinStore pins, {
   List<Override> overrides = const [],
+  String? pushed,
 }) async {
-  final router = GoRouter(initialLocation: '/unlock?next=%2Fdone', routes: [
-    GoRoute(path: '/', builder: (_, __) => const Text('home')),
-    GoRoute(path: '/done', builder: (_, __) => const Text('done')),
-    GoRoute(
-      path: '/unlock',
-      builder: (_, s) => UnlockScreen(next: s.uri.queryParameters['next']),
-    ),
-  ]);
+  final router = _router = GoRouter(
+      initialLocation: pushed == null ? '/unlock?next=%2Fdone' : '/origin',
+      routes: [
+        GoRoute(path: '/', builder: (_, __) => const Text('home')),
+        GoRoute(path: '/done', builder: (_, __) => const Text('done')),
+        GoRoute(path: '/origin', builder: (_, __) => const Text('origin')),
+        GoRoute(
+            path: '/sources/manage', builder: (_, __) => const Text('manage')),
+        GoRoute(
+          path: '/unlock',
+          builder: (_, s) => UnlockScreen(next: s.uri.queryParameters['next']),
+        ),
+      ]);
   final container = ProviderContainer(overrides: [
     deviceAuthProvider.overrideWithValue(auth),
     pinStoreProvider.overrideWithValue(pins),
@@ -62,6 +74,10 @@ Future<ProviderContainer> _pump(
     child: MaterialApp.router(builder: toastLayerBuilder, routerConfig: router),
   ));
   await tester.pumpAndSettle();
+  if (pushed != null) {
+    unawaited(router.push(pushed));
+    await tester.pumpAndSettle();
+  }
   return container;
 }
 
@@ -109,6 +125,39 @@ void main() {
     await tester.tap(find.byKey(const Key('unlock-cancel')));
     await tester.pumpAndSettle();
     expect(find.text('home'), findsOneWidget);
+  });
+
+  // iOS has no system back: a screen reached by `go` from here is a dead end.
+  group('opened over another screen', () {
+    testWidgets('without next, unlocking returns to the opener',
+        (tester) async {
+      await _pump(tester, _Auth(DeviceAuthResult.success),
+          PinStore(MockAuthStorage(), iterations: 1000),
+          pushed: unlockLocation());
+      expect(find.text('origin'), findsOneWidget);
+    });
+
+    testWidgets('a root-level next keeps the opener underneath',
+        (tester) async {
+      await _pump(tester, _Auth(DeviceAuthResult.success),
+          PinStore(MockAuthStorage(), iterations: 1000),
+          pushed: unlockLocation('/sources/manage'));
+      expect(find.text('manage'), findsOneWidget);
+
+      expect(_router.canPop(), isTrue);
+      _router.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('origin'), findsOneWidget);
+    });
+
+    testWidgets('cancel returns to the opener', (tester) async {
+      await _pump(tester, _Auth(DeviceAuthResult.cancelled),
+          PinStore(MockAuthStorage(), iterations: 1000),
+          pushed: unlockLocation());
+      await tester.tap(find.byKey(const Key('unlock-cancel')));
+      await tester.pumpAndSettle();
+      expect(find.text('origin'), findsOneWidget);
+    });
   });
 
   testWidgets('Forgot PIN removes locked accounts and the PIN', (tester) async {
