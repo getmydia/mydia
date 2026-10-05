@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/domain/models/cast_device.dart';
@@ -32,9 +33,10 @@ void main() {
 
       expect(restored.device.id, 'd1');
       expect(restored.device.protocol, CastProtocolKind.chromecast);
-      expect(restored.mediaId, 'movie-9');
-      expect(restored.mediaType, 'movie');
-      expect(restored.fileId, 'file-3');
+      final content = restored.content as MydiaCastContent;
+      expect(content.mediaId, 'movie-9');
+      expect(content.mediaType, 'movie');
+      expect(content.fileId, 'file-3');
       expect(restored.title, 'Arrival');
       expect(restored.position, const Duration(minutes: 12));
       expect(restored.routeKind, CastRouteKind.directServer);
@@ -171,7 +173,10 @@ void main() {
       expect(await store.load(), isNull);
 
       await store.save(sessionAt(DateTime.utc(2026, 7, 28)));
-      expect((await store.load())?.mediaId, 'movie-9');
+      expect(
+        ((await store.load())?.content as MydiaCastContent?)?.mediaId,
+        'movie-9',
+      );
 
       await store.clear();
       expect(await store.load(), isNull);

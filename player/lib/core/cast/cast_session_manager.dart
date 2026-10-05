@@ -8,11 +8,14 @@ import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
+import 'cast_content.dart';
 import 'cast_route_resolver.dart';
 import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 import 'mydia_cast_backend.dart';
+
+export 'cast_content.dart';
 
 /// The track list to hand to LOAD, with [selectedTrackId] first.
 ///
@@ -216,9 +219,7 @@ Stream<List<CastDevice>> mergeCastDiscovery(
 
 /// Everything the UI knows about the item it wants to cast.
 class CastLaunchRequest {
-  final String fileId;
-  final String mediaId;
-  final String mediaType;
+  final CastContent content;
   final String title;
   final String? subtitleLabel;
   final String? imageUrl;
@@ -239,12 +240,9 @@ class CastLaunchRequest {
   /// Null means off, which is what local playback does when streaming, so it
   /// is what a cast defaults to.
   final String? selectedSubtitleTrackId;
-  final String? showId;
 
-  const CastLaunchRequest({
-    required this.fileId,
-    required this.mediaId,
-    required this.mediaType,
+  const CastLaunchRequest.forContent({
+    required this.content,
     required this.title,
     this.subtitleLabel,
     this.imageUrl,
@@ -252,8 +250,36 @@ class CastLaunchRequest {
     this.subtitles = const [],
     this.duration,
     this.selectedSubtitleTrackId,
-    this.showId,
   });
+
+  /// A Mydia request, taking the ids a caller already has.
+  CastLaunchRequest({
+    required String fileId,
+    required String mediaId,
+    required String mediaType,
+    required String title,
+    String? subtitleLabel,
+    String? imageUrl,
+    Duration? startPosition,
+    List<CastSubtitleTrack> subtitles = const [],
+    Duration? duration,
+    String? selectedSubtitleTrackId,
+    String? showId,
+  }) : this.forContent(
+          content: MydiaCastContent(
+            fileId: fileId,
+            mediaId: mediaId,
+            mediaType: mediaType,
+            showId: showId,
+          ),
+          title: title,
+          subtitleLabel: subtitleLabel,
+          imageUrl: imageUrl,
+          startPosition: startPosition,
+          subtitles: subtitles,
+          duration: duration,
+          selectedSubtitleTrackId: selectedSubtitleTrackId,
+        );
 
   /// The same request, resumed from somewhere else, or with a new subtitle
   /// choice.
@@ -274,10 +300,11 @@ class CastLaunchRequest {
     bool clearSelectedSubtitle = false,
     String? showId,
   }) =>
-      CastLaunchRequest(
-        fileId: fileId,
-        mediaId: mediaId,
-        mediaType: mediaType,
+      CastLaunchRequest.forContent(
+        content: switch (content) {
+          final MydiaCastContent m => m.withShowId(showId),
+          final other => other,
+        },
         title: title,
         subtitleLabel: subtitleLabel,
         imageUrl: imageUrl,
@@ -287,7 +314,6 @@ class CastLaunchRequest {
         selectedSubtitleTrackId: clearSelectedSubtitle
             ? null
             : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
-        showId: showId ?? this.showId,
       );
 }
 
@@ -1120,7 +1146,7 @@ class CastSessionManager {
     if (wantsBridge) await _enableLan();
 
     final route = await resolver.resolve(
-      fileId: request.fileId,
+      fileId: (request.content as MydiaCastContent).fileId,
       protocol: device.protocol,
       forceBridge: forceBridge,
       forceTranscode: forceTranscode,
@@ -1391,12 +1417,15 @@ class CastSessionManager {
       totalDuration: request.duration,
     ));
 
-    final contentRef = isMydia
+    final mydia = request.content is MydiaCastContent
+        ? request.content as MydiaCastContent
+        : null;
+    final contentRef = isMydia && mydia != null
         ? MydiaContentRef(
-            mediaItemId: request.mediaType == 'episode'
-                ? (request.showId ?? request.mediaId)
-                : request.mediaId,
-            episodeId: request.mediaType == 'episode' ? request.mediaId : null,
+            mediaItemId: mydia.isEpisode
+                ? (mydia.showId ?? mydia.mediaId)
+                : mydia.mediaId,
+            episodeId: mydia.isEpisode ? mydia.mediaId : null,
             audioTrack: null,
             subtitleTrack: request.selectedSubtitleTrackId,
           )
@@ -1455,17 +1484,15 @@ class CastSessionManager {
       clearSelectedSubtitle: resolvedSubtitleId == null,
     );
 
-    final mediaUrl = isMydia
-        ? (request.mediaType == 'episode'
-            ? '${request.showId ?? request.mediaId}:${request.mediaId}'
-            : request.mediaId)
+    final mediaUrl = isMydia && mydia != null
+        ? (mydia.isEpisode
+            ? '${mydia.showId ?? mydia.mediaId}:${mydia.mediaId}'
+            : mydia.mediaId)
         : route.mediaUrl;
 
-    _persisted = PersistedCastSession(
+    _persisted = PersistedCastSession.forContent(
       device: device,
-      mediaId: request.mediaId,
-      mediaType: request.mediaType,
-      fileId: request.fileId,
+      content: request.content,
       title: request.title,
       position: request.startPosition ?? Duration.zero,
       routeKind: route.kind,
@@ -1473,7 +1500,6 @@ class CastSessionManager {
       mediaUrl: mediaUrl,
       duration: request.duration ?? Duration.zero,
       selectedSubtitleTrackId: resolvedSubtitleId,
-      showId: request.showId,
     );
     await _store.save(_persisted!);
     if (generation != _connectGeneration) return;
@@ -1634,18 +1660,20 @@ class CastSessionManager {
       await _store.save(_persisted!);
     }
 
-    if (request.mediaType == 'episode') {
-      await _progressService.syncEpisodePosition(
-        request.mediaId,
-        position,
-        _lastDuration,
-      );
-    } else {
-      await _progressService.syncMoviePosition(
-        request.mediaId,
-        position,
-        _lastDuration,
-      );
+    if (request.content case final MydiaCastContent mydia) {
+      if (mydia.isEpisode) {
+        await _progressService.syncEpisodePosition(
+          mydia.mediaId,
+          position,
+          _lastDuration,
+        );
+      } else {
+        await _progressService.syncMoviePosition(
+          mydia.mediaId,
+          position,
+          _lastDuration,
+        );
+      }
     }
   }
 
@@ -1774,11 +1802,8 @@ class CastSessionManager {
 
     await startCast(
       device: stored.device,
-      request: CastLaunchRequest(
-        fileId: stored.fileId,
-        mediaId: stored.mediaId,
-        mediaType: stored.mediaType,
-        showId: stored.showId,
+      request: CastLaunchRequest.forContent(
+        content: stored.content,
         title: stored.title,
         startPosition: stored.position,
         duration: stored.duration,
@@ -1911,11 +1936,8 @@ class CastSessionManager {
     // — reconstruct an equivalent one from the fields the persisted record
     // carries, so a restored session keeps syncing progress and marks
     // itself stale like a freshly started one does.
-    final request = CastLaunchRequest(
-      fileId: stored.fileId,
-      mediaId: stored.mediaId,
-      mediaType: stored.mediaType,
-      showId: stored.showId,
+    final request = CastLaunchRequest.forContent(
+      content: stored.content,
       title: stored.title,
       startPosition: stored.position,
       duration: stored.duration,

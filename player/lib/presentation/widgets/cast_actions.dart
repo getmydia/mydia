@@ -181,10 +181,8 @@ Future<void> pickCastDevice(BuildContext context, WidgetRef ref) async {
     // instead of throwing out of `retargetTo`.
     await manager.startCast(
       device: device,
-      request: CastLaunchRequest(
-        fileId: persisted.fileId,
-        mediaId: persisted.mediaId,
-        mediaType: persisted.mediaType,
+      request: CastLaunchRequest.forContent(
+        content: persisted.content,
         title: persisted.title,
         startPosition: persisted.position,
         duration: persisted.duration,

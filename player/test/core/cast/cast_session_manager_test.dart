@@ -160,7 +160,7 @@ void main() {
     protocol: CastProtocolKind.chromecast,
   );
 
-  const launch = CastLaunchRequest(
+  final launch = CastLaunchRequest(
     fileId: 'file-1',
     mediaId: 'movie-1',
     mediaType: 'movie',
@@ -322,7 +322,7 @@ void main() {
       await manager.startCast(device: device, request: launch);
 
       final saved = await store.load();
-      expect(saved?.mediaId, 'movie-1');
+      expect((saved?.content as MydiaCastContent?)?.mediaId, 'movie-1');
       expect(saved?.device.id, 'd1');
       expect(saved?.routeKind, CastRouteKind.directServer);
     });
@@ -364,7 +364,7 @@ void main() {
       backend.emitDuration(const Duration(seconds: 200));
       await Future<void>.delayed(Duration.zero);
 
-      const secondLaunch = CastLaunchRequest(
+      final secondLaunch = CastLaunchRequest(
         fileId: 'file-2',
         mediaId: 'movie-2',
         mediaType: 'movie',
@@ -605,7 +605,7 @@ void main() {
     /// playlists reports `duration: -1` and never learns the real length.
     const knownRuntime = Duration(minutes: 107);
 
-    const launchWithDuration = CastLaunchRequest(
+    final launchWithDuration = CastLaunchRequest(
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',
@@ -711,7 +711,7 @@ void main() {
         () async {
       final manager = build();
       addTearDown(manager.dispose);
-      const episodeLaunch = CastLaunchRequest(
+      final episodeLaunch = CastLaunchRequest(
         fileId: 'file-3',
         mediaId: 'ep-1',
         mediaType: 'episode',
@@ -745,12 +745,12 @@ void main() {
         'receiver reports', () async {
       final manager = build();
       addTearDown(manager.dispose);
-      const withDuration = CastLaunchRequest(
+      final withDuration = CastLaunchRequest(
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
         title: 'Arrival',
-        duration: Duration(seconds: 6420), // the server's own figure
+        duration: const Duration(seconds: 6420), // the server's own figure
       );
       await manager.startCast(device: device, request: withDuration);
 
@@ -1196,7 +1196,7 @@ void main() {
       addTearDown(manager.dispose);
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -1242,7 +1242,10 @@ void main() {
       final ref = backend.loadedRequests.single.contentRef;
       expect(ref?.mediaItemId, 'show-42');
       expect(ref?.episodeId, 'ep-1');
-      expect((await store.load())?.showId, 'show-42');
+      expect(
+        ((await store.load())?.content as MydiaCastContent?)?.showId,
+        'show-42',
+      );
     });
   });
 
@@ -1250,13 +1253,13 @@ void main() {
     // A resume offset baked into the numbers, matching the resume scenario
     // in cast_resume_offset_test.dart: the server echoes back 2394s for a
     // request at 2400s (it snapped to the nearest keyframe).
-    const launchWithPosition = CastLaunchRequest(
+    final launchWithPosition = CastLaunchRequest(
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',
       title: 'Arrival',
-      startPosition: Duration(seconds: 2400),
-      duration: Duration(hours: 1),
+      startPosition: const Duration(seconds: 2400),
+      duration: const Duration(hours: 1),
     );
 
     test(
@@ -1324,16 +1327,16 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
           title: 'Arrival',
           subtitleLabel: 'English',
           imageUrl: 'https://mydia.test/poster.jpg',
-          startPosition: Duration(seconds: 2400),
-          duration: Duration(hours: 1),
-          subtitles: [
+          startPosition: const Duration(seconds: 2400),
+          duration: const Duration(hours: 1),
+          subtitles: const [
             CastSubtitleTrack(
               trackId: '0',
               url: 'https://mydia.test/subs/en.vtt',
@@ -1423,7 +1426,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-2',
           mediaId: 'movie-2',
           mediaType: 'movie',
@@ -1488,7 +1491,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-2',
           mediaId: 'movie-2',
           mediaType: 'movie',
@@ -1996,7 +1999,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2021,7 +2024,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2084,7 +2087,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2106,7 +2109,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2126,7 +2129,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2147,7 +2150,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2172,7 +2175,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2208,7 +2211,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2262,7 +2265,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2286,7 +2289,7 @@ void main() {
 
     // The brief's own snippet for this test declared a local, non-const
     // `tracks` list and then passed it as `subtitles: tracks` inside a
-    // `const CastLaunchRequest(...)`, which doesn't compile against a
+    // `CastLaunchRequest(...)`, which doesn't compile against a
     // non-const local. Reusing `twoTracks` (already `const`, and carrying
     // the identical two tracks) sidesteps that rather than introducing a
     // second near-duplicate list.
@@ -2296,7 +2299,7 @@ void main() {
 
       await manager.startCast(
         device: device,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2883,13 +2886,13 @@ void main() {
       );
       await manager.startCast(
         device: chromecastDevice,
-        request: const CastLaunchRequest(
+        request: CastLaunchRequest(
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
           title: 'Arrival',
-          startPosition: Duration(seconds: 2400),
-          duration: Duration(hours: 1),
+          startPosition: const Duration(seconds: 2400),
+          duration: const Duration(hours: 1),
         ),
       );
 
@@ -3160,14 +3163,14 @@ void main() {
         metadata: {'nodeId': 'node-remote'},
       );
 
-      const request = CastLaunchRequest(
+      final request = CastLaunchRequest(
         fileId: 'file-123',
         mediaId: 'ep-456',
         mediaType: 'episode',
         showId: 'show-789',
         title: 'Severance - S01E01',
-        startPosition: Duration(seconds: 42),
-        duration: Duration(minutes: 50),
+        startPosition: const Duration(seconds: 42),
+        duration: const Duration(minutes: 50),
         selectedSubtitleTrackId: 'sub-1',
       );
 
@@ -3184,7 +3187,10 @@ void main() {
       expect(manager.currentSession?.connectionState,
           CastConnectionState.connected);
       expect(manager.currentSession?.mediaInfo?.title, 'Severance - S01E01');
-      expect(manager.persistedSession?.showId, 'show-789');
+      expect(
+        (manager.persistedSession?.content as MydiaCastContent?)?.showId,
+        'show-789',
+      );
       expect(manager.persistedSession?.mediaUrl, 'show-789:ep-456');
     });
 
@@ -3208,12 +3214,12 @@ void main() {
         metadata: {'nodeId': 'node-remote'},
       );
 
-      const request = CastLaunchRequest(
+      final request = CastLaunchRequest(
         fileId: 'file-999',
         mediaId: 'movie-111',
         mediaType: 'movie',
         title: 'Inception',
-        duration: Duration(minutes: 148),
+        duration: const Duration(minutes: 148),
       );
 
       await manager.startCast(device: device, request: request);
