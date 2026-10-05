@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cache_watcher.dart';
 import 'fetch_log.dart';
 import 'invalidation_target.dart';
 import 'query_key.dart';
-import 'query_watcher.dart';
 
 /// The watchers that are alive right now, by key.
 ///
@@ -12,9 +12,9 @@ import 'query_watcher.dart';
 /// inside a notifier's `build()`, and mutating provider state there is not
 /// allowed.
 class WatcherRegistry {
-  final Map<QueryKey, QueryWatcher<dynamic>> _watchers = {};
+  final Map<QueryKey, CacheWatcher> _watchers = {};
 
-  void register(QueryKey key, QueryWatcher<dynamic> watcher) {
+  void register(QueryKey key, CacheWatcher watcher) {
     _watchers[key] = watcher;
   }
 
@@ -26,25 +26,24 @@ class WatcherRegistry {
   /// order — a replacement registering before its predecessor is torn
   /// down — so a live successor can never be dropped by a stale
   /// predecessor's teardown.
-  void unregister(QueryKey key, QueryWatcher<dynamic> watcher) {
+  void unregister(QueryKey key, CacheWatcher watcher) {
     if (identical(_watchers[key], watcher)) {
       _watchers.remove(key);
     }
   }
 
-  QueryWatcher<dynamic>? find(QueryKey key) => _watchers[key];
+  CacheWatcher? find(QueryKey key) => _watchers[key];
 
   /// The live watchers for [operationName], whatever their variables.
   ///
   /// Materialised with `toList()` for the same reason as [watchers]: a
   /// refetch can dispose a watcher and mutate `_watchers` mid-iteration.
-  Iterable<QueryWatcher<dynamic>> family(String operationName) =>
-      _watchers.entries
-          .where((entry) => entry.key.operationName == operationName)
-          .map((entry) => entry.value)
-          .toList();
+  Iterable<CacheWatcher> family(String operationName) => _watchers.entries
+      .where((entry) => entry.key.operationName == operationName)
+      .map((entry) => entry.value)
+      .toList();
 
-  Iterable<QueryWatcher<dynamic>> get watchers => _watchers.values.toList();
+  Iterable<CacheWatcher> get watchers => _watchers.values.toList();
 }
 
 final Provider<WatcherRegistry> watcherRegistryProvider =
