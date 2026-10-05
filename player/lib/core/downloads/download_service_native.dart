@@ -321,7 +321,8 @@ class _NativeDownloadService implements DownloadService {
       final task = queuedTasks.first;
       // Claimed as downloading so the loop holds its slot from the start;
       // otherwise a slow resolve lets this loop launch every queued task.
-      final pendingTask = task.copyWith(status: 'downloading');
+      final pendingTask =
+          task.copyWith(status: 'downloading', lastProgressAt: _clock());
       await _database!.saveTask(pendingTask);
 
       _runInBackground(_runTask(pendingTask), 'download ${pendingTask.id}');
@@ -813,8 +814,12 @@ class _NativeDownloadService implements DownloadService {
       final path = current.filePath ??
           '${await _getDownloadDirectory()}/'
               '${_generateFileName(current, file.extension)}';
+      // A slow resolve or prepare must not eat the stall window.
       await save(current.copyWith(
-          filePath: path, status: 'downloading', fileSize: expected));
+          filePath: path,
+          status: 'downloading',
+          fileSize: expected,
+          lastProgressAt: _clock()));
       final disk = File(path);
 
       var reResolved = false;
@@ -951,7 +956,10 @@ class _NativeDownloadService implements DownloadService {
     if (_database == null) return;
 
     final task = _database!.getTask(taskId);
-    if (task == null) return;
+    // A finished, failed or cancelled task has nothing to pause.
+    if (task == null || !DownloadStatusSets.active.contains(task.status)) {
+      return;
+    }
 
     // Cancel the token if one is live. An orphan has none, because the map is
     // rebuilt empty on every launch, and it still has to become paused rather
@@ -962,6 +970,7 @@ class _NativeDownloadService implements DownloadService {
     if (cancelToken != null && !cancelToken.isCancelled) {
       cancelToken.cancel();
     }
+    _speedTracker.clearTask(taskId);
 
     // Re-read: a progress tick may have landed since the read above.
     final pausedTask =

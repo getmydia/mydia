@@ -213,6 +213,43 @@ void main() {
     }
   });
 
+  test('a queue-claimed task is not stalled while it resolves', () async {
+    final h = await makeHarness(body: body);
+    addTearDown(h.dispose);
+    h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: false);
+    await h.database.saveTask(DownloadTask(
+      id: 'old',
+      mediaId: 'm1',
+      title: 'Old',
+      quality: '1080p',
+      status: 'queued',
+      lastProgressAt: h.clock.now.subtract(const Duration(minutes: 10)),
+      createdAt: DateTime(2026, 1, 1),
+    ));
+    final gate = h.resolver.gate = Completer<void>();
+    h.service.applySettings(maxConcurrentDownloads: 1, autoStartQueued: true);
+    await settle();
+    expect(h.database.getTask('old')!.status, 'downloading');
+
+    h.clock.advance(const Duration(seconds: 30));
+    await h.service.checkForStalls();
+    expect(h.database.getTask('old')!.status, 'downloading');
+
+    gate.complete();
+    await h.waitForStatus('old', 'completed');
+  });
+
+  test('pausing a finished task leaves it alone', () async {
+    final h = await makeHarness(body: body);
+    addTearDown(h.dispose);
+    final task = await h.service.start(_request());
+    await h.waitForStatus(task.id, 'completed');
+
+    await h.service.pauseDownload(task.id);
+
+    expect(h.database.getTask(task.id)!.status, 'completed');
+  });
+
   test('a connection dropped with bytes on disk is parked for a ranged resume',
       () async {
     final h = await makeHarness(body: body);
