@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/router/root_routes.dart';
 import '../../../core/sources/lock/device_auth.dart';
 import '../../../core/sources/lock/pin_store.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
@@ -17,7 +18,8 @@ import 'pin_pad.dart';
 class UnlockScreen extends ConsumerStatefulWidget {
   const UnlockScreen({super.key, this.next});
 
-  /// An in-app location to continue to. Anything else goes home.
+  /// An in-app location to continue to. Anything else goes home. Without
+  /// one, the screen returns to whatever opened it.
   final String? next;
 
   @override
@@ -39,6 +41,24 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
       return '/';
     }
     return next;
+  }
+
+  /// Back to whatever opened this screen, or home when nothing did.
+  void _leave() => context.canPop() ? context.pop() : context.go('/');
+
+  /// After unlocking. Without a `next`, the opener is the destination. A
+  /// root-navigator `next` replaces this screen, keeping the opener under it
+  /// for the destination's back button: a `go` there leaves iOS, which has no
+  /// system back, with no way out. A shell `next` has the shell's nav, so it
+  /// is a `go`.
+  void _continue() {
+    if (widget.next == null) {
+      _leave();
+    } else if (opensOverShell(_next) && context.canPop()) {
+      context.pushReplacement(_next);
+    } else {
+      context.go(_next);
+    }
   }
 
   @override
@@ -66,7 +86,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     setState(() => _prompting = false);
     switch (result) {
       case DeviceAuthResult.success:
-        context.go(_next);
+        _continue();
       case DeviceAuthResult.unavailable:
         setState(() {
           _deviceAvailable = false;
@@ -86,7 +106,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
     if (!mounted) return null;
     switch (result) {
       case PinAccepted():
-        context.go(_next);
+        _continue();
         return null;
       case PinRejected():
         return 'Wrong PIN.';
@@ -177,7 +197,7 @@ class _UnlockScreenState extends ConsumerState<UnlockScreen> {
                       ),
                     TextButton(
                       key: const Key('unlock-cancel'),
-                      onPressed: () => context.go('/'),
+                      onPressed: _leave,
                       child: const Text('Cancel'),
                     ),
                   ],

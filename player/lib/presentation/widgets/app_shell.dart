@@ -15,6 +15,7 @@ import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
@@ -318,7 +319,11 @@ class _AppShellState extends ConsumerState<AppShell>
       _showOfflineToast();
       return;
     }
-    context.go(route);
+    if (opensOverShell(route)) {
+      context.push(route);
+    } else {
+      context.go(route);
+    }
   }
 
   /// Wraps [child] in a focus region, or returns it untouched off the

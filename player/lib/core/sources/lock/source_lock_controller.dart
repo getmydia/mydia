@@ -13,9 +13,10 @@ import 'pin_store.dart';
 /// How long the app may sit in the background before it locks again.
 const kRelockGrace = Duration(minutes: 1);
 
-/// The unlock screen, returning to [next] on success.
-String unlockLocation(String next) =>
-    '/unlock?next=${Uri.encodeQueryComponent(next)}';
+/// The unlock screen, continuing to [next] on success, or back to whatever
+/// opened it when there is no [next].
+String unlockLocation([String? next]) =>
+    next == null ? '/unlock' : '/unlock?next=${Uri.encodeQueryComponent(next)}';
 
 /// Wall clock for the relock check. A Dart timer does not count time the
 /// device slept, so the grace is also compared against this on resume.

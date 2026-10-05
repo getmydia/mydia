@@ -17,7 +17,7 @@ Future<void> changeServerLock(BuildContext context, WidgetRef ref,
     SourceAccountRecord record, SourceServer server) async {
   final anyLock = ref.read(sourceLocksProvider).isNotEmpty;
   if (anyLock && !ref.read(sourceLockProvider)) {
-    await context.push(unlockLocation('/sources/manage'));
+    await context.push(unlockLocation());
     return;
   }
   final choice = await showModalBottomSheet<SourceLock>(
@@ -99,7 +99,7 @@ class ShowHiddenSourcesRow extends ConsumerWidget {
       title: Text(unlocked ? 'Lock now' : 'Show hidden servers'),
       onTap: () => unlocked
           ? ref.read(sourceLockProvider.notifier).lock()
-          : context.push(unlockLocation('/sources/manage')),
+          : context.push(unlockLocation()),
     );
   }
 }
