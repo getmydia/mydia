@@ -29,6 +29,7 @@ class AllServersGridScreen extends ConsumerWidget {
     final notifier = ref.read(allServersGridProvider(kind).notifier);
     final names = ref.watch(allServersNamesProvider);
     final state = grid.value;
+    final items = stillIncluded(names, state?.items ?? const []);
     void retry() => ref.invalidate(allServersGridProvider(kind));
 
     return Scaffold(
@@ -82,9 +83,9 @@ class AllServersGridScreen extends ConsumerWidget {
                   },
                   child: BrowseGrid(
                     scrollTopPadding: 8,
-                    itemCount: state.items.length,
+                    itemCount: items.length,
                     itemBuilder: (context, index) =>
-                        AllServersPoster(item: state.items[index]),
+                        AllServersPoster(item: items[index]),
                   ),
                 ),
             },

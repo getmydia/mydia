@@ -25,6 +25,16 @@ final allServersNamesProvider =
             s.id: s.displayName,
         });
 
+/// [items] from servers still included. A merged result outlives a server
+/// leaving the set (relocked, switched off) until its replacement loads, so
+/// screens filter by the current set to drop that server's items at once.
+List<ItemSummary> stillIncluded(
+        Map<SourceId, String> included, List<ItemSummary> items) =>
+    [
+      for (final i in items)
+        if (included.containsKey(i.ref.sourceId)) i
+    ];
+
 final allServersContinueWatchingProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).continueWatching());

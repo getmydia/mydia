@@ -256,4 +256,12 @@ void main() {
       expect(reader.searches, ['x', 'x', 'y']);
     });
   });
+
+  test('stillIncluded drops items from a server that left the set', () {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final items = [item(a, 'a1'), item(b, 'b1'), item(a, 'a2')];
+    expect(
+        stillIncluded({a.id: 'Server a'}, items).map((i) => i.ref.externalId),
+        ['a1', 'a2']);
+  });
 }

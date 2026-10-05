@@ -37,6 +37,9 @@ class AllServersHomeScreen extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
     final r = resuming.requireValue, n = recent.requireValue;
+    final included = ref.watch(allServersNamesProvider);
+    final continueItems = stillIncluded(included, r.value);
+    final recentItems = stillIncluded(included, n.value);
     final everyServer = ref.watch(allServersSourcesProvider).length;
     final unavailable = {...r.unavailable, ...n.unavailable}.toList();
     // Zero included servers is nothing to show, not every server failing.
@@ -59,27 +62,27 @@ class AllServersHomeScreen extends ConsumerWidget {
           ),
           AllServersBanner(
               unavailable: unavailable, onRetry: () => _refresh(ref)),
-          if (r.value.isNotEmpty)
+          if (continueItems.isNotEmpty)
             SourcePosterRow(
               key: const Key('all-continue-watching'),
               title: 'Continue Watching',
               railId: 'all-continue',
-              items: r.value,
+              items: continueItems,
               posterFor: (context, item) => AllServersPoster(
                 item: item,
                 caption: continueWatchingCaption(item),
                 onContextMenu: (c) => _menu(c, ref, item),
               ),
             ),
-          if (n.value.isNotEmpty)
+          if (recentItems.isNotEmpty)
             SourcePosterRow(
               key: const Key('all-recently-added'),
               title: 'Recently Added',
               railId: 'all-recent',
-              items: n.value,
+              items: recentItems,
               posterFor: (context, item) => AllServersPoster(item: item),
             ),
-          if (r.value.isEmpty && n.value.isEmpty)
+          if (continueItems.isEmpty && recentItems.isEmpty)
             const Padding(
               padding: EdgeInsets.all(48),
               child: Center(child: Text('Nothing to show yet.')),
