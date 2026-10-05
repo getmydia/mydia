@@ -14,6 +14,8 @@ import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
+import '../../presentation/screens/all_servers/all_servers_cards.dart';
+import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
@@ -385,6 +387,13 @@ GoRouter appRouter(Ref ref) {
             path: '/settings',
             name: 'settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/all',
+            name: 'all_servers',
+            redirect: (context, state) =>
+                allServersRedirect(ref.read(allServersSourcesProvider)),
+            builder: (context, state) => const AllServersHomeScreen(),
           ),
           GoRoute(
             path: '/s/:sourceId',
