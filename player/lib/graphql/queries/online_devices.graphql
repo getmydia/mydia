@@ -1,0 +1,20 @@
+query Devices {
+  devices {
+    id
+    deviceName
+    platform
+    nodeId
+    isRevoked
+  }
+}
+
+query OnlineDevices {
+  devices {
+    id
+    deviceName
+    platform
+    nodeId
+    isRevoked
+    online
+  }
+}

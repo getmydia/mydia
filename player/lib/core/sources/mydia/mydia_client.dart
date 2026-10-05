@@ -8,6 +8,7 @@ import 'package:gql/ast.dart' show DocumentNode, OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
+import '../../../graphql/mutations/refresh_access_token.graphql.dart';
 import '../../../graphql/mutations/refresh_media_token.graphql.dart';
 import '../../../graphql/queries/server_compatibility.graphql.dart';
 import '../../compatibility/compatibility_verdict.dart';
@@ -18,16 +19,6 @@ import 'mydia_gql_transport.dart';
 import 'schema_downgrade.dart';
 
 typedef GetDeviceProfile = FutureOr<DeviceProfile?> Function();
-
-/// Unauthenticated on the server on purpose: the device token is the proof.
-const _refreshMutation = r'''
-mutation RefreshAccessToken($deviceToken: String!) {
-  refreshAccessToken(deviceToken: $deviceToken) {
-    token
-    expiresAt
-  }
-}
-''';
 
 class MydiaClient {
   MydiaClient({
@@ -233,7 +224,12 @@ class MydiaClient {
     }
     final Map<String, dynamic> data;
     try {
-      data = await _send(_refreshMutation, {'deviceToken': deviceToken}, null);
+      data = await _send(
+        printNode(documentNodeMutationRefreshAccessToken),
+        Variables$Mutation$RefreshAccessToken(deviceToken: deviceToken)
+            .toJson(),
+        null,
+      );
     } on SourceException catch (e) {
       // The server answers a revoked or unknown device token with a plain
       // GraphQL error, so any answer other than "could not reach it" means

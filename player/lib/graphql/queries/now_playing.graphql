@@ -1,0 +1,22 @@
+query NowPlayingEpisode($id: ID!) {
+  episode(id: $id) {
+    seasonNumber
+    episodeNumber
+    title
+    show {
+      title
+      artwork {
+        posterUrl
+      }
+    }
+  }
+}
+
+query NowPlayingMovie($id: ID!) {
+  movie(id: $id) {
+    year
+    artwork {
+      posterUrl
+    }
+  }
+}

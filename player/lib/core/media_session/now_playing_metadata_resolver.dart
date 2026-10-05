@@ -2,14 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gql/ast.dart' show DocumentNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../graphql/queries/now_playing.graphql.dart';
 import '../graphql/graphql_provider.dart';
 import 'media_session_state.dart';
 
 /// Runs one GraphQL query and returns its `data`, or null.
 typedef NowPlayingFetch = Future<Map<String, dynamic>?> Function(
-    String document, Map<String, dynamic> variables);
+    DocumentNode document, Map<String, dynamic> variables);
 
 /// Thrown by a [NowPlayingFetch] when there is currently no way to reach the
 /// server (no GraphQL client yet, e.g. playback started during startup or a
@@ -17,29 +19,6 @@ typedef NowPlayingFetch = Future<Map<String, dynamic>?> Function(
 /// as unmemoisable so the next [NowPlayingMetadataResolver.resolve] call for
 /// the same ids fetches again instead of returning a permanently cached null.
 class NowPlayingFetchUnavailable implements Exception {}
-
-const _episodeQuery = r'''
-query NowPlayingEpisode($id: ID!) {
-  episode(id: $id) {
-    seasonNumber
-    episodeNumber
-    title
-    show {
-      title
-      artwork { posterUrl }
-    }
-  }
-}
-''';
-
-const _movieQuery = r'''
-query NowPlayingMovie($id: ID!) {
-  movie(id: $id) {
-    year
-    artwork { posterUrl }
-  }
-}
-''';
 
 /// Looks up the poster and second line for whatever is playing, from the ids
 /// the player snapshot already carries.
@@ -63,11 +42,17 @@ class NowPlayingMetadataResolver {
       String? mediaItemId, String? episodeId, String key) async {
     try {
       if (episodeId != null) {
-        final data = await _fetch(_episodeQuery, {'id': episodeId});
+        final data = await _fetch(
+          documentNodeQueryNowPlayingEpisode,
+          Variables$Query$NowPlayingEpisode(id: episodeId).toJson(),
+        );
         final episode = data?['episode'];
         return episode is Map<String, dynamic> ? _episode(episode) : null;
       }
-      final data = await _fetch(_movieQuery, {'id': mediaItemId});
+      final data = await _fetch(
+        documentNodeQueryNowPlayingMovie,
+        Variables$Query$NowPlayingMovie(id: mediaItemId!).toJson(),
+      );
       final movie = data?['movie'];
       return movie is Map<String, dynamic> ? _movie(movie) : null;
     } on NowPlayingFetchUnavailable {
@@ -114,7 +99,7 @@ final nowPlayingMetadataResolverProvider =
     final client = ref.read(graphqlClientProvider);
     if (client == null) throw NowPlayingFetchUnavailable();
     final result = await client.query(QueryOptions(
-      document: gql(document),
+      document: document,
       variables: variables,
       // A detail screen usually just loaded this item.
       fetchPolicy: FetchPolicy.cacheFirst,

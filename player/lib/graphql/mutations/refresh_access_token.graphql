@@ -1,0 +1,6 @@
+mutation RefreshAccessToken($deviceToken: String!) {
+  refreshAccessToken(deviceToken: $deviceToken) {
+    token
+    expiresAt
+  }
+}

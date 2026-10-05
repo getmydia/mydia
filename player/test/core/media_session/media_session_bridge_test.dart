@@ -211,7 +211,7 @@ void main() {
   });
 
   test('a no-op session skips metadata and artwork lookups entirely', () async {
-    final fetchCalls = <String>[];
+    final fetchCalls = <Object>[];
     final noopResolver =
         NowPlayingMetadataResolver((document, variables) async {
       fetchCalls.add(document);

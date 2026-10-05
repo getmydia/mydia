@@ -1,0 +1,6 @@
+mutation RegisterDeviceNode($nodeId: String!) {
+  registerDeviceNode(nodeId: $nodeId) {
+    id
+    nodeId
+  }
+}
