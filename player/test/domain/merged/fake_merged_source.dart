@@ -84,6 +84,12 @@ class FakeMergedSource extends MediaSource
   SourceException? failWith;
   int? failAfterPages;
 
+  /// Browse answers this many empty pages (with a cursor) before real ones.
+  int emptyLeadingPages = 0;
+
+  /// Browse always answers an empty page echoing the cursor it was given.
+  bool stuckEmpty = false;
+
   /// Completes calls only when set to a completed future.
   Completer<void>? gate;
   final browseCalls = <BrowseQuery>[];
@@ -144,6 +150,13 @@ class FakeMergedSource extends MediaSource
     final failFrom = failAfterPages;
     if (failFrom != null && start ~/ query.pageSize >= failFrom) {
       throw const SourceException.unreachable();
+    }
+    if (stuckEmpty) {
+      return Page(items: const [], nextCursor: cursor ?? const Cursor('0'));
+    }
+    if (browseCalls.length <= emptyLeadingPages) {
+      // An empty first page that still points onward (cursor `0`).
+      return const Page(items: [], nextCursor: Cursor('0'));
     }
     final all = library.id == 'shows' ? shows : movies;
     final page = all.skip(start).take(query.pageSize).toList();

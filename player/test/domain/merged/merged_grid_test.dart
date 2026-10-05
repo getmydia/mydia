@@ -76,6 +76,53 @@ void main() {
     expect(grid.unavailable, [flaky.id]);
   });
 
+  test('a stream whose first page is empty with a cursor keeps exact order',
+      () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final lateStart = FakeMergedSource(a, movies: [
+      for (final t in ['a', 'c', 'e']) item(a, t, title: t)
+    ])
+      ..emptyLeadingPages = 1;
+    final steady = FakeMergedSource(b, movies: [
+      for (final t in ['b', 'd', 'f']) item(b, t, title: t)
+    ]);
+    final grid = await reader([lateStart, steady])
+        .grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 10);
+    expect(grid.items.map((i) => i.title), ['a', 'b', 'c', 'd', 'e', 'f']);
+  });
+
+  test('a stream answering empty pages with the same cursor ends', () async {
+    final stuck = FakeMergedSource(fakeServer('s'))..stuckEmpty = true;
+    final grid =
+        await reader([stuck]).grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 5).timeout(const Duration(seconds: 2));
+    expect(grid.items, isEmpty);
+    expect(grid.hasMore, isFalse);
+  });
+
+  test('overlapping loadMore calls never emit an item twice', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final gate = Completer<void>();
+    final sa = FakeMergedSource(a, movies: [
+      for (final t in ['a', 'c', 'e']) item(a, t, title: t)
+    ]);
+    final sb = FakeMergedSource(b, movies: [
+      for (final t in ['b', 'd', 'f']) item(b, t, title: t)
+    ]);
+    final grid =
+        await reader([sa, sb]).grid(LibraryKind.movies, SharedSort.title);
+    sa.gate = gate;
+    sb.gate = gate;
+    final first = grid.loadMore(count: 2);
+    final second = grid.loadMore(count: 2);
+    gate.complete();
+    await Future.wait([first, second]);
+    final refs = grid.items.map((i) => i.ref.externalId).toList();
+    expect(refs.toSet(), hasLength(refs.length));
+    expect(refs, ['a', 'b', 'c', 'd']);
+  });
+
   test('a server slower than the timeout is unavailable', () async {
     final slow = FakeMergedSource(fakeServer('s'))..gate = Completer<void>();
     addTearDown(() => slow.gate!.complete());

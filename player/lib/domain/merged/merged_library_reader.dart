@@ -45,22 +45,23 @@ class LiveMergedReader implements MergedLibraryReader {
 
   Future<MergedResult<List<List<ItemSummary>>>> _each<C extends Object>(
       Future<List<ItemSummary>> Function(C capability) call) async {
+    final caps = [for (final s in sources) s.as<C>()];
     final answers = await Future.wait([
-      for (final s in sources)
-        if (s.as<C>() case final c?)
-          _guard(s, () => call(c))
+      for (var i = 0; i < sources.length; i++)
+        if (caps[i] case final c?)
+          _guard(sources[i], () => call(c))
         else
           Future<List<ItemSummary>?>.value(),
     ]);
     return MergedResult(
       [for (final a in answers) a ?? const []],
       skipped: [
-        for (final s in sources)
-          if (s.as<C>() == null) s.id
+        for (var i = 0; i < sources.length; i++)
+          if (caps[i] == null) sources[i].id
       ],
       unavailable: [
         for (var i = 0; i < sources.length; i++)
-          if (sources[i].as<C>() != null && answers[i] == null) sources[i].id,
+          if (caps[i] != null && answers[i] == null) sources[i].id,
       ],
     );
   }

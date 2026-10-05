@@ -44,12 +44,20 @@ class MergedGrid {
   /// Emits up to [count] more items. An item is emitted only once every
   /// stream still running has one buffered, so the order is exact for the
   /// keys the servers send.
-  Future<void> loadMore({int count = 60}) async {
+  ///
+  /// Overlapping calls run one after another, so no stream is ever filled
+  /// from the same cursor twice.
+  Future<void> loadMore({int count = 60}) {
+    final run = _tail.then((_) => _loadMore(count));
+    _tail = run.catchError((Object _) {});
+    return run;
+  }
+
+  Future<void> _tail = Future<void>.value();
+
+  Future<void> _loadMore(int count) async {
     for (var emitted = 0; emitted < count; emitted++) {
-      await Future.wait([
-        for (final s in _streams)
-          if (s.buffer.isEmpty && !s.exhausted) _fill(s),
-      ]);
+      await Future.wait([for (final s in _streams) _ensureHead(s)]);
       GridStream? best;
       for (final s in _streams) {
         if (s.buffer.isEmpty) continue;
@@ -65,14 +73,25 @@ class MergedGrid {
     }
   }
 
+  /// Fetches until [s] has an item buffered or has run out.
+  Future<void> _ensureHead(GridStream s) async {
+    while (s.buffer.isEmpty && !s.exhausted) {
+      await _fill(s);
+    }
+  }
+
   Future<void> _fill(GridStream s) async {
     try {
       final page = await s.source
           .browse(s.library, s.query, cursor: s.cursor)
           .timeout(timeout);
       s.buffer.addAll(page.items);
-      s.cursor = page.nextCursor;
-      if (page.nextCursor == null) s.exhausted = true;
+      final next = page.nextCursor;
+      // An empty page that points back at the cursor it was asked with
+      // would loop forever.
+      final stuck = page.items.isEmpty && next?.value == s.cursor?.value;
+      s.cursor = next;
+      if (next == null || stuck) s.exhausted = true;
     } catch (e) {
       // A server that fails mid-scroll stops contributing; what it already
       // gave stays where it is.
