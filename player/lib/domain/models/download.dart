@@ -1,5 +1,8 @@
 import 'package:hive_ce/hive.dart';
 
+import '../../core/sources/source.dart';
+import '../sources/item.dart';
+
 part 'download.g.dart';
 
 enum DownloadStatus {
@@ -27,6 +30,14 @@ enum DownloadStatus {
 enum MediaType {
   movie,
   episode,
+}
+
+/// The item kind a record stands for. Records written before third-party
+/// downloads have no kind and are a Mydia movie or episode.
+ItemKind downloadItemKind(String? itemKind, String mediaType) {
+  final stored =
+      itemKind == null ? null : ItemKind.values.asNameMap()[itemKind];
+  return stored ?? (mediaType == 'episode' ? ItemKind.episode : ItemKind.movie);
 }
 
 @HiveType(typeId: 0)
@@ -142,6 +153,25 @@ class DownloadTask {
   @HiveField(34)
   final int recoveryAttempts;
 
+  /// The source this came from. Null on records written before downloads
+  /// came from more than one server, which are all home Mydia.
+  @HiveField(35)
+  final String? sourceId;
+
+  /// `ItemKind.name`. Null on old records; see [downloadItemKind].
+  @HiveField(36)
+  final String? itemKind;
+
+  /// Artwork saved next to the file when the download completed.
+  @HiveField(37)
+  final String? posterPath;
+
+  @HiveField(38)
+  final String? backdropPath;
+
+  @HiveField(39)
+  final String? thumbnailPath;
+
   const DownloadTask({
     required this.id,
     required this.mediaId,
@@ -180,7 +210,25 @@ class DownloadTask {
     this.airDate,
     this.lastProgressAt,
     this.recoveryAttempts = 0,
+    this.sourceId,
+    this.itemKind,
+    this.posterPath,
+    this.backdropPath,
+    this.thumbnailPath,
   });
+
+  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+
+  ItemRef get itemRef => ItemRef(
+        sourceId: source,
+        kind: downloadItemKind(itemKind, mediaType),
+        externalId: mediaId,
+      );
+
+  /// Kind is left out: a caller holding only a Mydia id knows movie or
+  /// episode, and the id is unique within its source either way.
+  bool matches(ItemRef ref) =>
+      ref.sourceId == source && ref.externalId == mediaId;
 
   DownloadStatus get downloadStatus {
     switch (status) {
@@ -296,6 +344,13 @@ class DownloadTask {
     String? airDate,
     DateTime? lastProgressAt,
     int? recoveryAttempts,
+    String? sourceId,
+    String? itemKind,
+    String? posterPath,
+    String? backdropPath,
+    String? thumbnailPath,
+    bool clearTranscodeJobId = false,
+    bool clearError = false,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -309,10 +364,11 @@ class DownloadTask {
       fileSize: fileSize ?? this.fileSize,
       downloadUrl: downloadUrl ?? this.downloadUrl,
       posterUrl: posterUrl ?? this.posterUrl,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
-      transcodeJobId: transcodeJobId ?? this.transcodeJobId,
+      transcodeJobId:
+          clearTranscodeJobId ? null : (transcodeJobId ?? this.transcodeJobId),
       transcodeProgress: transcodeProgress ?? this.transcodeProgress,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       isProgressive: isProgressive ?? this.isProgressive,
@@ -333,6 +389,11 @@ class DownloadTask {
       airDate: airDate ?? this.airDate,
       lastProgressAt: lastProgressAt ?? this.lastProgressAt,
       recoveryAttempts: recoveryAttempts ?? this.recoveryAttempts,
+      sourceId: sourceId ?? this.sourceId,
+      itemKind: itemKind ?? this.itemKind,
+      posterPath: posterPath ?? this.posterPath,
+      backdropPath: backdropPath ?? this.backdropPath,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
     );
   }
 
@@ -450,6 +511,25 @@ class DownloadedMedia {
   @HiveField(22)
   final String? airDate;
 
+  /// The source this came from. Null on records written before downloads
+  /// came from more than one server, which are all home Mydia.
+  @HiveField(23)
+  final String? sourceId;
+
+  /// `ItemKind.name`. Null on old records; see [downloadItemKind].
+  @HiveField(24)
+  final String? itemKind;
+
+  /// Artwork saved next to the file when the download completed.
+  @HiveField(25)
+  final String? posterPath;
+
+  @HiveField(26)
+  final String? backdropPath;
+
+  @HiveField(27)
+  final String? thumbnailPath;
+
   const DownloadedMedia({
     required this.id,
     required this.mediaId,
@@ -474,7 +554,25 @@ class DownloadedMedia {
     this.showPosterUrl,
     this.thumbnailUrl,
     this.airDate,
+    this.sourceId,
+    this.itemKind,
+    this.posterPath,
+    this.backdropPath,
+    this.thumbnailPath,
   });
+
+  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+
+  ItemRef get itemRef => ItemRef(
+        sourceId: source,
+        kind: downloadItemKind(itemKind, mediaType),
+        externalId: mediaId,
+      );
+
+  /// Kind is left out: a caller holding only a Mydia id knows movie or
+  /// episode, and the id is unique within its source either way.
+  bool matches(ItemRef ref) =>
+      ref.sourceId == source && ref.externalId == mediaId;
 
   MediaType get type {
     return mediaType == 'episode' ? MediaType.episode : MediaType.movie;
@@ -513,6 +611,11 @@ class DownloadedMedia {
       showPosterUrl: task.showPosterUrl,
       thumbnailUrl: task.thumbnailUrl,
       airDate: task.airDate,
+      sourceId: task.sourceId,
+      itemKind: task.itemKind,
+      posterPath: task.posterPath,
+      backdropPath: task.backdropPath,
+      thumbnailPath: task.thumbnailPath,
     );
   }
 }
