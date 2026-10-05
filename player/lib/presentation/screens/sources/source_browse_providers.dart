@@ -222,6 +222,9 @@ class LibraryBrowseNotifier extends StreamNotifier<LibraryBrowseState> {
     } catch (_) {
       // Any failure, not just a SourceException: loadingMore must not stick.
       if (ref.mounted && generation == _generation) {
+        // Page 2 never landed, so page 1 is still the whole list: let the
+        // watcher refresh it again.
+        _paged = false;
         state = AsyncData(current.copyWith(loadingMore: false));
       }
     }

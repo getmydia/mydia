@@ -105,10 +105,35 @@ void main() {
     // ...and a user refetch's page 1 does not replace the paged list.
     source.firstPageHold = Completer<void>();
     final refetch = (watcher as SourceWatcher).refetch();
+    await pumpEventQueue();
     source.firstPageHold!.complete();
     await refetch;
     await pumpEventQueue();
     expect(container.read(provider).requireValue.items, hasLength(120));
+  });
+
+  test('a failed loadMore leaves page 1 refreshable', () async {
+    final source = _GatedSource()..followUpError = StateError('boom');
+    final container = containerFor(source);
+    final provider = libraryBrowseProvider(FakeMediaSource.movies);
+    await container.read(provider.future);
+
+    final loading = container.read(provider.notifier).loadMore();
+    source.gate.complete();
+    await loading;
+    expect(container.read(provider).requireValue.items, hasLength(60));
+
+    final watcher = container
+        .read(watcherRegistryProvider)
+        .find(SourceKeys.browse(FakeMediaSource.movies, const BrowseQuery()))!;
+    expect(await watcher.refetchAutomatically(), isTrue);
+
+    var emissions = 0;
+    container.listen(provider, (_, __) => emissions++);
+    await (watcher as SourceWatcher).refetch();
+    await pumpEventQueue();
+    expect(emissions, greaterThan(0),
+        reason: 'a refetched page 1 must reach the list again');
   });
 
   test('setQuery starts a new watcher on page 1', () async {
