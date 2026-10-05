@@ -337,6 +337,8 @@ class FakePlexServer {
               });
       case '/video/:/transcode/universal/stop':
         return http.Response('', 200);
+      case '/library/parts/21':
+        return http.Response('', 200);
       case '/library/streams/33':
         return http.Response('1\n00:00:01,000 --> 00:00:02,000\nHola\n', 200);
     }

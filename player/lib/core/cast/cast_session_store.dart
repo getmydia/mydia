@@ -2,14 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../domain/models/cast_device.dart';
+import 'cast_content.dart';
 import 'cast_route_resolver.dart';
 
 /// Enough state to reattach to a cast session after the app restarts.
 class PersistedCastSession {
   final CastDevice device;
-  final String mediaId;
-  final String mediaType;
-  final String fileId;
+  final CastContent content;
   final String title;
   final Duration position;
   final CastRouteKind routeKind;
@@ -37,13 +36,10 @@ class PersistedCastSession {
   /// subtitles changed. Null means off, which is also what a record written
   /// before this field existed restores as.
   final String? selectedSubtitleTrackId;
-  final String? showId;
 
-  const PersistedCastSession({
+  const PersistedCastSession.forContent({
     required this.device,
-    required this.mediaId,
-    required this.mediaType,
-    required this.fileId,
+    required this.content,
     required this.title,
     required this.position,
     required this.routeKind,
@@ -51,8 +47,38 @@ class PersistedCastSession {
     this.mediaUrl = '',
     this.duration = Duration.zero,
     this.selectedSubtitleTrackId,
-    this.showId,
   });
+
+  /// A Mydia record, taking the ids a caller already has.
+  PersistedCastSession({
+    required CastDevice device,
+    required String mediaId,
+    required String mediaType,
+    required String fileId,
+    required String title,
+    required Duration position,
+    required CastRouteKind routeKind,
+    required DateTime savedAt,
+    String mediaUrl = '',
+    Duration duration = Duration.zero,
+    String? selectedSubtitleTrackId,
+    String? showId,
+  }) : this.forContent(
+          device: device,
+          content: MydiaCastContent(
+            fileId: fileId,
+            mediaId: mediaId,
+            mediaType: mediaType,
+            showId: showId,
+          ),
+          title: title,
+          position: position,
+          routeKind: routeKind,
+          savedAt: savedAt,
+          mediaUrl: mediaUrl,
+          duration: duration,
+          selectedSubtitleTrackId: selectedSubtitleTrackId,
+        );
 
   /// Sessions older than this are discarded without a reconnect attempt.
   static const maxAge = Duration(hours: 12);
@@ -61,9 +87,7 @@ class PersistedCastSession {
 
   Map<String, dynamic> toMap() => {
         'device': device.toJson(),
-        'mediaId': mediaId,
-        'mediaType': mediaType,
-        'fileId': fileId,
+        ...content.toMap(),
         'title': title,
         'positionSeconds': position.inSeconds,
         'routeKind':
@@ -72,17 +96,14 @@ class PersistedCastSession {
         'mediaUrl': mediaUrl,
         'durationSeconds': duration.inSeconds,
         'selectedSubtitleTrackId': selectedSubtitleTrackId,
-        'showId': showId,
       };
 
   factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
-    return PersistedCastSession(
+    return PersistedCastSession.forContent(
       device: CastDevice.fromJson(
         Map<String, dynamic>.from(map['device'] as Map),
       ),
-      mediaId: map['mediaId'] as String,
-      mediaType: map['mediaType'] as String,
-      fileId: map['fileId'] as String,
+      content: CastContent.fromMap(map),
       title: map['title'] as String,
       position: Duration(seconds: map['positionSeconds'] as int),
       routeKind: map['routeKind'] == 'bridge'
@@ -99,7 +120,6 @@ class PersistedCastSession {
       // Records written before subtitle selection was persisted carry no
       // such key at all; that reads the same as an explicit off.
       selectedSubtitleTrackId: map['selectedSubtitleTrackId'] as String?,
-      showId: map['showId'] as String?,
     );
   }
 
@@ -115,11 +135,12 @@ class PersistedCastSession {
     bool clearSelectedSubtitle = false,
     String? showId,
   }) {
-    return PersistedCastSession(
+    return PersistedCastSession.forContent(
       device: device,
-      mediaId: mediaId,
-      mediaType: mediaType,
-      fileId: fileId,
+      content: switch (content) {
+        final MydiaCastContent m => m.withShowId(showId),
+        final other => other,
+      },
       title: title,
       position: position ?? this.position,
       routeKind: routeKind,
@@ -129,7 +150,6 @@ class PersistedCastSession {
       selectedSubtitleTrackId: clearSelectedSubtitle
           ? null
           : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
-      showId: showId ?? this.showId,
     );
   }
 }

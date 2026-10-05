@@ -18,8 +18,11 @@ refuses anything else.
 
 The home Mydia login predates this layer. It appears as
 `Source.legacyMydia()`, read from `AuthService`'s own keys, and keeps its
-unprefixed routes. A guest Mydia is an ordinary account (see Guest Mydia
-servers).
+unprefixed routes and its own screens and controllers. Its `MediaSource`
+is a `MydiaGuestSource` over home's GraphQL client (`HomeMydiaTransport`),
+whose status follows the auth state; anything that works across sources
+(All servers, artwork, the switcher's status) reads home through it. A
+guest Mydia is an ordinary account (see Guest Mydia servers).
 
 The source switcher groups servers by account, with a caption per
 non-Mydia account.
@@ -161,6 +164,31 @@ iOS blurs the window when it resigns active. While a locked source plays,
 MPRIS and the macOS Dock now-playing menu show "Mydia" with no title or
 artwork.
 
+## Cast
+
+Plex, Jellyfin and Stash items cast to Chromecast and DLNA, not to Mydia
+player targets. `SessionSourceCastBinding` builds the receiver's route from
+the item's playback session in receiver mode: H.264/AAC
+(`receiverDeviceProfile`), and the credential in the query (`X-Plex-Token`,
+`api_key`, `apikey`), because a receiver cannot send headers. Local playback
+never does this. The TV fetches from the source's current connection, so a
+server this device reaches only over a VPN cannot be cast from.
+
+Chromecast gets HLS (copy for H.264, otherwise a transcode, and a transcode
+after one rejected load; DLNA is not retried) and DLNA the direct file.
+Subtitles:
+
+- Jellyfin converts any text track, embedded or sidecar, to WebVTT. Image
+  tracks are excluded.
+- Stash serves its captions as WebVTT.
+- Plex burns the chosen track in, image tracks included. That forces a
+  transcode, and selecting it on the part also changes the track Plex picks
+  for that file on its other clients. Changing the track restarts the stream.
+- DLNA gets no subtitles.
+
+Progress goes to the source's own reporter from the receiver's position. The
+persisted cast record keeps no stream URL, because it carries the credential.
+
 ## HTTP and errors
 
 `SourceHttp` turns non-2xx answers into typed source errors. It has an
@@ -186,9 +214,11 @@ Plex, Stash and Jellyfin share `SourcePlaybackSession` (data from the
 neutral item detail) and `SimplePlaybackTransport` (no readiness probe: all
 serve a complete HLS playlist). Jellyfin asks the server first
 (`PlaybackInfo`, with a device profile built from the same codec list Plex
-uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what only Mydia does
-(cast, library refresh, its connection's link path); the
-screen checks before using any of them.
+uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what a session
+supports: library refresh and the connection's link path are Mydia's; cast
+is Mydia's, Plex's, Jellyfin's and Stash's. Downloads are not a session
+feature: they are the source's `Downloadable` capability. The screen checks
+before using any of them.
 
 Source episodes get Up Next. `SourcePlaybackSession.seasonEpisodes` walks
 show, season, episodes, and plays each entry's `defaultVersionId`.
@@ -269,9 +299,8 @@ including on a cold start before the saved servers load, as `/s/<id>` does.
 
 Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Home Mydia joins
-through `homeMydiaBrowseSourceProvider`, a `MydiaGuestSource` over home's
-own GraphQL client; it is never registered in `mediaSourceProvider`, and
-home items open Mydia's own detail screens.
+through `mediaSourceProvider` like any other server, and home items open
+Mydia's own detail screens.
 
 ## Tests
 

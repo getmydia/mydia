@@ -106,13 +106,13 @@ void main() {
     final manager = build();
     await manager.startCast(
       device: device,
-      request: const CastLaunchRequest(
+      request: CastLaunchRequest(
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
         title: 'Arrival',
-        startPosition: Duration(seconds: 2400),
-        duration: Duration(seconds: 5400),
+        startPosition: const Duration(seconds: 2400),
+        duration: const Duration(seconds: 5400),
       ),
     );
     return manager;
@@ -211,13 +211,13 @@ void main() {
 
     await manager.startCast(
       device: device,
-      request: const CastLaunchRequest(
+      request: CastLaunchRequest(
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
         title: 'Arrival',
-        startPosition: Duration(seconds: 2400),
-        duration: Duration(seconds: 5400),
+        startPosition: const Duration(seconds: 2400),
+        duration: const Duration(seconds: 5400),
       ),
     );
 
@@ -229,12 +229,12 @@ void main() {
     final manager = build();
     await manager.startCast(
       device: device,
-      request: const CastLaunchRequest(
+      request: CastLaunchRequest(
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
         title: 'Arrival',
-        duration: Duration(seconds: 5400),
+        duration: const Duration(seconds: 5400),
       ),
     );
 
@@ -257,13 +257,13 @@ void main() {
 
     await manager.startCast(
       device: dlna,
-      request: const CastLaunchRequest(
+      request: CastLaunchRequest(
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
         title: 'Arrival',
-        startPosition: Duration(seconds: 2400),
-        duration: Duration(seconds: 5400),
+        startPosition: const Duration(seconds: 2400),
+        duration: const Duration(seconds: 5400),
       ),
     );
 

@@ -175,6 +175,14 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
         owner: _owner,
         target: _guest.source.account.id,
       );
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      throw UnsupportedError('Guest Mydia servers do not cast.');
 }
 
 class MydiaGuestStreamResolver implements StreamResolver {

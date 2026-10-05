@@ -4,7 +4,8 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia_source.dart';
+import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -14,6 +15,14 @@ class _FixedAuth extends AuthStateNotifier {
   final AsyncValue<AuthStatus> _value;
   @override
   AsyncValue<AuthStatus> build() => _value;
+}
+
+class _SettableAuth extends AuthStateNotifier {
+  _SettableAuth(this._initial);
+  final AsyncValue<AuthStatus> _initial;
+  @override
+  AsyncValue<AuthStatus> build() => _initial;
+  void set(AsyncValue<AuthStatus> value) => state = value;
 }
 
 const _plexSource = Source(
@@ -136,15 +145,41 @@ void main() {
   });
 
   group('mediaSourceProvider', () {
-    test('builds a MydiaSource for the legacy id', () {
+    test('builds home Mydia as a browsable Mydia source', () {
       final c = _container(const AsyncData(AuthStatus.authenticated));
       final source = c.read(mediaSourceProvider(SourceId.legacyMydia));
-      expect(source, isA<MydiaSource>());
-      expect(source!.kind, SourceKind.mydia);
+      expect(source, isA<MydiaGuestSource>());
+      expect(source!.id, SourceId.legacyMydia);
+      expect(source.kind, SourceKind.mydia);
       expect(source.connection, SourceConnectionStatus.remote);
-      expect(source.capabilities, {SourceCapability.downloadable});
+      expect(source.capabilities, contains(SourceCapability.searchable));
+      expect(source.as<Searchable>(), isNotNull);
       expect(source.as<Downloadable>(), isNotNull);
-      expect(source.as<WatchedState>(), isNull);
+    });
+
+    test('home status follows auth without rebuilding the source', () {
+      final auth = _SettableAuth(const AsyncData(AuthStatus.authenticated));
+      final c = ProviderContainer(overrides: [
+        authStateProvider.overrideWith(() => auth),
+        thirdPartySourcesProvider.overrideWithValue(const []),
+      ]);
+      addTearDown(c.dispose);
+      c.listen(mediaSourceProvider(SourceId.legacyMydia), (_, __) {});
+      final home = c.read(mediaSourceProvider(SourceId.legacyMydia))!;
+      final seen = <SourceConnectionStatus>[];
+      home.statusListenable
+          .addListener(() => seen.add(home.statusListenable.value));
+
+      auth.set(const AsyncLoading<AuthStatus>());
+      auth.set(const AsyncData(AuthStatus.offlineMode));
+      auth.set(const AsyncData(AuthStatus.authenticated));
+
+      expect(seen, [
+        SourceConnectionStatus.connecting,
+        SourceConnectionStatus.unreachable,
+        SourceConnectionStatus.remote,
+      ]);
+      expect(c.read(mediaSourceProvider(SourceId.legacyMydia)), same(home));
     });
 
     test('is null for an unknown id', () {
@@ -162,19 +197,17 @@ void main() {
     });
   });
 
-  group('MydiaSource.connection', () {
-    SourceConnectionStatus status(AsyncValue<AuthStatus> auth) =>
-        MydiaSource(source: Source.legacyMydia(), auth: auth, jobs: () => null)
-            .connection;
-
+  group('homeMydiaStatus', () {
     test('maps auth state to a connection status', () {
-      expect(status(const AsyncLoading<AuthStatus>()),
+      expect(homeMydiaStatus(const AsyncLoading<AuthStatus>()),
           SourceConnectionStatus.connecting);
-      expect(status(const AsyncData(AuthStatus.authenticated)),
+      expect(homeMydiaStatus(const AsyncData(AuthStatus.authenticated)),
           SourceConnectionStatus.remote);
-      expect(status(const AsyncData(AuthStatus.offlineMode)),
+      expect(homeMydiaStatus(const AsyncData(AuthStatus.offlineMode)),
           SourceConnectionStatus.unreachable);
-      expect(status(AsyncError<AuthStatus>(Exception('x'), StackTrace.empty)),
+      expect(
+          homeMydiaStatus(
+              AsyncError<AuthStatus>(Exception('x'), StackTrace.empty)),
           SourceConnectionStatus.unreachable);
     });
   });

@@ -7,6 +7,7 @@ import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/capabilities.dart';
 import '../../../../core/sources/media_source.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_search_outcome.dart';
@@ -58,7 +59,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     return fresh;
   }
 
-  Future<(ItemDetail, MediaVersion?)> _version() async {
+  Future<(ItemDetail, MediaVersion?)> pickedVersion() async {
     final detail = await loadDetail();
     final version = detail.versions.where((v) => v.id == fileId).firstOrNull ??
         detail.versions.firstOrNull;
@@ -70,6 +71,51 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   ProgressReporter createProgress();
   StreamResolver createResolver(ItemDetail detail, MediaVersion version);
 
+  /// [createResolver] for a cast receiver: receiver codecs and the credential
+  /// in the URL. [burnSubtitleStreamId] is read only by sources that burn
+  /// subtitles in.
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  });
+
+  /// Subtitle tracks a receiver can show for [version]. Empty when the
+  /// source has none it can serve as WebVTT or burn in.
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+          MediaVersion version) async =>
+      const [];
+
+  /// The source subtitle stream that matches the track the viewer has on
+  /// locally, for a cast. Sidecars carry the source's stream id; an embedded
+  /// track is an mpv track, matched by language, then title. Null when off or
+  /// nothing matches.
+  Future<String?> receiverSubtitleIdFor(SubtitleTrack? local) async {
+    if (local == null) return null;
+    final (_, version) = await pickedVersion();
+    final subtitles = [
+      for (final s in version?.streams ?? const <MediaStreamInfo>[])
+        if (s.kind == MediaStreamKind.subtitle) s,
+    ];
+
+    for (final s in subtitles) {
+      if (s.id == local.id) return s.id;
+    }
+
+    final language = local.language.toLowerCase();
+    if (language == 'und') return null;
+    final sameLanguage = [
+      for (final s in subtitles)
+        if (s.language?.toLowerCase() == language) s,
+    ];
+    if (sameLanguage.isEmpty) return null;
+
+    final names = {local.title, local.displayName}.whereType<String>();
+    return (sameLanguage.where((s) => names.contains(s.title)).firstOrNull ??
+            sameLanguage.first)
+        .id;
+  }
+
   @override
   Set<PlaybackFeature> get features => const {};
 
@@ -79,7 +125,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async {
     try {
-      final (_, version) = await _version();
+      final (_, version) = await pickedVersion();
       if (version == null) return (offer: null, serverRejected: true);
       final kbps = version.bitrateKbps;
       return (
@@ -102,7 +148,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Future<PlaybackDetail?> detail() async {
     try {
-      final (detail, version) = await _version();
+      final (detail, version) = await pickedVersion();
       final duration =
           version?.durationSeconds ?? detail.summary.durationSeconds;
       final external = [
@@ -131,7 +177,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   @override
   Future<String?> subtitleContent(String trackId) async {
     try {
-      final (_, version) = await _version();
+      final (_, version) = await pickedVersion();
       final stream = version?.streams
           .where((s) => s.id == trackId && s.externalPath != null)
           .firstOrNull;
@@ -149,7 +195,7 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     required bool Function() isCurrent,
   }) async {
     try {
-      final (detail, version) = await _version();
+      final (detail, version) = await pickedVersion();
       if (!isCurrent()) return const StreamingSuperseded();
       if (version == null) {
         return const StreamingUnavailable(

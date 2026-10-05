@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/mydia/mydia_guest_client.dart';
 import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
@@ -419,5 +421,25 @@ void main() {
       expect(segments, isEmpty);
       expect(b.t.calls.length, before);
     });
+  });
+
+  test('an injected status wins over the client\'s', () {
+    final status = ValueNotifier(SourceConnectionStatus.unreachable);
+    addTearDown(status.dispose);
+    final client = MydiaGuestClient(
+      transport: FakeMydiaTransport(),
+      load: () async => const MydiaGuestCredentials(
+          instanceId: 'inst-2', accessToken: 'access'),
+      save: (_) async {},
+      onUnauthorized: () {},
+    );
+    final source =
+        MydiaGuestSource(source: guest, client: client, status: status);
+    addTearDown(source.dispose);
+
+    expect(source.connection, SourceConnectionStatus.unreachable);
+    expect(source.statusListenable, same(status));
+    status.value = SourceConnectionStatus.remote;
+    expect(source.connection, SourceConnectionStatus.remote);
   });
 }

@@ -51,6 +51,13 @@ class StashClient {
     return {if (key != null && key.isNotEmpty) 'ApiKey': key};
   }
 
+  /// The API key as Stash's `apikey` parameter, for a cast receiver that
+  /// cannot send headers.
+  Future<Map<String, String>> receiverQuery() async {
+    final key = await _apiKey();
+    return {if (key != null && key.isNotEmpty) 'apikey': key};
+  }
+
   Future<Uri> url(String path) async =>
       stashUnder(await connection.base(), path);
 

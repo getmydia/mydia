@@ -8,11 +8,15 @@ import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
+import 'cast_content.dart';
 import 'cast_route_resolver.dart';
 import 'cast_seek_restart.dart';
 import 'cast_session_store.dart';
 import 'cast_streaming_session_service.dart';
 import 'mydia_cast_backend.dart';
+import 'source_cast_binding.dart';
+
+export 'cast_content.dart';
 
 /// The track list to hand to LOAD, with [selectedTrackId] first.
 ///
@@ -216,9 +220,7 @@ Stream<List<CastDevice>> mergeCastDiscovery(
 
 /// Everything the UI knows about the item it wants to cast.
 class CastLaunchRequest {
-  final String fileId;
-  final String mediaId;
-  final String mediaType;
+  final CastContent content;
   final String title;
   final String? subtitleLabel;
   final String? imageUrl;
@@ -239,12 +241,9 @@ class CastLaunchRequest {
   /// Null means off, which is what local playback does when streaming, so it
   /// is what a cast defaults to.
   final String? selectedSubtitleTrackId;
-  final String? showId;
 
-  const CastLaunchRequest({
-    required this.fileId,
-    required this.mediaId,
-    required this.mediaType,
+  const CastLaunchRequest.forContent({
+    required this.content,
     required this.title,
     this.subtitleLabel,
     this.imageUrl,
@@ -252,8 +251,36 @@ class CastLaunchRequest {
     this.subtitles = const [],
     this.duration,
     this.selectedSubtitleTrackId,
-    this.showId,
   });
+
+  /// A Mydia request, taking the ids a caller already has.
+  CastLaunchRequest({
+    required String fileId,
+    required String mediaId,
+    required String mediaType,
+    required String title,
+    String? subtitleLabel,
+    String? imageUrl,
+    Duration? startPosition,
+    List<CastSubtitleTrack> subtitles = const [],
+    Duration? duration,
+    String? selectedSubtitleTrackId,
+    String? showId,
+  }) : this.forContent(
+          content: MydiaCastContent(
+            fileId: fileId,
+            mediaId: mediaId,
+            mediaType: mediaType,
+            showId: showId,
+          ),
+          title: title,
+          subtitleLabel: subtitleLabel,
+          imageUrl: imageUrl,
+          startPosition: startPosition,
+          subtitles: subtitles,
+          duration: duration,
+          selectedSubtitleTrackId: selectedSubtitleTrackId,
+        );
 
   /// The same request, resumed from somewhere else, or with a new subtitle
   /// choice.
@@ -274,10 +301,11 @@ class CastLaunchRequest {
     bool clearSelectedSubtitle = false,
     String? showId,
   }) =>
-      CastLaunchRequest(
-        fileId: fileId,
-        mediaId: mediaId,
-        mediaType: mediaType,
+      CastLaunchRequest.forContent(
+        content: switch (content) {
+          final MydiaCastContent m => m.withShowId(showId),
+          final other => other,
+        },
         title: title,
         subtitleLabel: subtitleLabel,
         imageUrl: imageUrl,
@@ -287,7 +315,6 @@ class CastLaunchRequest {
         selectedSubtitleTrackId: clearSelectedSubtitle
             ? null
             : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
-        showId: showId ?? this.showId,
       );
 }
 
@@ -381,12 +408,23 @@ class CastSessionManager {
   CastSubtitleTrack? _selectedSubtitle;
 
   /// Server-side HLS session backing the media currently on the receiver.
-  String? _activeHlsSessionId;
+  _ServerSession? _activeServerSession;
+
+  final SourceCastBinder? _bindSource;
+
+  /// The binding for the source item being cast, reused across restarts of
+  /// the same content (seek, subtitle, retarget).
+  SourceCastBinding? _sourceBinding;
+  SourceCastContent? _sourceBindingContent;
+
+  /// Where a source cast reports progress. One per content, so Watched is
+  /// sent once however many times the stream restarts.
+  CastProgressSink? _sourceProgress;
 
   /// True while a cast-seek restart (`startCast`) is running.
   ///
   /// `startCast` re-runs the whole route-resolution/load path and mutates
-  /// shared state — `_persisted`, `_activeHlsSessionId`, the backend
+  /// shared state — `_persisted`, `_activeServerSession`, the backend
   /// listeners re-armed by `_listenToBackend` — across several `await`
   /// points. A user dragging a scrub bar fires `seek` faster than one
   /// restart completes; without this guard a second call reads the same
@@ -452,6 +490,7 @@ class CastSessionManager {
     required Future<void> Function(bool enabled) setLanAccess,
     DateTime Function()? clock,
     CastCapabilities? capabilities,
+    SourceCastBinder? bindSource,
   })  : assert(mydiaBackend == null || resolveMydiaBackend == null,
             'pass a Mydia backend or a resolver, not both'),
         _registry = CastBackendRegistry(
@@ -465,6 +504,7 @@ class CastSessionManager {
         _streamingSessions = streamingSessions,
         _setLanAccess = setLanAccess,
         _clock = clock ?? DateTime.now,
+        _bindSource = bindSource,
         _capabilities = capabilities ?? const CastCapabilities.full();
 
   Stream<CastSession?> get sessionStream => _sessions.stream;
@@ -487,6 +527,14 @@ class CastSessionManager {
     required CastDevice device,
     required CastLaunchRequest request,
   }) async {
+    if (request.content is SourceCastContent &&
+        device.protocol == CastProtocolKind.mydia) {
+      throw const CastBackendException(
+        'Mydia players can only play items from Mydia.',
+        CastFailureKind.unknown,
+      );
+    }
+
     // Resolved from `device.protocol`, not read off `_backend`: a concurrent
     // call for a different protocol could have repointed that field between
     // here and whenever this call last touched it. Everything below uses
@@ -494,6 +542,16 @@ class CastSessionManager {
     // at which point it is committed to `_backend` for the rest of the
     // session (see that field's dartdoc).
     final backend = _registry.forProtocol(device.protocol);
+
+    // A Mydia item replacing a source one ends the source item: its stop
+    // report would otherwise never be sent.
+    if (request.content is MydiaCastContent && _sourceProgress != null) {
+      final stale = _sourceProgress;
+      _sourceProgress = null;
+      _sourceBinding = null;
+      _sourceBindingContent = null;
+      await stale?.stopped();
+    }
 
     // Invalidates any `connectTo` still awaiting `_backend.connect` — see
     // `_connectGeneration`'s dartdoc. Must happen before anything else here,
@@ -519,7 +577,7 @@ class CastSessionManager {
 
     // Every server-side HLS session opened while resolving routes for this
     // call. All but the one actually playing get torn down at the end.
-    final startedHlsSessions = <String>[];
+    final startedServerSessions = <_ServerSession>[];
 
     final isMydia = device.protocol == CastProtocolKind.mydia;
     CastRoute? route;
@@ -531,15 +589,15 @@ class CastSessionManager {
       );
     } else {
       try {
-        route =
-            await _resolveRoute(resolver, request, device, startedHlsSessions);
+        route = await _resolveRoute(
+            resolver, request, device, startedServerSessions);
       } catch (e) {
-        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         rethrow;
       }
 
       if (route == null) {
-        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         throw const CastBackendException(
           'No usable route to the receiver: the server is unreachable and this '
           'device has no LAN address to serve from.',
@@ -564,7 +622,7 @@ class CastSessionManager {
       try {
         await backend.connect(device);
       } catch (e) {
-        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         rethrow;
       }
     }
@@ -589,7 +647,7 @@ class CastSessionManager {
       if (backend.connectedDevice?.id == device.id && !newerOwnsThisDevice) {
         await backend.disconnect();
       }
-      await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+      await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
       return;
     }
 
@@ -608,7 +666,7 @@ class CastSessionManager {
           generation: generation,
         );
         if (generation != _connectGeneration) {
-          await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+          await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
           return;
         }
         loaded = route;
@@ -620,7 +678,7 @@ class CastSessionManager {
           debugPrint(
               '[CastSessionManager] Ignoring disconnect error during rollback: $e');
         }
-        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         if (generation == _connectGeneration) _publish(null);
         rethrow;
       }
@@ -632,11 +690,11 @@ class CastSessionManager {
           route,
           device,
           request,
-          startedHlsSessions,
+          startedServerSessions,
           generation: generation,
         );
         if (generation != _connectGeneration) {
-          await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+          await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
           return;
         }
       } catch (e) {
@@ -664,7 +722,7 @@ class CastSessionManager {
           debugPrint(
               '[CastSessionManager] Ignoring disconnect error during rollback: $e');
         }
-        await _abandonStart(lanEnabledBeforeCall, startedHlsSessions);
+        await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         // The backend has just been disconnected, so leaving a session
         // published — as `connectTo` may have done before this call, or a
         // prior `startCast` on this same device — would claim a connection
@@ -677,7 +735,7 @@ class CastSessionManager {
       }
     }
 
-    await _adoptHlsSession(loaded.hlsSessionId, startedHlsSessions);
+    await _adoptHlsSession(loaded.hlsSessionId, startedServerSessions);
 
     // The Security requirement is that the LAN listener exists only while a
     // bridged cast needs it. An escalation that started on the bridge and
@@ -1098,6 +1156,33 @@ class CastSessionManager {
     ));
   }
 
+  Future<SourceCastBinding> _bindingFor(SourceCastContent content) async {
+    final bound = _sourceBinding;
+    if (bound != null && _sourceBindingContent == content) return bound;
+    final bind = _bindSource ??
+        (throw const CastBackendException(
+            'Casting is not available for this server.',
+            CastFailureKind.unknown));
+    final generation = _connectGeneration;
+    // Bound before the old item is stopped: a failed bind must leave the
+    // previous binding and its progress sink untouched.
+    final binding = await bind(content);
+    // A newer cast started while this bind was in flight and owns the
+    // binding now. Hand this one back for the superseded call to finish
+    // with, without taking over the newer cast's progress.
+    if (generation != _connectGeneration) return binding;
+    // Committed before the old item's stop report is awaited, so a slow
+    // server can neither hold up a newer cast nor let this call overwrite
+    // one that bound while the report was in flight.
+    final replaced = _sourceProgress;
+    _sourceBinding = binding;
+    _sourceBindingContent = content;
+    _sourceProgress = null;
+    // A different item replaces the old one: give it its stop report.
+    await replaced?.stopped();
+    return binding;
+  }
+
   /// Resolve a route, enabling LAN access first when the route will be a
   /// bridge one.
   ///
@@ -1110,17 +1195,33 @@ class CastSessionManager {
     CastRouteResolver resolver,
     CastLaunchRequest request,
     CastDevice device,
-    List<String> startedHlsSessions, {
+    List<_ServerSession> startedServerSessions, {
     bool forceBridge = false,
     bool forceTranscode = false,
   }) async {
+    if (request.content case final SourceCastContent content) {
+      final binding = await _bindingFor(content);
+      final route = await binding.resolve(
+        protocol: device.protocol,
+        startPosition: request.startPosition ?? Duration.zero,
+        subtitleTrackId: request.selectedSubtitleTrackId,
+        forceTranscode: forceTranscode,
+      );
+      final sessionId = route.hlsSessionId;
+      if (sessionId != null) {
+        startedServerSessions.add(_ServerSession(
+            sessionId, () => binding.endServerSession(sessionId)));
+      }
+      return route;
+    }
+
     final wantsBridge = resolver.usesBridge(forceBridge: forceBridge);
     final enabledHere = wantsBridge && !_lanEnabled;
 
     if (wantsBridge) await _enableLan();
 
     final route = await resolver.resolve(
-      fileId: request.fileId,
+      fileId: (request.content as MydiaCastContent).fileId,
       protocol: device.protocol,
       forceBridge: forceBridge,
       forceTranscode: forceTranscode,
@@ -1134,7 +1235,11 @@ class CastSessionManager {
     }
 
     final sessionId = route.hlsSessionId;
-    if (sessionId != null) startedHlsSessions.add(sessionId);
+    if (sessionId != null) {
+      startedServerSessions.add(
+        _ServerSession(sessionId, () => _streamingSessions.end(sessionId)),
+      );
+    }
 
     return route;
   }
@@ -1169,7 +1274,7 @@ class CastSessionManager {
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
-    List<String> startedHlsSessions, {
+    List<_ServerSession> startedServerSessions, {
     required int generation,
   }) async {
     try {
@@ -1189,7 +1294,7 @@ class CastSessionManager {
         resolver,
         device,
         request,
-        startedHlsSessions,
+        startedServerSessions,
       );
       if (secondRoute == null) rethrow;
 
@@ -1215,7 +1320,7 @@ class CastSessionManager {
           resolver,
           request,
           device,
-          startedHlsSessions,
+          startedServerSessions,
           forceTranscode: true,
         );
         if (transcodeRoute == null) rethrow;
@@ -1240,12 +1345,12 @@ class CastSessionManager {
   /// [startCast] created.
   Future<void> _abandonStart(
     bool lanEnabledBeforeCall,
-    List<String> startedHlsSessions,
+    List<_ServerSession> startedServerSessions,
   ) async {
-    for (final id in startedHlsSessions) {
-      await _streamingSessions.end(id);
+    for (final session in startedServerSessions) {
+      await session.end();
     }
-    startedHlsSessions.clear();
+    startedServerSessions.clear();
 
     if (!lanEnabledBeforeCall) await _disableLanQuietly();
   }
@@ -1254,19 +1359,23 @@ class CastSessionManager {
   /// whatever the previously cast item was using.
   Future<void> _adoptHlsSession(
     String? loadedSessionId,
-    List<String> startedHlsSessions,
+    List<_ServerSession> startedServerSessions,
   ) async {
-    final previous = _activeHlsSessionId;
-    if (previous != null && previous != loadedSessionId) {
-      await _streamingSessions.end(previous);
+    final previous = _activeServerSession;
+    if (previous != null && previous.id != loadedSessionId) {
+      await previous.end();
     }
 
-    for (final id in startedHlsSessions) {
-      if (id != loadedSessionId) await _streamingSessions.end(id);
+    for (final session in startedServerSessions) {
+      if (session.id != loadedSessionId) await session.end();
     }
-    startedHlsSessions.clear();
+    final loaded = startedServerSessions
+            .where((s) => s.id == loadedSessionId)
+            .firstOrNull ??
+        (previous?.id == loadedSessionId ? previous : null);
+    startedServerSessions.clear();
 
-    _activeHlsSessionId = loadedSessionId;
+    _activeServerSession = loaded;
   }
 
   /// Pick a second attempt for a failed load, or null to give up.
@@ -1280,8 +1389,22 @@ class CastSessionManager {
     CastRouteResolver resolver,
     CastDevice device,
     CastLaunchRequest request,
-    List<String> startedHlsSessions,
+    List<_ServerSession> startedServerSessions,
   ) async {
+    if (request.content is SourceCastContent) {
+      // Only Chromecast can take a transcode; on DLNA the same direct file
+      // would come back and fail again.
+      if (device.protocol != CastProtocolKind.chromecast ||
+          e.kind != CastFailureKind.mediaLoadFailed ||
+          attempted.transcoded) {
+        return null;
+      }
+      debugPrint(
+          '[CastSessionManager] Source media rejected, retrying with a transcode');
+      return _resolveRoute(resolver, request, device, startedServerSessions,
+          forceTranscode: true);
+    }
+
     switch (e.kind) {
       case CastFailureKind.unreachable:
         // Usually AP isolation, a VLAN, or guest wifi. Serve it ourselves.
@@ -1293,7 +1416,7 @@ class CastSessionManager {
           resolver,
           request,
           device,
-          startedHlsSessions,
+          startedServerSessions,
           forceBridge: true,
         );
 
@@ -1317,7 +1440,7 @@ class CastSessionManager {
           resolver,
           request,
           device,
-          startedHlsSessions,
+          startedServerSessions,
           forceBridge: true,
         );
         if (bridgeRetry != null) {
@@ -1337,7 +1460,7 @@ class CastSessionManager {
           resolver,
           request,
           device,
-          startedHlsSessions,
+          startedServerSessions,
           forceTranscode: true,
         );
 
@@ -1385,18 +1508,24 @@ class CastSessionManager {
     final tracks = isMydia ? request.subtitles : route.subtitles;
     final subtitles =
         orderSubtitlesForLoad(tracks, request.selectedSubtitleTrackId);
+    // A burned-in track is part of the picture already; the receiver has
+    // nothing to fetch for it. It stays in the menu via `_subtitles`.
+    final sidecars = subtitles.where((t) => !t.burnedIn).toList();
 
     _useTimeline(StreamTimeline(
       startOffset: route.startOffset,
       totalDuration: request.duration,
     ));
 
-    final contentRef = isMydia
+    final mydia = request.content is MydiaCastContent
+        ? request.content as MydiaCastContent
+        : null;
+    final contentRef = isMydia && mydia != null
         ? MydiaContentRef(
-            mediaItemId: request.mediaType == 'episode'
-                ? (request.showId ?? request.mediaId)
-                : request.mediaId,
-            episodeId: request.mediaType == 'episode' ? request.mediaId : null,
+            mediaItemId: mydia.isEpisode
+                ? (mydia.showId ?? mydia.mediaId)
+                : mydia.mediaId,
+            episodeId: mydia.isEpisode ? mydia.mediaId : null,
             audioTrack: null,
             subtitleTrack: request.selectedSubtitleTrackId,
           )
@@ -1413,7 +1542,7 @@ class CastSessionManager {
       // progressive route `startOffset` is zero and this is the whole
       // position, which is a valid byte-range seek.
       startPosition: _timeline.toPlayer(request.startPosition ?? Duration.zero),
-      subtitles: subtitles,
+      subtitles: sidecars,
       contentRef: contentRef,
     ));
     if (generation != _connectGeneration) return;
@@ -1431,7 +1560,7 @@ class CastSessionManager {
     // directly is what covers the mismatch case: leaving dart_cast's forced
     // first track active while the UI (`CastSession.selectedSubtitle`) says
     // off would show the viewer a subtitle they were told is disabled.
-    if (subtitles.isNotEmpty && _selectedSubtitle == null) {
+    if (sidecars.isNotEmpty && _selectedSubtitle == null) {
       await backend.selectSubtitle(null);
       if (generation != _connectGeneration) return;
     }
@@ -1455,17 +1584,21 @@ class CastSessionManager {
       clearSelectedSubtitle: resolvedSubtitleId == null,
     );
 
-    final mediaUrl = isMydia
-        ? (request.mediaType == 'episode'
-            ? '${request.showId ?? request.mediaId}:${request.mediaId}'
-            : request.mediaId)
-        : route.mediaUrl;
+    // A source route's URL carries the server credential (X-Plex-Token,
+    // api_key, apikey) and the store is an unencrypted Hive box, so nothing
+    // from it is persisted. An empty URL already means "discard on restore",
+    // and Chromecast/DLNA records are never adopted anyway.
+    final mediaUrl = request.content is SourceCastContent
+        ? ''
+        : isMydia && mydia != null
+            ? (mydia.isEpisode
+                ? '${mydia.showId ?? mydia.mediaId}:${mydia.mediaId}'
+                : mydia.mediaId)
+            : route.mediaUrl;
 
-    _persisted = PersistedCastSession(
+    _persisted = PersistedCastSession.forContent(
       device: device,
-      mediaId: request.mediaId,
-      mediaType: request.mediaType,
-      fileId: request.fileId,
+      content: request.content,
       title: request.title,
       position: request.startPosition ?? Duration.zero,
       routeKind: route.kind,
@@ -1473,7 +1606,6 @@ class CastSessionManager {
       mediaUrl: mediaUrl,
       duration: request.duration ?? Duration.zero,
       selectedSubtitleTrackId: resolvedSubtitleId,
-      showId: request.showId,
     );
     await _store.save(_persisted!);
     if (generation != _connectGeneration) return;
@@ -1538,6 +1670,9 @@ class CastSessionManager {
     // false "watched" verdict) to the user's history.
     _lastDuration = request.duration ?? Duration.zero;
     _lastProgressSync = null;
+    if (request.content is SourceCastContent) {
+      _sourceProgress ??= _sourceBinding?.openProgress();
+    }
 
     // `_progressService` is a single long-lived instance (this manager is a
     // keep-alive provider, reused across every cast target for the life of
@@ -1634,18 +1769,29 @@ class CastSessionManager {
       await _store.save(_persisted!);
     }
 
-    if (request.mediaType == 'episode') {
-      await _progressService.syncEpisodePosition(
-        request.mediaId,
-        position,
-        _lastDuration,
+    if (request.content is SourceCastContent) {
+      await _sourceProgress?.report(
+        position: _timeline.toReal(position),
+        duration: _lastDuration,
+        paused: _current?.playbackState == CastPlaybackState.paused,
       );
-    } else {
-      await _progressService.syncMoviePosition(
-        request.mediaId,
-        position,
-        _lastDuration,
-      );
+      return;
+    }
+
+    if (request.content case final MydiaCastContent mydia) {
+      if (mydia.isEpisode) {
+        await _progressService.syncEpisodePosition(
+          mydia.mediaId,
+          position,
+          _lastDuration,
+        );
+      } else {
+        await _progressService.syncMoviePosition(
+          mydia.mediaId,
+          position,
+          _lastDuration,
+        );
+      }
     }
   }
 
@@ -1669,6 +1815,32 @@ class CastSessionManager {
   /// differs by so much as a token falls back to activating trackId=1 with
   /// only a log warning.
   Future<void> selectSubtitle(CastSubtitleTrack? track) async {
+    // A burned-in track lives in the stream, so switching to or from one
+    // means a new stream at the current position.
+    final restartRequest = _lastRequest;
+    final restartSession = _persisted;
+    if (restartRequest != null &&
+        restartSession != null &&
+        ((track?.burnedIn ?? false) ||
+            (_selectedSubtitle?.burnedIn ?? false))) {
+      if (_isRestartingForSeek) return;
+      _isRestartingForSeek = true;
+      try {
+        await startCast(
+          device: restartSession.device,
+          request: restartRequest.copyWith(
+            startPosition:
+                _current?.mediaInfo?.position ?? restartRequest.startPosition,
+            selectedSubtitleTrackId: track?.trackId,
+            clearSelectedSubtitle: track == null,
+          ),
+        );
+      } finally {
+        _isRestartingForSeek = false;
+      }
+      return;
+    }
+
     await _backend.selectSubtitle(track);
 
     _selectedSubtitle = track;
@@ -1726,6 +1898,12 @@ class CastSessionManager {
     // `_isRestartingForSeek`'s dartdoc).
     if (_isRestartingForSeek) return;
 
+    // Plex, Jellyfin and Stash serve full-length playlists; the receiver
+    // seeks within them.
+    if (_lastRequest?.content is SourceCastContent) {
+      return _backend.seek(_timeline.toPlayer(position));
+    }
+
     final session = _persisted;
     final request = _lastRequest;
 
@@ -1774,11 +1952,8 @@ class CastSessionManager {
 
     await startCast(
       device: stored.device,
-      request: CastLaunchRequest(
-        fileId: stored.fileId,
-        mediaId: stored.mediaId,
-        mediaType: stored.mediaType,
-        showId: stored.showId,
+      request: CastLaunchRequest.forContent(
+        content: stored.content,
         title: stored.title,
         startPosition: stored.position,
         duration: stored.duration,
@@ -1808,6 +1983,9 @@ class CastSessionManager {
       debugPrint('[CastSessionManager] Ignoring stop error: $e');
     }
 
+    // After the receiver is stopped, so a slow server cannot delay that.
+    await _sourceProgress?.stopped();
+
     await _endSession(generation: generation);
   }
 
@@ -1823,6 +2001,8 @@ class CastSessionManager {
 
     _cancelSubscriptions();
 
+    // No source stop report here: the receiver keeps playing on purpose, so
+    // the item is not stopped as far as the server is concerned.
     await _endSession(generation: generation);
   }
 
@@ -1837,9 +2017,9 @@ class CastSessionManager {
     await _store.clear();
     if (generation != _connectGeneration) return;
 
-    final hlsSessionId = _activeHlsSessionId;
-    _activeHlsSessionId = null;
-    if (hlsSessionId != null) await _streamingSessions.end(hlsSessionId);
+    final serverSession = _activeServerSession;
+    _activeServerSession = null;
+    if (serverSession != null) await serverSession.end();
     if (generation != _connectGeneration) return;
 
     await _disableLanQuietly();
@@ -1851,6 +2031,9 @@ class CastSessionManager {
     _lastProgressSync = null;
     _subtitles = const [];
     _selectedSubtitle = null;
+    _sourceProgress = null;
+    _sourceBinding = null;
+    _sourceBindingContent = null;
     _publish(null);
   }
 
@@ -1911,11 +2094,8 @@ class CastSessionManager {
     // — reconstruct an equivalent one from the fields the persisted record
     // carries, so a restored session keeps syncing progress and marks
     // itself stale like a freshly started one does.
-    final request = CastLaunchRequest(
-      fileId: stored.fileId,
-      mediaId: stored.mediaId,
-      mediaType: stored.mediaType,
-      showId: stored.showId,
+    final request = CastLaunchRequest.forContent(
+      content: stored.content,
       title: stored.title,
       startPosition: stored.position,
       duration: stored.duration,
@@ -2002,18 +2182,18 @@ class CastSessionManager {
   ) async {
     final generation = _connectGeneration;
     final resolver = _resolverFactory();
-    final startedHlsSessions = <String>[];
+    final startedServerSessions = <_ServerSession>[];
 
     try {
       final route = await _resolveRoute(
         resolver,
         request,
         stored.device,
-        startedHlsSessions,
+        startedServerSessions,
         forceBridge: true,
       );
       if (route == null) {
-        await _abandonStart(false, startedHlsSessions);
+        await _abandonStart(false, startedServerSessions);
         return false;
       }
 
@@ -2026,15 +2206,15 @@ class CastSessionManager {
         generation: generation,
       );
       if (generation != _connectGeneration) {
-        await _abandonStart(false, startedHlsSessions);
+        await _abandonStart(false, startedServerSessions);
         return false;
       }
-      await _adoptHlsSession(route.hlsSessionId, startedHlsSessions);
+      await _adoptHlsSession(route.hlsSessionId, startedServerSessions);
       return true;
     } catch (e) {
       debugPrint('[CastSessionManager] Bridge restore failed: $e');
       _cancelSubscriptions();
-      await _abandonStart(false, startedHlsSessions);
+      await _abandonStart(false, startedServerSessions);
       try {
         await backend.disconnect();
       } catch (_) {
@@ -2087,19 +2267,24 @@ class CastSessionManager {
   /// dropped with a live session used to leave the backend connected and the
   /// LAN proxy exposed with nothing left to turn either off.
   void dispose() {
+    // A synchronous dispose cannot await a source's stop report, so none is
+    // sent here; use [stopCast] first when the server should hear about it.
     _cancelSubscriptions();
 
     final hadSession = _current != null;
-    final hlsSessionId = _activeHlsSessionId;
-    _activeHlsSessionId = null;
+    final serverSession = _activeServerSession;
+    _activeServerSession = null;
     _current = null;
 
-    unawaited(_releaseResources(hadSession, hlsSessionId));
+    unawaited(_releaseResources(hadSession, serverSession));
 
     _sessions.close();
   }
 
-  Future<void> _releaseResources(bool hadSession, String? hlsSessionId) async {
+  Future<void> _releaseResources(
+    bool hadSession,
+    _ServerSession? serverSession,
+  ) async {
     if (hadSession) {
       try {
         await _backend.disconnect();
@@ -2109,8 +2294,16 @@ class CastSessionManager {
       }
     }
 
-    if (hlsSessionId != null) await _streamingSessions.end(hlsSessionId);
+    if (serverSession != null) await serverSession.end();
 
     await _disableLanQuietly();
   }
+}
+
+/// A server-side stream session and how to end it: Mydia's streaming
+/// service, or the source that started it.
+class _ServerSession {
+  const _ServerSession(this.id, this.end);
+  final String id;
+  final Future<void> Function() end;
 }

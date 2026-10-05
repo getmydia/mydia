@@ -21,6 +21,13 @@ class _TestSourceSession extends SourcePlaybackSession {
   @override
   StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
       throw UnimplementedError();
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      throw UnimplementedError();
 }
 
 class _BrokenSession extends _TestSourceSession {

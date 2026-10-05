@@ -116,4 +116,41 @@ void main() {
     await reporter.sendWatched();
     expect(o.server.operations.last.$1, 'AddPlay');
   });
+
+  test('receiver mode puts apikey on the direct stream', () async {
+    final o = open();
+    final stream = await StashStreamResolver(
+      client: o.session.stashClient,
+      sceneId: '2',
+      forReceiver: true,
+    ).resolve(const DirectPlayPlan(reason: PlanReason.directPlayAccepted),
+        fileId: '92', startAt: Duration.zero);
+
+    final url = Uri.parse(stream.url);
+    expect(url.path, '/scene/2/stream');
+    expect(url.queryParameters['apikey'], FakeStashServer.apiKey);
+    expect(stream.headers, isEmpty);
+  });
+
+  test('receiver mode keeps the resolution on the HLS stream', () async {
+    final o = open();
+    final stream = await StashStreamResolver(
+      client: o.session.stashClient,
+      sceneId: '2',
+      forReceiver: true,
+    ).resolve(
+        const HlsPlan(
+          strategy: HlsStrategy.transcode,
+          rung: QualityRung.original,
+          adaptive: false,
+          reason: PlanReason.fallbackFromFailure,
+        ),
+        fileId: '92',
+        startAt: Duration.zero);
+
+    final url = Uri.parse(stream.url);
+    expect(url.path, '/scene/2/stream.m3u8');
+    expect(url.queryParameters['resolution'], 'ORIGINAL');
+    expect(url.queryParameters['apikey'], FakeStashServer.apiKey);
+  });
 }

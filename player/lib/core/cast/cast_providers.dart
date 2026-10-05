@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../../presentation/screens/player/session/source_cast_binding_impl.dart';
 import '../connection/connection_provider.dart';
 import '../graphql/graphql_provider.dart';
 import '../p2p/local_proxy_service.dart';
@@ -262,6 +263,7 @@ final castSessionManagerProvider =
     // rebuilding the manager would drop a live cast.
     resolveMydiaBackend: () => ref.read(mydiaCastBackendProvider),
     capabilities: ref.read(castCapabilitiesProvider),
+    bindSource: (content) => bindSourceCast(ref, content),
     store: store,
     progressService: ProgressService(client),
     resolverFactory: () => CastRouteResolver(

@@ -1,13 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/sources/mydia/mydia_guest_client.dart';
 import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_guest_source.dart';
 import 'package:player/core/sources/mydia/mydia_transcode_job.dart';
-import 'package:player/core/sources/mydia_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
@@ -101,11 +98,17 @@ void main() {
     await proxy.release(other);
   });
 
-  group('home MydiaSource', () {
-    MydiaSource home(FakeDownloadJobService? jobs) => MydiaSource(
+  group('home source', () {
+    // Home passes `homeJobs`; the guest client and proxy must stay unused.
+    MydiaGuestSource home(FakeDownloadJobService? jobs) => MydiaGuestSource(
           source: Source.legacyMydia(),
-          auth: const AsyncData(AuthStatus.authenticated),
-          jobs: () => jobs,
+          client: MydiaGuestClient(
+            transport: FakeMydiaTransport(),
+            load: () async => throw StateError('home never loads guest creds'),
+            save: (_) async {},
+            onUnauthorized: () {},
+          ),
+          homeJobs: () => jobs,
         );
 
     test('without a job service it is unreachable', () {

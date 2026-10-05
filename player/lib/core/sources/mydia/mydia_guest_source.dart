@@ -29,6 +29,7 @@ import '../../p2p/media_route.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
+import '../../downloads/download_job_service.dart';
 import 'guest_download_job_service.dart';
 import 'guest_proxy.dart';
 import 'mydia_guest_client.dart';
@@ -81,16 +82,30 @@ class MydiaGuestSource extends MediaSource
   MydiaGuestSource({
     required this.source,
     required this.client,
-    required this.proxy,
+    this.proxy,
+    this.homeJobs,
+    ValueListenable<SourceConnectionStatus>? status,
     void Function()? onDispose,
-  }) : _onDispose = onDispose;
+  })  : _status = status,
+        _onDispose = onDispose;
 
   @override
   final Source source;
   final MydiaGuestClient client;
 
   /// The shared local proxy, which carries a paired guest's file bytes.
-  final LocalProxyService Function() proxy;
+  /// Required to download from a paired guest; home never uses it.
+  final LocalProxyService Function()? proxy;
+
+  /// Set only for home Mydia: its own download job service (HTTP media-token
+  /// URL or the home p2p proxy), or null while signed out or connecting.
+  /// When provided, downloads use it and never touch the guest GraphQL job
+  /// service or [proxy]. A guest leaves it null.
+  final DownloadJobService? Function()? homeJobs;
+
+  /// Overrides [MydiaGuestClient.status] when the connection is owned
+  /// elsewhere: home Mydia's follows its auth state.
+  final ValueListenable<SourceConnectionStatus>? _status;
   final void Function()? _onDispose;
 
   @override
@@ -140,10 +155,11 @@ class MydiaGuestSource extends MediaSource
   }
 
   @override
-  SourceConnectionStatus get connection => client.status.value;
+  SourceConnectionStatus get connection => statusListenable.value;
 
   @override
-  ValueListenable<SourceConnectionStatus> get statusListenable => client.status;
+  ValueListenable<SourceConnectionStatus> get statusListenable =>
+      _status ?? client.status;
 
   @override
   T? as<T extends Object>() => this is T ? this as T : null;
@@ -383,22 +399,39 @@ class MydiaGuestSource extends MediaSource
   late final GuestDownloadJobService _jobs =
       GuestDownloadJobService(request: client.request);
 
+  DownloadJobService _service() {
+    final home = homeJobs;
+    if (home == null) return _jobs;
+    return home() ?? (throw const SourceException.unreachable());
+  }
+
   @override
   Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
-      (await _jobs.getOptions(mydiaContentType(ref.kind), ref.externalId))
+      (await _service().getOptions(mydiaContentType(ref.kind), ref.externalId))
           .options;
 
   @override
-  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async =>
-      MydiaTranscodeJob(
-        jobs: _jobs,
-        contentType: mydiaContentType(ref.kind),
-        id: ref.externalId,
-        resolution: optionId,
-        fileFor: _file,
-      );
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
+    final service = _service();
+    return MydiaTranscodeJob(
+      jobs: service,
+      contentType: mydiaContentType(ref.kind),
+      id: ref.externalId,
+      resolution: optionId,
+      // HTTP signs the URL with the media token and p2p points at the local
+      // proxy, so a home URL carries everything and needs no headers.
+      fileFor: homeJobs != null
+          ? (jobId) async => DirectFile(
+              url: await service.getDownloadUrl(jobId), extension: 'mp4')
+          : _file,
+    );
+  }
 
   bool _holdsProxy = false;
+
+  LocalProxyService _proxy() =>
+      proxy?.call() ??
+      (throw StateError('A guest download needs a local proxy'));
 
   Future<DirectFile> _file(String jobId) async {
     final credentials = await client.credentials();
@@ -406,7 +439,7 @@ class MydiaGuestSource extends MediaSource
       // The hold lasts as long as the source: nothing observes a download
       // finishing, so [dispose] is where it is let go.
       _holdsProxy = true;
-      final base = await guestProxyBase(proxy(), credentials,
+      final base = await guestProxyBase(_proxy(), credentials,
           owner: this, target: source.account.id);
       return DirectFile(
           url: MediaRoutes.download(base, jobId), extension: 'mp4');
@@ -489,7 +522,7 @@ class MydiaGuestSource extends MediaSource
   void dispose() {
     // Only a p2p download ever took a hold, so a source that never
     // downloaded must not touch the shared proxy.
-    if (_holdsProxy) unawaited(proxy().release(this));
+    if (_holdsProxy) unawaited(_proxy().release(this));
     client.dispose();
     _onDispose?.call();
   }

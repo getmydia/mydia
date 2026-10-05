@@ -145,7 +145,12 @@ class CastSubtitleTrack {
     required this.url,
     required this.label,
     required this.language,
+    this.burnedIn = false,
   });
+
+  /// Rendered into the video by the server, so selecting it restarts the
+  /// stream. Never sent to the receiver as a sidecar.
+  final bool burnedIn;
 
   /// Whether `id` is a shape the server can actually serve as a session
   /// subtitle.
@@ -175,6 +180,7 @@ class CastSubtitleTrack {
         url: url ?? this.url,
         label: label,
         language: language,
+        burnedIn: burnedIn,
       );
 
   @override
@@ -183,10 +189,11 @@ class CastSubtitleTrack {
       other is CastSubtitleTrack &&
           runtimeType == other.runtimeType &&
           trackId == other.trackId &&
-          url == other.url;
+          url == other.url &&
+          burnedIn == other.burnedIn;
 
   @override
-  int get hashCode => Object.hash(trackId, url);
+  int get hashCode => Object.hash(trackId, url, burnedIn);
 }
 
 /// Represents a connection to a receiver, with or without media on it.

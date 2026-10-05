@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/graphql/mutations/update_movie_progress.graphql.dart';
@@ -852,7 +853,10 @@ void main() {
     expect(castManager.capturedRequests.length, 1,
         reason: 'the superseded load (file B) must never reach startCast; '
             'only the current load may');
-    expect(castManager.capturedRequests.single.fileId, 'file-c');
+    expect(
+      (castManager.capturedRequests.single.content as MydiaCastContent).fileId,
+      'file-c',
+    );
   });
 
   testWidgets(
