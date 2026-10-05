@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../widgets/artwork_image.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/glass_surface.dart';
@@ -20,6 +19,7 @@ import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
 import '../../../core/theme/colors.dart';
 import 'series_downloads_screen.dart';
+import 'widgets/download_artwork.dart';
 import 'widgets/download_recovery_banner.dart';
 
 export 'widgets/download_recovery_banner.dart'
@@ -110,6 +110,8 @@ class DownloadsScreen extends ConsumerWidget {
                 isEpisode ? (task.showTitle ?? 'Unknown Series') : task.title,
             posterUrl: isEpisode ? task.showPosterUrl : task.posterUrl,
             backdropUrl: task.backdropUrl,
+            posterPath: task.posterPath,
+            backdropPath: task.backdropPath,
             type: isEpisode ? GroupType.series : GroupType.movie,
             updatedAt: task.createdAt,
           );
@@ -134,6 +136,8 @@ class DownloadsScreen extends ConsumerWidget {
                 isEpisode ? (media.showTitle ?? 'Unknown Series') : media.title,
             posterUrl: isEpisode ? media.showPosterUrl : media.posterUrl,
             backdropUrl: media.backdropUrl,
+            posterPath: media.posterPath,
+            backdropPath: media.backdropPath,
             type: isEpisode ? GroupType.series : GroupType.movie,
             updatedAt: media.downloadedAt,
           );
@@ -366,24 +370,16 @@ class DownloadsScreen extends ConsumerWidget {
                 // Poster image
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: group.posterUrl != null
-                      ? ArtworkImage(
-                          imageUrl: group.posterUrl!,
-                          fit: BoxFit.cover,
-                          cacheManager: PosterCacheManager(),
-                          placeholder: (_) =>
-                              Container(color: AppColors.surfaceVariant),
-                          errorWidget: (_) => Container(
-                            color: AppColors.surfaceVariant,
-                            child: const Icon(Icons.movie,
-                                color: AppColors.textSecondary),
-                          ),
-                        )
-                      : Container(
-                          color: AppColors.surfaceVariant,
-                          child: const Icon(Icons.movie,
-                              color: AppColors.textSecondary),
-                        ),
+                  child: DownloadArtwork(
+                    localPath: group.posterPath,
+                    fallbackUrl: group.posterUrl,
+                    cacheManager: PosterCacheManager(),
+                    placeholder: (_) => Container(
+                      color: AppColors.surfaceVariant,
+                      child: const Icon(Icons.movie,
+                          color: AppColors.textSecondary),
+                    ),
+                  ),
                 ),
 
                 // Active overlay + progress ring
@@ -1276,24 +1272,15 @@ class DownloadsScreen extends ConsumerWidget {
           SizedBox(
             width: 90,
             height: 160,
-            child: posterUrl != null
-                ? ArtworkImage(
-                    imageUrl: posterUrl,
-                    fit: BoxFit.cover,
-                    cacheManager: PosterCacheManager(),
-                    placeholder: (_) =>
-                        Container(color: AppColors.surfaceVariant),
-                    errorWidget: (_) => Container(
-                      color: AppColors.surfaceVariant,
-                      child: const Icon(Icons.movie,
-                          color: AppColors.textSecondary),
-                    ),
-                  )
-                : Container(
-                    color: AppColors.surfaceVariant,
-                    child:
-                        const Icon(Icons.movie, color: AppColors.textSecondary),
-                  ),
+            child: DownloadArtwork(
+              localPath: task.posterPath,
+              fallbackUrl: posterUrl,
+              cacheManager: PosterCacheManager(),
+              placeholder: (_) => Container(
+                color: AppColors.surfaceVariant,
+                child: const Icon(Icons.movie, color: AppColors.textSecondary),
+              ),
+            ),
           ),
           // Info
           Expanded(
@@ -1754,6 +1741,8 @@ class DownloadGroup {
   final String title;
   final String? posterUrl;
   final String? backdropUrl;
+  final String? posterPath;
+  final String? backdropPath;
   final GroupType type;
   DateTime updatedAt;
   final List<DownloadTask> activeTasks = [];
@@ -1764,6 +1753,8 @@ class DownloadGroup {
     required this.title,
     this.posterUrl,
     this.backdropUrl,
+    this.posterPath,
+    this.backdropPath,
     required this.type,
     required this.updatedAt,
   });

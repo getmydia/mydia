@@ -28,7 +28,6 @@ import 'download_service.dart';
 import 'download_job_service.dart';
 import 'download_speed_tracker.dart';
 import 'range_fetch.dart';
-import 'thumbnail_cache_warmer.dart';
 
 /// Downloads are fully supported on native platforms.
 const bool isDownloadSupported = true;
@@ -215,6 +214,7 @@ class _NativeDownloadService implements DownloadService {
   final _speedTracker = DownloadSpeedTracker.instance;
   final Map<String, CancelToken> _cancelTokens = {};
   bool _disposed = false;
+  ArtworkFetcher? _artworkFetcher;
   final StreamController<DownloadTask> _progressController =
       StreamController<DownloadTask>.broadcast();
 
@@ -367,6 +367,77 @@ class _NativeDownloadService implements DownloadService {
     _notificationProgressSub = _progressController.stream.listen((_) {
       _updateForegroundService();
     });
+  }
+
+  @override
+  void setArtworkFetcher(ArtworkFetcher fetcher) {
+    _artworkFetcher = fetcher;
+  }
+
+  /// Saves the poster, backdrop and thumbnail next to the file, so the
+  /// Downloads screen has them offline and without credentials. Best-effort:
+  /// a picture that fails to arrive never fails the download.
+  Future<void> _saveArtwork(DownloadTask task) async {
+    final fetch = _artworkFetcher;
+    final path = task.filePath;
+    if (fetch == null || path == null) return;
+
+    Future<String?> one(String? art, String suffix) async {
+      if (art == null || art.isEmpty || _disposed) return null;
+      try {
+        final request = await fetch(task, art);
+        if (request == null) return null;
+        final target = '$path.$suffix.jpg';
+        await _dio.download(request.url, target,
+            options: Options(headers: request.headers));
+        return target;
+      } catch (e) {
+        debugPrint('[Downloads] Artwork skipped: $e');
+        return null;
+      }
+    }
+
+    final poster = await one(task.posterUrl, 'poster');
+    final backdrop = await one(task.backdropUrl, 'backdrop');
+    final thumbnail = await one(task.thumbnailUrl, 'thumb');
+    final saved = [poster, backdrop, thumbnail].whereType<String>().toList();
+    if (saved.isEmpty) return;
+
+    // Deleted (or the service disposed) while the pictures were on their way.
+    final db = _database;
+    if (_disposed || db == null || db.getMedia(task.id) == null) {
+      for (final p in saved) {
+        try {
+          await File(p).delete();
+        } catch (_) {}
+      }
+      return;
+    }
+    final withArt = task.copyWith(
+      posterPath: poster,
+      backdropPath: backdrop,
+      thumbnailPath: thumbnail,
+    );
+    await db.saveTask(withArt);
+    await db.saveMedia(DownloadedMedia.fromTask(withArt));
+  }
+
+  /// Deletes a completed download's file and its saved artwork.
+  Future<void> _deleteMediaFiles(DownloadedMedia media) async {
+    for (final path in [
+      media.filePath,
+      media.posterPath,
+      media.backdropPath,
+      media.thumbnailPath,
+    ]) {
+      if (path == null) continue;
+      final file = File(path);
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // Best-effort; the orphan sweep catches leftovers.
+      }
+    }
   }
 
   @override
@@ -595,17 +666,27 @@ class _NativeDownloadService implements DownloadService {
 
       // Get all valid file paths from completed downloads
       final downloadedMedia = _database!.getAllMedia();
-      final validCompletedPaths =
-          downloadedMedia.map((m) => m.filePath).toSet();
+      final validCompletedPaths = {
+        for (final m in downloadedMedia) ...[
+          m.filePath,
+          if (m.posterPath != null) m.posterPath!,
+          if (m.backdropPath != null) m.backdropPath!,
+          if (m.thumbnailPath != null) m.thumbnailPath!,
+        ],
+      };
 
       // Get all file paths from active/pending downloads
       final activeTasks = _database!
           .getAllTasks()
           .where((t) => DownloadStatusSets.active.contains(t.status));
-      final activeTaskPaths = activeTasks
-          .where((t) => t.filePath != null)
-          .map((t) => t.filePath!)
-          .toSet();
+      final activeTaskPaths = {
+        for (final t in activeTasks) ...[
+          if (t.filePath != null) t.filePath!,
+          if (t.posterPath != null) t.posterPath!,
+          if (t.backdropPath != null) t.backdropPath!,
+          if (t.thumbnailPath != null) t.thumbnailPath!,
+        ],
+      };
 
       // Combine all valid paths
       final validPaths = {...validCompletedPaths, ...activeTaskPaths};
@@ -919,11 +1000,11 @@ class _NativeDownloadService implements DownloadService {
       await _database!.saveTask(done);
       await _database!.saveMedia(DownloadedMedia.fromTask(done));
 
+      _emit(done);
+
       // Best-effort, and deliberately not awaited: the download is already on
       // disk and must not be delayed or failed by an image fetch.
-      unawaited(warmThumbnailCache(done));
-
-      _emit(done);
+      unawaited(_saveArtwork(done));
     } on _ParkTask catch (e) {
       await save(current.copyWith(status: 'interrupted', error: e.message));
     } on _TaskFailure catch (e) {
@@ -1129,11 +1210,7 @@ class _NativeDownloadService implements DownloadService {
       throw StateError('Media not found');
     }
 
-    // Delete the file
-    final file = File(media.filePath);
-    if (await file.exists()) {
-      await file.delete();
-    }
+    await _deleteMediaFiles(media);
 
     // Remove from database
     await _database!.deleteMedia(media.id);
@@ -1215,12 +1292,7 @@ class _NativeDownloadService implements DownloadService {
         .where((m) => m.source == source && m.showId == showId)
         .toList();
     for (final media in seriesMedia) {
-      final file = File(media.filePath);
-      if (await file.exists()) {
-        try {
-          await file.delete();
-        } catch (_) {}
-      }
+      await _deleteMediaFiles(media);
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
       final tasks =
@@ -1261,12 +1333,7 @@ class _NativeDownloadService implements DownloadService {
             (m.seasonNumber ?? 0) == seasonNumber)
         .toList();
     for (final media in seasonMedia) {
-      final file = File(media.filePath);
-      if (await file.exists()) {
-        try {
-          await file.delete();
-        } catch (_) {}
-      }
+      await _deleteMediaFiles(media);
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
       final tasks =

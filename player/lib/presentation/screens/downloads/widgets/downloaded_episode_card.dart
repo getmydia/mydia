@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../widgets/artwork_image.dart';
+import 'download_artwork.dart';
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/layout/breakpoints.dart';
 import '../../../../core/playback/playback_progress_providers.dart';
@@ -93,16 +93,12 @@ class DownloadedEpisodeCard extends ConsumerWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
-                  ? ArtworkImage(
-                      imageUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                      cacheManager: EpisodeThumbnailCacheManager(),
-                      placeholder: (context) =>
-                          Container(color: AppColors.surfaceVariant),
-                      errorWidget: (context) => _buildPlaceholder(),
-                    )
-                  : _buildPlaceholder(),
+              child: DownloadArtwork(
+                localPath: media.thumbnailPath,
+                fallbackUrl: thumbnailUrl,
+                cacheManager: EpisodeThumbnailCacheManager(),
+                placeholder: (context) => _buildPlaceholder(),
+              ),
             ),
             if (media.quality.isNotEmpty)
               Positioned(

@@ -90,6 +90,11 @@ class _StubDownloadService implements DownloadService {
   }
 
   @override
+  void setArtworkFetcher(ArtworkFetcher fetcher) {
+    // No-op in stub
+  }
+
+  @override
   void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op in stub
   }

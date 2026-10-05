@@ -100,6 +100,11 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
+  void setArtworkFetcher(ArtworkFetcher fetcher) {
+    // No-op on web
+  }
+
+  @override
   void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op on web
   }

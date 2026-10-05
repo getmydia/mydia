@@ -5,6 +5,7 @@ import '../../domain/models/download_settings.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/source_error.dart';
 import '../sources/capabilities.dart';
+import '../sources/source.dart';
 import '../sources/sources_providers.dart';
 import 'download_service.dart';
 import 'download_speed_tracker.dart';
@@ -87,6 +88,18 @@ Future<DownloadService> downloadManager(Ref ref) async {
           'This server is no longer on this device.');
     }
     return downloadable.resolve(task.itemRef, task.quality);
+  });
+
+  service.setArtworkFetcher((task, art) async {
+    if (task.source == SourceId.legacyMydia) {
+      return (url: art, headers: const <String, String>{});
+    }
+    final request = await ref
+        .read(mediaSourceProvider(task.source))
+        ?.artwork(ArtworkRef(art), width: 600);
+    return request == null
+        ? null
+        : (url: request.url, headers: request.headers);
   });
 
   ref.onDispose(() {

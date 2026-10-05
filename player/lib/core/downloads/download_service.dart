@@ -52,6 +52,11 @@ abstract class DownloadDatabase {
 /// `downloadManagerProvider`; called on every start, resume and restart.
 typedef DownloadPlanResolver = Future<DownloadPlan> Function(DownloadTask task);
 
+/// Where one piece of a task's artwork is. [art] is a URL for home Mydia and
+/// an `ArtworkRef.path` for any other source. Null when there is none.
+typedef ArtworkFetcher = Future<({String url, Map<String, String> headers})?>
+    Function(DownloadTask task, String art);
+
 /// Abstract interface for the download service/manager.
 abstract class DownloadService {
   /// Initialize the service with a database.
@@ -61,6 +66,9 @@ abstract class DownloadService {
   /// Install how tasks find their bytes. Runs the recovery sweep, which waits
   /// for this.
   void setPlanResolver(DownloadPlanResolver resolver);
+
+  /// Install how artwork is fetched for a completed download.
+  void setArtworkFetcher(ArtworkFetcher fetcher);
 
   /// Apply the user's download settings. Called whenever settings change.
   void applySettings({
