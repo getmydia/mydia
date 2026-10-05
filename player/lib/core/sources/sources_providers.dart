@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -372,10 +373,15 @@ final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
 
 /// Included sources the merged views read, home Mydia first. Leaves out
 /// what is locked away and what needs signing in again.
+///
+/// The list compares equal when it holds the same instances in the same
+/// order, so a source-records write that changes nothing here (a picker
+/// switch, an unchanged rediscovery) does not notify, and the merged reader
+/// and grids built on it are not restarted.
 final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
   final choices = ref.watch(allServersChoicesProvider);
   final gated = ref.watch(gatedSourceIdsProvider);
-  return [
+  return _IdentityList([
     for (final s in ref.watch(sourcesProvider))
       if (!s.account.needsReauth &&
           !gated.contains(s.id) &&
@@ -385,8 +391,25 @@ final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
                 : ref.watch(mediaSourceProvider(s.id)))
             case final media?)
           media,
-  ];
+  ]);
 });
+
+/// An unmodifiable list whose equality is element-wise identity.
+class _IdentityList extends UnmodifiableListView<MediaSource> {
+  _IdentityList(super.source);
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _IdentityList || other.length != length) return false;
+    for (var i = 0; i < length; i++) {
+      if (!identical(this[i], other[i])) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(map(identityHashCode));
+}
 
 /// Included sources the merged views left out because they need signing in
 /// again, so the views can say so.

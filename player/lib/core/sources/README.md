@@ -260,7 +260,8 @@ the capability or the chosen sort sits out. Grids are a k-way merge of each
 library's own pages in the `SharedSort` order, so an item is shown only
 once every server still paging has one buffered. Search keeps each
 server's ranking and interleaves servers within Movies, Shows, Episodes and
-Videos.
+Videos. `/all*` redirects to `/` when fewer than two servers are included,
+including on a cold start before the saved servers load, as `/s/<id>` does.
 
 Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Home Mydia joins
