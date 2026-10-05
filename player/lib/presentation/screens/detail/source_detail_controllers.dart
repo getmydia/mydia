@@ -30,6 +30,25 @@ MediaSource _source(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
 
+/// Awaits [load] for a build that owns [buildRef] (captured before the first
+/// await: `ref` itself always points at the current build). A stream-backed
+/// provider disposed or rebuilt while loading completes its future with a
+/// StateError; once [buildRef] is stale that error belongs to nobody, so it
+/// becomes null. While the build is current every error still surfaces.
+Future<T?> _awaitWhileCurrent<T>(
+    Ref buildRef, Future<T> Function() load) async {
+  try {
+    return await load();
+  } catch (_) {
+    if (!buildRef.mounted) return null;
+    rethrow;
+  }
+}
+
+/// What a Future-returning build throws once it is stale: Riverpod discards
+/// the result of a build that was replaced, so nobody sees it.
+StateError _staleBuild() => StateError('the build was replaced while loading');
+
 /// The capability [T] of [item]'s source, read without watching so it is safe
 /// at write time. Throws when the source has gone or lacks it.
 T _capability<T extends Object>(Ref ref, ItemRef item) {
@@ -81,8 +100,11 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
 
   @override
   Stream<MovieView> build() async* {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
-    final detail = await ref.watch(sourceItemProvider(item).future);
+    final detail = await _awaitWhileCurrent(
+        buildRef, () => ref.watch(sourceItemProvider(item).future));
+    if (detail == null) return;
     // Cast and trailer arrive with the item on both servers, so there is no
     // second fetch to yield after this one.
     yield movieViewFromSource(detail, features: sourceFeatures(source));
@@ -143,12 +165,18 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
 
   @override
   Stream<ShowView> build() async* {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
     final features = sourceFeatures(source);
-    final (detail, seasons) = await (
-      ref.watch(sourceItemProvider(item).future),
-      ref.watch(sourceChildrenProvider(item).future),
-    ).wait;
+    final loaded = await _awaitWhileCurrent(
+      buildRef,
+      () => (
+        ref.watch(sourceItemProvider(item).future),
+        ref.watch(sourceChildrenProvider(item).future),
+      ).wait,
+    );
+    if (loaded == null) return;
+    final (detail, seasons) = loaded;
     final first = showViewFromSource(detail, seasons, features: features);
     yield first;
 
@@ -208,28 +236,34 @@ class SourceSeasonNotifier extends AsyncNotifier<List<EpisodeView>>
 
   @override
   Future<List<EpisodeView>> build() async {
+    final buildRef = ref;
     final source = _source(ref, key.show.sourceId);
     // Only the pieces the season needs, so a favorite toggle or a late next
     // up on the show does not refetch the episodes.
-    final head = await ref.watch(
-      sourceShowProvider(key.show).selectAsync(
-        (show) => (
-          title: show.title,
-          poster: show.poster,
-          season: show.seasons
-              .where((s) => s.number == key.seasonNumber)
-              .map((s) => s.target)
-              .firstOrNull,
+    final head = await _awaitWhileCurrent(
+      buildRef,
+      () => ref.watch(
+        sourceShowProvider(key.show).selectAsync(
+          (show) => (
+            title: show.title,
+            poster: show.poster,
+            season: show.seasons
+                .where((s) => s.number == key.seasonNumber)
+                .map((s) => s.target)
+                .firstOrNull,
+          ),
         ),
       ),
     );
+    if (head == null) throw _staleBuild();
     final seasonTarget = head.season;
     if (seasonTarget is! SourceTarget) {
       throw const SourceException.notFound();
     }
     _season = seasonTarget.ref;
-    final children =
-        await ref.watch(sourceChildrenProvider(seasonTarget.ref).future);
+    final children = await _awaitWhileCurrent(buildRef,
+        () => ref.watch(sourceChildrenProvider(seasonTarget.ref).future));
+    if (children == null) throw _staleBuild();
     final features = sourceFeatures(source);
     final poster = head.poster;
     return [
@@ -331,8 +365,11 @@ class SourceEpisodeNotifier extends AsyncNotifier<EpisodeView>
 
   @override
   Future<EpisodeView> build() async {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
-    final detail = await ref.watch(sourceItemProvider(item).future);
+    final detail = await _awaitWhileCurrent(
+        buildRef, () => ref.watch(sourceItemProvider(item).future));
+    if (detail == null) throw _staleBuild();
     return episodeViewFromSourceDetail(
       detail,
       features: sourceFeatures(source),

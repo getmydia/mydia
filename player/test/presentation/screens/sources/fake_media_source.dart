@@ -298,8 +298,16 @@ class FakeDetailSource extends FakeMediaSource
   /// cached one.
   String titleSuffix = '';
 
+  /// When set, [item] waits on it before answering.
+  Completer<void>? itemHold;
+  SourceException? itemError;
+  int itemCalls = 0;
+
   @override
   Future<ItemDetail> item(ItemRef ref) async {
+    itemCalls++;
+    await itemHold?.future;
+    if (itemError case final e?) throw e;
     final detail = await super.item(ref);
     if (titleSuffix.isEmpty) return detail;
     final json = detail.toJson();

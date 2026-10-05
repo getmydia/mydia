@@ -9,6 +9,7 @@ import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/detail/detail_actions.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
 import 'package:player/presentation/screens/detail/detail_providers.dart';
@@ -47,8 +48,6 @@ void main() {
     await c.read(seasonActionsProvider(key)).setSeasonWatched(true);
     expect(source.watchedCalls, [(fakeSeason.ref, true)]);
     expect(sub.read().value?.every((e) => e.watched), isTrue);
-    // The refetch the write kicked off must land before teardown.
-    await _settle();
   });
 
   test('this and previous marks each earlier episode once, in order', () async {
@@ -83,8 +82,6 @@ void main() {
       throwsException,
     );
     expect(sub.read().value?.any((e) => e.watched), isFalse);
-    // The refetch the failed write kicked off must land before teardown.
-    await _settle();
   });
 
   test('a partial this-and-previous failure stops and refetches', () async {
@@ -236,6 +233,38 @@ void main() {
       'seasonNumber': '1',
       'resume': '90',
     });
+  });
+
+  test('leaving a show before its first load finishes raises no error',
+      () async {
+    final source = FakeDetailSource()..itemHold = Completer<void>();
+    final c = ProviderContainer(overrides: [
+      mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+    ]);
+    c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, __) {});
+    await _settle();
+    // The item fetch is still held: disposing now completes the provider
+    // futures the show build awaits with a disposed-during-loading error.
+    c.dispose();
+    await pumpEventQueue();
+    source.itemHold!.complete();
+    await pumpEventQueue();
+  });
+
+  test('a real server error still reaches the show view', () async {
+    final source = FakeDetailSource()
+      ..itemError = const SourceException.notFound();
+    final c = _container(source);
+    final sub =
+        c.listen(showViewProvider(SourceTarget(fakeShow.ref)), (_, __) {});
+    await _settle();
+    // Riverpod reports its automatic retry as a loading state, so the proof
+    // that the error surfaced is the retry refetching the item (the first
+    // retry fires after 200ms).
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(sub.read().hasValue, isFalse);
+    expect(source.itemCalls, greaterThan(1),
+        reason: 'the build is current, so the error is not swallowed');
   });
 
   test('a movie view updates when the fresh item lands after the cached one',
