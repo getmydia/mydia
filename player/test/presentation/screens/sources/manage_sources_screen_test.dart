@@ -5,8 +5,8 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
-import 'package:player/core/sources/mydia/mydia_guest_secrets.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -228,10 +228,10 @@ void main() {
   testWidgets('removing a p2p guest stops watching its node', (tester) async {
     final storage = MockAuthStorage();
     final p2p = _RecordingP2p();
-    await writeGuestCredentials(
+    await writeMydiaCredentials(
         SourceSecrets(storage),
         _guestRecord().account,
-        const MydiaGuestCredentials(
+        const MydiaCredentials(
             instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
     final store = await _removeGuest(tester, storage, p2p);
     expect(p2p.unwatched, ['{"id":"n1"}']);

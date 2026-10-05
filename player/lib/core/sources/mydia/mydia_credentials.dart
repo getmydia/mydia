@@ -1,4 +1,4 @@
-/// What a guest Mydia server handed this device, kept as one secret.
+/// What a Mydia server handed this device, kept as one secret.
 library;
 
 import 'dart:convert';
@@ -7,8 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 @immutable
-class MydiaGuestCredentials {
-  const MydiaGuestCredentials({
+class MydiaCredentials {
+  const MydiaCredentials({
     required this.instanceId,
     required this.accessToken,
     this.instanceName,
@@ -19,8 +19,8 @@ class MydiaGuestCredentials {
     this.username,
   });
 
-  factory MydiaGuestCredentials.fromJson(Map<String, dynamic> json) =>
-      MydiaGuestCredentials(
+  factory MydiaCredentials.fromJson(Map<String, dynamic> json) =>
+      MydiaCredentials(
         instanceId: json['instanceId'] as String,
         accessToken: json['accessToken'] as String,
         instanceName: json['instanceName'] as String?,
@@ -43,7 +43,7 @@ class MydiaGuestCredentials {
   /// Set for a URL login: the base the GraphQL and HLS paths hang off.
   final String? serverUrl;
 
-  /// Set for a paired guest: the server's iroh EndpointAddr JSON.
+  /// Set for a paired server: the server's iroh EndpointAddr JSON.
   final String? nodeAddr;
   final String? username;
 
@@ -71,8 +71,8 @@ class MydiaGuestCredentials {
         if (username != null) 'username': username,
       };
 
-  MydiaGuestCredentials copyWith({String? accessToken, String? mediaToken}) =>
-      MydiaGuestCredentials(
+  MydiaCredentials copyWith({String? accessToken, String? mediaToken}) =>
+      MydiaCredentials(
         instanceId: instanceId,
         accessToken: accessToken ?? this.accessToken,
         instanceName: instanceName,
@@ -85,7 +85,7 @@ class MydiaGuestCredentials {
 
   @override
   bool operator ==(Object other) =>
-      other is MydiaGuestCredentials &&
+      other is MydiaCredentials &&
       other.instanceId == instanceId &&
       other.accessToken == accessToken &&
       other.instanceName == instanceName &&
@@ -101,7 +101,7 @@ class MydiaGuestCredentials {
 }
 
 /// Scheme, lowercased host and port, with no trailing slash, so the same
-/// server typed two ways is one guest.
+/// server typed two ways is one instance.
 String normalizeMydiaUrl(String url) {
   final uri = Uri.parse(url.trim());
   final port = uri.hasPort ? ':${uri.port}' : '';
@@ -111,12 +111,12 @@ String normalizeMydiaUrl(String url) {
   return '${uri.scheme}://${uri.host.toLowerCase()}$port$path';
 }
 
-/// The id of a URL-login guest whose server reports no instance id.
+/// The id of a URL-login server whose server reports no instance id.
 String urlInstanceId(String url) {
   final digest = sha256.convert(utf8.encode(normalizeMydiaUrl(url)));
   return 'u${digest.toString().substring(0, 16)}';
 }
 
-/// The id of a paired guest whose server reports no instance id. A node id
+/// The id of a paired server whose server reports no instance id. A node id
 /// is the server's key, stable for as long as its keypair is.
 String nodeInstanceId(String nodeId) => 'n$nodeId';

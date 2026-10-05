@@ -1,4 +1,4 @@
-/// How a guest Mydia's GraphQL travels: HTTP to its URL, or p2p to its node.
+/// How a Mydia server's GraphQL travels: HTTP to its URL, or p2p to its node.
 library;
 
 import '../../../domain/sources/source_error.dart';

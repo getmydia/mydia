@@ -1,4 +1,4 @@
-/// A guest Mydia's GraphQL `data` to the neutral source models.
+/// Mydia GraphQL `data` to the neutral source models.
 library;
 
 import '../../../domain/sources/item.dart';

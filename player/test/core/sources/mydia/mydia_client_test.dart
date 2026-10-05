@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia/mydia_guest_client.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/source_error.dart';
-import 'package:player/graphql/queries/guest_mydia.graphql.dart';
+import 'package:player/graphql/queries/mydia_queries.dart';
 
 import 'fake_mydia_transport.dart';
 
@@ -30,18 +30,18 @@ class _GatedTransport extends FakeMydiaTransport {
 
 void main() {
   late FakeMydiaTransport transport;
-  late List<MydiaGuestCredentials> saved;
+  late List<MydiaCredentials> saved;
   late int unauthorized;
 
   late int loads;
 
-  MydiaGuestClient build(
+  MydiaClient build(
           {String? deviceToken = 'device', String token = 'access'}) =>
-      MydiaGuestClient(
+      MydiaClient(
         transport: transport,
         load: () async {
           loads++;
-          return MydiaGuestCredentials(
+          return MydiaCredentials(
               instanceId: 'inst-2',
               accessToken: token,
               deviceToken: deviceToken);
@@ -66,15 +66,15 @@ void main() {
   test('loads the credentials once, on first use', () async {
     final client = build();
     expect(loads, 0);
-    await client.request(documentNodeQueryGuestInstanceIdentity);
-    await client.request(documentNodeQueryGuestInstanceIdentity);
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect(loads, 1);
   });
 
   test('sends the current access token and reports the server reached',
       () async {
     final client = build();
-    final data = await client.request(documentNodeQueryGuestInstanceIdentity);
+    final data = await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect((data['serverCompatibility'] as Map)['instanceId'], 'inst-2');
     expect(transport.calls.single.token, 'access');
     expect(client.status.value, SourceConnectionStatus.remote);
@@ -84,7 +84,7 @@ void main() {
       () async {
     transport.validTokens = {'fresh'};
     final client = build();
-    await client.request(documentNodeQueryGuestInstanceIdentity);
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect(transport.calls.map((c) => c.operation), [
       'GuestInstanceIdentity',
       'RefreshAccessToken',
@@ -103,7 +103,7 @@ void main() {
     transport.validTokens = {};
     final client = build(deviceToken: null);
     await expectLater(
-        client.request(documentNodeQueryGuestInstanceIdentity),
+        client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
     expect(unauthorized, 1);
@@ -116,7 +116,7 @@ void main() {
         (_) => throw const SourceException.unauthorized();
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryGuestInstanceIdentity),
+        client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
     expect(unauthorized, 1);
@@ -129,7 +129,7 @@ void main() {
         (_) => throw const SourceException.unreachable();
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryGuestInstanceIdentity),
+        client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)));
     expect(unauthorized, 0);
@@ -144,7 +144,7 @@ void main() {
         throw const SourceException.server('Invalid or revoked device token');
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryGuestInstanceIdentity),
+        client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
     expect(unauthorized, 1);
@@ -155,7 +155,7 @@ void main() {
     transport.validTokens = {};
     final client = build();
     await expectLater(
-        client.request(documentNodeQueryGuestInstanceIdentity),
+        client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()
             .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)));
     expect(unauthorized, 1);
@@ -169,9 +169,9 @@ void main() {
       ..handlers.addAll(transport.handlers);
     transport = gated;
     final client = build();
-    final late = client.request(documentNodeQueryGuestInstanceIdentity);
+    final late = client.request(documentNodeQueryMydiaInstanceIdentity);
     await Future<void>.delayed(Duration.zero);
-    await client.request(documentNodeQueryGuestInstanceIdentity);
+    await client.request(documentNodeQueryMydiaInstanceIdentity);
     gated.gate.complete();
     await late;
     expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
@@ -183,7 +183,7 @@ void main() {
   test('an unreachable server sets the status and rethrows', () async {
     transport.unreachable = true;
     final client = build();
-    await expectLater(client.request(documentNodeQueryGuestInstanceIdentity),
+    await expectLater(client.request(documentNodeQueryMydiaInstanceIdentity),
         throwsA(isA<SourceException>()));
     expect(client.status.value, SourceConnectionStatus.unreachable);
   });
@@ -192,8 +192,8 @@ void main() {
     transport.validTokens = {'fresh'};
     final client = build();
     await Future.wait([
-      client.request(documentNodeQueryGuestInstanceIdentity),
-      client.request(documentNodeQueryGuestInstanceIdentity),
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      client.request(documentNodeQueryMydiaInstanceIdentity),
     ]);
     expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
         hasLength(1));

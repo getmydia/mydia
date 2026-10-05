@@ -3,21 +3,20 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/playback/playback_plan.dart';
-import 'package:player/core/sources/mydia/mydia_guest_client.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
-import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/domain/models/quality_rung.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
-import 'package:player/presentation/screens/player/session/mydia_guest_playback_session.dart';
+import 'package:player/presentation/screens/player/session/mydia_source_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/player/session/source_playback_sessions.dart';
 
 import '../../../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../../../core/sources/mydia/mydia_fixtures.dart' as fx;
-import '../../../../core/sources/mydia/mydia_guest_source_test.dart'
-    show guest, sid;
+import '../../../../core/sources/mydia/mydia_source_test.dart' show guest, sid;
 
 const _movie = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1');
 const _episode =
@@ -30,12 +29,12 @@ const _hls = HlsPlan(
   reason: PlanReason.fallbackFromFailure,
 );
 
-const _direct = MydiaGuestCredentials(
+const _direct = MydiaCredentials(
   instanceId: 'inst-2',
   accessToken: 'access',
   serverUrl: 'https://lake.example',
 );
-const _p2p = MydiaGuestCredentials(
+const _p2p = MydiaCredentials(
   instanceId: 'inst-2',
   accessToken: 'access',
   nodeAddr: '{"id":"abc"}',
@@ -91,18 +90,18 @@ void main() {
 
   tearDown(() => proxy.shutdown());
 
-  MydiaGuestPlaybackSession open(
-    MydiaGuestCredentials creds, {
+  MydiaSourcePlaybackSession open(
+    MydiaCredentials creds, {
     ItemRef item = _movie,
   }) {
-    final client = MydiaGuestClient(
+    final client = MydiaClient(
       transport: t,
       load: () async => creds,
       save: (_) async {},
       onUnauthorized: () {},
     );
-    return MydiaGuestPlaybackSession(
-      source: MydiaGuestSource(source: guest, client: client),
+    return MydiaSourcePlaybackSession(
+      source: MydiaSource(source: guest, client: client),
       item: item,
       fileId: item.kind == ItemKind.movie ? 'f-m-1' : 'f-e-1',
       proxy: () => proxy,
@@ -113,7 +112,7 @@ void main() {
     );
   }
 
-  Future<StreamingSetup> setupOf(MydiaGuestPlaybackSession s,
+  Future<StreamingSetup> setupOf(MydiaSourcePlaybackSession s,
           {Object? owner}) async =>
       ((await s.prepareStreaming(
               owner: owner ?? Object(),
@@ -247,7 +246,7 @@ void main() {
 
   test('progress for a movie and an episode', () async {
     final movie =
-        (await setupOf(open(_direct))).progress as MydiaGuestProgressReporter;
+        (await setupOf(open(_direct))).progress as MydiaSourceProgressReporter;
     await movie.sendProgress(
         positionSeconds: 12, durationSeconds: 6000, paused: false);
     await movie.sendWatched();
@@ -263,7 +262,7 @@ void main() {
     expect(varsOf('MarkMovieWatched'), {'movieId': 'm-1'});
 
     final ep = (await setupOf(open(_direct, item: _episode))).progress
-        as MydiaGuestProgressReporter;
+        as MydiaSourceProgressReporter;
     await ep.sendProgress(
         positionSeconds: 5, durationSeconds: 1440, paused: true);
     await ep.sendWatched();
@@ -325,15 +324,15 @@ void main() {
   });
 
   test('playbackSessionFor builds a guest session only with a proxy', () {
-    final client = MydiaGuestClient(
+    final client = MydiaClient(
       transport: t,
       load: () async => _direct,
       save: (_) async {},
       onUnauthorized: () {},
     );
-    final source = MydiaGuestSource(source: guest, client: client);
+    final source = MydiaSource(source: guest, client: client);
     expect(playbackSessionFor(source, _movie, 'f-m-1', proxy: () => proxy),
-        isA<MydiaGuestPlaybackSession>());
+        isA<MydiaSourcePlaybackSession>());
     expect(playbackSessionFor(source, _movie, 'f-m-1'), isNull);
   });
 

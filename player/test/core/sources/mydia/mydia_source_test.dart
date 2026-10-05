@@ -3,9 +3,9 @@ import 'package:player/domain/sources/source_error.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/capabilities.dart';
-import 'package:player/core/sources/mydia/mydia_guest_client.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
-import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/sources/item.dart';
@@ -31,7 +31,7 @@ const guest = Source(
       id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
 );
 
-({MydiaGuestSource source, FakeMydiaTransport t}) build(
+({MydiaSource source, FakeMydiaTransport t}) build(
     {void Function()? onDispose}) {
   final t = FakeMydiaTransport();
   final movies = [for (var i = 1; i <= 5; i++) fx.movie('m-$i')];
@@ -117,16 +117,15 @@ const guest = Source(
   ]) {
     t.handlers[op] = (_) => <String, dynamic>{};
   }
-  final client = MydiaGuestClient(
+  final client = MydiaClient(
     transport: t,
-    load: () async => const MydiaGuestCredentials(
-        instanceId: 'inst-2', accessToken: 'access'),
+    load: () async =>
+        const MydiaCredentials(instanceId: 'inst-2', accessToken: 'access'),
     save: (_) async {},
     onUnauthorized: () {},
   );
   return (
-    source:
-        MydiaGuestSource(source: guest, client: client, onDispose: onDispose),
+    source: MydiaSource(source: guest, client: client, onDispose: onDispose),
     t: t
   );
 }
@@ -423,15 +422,14 @@ void main() {
   test('an injected status wins over the client\'s', () {
     final status = ValueNotifier(SourceConnectionStatus.unreachable);
     addTearDown(status.dispose);
-    final client = MydiaGuestClient(
+    final client = MydiaClient(
       transport: FakeMydiaTransport(),
-      load: () async => const MydiaGuestCredentials(
-          instanceId: 'inst-2', accessToken: 'access'),
+      load: () async =>
+          const MydiaCredentials(instanceId: 'inst-2', accessToken: 'access'),
       save: (_) async {},
       onUnauthorized: () {},
     );
-    final source =
-        MydiaGuestSource(source: guest, client: client, status: status);
+    final source = MydiaSource(source: guest, client: client, status: status);
     addTearDown(source.dispose);
 
     expect(source.connection, SourceConnectionStatus.unreachable);

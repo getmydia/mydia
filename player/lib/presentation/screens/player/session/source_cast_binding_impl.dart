@@ -15,7 +15,7 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/sources/source_error.dart';
-import 'mydia_guest_playback_session.dart';
+import 'mydia_source_playback_session.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 import 'source_playback_sessions.dart';
@@ -140,7 +140,7 @@ Future<SourceCastBinding> bindSourceCast(
   }
   final session = playbackSessionFor(media, content.item, content.versionId);
   if (session is! SourcePlaybackSession ||
-      session is MydiaGuestPlaybackSession) {
+      session is MydiaSourcePlaybackSession) {
     throw const CastBackendException(
       'Casting is not available for this server.',
       CastFailureKind.unknown,

@@ -1,4 +1,4 @@
-/// Saves a guest Mydia server paired or signed in from the add-server screen.
+/// Saves a Mydia server paired or signed in from the add-server screen.
 library;
 
 import 'dart:convert';
@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
-import '../../../graphql/queries/guest_mydia.graphql.dart';
+import '../../../graphql/queries/mydia_queries.dart';
 import '../../auth/auth_storage.dart';
 import '../source.dart';
 import '../source_factories.dart';
@@ -15,12 +15,12 @@ import '../sources_providers.dart';
 import '../store/source_records.dart';
 import '../store/source_secrets.dart';
 import 'mydia_gql_transport.dart';
-import 'mydia_guest_credentials.dart';
-import 'mydia_guest_secrets.dart';
+import 'mydia_credentials.dart';
+import 'mydia_secrets.dart';
 
 /// The server being added is the one this device already signs in to as home.
-class GuestIsHomeException implements Exception {
-  const GuestIsHomeException();
+class ServerIsHomeException implements Exception {
+  const ServerIsHomeException();
 
   @override
   String toString() => 'This is already your home server.';
@@ -32,14 +32,14 @@ const _homeInstanceIdKey = 'instance_id';
 const _homeNodeAddrKey = 'server_node_addr';
 const _homeServerUrlKey = 'server_url';
 
-/// Stores [partial] as a guest Mydia account and selects it. [partial] may
+/// Stores [partial] as a Mydia account and selects it. [partial] may
 /// carry an empty `instanceId`, which is resolved here.
 ///
 /// With [reauthAccountId], the server must be the one that account holds.
 /// [homeStorage] and [transport] are injectable for tests.
-Future<SourceId> saveGuestMydia(
+Future<SourceId> saveMydiaServer(
   Ref ref,
-  MydiaGuestCredentials partial, {
+  MydiaCredentials partial, {
   String? reauthAccountId,
   AuthStorage? homeStorage,
   MydiaGqlTransport? transport,
@@ -66,7 +66,7 @@ Future<SourceId> saveGuestMydia(
     storageNamespace: SourceSecrets.newStorageNamespace(accountId),
     activeProfileId: kOwnerProfileId,
   );
-  final credentials = MydiaGuestCredentials(
+  final credentials = MydiaCredentials(
     instanceId: instanceId,
     accessToken: partial.accessToken,
     instanceName: partial.instanceName,
@@ -77,7 +77,7 @@ Future<SourceId> saveGuestMydia(
     username: partial.username,
   );
   // Credentials first: a stored server without them would fail every request.
-  await writeGuestCredentials(
+  await writeMydiaCredentials(
       ref.read(sourceSecretsProvider), account, credentials);
   final record = SourceAccountRecord(
     account: account,
@@ -117,7 +117,7 @@ String? _hostOf(String? url) {
 
 Future<String> _resolveInstanceId(
   Ref ref,
-  MydiaGuestCredentials partial, {
+  MydiaCredentials partial, {
   MydiaGqlTransport? transport,
 }) async {
   if (partial.instanceId.isNotEmpty) return partial.instanceId;
@@ -135,12 +135,12 @@ Future<String> _resolveInstanceId(
 /// servers have no such field and answer with an error.
 Future<String?> _askInstanceId(
   Ref ref,
-  MydiaGuestCredentials partial,
+  MydiaCredentials partial,
   MydiaGqlTransport? transport,
 ) async {
   try {
-    final data = await (transport ?? guestTransportFor(ref, partial)).send(
-      printNode(documentNodeQueryGuestInstanceIdentity),
+    final data = await (transport ?? mydiaTransportFor(ref, partial)).send(
+      printNode(documentNodeQueryMydiaInstanceIdentity),
       const {},
       token: partial.accessToken,
     );
@@ -152,19 +152,19 @@ Future<String?> _askInstanceId(
 }
 
 Future<void> _refuseHome(
-  MydiaGuestCredentials partial,
+  MydiaCredentials partial,
   String instanceId,
   AuthStorage home,
 ) async {
   final homeInstance = await home.read(_homeInstanceIdKey);
   if (homeInstance != null && homeInstance == instanceId) {
-    throw const GuestIsHomeException();
+    throw const ServerIsHomeException();
   }
 
   final nodeId = partial.nodeId;
   final homeAddr = await home.read(_homeNodeAddrKey);
   if (nodeId != null && homeAddr != null && _nodeIdOf(homeAddr) == nodeId) {
-    throw const GuestIsHomeException();
+    throw const ServerIsHomeException();
   }
 
   final url = partial.serverUrl;
@@ -173,7 +173,7 @@ Future<void> _refuseHome(
       homeUrl != null &&
       !homeUrl.startsWith('p2p://') &&
       normalizeMydiaUrl(url) == normalizeMydiaUrl(homeUrl)) {
-    throw const GuestIsHomeException();
+    throw const ServerIsHomeException();
   }
 }
 

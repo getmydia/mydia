@@ -1,4 +1,4 @@
-/// One guest Mydia's requests, with its own token refresh.
+/// A Mydia server's requests, with its own token refresh.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +8,7 @@ import 'package:gql/language.dart' show printNode;
 import '../../../domain/sources/source_error.dart';
 import '../media_source.dart';
 import 'mydia_gql_transport.dart';
-import 'mydia_guest_credentials.dart';
+import 'mydia_credentials.dart';
 
 /// Unauthenticated on the server on purpose: the device token is the proof.
 const _refreshMutation = r'''
@@ -20,11 +20,11 @@ mutation RefreshAccessToken($deviceToken: String!) {
 }
 ''';
 
-class MydiaGuestClient {
-  MydiaGuestClient({
+class MydiaClient {
+  MydiaClient({
     required MydiaGqlTransport transport,
-    required Future<MydiaGuestCredentials> Function() load,
-    required Future<void> Function(MydiaGuestCredentials) save,
+    required Future<MydiaCredentials> Function() load,
+    required Future<void> Function(MydiaCredentials) save,
     required void Function() onUnauthorized,
   })  : _transport = transport,
         _load = load,
@@ -32,11 +32,11 @@ class MydiaGuestClient {
         _onUnauthorized = onUnauthorized;
 
   final MydiaGqlTransport _transport;
-  final Future<MydiaGuestCredentials> Function() _load;
-  final Future<void> Function(MydiaGuestCredentials) _save;
+  final Future<MydiaCredentials> Function() _load;
+  final Future<void> Function(MydiaCredentials) _save;
   final void Function() _onUnauthorized;
-  MydiaGuestCredentials? _credentials;
-  Future<MydiaGuestCredentials>? _loading;
+  MydiaCredentials? _credentials;
+  Future<MydiaCredentials>? _loading;
   Future<String?>? _refreshing;
 
   final ValueNotifier<SourceConnectionStatus> _status =
@@ -46,7 +46,7 @@ class MydiaGuestClient {
 
   /// The current credentials, read from storage once. A failed read is not
   /// cached.
-  Future<MydiaGuestCredentials> credentials() async {
+  Future<MydiaCredentials> credentials() async {
     final known = _credentials;
     if (known != null) return known;
     final loading = _loading ??= _load().whenComplete(() => _loading = null);

@@ -4,7 +4,7 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/capabilities.dart';
-import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/plex/plex_media_source.dart';
 import 'package:player/core/sources/source.dart';
@@ -148,7 +148,7 @@ void main() {
     test('builds home Mydia as a browsable Mydia source', () {
       final c = _container(const AsyncData(AuthStatus.authenticated));
       final source = c.read(mediaSourceProvider(SourceId.legacyMydia));
-      expect(source, isA<MydiaGuestSource>());
+      expect(source, isA<MydiaSource>());
       expect(source!.id, SourceId.legacyMydia);
       expect(source.kind, SourceKind.mydia);
       expect(source.connection, SourceConnectionStatus.remote);
