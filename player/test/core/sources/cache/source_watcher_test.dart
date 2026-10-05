@@ -96,6 +96,30 @@ void main() {
     expect(h.freshness.last.isRefreshing, isFalse);
   });
 
+  test('an unchanged answer emits once and still stamps the log', () async {
+    final h = _Harness(
+        loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'same');
+    h.watcher;
+    await pumpEventQueue();
+    expect(h.values, ['same']);
+
+    await h.answer('same');
+    expect(h.values, ['same']);
+    expect(h.log.lastFetchedAt(_key), _now);
+    expect(h.cache.read(_key)!.writtenAt, _now);
+    expect(h.freshness.last.isRefreshing, isFalse);
+    expect(h.freshness.last.fetchedAt, _now);
+  });
+
+  test('a changed answer after a cached emission emits twice', () async {
+    final h = _Harness(
+        loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'old');
+    h.watcher;
+    await pumpEventQueue();
+    await h.answer('new');
+    expect(h.values, ['old', 'new']);
+  });
+
   test('stale entry: emits it and reports stale until the answer', () async {
     final h = _Harness(
         loggedAt: _now.subtract(const Duration(hours: 2)), cached: 'old');

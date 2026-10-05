@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../../graphql/watch/cache_watcher.dart';
@@ -69,6 +70,11 @@ class SourceWatcher<T> implements CacheWatcher {
   bool _hasData = false;
   bool _closed = false;
 
+  /// The JSON of the last value that went out, from the cache or a fetch.
+  bool _hasEmitted = false;
+  Object? _lastEncoded;
+  static const DeepCollectionEquality _equality = DeepCollectionEquality();
+
   Stream<T> get stream => _controller.stream;
 
   Future<void> _start() async {
@@ -104,7 +110,8 @@ class SourceWatcher<T> implements CacheWatcher {
     }
   }
 
-  /// One fetch at a time: a refetch while one is running joins it.
+  /// One fetch at a time. Automatic callers and the initial load join the
+  /// running one; [refetch] queues a follow-up instead.
   Future<void> _refresh() =>
       _inFlight ??= _fetchOnce().whenComplete(() => _inFlight = null);
 
@@ -121,12 +128,23 @@ class SourceWatcher<T> implements CacheWatcher {
 
     final now = _clock();
     _hasData = true;
-    _add(value);
+    Object? encoded;
+    try {
+      encoded = _encode(value);
+    } catch (error) {
+      debugPrint('[SourceWatcher] could not encode $key: $error');
+    }
+    // An answer equal to what is already out would only make every
+    // dependent rebuild; the models define no `==`, so compare the JSON.
+    final unchanged = _hasEmitted &&
+        encoded != null &&
+        _equality.equals(encoded, _lastEncoded);
+    if (!unchanged) _add(value, encoded);
     _publish(fetchedAt: now);
     try {
       // Data first, then the log: the log must never vouch for an entry
       // that failed to store.
-      await _cache.write(key, _encode(value), now);
+      await _cache.write(key, encoded ?? _encode(value), now);
       await _fetchLog.record(key, now);
     } catch (error) {
       debugPrint('[SourceWatcher] could not store $key: $error');
@@ -169,8 +187,18 @@ class SourceWatcher<T> implements CacheWatcher {
     ));
   }
 
-  void _add(T value) {
+  void _add(T value, [Object? encoded]) {
+    _hasEmitted = true;
+    _lastEncoded = encoded ?? _tryEncode(value);
     if (!_controller.isClosed) _controller.add(value);
+  }
+
+  Object? _tryEncode(T value) {
+    try {
+      return _encode(value);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Fetches now. Always honoured; this is the user's refresh.

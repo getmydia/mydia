@@ -175,6 +175,11 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
     final buildRef = ref;
     final source = _source(ref, item.sourceId);
     final features = sourceFeatures(source);
+    // A rebuild (after a write, say) keeps the previous Continue target
+    // until the new next-up answer lands. A new answer, null included,
+    // replaces it.
+    final carriedId = state.value?.nextUpEpisodeId;
+    final carriedSeason = state.value?.nextUpSeasonNumber;
     final loaded = await _awaitWhileCurrent(
       buildRef,
       () => (
@@ -184,7 +189,13 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
     );
     if (loaded == null) return;
     final (detail, seasons) = loaded;
-    final first = showViewFromSource(detail, seasons, features: features);
+    final base = showViewFromSource(detail, seasons, features: features);
+    final first = carriedId == null
+        ? base
+        : base.copyWith(
+            nextUpEpisodeId: carriedId,
+            nextUpSeasonNumber: carriedSeason,
+          );
     yield first;
 
     final nextUp = source.as<NextUp>();
@@ -203,6 +214,9 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
         nextUpEpisodeId: next.ref.externalId,
         nextUpSeasonNumber: next.parentIndex,
       );
+    } else if (carriedId != null) {
+      // Nothing left to continue: drop the carried target.
+      yield base.copyWith(isFavorite: (state.value ?? first).isFavorite);
     }
   }
 
