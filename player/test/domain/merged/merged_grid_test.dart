@@ -101,6 +101,19 @@ void main() {
     expect(grid.hasMore, isFalse);
   });
 
+  test('a stream answering empty pages with new cursors ends; others go on',
+      () async {
+    final b = fakeServer('b');
+    final endless = FakeMergedSource(fakeServer('e'))..endlessEmpty = true;
+    final steady = FakeMergedSource(b, movies: [item(b, 'x', title: 'x')]);
+    final grid = await reader([endless, steady])
+        .grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 5).timeout(const Duration(seconds: 2));
+    expect(grid.items.map((i) => i.title), ['x']);
+    expect(grid.hasMore, isFalse);
+    expect(endless.browseCalls.length, lessThanOrEqualTo(5));
+  });
+
   test('overlapping loadMore calls never emit an item twice', () async {
     final a = fakeServer('a'), b = fakeServer('b');
     final gate = Completer<void>();

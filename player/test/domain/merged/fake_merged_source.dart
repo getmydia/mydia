@@ -90,6 +90,9 @@ class FakeMergedSource extends MediaSource
   /// Browse always answers an empty page echoing the cursor it was given.
   bool stuckEmpty = false;
 
+  /// Browse always answers an empty page pointing at a new cursor.
+  bool endlessEmpty = false;
+
   /// Completes calls only when set to a completed future.
   Completer<void>? gate;
   final browseCalls = <BrowseQuery>[];
@@ -150,6 +153,9 @@ class FakeMergedSource extends MediaSource
     final failFrom = failAfterPages;
     if (failFrom != null && start ~/ query.pageSize >= failFrom) {
       throw const SourceException.unreachable();
+    }
+    if (endlessEmpty) {
+      return Page(items: const [], nextCursor: Cursor('${browseCalls.length}'));
     }
     if (stuckEmpty) {
       return Page(items: const [], nextCursor: cursor ?? const Cursor('0'));

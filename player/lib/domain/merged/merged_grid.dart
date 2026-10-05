@@ -73,9 +73,20 @@ class MergedGrid {
     }
   }
 
+  /// Consecutive empty pages a stream may answer before it counts as run out.
+  /// Guards against a server that keeps pointing at new cursors with nothing
+  /// on them, which would otherwise hold every other server's items back.
+  static const maxEmptyPages = 5;
+
   /// Fetches until [s] has an item buffered or has run out.
   Future<void> _ensureHead(GridStream s) async {
-    while (s.buffer.isEmpty && !s.exhausted) {
+    for (var empty = 0; s.buffer.isEmpty && !s.exhausted; empty++) {
+      if (empty == maxEmptyPages) {
+        debugPrint('All servers: ${s.source.id.value} sent '
+            '$maxEmptyPages empty pages in a row; skipping the rest');
+        s.exhausted = true;
+        return;
+      }
       await _fill(s);
     }
   }
