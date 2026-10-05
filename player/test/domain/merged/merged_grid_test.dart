@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/domain/merged/merged_grid.dart';
 import 'package:player/domain/merged/merged_library_reader.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -101,7 +102,7 @@ void main() {
     expect(grid.hasMore, isFalse);
   });
 
-  test('a stream answering empty pages with new cursors ends; others go on',
+  test('a stream of endless empty pages is given up on and named; others go on',
       () async {
     final b = fakeServer('b');
     final endless = FakeMergedSource(fakeServer('e'))..endlessEmpty = true;
@@ -111,7 +112,34 @@ void main() {
     await grid.loadMore(count: 5).timeout(const Duration(seconds: 2));
     expect(grid.items.map((i) => i.title), ['x']);
     expect(grid.hasMore, isFalse);
-    expect(endless.browseCalls.length, lessThanOrEqualTo(5));
+    expect(grid.unavailable, [endless.id]);
+    expect(endless.browseCalls.length,
+        lessThanOrEqualTo(MergedGrid.maxEmptyPages));
+  });
+
+  test('a page the server repeats is shown once', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final repeating = FakeMergedSource(a,
+        movies: [item(a, 'a1', title: 'a'), item(a, 'a2', title: 'c')])
+      ..repeatFirstPage = true;
+    final steady = FakeMergedSource(b, movies: [item(b, 'b1', title: 'b')]);
+    final grid = await reader([repeating, steady])
+        .grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 10).timeout(const Duration(seconds: 2));
+    expect(grid.items.map((i) => i.title), ['a', 'b', 'c']);
+  });
+
+  test('a non-empty page pointing back at its own cursor ends the stream',
+      () async {
+    final a = fakeServer('a');
+    final self = FakeMergedSource(a, movies: [item(a, 'a1', title: 'a')])
+      ..selfPointing = true;
+    final grid =
+        await reader([self]).grid(LibraryKind.movies, SharedSort.title);
+    await grid.loadMore(count: 5).timeout(const Duration(seconds: 2));
+    expect(grid.items.map((i) => i.title), ['a']);
+    expect(grid.hasMore, isFalse);
+    expect(self.browseCalls, hasLength(2));
   });
 
   test('overlapping loadMore calls never emit an item twice', () async {

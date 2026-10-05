@@ -93,6 +93,12 @@ class FakeMergedSource extends MediaSource
   /// Browse always answers an empty page pointing at a new cursor.
   bool endlessEmpty = false;
 
+  /// Browse always answers the first page again, pointing at a new cursor.
+  bool repeatFirstPage = false;
+
+  /// Browse answers the first page, pointing back at the cursor it was given.
+  bool selfPointing = false;
+
   /// Completes calls only when set to a completed future.
   Completer<void>? gate;
   final browseCalls = <BrowseQuery>[];
@@ -153,6 +159,16 @@ class FakeMergedSource extends MediaSource
     final failFrom = failAfterPages;
     if (failFrom != null && start ~/ query.pageSize >= failFrom) {
       throw const SourceException.unreachable();
+    }
+    if (selfPointing) {
+      return Page(
+          items: movies.take(query.pageSize).toList(),
+          nextCursor: cursor ?? const Cursor('0'));
+    }
+    if (repeatFirstPage) {
+      return Page(
+          items: movies.take(query.pageSize).toList(),
+          nextCursor: Cursor('${browseCalls.length}'));
     }
     if (endlessEmpty) {
       return Page(items: const [], nextCursor: Cursor('${browseCalls.length}'));

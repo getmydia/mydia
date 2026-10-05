@@ -17,6 +17,10 @@ class GridStream {
   final LibraryRef library;
   final BrowseQuery query;
   final List<ItemSummary> buffer = [];
+
+  /// Every item this stream has buffered, so a server that repeats a page
+  /// cannot show the same title twice.
+  final Set<ItemRef> seen = {};
   Cursor? cursor;
   bool exhausted = false;
 }
@@ -73,22 +77,29 @@ class MergedGrid {
     }
   }
 
-  /// Consecutive empty pages a stream may answer before it counts as run out.
+  /// Consecutive empty pages a stream may answer before it is given up on.
   /// Guards against a server that keeps pointing at new cursors with nothing
   /// on them, which would otherwise hold every other server's items back.
-  static const maxEmptyPages = 5;
+  /// It is reported unavailable rather than finished, so the banner names it
+  /// and Retry tries it again.
+  static const maxEmptyPages = 20;
 
   /// Fetches until [s] has an item buffered or has run out.
   Future<void> _ensureHead(GridStream s) async {
     for (var empty = 0; s.buffer.isEmpty && !s.exhausted; empty++) {
       if (empty == maxEmptyPages) {
         debugPrint('All servers: ${s.source.id.value} sent '
-            '$maxEmptyPages empty pages in a row; skipping the rest');
-        s.exhausted = true;
+            '$maxEmptyPages empty pages in a row; giving up on it');
+        _giveUp(s);
         return;
       }
       await _fill(s);
     }
+  }
+
+  void _giveUp(GridStream s) {
+    s.exhausted = true;
+    if (!unavailable.contains(s.source.id)) unavailable.add(s.source.id);
   }
 
   Future<void> _fill(GridStream s) async {
@@ -96,19 +107,21 @@ class MergedGrid {
       final page = await s.source
           .browse(s.library, s.query, cursor: s.cursor)
           .timeout(timeout);
-      s.buffer.addAll(page.items);
+      // A page of nothing but repeats counts as empty below.
+      for (final i in page.items) {
+        if (s.seen.add(i.ref)) s.buffer.add(i);
+      }
       final next = page.nextCursor;
-      // An empty page that points back at the cursor it was asked with
-      // would loop forever.
-      final stuck = page.items.isEmpty && next?.value == s.cursor?.value;
+      // A page that points back at the cursor it was asked with would be
+      // fetched again forever, empty or not; its items count once.
+      final stuck = next != null && next.value == s.cursor?.value;
       s.cursor = next;
       if (next == null || stuck) s.exhausted = true;
     } catch (e) {
       // A server that fails mid-scroll stops contributing; what it already
       // gave stays where it is.
       debugPrint('All servers: ${s.source.id.value} browse failed: $e');
-      s.exhausted = true;
-      if (!unavailable.contains(s.source.id)) unavailable.add(s.source.id);
+      _giveUp(s);
     }
   }
 }
