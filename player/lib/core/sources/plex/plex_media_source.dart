@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -21,7 +22,8 @@ class PlexMediaSource extends MediaSource
         RecentlyAdded,
         HomeHubs,
         Similar,
-        NextUp {
+        NextUp,
+        SkipSegments {
   PlexMediaSource({
     required this.source,
     required this.client,
@@ -43,6 +45,7 @@ class PlexMediaSource extends MediaSource
         SourceCapability.hubs,
         SourceCapability.similar,
         SourceCapability.nextUp,
+        SourceCapability.skipSegments,
       };
 
   @override
@@ -208,6 +211,17 @@ class PlexMediaSource extends MediaSource
               library: hub.library,
             ),
     ];
+  }
+
+  /// Its own request, so a marker failure never costs the detail screen.
+  @override
+  Future<List<MediaSegment>> skipSegments(ItemRef ref,
+      {String? versionId}) async {
+    final body = await client.container(
+        '/library/metadata/${ref.externalId}', {'includeMarkers': '1'});
+    final list = body['Metadata'] as List? ?? const [];
+    if (list.isEmpty || list.first is! Map) return const [];
+    return plexSegments((list.first as Map).cast<String, dynamic>());
   }
 
   @override

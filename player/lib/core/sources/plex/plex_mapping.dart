@@ -2,6 +2,7 @@
 /// field Plex may omit is treated as optional.
 library;
 
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -238,3 +239,19 @@ ItemDetail plexDetail(SourceId sourceId, Map<String, dynamic> m) {
     ].whereType<MediaVersion>().toList(),
   );
 }
+
+/// Intro and credits markers of one `Metadata` entry fetched with
+/// `includeMarkers=1`. Offsets are already milliseconds.
+List<MediaSegment> plexSegments(Map<String, dynamic> metadata) => [
+      for (final m in (metadata['Marker'] as List? ?? const []))
+        if (m is Map)
+          MediaSegment(
+            type: switch (m['type']) {
+              'intro' => SegmentType.intro,
+              'credits' => SegmentType.credits,
+              _ => SegmentType.unknown,
+            },
+            startMs: (m['startTimeOffset'] as num?)?.toInt() ?? 0,
+            endMs: (m['endTimeOffset'] as num?)?.toInt() ?? 0,
+          ),
+    ].where((s) => s.actionable).toList();

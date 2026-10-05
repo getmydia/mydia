@@ -29,6 +29,10 @@ class FakePlexServer {
   /// Set to make the show answer without an `OnDeck` entry.
   bool nothingOnDeck = false;
 
+  /// What an episode's `Marker` list holds when asked with
+  /// `includeMarkers=1`.
+  List<Map<String, dynamic>> markers = [];
+
   static const movies = [
     ('101', 'The Lantern Keeper', 2019),
     ('102', 'Saltwater Clocks', 2021),
@@ -151,7 +155,12 @@ class FakePlexServer {
       case '/library/metadata/401':
       case '/library/metadata/402':
         return _container({
-          'Metadata': [_episode(int.parse(path.substring(path.length - 1)))],
+          'Metadata': [
+            {
+              ..._episode(int.parse(path.substring(path.length - 1))),
+              if (q['includeMarkers'] == '1') 'Marker': markers,
+            },
+          ],
         });
       case '/library/metadata/101/similar':
         return _container({
