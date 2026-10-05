@@ -258,8 +258,8 @@ skips that directory.
 
 1. A `MediaSource` subclass with its mapping and client, plus the shared
    contract suite in `test/core/sources/media_source_contract.dart`.
-   `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites`, `NextUp` and
-   `RecentlyAdded` are optional; a source that implements one also lists
+   `ContinueWatching`, `HomeHubs`, `Similar`, `Favorites`, `NextUp`,
+   `RecentlyAdded` and `SkipSegments` are optional; a source that implements one also lists
    the matching `SourceCapability`.
 2. A `SourceKind` value and a case in `source_factories.dart`.
 3. A `SourcePlaybackSession` subclass and a case in
