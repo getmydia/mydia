@@ -18,8 +18,11 @@ refuses anything else.
 
 The home Mydia login predates this layer. It appears as
 `Source.legacyMydia()`, read from `AuthService`'s own keys, and keeps its
-unprefixed routes. A guest Mydia is an ordinary account (see Guest Mydia
-servers).
+unprefixed routes and its own screens and controllers. Its `MediaSource`
+is a `MydiaGuestSource` over home's GraphQL client (`HomeMydiaTransport`),
+whose status follows the auth state; anything that works across sources
+(All servers, artwork, the switcher's status) reads home through it. A
+guest Mydia is an ordinary account (see Guest Mydia servers).
 
 The source switcher groups servers by account, with a caption per
 non-Mydia account.
@@ -265,9 +268,8 @@ including on a cold start before the saved servers load, as `/s/<id>` does.
 
 Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Home Mydia joins
-through `homeMydiaBrowseSourceProvider`, a `MydiaGuestSource` over home's
-own GraphQL client; it is never registered in `mediaSourceProvider`, and
-home items open Mydia's own detail screens.
+through `mediaSourceProvider` like any other server, and home items open
+Mydia's own detail screens.
 
 ## Tests
 

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia/home_mydia_browse.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -60,9 +59,10 @@ void main() {
       authStateProvider.overrideWith(_Authenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      homeMydiaBrowseSourceProvider.overrideWithValue(home),
-      mediaSourceProvider.overrideWith((ref, id) => fakes.putIfAbsent(
-          id, () => FakeMergedSource(fakeServer(id.value.split(':').first)))),
+      mediaSourceProvider.overrideWith((ref, id) => id == SourceId.legacyMydia
+          ? home
+          : fakes.putIfAbsent(id,
+              () => FakeMergedSource(fakeServer(id.value.split(':').first)))),
     ]);
     addTearDown(container.dispose);
     await container.read(sourceRecordsProvider.future);

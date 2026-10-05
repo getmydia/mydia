@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
+import '../auth/auth_status.dart';
+import '../graphql/graphql_provider.dart';
 import '../p2p/p2p_service.dart';
 import 'connection/connection_refresh_bus.dart';
 import 'connection/racing_connection.dart';
@@ -18,6 +20,7 @@ import 'jellyfin/jellyfin_media_source.dart';
 import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
 import 'media_source.dart';
+import 'mydia/home_mydia_transport.dart';
 import 'mydia/mydia_gql_transport.dart';
 import 'mydia/mydia_guest_client.dart';
 import 'mydia/mydia_guest_credentials.dart';
@@ -43,6 +46,35 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
       SourceKind.jellyfin => _jellyfin(ref, source),
       SourceKind.mydia => buildGuestMydiaSource(ref, source),
     };
+
+/// Home Mydia's connection status, from its auth state.
+SourceConnectionStatus homeMydiaStatus(AsyncValue<AuthStatus> auth) =>
+    switch (auth) {
+      AsyncData(value: AuthStatus.authenticated) =>
+        SourceConnectionStatus.remote,
+      AsyncData() || AsyncError() => SourceConnectionStatus.unreachable,
+      _ => SourceConnectionStatus.connecting,
+    };
+
+/// Home Mydia, browsed like a guest over home's own GraphQL client. That
+/// client adds and refreshes the token, so these credentials are never
+/// sent, and a refused token surfaces through home's auth state. The status
+/// follows the auth state without rebuilding the source.
+MediaSource buildHomeMydiaSource(Ref ref, Source source) {
+  final status = ValueNotifier(homeMydiaStatus(ref.read(authStateProvider)));
+  ref.listen<AsyncValue<AuthStatus>>(
+      authStateProvider, (_, next) => status.value = homeMydiaStatus(next));
+  ref.onDispose(status.dispose);
+  final client = MydiaGuestClient(
+    transport:
+        HomeMydiaTransport(() => ref.read(asyncGraphqlClientProvider.future)),
+    load: () async =>
+        const MydiaGuestCredentials(instanceId: 'home', accessToken: ''),
+    save: (_) async {},
+    onUnauthorized: () {},
+  );
+  return MydiaGuestSource(source: source, client: client, status: status);
+}
 
 /// A credential read once from secure storage and held until the server
 /// refuses it.

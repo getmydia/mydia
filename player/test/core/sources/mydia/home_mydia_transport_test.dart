@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql/client.dart';
-import 'package:player/core/sources/mydia/home_mydia_browse.dart';
 import 'package:player/core/sources/mydia/home_mydia_transport.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -76,10 +76,12 @@ void main() {
             .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)));
   });
 
-  test('no home Mydia means no browse source', () {
-    final container = ProviderContainer(
-        overrides: [mydiaPresentProvider.overrideWith(_Absent.new)]);
+  test('no home Mydia means no home source', () {
+    final container = ProviderContainer(overrides: [
+      mydiaPresentProvider.overrideWith(_Absent.new),
+      thirdPartySourcesProvider.overrideWithValue(const []),
+    ]);
     addTearDown(container.dispose);
-    expect(container.read(homeMydiaBrowseSourceProvider), isNull);
+    expect(container.read(mediaSourceProvider(SourceId.legacyMydia)), isNull);
   });
 }

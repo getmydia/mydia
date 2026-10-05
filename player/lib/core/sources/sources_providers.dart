@@ -13,8 +13,6 @@ import '../graphql/graphql_provider.dart';
 import 'all_servers_inclusion.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
-import 'mydia/home_mydia_browse.dart';
-import 'mydia_source.dart';
 import 'source.dart';
 import 'source_factories.dart';
 import 'store/source_records.dart';
@@ -372,7 +370,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
   final MediaSource media = switch (source.kind) {
     SourceKind.mydia when source.id == SourceId.legacyMydia =>
-      MydiaSource(source: source, auth: ref.watch(authStateProvider)),
+      buildHomeMydiaSource(ref, source),
     SourceKind.mydia ||
     SourceKind.plex ||
     SourceKind.stash ||
@@ -402,11 +400,7 @@ final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
       if (!s.account.needsReauth &&
           !gated.contains(s.id) &&
           includedInAllServers(s, choices))
-        if ((s.id == SourceId.legacyMydia
-                ? ref.watch(homeMydiaBrowseSourceProvider)
-                : ref.watch(mediaSourceProvider(s.id)))
-            case final media?)
-          media,
+        if (ref.watch(mediaSourceProvider(s.id)) case final media?) media,
   ]);
 });
 
