@@ -7,6 +7,8 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
 import 'download_service.dart';
 
 /// Downloads are not supported on web.
@@ -66,10 +68,10 @@ class _WebDownloadDatabase implements DownloadDatabase {
   DownloadedMedia? getMedia(String id) => null;
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) => null;
+  DownloadedMedia? getMediaFor(ItemRef ref) => null;
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
   List<DownloadedMedia> getAllMedia() => [];
@@ -210,7 +212,7 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  Future<void> deleteDownload(String mediaId) async {
+  Future<void> deleteDownload(ItemRef ref) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
@@ -230,12 +232,13 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  Future<int> deleteSeriesDownloads(String showId) async {
+  Future<int> deleteSeriesDownloads(SourceId source, String showId) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
   @override
-  Future<int> deleteSeasonDownloads(String showId, int seasonNumber) async {
+  Future<int> deleteSeasonDownloads(
+      SourceId source, String showId, int seasonNumber) async {
     throw UnsupportedError('Downloads are not supported on web');
   }
 
@@ -246,10 +249,10 @@ class _WebDownloadService implements DownloadService {
   List<DownloadedMedia> getDownloadedMedia() => [];
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => null;
+  DownloadedMedia? getDownloaded(ItemRef ref) => null;
 
   @override
   int getTotalStorageUsed() => 0;

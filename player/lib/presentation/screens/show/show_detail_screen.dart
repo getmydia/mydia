@@ -12,6 +12,8 @@ import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/mydia_downloads.dart';
+import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
 import 'show_detail_controller.dart';
 import 'show_season_section.dart';
 import '../../widgets/detail_hero_app_bar.dart';
@@ -579,7 +581,10 @@ class ShowDetailScreen extends ConsumerWidget {
       // the selected episode.
       isDownloaded: mydiaEpisode == null
           ? false
-          : ref.watch(isMediaDownloadedProvider(mydiaEpisode.id)).value ??
+          : ref
+                  .watch(isItemDownloadedProvider(
+                      homeMydiaRef(ItemKind.episode, mydiaEpisode.id)))
+                  .value ??
               false,
       onShowMediaInfo: mydiaEpisode == null ||
               !show.features.contains(DetailFeature.mediaInfo) ||

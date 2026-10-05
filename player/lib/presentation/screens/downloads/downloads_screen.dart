@@ -14,6 +14,7 @@ import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
+import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
@@ -801,7 +802,7 @@ class DownloadsScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       final manager = await ref.read(downloadManagerProvider.future);
       for (final media in group.downloads) {
-        await manager.deleteDownload(media.mediaId);
+        await manager.deleteDownload(media.itemRef);
       }
     }
   }
@@ -834,7 +835,12 @@ class DownloadsScreen extends ConsumerWidget {
 
     if (confirmed == true && context.mounted) {
       final manager = await ref.read(downloadManagerProvider.future);
-      await manager.deleteSeriesDownloads(group.id);
+      await manager.deleteSeriesDownloads(
+        group.downloads.firstOrNull?.source ??
+            group.activeTasks.firstOrNull?.source ??
+            SourceId.legacyMydia,
+        group.id,
+      );
     }
   }
 

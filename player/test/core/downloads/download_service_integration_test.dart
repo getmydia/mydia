@@ -7,8 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/downloads/download_service_native.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/download_request.dart';
+import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+
+ItemRef _ref(String mediaId) => homeMydiaRef(ItemKind.movie, mediaId);
 
 void main() {
   late DownloadHarness harness;
@@ -63,7 +67,7 @@ void main() {
       expect(completedTask.filePath, isNotNull);
       expect(completedTask.completedAt, isNotNull);
 
-      final downloadedMedia = harness.database.getMediaByMediaId(mediaId);
+      final downloadedMedia = harness.database.getMediaFor(_ref(mediaId));
       expect(downloadedMedia, isNotNull);
       expect(downloadedMedia!.title, equals(title));
       expect(downloadedMedia.quality, equals(quality));
@@ -318,11 +322,11 @@ void main() {
       final filePath = completedTask!.filePath!;
       expect(await File(filePath).exists(), isTrue);
 
-      await harness.service.deleteDownload(mediaId);
+      await harness.service.deleteDownload(_ref(mediaId));
 
       expect(await File(filePath).exists(), isFalse);
-      expect(harness.database.getMediaByMediaId(mediaId), isNull);
-      expect(harness.database.isMediaDownloaded(mediaId), isFalse);
+      expect(harness.database.getMediaFor(_ref(mediaId)), isNull);
+      expect(harness.database.isDownloaded(_ref(mediaId)), isFalse);
     });
   });
 
@@ -340,8 +344,8 @@ void main() {
 
       await harness.waitForStatus(task.id, 'completed');
 
-      expect(harness.service.isMediaDownloaded(mediaId), isTrue);
-      expect(harness.database.isMediaDownloaded(mediaId), isTrue);
+      expect(harness.service.isDownloaded(_ref(mediaId)), isTrue);
+      expect(harness.database.isDownloaded(_ref(mediaId)), isTrue);
     });
 
     test('downloaded media can be retrieved by mediaId', () async {
@@ -360,7 +364,7 @@ void main() {
 
       await harness.waitForStatus(task.id, 'completed');
 
-      final downloadedMedia = harness.service.getDownloadedMediaById(mediaId);
+      final downloadedMedia = harness.service.getDownloaded(_ref(mediaId));
 
       expect(downloadedMedia, isNotNull);
       expect(downloadedMedia!.mediaId, equals(mediaId));
@@ -385,7 +389,7 @@ void main() {
 
       await harness.waitForStatus(task.id, 'completed');
 
-      final downloadedMedia = harness.service.getDownloadedMediaById(mediaId);
+      final downloadedMedia = harness.service.getDownloaded(_ref(mediaId));
 
       expect(downloadedMedia, isNotNull);
       final file = File(downloadedMedia!.filePath);
@@ -550,7 +554,10 @@ void main() {
       );
       await harness.waitForStatus(failTask.id, 'failed');
 
-      expect(harness.database.isMediaDownloaded('success_before_fail'), isTrue);
+      expect(
+        harness.database.isDownloaded(_ref('success_before_fail')),
+        isTrue,
+      );
       expect(
         harness.database.getTask(successTask.id)!.downloadStatus,
         equals(DownloadStatus.completed),

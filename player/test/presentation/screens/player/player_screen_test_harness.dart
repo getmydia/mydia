@@ -39,6 +39,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
@@ -83,7 +84,7 @@ class FakeDownloadService extends Fake implements DownloadService {
   final DownloadedMedia? downloaded;
 
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => downloaded;
+  DownloadedMedia? getDownloaded(ItemRef ref) => downloaded;
 }
 
 /// Captures the [CastLaunchRequest] handed to `startCast` instead of routing

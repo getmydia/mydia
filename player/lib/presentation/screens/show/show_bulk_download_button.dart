@@ -4,7 +4,9 @@ import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
+import '../../../domain/models/download_request.dart';
 import '../../../domain/models/episode.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/models/season_info.dart';
 import '../../../domain/models/show_detail.dart';
 import '../../widgets/quality_download_dialog.dart';
@@ -147,7 +149,9 @@ class ShowBulkDownloadButton extends ConsumerWidget {
     final queueMediaIds = <String>{};
 
     for (final episode in allEpisodes) {
-      if (downloadManager.isMediaDownloaded(episode.id)) {
+      if (downloadManager.isDownloaded(
+        homeMydiaRef(ItemKind.episode, episode.id),
+      )) {
         downloadedMediaIds.add(episode.id);
       }
     }

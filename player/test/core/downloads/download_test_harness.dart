@@ -15,6 +15,7 @@ import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/downloads/download_service_native.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/sources/item.dart';
 
 /// A complete [DownloadDatabase] over two Hive boxes.
 class HiveDownloadDatabase implements DownloadDatabase {
@@ -84,16 +85,16 @@ class HiveDownloadDatabase implements DownloadDatabase {
   DownloadedMedia? getMedia(String id) => _open ? mediaBox.get(id) : null;
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) {
+  DownloadedMedia? getMediaFor(ItemRef ref) {
     if (!_open) return null;
     for (final m in mediaBox.values) {
-      if (m.mediaId == mediaId) return m;
+      if (m.matches(ref)) return m;
     }
     return null;
   }
 
   @override
-  bool isMediaDownloaded(String mediaId) => getMediaByMediaId(mediaId) != null;
+  bool isDownloaded(ItemRef ref) => getMediaFor(ref) != null;
 
   @override
   List<DownloadedMedia> getAllMedia() => _open ? mediaBox.values.toList() : [];

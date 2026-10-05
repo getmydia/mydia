@@ -7,6 +7,8 @@ import '../../../core/layout/window_chrome_inset.dart';
 import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
 import '../detail/mydia_downloads.dart';
+import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../widgets/detail_hero_app_bar.dart';
@@ -466,7 +468,9 @@ class EpisodeDetailScreen extends ConsumerWidget {
   Widget _buildDownloadButton(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
     final mydia = episode.mydiaDetail!;
-    final isDownloadedAsync = ref.watch(isMediaDownloadedProvider(mydia.id));
+    final isDownloadedAsync = ref.watch(
+      isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, mydia.id)),
+    );
     final isDownloaded = isDownloadedAsync.value ?? false;
     final hasFiles = episode.files.isNotEmpty;
 

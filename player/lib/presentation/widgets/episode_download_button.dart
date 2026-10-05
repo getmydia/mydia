@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/models/episode.dart';
+import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
 import '../../core/theme/colors.dart';
@@ -32,7 +34,9 @@ class EpisodeDownloadButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final isDownloadedAsync = ref.watch(isMediaDownloadedProvider(episode.id));
+    final isDownloadedAsync = ref.watch(
+      isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id)),
+    );
     final isDownloaded = isDownloadedAsync.value ?? false;
 
     return _ActionButton(

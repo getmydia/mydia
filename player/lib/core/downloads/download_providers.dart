@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/models/download.dart';
 import '../../domain/models/download_settings.dart';
+import '../../domain/sources/item.dart';
 import 'download_service.dart';
 import 'download_speed_tracker.dart';
 
@@ -186,23 +187,23 @@ List<DownloadTask> _getFailedTasks(DownloadDatabase database) {
 }
 
 @riverpod
-Future<bool> isMediaDownloaded(Ref ref, String mediaId) async {
+Future<bool> isItemDownloaded(Ref ref, ItemRef item) async {
   if (!isDownloadSupported) {
     return false;
   }
 
   final manager = await ref.watch(downloadManagerProvider.future);
-  return manager.isMediaDownloaded(mediaId);
+  return manager.isDownloaded(item);
 }
 
 @riverpod
-Future<DownloadedMedia?> getDownloadedMediaById(Ref ref, String mediaId) async {
+Future<DownloadedMedia?> downloadedItem(Ref ref, ItemRef item) async {
   if (!isDownloadSupported) {
     return null;
   }
 
   final manager = await ref.watch(downloadManagerProvider.future);
-  return manager.getDownloadedMediaById(mediaId);
+  return manager.getDownloaded(item);
 }
 
 /// Provides speed info for all active downloads, updated on each progress event.

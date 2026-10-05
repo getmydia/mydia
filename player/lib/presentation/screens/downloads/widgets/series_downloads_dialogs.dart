@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/downloads/download_providers.dart';
+import '../../../../core/sources/source.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../domain/models/download.dart';
 
@@ -74,7 +75,7 @@ Future<void> showDeleteEpisodeDialog(
   if (confirmed != true) return;
 
   final service = await ref.read(downloadManagerProvider.future);
-  await service.deleteDownload(media.mediaId);
+  await service.deleteDownload(media.itemRef);
 }
 
 /// Confirms deleting every downloaded episode in one season.
@@ -116,7 +117,11 @@ Future<void> showDeleteSeasonDialog(
   if (confirmed != true) return;
 
   final service = await ref.read(downloadManagerProvider.future);
-  await service.deleteSeasonDownloads(showId, seasonNumber);
+  await service.deleteSeasonDownloads(
+    SourceId.legacyMydia,
+    showId,
+    seasonNumber,
+  );
 }
 
 /// Confirms deleting every download for the show, queued or complete.
@@ -160,6 +165,6 @@ Future<bool> showDeleteAllDialog(
   if (confirmed != true) return false;
 
   final service = await ref.read(downloadManagerProvider.future);
-  await service.deleteSeriesDownloads(showId);
+  await service.deleteSeriesDownloads(SourceId.legacyMydia, showId);
   return true;
 }

@@ -7,6 +7,8 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
 import 'download_service.dart';
 
 /// Downloads are not supported in stub mode.
@@ -56,10 +58,10 @@ class _StubDownloadDatabase implements DownloadDatabase {
   DownloadedMedia? getMedia(String id) => null;
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) => null;
+  DownloadedMedia? getMediaFor(ItemRef ref) => null;
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
   List<DownloadedMedia> getAllMedia() => [];
@@ -190,7 +192,7 @@ class _StubDownloadService implements DownloadService {
   Future<void> retryDownload(String taskId) async {}
 
   @override
-  Future<void> deleteDownload(String mediaId) async {}
+  Future<void> deleteDownload(ItemRef ref) async {}
 
   @override
   Future<int> cancelAllQueued() async => 0;
@@ -202,10 +204,12 @@ class _StubDownloadService implements DownloadService {
   Future<int> retryAllFailed() async => 0;
 
   @override
-  Future<int> deleteSeriesDownloads(String showId) async => 0;
+  Future<int> deleteSeriesDownloads(SourceId source, String showId) async => 0;
 
   @override
-  Future<int> deleteSeasonDownloads(String showId, int seasonNumber) async => 0;
+  Future<int> deleteSeasonDownloads(
+          SourceId source, String showId, int seasonNumber) async =>
+      0;
 
   @override
   List<DownloadTask> getActiveDownloads() => [];
@@ -214,10 +218,10 @@ class _StubDownloadService implements DownloadService {
   List<DownloadedMedia> getDownloadedMedia() => [];
 
   @override
-  bool isMediaDownloaded(String mediaId) => false;
+  bool isDownloaded(ItemRef ref) => false;
 
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) => null;
+  DownloadedMedia? getDownloaded(ItemRef ref) => null;
 
   @override
   int getTotalStorageUsed() => 0;

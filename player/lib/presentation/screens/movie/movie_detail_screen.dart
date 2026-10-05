@@ -14,6 +14,8 @@ import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/mydia_downloads.dart';
+import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
@@ -306,7 +308,11 @@ class MovieDetailScreen extends ConsumerWidget {
       showDownload: canDownload,
       isDownloaded: mydia == null
           ? false
-          : ref.watch(isMediaDownloadedProvider(mydia.id)).value ?? false,
+          : ref
+                  .watch(isItemDownloadedProvider(
+                      homeMydiaRef(ItemKind.movie, mydia.id)))
+                  .value ??
+              false,
       onShowMediaInfo: mydia == null ||
               !movie.features.contains(DetailFeature.mediaInfo) ||
               movie.files.isEmpty

@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_job_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/episode.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/widgets/episode_download_button.dart';
 
@@ -37,7 +39,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isMediaDownloadedProvider(episode.id)
+          isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id))
               .overrideWith((ref) => downloaded),
           downloadOptionsProvider('episode', episode.id).overrideWith(
               (ref) => Completer<DownloadOptionsResponse>().future),

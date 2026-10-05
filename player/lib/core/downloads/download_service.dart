@@ -8,6 +8,8 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
 import 'download_service_stub.dart'
     if (dart.library.html) 'download_service_web.dart'
     if (dart.library.io) 'download_service_native.dart' as impl;
@@ -35,8 +37,8 @@ abstract class DownloadDatabase {
   Future<void> saveMedia(DownloadedMedia media);
   Future<void> deleteMedia(String id);
   DownloadedMedia? getMedia(String id);
-  DownloadedMedia? getMediaByMediaId(String mediaId);
-  bool isMediaDownloaded(String mediaId);
+  DownloadedMedia? getMediaFor(ItemRef ref);
+  bool isDownloaded(ItemRef ref);
   List<DownloadedMedia> getAllMedia();
   Stream<dynamic> watchMedia();
   int getTotalStorageUsed();
@@ -168,7 +170,7 @@ abstract class DownloadService {
 
   /// Retry a `failed` or `cancelled` task. Delegates to [restartDownload].
   Future<void> retryDownload(String taskId);
-  Future<void> deleteDownload(String mediaId);
+  Future<void> deleteDownload(ItemRef ref);
 
   /// Cancel all queued/pending downloads. Returns count cancelled.
   Future<int> cancelAllQueued();
@@ -180,15 +182,16 @@ abstract class DownloadService {
   Future<int> retryAllFailed();
 
   /// Delete all downloads (completed + active) for a series. Returns count deleted.
-  Future<int> deleteSeriesDownloads(String showId);
+  Future<int> deleteSeriesDownloads(SourceId source, String showId);
 
   /// Delete all downloads for a specific season of a series. Returns count deleted.
-  Future<int> deleteSeasonDownloads(String showId, int seasonNumber);
+  Future<int> deleteSeasonDownloads(
+      SourceId source, String showId, int seasonNumber);
 
   List<DownloadTask> getActiveDownloads();
   List<DownloadedMedia> getDownloadedMedia();
-  bool isMediaDownloaded(String mediaId);
-  DownloadedMedia? getDownloadedMediaById(String mediaId);
+  bool isDownloaded(ItemRef ref);
+  DownloadedMedia? getDownloaded(ItemRef ref);
   int getTotalStorageUsed();
   void dispose();
 }

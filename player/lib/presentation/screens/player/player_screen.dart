@@ -92,6 +92,8 @@ import '../../../domain/models/quality_rung.dart';
 import '../../../domain/models/subtitle_candidate.dart';
 import '../../../domain/models/subtitle_track.dart' as app_models;
 import '../../../domain/models/cast_device.dart';
+import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/playback/server_features.dart';
@@ -954,7 +956,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     fetchSeason: (season) => _session.seasonEpisodes(season),
     isDownloaded: (episodeId) async {
       final manager = await ref.read(downloadManagerProvider.future);
-      return manager.getDownloadedMediaById(episodeId) != null;
+      return manager.getDownloaded(
+            homeMydiaRef(ItemKind.episode, episodeId),
+          ) !=
+          null;
     },
     navigate: _navigateToEpisode,
     playingSignal: () {
@@ -1500,8 +1505,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       // Only Mydia has downloads. A third-party id can collide with a
       // Mydia download's id, so it is never looked up.
       final downloadedMedia = playsDownloads
-          ? (await ref.read(downloadManagerProvider.future))
-              .getDownloadedMediaById(widget.mediaId)
+          ? (await ref.read(downloadManagerProvider.future)).getDownloaded(
+              homeMydiaRef(
+                widget.mediaType == 'episode'
+                    ? ItemKind.episode
+                    : ItemKind.movie,
+                widget.mediaId,
+              ),
+            )
           : null;
       if (!_isCurrentLoad(gen)) return;
 

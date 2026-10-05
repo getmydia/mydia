@@ -17,6 +17,8 @@ import '../../domain/models/download.dart';
 import '../../domain/models/download_option.dart';
 import '../../domain/models/download_settings.dart';
 import '../../domain/models/storage_settings.dart';
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
 import '../storage/app_hive.dart';
 import 'download_notification_service.dart';
 import 'download_recovery.dart';
@@ -145,25 +147,15 @@ class _NativeDownloadDatabase implements DownloadDatabase {
   }
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) {
-    try {
-      return _mediaBox.values.firstWhere(
-        (media) => media.mediaId == mediaId,
-      );
-    } catch (_) {
-      return null;
+  DownloadedMedia? getMediaFor(ItemRef ref) {
+    for (final media in _mediaBox.values) {
+      if (media.matches(ref)) return media;
     }
+    return null;
   }
 
   @override
-  bool isMediaDownloaded(String mediaId) {
-    try {
-      _mediaBox.values.firstWhere((media) => media.mediaId == mediaId);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
+  bool isDownloaded(ItemRef ref) => getMediaFor(ref) != null;
 
   @override
   List<DownloadedMedia> getAllMedia() {
@@ -1635,11 +1627,11 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  Future<void> deleteDownload(String mediaId) async {
+  Future<void> deleteDownload(ItemRef ref) async {
     if (_database == null) return;
 
     // Find the downloaded media
-    final media = _database!.getMediaByMediaId(mediaId);
+    final media = _database!.getMediaFor(ref);
     if (media == null) {
       throw StateError('Media not found');
     }
@@ -1654,7 +1646,7 @@ class _NativeDownloadService implements DownloadService {
     await _database!.deleteMedia(media.id);
 
     // Also remove any associated tasks
-    final tasks = _database!.getAllTasks().where((t) => t.mediaId == mediaId);
+    final tasks = _database!.getAllTasks().where((t) => t.matches(ref));
     for (final task in tasks) {
       await _database!.deleteTask(task.id);
     }
@@ -1719,14 +1711,16 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  Future<int> deleteSeriesDownloads(String showId) async {
+  Future<int> deleteSeriesDownloads(SourceId source, String showId) async {
     if (_database == null) return 0;
 
     int count = 0;
 
     // Delete completed downloads for this series
     final allMedia = _database!.getAllMedia();
-    final seriesMedia = allMedia.where((m) => m.showId == showId).toList();
+    final seriesMedia = allMedia
+        .where((m) => m.source == source && m.showId == showId)
+        .toList();
     for (final media in seriesMedia) {
       final file = File(media.filePath);
       if (await file.exists()) {
@@ -1746,7 +1740,9 @@ class _NativeDownloadService implements DownloadService {
 
     // Cancel active tasks for this series
     final allTasks = _database!.getAllTasks();
-    final seriesTasks = allTasks.where((t) => t.showId == showId).toList();
+    final seriesTasks = allTasks
+        .where((t) => t.source == source && t.showId == showId)
+        .toList();
     for (final task in seriesTasks) {
       await _cancelAndCleanupTask(task.id, processQueue: false);
       count++;
@@ -1757,7 +1753,8 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  Future<int> deleteSeasonDownloads(String showId, int seasonNumber) async {
+  Future<int> deleteSeasonDownloads(
+      SourceId source, String showId, int seasonNumber) async {
     if (_database == null) return 0;
 
     int count = 0;
@@ -1765,8 +1762,10 @@ class _NativeDownloadService implements DownloadService {
     // Delete completed downloads for this season
     final allMedia = _database!.getAllMedia();
     final seasonMedia = allMedia
-        .where(
-            (m) => m.showId == showId && (m.seasonNumber ?? 0) == seasonNumber)
+        .where((m) =>
+            m.source == source &&
+            m.showId == showId &&
+            (m.seasonNumber ?? 0) == seasonNumber)
         .toList();
     for (final media in seasonMedia) {
       final file = File(media.filePath);
@@ -1788,8 +1787,10 @@ class _NativeDownloadService implements DownloadService {
     // Cancel active tasks for this season
     final allTasks = _database!.getAllTasks();
     final seasonTasks = allTasks
-        .where(
-            (t) => t.showId == showId && (t.seasonNumber ?? 0) == seasonNumber)
+        .where((t) =>
+            t.source == source &&
+            t.showId == showId &&
+            (t.seasonNumber ?? 0) == seasonNumber)
         .toList();
     for (final task in seasonTasks) {
       await _cancelAndCleanupTask(task.id, processQueue: false);
@@ -1811,14 +1812,10 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  bool isMediaDownloaded(String mediaId) {
-    return _database?.isMediaDownloaded(mediaId) ?? false;
-  }
+  bool isDownloaded(ItemRef ref) => _database?.isDownloaded(ref) ?? false;
 
   @override
-  DownloadedMedia? getDownloadedMediaById(String mediaId) {
-    return _database?.getMediaByMediaId(mediaId);
-  }
+  DownloadedMedia? getDownloaded(ItemRef ref) => _database?.getMediaFor(ref);
 
   @override
   int getTotalStorageUsed() {

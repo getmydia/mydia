@@ -10,6 +10,8 @@ import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart' show DownloadService;
 import '../../../domain/models/download.dart';
+import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/models/episode_detail.dart';
 import '../../../domain/models/movie_detail.dart';
@@ -57,8 +59,11 @@ Future<void> _runProgressiveDownload(
   required _StartDownload start,
   bool hasFiles = true,
 }) async {
-  final isDownloaded =
-      ref.read(isMediaDownloadedProvider(mediaId)).value ?? false;
+  final item = homeMydiaRef(
+    contentType == 'episode' ? ItemKind.episode : ItemKind.movie,
+    mediaId,
+  );
+  final isDownloaded = ref.read(isItemDownloadedProvider(item)).value ?? false;
 
   if (isDownloaded) {
     if (context.mounted) {
