@@ -1,11 +1,15 @@
 /// Per-screen state for the generic source screens, keyed by source. Screens
-/// invalidate through `invalidateSourceItemWrites` after a write; nothing here is
-/// wired to Mydia's `QueryWatcher`.
+/// invalidate through `invalidateSourceItemWrites` after a write. Each leaf
+/// provider is a `SourceWatcher`, so it paints from the cache and is refreshed
+/// by `SourceRules`.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 
+import '../../../core/sources/cache/create_source_watcher.dart';
+import '../../../core/sources/cache/source_codecs.dart';
+import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -40,35 +44,73 @@ String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
   ).toString();
 }
 
-final sourceLibrariesProvider = FutureProvider.autoDispose
-    .family<List<Library>, SourceId>(
-        (ref, id) => _require(ref, id).libraries());
-
-/// The home row for [library]: its "Recently added" sort when it has one.
-final sourceLibraryPreviewProvider = FutureProvider.autoDispose
-    .family<List<ItemSummary>, LibraryRef>((ref, library) async {
-  final source = _require(ref, library.sourceId);
-  final libraries =
-      await ref.watch(sourceLibrariesProvider(library.sourceId).future);
-  final options =
-      libraries.where((l) => l.ref == library).firstOrNull?.sortOptions ??
-          const [];
-  final recent = options.where((o) => o.label == 'Recently added').firstOrNull;
-  final page = await source.browse(
-    library,
-    BrowseQuery(sortId: recent?.id, pageSize: 20),
-  );
-  return page.items;
+final sourceLibrariesProvider =
+    StreamProvider.autoDispose.family<List<Library>, SourceId>((ref, id) {
+  final source = _require(ref, id);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.libraries(id),
+    fetch: source.libraries,
+    encode: encodeLibraries,
+    decode: decodeLibraries,
+  ).stream;
 });
 
-final sourceItemProvider = FutureProvider.autoDispose
-    .family<ItemDetail, ItemRef>(
-        (ref, item) => _require(ref, item.sourceId).item(item));
+/// The home row for [library]: its "Recently added" sort when it has one.
+final sourceLibraryPreviewProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, LibraryRef>((ref, library) async* {
+  final source = _require(ref, library.sourceId);
+  // selectAsync: a fresh libraries answer with the same sort must not
+  // rebuild this row and fetch it twice.
+  final sortId = await ref.watch(
+    sourceLibrariesProvider(library.sourceId).selectAsync(
+      (libraries) => libraries
+          .where((l) => l.ref == library)
+          .firstOrNull
+          ?.sortOptions
+          .where((o) => o.label == 'Recently added')
+          .firstOrNull
+          ?.id,
+    ),
+  );
+  if (!ref.mounted) return;
+  final query = BrowseQuery(sortId: sortId, pageSize: 20);
+  yield* createSourceWatcher(
+    ref,
+    key: SourceKeys.browse(library, query),
+    fetch: () => source.browse(library, query),
+    encode: encodeSummaryPage,
+    decode: decodeSummaryPage,
+  ).stream.map((page) => page.items);
+});
+
+final sourceItemProvider =
+    StreamProvider.autoDispose.family<ItemDetail, ItemRef>((ref, item) {
+  final source = _require(ref, item.sourceId);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.item(item),
+    fetch: () => source.item(item),
+    encode: encodeDetail,
+    decode: decodeDetail,
+  ).stream;
+});
 
 /// Every child of [parent], following pages up to a sane cap.
-final sourceChildrenProvider = FutureProvider.autoDispose
-    .family<List<ItemSummary>, ItemRef>((ref, parent) async {
+final sourceChildrenProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, ItemRef>((ref, parent) {
   final source = _require(ref, parent.sourceId);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.children(parent),
+    fetch: () => _allChildren(source, parent),
+    encode: encodeSummaries,
+    decode: decodeSummaries,
+  ).stream;
+});
+
+Future<List<ItemSummary>> _allChildren(
+    MediaSource source, ItemRef parent) async {
   final items = <ItemSummary>[];
   Cursor? cursor;
   for (var pages = 0; pages < 10; pages++) {
@@ -78,7 +120,7 @@ final sourceChildrenProvider = FutureProvider.autoDispose
     if (cursor == null) break;
   }
   return items;
-});
+}
 
 class LibraryBrowseState {
   const LibraryBrowseState({
@@ -177,21 +219,34 @@ final libraryBrowseProvider = AsyncNotifierProvider.autoDispose
 /// row stays hidden until the next refresh rather than polling a down
 /// server.
 final sourceContinueWatchingProvider =
-    FutureProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) async {
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
     final continueWatching = _require(ref, id).as<ContinueWatching>();
-    if (continueWatching == null) return const [];
-    return continueWatching.continueWatching();
+    if (continueWatching == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.continueWatching(id),
+      fetch: continueWatching.continueWatching,
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
   },
   retry: (_, __) => null,
 );
 
 /// Null for a source without hubs, whose home keeps one row per library.
 final sourceHubsProvider =
-    FutureProvider.autoDispose.family<List<Hub>?, SourceId>(
-  (ref, id) async {
+    StreamProvider.autoDispose.family<List<Hub>?, SourceId>(
+  (ref, id) {
     final hubs = _require(ref, id).as<HomeHubs>();
-    return hubs == null ? null : await hubs.hubs();
+    if (hubs == null) return Stream.value(null);
+    return createSourceWatcher<List<Hub>?>(
+      ref,
+      key: SourceKeys.hubs(id),
+      fetch: hubs.hubs,
+      encode: encodeHubs,
+      decode: decodeHubs,
+    ).stream;
   },
   retry: (_, __) => null,
 );

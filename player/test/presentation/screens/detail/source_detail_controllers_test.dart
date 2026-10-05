@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/graphql/watch/fetch_log.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/models/media_file.dart';
@@ -45,6 +47,8 @@ void main() {
     await c.read(seasonActionsProvider(key)).setSeasonWatched(true);
     expect(source.watchedCalls, [(fakeSeason.ref, true)]);
     expect(sub.read().value?.every((e) => e.watched), isTrue);
+    // The refetch the write kicked off must land before teardown.
+    await _settle();
   });
 
   test('this and previous marks each earlier episode once, in order', () async {
@@ -79,6 +83,8 @@ void main() {
       throwsException,
     );
     expect(sub.read().value?.any((e) => e.watched), isFalse);
+    // The refetch the failed write kicked off must land before teardown.
+    await _settle();
   });
 
   test('a partial this-and-previous failure stops and refetches', () async {
@@ -196,12 +202,15 @@ void main() {
   });
 
   test('similar is empty without the capability and lists with it', () async {
+    // A listener keeps the stream provider alive until its first value.
     final plain = _container(FakeMediaSource());
+    plain.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, __) {});
     expect(
       await plain.read(sourceSimilarProvider(fakeMovie(1).ref).future),
       isEmpty,
     );
     final rich = _container(FakeDetailSource());
+    rich.listen(sourceSimilarProvider(fakeMovie(1).ref), (_, __) {});
     final items =
         await rich.read(sourceSimilarProvider(fakeMovie(1).ref).future);
     expect(items.single.title, 'Invented Film 2');
@@ -227,6 +236,38 @@ void main() {
       'seasonNumber': '1',
       'resume': '90',
     });
+  });
+
+  test('a movie view updates when the fresh item lands after the cached one',
+      () async {
+    final cache = InMemorySourceCache();
+    final log = InMemoryFetchLog();
+    final source = FakeDetailSource();
+    ProviderContainer mount() {
+      final c = ProviderContainer(overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(source),
+        sourceCacheProvider.overrideWithValue(cache),
+        fetchLogProvider.overrideWithValue(log),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    final target = SourceTarget(fakeMovie(1).ref);
+    final first = mount();
+    first.listen(movieViewProvider(target), (_, __) {});
+    await _settle();
+
+    source.titleSuffix = ' (remastered)';
+    final second = mount();
+    final views = <String>[];
+    second.listen(movieViewProvider(target), (_, next) {
+      if (next.value case final v?) views.add(v.title);
+    }, fireImmediately: true);
+    await _settle();
+    expect(views.first, isNot(endsWith('(remastered)')),
+        reason: 'the cached item paints first');
+    expect(views.last, endsWith('(remastered)'));
   });
 }
 

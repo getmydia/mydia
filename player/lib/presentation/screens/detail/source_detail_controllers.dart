@@ -9,6 +9,9 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/sources/cache/create_source_watcher.dart';
+import '../../../core/sources/cache/source_codecs.dart';
+import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -360,11 +363,18 @@ final sourceEpisodeProvider = AsyncNotifierProvider.autoDispose
 /// Empty for a source without the capability. No automatic retry: a failed
 /// rail stays hidden rather than polling a down server.
 final sourceSimilarProvider =
-    FutureProvider.autoDispose.family<List<ItemSummary>, ItemRef>(
-  (ref, item) async {
+    StreamProvider.autoDispose.family<List<ItemSummary>, ItemRef>(
+  (ref, item) {
     final similar =
         ref.watch(mediaSourceProvider(item.sourceId))?.as<Similar>();
-    return similar == null ? const [] : similar.similar(item);
+    if (similar == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.similar(item),
+      fetch: () => similar.similar(item),
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
   },
   retry: (_, __) => null,
 );
