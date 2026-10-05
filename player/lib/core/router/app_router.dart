@@ -6,6 +6,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'web_url_stub.dart' if (dart.library.js_interop) 'web_url.dart'
     as web_url;
 import 'source_detail_routes.dart';
+import '../sources/media_source.dart' show MediaSource;
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
@@ -132,6 +133,15 @@ SourceId? _sourceIdIn(String location) {
 
 /// Where `/sources/add/mydia` redirects: third-party sources do not exist on
 /// web, so a guest added there would vanish.
+/// The `/all*` redirect, held while saved sources are still loading so a
+/// cold start does not read an empty set and bounce to `/`. The router
+/// refreshes when loading ends.
+String? allServersRouteRedirect({
+  required bool sourcesLoading,
+  required List<MediaSource> included,
+}) =>
+    sourcesLoading ? null : allServersRedirect(included);
+
 String? guestMydiaRouteRedirect({bool isWeb = kIsWeb}) => isWeb ? '/' : null;
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
@@ -393,31 +403,39 @@ GoRouter appRouter(Ref ref) {
           GoRoute(
             path: '/all',
             name: 'all_servers',
-            redirect: (context, state) =>
-                allServersRedirect(ref.read(allServersSourcesProvider)),
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
             builder: (context, state) => const AllServersHomeScreen(),
           ),
           GoRoute(
             path: '/all/movies',
             name: 'all_servers_movies',
-            redirect: (context, state) =>
-                allServersRedirect(ref.read(allServersSourcesProvider)),
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.movies),
           ),
           GoRoute(
             path: '/all/shows',
             name: 'all_servers_shows',
-            redirect: (context, state) =>
-                allServersRedirect(ref.read(allServersSourcesProvider)),
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.shows),
           ),
           GoRoute(
             path: '/all/search',
             name: 'all_servers_search',
-            redirect: (context, state) =>
-                allServersRedirect(ref.read(allServersSourcesProvider)),
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
             builder: (context, state) => const AllServersSearchScreen(),
           ),
           GoRoute(

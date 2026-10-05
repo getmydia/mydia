@@ -128,6 +128,11 @@ class AllServersSearchNotifier
   @override
   AsyncValue<MergedResult<MergedSearch>>? build() {
     ref.onDispose(() => _timer?.cancel());
+    // A change in the included servers rebuilds this: results from a server
+    // that left the set must not stay, and a search in flight is outdated.
+    ref.watch(allServersSourcesProvider);
+    _request++;
+    _lastQuery = '';
     return null;
   }
 

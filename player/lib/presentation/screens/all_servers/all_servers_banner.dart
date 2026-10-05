@@ -2,6 +2,7 @@
 /// included ones that need signing in again.
 library;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +27,7 @@ class _AllServersBannerState extends ConsumerState<AllServersBanner> {
   @override
   void didUpdateWidget(AllServersBanner old) {
     super.didUpdateWidget(old);
-    if (old.unavailable.length != widget.unavailable.length) _dismissed = false;
+    if (!listEquals(old.unavailable, widget.unavailable)) _dismissed = false;
   }
 
   @override

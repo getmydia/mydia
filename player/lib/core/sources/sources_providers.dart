@@ -137,7 +137,17 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             if (r.serverLocks.isNotEmpty) r,
         ];
         for (final record in locked) {
-          await _write((store) => store.removeAccount(record.account.id));
+          final id = record.account.id;
+          final choices = {
+            for (final e in (_current?.allServers ?? const {}).entries)
+              if (!e.key.value.startsWith('$id:')) e.key: e.value,
+          };
+          await _write((store) async {
+            await store.removeAccount(id);
+            if (choices.length != (_current?.allServers.length ?? 0)) {
+              await store.setAllServers(choices);
+            }
+          });
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
       });

@@ -17,6 +17,14 @@ void main() {
     expect(r.cacheKey, 'mydia|https://media.example.test/p/1.jpg|300');
   });
 
+  test('an artwork URL carrying credentials resolves to nothing', () async {
+    expect(
+        await home.artwork(
+            const ArtworkRef('https://user:pw@media.example.test/p.jpg'),
+            width: 300),
+        isNull);
+  });
+
   test('a relative path resolves to nothing', () async {
     expect(
         await home.artwork(const ArtworkRef('/p/1.jpg'), width: 300), isNull);

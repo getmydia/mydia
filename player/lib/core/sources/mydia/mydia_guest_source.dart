@@ -42,7 +42,8 @@ ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
   final uri = Uri.tryParse(art.path);
   if (uri == null ||
       !(uri.scheme == 'http' || uri.scheme == 'https') ||
-      uri.host.isEmpty) {
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) {
     return null;
   }
   return ArtworkRequest(

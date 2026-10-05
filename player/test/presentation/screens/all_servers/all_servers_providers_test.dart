@@ -62,6 +62,14 @@ class ThrowingGrid extends MergedGrid {
   }
 }
 
+class IncludedHolder extends Notifier<List<FakeMergedSource>> {
+  @override
+  List<FakeMergedSource> build() =>
+      [bigServer(), FakeMergedSource(fakeServer('b'))];
+
+  void set(List<FakeMergedSource> next) => state = next;
+}
+
 class ScriptedReader implements MergedLibraryReader {
   ScriptedReader({this.gridFor});
 
@@ -202,6 +210,30 @@ void main() {
       final shown = c.read(allServersSearchProvider)!.requireValue;
       expect(shown.value.sections[MergedSection.movies]!.single.ref.externalId,
           'two');
+    });
+
+    test('changing the included servers clears the shown results', () async {
+      final reader = ScriptedReader();
+      final holder = NotifierProvider<IncludedHolder, List<FakeMergedSource>>(
+          IncludedHolder.new);
+      final c = ProviderContainer(overrides: [
+        allServersSourcesProvider.overrideWith((ref) => ref.watch(holder)),
+        allServersReaderProvider.overrideWithValue(reader),
+      ]);
+      addTearDown(c.dispose);
+      final sub = c.listen(allServersSearchProvider, (_, __) {});
+      addTearDown(sub.close);
+      final n = c.read(allServersSearchProvider.notifier);
+
+      n.query('one');
+      await debounce();
+      reader.completers['one']!.complete(result('one'));
+      await settle();
+      expect(c.read(allServersSearchProvider), isNotNull);
+
+      c.read(holder.notifier).set([bigServer()]);
+      await settle();
+      expect(c.read(allServersSearchProvider), isNull);
     });
 
     test('retry reruns the last query once, without a second debounced run',

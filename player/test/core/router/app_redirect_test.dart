@@ -5,10 +5,24 @@ import 'package:player/core/router/app_router.dart';
 import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 
+import '../../domain/merged/fake_merged_source.dart';
 import '../../presentation/screens/sources/fake_media_source.dart'
     show fakeSource;
 
 void main() {
+  test('/all* waits for saved sources before deciding', () {
+    final two = [
+      FakeMergedSource(fakeServer('a')),
+      FakeMergedSource(fakeServer('b')),
+    ];
+    expect(allServersRouteRedirect(sourcesLoading: true, included: const []),
+        isNull);
+    expect(allServersRouteRedirect(sourcesLoading: false, included: const []),
+        '/');
+    expect(
+        allServersRouteRedirect(sourcesLoading: false, included: two), isNull);
+  });
+
   String? go(AuthStatus status, String location) => appRedirect(
         auth: AsyncData(status),
         location: location,
