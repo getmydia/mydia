@@ -208,9 +208,10 @@ Changing any model's `toJson` shape means bumping
 swept in the background after it opens: entries older than 30 days go,
 then the oldest beyond 2000. Removing an account (or Forgot PIN) deletes
 its entries. That delete is best-effort: a failed one is logged and does
-not stop the removal. Fetch-log entries, and entries of servers dropped
-without removing the account, are left for the 30-day sweep; they are
-harmless. Locked and hidden servers are cached like any other; the
+not stop the removal. The account's fetch-log entries stay, since the
+fetch log has no sweep; they are a timestamp each and nothing reads them
+once the source is gone. Entries of a server dropped without removing the
+account are left for the 30-day sweep. Locked and hidden servers are cached like any other; the
 router's lock gate is what hides them.
 
 ## Credentials stay out of URLs
