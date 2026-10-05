@@ -561,6 +561,43 @@ class DownloadedMedia {
     this.thumbnailPath,
   });
 
+  /// This record with its saved artwork paths replaced; nothing else changes.
+  DownloadedMedia withArtwork({
+    String? posterPath,
+    String? backdropPath,
+    String? thumbnailPath,
+  }) =>
+      DownloadedMedia(
+        id: id,
+        mediaId: mediaId,
+        title: title,
+        quality: quality,
+        filePath: filePath,
+        fileSize: fileSize,
+        mediaType: mediaType,
+        posterUrl: posterUrl,
+        downloadedAt: downloadedAt,
+        overview: overview,
+        runtime: runtime,
+        genres: genres,
+        rating: rating,
+        backdropUrl: backdropUrl,
+        year: year,
+        contentRating: contentRating,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber,
+        showId: showId,
+        showTitle: showTitle,
+        showPosterUrl: showPosterUrl,
+        thumbnailUrl: thumbnailUrl,
+        airDate: airDate,
+        sourceId: sourceId,
+        itemKind: itemKind,
+        posterPath: posterPath,
+        backdropPath: backdropPath,
+        thumbnailPath: thumbnailPath,
+      );
+
   SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
 
   ItemRef get itemRef => ItemRef(

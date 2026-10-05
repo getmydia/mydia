@@ -397,7 +397,13 @@ class _NativeDownloadService implements DownloadService {
       }
     }
 
-    final poster = await one(task.posterUrl, 'poster');
+    // An episode's posterUrl is its still, which belongs in the thumbnail;
+    // the saved poster is the show's.
+    final poster = await one(
+        task.type == MediaType.episode
+            ? (task.showPosterUrl ?? task.posterUrl)
+            : task.posterUrl,
+        'poster');
     final backdrop = await one(task.backdropUrl, 'backdrop');
     final thumbnail = await one(task.thumbnailUrl, 'thumb');
     final saved = [poster, backdrop, thumbnail].whereType<String>().toList();
@@ -413,13 +419,21 @@ class _NativeDownloadService implements DownloadService {
       }
       return;
     }
-    final withArt = task.copyWith(
-      posterPath: poster,
-      backdropPath: backdrop,
-      thumbnailPath: thumbnail,
-    );
-    await db.saveTask(withArt);
-    await db.saveMedia(DownloadedMedia.fromTask(withArt));
+    // Write only the paths onto the rows as they are now, not the snapshot
+    // taken before the fetches.
+    final currentTask = db.getTask(task.id);
+    if (currentTask != null) {
+      await db.saveTask(currentTask.copyWith(
+        posterPath: poster,
+        backdropPath: backdrop,
+        thumbnailPath: thumbnail,
+      ));
+    }
+    await db.saveMedia(db.getMedia(task.id)!.withArtwork(
+          posterPath: poster,
+          backdropPath: backdrop,
+          thumbnailPath: thumbnail,
+        ));
   }
 
   /// Deletes a completed download's file and its saved artwork.
