@@ -24,12 +24,23 @@ class _Authenticated extends AuthStateNotifier {
   AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
 }
 
-/// Mounts the app router for a signed-in user at [location].
-Future<GoRouter> _pump(WidgetTester tester, String location) async {
+class _Unauthenticated extends AuthStateNotifier {
+  @override
+  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
+}
+
+/// Mounts the app router at [location], for a signed-in user unless
+/// [signedIn] is false.
+Future<GoRouter> _pump(
+  WidgetTester tester,
+  String location, {
+  bool signedIn = true,
+}) async {
   await tester.binding.setSurfaceSize(const Size(900, 1400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final container = ProviderContainer(overrides: [
-    authStateProvider.overrideWith(_Authenticated.new),
+    authStateProvider
+        .overrideWith(signedIn ? _Authenticated.new : _Unauthenticated.new),
     sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     authServiceProvider
@@ -66,6 +77,22 @@ void main() {
     final router = await _pump(tester, '/sources/add');
     unawaited(router.push('/sources/add/mydia'));
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('login-back')));
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(find.byType(AddSourceScreen), findsOneWidget);
+  });
+
+  testWidgets(
+      'with no Mydia server, the Mydia tile opens login with a way back',
+      (tester) async {
+    await _pump(tester, '/sources/add', signedIn: false);
+    await tester.tap(find.byKey(const Key('add-source-mydia')));
+    await tester.pumpAndSettle();
+
+    final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
+    expect(screen.guest, isNull);
 
     await tester.tap(find.byKey(const Key('login-back')));
     await tester.pumpAndSettle();
