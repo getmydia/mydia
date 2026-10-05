@@ -7,11 +7,15 @@
 /// player/docs/riverpod.md). State is only restored when `ref.mounted`.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/sources/cache/create_source_watcher.dart';
 import '../../../core/sources/cache/source_codecs.dart';
 import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -57,25 +61,26 @@ T _capability<T extends Object>(Ref ref, ItemRef item) {
   return source.as<T>() ?? (throw StateError('the source does not support $T'));
 }
 
-/// Everything a finished write should refresh, through the container so it
-/// still works if the notifier was disposed while the write was in flight.
+/// What a finished write should refresh, through the container so it still
+/// works if the notifier was disposed while the write was in flight.
 void Function() _invalidator(Ref ref, ItemRef item) {
   final container = ref.container;
   return () => invalidateSourceDetailWrites(container, item);
 }
 
-/// Progress or watched state of [item] changed, here or in the player: its
-/// own item, its season and show, the detail notifiers built on them, and the
-/// home rows. The item and detail families are dropped whole because the
-/// season and show of [item] are not known without fetching them.
-void invalidateSourceDetailWrites(ProviderContainer container, ItemRef item) {
-  invalidateSourceContainerWrites(container, item);
-  container.invalidate(sourceItemProvider);
-  container.invalidate(sourceMovieProvider);
-  container.invalidate(sourceShowProvider);
-  container.invalidate(sourceSeasonProvider);
-  container.invalidate(sourceEpisodeProvider);
+/// The favorite rule, captured the same way as [_invalidator].
+void Function() _favoriteInvalidator(Ref ref, ItemRef item) {
+  final container = ref.container;
+  return () => unawaited(container
+      .read(invalidatorProvider)
+      .invalidate(SourceRules.favoriteChanged(item.sourceId)));
 }
+
+/// Progress or watched state of [item] changed, here or in the player. The
+/// detail notifiers are built on the item and children watchers, which the
+/// rule refetches, so they follow on their own.
+void invalidateSourceDetailWrites(ProviderContainer container, ItemRef item) =>
+    invalidateSourceContainerWrites(container, item);
 
 Progress? _progressWithWatched(Progress? existing, bool watched) {
   if (!watched) return null;
@@ -114,11 +119,11 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
   /// back if the write fails.
   Future<void> _write(
     MovieView Function(MovieView) change,
-    Future<void> Function() write,
-  ) async {
+    Future<void> Function() write, {
+    required void Function() invalidate,
+  }) async {
     final snapshot = state.value;
     if (snapshot == null) return;
-    final invalidate = _invalidator(ref, item);
     state = AsyncData(change(snapshot));
     try {
       await write();
@@ -137,6 +142,7 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
           ? m.copyWith(progress: _progressWithWatched(m.progress, true))
           : m.copyWith(clearProgress: true),
       () => watchedState.setWatched(item, watched),
+      invalidate: _invalidator(ref, item),
     );
   }
 
@@ -147,6 +153,7 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
     await _write(
       (m) => m.copyWith(isFavorite: next),
       () => favorites.setFavorite(item, next),
+      invalidate: _favoriteInvalidator(ref, item),
     );
   }
 
@@ -204,7 +211,7 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
     final snapshot = state.value;
     if (snapshot == null) return;
     final favorites = _capability<Favorites>(ref, item);
-    final invalidate = _invalidator(ref, item);
+    final invalidate = _favoriteInvalidator(ref, item);
     final next = !snapshot.isFavorite;
     state = AsyncData(snapshot.copyWith(isFavorite: next));
     try {

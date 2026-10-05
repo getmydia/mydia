@@ -4,12 +4,15 @@
 /// by `SourceRules`.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
+import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/graphql/watch/watcher_registry.dart';
 import '../../../core/sources/cache/create_source_watcher.dart';
 import '../../../core/sources/cache/source_codecs.dart';
 import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -271,10 +274,12 @@ final sourceHubsProvider =
   retry: (_, __) => null,
 );
 
-/// Progress or watched state changed: this item, its siblings in a season
-/// list, and the home rows and grids that show it are all stale.
-void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) =>
-    _invalidateWrites(ref.invalidate, item);
+/// Progress or watched state of [item] changed: every live watcher on its
+/// source that shows watch state refetches, the rest mount cold. See
+/// `SourceRules.watchedChanged`.
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) => unawaited(ref
+    .read(invalidatorProvider)
+    .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
 /// [invalidateSourceItemWrites] through a container, for a write that
 /// finishes after its notifier is disposed: a `Ref` throws then, a container
@@ -283,16 +288,13 @@ void invalidateSourceContainerWrites(
   ProviderContainer container,
   ItemRef item,
 ) =>
-    _invalidateWrites(container.invalidate, item);
+    unawaited(container
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
-void _invalidateWrites(
-  void Function(ProviderOrFamily provider) invalidate,
-  ItemRef item,
-) {
-  invalidate(sourceItemProvider(item));
-  invalidate(sourceChildrenProvider);
-  invalidate(sourceLibraryPreviewProvider);
-  invalidate(libraryBrowseProvider);
-  invalidate(sourceContinueWatchingProvider(item.sourceId));
-  invalidate(sourceHubsProvider(item.sourceId));
-}
+/// [item] was dismissed from Continue Watching; only the rail and the hubs
+/// change.
+void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
+    unawaited(ref
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.continueWatchingRemoved(item.sourceId)));
