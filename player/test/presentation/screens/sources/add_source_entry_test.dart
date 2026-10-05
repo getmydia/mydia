@@ -6,7 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
+import 'package:player/core/router/app_router.dart'
+    show guestMydiaRouteRedirect;
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/presentation/screens/login/login_controller.dart'
+    show GuestTarget;
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
@@ -67,12 +71,81 @@ void main() {
     expect(mydia.enabled, isTrue);
   });
 
-  testWidgets('a second Mydia server is disabled as coming soon',
+  testWidgets('with a home Mydia, the tile is enabled and adds a guest',
       (tester) async {
-    await pumpAdd(tester, mydia: true);
-    final mydia =
+    final router = GoRouter(routes: [
+      GoRoute(path: '/', builder: (_, __) => const AddSourceScreen()),
+      GoRoute(
+        path: '/sources/add/mydia',
+        builder: (_, __) => const SizedBox(key: Key('guest-marker')),
+      ),
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('add-source-mydia'));
+    expect(tester.widget<ListTile>(tile).enabled, isTrue);
+    expect(
+        find.text("Add a friend's or family member's server"), findsOneWidget);
+    expect(find.textContaining('coming soon'), findsNothing);
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('guest-marker')), findsOneWidget);
+  });
+
+  testWidgets('on web with a home Mydia, the tile is disabled with a hint',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+      ],
+      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+    ));
+    final tile =
         tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
-    expect(mydia.enabled, isFalse);
-    expect(find.text('Multiple Mydia servers: coming soon'), findsOneWidget);
+    expect(tile.enabled, isFalse);
+    expect(find.text('Add more Mydia servers from the desktop or mobile app'),
+        findsOneWidget);
+  });
+
+  testWidgets('on web without a home Mydia, the tile still signs in',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mydiaPresentProvider.overrideWith(() => _MydiaPresent(false)),
+      ],
+      child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
+    ));
+    final tile =
+        tester.widget<ListTile>(find.byKey(const Key('add-source-mydia')));
+    expect(tile.enabled, isTrue);
+    expect(find.text('Sign in to a Mydia server'), findsOneWidget);
+  });
+
+  test('the guest add route redirects home on web only', () {
+    expect(guestMydiaRouteRedirect(isWeb: true), '/');
+    expect(guestMydiaRouteRedirect(isWeb: false), isNull);
+  });
+
+  testWidgets(
+      'guest mode retitles the login screen and hides the other-server link',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authServiceProvider
+            .overrideWithValue(AuthService(storage: MockAuthStorage())),
+      ],
+      child: const MaterialApp(home: LoginScreen(guest: GuestTarget())),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Add a Mydia server'), findsOneWidget);
+    expect(find.byKey(const Key('connect-other-server')), findsNothing);
   });
 }

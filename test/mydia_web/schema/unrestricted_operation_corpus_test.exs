@@ -52,6 +52,16 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "Search" => %{"query" => "Crawl", "first" => 5},
       "TvShowsList" => %{"first" => 5},
       "MoviesList" => %{"first" => 5},
+      "GuestInstanceIdentity" => %{},
+      "GuestMovies" => %{
+        "first" => 10,
+        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
+      },
+      "GuestTvShows" => %{
+        "first" => 10,
+        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
+      },
+      "GuestContinueWatching" => %{"first" => 10},
       "SeasonEpisodes" => %{"showId" => s.show.id, "seasonNumber" => 1},
       "MovieDetail" => %{"id" => s.movie.id},
       "MovieMediaInfo" => %{"id" => s.movie.id},

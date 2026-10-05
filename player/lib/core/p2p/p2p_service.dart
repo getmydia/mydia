@@ -190,6 +190,18 @@ const _maxAutoReconnectAttempts = 3;
 /// Delay before attempting auto-reconnect after a disconnect event.
 const _autoReconnectDelay = Duration(seconds: 2);
 
+/// The server answered a p2p GraphQL request with an error. Distinct from a
+/// dial or timeout failure, which never reached a GraphQL answer. It prints as
+/// `Exception: <message>`, exactly as the plain `Exception` it replaces did.
+class P2pGraphQLError implements Exception {
+  const P2pGraphQLError(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'Exception: $message';
+}
+
 /// Service to handle P2P networking via iroh-based Rust Native Core
 class P2pService {
   P2PHost? _host;
@@ -787,7 +799,7 @@ class P2pService {
         final firstError = errors.first;
         final message =
             firstError is Map<String, Object?> ? firstError['message'] : null;
-        throw Exception(message ?? 'GraphQL error');
+        throw P2pGraphQLError(message?.toString() ?? 'GraphQL error');
       }
     }
 

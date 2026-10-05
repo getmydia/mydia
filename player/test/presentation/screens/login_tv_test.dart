@@ -41,7 +41,7 @@ class _FakeLoginController extends LoginController {
   LoginState build() => LoginState.initial();
 
   @override
-  Future<void> pairWithClaimCode(String claimCode) async {
+  Future<void> pairWithClaimCode(String claimCode, {GuestTarget? guest}) async {
     submittedClaimCode = claimCode;
     if (failureError != null) {
       state = state.copyWith(

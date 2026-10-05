@@ -5,15 +5,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
+import '../../../core/sources/mydia/mydia_guest_secrets.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
+import '../../../core/sources/store/source_secrets.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
+
+/// A guest Mydia reached over p2p stops being watched. Unreadable credentials
+/// must not block the removal.
+Future<void> unwatchGuestPeer(
+  SourceSecrets secrets,
+  P2pService p2p,
+  ProviderAccount account,
+) async {
+  if (account.kind != SourceKind.mydia) return;
+  try {
+    final nodeAddr = (await readGuestCredentials(secrets, account))?.nodeAddr;
+    if (nodeAddr != null) p2p.unwatchPeer(nodeAddr);
+  } catch (e) {
+    debugPrint('[Sources] Could not stop watching the guest peer: $e');
+  }
+}
 
 class ManageSourcesScreen extends ConsumerWidget {
   const ManageSourcesScreen({super.key});
@@ -99,6 +118,8 @@ class _AccountCard extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final toaster = Toaster.of(context);
+    await unwatchGuestPeer(ref.read(sourceSecretsProvider),
+        ref.read(p2pServiceProvider), record.account);
     try {
       await ref
           .read(sourceRecordsProvider.notifier)
@@ -124,7 +145,7 @@ class _AccountCard extends ConsumerWidget {
                   SourceKind.plex => 'Plex account',
                   SourceKind.stash => 'Stash server',
                   SourceKind.jellyfin => 'Jellyfin user',
-                  // The Mydia login is not stored as a source account.
+                  // A guest Mydia server; home is not a stored account.
                   SourceKind.mydia => 'Mydia account',
                 },
                 style: Theme.of(context).textTheme.bodySmall),

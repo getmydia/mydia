@@ -11,6 +11,10 @@ class SourceSecrets {
 
   final AuthStorage _storage;
 
+  /// Whether a write has failed to reach durable storage, as
+  /// [AuthStorage.degraded].
+  bool get degraded => _storage.degraded;
+
   static String newStorageNamespace(String accountId) => 'source/$accountId';
 
   static String _accountKey(ProviderAccount account) =>

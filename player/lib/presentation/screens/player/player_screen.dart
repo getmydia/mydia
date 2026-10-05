@@ -3727,11 +3727,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// core Flutter invariant. Before this, every call from `dispose()` threw
   /// on its very first line, before doing any of the cleanup below.
   Future<void> _terminateHlsSession() async {
-    // Releases this screen's hold rather than stopping the proxy outright.
-    // On a next-episode navigation the incoming screen has already started
-    // it — Flutter mounts the new route before disposing the old one — so an
-    // unconditional stop here closed the server the episode now playing was
-    // streaming from.
+    // Releases every target this screen took (home, or a guest instance's)
+    // rather than stopping the proxy outright. On a next-episode navigation
+    // the incoming screen has already started it — Flutter mounts the new
+    // route before disposing the old one — so an unconditional stop here
+    // closed the server the episode now playing was streaming from.
     //
     // Deliberately unconditional. This used to run only while the connection
     // was still in p2p mode, which tracked the *current* mode rather than the
@@ -3742,7 +3742,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // for the rest of the session. Releasing a hold that was never taken is
     // a no-op, so there is nothing to guard against.
     try {
-      await _mediaProxy.stop(this);
+      await _mediaProxy.release(this);
       debugPrint('[PlayerScreen] Media proxy released');
     } catch (e) {
       debugPrint('[PlayerScreen] Error stopping local proxy: $e');

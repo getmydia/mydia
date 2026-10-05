@@ -181,6 +181,30 @@ void main() {
       expect(sourceRootRedirect('mydia', [Source.legacyMydia()]), '/');
     });
 
+    test('leaves a guest Mydia on its own screen', () {
+      const guestId = 'mguest:owner:inst-2';
+      const guest = Source(
+        account: ProviderAccount(
+          id: 'mguest',
+          kind: SourceKind.mydia,
+          displayName: 'Lakeside',
+          storageNamespace: 'source/mguest',
+          activeProfileId: 'owner',
+        ),
+        profile: SourceProfile(
+            id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+        server: SourceServer(
+            id: 'inst-2',
+            accountId: 'mguest',
+            profileId: 'owner',
+            name: 'Lakeside'),
+      );
+      expect(guest.id.value, guestId);
+      expect(
+          sourceRootRedirect(guestId, [Source.legacyMydia(), guest]), isNull);
+      expect(sourceRootRedirect('mydia', [Source.legacyMydia(), guest]), '/');
+    });
+
     test('sends an unknown source home', () {
       expect(sourceRootRedirect('nope', [Source.legacyMydia()]), '/');
     });

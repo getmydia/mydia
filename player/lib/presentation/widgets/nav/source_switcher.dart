@@ -47,7 +47,7 @@ class SourceSwitcher extends ConsumerWidget {
   ) {
     final fromLocation = sourceIdFromLocation(location);
     return sources.where((s) => s.id.value == fromLocation).firstOrNull ??
-        sources.where((s) => s.kind == SourceKind.mydia).firstOrNull ??
+        sources.where((s) => s.id == SourceId.legacyMydia).firstOrNull ??
         sources.where((s) => s.id == active).firstOrNull ??
         sources.first;
   }
@@ -100,7 +100,7 @@ class SourceSwitcher extends ConsumerWidget {
       case PickSource(:final source):
         ref.read(selectedSourceIdProvider.notifier).select(source.id);
         (onSwitchSource ?? onNavigate)(
-            source.kind == SourceKind.mydia ? '/' : '/s/${source.id.value}');
+            source.id == SourceId.legacyMydia ? '/' : '/s/${source.id.value}');
       case SwitchUser(:final account):
         await showPlexHomeSheet(
           anchorContext,
@@ -132,7 +132,9 @@ class _Header extends StatelessWidget {
   static String? _caption(Source source, String? homeUser) {
     if (source.account.needsReauth) return 'Sign in again';
     return switch (source.kind) {
-      SourceKind.mydia => null,
+      SourceKind.mydia => source.id == SourceId.legacyMydia
+          ? null
+          : 'Mydia · ${source.account.displayName}',
       SourceKind.plex => homeUser == null
           ? 'Plex · ${source.account.displayName}'
           : 'Plex · ${source.account.displayName} · $homeUser',

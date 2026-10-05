@@ -48,6 +48,14 @@ abstract class MediaProxy {
   /// started the proxy: both are no-ops.
   Future<void> stop(Object owner, {String target = homeTarget});
 
+  /// Release every target [owner] holds. Serving stops once no target has
+  /// an owner left.
+  ///
+  /// For a call site that may have taken any number of targets and cannot
+  /// know which, such as a player screen that can play from home or from a
+  /// guest instance. The ownership rules of [stop] apply to each target.
+  Future<void> release(Object owner);
+
   /// Origin and prefix to build [target]'s media URLs against, with no
   /// trailing slash: [baseUrl] for [homeTarget], `<baseUrl>/t/<target>`
   /// for any other.

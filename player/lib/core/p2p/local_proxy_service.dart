@@ -192,11 +192,24 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  Future<void> stop(Object owner,
-      {String target = MediaProxy.homeTarget}) async {
-    final entry = _targets[target];
-    if (entry == null || !entry.owners.remove(owner)) return;
-    if (entry.owners.isEmpty) _targets.remove(target);
+  Future<void> stop(Object owner, {String target = MediaProxy.homeTarget}) =>
+      _drop(owner, [target]);
+
+  @override
+  Future<void> release(Object owner) => _drop(owner, _targets.keys.toList());
+
+  /// Removes [owner] from each of [targets] it holds, dropping targets left
+  /// with no owner, then lets go of its lease and tears down if it was the
+  /// last.
+  Future<void> _drop(Object owner, List<String> targets) async {
+    var removed = false;
+    for (final key in targets) {
+      final entry = _targets[key];
+      if (entry == null || !entry.owners.remove(owner)) continue;
+      removed = true;
+      if (entry.owners.isEmpty) _targets.remove(key);
+    }
+    if (!removed) return;
 
     // The owner may still hold another target.
     if (_targets.values.any((t) => t.owners.contains(owner))) return;

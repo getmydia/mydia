@@ -24,7 +24,10 @@ import 'login/login_controller.dart';
 import 'sources/add_source_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.guest});
+
+  /// Set when adding a guest Mydia server beside home, not signing in to it.
+  final GuestTarget? guest;
 
   /// Whether to offer the camera QR scanner.
   ///
@@ -253,12 +256,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (!mounted) return;
     }
 
-    context.go('/');
+    final guestSource = state.guestSource;
+    context.go(guestSource == null ? '/' : '/s/${guestSource.value}');
   }
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {
     final controller = ref.read(loginControllerProvider.notifier);
-    await controller.pairWithQrCode(qrData);
+    await controller.pairWithQrCode(qrData, guest: widget.guest);
 
     await _completePairing();
   }
@@ -271,6 +275,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _serverUrlController.text.trim(),
       _usernameController.text.trim(),
       _passwordController.text,
+      guest: widget.guest,
     );
 
     await _completePairing();
@@ -283,7 +288,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final controller = ref.read(loginControllerProvider.notifier);
     // No custom relay URL: the claim code resolves through the relay API and
     // iroh's default discovery.
-    await controller.pairWithClaimCode(code);
+    await controller.pairWithClaimCode(code, guest: widget.guest);
 
     await _completePairing();
   }
@@ -485,9 +490,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         card,
-        const SizedBox(height: 16),
-        const ConnectOtherServerButton(),
-        const ShowHiddenSourcesButton(),
+        if (widget.guest == null) ...const [
+          SizedBox(height: 16),
+          ConnectOtherServerButton(),
+          ShowHiddenSourcesButton(),
+        ],
       ],
     );
   }
@@ -650,7 +657,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           children: [
             Flexible(
               child: Text(
-                'Mydia Player',
+                widget.guest != null ? 'Add a Mydia server' : 'Mydia Player',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -801,14 +808,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
                   Flexible(
                     child: Text(
-                      'Mydia Player',
+                      widget.guest != null
+                          ? 'Add a Mydia server'
+                          : 'Mydia Player',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -816,8 +825,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                     ),
                   ),
-                  SizedBox(width: 8),
-                  ChannelBadge(),
+                  const SizedBox(width: 8),
+                  const ChannelBadge(),
                 ],
               ),
               const SizedBox(height: 2),
@@ -1456,7 +1465,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final code = _totpController.text.trim();
     if (code.isEmpty) return;
 
-    await ref.read(loginControllerProvider.notifier).submitTotpCode(code);
+    await ref
+        .read(loginControllerProvider.notifier)
+        .submitTotpCode(code, guest: widget.guest);
     await _completePairing();
   }
 

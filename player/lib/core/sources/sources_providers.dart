@@ -336,8 +336,9 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
   final MediaSource media = switch (source.kind) {
-    SourceKind.mydia =>
+    SourceKind.mydia when source.id == SourceId.legacyMydia =>
       MydiaSource(source: source, auth: ref.watch(authStateProvider)),
+    SourceKind.mydia ||
     SourceKind.plex ||
     SourceKind.stash ||
     SourceKind.jellyfin =>
@@ -347,11 +348,11 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   return media;
 });
 
-/// Where `/s/:sourceId` lands before its screen builds: Mydia keeps its
+/// Where `/s/:sourceId` lands before its screen builds: home Mydia keeps its
 /// unprefixed routes, so its root is `/`; an unknown id goes home; a Plex
 /// or Stash source stays (null).
 String? sourceRootRedirect(String sourceId, List<Source> sources) {
   final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
-  if (source == null || source.kind == SourceKind.mydia) return '/';
+  if (source == null || source.id == SourceId.legacyMydia) return '/';
   return null;
 }

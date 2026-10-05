@@ -1,0 +1,51 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_guest_secrets.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/store/source_secrets.dart';
+
+import '../../../test_utils/mock_auth_storage.dart';
+
+const guest = Source(
+  account: ProviderAccount(
+    id: 'mguest',
+    kind: SourceKind.mydia,
+    displayName: 'Lakeside',
+    storageNamespace: 'source/mguest',
+    activeProfileId: 'owner',
+  ),
+  profile: SourceProfile(
+      id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+  server: SourceServer(
+      id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
+);
+
+void main() {
+  test('guest credentials round-trip through the account token', () async {
+    final storage = MockAuthStorage();
+    final secrets = SourceSecrets(storage);
+    const c = MydiaGuestCredentials(
+      instanceId: 'inst-2',
+      accessToken: 'at',
+      serverUrl: 'https://lakeside.example.test',
+    );
+    expect(await readGuestCredentials(secrets, guest.account), isNull);
+    await writeGuestCredentials(secrets, guest.account, c);
+    expect(await storage.read('source/mguest/account_token'), isNotNull);
+    final back = await readGuestCredentials(secrets, guest.account);
+    expect(back?.instanceId, 'inst-2');
+    expect(back?.accessToken, 'at');
+    expect(back?.serverUrl, 'https://lakeside.example.test');
+  });
+
+  test('a token that is not JSON reads as null', () async {
+    final secrets = SourceSecrets(MockAuthStorage());
+    await secrets.writeAccountToken(guest.account, 'not json');
+    expect(await readGuestCredentials(secrets, guest.account), isNull);
+  });
+
+  test('isGuestMydia tells a guest from home', () {
+    expect(isGuestMydia(guest), isTrue);
+    expect(isGuestMydia(Source.legacyMydia()), isFalse);
+  });
+}

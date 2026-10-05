@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
+import '../p2p/p2p_service.dart';
 import 'connection/connection_refresh_bus.dart';
 import 'connection/racing_connection.dart';
 import 'jellyfin/jellyfin_client.dart';
@@ -17,6 +18,11 @@ import 'jellyfin/jellyfin_media_source.dart';
 import 'plex/plex_connections.dart';
 import 'connection/source_connection.dart';
 import 'media_source.dart';
+import 'mydia/mydia_gql_transport.dart';
+import 'mydia/mydia_guest_client.dart';
+import 'mydia/mydia_guest_credentials.dart';
+import 'mydia/mydia_guest_secrets.dart';
+import 'mydia/mydia_guest_source.dart';
 import 'plex/plex_identity.dart';
 import 'plex/plex_media_source.dart';
 import 'plex/plex_server_client.dart';
@@ -35,8 +41,7 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
       SourceKind.plex => _plex(ref, source),
       SourceKind.stash => _stash(ref, source),
       SourceKind.jellyfin => _jellyfin(ref, source),
-      SourceKind.mydia => throw ArgumentError.value(
-          source.kind, 'kind', 'Mydia has its own adapter'),
+      SourceKind.mydia => buildGuestMydiaSource(ref, source),
     };
 
 /// A credential read once from secure storage and held until the server
@@ -253,4 +258,61 @@ Future<List<ServerConnection>> _rediscoverJellyfin(
         );
   }
   return fresh;
+}
+
+/// A guest Mydia server's source. Its credentials are read on first use, so
+/// the source builds synchronously.
+MydiaGuestSource buildGuestMydiaSource(Ref ref, Source source) {
+  final secrets = ref.read(sourceSecretsProvider);
+  Future<MydiaGuestCredentials> load() async =>
+      await readGuestCredentials(secrets, source.account) ??
+      (throw const SourceException.unauthorized());
+  final client = MydiaGuestClient(
+    transport: _LazyGuestTransport(ref, load),
+    load: load,
+    save: (c) => writeGuestCredentials(secrets, source.account, c),
+    onUnauthorized: () => _flagReauth(ref, source),
+  );
+  return MydiaGuestSource(source: source, client: client);
+}
+
+/// How [c]'s server is reached: p2p to its node, else HTTP to its URL.
+MydiaGqlTransport guestTransportFor(Ref ref, MydiaGuestCredentials c) => c.isP2p
+    ? P2pMydiaTransport(
+        p2p: ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
+    : HttpMydiaTransport(
+        serverUrl: c.serverUrl!, http: ref.read(sourceHttpProvider));
+
+/// Builds the real transport from the stored credentials on first use and
+/// keeps it. A failed load is not kept: the next request tries again.
+class _LazyGuestTransport implements MydiaGqlTransport {
+  _LazyGuestTransport(this._ref, this._load);
+
+  final Ref _ref;
+  final Future<MydiaGuestCredentials> Function() _load;
+  Future<MydiaGqlTransport>? _transport;
+
+  /// One build for concurrent first requests; a failure clears it.
+  Future<MydiaGqlTransport> _resolve() => _transport ??= _build().then(
+        (t) => t,
+        onError: (Object e, StackTrace st) {
+          _transport = null;
+          Error.throwWithStackTrace(e, st);
+        },
+      );
+
+  Future<MydiaGqlTransport> _build() async {
+    return guestTransportFor(_ref, await _load());
+  }
+
+  @override
+  SourceConnectionStatus get reachedVia => SourceConnectionStatus.remote;
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+  }) async =>
+      (await _resolve()).send(query, variables, token: token);
 }

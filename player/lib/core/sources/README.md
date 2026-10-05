@@ -16,8 +16,10 @@ per-user call sends as `userId`. A `SourceServer` is what the viewer browses. A
 routes, caches and memories key on. Ids are `[A-Za-z0-9_-]+`; the store
 refuses anything else.
 
-The Mydia login predates this layer. It appears as `Source.legacyMydia()`,
-read from `AuthService`'s own keys, and keeps its unprefixed routes.
+The home Mydia login predates this layer. It appears as
+`Source.legacyMydia()`, read from `AuthService`'s own keys, and keeps its
+unprefixed routes. A guest Mydia is an ordinary account (see Guest Mydia
+servers).
 
 The source switcher groups servers by account, with a caption per
 non-Mydia account.
@@ -67,6 +69,64 @@ to the owner.
 `SourceSecrets.deleteAll` deletes server tokens for every profile crossed
 with the chosen and stored server ids, so an inactive user's leftovers go
 when the account is removed.
+
+## Guest Mydia servers
+
+A guest is a second (or later) Mydia the viewer signed into. It is an
+account of `SourceKind.mydia` in `HiveSourceStore`: account `m<instanceId>`,
+profile `owner`, server `<instanceId>`, so its `SourceId` is
+`m<instanceId>:owner:<instanceId>`. An `instanceId` that fails
+`isValidSourceIdComponent` is refused at add time.
+
+All of a guest's credentials are one JSON secret
+(`MydiaGuestCredentials`) at `source/m<instanceId>/account_token`: access,
+device and media tokens, plus the server URL or the iroh node address. It is
+written before the account record.
+
+The instance id comes from the first of: the pairing QR, the claim result,
+`serverCompatibility { instanceId }`, the iroh node id (`n<nodeId>`, for a
+paired server that sent none), and for a URL login the first 16 hex
+characters of the SHA-256 of the normalized URL (`u<hash>`). Two
+consequences: a URL guest on a server that never enabled remote access can
+appear twice if the same server is later paired, and a hashed id gets no
+wrong-instance check. A reinstalled server has new keys and rejects the
+stored token, which flags the account `needsReauth` through the 401 path.
+
+The first Mydia signed into is home. Adding the home instance as a guest is
+refused when the server's instance id matches home's stored instance id, when
+its p2p node is home's, or when the URL is the same as home's. A home that
+signed in by URL and password and is added again by claim code is not
+detected. Adding an existing guest again signs it in again: its credentials
+are replaced and `needsReauth` clears. Signing out of home keeps every
+guest, and the next Mydia signed into becomes home. A guest is never
+promoted.
+
+A guest server must run a build with this release's GraphQL fields
+(`serverCompatibility.instanceId`, sortable lists and `playlistMode`); an
+older server answers with GraphQL errors. Guests are not available in the web
+build, where third-party sources do not exist.
+
+A guest has its own transport, `MydiaGqlTransport`: an HTTP POST to
+`/api/graphql`, or `P2pService.sendGraphQLRequest` for a paired guest. It
+sends the generated `documentNode...` constants from
+`lib/graphql/queries/guest_mydia.graphql`, so the schema guard still checks
+them, and reads the `data` map by hand. Guest code never touches the home
+GraphQL client, `AuthService` or `MediaTokenService`.
+
+Guest HLS uses `playlistMode: FULL` and `SimplePlaybackTransport`, with the
+bearer token on the stream. Over p2p the local proxy serves a guest at
+`/t/<accountId>/...`; home keeps the bare path. The player screen lets go of
+its targets with `MediaProxy.release(owner)`, which releases every target
+that owner took, so a guest's `/t/<accountId>` target is not stranded.
+
+Add a guest from Add server, Mydia (`/sources/add/mydia`), by claim code,
+QR or URL and password. Removing a guest deletes its secrets and record and
+unwatches the peer; it does not call `revokeDevice`, because pairing never
+learns the server-side device id.
+
+Guests do not do downloads, cast, remote control, device registration or
+the home Mydia settings. They share the device's single p2p identity and
+`device_id` with home.
 
 ## Locks
 
