@@ -15,7 +15,9 @@ import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_cards.dart';
+import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
+import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
@@ -394,6 +396,29 @@ GoRouter appRouter(Ref ref) {
             redirect: (context, state) =>
                 allServersRedirect(ref.read(allServersSourcesProvider)),
             builder: (context, state) => const AllServersHomeScreen(),
+          ),
+          GoRoute(
+            path: '/all/movies',
+            name: 'all_servers_movies',
+            redirect: (context, state) =>
+                allServersRedirect(ref.read(allServersSourcesProvider)),
+            builder: (context, state) =>
+                const AllServersGridScreen(kind: LibraryKind.movies),
+          ),
+          GoRoute(
+            path: '/all/shows',
+            name: 'all_servers_shows',
+            redirect: (context, state) =>
+                allServersRedirect(ref.read(allServersSourcesProvider)),
+            builder: (context, state) =>
+                const AllServersGridScreen(kind: LibraryKind.shows),
+          ),
+          GoRoute(
+            path: '/all/search',
+            name: 'all_servers_search',
+            redirect: (context, state) =>
+                allServersRedirect(ref.read(allServersSourcesProvider)),
+            builder: (context, state) => const AllServersSearchScreen(),
           ),
           GoRoute(
             path: '/s/:sourceId',
