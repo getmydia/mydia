@@ -21,6 +21,11 @@ import 'store/source_records.dart';
 import 'store/source_secrets.dart';
 import 'store/source_store.dart';
 
+/// How long removing an account waits for the download manager. A manager
+/// that never builds must not stall the write queue.
+/// Mutable so a test can shorten it.
+Duration downloadLookupTimeout = const Duration(seconds: 5);
+
 final sourceStoreProvider = FutureProvider<SourceStore>(
   (ref) => HiveSourceStore.open(),
   retry: (_, __) => null,
@@ -85,7 +90,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   Future<void> _deleteDownloads(String accountId) async {
     if (!isDownloadSupported) return;
     try {
-      final manager = await ref.read(downloadManagerProvider.future);
+      final manager = await ref
+          .read(downloadManagerProvider.future)
+          .timeout(downloadLookupTimeout);
       await manager.deleteAccountDownloads(accountId);
     } catch (e) {
       debugPrint('[sources] Could not delete downloads of $accountId: $e');

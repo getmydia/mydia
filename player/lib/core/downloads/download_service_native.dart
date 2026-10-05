@@ -1314,16 +1314,8 @@ class _NativeDownloadService implements DownloadService {
   @override
   Future<int> deleteAccountDownloads(String accountId) async {
     if (_database == null) return 0;
-    var count = 0;
-    final media = _database!
-        .getAllMedia()
-        .where((m) => _ofAccount(m.source, accountId))
-        .toList();
-    for (final m in media) {
-      await _deleteMediaFiles(m);
-      await _database!.deleteMedia(m.id);
-      count++;
-    }
+    // Tasks first, so an in-flight download cannot finish and save a media
+    // row for the removed account while the files are being deleted.
     final tasks = _database!
         .getAllTasks()
         .where((t) => _ofAccount(t.source, accountId))
@@ -1334,6 +1326,16 @@ class _NativeDownloadService implements DownloadService {
       await _cancelAndCleanupTask(task.id,
           processQueue: false, cancelJob: false);
       await _database!.deleteTask(task.id);
+    }
+    var count = 0;
+    final media = _database!
+        .getAllMedia()
+        .where((m) => _ofAccount(m.source, accountId))
+        .toList();
+    for (final m in media) {
+      await _deleteMediaFiles(m);
+      await _database!.deleteMedia(m.id);
+      count++;
     }
     await _processQueue();
     return count;

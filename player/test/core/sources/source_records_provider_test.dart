@@ -1,4 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/downloads/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -56,6 +60,24 @@ void main() {
     await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(container.read(thirdPartySourcesProvider), isEmpty);
     expect(await storage.read('source/acc1/account_token'), isNull);
+  });
+
+  test('removal completes when the download manager never builds', () async {
+    final saved = downloadLookupTimeout;
+    downloadLookupTimeout = const Duration(milliseconds: 50);
+    addTearDown(() => downloadLookupTimeout = saved);
+    final stuck = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(_Unauthenticated.new),
+      downloadManagerProvider
+          .overrideWith((ref) => Completer<DownloadService>().future),
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+    ]);
+    addTearDown(stuck.dispose);
+    await store.putAccount(plexRecord());
+    await stuck.read(sourceRecordsProvider.future);
+    await stuck.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect(stuck.read(thirdPartySourcesProvider), isEmpty);
   });
 
   test('the active source survives a restart', () async {

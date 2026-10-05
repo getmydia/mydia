@@ -103,7 +103,9 @@ class _AccountCard extends ConsumerWidget {
     var footprint = (count: 0, bytes: 0);
     if (isDownloadSupported) {
       try {
-        footprint = (await ref.read(downloadManagerProvider.future))
+        footprint = (await ref
+                .read(downloadManagerProvider.future)
+                .timeout(downloadLookupTimeout))
             .accountDownloads(record.account.id);
       } catch (_) {
         // The dialog still works without the count.
