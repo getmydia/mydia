@@ -61,7 +61,11 @@ class SourceWatcher<T> implements CacheWatcher {
   /// requested before that cannot overtake it.
   final Completer<void> _ready = Completer<void>();
 
+  /// Completes on [close], releasing refetches still waiting on a fetch.
+  final Completer<void> _closeSignal = Completer<void>();
+
   Future<void>? _inFlight;
+  Future<void>? _rerun;
   bool _hasData = false;
   bool _closed = false;
 
@@ -93,7 +97,9 @@ class SourceWatcher<T> implements CacheWatcher {
       return (value: _decode(entry.json), writtenAt: entry.writtenAt);
     } catch (error) {
       debugPrint('[SourceWatcher] dropping unreadable $key: $error');
-      unawaited(_cache.delete(key));
+      unawaited(_cache.delete(key).catchError((Object e) {
+        debugPrint('[SourceWatcher] could not drop $key: $e');
+      }));
       return null;
     }
   }
@@ -168,11 +174,25 @@ class SourceWatcher<T> implements CacheWatcher {
   }
 
   /// Fetches now. Always honoured; this is the user's refresh.
+  ///
+  /// A refetch that arrives mid-fetch does not join it: the running request
+  /// may predate the write that asked for this one, and its answer would be
+  /// stamped fresh. It queues exactly one follow-up instead, shared by every
+  /// refetch that arrives during the same fetch.
   Future<void> refetch() async {
     if (_closed) return;
     await _ready.future;
     if (_closed) return;
-    await _refresh();
+    final running = _inFlight;
+    if (running == null) {
+      await Future.any([_refresh(), _closeSignal.future]);
+      return;
+    }
+    _rerun ??= running.then((_) {
+      _rerun = null;
+      return _closed ? null : _refresh();
+    });
+    await Future.any([_rerun!, _closeSignal.future]);
   }
 
   @override
@@ -187,6 +207,7 @@ class SourceWatcher<T> implements CacheWatcher {
     if (_closed) return;
     _closed = true;
     if (!_ready.isCompleted) _ready.complete();
+    if (!_closeSignal.isCompleted) _closeSignal.complete();
     await _controller.close();
   }
 }

@@ -10,6 +10,12 @@ import 'package:player/core/sources/cache/source_watcher.dart';
 final _key = QueryKey('acc1:owner:srv1/item', const {'id': '1'});
 final _now = DateTime(2031, 4, 2, 12);
 
+class _ThrowingWriteCache extends InMemorySourceCache {
+  @override
+  Future<void> write(QueryKey key, Object? json, DateTime at) =>
+      Future.error(StateError('disk full'));
+}
+
 class _Harness {
   _Harness({DateTime? loggedAt, Object? cached = _none}) {
     if (loggedAt != null) log = InMemoryFetchLog({_key: loggedAt});
@@ -155,15 +161,69 @@ void main() {
     expect(h.values, ['new']);
   });
 
-  test('refetch during a fetch joins it instead of fetching twice', () async {
+  test('refetch during a fetch queues one more fetch after it', () async {
+    final h = _Harness();
+    h.watcher;
+    await pumpEventQueue();
+    var done = false;
+    unawaited(h.watcher.refetch().then((_) => done = true));
+    await pumpEventQueue();
+    expect(h.fetches, 1, reason: 'the follow-up waits for the running fetch');
+    await h.answer('a');
+    expect(h.fetches, 2);
+    expect(done, isFalse);
+    await h.answer('b');
+    expect(h.values, ['a', 'b']);
+    expect(done, isTrue);
+  });
+
+  test('refetches during the same fetch share one follow-up', () async {
     final h = _Harness();
     h.watcher;
     await pumpEventQueue();
     unawaited(h.watcher.refetch());
+    unawaited(h.watcher.refetch());
     await pumpEventQueue();
-    expect(h.fetches, 1);
     await h.answer('a');
-    expect(h.values, ['a']);
+    await h.answer('b');
+    expect(h.fetches, 2);
+    expect(h.values, ['a', 'b']);
+  });
+
+  test('a pending refetch completes when the watcher closes mid-fetch',
+      () async {
+    final h = _Harness();
+    h.watcher;
+    await pumpEventQueue();
+    var done = false;
+    unawaited(h.watcher.refetch().then((_) => done = true));
+    await pumpEventQueue();
+    await h.watcher.close();
+    await pumpEventQueue();
+    expect(done, isTrue);
+    expect(h.fetches, 1);
+  });
+
+  test('a failing cache write still emits and leaves the log unstamped',
+      () async {
+    final log = InMemoryFetchLog();
+    final values = <String>[];
+    final next = Completer<String>();
+    final watcher = SourceWatcher<String>(
+      key: _key,
+      fetch: () => next.future,
+      cache: _ThrowingWriteCache(),
+      fetchLog: log,
+      encode: (v) => v,
+      decode: (json) => json! as String,
+      clock: () => _now,
+    )..stream.listen(values.add);
+    await pumpEventQueue();
+    next.complete('fresh');
+    await pumpEventQueue();
+    expect(values, ['fresh']);
+    expect(log.lastFetchedAt(_key), isNull);
+    await watcher.close();
   });
 
   test('refetchAutomatically honours canRefetch', () async {
