@@ -119,6 +119,13 @@ class JellyfinClient {
   Future<Map<String, String>> headers() async =>
       {'Authorization': (await _identity()).authorization(await _token())};
 
+  /// The access token as Jellyfin's `api_key` parameter, for a cast receiver
+  /// that cannot send headers.
+  Future<Map<String, String>> receiverQuery() async {
+    final token = await _token();
+    return {if (token != null && token.isNotEmpty) 'api_key': token};
+  }
+
   Future<Uri> url(String path, [Map<String, String>? query]) async =>
       jellyfinUnder(await connection.base(), path, query);
 

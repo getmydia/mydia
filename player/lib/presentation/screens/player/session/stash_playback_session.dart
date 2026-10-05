@@ -33,6 +33,8 @@ class StashPlaybackSession extends SourcePlaybackSession {
 
   final StashMediaSource _stash;
 
+  StashClient get stashClient => _stash.client;
+
   @override
   List<CandidateStrategy> candidatesFor(MediaVersion version) => [
         CandidateStrategy(
@@ -60,10 +62,17 @@ class StashPlaybackSession extends SourcePlaybackSession {
 }
 
 class StashStreamResolver implements StreamResolver {
-  StashStreamResolver({required this.client, required this.sceneId});
+  StashStreamResolver({
+    required this.client,
+    required this.sceneId,
+    this.forReceiver = false,
+  });
 
   final StashClient client;
   final String sceneId;
+
+  /// A cast receiver cannot send headers, so the API key rides in the URL.
+  final bool forReceiver;
 
   @override
   Future<ResolvedStream> resolve(
@@ -76,9 +85,17 @@ class StashStreamResolver implements StreamResolver {
       HlsPlan(:final rung) => '/scene/$sceneId/stream.m3u8'
           '?resolution=${stashResolutionFor(rung.height)}',
     };
+    final url = await client.url(path);
+    if (!forReceiver) {
+      return ResolvedStream(
+          url: url.toString(), headers: await client.headers());
+    }
     return ResolvedStream(
-      url: (await client.url(path)).toString(),
-      headers: await client.headers(),
+      url: url.replace(queryParameters: {
+        ...url.queryParameters,
+        ...await client.receiverQuery(),
+      }).toString(),
+      headers: const {},
     );
   }
 

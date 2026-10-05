@@ -56,6 +56,8 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
         super(source: source);
 
   final JellyfinMediaSource _jellyfin;
+
+  JellyfinClient get jellyfinClient => _jellyfin.client;
   final DeviceProfile? _profile;
 
   Future<JellyfinPlaybackInfo>? _info;
@@ -154,6 +156,7 @@ class JellyfinStreamResolver implements StreamResolver {
     required this.playSessionId,
     required this.codecs,
     required this.onPlayMethod,
+    this.forReceiver = false,
   });
 
   final JellyfinClient client;
@@ -162,6 +165,9 @@ class JellyfinStreamResolver implements StreamResolver {
   final String playSessionId;
   final ({List<String> video, List<String> audio}) codecs;
   final void Function(String method) onPlayMethod;
+
+  /// A cast receiver cannot send headers, so the token rides in the URL.
+  final bool forReceiver;
   int _starts = 0;
 
   @override
@@ -170,7 +176,10 @@ class JellyfinStreamResolver implements StreamResolver {
     required String fileId,
     required Duration startAt,
   }) async {
-    final headers = await client.headers();
+    final headers =
+        forReceiver ? const <String, String>{} : await client.headers();
+    final credential =
+        forReceiver ? await client.receiverQuery() : const <String, String>{};
     switch (plan) {
       case DirectPlayPlan():
         onPlayMethod('DirectPlay');
@@ -179,6 +188,7 @@ class JellyfinStreamResolver implements StreamResolver {
             'static': 'true',
             'mediaSourceId': version.id,
             'playSessionId': playSessionId,
+            ...credential,
           }))
               .toString(),
           headers: headers,
@@ -213,6 +223,7 @@ class JellyfinStreamResolver implements StreamResolver {
             if (rung.maxBitrateKbps case final kbps?)
               'MaxStreamingBitrate': '${kbps * 1000}',
             if (rung.height case final height?) 'MaxHeight': '$height',
+            ...credential,
           }))
               .toString(),
           headers: headers,

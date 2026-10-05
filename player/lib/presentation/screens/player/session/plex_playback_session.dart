@@ -56,6 +56,8 @@ class PlexPlaybackSession extends SourcePlaybackSession {
         super(source: source);
 
   final PlexMediaSource _plex;
+
+  PlexServerClient get plexClient => _plex.client;
   final DeviceProfile? _profile;
 
   /// One per playback; each transcode start gets its own session on top.
@@ -92,6 +94,8 @@ class PlexStreamResolver implements StreamResolver {
     required this.mediaIndex,
     required this.playbackId,
     this.profile,
+    this.forReceiver = false,
+    this.burnSubtitleStreamId,
   });
 
   final PlexServerClient client;
@@ -100,6 +104,15 @@ class PlexStreamResolver implements StreamResolver {
   final int mediaIndex;
   final String playbackId;
   final DeviceProfile? profile;
+
+  /// A cast receiver cannot send headers, so the token and identity ride in
+  /// the URL.
+  final bool forReceiver;
+
+  /// The part's subtitle stream to burn into the transcode; `'0'` turns
+  /// subtitles off. Only read when [forReceiver], because a receiver cannot
+  /// fetch a sidecar track the way the local player does.
+  final String? burnSubtitleStreamId;
   int _starts = 0;
 
   Future<Map<String, String>> _playerHeaders() async {
@@ -126,11 +139,24 @@ class PlexStreamResolver implements StreamResolver {
         final path = version.streamPath ??
             (throw const SourceException.unsupported(
                 'Plex offers no direct file for this item.'));
+        if (forReceiver) {
+          return ResolvedStream(
+            url: (await client.url(path, await _playerHeaders())).toString(),
+            headers: const {},
+          );
+        }
         return ResolvedStream(
           url: (await client.url(path)).toString(),
           headers: await _playerHeaders(),
         );
       case HlsPlan():
+        final burn = forReceiver ? burnSubtitleStreamId : null;
+        if (burn != null) {
+          // The transcoder burns the part's selected subtitle stream, so
+          // select it first. Every Plex client's track picker sends this.
+          await client.put('/library/parts/${version.id}',
+              {'subtitleStreamID': burn, 'allParts': '1'});
+        }
         final session = '$playbackId-${_starts++}';
         final height = plan.rung.height;
         final query = {
@@ -142,7 +168,7 @@ class PlexStreamResolver implements StreamResolver {
           'directPlay': '0',
           'directStream': plan.strategy == HlsStrategy.copy ? '1' : '0',
           'directStreamAudio': '1',
-          'subtitles': 'none',
+          'subtitles': burn != null && burn != '0' ? 'burn' : 'none',
           'offset': '0',
           'copyts': '1',
           'session': session,
@@ -166,11 +192,12 @@ class PlexStreamResolver implements StreamResolver {
               decision['generalDecisionText'] as String? ??
                   'Plex refused to convert this file.');
         }
+        final headers = await _playerHeaders();
         return ResolvedStream(
-          url: (await client.url(
-                  '/video/:/transcode/universal/start.m3u8', query))
+          url: (await client.url('/video/:/transcode/universal/start.m3u8',
+                  forReceiver ? {...query, ...headers} : query))
               .toString(),
-          headers: await _playerHeaders(),
+          headers: forReceiver ? const {} : headers,
           sessionId: session,
         );
     }
