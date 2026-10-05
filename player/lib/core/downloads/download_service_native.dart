@@ -214,7 +214,7 @@ class _NativeDownloadService implements DownloadService {
 
   final _speedTracker = DownloadSpeedTracker.instance;
   final Map<String, CancelToken> _cancelTokens = {};
-  final Map<String, bool> _pausedTasks = {};
+  bool _disposed = false;
   final StreamController<DownloadTask> _progressController =
       StreamController<DownloadTask>.broadcast();
 
@@ -276,7 +276,6 @@ class _NativeDownloadService implements DownloadService {
 
     for (final id in cancelledIds) {
       _cancelTokens.remove(id);
-      _pausedTasks.remove(id);
 
       final task = _database!.getTask(id);
       if (task != null) {
@@ -300,7 +299,7 @@ class _NativeDownloadService implements DownloadService {
   /// Process the download queue and start next queued downloads if slots available.
 
   Future<void> _processQueue() async {
-    if (_resolver == null) return;
+    if (_resolver == null || _disposed) return;
     if (_database == null || !_autoStartQueued) return;
 
     // Clean up any cancelled tokens before checking slots
@@ -320,7 +319,9 @@ class _NativeDownloadService implements DownloadService {
 
       // Start the first queued task
       final task = queuedTasks.first;
-      final pendingTask = task.copyWith(status: 'pending');
+      // Claimed as downloading so the loop holds its slot from the start;
+      // otherwise a slow resolve lets this loop launch every queued task.
+      final pendingTask = task.copyWith(status: 'downloading');
       await _database!.saveTask(pendingTask);
 
       _runInBackground(_runTask(pendingTask), 'download ${pendingTask.id}');
@@ -384,7 +385,7 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   Future<void> recoverStuckDownloads() async {
-    if (_resolver == null) return;
+    if (_resolver == null || _disposed) return;
     if (_database == null || _sweepInFlight) return;
     _sweepInFlight = true;
     try {
@@ -426,8 +427,9 @@ class _NativeDownloadService implements DownloadService {
         await restartDownload(task.id);
 
       case RecoveryAction.resume:
+        // Claimed as downloading so the loop holds its slot from the start.
         final claimed = task.copyWith(
-          status: 'interrupted',
+          status: 'downloading',
           recoveryAttempts: task.recoveryAttempts + 1,
           lastProgressAt: _clock(),
         );
@@ -727,7 +729,13 @@ class _NativeDownloadService implements DownloadService {
     _cancelTokens[task.id] = cancelToken;
     var current = task;
 
+    // Once the token is cancelled someone else owns the task's status, so a
+    // late write from this loop (an in-flight progress tick, a catch handler)
+    // must not overwrite theirs.
+    bool superseded() => cancelToken.isCancelled || _disposed;
+
     Future<void> save(DownloadTask next) async {
+      if (superseded()) return;
       current = next;
       await _database!.saveTask(next);
       _emit(next);
@@ -736,13 +744,13 @@ class _NativeDownloadService implements DownloadService {
     void release() {
       if (identical(_cancelTokens[task.id], cancelToken)) {
         _cancelTokens.remove(task.id);
+        _speedTracker.clearTask(task.id);
       }
-      _pausedTasks.remove(task.id);
-      _speedTracker.clearTask(task.id);
     }
 
     try {
       var plan = await _resolve(current);
+      if (superseded()) return;
       var transcodeDone = true;
       var expected = current.fileSize;
       String? jobId;
@@ -768,6 +776,15 @@ class _NativeDownloadService implements DownloadService {
         jobId = current.transcodeJobId;
         if (jobId == null) {
           final snap = await plan.prepare();
+          if (superseded()) {
+            // Claimed while preparing: the job it created would leak.
+            try {
+              await plan.cancel(snap.jobId);
+            } catch (_) {
+              // Best effort, the server may be out of reach.
+            }
+            return;
+          }
           jobId = snap.jobId;
           await save(current.copyWith(
             transcodeJobId: snap.jobId,
@@ -865,23 +882,33 @@ class _NativeDownloadService implements DownloadService {
             transientRetries++;
             await Future<void>.delayed(
                 Duration(seconds: 1 << transientRetries));
+            if (superseded()) return;
             if (transientRetries >= maxTransientRetries) {
               throw _ParkTask('Network error after $maxTransientRetries '
                   'attempts: ${e.message ?? e.type.name}');
             }
             continue;
           }
+          // A dropped connection mid-body (no HTTP status, bytes already on
+          // disk) is common on remote servers: park it so the sweep resumes it
+          // with a Range request instead of failing it back to byte zero.
+          if (e.response == null &&
+              (await disk.exists() ? await disk.length() : 0) > 0) {
+            throw _ParkTask('Network error: ${e.message ?? e.type.name}');
+          }
           rethrow;
         }
       }
 
-      if (cancelToken.isCancelled) return;
+      if (superseded()) return;
+      final size = await disk.length();
+      if (superseded()) return;
       final done = current.copyWith(
         status: 'completed',
         progress: 1.0,
         transcodeProgress: 1.0,
         downloadProgress: 1.0,
-        fileSize: await disk.length(),
+        fileSize: size,
         completedAt: DateTime.now(),
       );
       await _database!.saveTask(done);
@@ -926,19 +953,22 @@ class _NativeDownloadService implements DownloadService {
     final task = _database!.getTask(taskId);
     if (task == null) return;
 
-    // Claim the status BEFORE cancelling the token, so the task never shows
-    // anything but 'paused' on the progress stream on the way.
-    final pausedTask = task.copyWith(status: 'paused');
-    await _database!.saveTask(pausedTask);
-    _emit(pausedTask);
-
     // Cancel the token if one is live. An orphan has none, because the map is
     // rebuilt empty on every launch, and it still has to become paused rather
-    // than silently staying "downloading".
+    // than silently staying "downloading". The cancel comes first: it turns
+    // every later write from the loop into a no-op, so nothing can overwrite
+    // the 'paused' saved below, and the loop writes no status of its own.
     final cancelToken = _cancelTokens.remove(taskId);
     if (cancelToken != null && !cancelToken.isCancelled) {
       cancelToken.cancel();
     }
+
+    // Re-read: a progress tick may have landed since the read above.
+    final pausedTask =
+        (_database!.getTask(taskId) ?? task).copyWith(status: 'paused');
+    await _database!.saveTask(pausedTask);
+    _emit(pausedTask);
+    _runInBackground(_processQueue(), 'process queue');
   }
 
   @override
@@ -988,8 +1018,7 @@ class _NativeDownloadService implements DownloadService {
       }
     }
 
-    // 3. Remove from paused tracking and speed tracker
-    _pausedTasks.remove(taskId);
+    // 3. Clear the speed tracker
     _speedTracker.clearTask(taskId);
 
     // 4. Update database and notify listeners
@@ -1048,7 +1077,6 @@ class _NativeDownloadService implements DownloadService {
     if (cancelToken != null && !cancelToken.isCancelled) {
       cancelToken.cancel('Restarted by user');
     }
-    _pausedTasks.remove(taskId);
     _speedTracker.clearTask(taskId);
 
     if (task.filePath != null) {
@@ -1073,7 +1101,8 @@ class _NativeDownloadService implements DownloadService {
       clearFilePath: true,
       clearTranscodeJobId: true,
       isProgressive: false,
-      status: 'pending',
+      // Holds its slot from the first moment, like start().
+      status: 'downloading',
     );
 
     await _database!.saveTask(cleared);
@@ -1279,6 +1308,7 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   void dispose() {
+    _disposed = true;
     for (final token in _cancelTokens.values) {
       token.cancel();
     }

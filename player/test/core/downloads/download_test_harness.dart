@@ -241,8 +241,13 @@ class FakeResolver {
   Exception? error;
   int calls = 0;
 
+  /// When set, every resolve waits for it, like a slow server.
+  Completer<void>? gate;
+
   Future<DownloadPlan> call(DownloadTask task) async {
     calls++;
+    final pending = gate;
+    if (pending != null) await pending.future;
     final failure = error;
     if (failure != null) throw failure;
     return plan(task);
