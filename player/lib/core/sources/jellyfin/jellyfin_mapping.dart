@@ -1,6 +1,7 @@
 /// Jellyfin `BaseItemDto` JSON to neutral models.
 library;
 
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../source.dart';
@@ -261,3 +262,18 @@ ItemDetail? jellyfinDetail(SourceId sourceId, Map<String, dynamic> json) {
     ],
   );
 }
+
+/// A `/MediaSegments/{id}` answer. Ticks are 100ns, so 10,000 per ms.
+List<MediaSegment> jellyfinSegments(Map<String, dynamic> body) => [
+      for (final s in (body['Items'] as List? ?? const []))
+        if (s is Map)
+          MediaSegment(
+            type: switch (s['Type']) {
+              'Intro' => SegmentType.intro,
+              'Outro' => SegmentType.credits,
+              _ => SegmentType.unknown,
+            },
+            startMs: ((s['StartTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
+            endMs: ((s['EndTicks'] as num?)?.toInt() ?? 0) ~/ 10000,
+          ),
+    ].where((s) => s.actionable).toList();
