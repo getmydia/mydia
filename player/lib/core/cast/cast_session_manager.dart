@@ -1163,9 +1163,14 @@ class CastSessionManager {
         (throw const CastBackendException(
             'Casting is not available for this server.',
             CastFailureKind.unknown));
+    final generation = _connectGeneration;
     // Bound before the old item is stopped: a failed bind must leave the
     // previous binding and its progress sink untouched.
     final binding = await bind(content);
+    // A newer cast started while this bind was in flight and owns the
+    // binding now. Hand this one back for the superseded call to finish
+    // with, without taking over the newer cast's progress.
+    if (generation != _connectGeneration) return binding;
     // A different item replaces the old one: give it its stop report.
     await _sourceProgress?.stopped();
     _sourceBinding = binding;

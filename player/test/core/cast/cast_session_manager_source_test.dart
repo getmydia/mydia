@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
@@ -206,6 +208,28 @@ void main() {
       backend.emitPosition(const Duration(minutes: 5));
       await pumpEventQueue();
       expect(binding.sink.reports, [const Duration(minutes: 5)]);
+    });
+
+    test('a slow bind for a superseded cast does not take over the newer one',
+        () async {
+      final slowBind = Completer<SourceCastBinding>();
+      final manager = build(
+        binder: (c) =>
+            c == otherContent ? Future.value(otherBinding) : slowBind.future,
+      );
+
+      final first = manager.startCast(device: tv, request: request);
+      await pumpEventQueue();
+      await manager.startCast(device: tv, request: otherRequest);
+      slowBind.complete(binding);
+      await first;
+
+      backend.emitDuration(const Duration(minutes: 80));
+      backend.emitPosition(const Duration(minutes: 7));
+      await pumpEventQueue();
+
+      expect(otherBinding.sink.reports, [const Duration(minutes: 7)]);
+      expect(binding.sink.reports, isEmpty);
     });
   });
 
