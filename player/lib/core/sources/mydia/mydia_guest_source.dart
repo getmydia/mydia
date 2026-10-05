@@ -68,12 +68,18 @@ class MydiaGuestSource extends MediaSource
   MydiaGuestSource({
     required this.source,
     required this.client,
+    ValueListenable<SourceConnectionStatus>? status,
     void Function()? onDispose,
-  }) : _onDispose = onDispose;
+  })  : _status = status,
+        _onDispose = onDispose;
 
   @override
   final Source source;
   final MydiaGuestClient client;
+
+  /// Overrides [MydiaGuestClient.status] when the connection is owned
+  /// elsewhere: home Mydia's follows its auth state.
+  final ValueListenable<SourceConnectionStatus>? _status;
   final void Function()? _onDispose;
 
   @override
@@ -90,10 +96,11 @@ class MydiaGuestSource extends MediaSource
       };
 
   @override
-  SourceConnectionStatus get connection => client.status.value;
+  SourceConnectionStatus get connection => statusListenable.value;
 
   @override
-  ValueListenable<SourceConnectionStatus> get statusListenable => client.status;
+  ValueListenable<SourceConnectionStatus> get statusListenable =>
+      _status ?? client.status;
 
   @override
   T? as<T extends Object>() => this is T ? this as T : null;
