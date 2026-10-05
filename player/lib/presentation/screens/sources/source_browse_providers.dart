@@ -152,7 +152,7 @@ class LibraryBrowseState {
       );
 }
 
-class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
+class LibraryBrowseNotifier extends StreamNotifier<LibraryBrowseState> {
   LibraryBrowseNotifier(this.library);
 
   final LibraryRef library;
@@ -162,17 +162,33 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
   /// was requested for the old one is dropped when it lands.
   int _generation = 0;
 
+  /// Set once the viewer asks for page 2. From then on the watcher declines
+  /// automatic refetches and its page-1 answers are ignored: either would
+  /// collapse the pages already on screen. Only page 1 is cached.
+  bool _paged = false;
+
   @override
-  Future<LibraryBrowseState> build() async {
+  Stream<LibraryBrowseState> build() {
     _generation++;
+    _paged = false;
+    final query = _query;
     final source = _require(ref, library.sourceId);
-    final page = await source.browse(library, _query);
-    return LibraryBrowseState(
-      query: _query,
-      items: page.items,
-      nextCursor: page.nextCursor,
-      total: page.total,
+    final watcher = createSourceWatcher<Page<ItemSummary>>(
+      ref,
+      key: SourceKeys.browse(library, query),
+      fetch: () => source.browse(library, query),
+      encode: encodeSummaryPage,
+      decode: decodeSummaryPage,
+      canRefetch: () => !_paged,
     );
+    return watcher.stream.where((_) => !_paged).map(
+          (page) => LibraryBrowseState(
+            query: query,
+            items: page.items,
+            nextCursor: page.nextCursor,
+            total: page.total,
+          ),
+        );
   }
 
   Future<void> setQuery(BrowseQuery query) async {
@@ -191,6 +207,7 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
     final cursor = current?.nextCursor;
     if (current == null || cursor == null || current.loadingMore) return;
     final generation = _generation;
+    _paged = true;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
       final page = await _require(ref, library.sourceId)
@@ -211,7 +228,7 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
   }
 }
 
-final libraryBrowseProvider = AsyncNotifierProvider.autoDispose
+final libraryBrowseProvider = StreamNotifierProvider.autoDispose
     .family<LibraryBrowseNotifier, LibraryBrowseState, LibraryRef>(
         LibraryBrowseNotifier.new);
 
