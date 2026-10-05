@@ -12,6 +12,7 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:hive_ce_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../../domain/models/download.dart';
@@ -33,6 +34,11 @@ import 'range_fetch.dart';
 
 /// Downloads are fully supported on native platforms.
 const bool isDownloadSupported = true;
+
+/// A running download persists and emits its progress at most this often, or
+/// after this many new bytes, whichever comes first.
+const _progressSaveInterval = Duration(milliseconds: 500);
+const _progressSaveBytes = 4 * 1024 * 1024;
 
 /// Get the native download service implementation.
 DownloadService getDownloadService() => createNativeDownloadService();
@@ -420,12 +426,16 @@ class _NativeDownloadService implements DownloadService {
 
     // Deleted (or the service disposed) while the pictures were on their way.
     final db = _database;
-    if (_disposed || db == null || db.getMedia(task.id) == null) {
+    Future<void> discard() async {
       for (final p in saved) {
         try {
           await File(p).delete();
         } catch (_) {}
       }
+    }
+
+    if (_disposed || db == null || db.getMedia(task.id) == null) {
+      await discard();
       return;
     }
     // Write only the paths onto the rows as they are now, not the snapshot
@@ -438,11 +448,17 @@ class _NativeDownloadService implements DownloadService {
         thumbnailPath: thumbnail,
       ));
     }
-    await db.saveMedia(db.getMedia(task.id)!.withArtwork(
-          posterPath: poster,
-          backdropPath: backdrop,
-          thumbnailPath: thumbnail,
-        ));
+    // Read after the task write: a delete may have landed during that await.
+    final media = db.getMedia(task.id);
+    if (_disposed || media == null) {
+      await discard();
+      return;
+    }
+    await db.saveMedia(media.withArtwork(
+      posterPath: poster,
+      backdropPath: backdrop,
+      thumbnailPath: thumbnail,
+    ));
   }
 
   /// Deletes a completed download's file and its saved artwork.
@@ -825,7 +841,7 @@ class _NativeDownloadService implements DownloadService {
       late DirectFile file;
 
       Future<void> pollJob(TranscodeJob job, String id) async {
-        final snap = await job.status(id);
+        final snap = await _guardJobCall(() => job.status(id));
         if (snap.error != null) {
           throw _TaskFailure('Transcode failed: ${snap.error}');
         }
@@ -843,7 +859,7 @@ class _NativeDownloadService implements DownloadService {
       if (plan is TranscodeJob) {
         jobId = current.transcodeJobId;
         if (jobId == null) {
-          final snap = await plan.prepare();
+          final snap = await _guardJobCall(plan.prepare);
           if (superseded()) {
             // Claimed while preparing: the job it created would leak.
             try {
@@ -899,7 +915,30 @@ class _NativeDownloadService implements DownloadService {
           await pollJob(plan, jobId!);
         }
         final from = await disk.exists() ? await disk.length() : 0;
+        // Persisting and emitting per chunk costs a Hive write and a
+        // notification update each, tens of thousands for a large file.
+        DateTime? lastSavedAt;
+        var lastSavedBytes = -1;
         try {
+          Future<void> persistProgress(int onDisk, int? total) async {
+            final estimate = expected ?? total;
+            final fraction = estimate != null && estimate > 0
+                ? (onDisk / estimate).clamp(0.0, 1.0)
+                : 0.0;
+            lastSavedAt = _clock();
+            lastSavedBytes = onDisk;
+            await save(current.copyWith(
+              downloadProgress: fraction,
+              progress: current.isProgressive
+                  ? current.transcodeProgress * 0.3 + fraction * 0.7
+                  : fraction,
+              downloadedBytes: onDisk,
+              fileSize: estimate,
+              lastProgressAt: lastSavedAt,
+              recoveryAttempts: 0,
+            ));
+          }
+
           final result = await fetchRange(
             _dio,
             url: file.url,
@@ -916,23 +955,19 @@ class _NativeDownloadService implements DownloadService {
               } else if (transcodeDone) {
                 expected ??= total;
               }
-              final estimate = expected ?? total;
-              final fraction = estimate != null && estimate > 0
-                  ? (onDisk / estimate).clamp(0.0, 1.0)
-                  : 0.0;
               _speedTracker.recordProgress(task.id, onDisk);
-              await save(current.copyWith(
-                downloadProgress: fraction,
-                progress: current.isProgressive
-                    ? current.transcodeProgress * 0.3 + fraction * 0.7
-                    : fraction,
-                downloadedBytes: onDisk,
-                fileSize: estimate,
-                lastProgressAt: _clock(),
-                recoveryAttempts: 0,
-              ));
+              final at = lastSavedAt;
+              if (at == null ||
+                  _clock().difference(at) >= _progressSaveInterval ||
+                  onDisk - lastSavedBytes >= _progressSaveBytes) {
+                await persistProgress(onDisk, total);
+              }
             },
           );
+          // The last chunks may have been throttled away.
+          if (result.bytesOnDisk != lastSavedBytes) {
+            await persistProgress(result.bytesOnDisk, result.total);
+          }
           if (plan is! TranscodeJob) {
             if (result.total != null) expected = result.total;
           } else if (transcodeDone) {
@@ -1465,6 +1500,35 @@ bool _isTransportError(DioException e) =>
         true,
       _ => false,
     };
+
+/// Runs a transcode job call (prepare, status), turning a dropped connection
+/// into a park so the sweep resumes the task instead of failing it. The home
+/// HTTP job service throws `http` errors and sockets errors, the p2p and
+/// guest services throw [SourceException]. [DeadJobException] and everything
+/// else pass through. Only the error's type is kept: its text may name a URL.
+Future<T> _guardJobCall<T>(Future<T> Function() call) async {
+  try {
+    return await call();
+  } on SourceException catch (e) {
+    if (e.kind == SourceErrorKind.unreachable) {
+      throw _ParkTask(e.viewerMessage, countsAsAttempt: false);
+    }
+    rethrow;
+  } on DioException catch (e) {
+    if (_isTransportError(e)) {
+      throw _ParkTask('Network error: ${e.message ?? e.type.name}');
+    }
+    rethrow;
+  } on http.ClientException catch (e) {
+    throw _ParkTask('Network error (${e.runtimeType})');
+  } on SocketException catch (e) {
+    throw _ParkTask('Network error (${e.runtimeType})');
+  } on HttpException catch (e) {
+    throw _ParkTask('Network error (${e.runtimeType})');
+  } on TimeoutException catch (e) {
+    throw _ParkTask('Network error (${e.runtimeType})');
+  }
+}
 
 /// The task cannot go on now, but may later: parked as interrupted for the
 /// recovery sweep.

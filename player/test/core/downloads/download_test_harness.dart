@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -187,6 +188,9 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   /// does not support `Range`.
   bool ignoreRange;
 
+  /// When set, the body arrives in chunks of this many bytes rather than one.
+  int? chunkSize;
+
   RecordingHttpAdapter({
     required this.body,
     this.failWith,
@@ -229,6 +233,20 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     if (error != null && slice.length > bodyErrorAfter) {
       return ResponseBody(
         _dyingBody(Uint8List.sublistView(slice, 0, bodyErrorAfter), error),
+        statusCode,
+        headers: {
+          Headers.contentLengthHeader: [slice.length.toString()],
+        },
+      );
+    }
+
+    final size = chunkSize;
+    if (size != null) {
+      return ResponseBody(
+        Stream.fromIterable([
+          for (var i = 0; i < slice.length; i += size)
+            Uint8List.sublistView(slice, i, math.min(i + size, slice.length)),
+        ]),
         statusCode,
         headers: {
           Headers.contentLengthHeader: [slice.length.toString()],

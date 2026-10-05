@@ -14,6 +14,23 @@ Future<void> _untilSaved(DownloadHarness h, String id) async {
   }
 }
 
+/// Deletes the media row while the artwork paths are being written to the
+/// task, the window a user delete can land in.
+class _DeleteWhileSavingArt extends HiveDownloadDatabase {
+  _DeleteWhileSavingArt({required super.tasksBox, required super.mediaBox});
+
+  bool raced = false;
+
+  @override
+  Future<void> saveTask(DownloadTask task) async {
+    if (task.posterPath != null) {
+      raced = true;
+      await mediaBox.delete(task.id);
+    }
+    await super.saveTask(task);
+  }
+}
+
 void main() {
   test('artwork lands next to the file and on the record', () async {
     final h = await makeHarness(body: Uint8List.fromList([1, 2, 3]));
@@ -114,6 +131,35 @@ void main() {
         h.adapter.requests.where((r) => r.uri.host == 'art.invalid').toList();
     expect(art, hasLength(1));
     expect(art.single.headers['X-Test-Token'], 'abc');
+  });
+
+  test('a delete landing during the artwork write leaves no art behind',
+      () async {
+    final h = await makeHarness(body: Uint8List.fromList([1, 2, 3]));
+    addTearDown(h.dispose);
+    final racing = _DeleteWhileSavingArt(
+        tasksBox: h.database.tasksBox, mediaBox: h.database.mediaBox);
+    h.service.setDatabase(racing);
+    h.service.setArtworkFetcher((task, art) async =>
+        (url: 'https://test.invalid/$art', headers: const <String, String>{}));
+
+    final task = await h.service.start(DownloadRequest(
+      ref: homeMydiaRef(ItemKind.movie, '9'),
+      optionId: 'original',
+      metadata: const DownloadMetadata(
+          title: 'Quill Harbor', mediaType: MediaType.movie, posterUrl: 'p'),
+    ));
+    await h.waitForStatus(task.id, 'completed');
+    for (var i = 0; i < 100 && !racing.raced; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(racing.raced, isTrue);
+    expect(h.database.getMedia(task.id), isNull);
+    final leftovers =
+        h.downloadDir.listSync().where((e) => e.path.endsWith('.poster.jpg'));
+    expect(leftovers, isEmpty);
   });
 
   test('startup cleanup keeps the artwork of a completed download', () async {

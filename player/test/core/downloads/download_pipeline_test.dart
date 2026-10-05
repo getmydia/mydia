@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_option.dart';
@@ -285,5 +286,91 @@ void main() {
         await h.service.start(_request(homeMydiaRef(ItemKind.movie, '7')));
     await h.waitForStatus(task.id, 'completed');
     expect(h.jobService.prepareCount, 1);
+  });
+
+  group('job calls that lose the connection', () {
+    const transcoding = DownloadJobStatus(
+      jobId: 'job-1',
+      status: DownloadJobStatusType.transcoding,
+      progress: 0.2,
+      currentFileSize: 4,
+    );
+
+    Future<DownloadHarness> seeded(Exception error) async {
+      final h = await makeHarness(body: body, jobStatus: transcoding);
+      h.jobService.statusError = error;
+      await h.database.saveTask(DownloadTask(
+        id: 'job',
+        mediaId: 'm1',
+        title: 'Quill Harbor',
+        quality: '1080p',
+        status: 'interrupted',
+        isProgressive: true,
+        transcodeJobId: 'job-1',
+        createdAt: DateTime(2026, 1, 1),
+      ));
+      return h;
+    }
+
+    for (final error in <Exception>[
+      const SocketException('Connection reset by peer'),
+      http.ClientException('Connection closed', Uri.parse('https://x.invalid')),
+      TimeoutException('slow'),
+    ]) {
+      test('${error.runtimeType} while polling parks the task', () async {
+        final h = await seeded(error);
+        addTearDown(h.dispose);
+
+        await h.service.resumeDownload('job');
+        await h.waitForStatus('job', 'interrupted');
+
+        final stored = h.database.getTask('job')!;
+        expect(stored.transcodeJobId, 'job-1');
+        expect(stored.error, isNot(contains('x.invalid')));
+      });
+    }
+
+    test('an unreachable guest parks without using up an attempt', () async {
+      final h = await seeded(const SourceException.unreachable());
+      addTearDown(h.dispose);
+
+      await h.service.resumeDownload('job');
+      await h.waitForStatus('job', 'interrupted');
+      expect(h.database.getTask('job')!.transcodeJobId, 'job-1');
+    });
+
+    test('a failure while preparing the job parks the task', () async {
+      final h = await makeHarness(body: body, jobStatus: transcoding);
+      addTearDown(h.dispose);
+      h.jobService.statusError = const SocketException('no route');
+      final jobPlan = h.resolver.plan;
+      h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
+
+      final task =
+          await h.service.start(_request(homeMydiaRef(ItemKind.movie, '7')));
+      await h.waitForStatus(task.id, 'interrupted');
+    });
+  });
+
+  test('a multi-chunk download saves far fewer times than it has chunks',
+      () async {
+    final big = Uint8List(2048);
+    final h = await makeHarness(body: big);
+    addTearDown(h.dispose);
+    h.adapter.chunkSize = 16;
+    final seen = <DownloadTask>[];
+    final sub = h.service.progressStream.listen(seen.add);
+    addTearDown(sub.cancel);
+
+    final task = await h.service.start(_request());
+    await h.waitForStatus(task.id, 'completed');
+
+    // 128 chunks arrive with the clock standing still: the first save, the
+    // final state and the completion are all that is written.
+    expect(seen.length, lessThan(10));
+    final stored = h.database.getTask(task.id)!;
+    expect(stored.downloadProgress, 1.0);
+    expect(stored.downloadedBytes, 2048);
+    expect(await File(stored.filePath!).length(), 2048);
   });
 }
