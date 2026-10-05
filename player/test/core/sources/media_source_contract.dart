@@ -106,6 +106,8 @@ void runMediaSourceContract(
           caps.contains(SourceCapability.favorites));
       expect(f.source.as<NextUp>() != null,
           caps.contains(SourceCapability.nextUp));
+      expect(f.source.as<SkipSegments>() != null,
+          caps.contains(SourceCapability.skipSegments));
     });
 
     test('similar never answers the item itself', () async {

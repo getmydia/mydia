@@ -5,6 +5,7 @@ import 'package:player/core/sources/mydia/mydia_guest_client.dart';
 import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_guest_source.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 
@@ -330,5 +331,64 @@ void main() {
     await b.source.setWatched(show, true);
     expect(b.t.calls.where((c) => c.operation == 'MarkSeasonWatched'),
         hasLength(2));
+  });
+
+  group('skip segments', () {
+    Map<String, dynamic> files(String root) => {
+          root: {
+            'id': 'x',
+            'files': [
+              {
+                'id': 'f-1',
+                'segments': [
+                  {'type': 'INTRO', 'startMs': 1000, 'endMs': 61000},
+                ],
+              },
+              {
+                'id': 'f-2',
+                'segments': [
+                  {'type': 'CREDITS', 'startMs': 1700000, 'endMs': 1800000},
+                ],
+              },
+            ],
+          },
+        };
+
+    test('picks the playing file', () async {
+      final b = build();
+      b.t.handlers['EpisodeSegments'] = (_) => files('episode');
+      final segments = await b.source.as<SkipSegments>()!.skipSegments(
+          const ItemRef(
+              sourceId: sid, kind: ItemKind.episode, externalId: 'ep-1'),
+          versionId: 'f-2');
+      expect(segments.single.type, SegmentType.credits);
+      expect(b.t.calls.last.vars['id'], 'ep-1');
+    });
+
+    test('falls back to the first file', () async {
+      final b = build();
+      b.t.handlers['MovieSegments'] = (_) => files('movie');
+      final segments = await b.source.as<SkipSegments>()!.skipSegments(
+          const ItemRef(
+              sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+      expect(segments.single.type, SegmentType.intro);
+    });
+
+    test('an older guest server has no segments', () async {
+      final b = build();
+      final segments = await b.source.as<SkipSegments>()!.skipSegments(
+          const ItemRef(
+              sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
+      expect(segments, isEmpty);
+    });
+
+    test('a show has no segments and sends nothing', () async {
+      final b = build();
+      final before = b.t.calls.length;
+      final segments = await b.source.as<SkipSegments>()!.skipSegments(
+          const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'));
+      expect(segments, isEmpty);
+      expect(b.t.calls.length, before);
+    });
   });
 }

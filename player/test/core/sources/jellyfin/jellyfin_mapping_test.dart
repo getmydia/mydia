@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_mapping.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 
@@ -261,6 +262,30 @@ void main() {
       'DateCreated': SharedSort.added,
       'PremiereDate': SharedSort.released,
       'CommunityRating': null,
+    });
+  });
+
+  group('jellyfinSegments', () {
+    test('maps Intro and Outro, converts ticks, drops the rest', () {
+      final segments = jellyfinSegments({
+        'Items': [
+          {'Type': 'Intro', 'StartTicks': 10000000, 'EndTicks': 610000000},
+          {'Type': 'Recap', 'StartTicks': 0, 'EndTicks': 50000000},
+          {'Type': 'Outro', 'StartTicks': 17000000000, 'EndTicks': 18000000000},
+          {'Type': 'Intro'},
+          42,
+        ],
+      });
+      expect(segments, const [
+        MediaSegment(type: SegmentType.intro, startMs: 1000, endMs: 61000),
+        MediaSegment(
+            type: SegmentType.credits, startMs: 1700000, endMs: 1800000),
+      ]);
+    });
+
+    test('an empty answer is no segments', () {
+      expect(jellyfinSegments({'Items': <Object>[]}), isEmpty);
+      expect(jellyfinSegments({}), isEmpty);
     });
   });
 }

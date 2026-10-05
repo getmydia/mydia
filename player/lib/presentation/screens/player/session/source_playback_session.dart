@@ -5,6 +5,7 @@ library;
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/progress_reporter.dart';
+import '../../../../core/sources/capabilities.dart';
 import '../../../../core/sources/media_source.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
@@ -166,8 +167,18 @@ abstract class SourcePlaybackSession implements PlaybackSession {
   Future<ProgressReporter> openProgress() =>
       throw UnsupportedError('only Mydia plays downloaded files');
 
+  /// Null when the source cannot say. Detection is additive, so a failure
+  /// costs the skip button and nothing else.
   @override
-  Future<List<MediaSegment>?> segments() async => null;
+  Future<List<MediaSegment>?> segments() async {
+    final skip = source.as<SkipSegments>();
+    if (skip == null) return null;
+    try {
+      return await skip.skipSegments(item, versionId: fileId);
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   Future<FetchedSubtitlePreference?> subtitlePreference() async => null;

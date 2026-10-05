@@ -2,6 +2,7 @@
 /// lists the matching `SourceCapability` returns itself for the interface.
 library;
 
+import '../../domain/models/media_segment.dart';
 import '../../domain/sources/hub.dart';
 import '../../domain/sources/item.dart';
 
@@ -56,4 +57,14 @@ abstract interface class NextUp {
 abstract interface class RecentlyAdded {
   /// Newest first, at most 20.
   Future<List<ItemSummary>> recentlyAdded();
+}
+
+/// Intro and credits regions. A source implementing this also lists
+/// [SourceCapability.skipSegments].
+abstract interface class SkipSegments {
+  /// Only actionable segments (see [MediaSegment.actionable]). Empty when
+  /// the server has none or is too old to answer. Throws only on a
+  /// transport or auth failure. [versionId] picks the file on servers that
+  /// detect per file (Mydia); servers that detect per item ignore it.
+  Future<List<MediaSegment>> skipSegments(ItemRef ref, {String? versionId});
 }

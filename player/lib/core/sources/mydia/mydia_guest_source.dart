@@ -4,6 +4,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:gql/ast.dart' show DocumentNode;
 
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -12,6 +13,7 @@ import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
 import '../../../graphql/mutations/toggle_favorite.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/guest_mydia.graphql.dart';
+import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/search.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
@@ -40,7 +42,8 @@ class MydiaGuestSource extends MediaSource
         ContinueWatching,
         Favorites,
         NextUp,
-        Similar {
+        Similar,
+        SkipSegments {
   MydiaGuestSource({
     required this.source,
     required this.client,
@@ -61,6 +64,7 @@ class MydiaGuestSource extends MediaSource
         SourceCapability.favorites,
         SourceCapability.nextUp,
         SourceCapability.similar,
+        SourceCapability.skipSegments,
       };
 
   @override
@@ -287,6 +291,32 @@ class MydiaGuestSource extends MediaSource
       for (final c in _maps(data['continueWatching']))
         continueWatchingSummary(id, c),
     ].whereType<ItemSummary>().toList();
+  }
+
+  /// Its own request: an unknown field fails the whole document, so a guest
+  /// predating segments must cost only the skip button.
+  @override
+  Future<List<MediaSegment>> skipSegments(ItemRef ref,
+      {String? versionId}) async {
+    final (doc, root) = switch (ref.kind) {
+      ItemKind.movie => (documentNodeQueryMovieSegments, 'movie'),
+      ItemKind.episode => (documentNodeQueryEpisodeSegments, 'episode'),
+      _ => (null, ''),
+    };
+    if (doc == null) return const [];
+    final Map<String, dynamic> data;
+    try {
+      data = await _q(doc, {'id': ref.externalId});
+    } on SourceException catch (e) {
+      if (e.kind == SourceErrorKind.server) return const [];
+      rethrow;
+    }
+    final files = _maps((data[root] as Map?)?['files']);
+    final fileId = files.any((f) => f['id'] == versionId)
+        ? versionId
+        : files.firstOrNull?['id'];
+    if (fileId is! String) return const [];
+    return MediaSegment.forFile(data, root: root, fileId: fileId);
   }
 
   @override

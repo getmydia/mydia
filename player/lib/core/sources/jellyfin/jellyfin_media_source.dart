@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
@@ -21,7 +22,8 @@ class JellyfinMediaSource extends MediaSource
         Similar,
         Favorites,
         NextUp,
-        RecentlyAdded {
+        RecentlyAdded,
+        SkipSegments {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -47,6 +49,7 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.favorites,
         SourceCapability.nextUp,
         SourceCapability.recentlyAdded,
+        SourceCapability.skipSegments,
       };
 
   @override
@@ -306,6 +309,20 @@ class JellyfinMediaSource extends MediaSource
         for (final m in (body['Items'] as List? ?? const []))
           if (m is Map) m.cast<String, dynamic>(),
       ];
+
+  /// 10.10 and later. Segments exist only where a provider plugin (Intro
+  /// Skipper, for one) has run; core Jellyfin detects nothing itself.
+  @override
+  Future<List<MediaSegment>> skipSegments(ItemRef ref,
+      {String? versionId}) async {
+    try {
+      return jellyfinSegments(
+          await client.get('/MediaSegments/${ref.externalId}'));
+    } on SourceException catch (e) {
+      if (e.kind == SourceErrorKind.notFound) return const [];
+      rethrow;
+    }
+  }
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {

@@ -344,4 +344,23 @@ void main() {
         .queryParameters;
     expect(q['Fields'], 'ChildCount,SortName,DateCreated');
   });
+
+  const jfEpisode =
+      ItemRef(sourceId: jellyfinSid, kind: ItemKind.episode, externalId: 'e1');
+
+  test('skip segments come from /MediaSegments', () async {
+    final b = build();
+    b.server.mediaSegments = [
+      {'Type': 'Intro', 'StartTicks': 10000000, 'EndTicks': 610000000},
+    ];
+    final segments = await b.source.as<SkipSegments>()!.skipSegments(jfEpisode);
+    expect(segments.single.startMs, 1000);
+    expect(b.server.requests.last.url.path, '/MediaSegments/e1');
+  });
+
+  test('a server without the endpoint has no segments', () async {
+    final b = build();
+    b.server.mediaSegments = null;
+    expect(await b.source.as<SkipSegments>()!.skipSegments(jfEpisode), isEmpty);
+  });
 }

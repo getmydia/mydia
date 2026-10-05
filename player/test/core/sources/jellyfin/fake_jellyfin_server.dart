@@ -29,6 +29,10 @@ class FakeJellyfinServer {
 
   /// What `/UserItems/Resume` and `/Shows/NextUp` answer, in that order.
   List<Map<String, dynamic>> resumeItems = [];
+
+  /// What `/MediaSegments/{id}` answers. Null makes the route 404, as a
+  /// server before 10.10 does.
+  List<Map<String, dynamic>>? mediaSegments = [];
   List<Map<String, dynamic>> nextUpItems = [];
 
   /// Paths that answer 500, to fail one request of several.
@@ -297,6 +301,11 @@ class FakeJellyfinServer {
     }
     if (path == '/Videos/m2/m2/Subtitles/3/Stream.srt') {
       return http.Response('1\n00:00:01,000 --> 00:00:02,000\nHola\n', 200);
+    }
+    if (request.method == 'GET' && path.startsWith('/MediaSegments/')) {
+      final segments = mediaSegments;
+      if (segments == null) return http.Response('', 404);
+      return _json({'Items': segments, 'TotalRecordCount': segments.length});
     }
     return http.Response('', 404);
   });

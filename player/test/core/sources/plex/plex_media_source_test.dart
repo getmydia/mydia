@@ -69,6 +69,25 @@ void main() {
 
   const movie = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: '101');
 
+  const episode =
+      ItemRef(sourceId: sid, kind: ItemKind.episode, externalId: '401');
+
+  test('skip segments come from the episode markers', () async {
+    final b = build();
+    b.server.markers = [
+      {'type': 'intro', 'startTimeOffset': 1000, 'endTimeOffset': 61000},
+    ];
+    final segments = await b.source.as<SkipSegments>()!.skipSegments(episode);
+    expect(segments.single.endMs, 61000);
+    expect(b.server.requests.last.url.queryParameters['includeMarkers'], '1');
+  });
+
+  test('an item with no markers has no segments', () async {
+    final segments =
+        await build().source.as<SkipSegments>()!.skipSegments(episode);
+    expect(segments, isEmpty);
+  });
+
   test('item detail carries cast, content rating and parents', () async {
     final source = build().source;
     final detail = await source.item(movie);
