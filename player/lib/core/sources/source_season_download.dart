@@ -1,6 +1,8 @@
 /// Queueing a whole season from a source that downloads originals.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../../domain/models/download_request.dart';
 import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
@@ -17,15 +19,14 @@ Future<BulkDownloadResult> queueSourceSeason({
   required DownloadService manager,
   required DownloadMetadata Function(ItemSummary episode) metadataFor,
 }) async {
-  final queuedAlready =
-      manager.getActiveDownloads().map((t) => t.itemRef).toSet();
+  final active = manager.getActiveDownloads();
   var queued = 0, skipped = 0, failed = 0;
   Cursor? cursor;
   do {
     final page = await source.children(season, cursor: cursor);
     for (final episode in page.items) {
       if (manager.isDownloaded(episode.ref) ||
-          queuedAlready.contains(episode.ref)) {
+          active.any((t) => t.matches(episode.ref))) {
         skipped++;
         continue;
       }
@@ -36,7 +37,8 @@ Future<BulkDownloadResult> queueSourceSeason({
           metadata: metadataFor(episode),
         ));
         queued++;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('Failed to queue download for ${episode.title}: $e');
         failed++;
       }
     }

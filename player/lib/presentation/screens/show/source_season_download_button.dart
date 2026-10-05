@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/sources/source_season_download.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -47,38 +48,56 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     final showRef = itemRefOf(show.target);
     final source = ref.read(mediaSourceProvider(showRef.sourceId));
     final manager = await ref.read(downloadManagerProvider.future);
-    if (source == null || !context.mounted) return;
-    final result = await queueSourceSeason(
-      source: source,
-      season: itemRefOf(seasonTarget),
-      manager: manager,
-      metadataFor: (e) {
-        final seasonNumber = e.parentIndex ?? season.number;
-        return DownloadMetadata(
-          title: '${show.title} - '
-              'S${seasonNumber.toString().padLeft(2, '0')}'
-              'E${(e.index ?? 0).toString().padLeft(2, '0')}: ${e.title}',
-          mediaType: MediaType.episode,
-          posterUrl: e.poster?.path,
-          thumbnailUrl: e.backdrop?.path,
-          backdropUrl: artKey(show.backdrop),
-          overview: e.overview,
-          runtime: e.durationSeconds == null ? null : e.durationSeconds! ~/ 60,
-          seasonNumber: seasonNumber,
-          episodeNumber: e.index,
-          showId: showRef.externalId,
-          showTitle: show.title,
-          showPosterUrl: artKey(show.poster),
-          airDate: e.airDate,
-        );
-      },
-    );
-    if (context.mounted) {
-      showToast(
-        context,
-        'Queued ${result.queued} episodes'
-        '${result.skipped > 0 ? ', ${result.skipped} already downloaded' : ''}',
-      );
+    if (!context.mounted) return;
+    if (source == null) {
+      showToast(context, 'This source is not available', kind: ToastKind.error);
+      return;
     }
+    final BulkDownloadResult result;
+    try {
+      result = await queueSourceSeason(
+        source: source,
+        season: itemRefOf(seasonTarget),
+        manager: manager,
+        metadataFor: (e) {
+          final seasonNumber = e.parentIndex ?? season.number;
+          return DownloadMetadata(
+            title: '${show.title} - '
+                'S${seasonNumber.toString().padLeft(2, '0')}'
+                'E${(e.index ?? 0).toString().padLeft(2, '0')}: ${e.title}',
+            mediaType: MediaType.episode,
+            posterUrl: e.poster?.path,
+            thumbnailUrl: e.backdrop?.path,
+            backdropUrl: artKey(show.backdrop),
+            overview: e.overview,
+            runtime:
+                e.durationSeconds == null ? null : e.durationSeconds! ~/ 60,
+            seasonNumber: seasonNumber,
+            episodeNumber: e.index,
+            showId: showRef.externalId,
+            showTitle: show.title,
+            showPosterUrl: artKey(show.poster),
+            airDate: e.airDate,
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('Failed to list season episodes: $e');
+      if (context.mounted) {
+        showToast(context, "Could not list this season's episodes",
+            kind: ToastKind.error);
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    showToast(
+      context,
+      'Queued ${result.queued} episodes'
+      '${result.skipped > 0 ? ', ${result.skipped} already downloaded or queued' : ''}'
+      '${result.failed > 0 ? ', ${result.failed} failed' : ''}',
+      kind: result.failed > 0 && result.queued == 0
+          ? ToastKind.error
+          : ToastKind.info,
+    );
   }
 }
