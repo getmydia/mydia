@@ -13,6 +13,7 @@ class MydiaCredentials {
     required this.accessToken,
     this.instanceName,
     this.mediaToken,
+    this.mediaTokenExpiry,
     this.deviceToken,
     this.serverUrl,
     this.nodeAddr,
@@ -25,6 +26,9 @@ class MydiaCredentials {
         accessToken: json['accessToken'] as String,
         instanceName: json['instanceName'] as String?,
         mediaToken: json['mediaToken'] as String?,
+        mediaTokenExpiry: json['mediaTokenExpiry'] != null
+            ? DateTime.tryParse(json['mediaTokenExpiry'] as String)
+            : null,
         deviceToken: json['deviceToken'] as String?,
         serverUrl: json['serverUrl'] as String?,
         nodeAddr: json['nodeAddr'] as String?,
@@ -35,6 +39,7 @@ class MydiaCredentials {
   final String accessToken;
   final String? instanceName;
   final String? mediaToken;
+  final DateTime? mediaTokenExpiry;
 
   /// Trades for a fresh access token when the server rejects the current
   /// one. Only paired devices have it; a URL login signs in again instead.
@@ -65,18 +70,25 @@ class MydiaCredentials {
         'accessToken': accessToken,
         if (instanceName != null) 'instanceName': instanceName,
         if (mediaToken != null) 'mediaToken': mediaToken,
+        if (mediaTokenExpiry != null)
+          'mediaTokenExpiry': mediaTokenExpiry!.toIso8601String(),
         if (deviceToken != null) 'deviceToken': deviceToken,
         if (serverUrl != null) 'serverUrl': serverUrl,
         if (nodeAddr != null) 'nodeAddr': nodeAddr,
         if (username != null) 'username': username,
       };
 
-  MydiaCredentials copyWith({String? accessToken, String? mediaToken}) =>
+  MydiaCredentials copyWith({
+    String? accessToken,
+    String? mediaToken,
+    DateTime? mediaTokenExpiry,
+  }) =>
       MydiaCredentials(
         instanceId: instanceId,
         accessToken: accessToken ?? this.accessToken,
         instanceName: instanceName,
         mediaToken: mediaToken ?? this.mediaToken,
+        mediaTokenExpiry: mediaTokenExpiry ?? this.mediaTokenExpiry,
         deviceToken: deviceToken,
         serverUrl: serverUrl,
         nodeAddr: nodeAddr,
@@ -90,14 +102,24 @@ class MydiaCredentials {
       other.accessToken == accessToken &&
       other.instanceName == instanceName &&
       other.mediaToken == mediaToken &&
+      other.mediaTokenExpiry == mediaTokenExpiry &&
       other.deviceToken == deviceToken &&
       other.serverUrl == serverUrl &&
       other.nodeAddr == nodeAddr &&
       other.username == username;
 
   @override
-  int get hashCode => Object.hash(instanceId, accessToken, instanceName,
-      mediaToken, deviceToken, serverUrl, nodeAddr, username);
+  int get hashCode => Object.hash(
+        instanceId,
+        accessToken,
+        instanceName,
+        mediaToken,
+        mediaTokenExpiry,
+        deviceToken,
+        serverUrl,
+        nodeAddr,
+        username,
+      );
 }
 
 /// Scheme, lowercased host and port, with no trailing slash, so the same

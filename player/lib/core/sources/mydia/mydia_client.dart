@@ -8,6 +8,7 @@ import 'package:gql/ast.dart' show DocumentNode, OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
+import '../../../graphql/mutations/refresh_media_token.graphql.dart';
 import '../../player/device_profile.dart';
 import '../media_source.dart';
 import 'mydia_credentials.dart';
@@ -47,6 +48,9 @@ class MydiaClient {
   MydiaCredentials? _credentials;
   Future<MydiaCredentials>? _loading;
   Future<String?>? _refreshing;
+  Future<String?>? _mediaTokenRefreshing;
+
+  static const mediaTokenRefreshThresholdSeconds = 3600;
 
   final ValueNotifier<SourceConnectionStatus> _status =
       ValueNotifier(SourceConnectionStatus.connecting);
@@ -127,6 +131,41 @@ class MydiaClient {
         ?.value;
   }
 
+  /// Ensures that a valid media token exists, proactively refreshing it if it
+  /// is within 1 hour of expiry.
+  Future<String?> ensureValidMediaToken() async {
+    final current = await credentials();
+    final mediaToken = current.mediaToken;
+    if (mediaToken == null) return null;
+
+    final expiry = current.mediaTokenExpiry;
+    final needsRefresh = expiry == null ||
+        expiry.difference(DateTime.now()).inSeconds <=
+            mediaTokenRefreshThresholdSeconds;
+
+    if (!needsRefresh) {
+      return mediaToken;
+    }
+
+    final inFlight = _mediaTokenRefreshing;
+    if (inFlight != null) return inFlight;
+
+    return _mediaTokenRefreshing =
+        _refreshMediaToken(current, mediaToken, expiry)
+            .whenComplete(() => _mediaTokenRefreshing = null);
+  }
+
+  /// Build a media URL with authentication query parameter if a media token
+  /// exists.
+  Future<String> buildMediaUrl(String baseUrl, String path) async {
+    final token = await ensureValidMediaToken();
+    if (token == null) {
+      return '$baseUrl$path';
+    }
+    final separator = path.contains('?') ? '&' : '?';
+    return '$baseUrl$path${separator}token=$token';
+  }
+
   Future<Map<String, dynamic>> _send(
     String query,
     Map<String, dynamic> variables,
@@ -177,6 +216,42 @@ class MydiaClient {
     _credentials = next;
     await _save(next);
     return token;
+  }
+
+  Future<String?> _refreshMediaToken(
+    MydiaCredentials current,
+    String mediaToken,
+    DateTime? expiry,
+  ) async {
+    try {
+      final data = await request(
+        documentNodeMutationRefreshMediaToken,
+        Variables$Mutation$RefreshMediaToken(token: mediaToken).toJson(),
+      );
+      final payload = data['__typename'] != null
+          ? data
+          : {...data, '__typename': 'RootMutationType'};
+      final refreshed =
+          Mutation$RefreshMediaToken.fromJson(payload).refreshMediaToken;
+      if (refreshed != null) {
+        final expiresAt = DateTime.tryParse(refreshed.expiresAt);
+        final latest = _credentials ?? await credentials();
+        final next = latest.copyWith(
+          mediaToken: refreshed.token,
+          mediaTokenExpiry: expiresAt,
+        );
+        _credentials = next;
+        await _save(next);
+        return refreshed.token;
+      }
+    } catch (_) {
+      // If mutation fails or throws, returns existing token if not expired, or null.
+    }
+
+    if (expiry != null && expiry.isAfter(DateTime.now())) {
+      return mediaToken;
+    }
+    return null;
   }
 
   void dispose() => _status.dispose();

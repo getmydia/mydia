@@ -42,6 +42,8 @@ void main() {
   MydiaClient build({
     String? deviceToken = 'device',
     String token = 'access',
+    String? mediaToken,
+    DateTime? mediaTokenExpiry,
     GetDeviceProfile? getDeviceProfile,
   }) =>
       MydiaClient(
@@ -49,9 +51,12 @@ void main() {
         load: () async {
           loads++;
           return MydiaCredentials(
-              instanceId: 'inst-2',
-              accessToken: token,
-              deviceToken: deviceToken);
+            instanceId: 'inst-2',
+            accessToken: token,
+            deviceToken: deviceToken,
+            mediaToken: mediaToken,
+            mediaTokenExpiry: mediaTokenExpiry,
+          );
         },
         save: (c) async => saved.add(c),
         onUnauthorized: () => unauthorized++,
@@ -388,5 +393,159 @@ void main() {
     await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect(transport.calls.length, 2);
     expect(transport.calls.last.deviceProfile, profile.toHeaderValue());
+  });
+
+  group('media token', () {
+    test('refreshes media token proactively when within 1 hour of expiry',
+        () async {
+      final now = DateTime.now();
+      final halfHourFromNow = now.add(const Duration(minutes: 30));
+      final tomorrow = DateTime.parse(
+        now.add(const Duration(hours: 24)).toIso8601String(),
+      );
+
+      transport.handlers['RefreshMediaToken'] = (vars) => {
+            'refreshMediaToken': {
+              'token': 'fresh-media',
+              'expiresAt': tomorrow.toIso8601String(),
+              'permissions': ['stream'],
+              '__typename': 'MediaToken',
+            },
+          };
+
+      final client = build(
+        mediaToken: 'old-media',
+        mediaTokenExpiry: halfHourFromNow,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'fresh-media');
+      expect(
+        transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
+        hasLength(1),
+      );
+      expect(
+        transport.calls
+            .firstWhere((c) => c.operation == 'RefreshMediaToken')
+            .vars,
+        {'token': 'old-media'},
+      );
+      expect(saved.single.mediaToken, 'fresh-media');
+      expect(saved.single.mediaTokenExpiry, tomorrow);
+      expect((await client.credentials()).mediaToken, 'fresh-media');
+    });
+
+    test('buildMediaUrl appends token parameter', () async {
+      final client = build(
+        mediaToken: 'media-123',
+        mediaTokenExpiry: DateTime.now().add(const Duration(hours: 2)),
+      );
+
+      final urlWithoutQuery = await client.buildMediaUrl(
+        'https://media.example',
+        '/video/stream.m3u8',
+      );
+      expect(
+        urlWithoutQuery,
+        'https://media.example/video/stream.m3u8?token=media-123',
+      );
+
+      final urlWithQuery = await client.buildMediaUrl(
+        'https://media.example',
+        '/video/stream.m3u8?profile=hd',
+      );
+      expect(
+        urlWithQuery,
+        'https://media.example/video/stream.m3u8?profile=hd&token=media-123',
+      );
+
+      final clientNoToken = build(mediaToken: null);
+      final urlNoToken = await clientNoToken.buildMediaUrl(
+        'https://media.example',
+        '/video/stream.m3u8',
+      );
+      expect(urlNoToken, 'https://media.example/video/stream.m3u8');
+    });
+
+    test('does not refresh when expiry is more than 1 hour away', () async {
+      final twoHoursFromNow = DateTime.now().add(const Duration(hours: 2));
+      final client = build(
+        mediaToken: 'valid-media',
+        mediaTokenExpiry: twoHoursFromNow,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'valid-media');
+      expect(
+        transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
+        isEmpty,
+      );
+      expect(saved, isEmpty);
+    });
+
+    test('refreshes when media token exists but expiry is null', () async {
+      final tomorrow = DateTime.parse(
+        DateTime.now().add(const Duration(hours: 24)).toIso8601String(),
+      );
+      transport.handlers['RefreshMediaToken'] = (vars) => {
+            'refreshMediaToken': {
+              'token': 'fresh-media',
+              'expiresAt': tomorrow.toIso8601String(),
+              'permissions': ['stream'],
+              '__typename': 'MediaToken',
+            },
+          };
+
+      final client = build(
+        mediaToken: 'old-media',
+        mediaTokenExpiry: null,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'fresh-media');
+      expect(
+        transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
+        hasLength(1),
+      );
+    });
+
+    test('returns existing token if refresh fails but token is not yet expired',
+        () async {
+      final halfHourFromNow = DateTime.now().add(const Duration(minutes: 30));
+      transport.handlers['RefreshMediaToken'] =
+          (_) => throw const SourceException.unreachable();
+
+      final client = build(
+        mediaToken: 'old-media',
+        mediaTokenExpiry: halfHourFromNow,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'old-media');
+    });
+
+    test('returns null if refresh fails and token is expired', () async {
+      final expired = DateTime.now().subtract(const Duration(minutes: 10));
+      transport.handlers['RefreshMediaToken'] =
+          (_) => throw const SourceException.unreachable();
+
+      final client = build(
+        mediaToken: 'expired-media',
+        mediaTokenExpiry: expired,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, isNull);
+    });
+
+    test('returns null when no media token exists', () async {
+      final client = build(mediaToken: null);
+      final token = await client.ensureValidMediaToken();
+      expect(token, isNull);
+      expect(
+        transport.calls.where((c) => c.operation == 'RefreshMediaToken'),
+        isEmpty,
+      );
+    });
   });
 }

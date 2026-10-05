@@ -15,6 +15,12 @@ void main() {
     expect(MydiaCredentials.fromJson(p2p.toJson()), p2p);
   });
 
+  test('round-trips through JSON with mediaTokenExpiry', () {
+    final expiry = DateTime.parse('2026-10-06T12:00:00.000Z');
+    final creds = p2p.copyWith(mediaTokenExpiry: expiry);
+    expect(MydiaCredentials.fromJson(creds.toJson()), creds);
+  });
+
   test('a p2p guest exposes its node id', () {
     expect(p2p.isP2p, isTrue);
     expect(p2p.nodeId, 'node-xyz');
