@@ -9,6 +9,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/source_picker.dart';
 
+import '../../../domain/merged/fake_merged_source.dart';
 import '../../screens/sources/fake_media_source.dart';
 
 class _Authenticated extends AuthStateNotifier {
@@ -50,6 +51,7 @@ Future<List<PickerChoice?>> _open(
   Size size = const Size(800, 600),
   Map<SourceId, FakeMediaSource> fakes = const {},
   List<SourceProfile> profiles = const [],
+  List<MediaSource> included = const [],
 }) async {
   // `size` is a logical size, so pin the pixel ratio; the default of 3 would
   // make every layout here a phone.
@@ -61,6 +63,7 @@ Future<List<PickerChoice?>> _open(
     overrides: [
       authStateProvider.overrideWith(_Authenticated.new),
       thirdPartySourcesProvider.overrideWithValue(sources),
+      allServersSourcesProvider.overrideWithValue(included),
       for (final s in sources)
         mediaSourceProvider(s.id)
             .overrideWithValue(fakes[s.id] ?? FakeMediaSource()),
@@ -97,6 +100,31 @@ Future<List<PickerChoice?>> _open(
 Finder _row(String id) => find.byKey(ValueKey('source-switcher-$id'));
 
 void main() {
+  testWidgets('All servers is the first row once two servers are included',
+      (tester) async {
+    final a = _source('acc1', 'aa11');
+    final b = _source('acc2', 'bb22');
+    final results = await _open(tester, [
+      a,
+      b
+    ], included: [
+      FakeMergedSource(a),
+      FakeMergedSource(b),
+    ]);
+    expect(_row('all'), findsOneWidget);
+    expect(tester.getTopLeft(_row('all')).dy,
+        lessThan(tester.getTopLeft(_row('mydia')).dy));
+    await tester.tap(_row('all'));
+    await tester.pumpAndSettle();
+    expect(results.single, isA<PickAllServers>());
+  });
+
+  testWidgets('no All servers row with fewer than two', (tester) async {
+    final a = _source('acc1', 'aa11');
+    await _open(tester, [a], included: [FakeMergedSource(a)]);
+    expect(_row('all'), findsNothing);
+  });
+
   testWidgets('groups servers under one caption per account', (tester) async {
     await _open(tester, [
       _source('acc1', 'aa11'),

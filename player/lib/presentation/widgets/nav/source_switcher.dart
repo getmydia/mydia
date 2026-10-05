@@ -15,6 +15,8 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
+import '../../screens/all_servers/all_servers_cards.dart' show allServersRoot;
+import 'all_servers_nav_list.dart' show isAllServersLocation;
 import 'source_nav_list.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
 
@@ -63,6 +65,7 @@ class SourceSwitcher extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       child: _Header(
         source: current,
+        allServers: isAllServersLocation(location),
         // Named only when the account's Plex Home has someone to switch to.
         homeUser: current.kind == SourceKind.plex &&
                 ref.watch(accountProfilesProvider(current.account.id)).length >
@@ -94,6 +97,8 @@ class SourceSwitcher extends ConsumerWidget {
         } else {
           onNavigate(unlockLocation('/sources/manage'));
         }
+      case PickAllServers():
+        (onSwitchSource ?? onNavigate)(allServersRoot);
       case PickSource(:final source) when source.account.needsReauth:
         onNavigate('/sources/add/${source.kind.name}'
             '?account=${source.account.id}');
@@ -117,9 +122,14 @@ class _Header extends StatelessWidget {
     required this.source,
     required this.homeUser,
     required this.onOpen,
+    this.allServers = false,
   });
 
   final Source source;
+
+  /// Names All servers instead of [source]: its name, a layers icon, no
+  /// caption and no connection status.
+  final bool allServers;
 
   /// The active Plex Home user, when the account has more than one.
   final String? homeUser;
@@ -147,12 +157,13 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     void open() => onOpen(context);
     final theme = Theme.of(context).textTheme;
-    final needsReauth = source.account.needsReauth;
-    final caption = _caption(source, homeUser);
+    final needsReauth = !allServers && source.account.needsReauth;
+    final caption = allServers ? null : _caption(source, homeUser);
+    final name = allServers ? 'All servers' : source.displayName;
 
     return Semantics(
         button: true,
-        label: 'Switch server, current: ${source.displayName}',
+        label: 'Switch server, current: $name',
         child: FocusHighlight(
           key: const ValueKey('source-switcher-header'),
           onActivate: open,
@@ -175,32 +186,37 @@ class _Header extends StatelessWidget {
                   children: [
                     SourceStatusBuilder(
                       sourceId: source.id,
-                      builder: (context, status) => Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Icon(
-                            sourceKindIcon(source.kind),
-                            size: 22,
-                            color: AppColors.primary,
-                          ),
-                          if (needsReauth)
-                            const Positioned(
-                              top: -4,
-                              right: -4,
-                              child: Icon(
-                                Icons.error_rounded,
-                                size: 12,
-                                color: AppColors.warning,
-                              ),
-                            )
-                          else if (status != null)
-                            Positioned(
-                              top: -2,
-                              right: -2,
-                              child: SourceStatusDot(status),
+                      builder: (context, rawStatus) {
+                        final status = allServers ? null : rawStatus;
+                        return Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Icon(
+                              allServers
+                                  ? Icons.layers_rounded
+                                  : sourceKindIcon(source.kind),
+                              size: 22,
+                              color: AppColors.primary,
                             ),
-                        ],
-                      ),
+                            if (needsReauth)
+                              const Positioned(
+                                top: -4,
+                                right: -4,
+                                child: Icon(
+                                  Icons.error_rounded,
+                                  size: 12,
+                                  color: AppColors.warning,
+                                ),
+                              )
+                            else if (status != null)
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: SourceStatusDot(status),
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -209,7 +225,7 @@ class _Header extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            source.displayName,
+                            name,
                             key: const ValueKey('source-switcher-header-name'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

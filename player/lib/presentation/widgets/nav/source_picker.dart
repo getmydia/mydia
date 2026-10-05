@@ -27,6 +27,11 @@ final class PickSource extends PickerChoice {
   final Source source;
 }
 
+/// The merged All servers views.
+final class PickAllServers extends PickerChoice {
+  const PickAllServers();
+}
+
 final class AddServer extends PickerChoice {
   const AddServer();
 }
@@ -231,6 +236,15 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (ref.watch(allServersSourcesProvider).length >= 2)
+              SidebarRow(
+                key: const ValueKey('source-switcher-all'),
+                icon: Icons.layers_rounded,
+                selectedIcon: Icons.layers_rounded,
+                label: 'All servers',
+                isSelected: false,
+                onTap: () => _pick(const PickAllServers()),
+              ),
             for (final group in groupSourcesByAccount(sources)) ...[
               if (group.first.id != SourceId.legacyMydia)
                 _AccountCaption(account: group.first.account),
