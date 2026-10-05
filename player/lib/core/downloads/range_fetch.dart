@@ -5,6 +5,9 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+/// Flush to disk this often so a fast network cannot outrun a slow disk.
+const _flushEvery = 4 * 1024 * 1024;
+
 class RangeFetchResult {
   const RangeFetchResult({
     required this.bytesOnDisk,
@@ -25,6 +28,11 @@ class RangeFetchResult {
 /// that to the partial would corrupt it, so a 200 truncates and starts over.
 /// Writes the body as it streams, so a cancel or a dropped connection
 /// leaves every byte that arrived on disk for the next attempt.
+///
+/// A cancel always surfaces as a [DioException] of type
+/// [DioExceptionType.cancel], also mid-body: Dio only aborts the underlying
+/// request for a streamed response, so the body stream may error with an
+/// `HttpException` or simply end early, and both are reported as the cancel.
 Future<RangeFetchResult> fetchRange(
   Dio dio, {
   required String url,
@@ -51,16 +59,28 @@ Future<RangeFetchResult> fetchRange(
   final total = length == null ? null : onDisk + length;
 
   final sink = file.openWrite(mode: resume ? FileMode.append : FileMode.write);
+  var unflushed = 0;
   try {
     await for (final chunk in response.data!.stream) {
+      if (cancelToken.isCancelled) break;
       sink.add(chunk);
       onDisk += chunk.length;
+      unflushed += chunk.length;
+      if (unflushed >= _flushEvery) {
+        await sink.flush();
+        unflushed = 0;
+      }
       await onProgress(onDisk, total);
     }
+  } catch (_) {
+    // A cancel aborts the request, which errors the body stream.
+    if (!cancelToken.isCancelled) rethrow;
   } finally {
     await sink.flush();
     await sink.close();
   }
+  final cancelled = cancelToken.cancelError;
+  if (cancelled != null) throw cancelled;
   return RangeFetchResult(
     bytesOnDisk: onDisk,
     statusCode: status,

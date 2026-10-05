@@ -51,10 +51,72 @@ void main() {
     expect(await File('${dir.path}/f.bin').readAsBytes(), body);
   });
 
+  test('a cancel mid-body throws a cancel and keeps what arrived', () async {
+    final dio = Dio()..httpClientAdapter = _ChunkedAdapter(body, 10);
+    final token = CancelToken();
+    final file = File('${dir.path}/f.bin');
+
+    await expectLater(
+      fetchRange(
+        dio,
+        url: 'https://test.invalid/f',
+        headers: const {},
+        file: file,
+        from: 0,
+        cancelToken: token,
+        onProgress: (onDisk, _) async {
+          if (onDisk >= 30) token.cancel('stop');
+        },
+      ),
+      throwsA(
+        isA<DioException>()
+            .having((e) => e.type, 'type', DioExceptionType.cancel),
+      ),
+    );
+    expect(await file.readAsBytes(), body.sublist(0, 30));
+  });
+
   test('a 200 to a ranged request rewrites instead of appending', () async {
     final (result, _) = await run(partial: 40, ignoreRange: true);
     expect(result.statusCode, 200);
     expect(result.bytesOnDisk, 100);
     expect(await File('${dir.path}/f.bin').readAsBytes(), body);
   });
+}
+
+/// Serves [body] as a lazy stream of [chunkSize] chunks.
+class _ChunkedAdapter implements HttpClientAdapter {
+  _ChunkedAdapter(this.body, this.chunkSize);
+
+  final Uint8List body;
+  final int chunkSize;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    Stream<Uint8List> chunks() async* {
+      for (var i = 0; i < body.length; i += chunkSize) {
+        await Future<void>.delayed(Duration.zero);
+        yield Uint8List.sublistView(
+          body,
+          i,
+          (i + chunkSize).clamp(0, body.length),
+        );
+      }
+    }
+
+    return ResponseBody(
+      chunks(),
+      200,
+      headers: {
+        Headers.contentLengthHeader: [body.length.toString()],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
