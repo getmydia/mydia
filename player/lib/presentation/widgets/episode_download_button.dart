@@ -6,7 +6,8 @@ import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
 import '../../core/theme/colors.dart';
-import '../screens/detail/mydia_downloads.dart';
+import '../../core/downloads/mydia_download_metadata.dart';
+import '../screens/detail/start_download.dart';
 
 /// Standalone progressive-download action for an episode.
 ///
@@ -48,13 +49,16 @@ class EpisodeDownloadButton extends ConsumerWidget {
   }
 
   Future<void> _handleDownload(BuildContext context, WidgetRef ref) {
-    return startMydiaEpisodeDownload(
+    return startItemDownload(
       context,
       ref,
-      episode: episode,
-      showId: showId,
-      showTitle: showTitle,
-      showPosterUrl: showPosterUrl,
+      item: homeMydiaRef(ItemKind.episode, episode.id),
+      metadata: mydiaEpisodeMetadata(
+        episode,
+        showId: showId,
+        showTitle: showTitle,
+        showPosterUrl: showPosterUrl,
+      ),
     );
   }
 }

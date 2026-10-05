@@ -13,9 +13,8 @@ import '../../../domain/detail/detail_views.dart';
 import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
 import '../detail/detail_similar_rail.dart';
-import '../detail/mydia_downloads.dart';
-import '../../../domain/models/download_request.dart';
-import '../../../domain/sources/item.dart';
+import '../detail/download_metadata.dart';
+import '../detail/start_download.dart';
 import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
@@ -288,8 +287,8 @@ class MovieDetailScreen extends ConsumerWidget {
     required bool compact,
   }) {
     final mydia = movie.mydia;
+    final item = itemRefOf(movie.target);
     final canDownload = isDownloadSupported &&
-        mydia != null &&
         movie.features.contains(DetailFeature.download) &&
         movie.files.isNotEmpty;
     return DetailActionRow(
@@ -302,17 +301,13 @@ class MovieDetailScreen extends ConsumerWidget {
       onToggleFavorite: () =>
           ref.read(movieActionsProvider(target)).toggleFavorite(),
       onDownload: canDownload
-          ? () => startMydiaMovieDownload(context, ref, mydia)
+          ? () => startItemDownload(context, ref,
+              item: item, metadata: movieDownloadMetadata(movie))
           : null,
       trailerUrl: movie.trailerUrl,
       showDownload: canDownload,
-      isDownloaded: mydia == null
-          ? false
-          : ref
-                  .watch(isItemDownloadedProvider(
-                      homeMydiaRef(ItemKind.movie, mydia.id)))
-                  .value ??
-              false,
+      isDownloaded: canDownload &&
+          (ref.watch(isItemDownloadedProvider(item)).value ?? false),
       onShowMediaInfo: mydia == null ||
               !movie.features.contains(DetailFeature.mediaInfo) ||
               movie.files.isEmpty

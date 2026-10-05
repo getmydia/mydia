@@ -9,6 +9,7 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/models/season_info.dart';
 import '../../../domain/models/show_detail.dart';
 import '../../widgets/quality_download_dialog.dart';
+import '../detail/start_download.dart';
 import '../../widgets/toast/toaster.dart';
 import 'season_episodes_controller.dart';
 
@@ -117,16 +118,19 @@ class ShowBulkDownloadButton extends ConsumerWidget {
     if (!context.mounted) return;
 
     // Show quality dialog using the first episode's ID
-    final selectedResolution = await showQualityDownloadDialog(
+    final selectedOption = await pickDownloadOption(
       context,
-      contentType: 'episode',
-      contentId: allEpisodes.first.id,
       title: seasonNumbers.length == 1
           ? '${show.title} - Season ${seasonNumbers.first}'
           : '${show.title} - All Seasons',
+      options: homeMydiaDownloadOptions(
+        ref,
+        homeMydiaRef(ItemKind.episode, allEpisodes.first.id),
+      ),
     );
 
-    if (selectedResolution == null || !context.mounted) return;
+    if (selectedOption == null || !context.mounted) return;
+    final selectedResolution = selectedOption.resolution;
 
     final downloadManager = await ref.read(downloadManagerProvider.future);
 

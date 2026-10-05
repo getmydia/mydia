@@ -6,9 +6,8 @@ import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../detail/detail_links.dart';
 import '../detail/detail_providers.dart';
-import '../detail/mydia_downloads.dart';
-import '../../../domain/models/download_request.dart';
-import '../../../domain/sources/item.dart';
+import '../detail/download_metadata.dart';
+import '../detail/start_download.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../widgets/detail_hero_app_bar.dart';
@@ -265,12 +264,9 @@ class EpisodeDetailScreen extends ConsumerWidget {
     );
   }
 
-  /// Mydia-only: the download button needs the Mydia episode behind the view.
   /// The button stays (disabled without files) on download-capable platforms.
   bool _canDownload(EpisodeView episode) =>
-      isDownloadSupported &&
-      episode.mydiaDetail != null &&
-      episode.features.contains(DetailFeature.download);
+      isDownloadSupported && episode.features.contains(DetailFeature.download);
 
   bool _canShowMediaInfo(EpisodeView episode) =>
       episode.mydiaDetail != null &&
@@ -467,12 +463,10 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
   Widget _buildDownloadButton(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
-    final mydia = episode.mydiaDetail!;
-    final isDownloadedAsync = ref.watch(
-      isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, mydia.id)),
-    );
+    final item = itemRefOf(episode.target);
+    final isDownloadedAsync = ref.watch(isItemDownloadedProvider(item));
     final isDownloaded = isDownloadedAsync.value ?? false;
-    final hasFiles = episode.files.isNotEmpty;
+    final hasFiles = episode.hasFile;
 
     return Container(
       decoration: BoxDecoration(
@@ -481,7 +475,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
       ),
       child: IconButton(
         onPressed: hasFiles
-            ? () => startMydiaEpisodeDetailDownload(context, ref, mydia)
+            ? () => startItemDownload(context, ref,
+                item: item, metadata: episodeDownloadMetadata(episode))
             : null,
         icon: Icon(
           isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
