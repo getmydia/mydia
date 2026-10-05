@@ -307,7 +307,7 @@ defmodule Mydia.MixProject do
   # whoever bumps rebases the patch or retires it. patches/exqlite/ explains
   # its patch, and how to tell whether upstream still needs it.
   @dep_patches [
-    {:exqlite, "0.40.0", "patches/exqlite/statement-destructor-never-blocks.patch"}
+    {:exqlite, "0.41.0", "patches/exqlite/statement-destructor-never-blocks.patch"}
   ]
 
   # Runs after every `mix deps.get`, so dev, CI and the Docker image all build
