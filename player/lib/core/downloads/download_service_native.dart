@@ -1731,7 +1731,7 @@ class _NativeDownloadService implements DownloadService {
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
       final tasks =
-          _database!.getAllTasks().where((t) => t.mediaId == media.mediaId);
+          _database!.getAllTasks().where((t) => t.matches(media.itemRef));
       for (final task in tasks) {
         await _database!.deleteTask(task.id);
       }
@@ -1777,7 +1777,7 @@ class _NativeDownloadService implements DownloadService {
       await _database!.deleteMedia(media.id);
       // Clean up associated tasks
       final tasks =
-          _database!.getAllTasks().where((t) => t.mediaId == media.mediaId);
+          _database!.getAllTasks().where((t) => t.matches(media.itemRef));
       for (final task in tasks) {
         await _database!.deleteTask(task.id);
       }

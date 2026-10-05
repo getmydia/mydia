@@ -18,7 +18,57 @@ DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
       sourceId: sourceId,
     );
 
+DownloadedMedia _episode(String id, String? sourceId) => DownloadedMedia(
+      id: 'row-$id-${sourceId ?? 'home'}',
+      mediaId: id,
+      title: 'Quill Harbor',
+      quality: 'original',
+      filePath: '/nowhere/$id-${sourceId ?? 'home'}',
+      fileSize: 1,
+      downloadedAt: DateTime(2026, 1, 1),
+      sourceId: sourceId,
+      showId: 'show1',
+      seasonNumber: 1,
+    );
+
+DownloadTask _task(String id, String? sourceId) => DownloadTask(
+      id: 'task-$id-${sourceId ?? 'home'}',
+      mediaId: id,
+      title: 'Quill Harbor',
+      quality: 'original',
+      status: 'completed',
+      createdAt: DateTime(2026, 1, 1),
+      sourceId: sourceId,
+      showId: 'show1',
+      seasonNumber: 1,
+    );
+
 void main() {
+  for (final season in [false, true]) {
+    test(
+        'deleting a ${season ? 'season' : 'series'} leaves another source\'s '
+        'media and tasks with the same ids', () async {
+      final h = await makeHarness(body: Uint8List(0));
+      addTearDown(h.dispose);
+      const plexId = SourceId('acc1:owner:aa11');
+      for (final s in [null, plexId.value]) {
+        await h.database.saveMedia(_episode('e1', s));
+        await h.database.saveTask(_task('e1', s));
+      }
+
+      if (season) {
+        await h.service.deleteSeasonDownloads(plexId, 'show1', 1);
+      } else {
+        await h.service.deleteSeriesDownloads(plexId, 'show1');
+      }
+
+      final media = h.database.getAllMedia();
+      expect(media.map((m) => m.source), [SourceId.legacyMydia]);
+      final tasks = h.database.getAllTasks();
+      expect(tasks.map((t) => t.source), [SourceId.legacyMydia]);
+    });
+  }
+
   test('the same id in two sources is two downloads', () async {
     final h = await makeHarness(body: Uint8List(0));
     addTearDown(h.dispose);
