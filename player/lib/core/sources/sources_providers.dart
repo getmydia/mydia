@@ -71,17 +71,29 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             (store) => store.putAccount(record.copyWith(serverLocks: kept)));
       });
 
+  /// Drops [accountId]'s All servers choices. Best effort: a leftover choice
+  /// is inert, and a failure here must not stop the account's credentials
+  /// from being deleted after it.
+  Future<void> _dropAllServersChoices(
+      SourceStore store, String accountId) async {
+    final all = _current?.allServers ?? const <SourceId, bool>{};
+    final kept = {
+      for (final e in all.entries)
+        if (!e.key.value.startsWith('$accountId:')) e.key: e.value,
+    };
+    if (kept.length == all.length) return;
+    try {
+      await store.setAllServers(kept);
+    } catch (e) {
+      debugPrint('[Sources] Could not drop All servers choices: $e');
+    }
+  }
+
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
-        final choices = {
-          for (final e in (_current?.allServers ?? const {}).entries)
-            if (!e.key.value.startsWith('$accountId:')) e.key: e.value,
-        };
         await _write((store) async {
           await store.removeAccount(accountId);
-          if (choices.length != (_current?.allServers.length ?? 0)) {
-            await store.setAllServers(choices);
-          }
+          await _dropAllServersChoices(store, accountId);
         });
         if (record != null) {
           await ref.read(sourceSecretsProvider).deleteAll(record);
@@ -138,15 +150,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         ];
         for (final record in locked) {
           final id = record.account.id;
-          final choices = {
-            for (final e in (_current?.allServers ?? const {}).entries)
-              if (!e.key.value.startsWith('$id:')) e.key: e.value,
-          };
           await _write((store) async {
             await store.removeAccount(id);
-            if (choices.length != (_current?.allServers.length ?? 0)) {
-              await store.setAllServers(choices);
-            }
+            await _dropAllServersChoices(store, id);
           });
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
