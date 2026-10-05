@@ -170,6 +170,22 @@ void main() {
     expect(b.server.operations.last.$1, 'ResetPlayCount');
   });
 
+  test('pushProgress throws when the answer carries no mutation result',
+      () async {
+    final b = build();
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
+    final sync = b.source.as<ProgressSync>()!;
+    await sync.pushProgress(ref,
+        positionSeconds: 30, durationSeconds: 100, watched: true);
+
+    b.server.emptyMutationAnswers = true;
+    await expectLater(
+      sync.pushProgress(ref,
+          positionSeconds: 30, durationSeconds: 100, watched: false),
+      throwsA(isA<SourceException>()),
+    );
+  });
+
   test('a schema without a field is unsupported, not a crash', () async {
     final b = build();
     b.server.graphqlError =

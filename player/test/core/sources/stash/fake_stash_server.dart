@@ -16,6 +16,10 @@ class FakeStashServer {
   /// When set, every GraphQL answer is this error message instead.
   String? graphqlError;
 
+  /// When true, the play-state mutations answer 200 with no `data`, like a
+  /// proxy that swallowed the call.
+  bool emptyMutationAnswers = false;
+
   static Map<String, dynamic> scene(int n,
           {int plays = 0, double resume = 0}) =>
       {
@@ -141,10 +145,12 @@ class FakeStashServer {
           }
         });
       case 'SaveActivity':
+        if (emptyMutationAnswers) return _json({});
         return _json({
           'data': {'sceneSaveActivity': true}
         });
       case 'AddPlay':
+        if (emptyMutationAnswers) return _json({});
         return _json({
           'data': {
             'sceneAddPlay': {'count': 1}

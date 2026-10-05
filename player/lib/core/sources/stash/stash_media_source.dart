@@ -56,12 +56,25 @@ class StashMediaSource extends MediaSource
     required int durationSeconds,
     required bool watched,
   }) async {
-    await client.query(stashSaveActivity, {
+    final saved = await client.query(stashSaveActivity, {
       'id': ref.externalId,
       'resume_time': positionSeconds.toDouble(),
       'playDuration': 0.0,
     });
-    if (watched) await client.query(stashAddPlay, {'id': ref.externalId});
+    _requireResult(saved, 'sceneSaveActivity');
+    if (watched) {
+      final played = await client.query(stashAddPlay, {'id': ref.externalId});
+      _requireResult(played, 'sceneAddPlay');
+    }
+  }
+
+  /// `query` answers `{}` for a 2xx with no `data`, which is not a result: the
+  /// mutation may never have run, and the record must stay unsynced.
+  static void _requireResult(Map<String, dynamic> data, String key) {
+    if (data[key] == null) {
+      throw const SourceException.server(
+          'Stash did not confirm the saved progress.');
+    }
   }
 
   @override
