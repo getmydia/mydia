@@ -1171,11 +1171,15 @@ class CastSessionManager {
     // binding now. Hand this one back for the superseded call to finish
     // with, without taking over the newer cast's progress.
     if (generation != _connectGeneration) return binding;
-    // A different item replaces the old one: give it its stop report.
-    await _sourceProgress?.stopped();
+    // Committed before the old item's stop report is awaited, so a slow
+    // server can neither hold up a newer cast nor let this call overwrite
+    // one that bound while the report was in flight.
+    final replaced = _sourceProgress;
     _sourceBinding = binding;
     _sourceBindingContent = content;
     _sourceProgress = null;
+    // A different item replaces the old one: give it its stop report.
+    await replaced?.stopped();
     return binding;
   }
 

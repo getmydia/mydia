@@ -18,6 +18,9 @@ import 'cast_session_manager_test.mocks.dart';
 class _FakeSink implements CastProgressSink {
   final reports = <Duration>[];
   var stops = 0;
+
+  /// When set, [stopped] waits for it, like a slow server.
+  Completer<void>? stopGate;
   @override
   Future<void> report({
     required Duration position,
@@ -26,7 +29,10 @@ class _FakeSink implements CastProgressSink {
   }) async =>
       reports.add(position);
   @override
-  Future<void> stopped() async => stops++;
+  Future<void> stopped() async {
+    stops++;
+    await stopGate?.future;
+  }
 }
 
 class _FakeBinding implements SourceCastBinding {
@@ -230,6 +236,50 @@ void main() {
 
       expect(otherBinding.sink.reports, [const Duration(minutes: 7)]);
       expect(binding.sink.reports, isEmpty);
+    });
+
+    test(
+        'a slow stop report for the old item does not let a superseded cast '
+        'take over the newer one', () async {
+      const thirdContent = SourceCastContent(
+        item: ItemRef(
+            sourceId: SourceId('px1:owner:srv'),
+            kind: ItemKind.movie,
+            externalId: '303'),
+        versionId: '41',
+      );
+      const thirdRequest = CastLaunchRequest.forContent(
+        content: thirdContent,
+        title: 'Lanterns Over Fennick',
+        duration: Duration(minutes: 70),
+      );
+      final thirdBinding = _FakeBinding();
+      final manager = build(
+        binder: (c) async => c == otherContent
+            ? otherBinding
+            : c == thirdContent
+                ? thirdBinding
+                : binding,
+      );
+
+      await manager.startCast(device: tv, request: request);
+      backend.emitDuration(const Duration(minutes: 90));
+      backend.emitPosition(const Duration(minutes: 2));
+      await pumpEventQueue();
+      binding.sink.stopGate = Completer<void>();
+
+      final superseded = manager.startCast(device: tv, request: otherRequest);
+      await pumpEventQueue();
+      await manager.startCast(device: tv, request: thirdRequest);
+      binding.sink.stopGate!.complete();
+      await superseded;
+
+      backend.emitDuration(const Duration(minutes: 70));
+      backend.emitPosition(const Duration(minutes: 9));
+      await pumpEventQueue();
+
+      expect(thirdBinding.sink.reports, [const Duration(minutes: 9)]);
+      expect(otherBinding.sink.reports, isEmpty);
     });
   });
 
