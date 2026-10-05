@@ -108,6 +108,15 @@ Future<DownloadService> downloadManager(Ref ref) async {
   return service;
 }
 
+/// Sources whose downloads may be listed: home, plus every source the
+/// switcher shows. A hidden source drops out while the app is locked, and
+/// its downloads with it.
+@riverpod
+Set<SourceId> visibleDownloadSources(Ref ref) => {
+      SourceId.legacyMydia,
+      for (final source in ref.watch(thirdPartySourcesProvider)) source.id,
+    };
+
 @riverpod
 Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
   if (!isDownloadSupported) {
@@ -117,13 +126,18 @@ Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
 
   final database = await ref.watch(downloadDatabaseProvider.future);
   await ref.watch(downloadManagerProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial active/queued tasks (exclude failed and completed)
-  yield _getActiveTasks(database);
+  yield _getActiveTasks(database)
+      .where((t) => visible.contains(t.source))
+      .toList();
 
   // Listen to database changes and emit latest tasks
   await for (final _ in database.watchTasks()) {
-    yield _getActiveTasks(database);
+    yield _getActiveTasks(database)
+        .where((t) => visible.contains(t.source))
+        .toList();
   }
 }
 
@@ -147,13 +161,20 @@ Stream<List<DownloadedMedia>> downloadedMedia(Ref ref) async* {
 
   final database = await ref.watch(downloadDatabaseProvider.future);
   final manager = await ref.watch(downloadManagerProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit current downloaded media
-  yield manager.getDownloadedMedia();
+  yield manager
+      .getDownloadedMedia()
+      .where((m) => visible.contains(m.source))
+      .toList();
 
   // Listen to database changes and emit downloaded media
   await for (final _ in database.watchMedia()) {
-    yield manager.getDownloadedMedia();
+    yield manager
+        .getDownloadedMedia()
+        .where((m) => visible.contains(m.source))
+        .toList();
   }
 }
 
@@ -192,13 +213,18 @@ Stream<List<DownloadTask>> failedDownloads(Ref ref) async* {
   }
 
   final database = await ref.watch(downloadDatabaseProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial failed tasks
-  yield _getFailedTasks(database);
+  yield _getFailedTasks(database)
+      .where((t) => visible.contains(t.source))
+      .toList();
 
   // Listen to database changes and emit failed tasks
   await for (final _ in database.watchTasks()) {
-    yield _getFailedTasks(database);
+    yield _getFailedTasks(database)
+        .where((t) => visible.contains(t.source))
+        .toList();
   }
 }
 

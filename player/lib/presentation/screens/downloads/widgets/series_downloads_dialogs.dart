@@ -82,6 +82,7 @@ Future<void> showDeleteEpisodeDialog(
 Future<void> showDeleteSeasonDialog(
   BuildContext context,
   WidgetRef ref, {
+  required SourceId sourceId,
   required String showId,
   required String showTitle,
   required int seasonNumber,
@@ -118,7 +119,7 @@ Future<void> showDeleteSeasonDialog(
 
   final service = await ref.read(downloadManagerProvider.future);
   await service.deleteSeasonDownloads(
-    SourceId.legacyMydia,
+    sourceId,
     showId,
     seasonNumber,
   );
@@ -132,6 +133,7 @@ Future<void> showDeleteSeasonDialog(
 Future<bool> showDeleteAllDialog(
   BuildContext context,
   WidgetRef ref, {
+  required SourceId sourceId,
   required String showId,
   required String showTitle,
   required int totalCount,
@@ -165,6 +167,6 @@ Future<bool> showDeleteAllDialog(
   if (confirmed != true) return false;
 
   final service = await ref.read(downloadManagerProvider.future);
-  await service.deleteSeriesDownloads(SourceId.legacyMydia, showId);
+  await service.deleteSeriesDownloads(sourceId, showId);
   return true;
 }

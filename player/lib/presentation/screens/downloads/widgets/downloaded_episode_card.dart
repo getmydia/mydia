@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../download_locations.dart';
 import 'download_artwork.dart';
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/layout/breakpoints.dart';
@@ -235,16 +236,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     );
   }
 
-  /// `fileId=offline` is what tells the player screen to resolve the local
-  /// file instead of asking the server for a stream.
   void _play(BuildContext context) {
-    final season = media.seasonNumber;
-    context.push(
-      '/player/episode/${media.mediaId}'
-      '?fileId=offline'
-      '&title=${Uri.encodeComponent(media.title)}'
-      '&showId=$showId'
-      '${season != null ? '&seasonNumber=$season' : ''}',
-    );
+    context.push<void>(downloadedPlayLocation(media));
   }
 }

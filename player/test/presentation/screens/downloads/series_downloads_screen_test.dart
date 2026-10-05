@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/downloads/series_downloads_screen.dart';
 import 'package:player/presentation/screens/downloads/widgets/download_queue_row.dart';
@@ -68,6 +69,7 @@ Future<void> _pump(
         ],
         child: const MaterialApp(
           home: SeriesDownloadsScreen(
+            sourceId: SourceId.legacyMydia,
             showId: 'show-1',
             showTitle: 'Test Show',
           ),

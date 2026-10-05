@@ -5,6 +5,7 @@ import 'widgets/download_artwork.dart';
 import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../core/sources/source.dart';
 import '../../../domain/models/download.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/quality_badge.dart';
@@ -13,6 +14,7 @@ import 'widgets/downloaded_episode_rail.dart';
 import 'widgets/series_downloads_dialogs.dart';
 
 class SeriesDownloadsScreen extends ConsumerWidget {
+  final SourceId sourceId;
   final String showId;
   final String showTitle;
   final String? showPosterUrl;
@@ -20,6 +22,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
 
   const SeriesDownloadsScreen({
     super.key,
+    required this.sourceId,
     required this.showId,
     required this.showTitle,
     this.showPosterUrl,
@@ -38,11 +41,13 @@ class SeriesDownloadsScreen extends ConsumerWidget {
     // Filter for this show
     final showDownloads = downloaded
         .where((m) =>
-            m.showId == showId || (m.showId == null && m.mediaId == showId))
+            m.source == sourceId &&
+            (m.showId == showId || (m.showId == null && m.mediaId == showId)))
         .toList();
     final showQueue = queue
         .where((t) =>
-            t.showId == showId || (t.showId == null && t.mediaId == showId))
+            t.source == sourceId &&
+            (t.showId == showId || (t.showId == null && t.mediaId == showId)))
         .toList();
 
     // Sort by Season/Episode
@@ -114,6 +119,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                   final deleted = await showDeleteAllDialog(
                     context,
                     ref,
+                    sourceId: sourceId,
                     showId: showId,
                     showTitle: showTitle,
                     totalCount: showDownloads.length + showQueue.length,
@@ -443,6 +449,7 @@ class SeriesDownloadsScreen extends ConsumerWidget {
                 onPressed: () => showDeleteSeasonDialog(
                   context,
                   ref,
+                  sourceId: sourceId,
                   showId: showId,
                   showTitle: showTitle,
                   seasonNumber: seasonNumber,
