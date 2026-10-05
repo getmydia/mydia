@@ -81,6 +81,24 @@ void main() {
       expect(stored.error, isNot(contains('secret')));
     });
 
+    test('a drop after throttled chunks saves the real bytes on disk',
+        () async {
+      final h = await makeHarness(body: body);
+      addTearDown(h.dispose);
+      h.adapter
+        ..chunkSize = 1
+        ..bodyError = const HttpException('Connection closed')
+        ..bodyErrorAfter = 6;
+
+      final task = await h.service.start(_request());
+      await h.waitForStatus(task.id, 'interrupted');
+
+      final stored = h.database.getTask(task.id)!;
+      expect(await File(stored.filePath!).length(), 6);
+      expect(stored.downloadedBytes, 6);
+      expect(stored.downloadProgress, greaterThan(0));
+    });
+
     test('a connection error before the first byte parks too', () async {
       final h = await makeHarness(body: body);
       addTearDown(h.dispose);

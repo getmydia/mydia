@@ -232,7 +232,8 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     final error = bodyError;
     if (error != null && slice.length > bodyErrorAfter) {
       return ResponseBody(
-        _dyingBody(Uint8List.sublistView(slice, 0, bodyErrorAfter), error),
+        _dyingBody(
+            Uint8List.sublistView(slice, 0, bodyErrorAfter), error, chunkSize),
         statusCode,
         headers: {
           Headers.contentLengthHeader: [slice.length.toString()],
@@ -267,8 +268,12 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-Stream<Uint8List> _dyingBody(Uint8List first, Exception error) async* {
-  yield first;
+Stream<Uint8List> _dyingBody(
+    Uint8List first, Exception error, int? chunkSize) async* {
+  final size = chunkSize ?? math.max(first.length, 1);
+  for (var i = 0; i < first.length; i += size) {
+    yield Uint8List.sublistView(first, i, math.min(i + size, first.length));
+  }
   throw error;
 }
 

@@ -825,6 +825,34 @@ class _NativeDownloadService implements DownloadService {
       _emit(next);
     }
 
+    // Progress saves are throttled, so a task that leaves the fetch loop by a
+    // park or a failure can be saved a window behind the bytes on disk. Its
+    // final save carries the real length, so the resume (and the list) start
+    // from what is actually there.
+    File? diskFile;
+    Future<DownloadTask> withDiskProgress(DownloadTask next) async {
+      final file = diskFile;
+      if (file == null || superseded()) return next;
+      try {
+        if (!await file.exists()) return next;
+        final onDisk = await file.length();
+        if (onDisk == next.downloadedBytes) return next;
+        final total = next.fileSize;
+        final fraction = total != null && total > 0
+            ? (onDisk / total).clamp(0.0, 1.0)
+            : next.downloadProgress;
+        return next.copyWith(
+          downloadedBytes: onDisk,
+          downloadProgress: fraction,
+          progress: next.isProgressive
+              ? next.transcodeProgress * 0.3 + fraction * 0.7
+              : fraction,
+        );
+      } catch (_) {
+        return next;
+      }
+    }
+
     void release() {
       if (identical(_cancelTokens[task.id], cancelToken)) {
         _cancelTokens.remove(task.id);
@@ -904,6 +932,7 @@ class _NativeDownloadService implements DownloadService {
           fileSize: expected,
           lastProgressAt: _clock()));
       final disk = File(path);
+      diskFile = disk;
 
       var reResolved = false;
       const maxTransientRetries = 3;
@@ -1038,20 +1067,20 @@ class _NativeDownloadService implements DownloadService {
       unawaited(_saveArtwork(done));
     } on _ParkTask catch (e) {
       final before = attemptsBeforeClaim;
-      await save(current.copyWith(
+      await save(await withDiskProgress(current.copyWith(
         status: 'interrupted',
         error: e.message,
         recoveryAttempts: !e.countsAsAttempt && before != null
             ? math.min(before, current.recoveryAttempts)
             : current.recoveryAttempts,
-      ));
+      )));
     } on _TaskFailure catch (e) {
-      await save(current.copyWith(
+      await save(await withDiskProgress(current.copyWith(
         status: 'failed',
         error: e.message,
         recoveryAttempts:
             e.permanent ? maxRecoveryAttempts : current.recoveryAttempts,
-      ));
+      )));
     } on DeadJobException catch (e) {
       await save(current.copyWith(
           status: 'failed',
@@ -1060,11 +1089,12 @@ class _NativeDownloadService implements DownloadService {
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) return;
       // The same rule as in the loop, for a failure before the first byte.
-      await save(current.copyWith(
+      await save(await withDiskProgress(current.copyWith(
           status: _isTransportError(e) ? 'interrupted' : 'failed',
-          error: e.message ?? 'Download failed'));
+          error: e.message ?? 'Download failed')));
     } catch (e) {
-      await save(current.copyWith(status: 'failed', error: e.toString()));
+      await save(await withDiskProgress(
+          current.copyWith(status: 'failed', error: e.toString())));
     } finally {
       release();
       _runInBackground(_processQueue(), 'process queue');
