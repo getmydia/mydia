@@ -67,28 +67,42 @@ class InMemorySourceCache implements SourceCache {
 /// One string per key: `{"v": schemaVersion, "at": millis, "d": json}`. A
 /// string box needs no type adapter.
 class HiveSourceCache implements SourceCache {
-  HiveSourceCache._(this._box);
+  HiveSourceCache._(this._box, this._maxEntries);
 
   static const String boxName = 'source_cache';
 
   /// Entries older than this are deleted when the box opens.
   static const Duration retention = Duration(days: 30);
 
+  /// The box never holds more than this after a sweep; the oldest entries
+  /// go first.
+  static const int maxEntries = 2000;
+
+  /// Returns without waiting for the sweep, which is off the startup path.
   static Future<HiveSourceCache> open() async {
     await initAppHive();
-    return fromBox(await Hive.openBox<String>(boxName), now: DateTime.now());
+    final cache = HiveSourceCache._(
+      await Hive.openBox<String>(boxName),
+      maxEntries,
+    );
+    unawaited(cache._sweep(DateTime.now()).catchError((Object e) {
+      debugPrint('[SourceCache] sweep failed: $e');
+    }));
+    return cache;
   }
 
   static Future<HiveSourceCache> fromBox(
     Box<String> box, {
     required DateTime now,
+    int maxEntries = HiveSourceCache.maxEntries,
   }) async {
-    final cache = HiveSourceCache._(box);
+    final cache = HiveSourceCache._(box, maxEntries);
     await cache._sweep(now);
     return cache;
   }
 
   final Box<String> _box;
+  final int _maxEntries;
 
   @override
   CacheEntry? read(QueryKey key) => _decode(_box.get(key.canonical));
@@ -113,12 +127,22 @@ class HiveSourceCache implements SourceCache {
       .toList());
 
   Future<void> _sweep(DateTime now) async {
-    final doomed = [
-      for (final key in _box.keys.whereType<String>())
-        if (_decode(_box.get(key)) case final entry
-            when entry == null || now.difference(entry.writtenAt) > retention)
-          key,
-    ];
+    final doomed = <String>[];
+    final kept = <(String, DateTime)>[];
+    for (final key in _box.keys.whereType<String>()) {
+      final entry = _decode(_box.get(key));
+      if (entry == null || now.difference(entry.writtenAt) > retention) {
+        doomed.add(key);
+      } else {
+        kept.add((key, entry.writtenAt));
+      }
+    }
+    if (kept.length > _maxEntries) {
+      kept.sort((a, b) => a.$2.compareTo(b.$2));
+      doomed.addAll(
+        kept.take(kept.length - _maxEntries).map((entry) => entry.$1),
+      );
+    }
     if (doomed.isEmpty) return;
     try {
       await _box.deleteAll(doomed);

@@ -83,6 +83,26 @@ void main() {
       expect(later.read(_a2), isNotNull);
     });
 
+    test('opening evicts the oldest entries down to the cap', () async {
+      final b = await box();
+      final writer = await HiveSourceCache.fromBox(b, now: _at);
+      for (var i = 0; i < 5; i++) {
+        await writer.write(
+          QueryKey('acc1:owner:srv1/item', {'id': '$i'}),
+          i,
+          _at.add(Duration(hours: i)),
+        );
+      }
+      final capped = await HiveSourceCache.fromBox(b,
+          now: _at.add(const Duration(days: 1)), maxEntries: 3);
+      QueryKey k(int i) => QueryKey('acc1:owner:srv1/item', {'id': '$i'});
+      expect(capped.read(k(0)), isNull);
+      expect(capped.read(k(1)), isNull);
+      expect(capped.read(k(2)), isNotNull);
+      expect(capped.read(k(4)), isNotNull);
+      expect(b.length, 3);
+    });
+
     test('an entry from another schema version reads as absent', () async {
       final b = await box();
       await b.put(_a1.canonical,
