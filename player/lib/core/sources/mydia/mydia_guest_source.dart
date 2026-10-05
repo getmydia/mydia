@@ -37,6 +37,21 @@ const _showsLibrary = 'shows';
 const _searchLimit = 40;
 const _rowLimit = 20;
 
+/// Mydia sends artwork as absolute URLs that need no credentials.
+ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
+  final uri = Uri.tryParse(art.path);
+  if (uri == null ||
+      !(uri.scheme == 'http' || uri.scheme == 'https') ||
+      uri.host.isEmpty) {
+    return null;
+  }
+  return ArtworkRequest(
+    url: art.path,
+    headers: const {},
+    cacheKey: '${id.value}|${art.path}|$width',
+  );
+}
+
 class MydiaGuestSource extends MediaSource
     implements
         WatchedState,
@@ -219,19 +234,8 @@ class MydiaGuestSource extends MediaSource
   }
 
   @override
-  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {
-    final uri = Uri.tryParse(art.path);
-    if (uri == null ||
-        !(uri.scheme == 'http' || uri.scheme == 'https') ||
-        uri.host.isEmpty) {
-      return null;
-    }
-    return ArtworkRequest(
-      url: art.path,
-      headers: const {},
-      cacheKey: '${id.value}|${art.path}|$width',
-    );
-  }
+  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
+      absoluteArtworkRequest(id, art, width);
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) async {
