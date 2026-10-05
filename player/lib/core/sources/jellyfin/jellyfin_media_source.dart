@@ -3,12 +3,15 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'jellyfin_client.dart';
 import 'jellyfin_mapping.dart';
@@ -23,7 +26,8 @@ class JellyfinMediaSource extends MediaSource
         Favorites,
         NextUp,
         RecentlyAdded,
-        SkipSegments {
+        SkipSegments,
+        Downloadable {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -50,6 +54,7 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.nextUp,
         SourceCapability.recentlyAdded,
         SourceCapability.skipSegments,
+        SourceCapability.downloadable,
       };
 
   @override
@@ -85,6 +90,19 @@ class JellyfinMediaSource extends MediaSource
   /// Library kinds by id, so paging does not re-fetch `/UserViews` on every
   /// page. Filled by [libraries].
   Map<String, LibraryKind>? _libraryKinds;
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) =>
+      originalOptions(this, ref);
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
+        this,
+        ref,
+        url: (v) => client.url('/Videos/${ref.externalId}/stream',
+            {'static': 'true', 'mediaSourceId': v.id}),
+        headers: client.headers,
+      );
 
   @override
   Future<List<Library>> libraries() async {

@@ -6,6 +6,7 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/store/source_records.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -79,6 +80,21 @@ void main() {
       show: const ItemRef(
           sourceId: jellyfinSid, kind: ItemKind.show, externalId: 'show1'),
     );
+  });
+
+  test('resolves the original file with the token in a header', () async {
+    final b = build();
+    final plan = await b.source.resolve(
+        const ItemRef(
+            sourceId: jellyfinSid, kind: ItemKind.movie, externalId: 'm2'),
+        'original') as DirectFile;
+    final url = Uri.parse(plan.url);
+    expect(url.path, endsWith('/Videos/m2/stream'));
+    expect(url.queryParameters['static'], 'true');
+    expect(url.queryParameters['mediaSourceId'], isNotEmpty);
+    expect(plan.headers['Authorization'],
+        contains('Token="${FakeJellyfinServer.token}"'));
+    expect(plan.url, isNot(contains(FakeJellyfinServer.token)));
   });
 
   test('lists film and show libraries, not music', () async {

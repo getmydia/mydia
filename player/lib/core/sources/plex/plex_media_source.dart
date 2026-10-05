@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
@@ -10,6 +12,7 @@ import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'plex_mapping.dart';
 import 'plex_server_client.dart';
@@ -23,7 +26,8 @@ class PlexMediaSource extends MediaSource
         HomeHubs,
         Similar,
         NextUp,
-        SkipSegments {
+        SkipSegments,
+        Downloadable {
   PlexMediaSource({
     required this.source,
     required this.client,
@@ -46,6 +50,7 @@ class PlexMediaSource extends MediaSource
         SourceCapability.similar,
         SourceCapability.nextUp,
         SourceCapability.skipSegments,
+        SourceCapability.downloadable,
       };
 
   @override
@@ -57,6 +62,20 @@ class PlexMediaSource extends MediaSource
 
   @override
   T? as<T extends Object>() => this is T ? this as T : null;
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) =>
+      originalOptions(this, ref);
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
+        this,
+        ref,
+        url: (v) => client.url(v.streamPath ??
+            (throw const SourceException.unsupported(
+                'Plex offers no direct file for this item.'))),
+        headers: client.headers,
+      );
 
   @override
   Future<List<Library>> libraries() async {

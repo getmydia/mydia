@@ -4,18 +4,26 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../../domain/models/download_option.dart';
+import '../../../domain/models/download_plan.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
+import '../original_download.dart';
 import '../source.dart';
 import 'stash_client.dart';
 import 'stash_documents.dart';
 import 'stash_mapping.dart';
 
 class StashMediaSource extends MediaSource
-    implements WatchedState, Searchable, ContinueWatching, RecentlyAdded {
+    implements
+        WatchedState,
+        Searchable,
+        ContinueWatching,
+        RecentlyAdded,
+        Downloadable {
   StashMediaSource({
     required this.source,
     required this.client,
@@ -34,6 +42,7 @@ class StashMediaSource extends MediaSource
         SourceCapability.searchable,
         SourceCapability.continueWatching,
         SourceCapability.recentlyAdded,
+        SourceCapability.downloadable,
       };
 
   @override
@@ -45,6 +54,19 @@ class StashMediaSource extends MediaSource
 
   @override
   T? as<T extends Object>() => this is T ? this as T : null;
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) =>
+      originalOptions(this, ref);
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) => originalFile(
+        this,
+        ref,
+        url: (v) =>
+            client.url(v.streamPath ?? '/scene/${ref.externalId}/stream'),
+        headers: client.headers,
+      );
 
   @override
   Future<List<Library>> libraries() async => [

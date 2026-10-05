@@ -7,6 +7,7 @@ import 'package:player/core/sources/stash/stash_client.dart';
 import 'package:player/core/sources/stash/stash_mapping.dart';
 import 'package:player/core/sources/stash/stash_media_source.dart';
 import 'package:player/core/sources/store/source_records.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/sources/source_error.dart';
@@ -118,6 +119,15 @@ void main() {
     expect(version.streamPath, '/scene/2/stream');
     expect(version.streams.single.externalPath,
         '/scene/2/caption?lang=en&type=srt');
+  });
+
+  test('resolves the original file with the API key in a header', () async {
+    final plan = await build().source.resolve(
+        const ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2'),
+        'original') as DirectFile;
+    expect(Uri.parse(plan.url).path, '/scene/2/stream');
+    expect(plan.headers['ApiKey'], FakeStashServer.apiKey);
+    expect(plan.url, isNot(contains(FakeStashServer.apiKey)));
   });
 
   test('a scene carries added and last played, no sort title', () async {
