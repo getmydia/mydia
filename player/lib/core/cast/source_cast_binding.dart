@@ -3,6 +3,8 @@
 /// `presentation/`, so the manager only sees this interface.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../../domain/models/cast_device.dart';
 import '../player/periodic_progress_reporter.dart';
 import '../player/progress_service.dart';
@@ -44,15 +46,14 @@ class ReporterCastProgressSink implements CastProgressSink {
         ProgressService.resolveSync(position, duration, StreamTimeline.zero);
     if (sync == null || _stopped) return;
     _last = sync;
-    await _reporter.sendProgress(
-      positionSeconds: sync.positionSeconds,
-      durationSeconds: sync.durationSeconds,
-      paused: paused,
-    );
+    await _guard(() => _reporter.sendProgress(
+          positionSeconds: sync.positionSeconds,
+          durationSeconds: sync.durationSeconds,
+          paused: paused,
+        ));
     if (!_watchedSent &&
         ProgressService.isWatchedAt(position, duration, StreamTimeline.zero)) {
-      _watchedSent = true;
-      await _reporter.sendWatched();
+      _watchedSent = await _guard(_reporter.sendWatched);
     }
   }
 
@@ -61,10 +62,22 @@ class ReporterCastProgressSink implements CastProgressSink {
     final last = _last;
     if (_stopped || last == null) return;
     _stopped = true;
-    await _reporter.sendStopped(
-      positionSeconds: last.positionSeconds,
-      durationSeconds: last.durationSeconds,
-    );
+    await _guard(() => _reporter.sendStopped(
+          positionSeconds: last.positionSeconds,
+          durationSeconds: last.durationSeconds,
+        ));
+  }
+
+  /// The manager fires reports without awaiting them, so a network blip must
+  /// not surface as an unhandled async error. True when [send] succeeded.
+  Future<bool> _guard(Future<void> Function() send) async {
+    try {
+      await send();
+      return true;
+    } catch (e) {
+      debugPrint('[Cast] Could not report progress: $e');
+      return false;
+    }
   }
 }
 

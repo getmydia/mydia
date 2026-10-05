@@ -1,0 +1,223 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/cast/cast_backend.dart';
+import 'package:player/core/cast/cast_route_resolver.dart';
+import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/cast/cast_session_store.dart';
+import 'package:player/core/cast/source_cast_binding.dart';
+import 'package:player/core/player/progress_service.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/domain/models/cast_device.dart';
+import 'package:player/domain/sources/item.dart';
+
+import '../../test_utils/fake_cast_backend.dart';
+import '../../test_utils/fake_streaming_session_service.dart';
+import 'cast_session_manager_test.mocks.dart';
+
+class _FakeSink implements CastProgressSink {
+  final reports = <Duration>[];
+  var stops = 0;
+  @override
+  Future<void> report({
+    required Duration position,
+    required Duration duration,
+    required bool paused,
+  }) async =>
+      reports.add(position);
+  @override
+  Future<void> stopped() async => stops++;
+}
+
+class _FakeBinding implements SourceCastBinding {
+  final resolves =
+      <({bool forceTranscode, String? subtitle, Duration start})>[];
+  final ended = <String>[];
+  final sink = _FakeSink();
+  var _n = 0;
+  List<CastSubtitleTrack> subtitles = const [];
+
+  @override
+  Future<CastRoute> resolve({
+    required CastProtocolKind protocol,
+    required Duration startPosition,
+    required String? subtitleTrackId,
+    required bool forceTranscode,
+  }) async {
+    resolves.add((
+      forceTranscode: forceTranscode,
+      subtitle: subtitleTrackId,
+      start: startPosition,
+    ));
+    final id = 'srv-${_n++}';
+    return CastRoute(
+      mediaUrl: 'http://192.168.1.5:32400/start.m3u8?session=$id',
+      kind: CastRouteKind.directServer,
+      mediaKind: CastMediaKind.hls,
+      hlsSessionId: id,
+      subtitles: subtitles,
+      transcoded: forceTranscode,
+    );
+  }
+
+  @override
+  Future<void> endServerSession(String sessionId) async => ended.add(sessionId);
+
+  @override
+  CastProgressSink openProgress() => sink;
+}
+
+void main() {
+  const tv = CastDevice(
+      id: 'tv-1', name: 'Den TV', protocol: CastProtocolKind.chromecast);
+  const mydiaTarget = CastDevice(
+      id: 'node-1', name: 'Bedroom', protocol: CastProtocolKind.mydia);
+  const content = SourceCastContent(
+    item: ItemRef(
+        sourceId: SourceId('px1:owner:srv'),
+        kind: ItemKind.movie,
+        externalId: '101'),
+    versionId: '21',
+  );
+
+  late FakeCastBackend backend;
+  late FakeStreamingSessionService mydiaSessions;
+  late _FakeBinding binding;
+  late InMemoryCastSessionStore store;
+
+  CastSessionManager build({SourceCastBinder? binder}) => CastSessionManager(
+        backend: backend,
+        mydiaBackend: backend,
+        store: store,
+        progressService: ProgressService(MockGraphQLClient()),
+        streamingSessions: mydiaSessions,
+        resolverFactory: () => CastRouteResolver(
+          isP2pMode: false,
+          serverUrl: 'https://mydia.test',
+          mediaToken: () async => 'tok',
+          lanBaseUrl: () => null,
+          streamingSessions: mydiaSessions,
+        ),
+        setLanAccess: (_) async {},
+        bindSource: binder ?? (_) async => binding,
+      );
+
+  const request = CastLaunchRequest.forContent(
+    content: content,
+    title: 'The Lantern Keeper',
+    startPosition: Duration(minutes: 3),
+    duration: Duration(minutes: 90),
+  );
+
+  setUp(() {
+    backend = FakeCastBackend();
+    mydiaSessions = FakeStreamingSessionService();
+    binding = _FakeBinding();
+    store = InMemoryCastSessionStore();
+  });
+
+  test('loads the source route and persists the content', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+
+    expect(backend.loadedRequests.single.url, contains('session=srv-0'));
+    expect(backend.loadedRequests.single.startPosition,
+        const Duration(minutes: 3));
+    expect((await store.load())!.content, content);
+    expect(mydiaSessions.started, isEmpty);
+  });
+
+  test('a rejected load retries once with a transcode', () async {
+    backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+
+    expect(binding.resolves.map((r) => r.forceTranscode), [false, true]);
+    expect(binding.ended, ['srv-0']);
+  });
+
+  test(
+      'positions go to the source sink, and stop reports stopped and ends '
+      'the transcode', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+    backend.emitDuration(const Duration(minutes: 90));
+    backend.emitPosition(const Duration(minutes: 4));
+    await pumpEventQueue();
+
+    expect(binding.sink.reports, [const Duration(minutes: 4)]);
+
+    await manager.stopCast();
+    expect(binding.sink.stops, 1);
+    expect(binding.ended, ['srv-0']);
+  });
+
+  test('a seek is a plain receiver seek', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+    await manager.seek(const Duration(minutes: 60));
+
+    expect(backend.seeks, [const Duration(minutes: 60)]);
+    expect(binding.resolves, hasLength(1));
+  });
+
+  test('a Mydia target is refused', () async {
+    final manager = build();
+    await expectLater(
+      manager.startCast(device: mydiaTarget, request: request),
+      throwsA(isA<CastBackendException>()),
+    );
+    expect(binding.resolves, isEmpty);
+  });
+
+  test('a failed bind surfaces its exception', () async {
+    final manager = build(
+      binder: (_) async => throw const CastBackendException(
+          'Sign in to this server again to cast from it.',
+          CastFailureKind.notAuthorized),
+    );
+    await expectLater(
+      manager.startCast(device: tv, request: request),
+      throwsA(isA<CastBackendException>()
+          .having((e) => e.kind, 'kind', CastFailureKind.notAuthorized)),
+    );
+  });
+
+  test('choosing a burned-in track restarts at the current position', () async {
+    binding.subtitles = const [
+      CastSubtitleTrack(
+          trackId: '33',
+          url: '',
+          label: 'Spanish',
+          language: 'spa',
+          burnedIn: true),
+    ];
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+    backend.emitPosition(const Duration(minutes: 10));
+    await pumpEventQueue();
+
+    await manager.selectSubtitle(binding.subtitles.single);
+
+    expect(binding.resolves.last.subtitle, '33');
+    expect(binding.resolves.last.start, const Duration(minutes: 10));
+    expect(backend.loadedRequests.last.subtitles, isEmpty);
+    expect(manager.currentSession!.selectedSubtitle?.trackId, '33');
+  });
+
+  test('reconnecting a stored source record relaunches it', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+    await manager.detach();
+    await store.save(PersistedCastSession.forContent(
+      device: tv,
+      content: content,
+      title: 'The Lantern Keeper',
+      position: const Duration(minutes: 20),
+      routeKind: CastRouteKind.directServer,
+      savedAt: DateTime.now(),
+    ));
+
+    await manager.reconnectStoredSession();
+
+    expect(binding.resolves.last.start, const Duration(minutes: 20));
+  });
+}

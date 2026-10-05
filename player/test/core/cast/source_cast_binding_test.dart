@@ -27,6 +27,16 @@ class _RecordingReporter extends PeriodicProgressReporter {
       stops.add((positionSeconds, durationSeconds));
 }
 
+class _ThrowingReporter extends _RecordingReporter {
+  @override
+  Future<void> sendProgress({
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool paused,
+  }) async =>
+      throw Exception('offline');
+}
+
 void main() {
   group('ReporterCastProgressSink', () {
     test('reports positions and marks watched once past the threshold',
@@ -77,6 +87,14 @@ void main() {
           duration: Duration.zero,
           paused: false);
       expect(reporter.progress, isEmpty);
+    });
+
+    test('a failing reporter does not make report throw', () async {
+      final sink = ReporterCastProgressSink(_ThrowingReporter());
+      await sink.report(
+          position: const Duration(minutes: 10),
+          duration: const Duration(minutes: 100),
+          paused: false);
     });
   });
 
