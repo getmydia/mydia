@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_gql_transport.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 /// Answers by operation name, recording every call.
 class FakeMydiaTransport implements MydiaGqlTransport {
-  final Map<String, Map<String, dynamic> Function(Map<String, dynamic> vars)>
+  final Map<String,
+          FutureOr<Map<String, dynamic>> Function(Map<String, dynamic> vars)>
       handlers = {};
   final List<({String operation, Map<String, dynamic> vars, String? token})>
       calls = [];
@@ -33,6 +36,6 @@ class FakeMydiaTransport implements MydiaGqlTransport {
     }
     final handler = handlers[op];
     if (handler == null) throw SourceException.server('no handler for $op');
-    return handler(variables);
+    return await handler(variables);
   }
 }

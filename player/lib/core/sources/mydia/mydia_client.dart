@@ -74,7 +74,6 @@ class MydiaClient {
             _refresh().whenComplete(() => _refreshing = null));
       }
       if (fresh == null) {
-        _onUnauthorized();
         rethrow;
       }
       try {
@@ -138,7 +137,10 @@ class MydiaClient {
   Future<String?> _refresh() async {
     final current = await credentials();
     final deviceToken = current.deviceToken;
-    if (deviceToken == null) return null;
+    if (deviceToken == null) {
+      _onUnauthorized();
+      return null;
+    }
     final Map<String, dynamic> data;
     try {
       data = await _send(_refreshMutation, {'deviceToken': deviceToken}, null);
@@ -147,10 +149,14 @@ class MydiaClient {
       // GraphQL error, so any answer other than "could not reach it" means
       // this device cannot re-authenticate.
       if (e.kind == SourceErrorKind.unreachable) rethrow;
+      _onUnauthorized();
       return null;
     }
     final token = (data['refreshAccessToken'] as Map?)?['token'];
-    if (token is! String || token.isEmpty) return null;
+    if (token is! String || token.isEmpty) {
+      _onUnauthorized();
+      return null;
+    }
     final next = current.copyWith(accessToken: token);
     _credentials = next;
     await _save(next);

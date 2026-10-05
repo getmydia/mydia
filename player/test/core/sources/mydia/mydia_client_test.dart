@@ -200,6 +200,104 @@ void main() {
         hasLength(1));
   });
 
+  test('coalesces concurrent 401s into a single refresh request', () async {
+    transport.validTokens = {'fresh'};
+    final refreshCompleter = Completer<Map<String, dynamic>>();
+    transport.handlers['RefreshAccessToken'] = (_) => refreshCompleter.future;
+
+    final client = build();
+    final f1 = client.request(documentNodeQueryMydiaInstanceIdentity);
+    final f2 = client.request(documentNodeQueryMydiaInstanceIdentity);
+    final f3 = client.request(documentNodeQueryMydiaInstanceIdentity);
+
+    // Yield to let all requests send and receive 401
+    await Future<void>.delayed(Duration.zero);
+
+    // Only one RefreshAccessToken mutation should have been dispatched
+    expect(
+      transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
+      hasLength(1),
+    );
+
+    refreshCompleter.complete({
+      'refreshAccessToken': {'token': 'fresh', 'expiresAt': null},
+    });
+
+    final results = await Future.wait([f1, f2, f3]);
+    for (final data in results) {
+      expect((data['serverCompatibility'] as Map)['instanceId'], 'inst-2');
+    }
+
+    expect(
+      transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
+      hasLength(1),
+    );
+    expect(saved.single.accessToken, 'fresh');
+    expect((await client.credentials()).accessToken, 'fresh');
+    expect(unauthorized, 0);
+  });
+
+  test('refused refresh invokes onUnauthorized', () async {
+    transport.validTokens = {};
+    transport.handlers['RefreshAccessToken'] =
+        (_) => throw const SourceException.unauthorized();
+    final client = build();
+
+    await expectLater(
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+    );
+
+    expect(unauthorized, 1);
+    expect(saved, isEmpty);
+    expect((await client.credentials()).accessToken, 'access');
+
+    // Concurrent requests on refused refresh invoke onUnauthorized once for the refusal
+    final client2 = build();
+    await expectLater(
+      Future.wait([
+        client2.request(documentNodeQueryMydiaInstanceIdentity),
+        client2.request(documentNodeQueryMydiaInstanceIdentity),
+      ]),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.unauthorized)),
+    );
+    expect(unauthorized, 2);
+  });
+
+  test('unreachable during refresh does not invoke onUnauthorized', () async {
+    transport.validTokens = {};
+    transport.handlers['RefreshAccessToken'] =
+        (_) => throw const SourceException.unreachable();
+    final client = build();
+
+    await expectLater(
+      client.request(documentNodeQueryMydiaInstanceIdentity),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+    );
+
+    expect(unauthorized, 0);
+    expect(saved, isEmpty);
+    expect(client.status.value, SourceConnectionStatus.unreachable);
+    expect((await client.credentials()).accessToken, 'access');
+
+    // Concurrent requests experiencing unreachable refresh also do not flag reauth
+    final client2 = build();
+    await expectLater(
+      Future.wait([
+        client2.request(documentNodeQueryMydiaInstanceIdentity),
+        client2.request(documentNodeQueryMydiaInstanceIdentity),
+      ]),
+      throwsA(isA<SourceException>()
+          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable)),
+    );
+    expect(unauthorized, 0);
+    expect(client2.status.value, SourceConnectionStatus.unreachable);
+    expect((await client2.credentials()).accessToken, 'access');
+  });
+
   test(
       'retries with fallback on unknown field error and skips straight to fallback on next call',
       () async {
