@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/startup/startup_init.dart';
 import 'package:player/core/startup/startup_timeline.dart';
 
@@ -31,6 +32,7 @@ StartupSteps _steps({
   bool noRustBridge = false,
   Future<void> Function()? hiveCache,
   Future<FetchLog> Function()? fetchLog,
+  Future<SourceCache> Function()? sourceCache,
   Future<void> Function()? downloadDb,
   Future<SidebarLayoutStore> Function()? sidebar,
   List<String>? started,
@@ -45,6 +47,7 @@ StartupSteps _steps({
     inputCapabilities: track('input'),
     hiveCache: hiveCache ?? track('hive'),
     fetchLog: fetchLog ?? () async => InMemoryFetchLog(),
+    sourceCache: sourceCache ?? () async => InMemorySourceCache(),
     downloadDb: downloadDb ?? track('downloads'),
     sidebarLayoutStore: sidebar ?? () async => InMemorySidebarLayoutStore(),
     connection: () async => null,
@@ -111,6 +114,15 @@ void main() {
     );
     expect(outcome, isA<StartupReady>());
     expect((outcome as StartupReady).fetchLog, isA<InMemoryFetchLog>());
+  });
+
+  test('a source cache failure falls back to in-memory', () async {
+    final outcome = await runStartup(
+      _steps(sourceCache: () async => throw StateError('corrupt box')),
+      timeline: StartupTimeline('t'),
+    );
+    expect(outcome, isA<StartupReady>());
+    expect((outcome as StartupReady).sourceCache, isA<InMemorySourceCache>());
   });
 
   test('records the step marks', () async {

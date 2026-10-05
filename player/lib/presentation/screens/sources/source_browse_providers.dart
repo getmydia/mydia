@@ -1,11 +1,18 @@
 /// Per-screen state for the generic source screens, keyed by source. Screens
-/// invalidate through `invalidateSourceItemWrites` after a write; nothing here is
-/// wired to Mydia's `QueryWatcher`.
+/// invalidate through `invalidateSourceItemWrites` after a write. Each leaf
+/// provider is a `SourceWatcher`, so it paints from the cache and is refreshed
+/// by `SourceRules`.
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
+import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/sources/cache/create_source_watcher.dart';
+import '../../../core/sources/cache/source_codecs.dart';
+import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -40,35 +47,73 @@ String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
   ).toString();
 }
 
-final sourceLibrariesProvider = FutureProvider.autoDispose
-    .family<List<Library>, SourceId>(
-        (ref, id) => _require(ref, id).libraries());
-
-/// The home row for [library]: its "Recently added" sort when it has one.
-final sourceLibraryPreviewProvider = FutureProvider.autoDispose
-    .family<List<ItemSummary>, LibraryRef>((ref, library) async {
-  final source = _require(ref, library.sourceId);
-  final libraries =
-      await ref.watch(sourceLibrariesProvider(library.sourceId).future);
-  final options =
-      libraries.where((l) => l.ref == library).firstOrNull?.sortOptions ??
-          const [];
-  final recent = options.where((o) => o.label == 'Recently added').firstOrNull;
-  final page = await source.browse(
-    library,
-    BrowseQuery(sortId: recent?.id, pageSize: 20),
-  );
-  return page.items;
+final sourceLibrariesProvider =
+    StreamProvider.autoDispose.family<List<Library>, SourceId>((ref, id) {
+  final source = _require(ref, id);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.libraries(id),
+    fetch: source.libraries,
+    encode: encodeLibraries,
+    decode: decodeLibraries,
+  ).stream;
 });
 
-final sourceItemProvider = FutureProvider.autoDispose
-    .family<ItemDetail, ItemRef>(
-        (ref, item) => _require(ref, item.sourceId).item(item));
+/// The home row for [library]: its "Recently added" sort when it has one.
+final sourceLibraryPreviewProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, LibraryRef>((ref, library) async* {
+  final source = _require(ref, library.sourceId);
+  // selectAsync: a fresh libraries answer with the same sort must not
+  // rebuild this row and fetch it twice.
+  final sortId = await ref.watch(
+    sourceLibrariesProvider(library.sourceId).selectAsync(
+      (libraries) => libraries
+          .where((l) => l.ref == library)
+          .firstOrNull
+          ?.sortOptions
+          .where((o) => o.label == 'Recently added')
+          .firstOrNull
+          ?.id,
+    ),
+  );
+  if (!ref.mounted) return;
+  final query = BrowseQuery(sortId: sortId, pageSize: 20);
+  yield* createSourceWatcher(
+    ref,
+    key: SourceKeys.browse(library, query),
+    fetch: () => source.browse(library, query),
+    encode: encodeSummaryPage,
+    decode: decodeSummaryPage,
+  ).stream.map((page) => page.items);
+});
+
+final sourceItemProvider =
+    StreamProvider.autoDispose.family<ItemDetail, ItemRef>((ref, item) {
+  final source = _require(ref, item.sourceId);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.item(item),
+    fetch: () => source.item(item),
+    encode: encodeDetail,
+    decode: decodeDetail,
+  ).stream;
+});
 
 /// Every child of [parent], following pages up to a sane cap.
-final sourceChildrenProvider = FutureProvider.autoDispose
-    .family<List<ItemSummary>, ItemRef>((ref, parent) async {
+final sourceChildrenProvider = StreamProvider.autoDispose
+    .family<List<ItemSummary>, ItemRef>((ref, parent) {
   final source = _require(ref, parent.sourceId);
+  return createSourceWatcher(
+    ref,
+    key: SourceKeys.children(parent),
+    fetch: () => _allChildren(source, parent),
+    encode: encodeSummaries,
+    decode: decodeSummaries,
+  ).stream;
+});
+
+Future<List<ItemSummary>> _allChildren(
+    MediaSource source, ItemRef parent) async {
   final items = <ItemSummary>[];
   Cursor? cursor;
   for (var pages = 0; pages < 10; pages++) {
@@ -78,7 +123,7 @@ final sourceChildrenProvider = FutureProvider.autoDispose
     if (cursor == null) break;
   }
   return items;
-});
+}
 
 class LibraryBrowseState {
   const LibraryBrowseState({
@@ -110,7 +155,7 @@ class LibraryBrowseState {
       );
 }
 
-class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
+class LibraryBrowseNotifier extends StreamNotifier<LibraryBrowseState> {
   LibraryBrowseNotifier(this.library);
 
   final LibraryRef library;
@@ -120,17 +165,35 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
   /// was requested for the old one is dropped when it lands.
   int _generation = 0;
 
+  /// Set once the viewer asks for page 2. From then on the watcher declines
+  /// automatic refetches and its page-1 answers are ignored: either would
+  /// collapse the pages already on screen. Only page 1 is cached. A cached
+  /// page 1 may emit before the fresh one, so paging in that window uses the
+  /// cached cursor.
+  bool _paged = false;
+
   @override
-  Future<LibraryBrowseState> build() async {
+  Stream<LibraryBrowseState> build() {
     _generation++;
+    _paged = false;
+    final query = _query;
     final source = _require(ref, library.sourceId);
-    final page = await source.browse(library, _query);
-    return LibraryBrowseState(
-      query: _query,
-      items: page.items,
-      nextCursor: page.nextCursor,
-      total: page.total,
+    final watcher = createSourceWatcher<Page<ItemSummary>>(
+      ref,
+      key: SourceKeys.browse(library, query),
+      fetch: () => source.browse(library, query),
+      encode: encodeSummaryPage,
+      decode: decodeSummaryPage,
+      canRefetch: () => !_paged,
     );
+    return watcher.stream.where((_) => !_paged).map(
+          (page) => LibraryBrowseState(
+            query: query,
+            items: page.items,
+            nextCursor: page.nextCursor,
+            total: page.total,
+          ),
+        );
   }
 
   Future<void> setQuery(BrowseQuery query) async {
@@ -149,6 +212,7 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
     final cursor = current?.nextCursor;
     if (current == null || cursor == null || current.loadingMore) return;
     final generation = _generation;
+    _paged = true;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
       final page = await _require(ref, library.sourceId)
@@ -163,13 +227,16 @@ class LibraryBrowseNotifier extends AsyncNotifier<LibraryBrowseState> {
     } catch (_) {
       // Any failure, not just a SourceException: loadingMore must not stick.
       if (ref.mounted && generation == _generation) {
+        // Page 2 never landed, so page 1 is still the whole list: let the
+        // watcher refresh it again.
+        _paged = false;
         state = AsyncData(current.copyWith(loadingMore: false));
       }
     }
   }
 }
 
-final libraryBrowseProvider = AsyncNotifierProvider.autoDispose
+final libraryBrowseProvider = StreamNotifierProvider.autoDispose
     .family<LibraryBrowseNotifier, LibraryBrowseState, LibraryRef>(
         LibraryBrowseNotifier.new);
 
@@ -177,29 +244,44 @@ final libraryBrowseProvider = AsyncNotifierProvider.autoDispose
 /// row stays hidden until the next refresh rather than polling a down
 /// server.
 final sourceContinueWatchingProvider =
-    FutureProvider.autoDispose.family<List<ItemSummary>, SourceId>(
-  (ref, id) async {
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
     final continueWatching = _require(ref, id).as<ContinueWatching>();
-    if (continueWatching == null) return const [];
-    return continueWatching.continueWatching();
+    if (continueWatching == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.continueWatching(id),
+      fetch: continueWatching.continueWatching,
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
   },
   retry: (_, __) => null,
 );
 
 /// Null for a source without hubs, whose home keeps one row per library.
 final sourceHubsProvider =
-    FutureProvider.autoDispose.family<List<Hub>?, SourceId>(
-  (ref, id) async {
+    StreamProvider.autoDispose.family<List<Hub>?, SourceId>(
+  (ref, id) {
     final hubs = _require(ref, id).as<HomeHubs>();
-    return hubs == null ? null : await hubs.hubs();
+    if (hubs == null) return Stream.value(null);
+    return createSourceWatcher<List<Hub>?>(
+      ref,
+      key: SourceKeys.hubs(id),
+      fetch: hubs.hubs,
+      encode: encodeHubs,
+      decode: decodeHubs,
+    ).stream;
   },
   retry: (_, __) => null,
 );
 
-/// Progress or watched state changed: this item, its siblings in a season
-/// list, and the home rows and grids that show it are all stale.
-void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) =>
-    _invalidateWrites(ref.invalidate, item);
+/// Progress or watched state of [item] changed: every live watcher on its
+/// source that shows watch state refetches, the rest mount cold. See
+/// `SourceRules.watchedChanged`.
+void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) => unawaited(ref
+    .read(invalidatorProvider)
+    .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
 /// [invalidateSourceItemWrites] through a container, for a write that
 /// finishes after its notifier is disposed: a `Ref` throws then, a container
@@ -208,16 +290,13 @@ void invalidateSourceContainerWrites(
   ProviderContainer container,
   ItemRef item,
 ) =>
-    _invalidateWrites(container.invalidate, item);
+    unawaited(container
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.watchedChanged(item.sourceId)));
 
-void _invalidateWrites(
-  void Function(ProviderOrFamily provider) invalidate,
-  ItemRef item,
-) {
-  invalidate(sourceItemProvider(item));
-  invalidate(sourceChildrenProvider);
-  invalidate(sourceLibraryPreviewProvider);
-  invalidate(libraryBrowseProvider);
-  invalidate(sourceContinueWatchingProvider(item.sourceId));
-  invalidate(sourceHubsProvider(item.sourceId));
-}
+/// [item] was dismissed from Continue Watching; only the rail and the hubs
+/// change.
+void invalidateSourceContinueWatchingWrites(WidgetRef ref, ItemRef item) =>
+    unawaited(ref
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.continueWatchingRemoved(item.sourceId)));

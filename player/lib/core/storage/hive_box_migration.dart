@@ -47,6 +47,7 @@ const kMydiaHiveBoxes = <String>[
   'storage_settings',
   'collection_sync',
   'source_accounts',
+  'source_cache',
 ];
 
 /// Moves each of [boxes] from [from] to [to], best-effort.

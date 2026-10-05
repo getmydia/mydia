@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../connection/connection_provider.dart';
 import '../graphql/watch/fetch_log.dart';
 import '../navigation/sidebar_layout_store.dart';
+import '../sources/cache/source_cache.dart';
 import 'startup_lock.dart';
 import 'startup_timeline.dart';
 
@@ -16,6 +17,7 @@ class StartupSteps {
     required this.inputCapabilities,
     required this.hiveCache,
     required this.fetchLog,
+    required this.sourceCache,
     required this.downloadDb,
     required this.sidebarLayoutStore,
     required this.connection,
@@ -26,6 +28,9 @@ class StartupSteps {
   final Future<void> Function() inputCapabilities;
   final Future<void> Function() hiveCache;
   final Future<FetchLog> Function() fetchLog;
+
+  /// Opens after the fetch log, in the same Hive directory.
+  final Future<SourceCache> Function() sourceCache;
 
   /// Null where downloads are unsupported.
   final Future<void> Function()? downloadDb;
@@ -40,11 +45,13 @@ sealed class StartupOutcome {
 final class StartupReady extends StartupOutcome {
   const StartupReady({
     required this.fetchLog,
+    required this.sourceCache,
     required this.sidebarLayoutStore,
     required this.initialConnection,
   });
 
   final FetchLog fetchLog;
+  final SourceCache sourceCache;
   final SidebarLayoutStore sidebarLayoutStore;
   final ConnectionState? initialConnection;
 }
@@ -114,9 +121,12 @@ Future<StartupOutcome> runStartup(
   }
 
   FetchLog fetchLog = InMemoryFetchLog();
+  SourceCache sourceCache = InMemorySourceCache();
   Future<void> hiveGroup() async {
     await guarded('GraphQL cache', steps.hiveCache);
     await guarded('Fetch log', () async => fetchLog = await steps.fetchLog());
+    await guarded(
+        'Source cache', () async => sourceCache = await steps.sourceCache());
     timeline.mark('hive');
   }
 
@@ -152,6 +162,7 @@ Future<StartupOutcome> runStartup(
 
   return StartupReady(
     fetchLog: fetchLog,
+    sourceCache: sourceCache,
     sidebarLayoutStore: sidebar,
     initialConnection: connection,
   );
