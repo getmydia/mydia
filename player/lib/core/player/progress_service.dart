@@ -19,7 +19,7 @@ class ProgressService implements ProgressReporter {
   DateTime? _lastSyncTime;
 
   static const _syncInterval = Duration(seconds: 10);
-  static const _watchedThreshold = 0.90; // 90% completion
+  static const watchedThreshold = 0.90; // 90% completion
 
   /// The mapping from media_kit's stream-local positions onto real media
   /// positions. Set by the player screen once the streaming session is known;
@@ -324,7 +324,7 @@ class ProgressService implements ProgressReporter {
     final seconds = timeline.resolveDuration(playerDuration).inSeconds;
     if (seconds <= 0) return false;
 
-    return (timeline.toReal(position).inSeconds / seconds) >= _watchedThreshold;
+    return (timeline.toReal(position).inSeconds / seconds) >= watchedThreshold;
   }
 
   /// Disposes the service and cancels any active timers.

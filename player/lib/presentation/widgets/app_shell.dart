@@ -367,6 +367,7 @@ class _AppShellState extends ConsumerState<AppShell>
     // so watching it once here is enough for the underlying provider —
     // not autoDispose — to keep listening for the rest of the session.
     ref.watch(progressFlushProvider);
+    ref.watch(sourceProgressFlushProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey

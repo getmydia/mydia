@@ -3561,6 +3561,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // writes straight to the server, which is reachable by definition.
     final store = _progressStore;
     final progressService = _progressService;
+    final item = homeMydiaRef(
+        mediaType == 'episode' ? ItemKind.episode : ItemKind.movie, mediaId);
     if (_isDownloadedSource && store != null) {
       final position = player.state.position;
       final duration = _totalDuration ?? player.state.duration;
@@ -3575,7 +3577,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         await saveDownloadedProgress(
           store: store,
           progressService: progressService,
-          mediaId: mediaId,
+          item: item,
           mediaType: mediaType,
           position: position,
           duration: duration,
@@ -3586,7 +3588,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
       await recordLocalProgress(
         store: store,
-        mediaId: mediaId,
+        item: item,
         mediaType: mediaType,
         position: position,
         duration: duration,

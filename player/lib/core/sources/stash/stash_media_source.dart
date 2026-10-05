@@ -23,7 +23,8 @@ class StashMediaSource extends MediaSource
         Searchable,
         ContinueWatching,
         RecentlyAdded,
-        Downloadable {
+        Downloadable,
+        ProgressSync {
   StashMediaSource({
     required this.source,
     required this.client,
@@ -43,7 +44,25 @@ class StashMediaSource extends MediaSource
         SourceCapability.continueWatching,
         SourceCapability.recentlyAdded,
         SourceCapability.downloadable,
+        SourceCapability.progressSync,
       };
+
+  /// `query` throws on a transport failure, a non-2xx answer and a GraphQL
+  /// `errors` body, so a refused push leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    await client.query(stashSaveActivity, {
+      'id': ref.externalId,
+      'resume_time': positionSeconds.toDouble(),
+      'playDuration': 0.0,
+    });
+    if (watched) await client.query(stashAddPlay, {'id': ref.externalId});
+  }
 
   @override
   SourceConnectionStatus get connection => client.connection.status.value;

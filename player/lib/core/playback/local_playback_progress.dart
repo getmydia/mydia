@@ -1,3 +1,12 @@
+import '../../domain/sources/item.dart';
+import '../sources/source.dart';
+
+/// Where a position is stored. Home Mydia keeps the bare id it always had,
+/// so positions recorded before this change are still found.
+String progressKey(ItemRef item) => item.sourceId == SourceId.legacyMydia
+    ? item.externalId
+    : '${item.sourceId.value}|${item.externalId}';
+
 /// One item's playback position as this device knows it.
 ///
 /// Written for downloaded media only. Streaming playback still writes
@@ -6,6 +15,10 @@
 /// Serialized as a plain map rather than a generated Hive adapter, matching
 /// `HiveCastSessionStore`: no build_runner step, and no type id to claim.
 class LocalPlaybackProgress {
+  /// The source this position belongs to. Records written before third-party
+  /// downloads are home Mydia's.
+  final String sourceId;
+
   final String mediaId;
 
   /// 'movie' or 'episode'. Decides which sync mutation the flush uses.
@@ -23,6 +36,7 @@ class LocalPlaybackProgress {
   final DateTime? syncedAt;
 
   const LocalPlaybackProgress({
+    this.sourceId = 'mydia',
     required this.mediaId,
     required this.mediaType,
     required this.positionSeconds,
@@ -33,7 +47,15 @@ class LocalPlaybackProgress {
 
   bool get isSynced => syncedAt != null;
 
+  /// The store key. The kind is unused by [progressKey].
+  String get key => progressKey(ItemRef(
+        sourceId: SourceId(sourceId),
+        kind: ItemKind.movie,
+        externalId: mediaId,
+      ));
+
   LocalPlaybackProgress copyWith({DateTime? syncedAt}) => LocalPlaybackProgress(
+        sourceId: sourceId,
         mediaId: mediaId,
         mediaType: mediaType,
         positionSeconds: positionSeconds,
@@ -43,6 +65,7 @@ class LocalPlaybackProgress {
       );
 
   Map<String, dynamic> toMap() => {
+        'sourceId': sourceId,
         'mediaId': mediaId,
         'mediaType': mediaType,
         'positionSeconds': positionSeconds,
@@ -54,6 +77,7 @@ class LocalPlaybackProgress {
   factory LocalPlaybackProgress.fromMap(Map<dynamic, dynamic> map) {
     final synced = map['syncedAt'] as String?;
     return LocalPlaybackProgress(
+      sourceId: map['sourceId'] as String? ?? 'mydia',
       mediaId: map['mediaId'] as String,
       mediaType: map['mediaType'] as String,
       positionSeconds: map['positionSeconds'] as int,

@@ -27,7 +27,8 @@ class JellyfinMediaSource extends MediaSource
         NextUp,
         RecentlyAdded,
         SkipSegments,
-        Downloadable {
+        Downloadable,
+        ProgressSync {
   JellyfinMediaSource({
     required this.source,
     required this.client,
@@ -55,7 +56,27 @@ class JellyfinMediaSource extends MediaSource
         SourceCapability.recentlyAdded,
         SourceCapability.skipSegments,
         SourceCapability.downloadable,
+        SourceCapability.progressSync,
       };
+
+  /// `send` throws a `SourceException` on a transport failure or any non-2xx
+  /// answer, so a refused push leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    await client.send('POST', '/Sessions/Playing/Stopped', body: {
+      'ItemId': ref.externalId,
+      'PositionTicks': positionSeconds * jellyfinTicksPerSecond,
+    });
+    if (watched) {
+      await client.send('POST', '/UserPlayedItems/${ref.externalId}',
+          query: {'userId': client.userId});
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => client.connection.status.value;

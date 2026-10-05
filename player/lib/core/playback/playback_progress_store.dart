@@ -3,20 +3,27 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../domain/sources/item.dart';
 import '../player/progress_service.dart';
+import '../sources/capabilities.dart';
+import '../sources/source.dart';
 import 'local_playback_progress.dart';
 
 abstract class PlaybackProgressStore {
   Future<void> save(LocalPlaybackProgress progress);
 
+  /// [key] is a [progressKey]: the bare id for home Mydia, `source|id` for
+  /// the rest.
+  ///
   /// Synchronous so the resume decision can read it without an extra await on
   /// a path that is already several awaits deep. Hive keeps an open box in
   /// memory, so there is nothing to wait for.
-  LocalPlaybackProgress? get(String mediaId);
+  LocalPlaybackProgress? get(String key);
 
   List<LocalPlaybackProgress> unsynced();
 
-  Future<void> markSynced(String mediaId, DateTime syncedAt);
+  /// [key] is a [progressKey].
+  Future<void> markSynced(String key, DateTime syncedAt);
 }
 
 /// Hive-backed store over a plain `Box<Map>` with no type adapter, matching
@@ -30,12 +37,12 @@ class HivePlaybackProgressStore implements PlaybackProgressStore {
 
   @override
   Future<void> save(LocalPlaybackProgress progress) async {
-    await _box.put(progress.mediaId, progress.toMap());
+    await _box.put(progress.key, progress.toMap());
   }
 
   @override
-  LocalPlaybackProgress? get(String mediaId) {
-    final raw = _box.get(mediaId);
+  LocalPlaybackProgress? get(String key) {
+    final raw = _box.get(key);
     if (raw == null) return null;
 
     try {
@@ -43,7 +50,7 @@ class HivePlaybackProgressStore implements PlaybackProgressStore {
     } catch (e) {
       // A malformed record must never cost the user their playback.
       debugPrint('[PlaybackProgressStore] Discarding unreadable record: $e');
-      unawaited(_box.delete(mediaId));
+      unawaited(_box.delete(key));
       return null;
     }
   }
@@ -59,8 +66,8 @@ class HivePlaybackProgressStore implements PlaybackProgressStore {
   }
 
   @override
-  Future<void> markSynced(String mediaId, DateTime syncedAt) async {
-    final existing = get(mediaId);
+  Future<void> markSynced(String key, DateTime syncedAt) async {
+    final existing = get(key);
     if (existing == null) return;
     await save(existing.copyWith(syncedAt: syncedAt));
   }
@@ -71,21 +78,21 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
 
   @override
   Future<void> save(LocalPlaybackProgress progress) async {
-    _records[progress.mediaId] = progress;
+    _records[progress.key] = progress;
   }
 
   @override
-  LocalPlaybackProgress? get(String mediaId) => _records[mediaId];
+  LocalPlaybackProgress? get(String key) => _records[key];
 
   @override
   List<LocalPlaybackProgress> unsynced() =>
       _records.values.where((p) => !p.isSynced).toList();
 
   @override
-  Future<void> markSynced(String mediaId, DateTime syncedAt) async {
-    final existing = _records[mediaId];
+  Future<void> markSynced(String key, DateTime syncedAt) async {
+    final existing = _records[key];
     if (existing == null) return;
-    _records[mediaId] = existing.copyWith(syncedAt: syncedAt);
+    _records[key] = existing.copyWith(syncedAt: syncedAt);
   }
 }
 
@@ -136,7 +143,7 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
 /// meaningless, and the server's own progress mutation rejects it.
 Future<void> recordLocalProgress({
   required PlaybackProgressStore store,
-  required String mediaId,
+  required ItemRef item,
   required String mediaType,
   required Duration position,
   required Duration duration,
@@ -147,7 +154,8 @@ Future<void> recordLocalProgress({
 
   try {
     await store.save(LocalPlaybackProgress(
-      mediaId: mediaId,
+      sourceId: item.sourceId.value,
+      mediaId: item.externalId,
       mediaType: mediaType,
       positionSeconds: position.inSeconds,
       durationSeconds: duration.inSeconds,
@@ -182,15 +190,16 @@ Future<void> recordLocalProgress({
 Future<void> saveDownloadedProgress({
   required PlaybackProgressStore store,
   required ProgressService progressService,
-  required String mediaId,
+  required ItemRef item,
   required String mediaType,
   required Duration position,
   required Duration duration,
   required DateTime now,
 }) async {
+  final mediaId = item.externalId;
   await recordLocalProgress(
     store: store,
-    mediaId: mediaId,
+    item: item,
     mediaType: mediaType,
     position: position,
     duration: duration,
@@ -215,7 +224,7 @@ Future<void> saveDownloadedProgress({
   }
 
   try {
-    await store.markSynced(mediaId, now);
+    await store.markSynced(progressKey(item), now);
   } catch (e) {
     // Same policy as `recordLocalProgress`: a store write must never cost the
     // user their playback. The record simply stays queued for a later flush.
@@ -242,7 +251,9 @@ Future<int> flushUnsyncedProgress({
 }) async {
   var synced = 0;
 
-  for (final record in store.unsynced()) {
+  final home =
+      store.unsynced().where((r) => r.sourceId == SourceId.legacyMydia.value);
+  for (final record in home) {
     final position = Duration(seconds: record.positionSeconds);
     final duration = Duration(seconds: record.durationSeconds);
 
@@ -259,7 +270,7 @@ Future<int> flushUnsyncedProgress({
         continue;
       }
 
-      await store.markSynced(record.mediaId, now);
+      await store.markSynced(record.key, now);
       synced++;
     } catch (e) {
       debugPrint(
@@ -267,5 +278,44 @@ Future<int> flushUnsyncedProgress({
     }
   }
 
+  return synced;
+}
+
+/// Hands every source its positions recorded while out of reach. Pushes
+/// unconditionally, as the home flush does: newer-wins is decided at play
+/// time by [pickNewerProgress]. Records of sources that are gone, out of
+/// reach, or refuse the push stay unsynced for the next run.
+Future<int> flushSourceProgress({
+  required PlaybackProgressStore store,
+  required ProgressSync? Function(SourceId id) syncFor,
+  required bool Function(SourceId id) reachable,
+  required DateTime now,
+}) async {
+  var synced = 0;
+  for (final record in store.unsynced()) {
+    if (record.sourceId == SourceId.legacyMydia.value) continue;
+    final id = SourceId(record.sourceId);
+    final sync = syncFor(id);
+    if (sync == null || !reachable(id)) continue;
+    final ref = ItemRef(
+      sourceId: id,
+      kind: record.mediaType == 'episode' ? ItemKind.episode : ItemKind.movie,
+      externalId: record.mediaId,
+    );
+    try {
+      await sync.pushProgress(
+        ref,
+        positionSeconds: record.positionSeconds,
+        durationSeconds: record.durationSeconds,
+        watched: record.durationSeconds > 0 &&
+            record.positionSeconds / record.durationSeconds >=
+                ProgressService.watchedThreshold,
+      );
+      await store.markSynced(record.key, now);
+      synced++;
+    } catch (e) {
+      debugPrint('[PlaybackProgressStore] Deferring ${record.key}: $e');
+    }
+  }
   return synced;
 }

@@ -27,7 +27,8 @@ class PlexMediaSource extends MediaSource
         Similar,
         NextUp,
         SkipSegments,
-        Downloadable {
+        Downloadable,
+        ProgressSync {
   PlexMediaSource({
     required this.source,
     required this.client,
@@ -51,7 +52,32 @@ class PlexMediaSource extends MediaSource
         SourceCapability.nextUp,
         SourceCapability.skipSegments,
         SourceCapability.downloadable,
+        SourceCapability.progressSync,
       };
+
+  /// `ping` throws a `SourceException` on a transport failure or any non-2xx
+  /// answer, so a refused push leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    await client.ping('/:/timeline', {
+      'ratingKey': ref.externalId,
+      'key': '/library/metadata/${ref.externalId}',
+      'state': 'stopped',
+      'time': '${positionSeconds * 1000}',
+      'duration': '${durationSeconds * 1000}',
+    });
+    if (watched) {
+      await client.ping('/:/scrobble', {
+        'identifier': 'com.plexapp.plugins.library',
+        'key': ref.externalId,
+      });
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => client.connection.status.value;

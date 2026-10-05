@@ -15,6 +15,8 @@ import '../../../domain/sources/source_error.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
 import '../../../graphql/mutations/toggle_favorite.graphql.dart';
+import '../../../graphql/mutations/update_episode_progress.graphql.dart';
+import '../../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
 import '../../../graphql/queries/guest_mydia.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
@@ -53,7 +55,8 @@ class MydiaGuestSource extends MediaSource
         NextUp,
         Similar,
         SkipSegments,
-        Downloadable {
+        Downloadable,
+        ProgressSync {
   MydiaGuestSource({
     required this.source,
     required this.client,
@@ -80,7 +83,39 @@ class MydiaGuestSource extends MediaSource
         SourceCapability.nextUp,
         SourceCapability.similar,
         SourceCapability.skipSegments,
+        SourceCapability.progressSync,
       };
+
+  /// `request` throws a `SourceException` on a transport failure, an auth
+  /// failure it cannot refresh past and a GraphQL error, so a refused push
+  /// leaves the local record unsynced.
+  @override
+  Future<void> pushProgress(
+    ItemRef ref, {
+    required int positionSeconds,
+    required int durationSeconds,
+    required bool watched,
+  }) async {
+    final episode = ref.kind == ItemKind.episode;
+    await client.request(
+      episode
+          ? documentNodeMutationUpdateEpisodeProgress
+          : documentNodeMutationUpdateMovieProgress,
+      {
+        episode ? 'episodeId' : 'movieId': ref.externalId,
+        'positionSeconds': positionSeconds,
+        'durationSeconds': durationSeconds,
+      },
+    );
+    if (watched) {
+      await client.request(
+        episode
+            ? documentNodeMutationMarkEpisodeWatched
+            : documentNodeMutationMarkMovieWatched,
+        {episode ? 'episodeId' : 'movieId': ref.externalId},
+      );
+    }
+  }
 
   @override
   SourceConnectionStatus get connection => client.status.value;

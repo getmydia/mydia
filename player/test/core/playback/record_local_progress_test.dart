@@ -5,6 +5,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
+import 'package:player/domain/models/download_request.dart';
+import 'package:player/domain/sources/item.dart';
 
 void main() {
   test('recordLocalProgress writes a well-formed record', () async {
@@ -12,7 +14,7 @@ void main() {
 
     await recordLocalProgress(
       store: store,
-      mediaId: 'movie-1',
+      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: const Duration(seconds: 5400),
@@ -32,7 +34,7 @@ void main() {
 
     await recordLocalProgress(
       store: store,
-      mediaId: 'movie-1',
+      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: Duration.zero,
@@ -48,7 +50,7 @@ void main() {
     // A store write must never fail playback.
     await recordLocalProgress(
       store: ThrowingStore(),
-      mediaId: 'movie-1',
+      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: const Duration(seconds: 5400),
