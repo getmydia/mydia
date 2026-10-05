@@ -123,6 +123,26 @@ void main() {
       expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
     });
 
+    test('removeLockedAccounts drops the removed accounts All servers choices',
+        () async {
+      final store = InMemorySourceStore();
+      await store.putAccount(plexRecord()
+          .copyWith(serverLocks: const {'abc123': SourceLock.locked}));
+      await store.putAccount(_otherAccount());
+      await store.setAllServers({
+        const SourceId('acc1:owner:abc123'): false,
+        const SourceId('acc10:owner:zz'): true,
+        const SourceId('acc2:owner:zz'): false,
+      });
+      final c = _container(store);
+      await c.read(sourceRecordsProvider.future);
+      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+      expect((await store.load()).allServers, {
+        const SourceId('acc10:owner:zz'): true,
+        const SourceId('acc2:owner:zz'): false,
+      });
+    });
+
     test('removeLockedAccounts sees a lock still queued ahead of it', () async {
       final store = InMemorySourceStore();
       await store.putAccount(plexRecord());

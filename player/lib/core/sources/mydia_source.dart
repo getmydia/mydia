@@ -13,6 +13,7 @@ import '../auth/auth_status.dart';
 import '../downloads/download_job_service.dart';
 import 'capabilities.dart';
 import 'media_source.dart';
+import 'mydia/mydia_guest_source.dart';
 import 'mydia/mydia_transcode_job.dart';
 import 'source.dart';
 
@@ -29,7 +30,8 @@ class MydiaSource extends MediaSource implements Downloadable {
 
   /// Only downloads go through this layer so far. Mydia's screens predate it
   /// and consult nothing else here; capabilities are declared as its
-  /// controllers move behind [MediaSource].
+  /// controllers move behind [MediaSource]. Artwork is the one other call
+  /// this stub answers.
   @override
   Set<SourceCapability> get capabilities =>
       const {SourceCapability.downloadable};
@@ -99,7 +101,7 @@ class MydiaSource extends MediaSource implements Downloadable {
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
-      null;
+      absoluteArtworkRequest(id, art, width);
 
   @override
   void dispose() => _status.dispose();

@@ -12,6 +12,7 @@ import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 import 'package:player/presentation/widgets/nav/sidebar_edit_bar.dart';
+import 'package:player/presentation/widgets/nav/sidebar_row.dart';
 
 import '../../screens/sources/fake_media_source.dart';
 
@@ -63,6 +64,28 @@ void main() {
   testWidgets('a source location shows no edit pencil and no edit bar',
       (tester) async {
     await _pump(tester, '/s/${fakeSourceId.value}');
+    expect(find.byTooltip('Edit sidebar'), findsNothing);
+    expect(find.byType(SidebarEditBar), findsNothing);
+  });
+
+  testWidgets('an All servers location shows its own nav, not Mydia\'s',
+      (tester) async {
+    await _pump(tester, '/all/movies');
+    for (final key in ['home', 'movies', 'shows', 'search']) {
+      expect(find.byKey(ValueKey('all-nav-$key')), findsOneWidget);
+    }
+    expect(
+        tester
+            .widget<SidebarRow>(find.byKey(const ValueKey('all-nav-movies')))
+            .isSelected,
+        isTrue);
+    expect(
+        tester
+            .widget<SidebarRow>(find.byKey(const ValueKey('all-nav-home')))
+            .isSelected,
+        isFalse);
+    expect(find.text('Calendar'), findsNothing);
+    expect(find.text('+ New filter'), findsNothing);
     expect(find.byTooltip('Edit sidebar'), findsNothing);
     expect(find.byType(SidebarEditBar), findsNothing);
   });

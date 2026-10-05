@@ -36,8 +36,12 @@ import 'mydia_guest_mapping.dart';
 import 'mydia_transcode_job.dart';
 
 const _sorts = [
-  SortOption(id: 'TITLE', label: 'Title'),
-  SortOption(id: 'ADDED_AT', label: 'Date added', descendingByDefault: true),
+  SortOption(id: 'TITLE', label: 'Title', shared: SharedSort.title),
+  SortOption(
+      id: 'ADDED_AT',
+      label: 'Date added',
+      descendingByDefault: true,
+      shared: SharedSort.added),
   SortOption(id: 'YEAR', label: 'Year', descendingByDefault: true),
 ];
 
@@ -46,11 +50,28 @@ const _showsLibrary = 'shows';
 const _searchLimit = 40;
 const _rowLimit = 20;
 
+/// Mydia sends artwork as absolute URLs that need no credentials.
+ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
+  final uri = Uri.tryParse(art.path);
+  if (uri == null ||
+      !(uri.scheme == 'http' || uri.scheme == 'https') ||
+      uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) {
+    return null;
+  }
+  return ArtworkRequest(
+    url: art.path,
+    headers: const {},
+    cacheKey: '${id.value}|${art.path}|$width',
+  );
+}
+
 class MydiaGuestSource extends MediaSource
     implements
         WatchedState,
         Searchable,
         ContinueWatching,
+        RecentlyAdded,
         Favorites,
         NextUp,
         Similar,
@@ -79,6 +100,7 @@ class MydiaGuestSource extends MediaSource
         SourceCapability.watchedState,
         SourceCapability.searchable,
         SourceCapability.continueWatching,
+        SourceCapability.recentlyAdded,
         SourceCapability.favorites,
         SourceCapability.nextUp,
         SourceCapability.similar,
@@ -267,19 +289,8 @@ class MydiaGuestSource extends MediaSource
   }
 
   @override
-  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async {
-    final uri = Uri.tryParse(art.path);
-    if (uri == null ||
-        !(uri.scheme == 'http' || uri.scheme == 'https') ||
-        uri.host.isEmpty) {
-      return null;
-    }
-    return ArtworkRequest(
-      url: art.path,
-      headers: const {},
-      cacheKey: '${id.value}|${art.path}|$width',
-    );
-  }
+  Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
+      absoluteArtworkRequest(id, art, width);
 
   @override
   Future<void> setWatched(ItemRef ref, bool watched) async {
@@ -407,6 +418,15 @@ class MydiaGuestSource extends MediaSource
       headers: {'Authorization': 'Bearer ${credentials.accessToken}'},
       extension: 'mp4',
     );
+  }
+
+  @override
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final data =
+        await _q(documentNodeQueryGuestRecentlyAdded, {'first': _rowLimit});
+    return [
+      for (final r in _maps(data['recentlyAdded'])) recentlyAddedSummary(id, r),
+    ].whereType<ItemSummary>().take(_rowLimit).toList();
   }
 
   @override

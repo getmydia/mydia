@@ -17,6 +17,8 @@ import 'package:player/presentation/screens/sources/manage_sources_screen.dart';
 import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord;
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
+import '../../../core/sources/stash/stash_media_source_test.dart'
+    show stashRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -251,6 +253,54 @@ void main() {
     final store = await _removeGuest(tester, storage, p2p);
     expect(p2p.unwatched, isEmpty);
     expect((await store.load()).accounts, isEmpty);
+  });
+
+  testWidgets('each server has an All servers switch, Stash off by default',
+      (tester) async {
+    final store = InMemorySourceStore();
+    await store.putAccount(plexRecord());
+    await store.putAccount(stashRecord);
+    final plexId = plexRecord().sources.single.id.value;
+    final stashId = stashRecord.sources.single.id.value;
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Authenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: const MaterialApp(
+          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+    ));
+    await tester.pumpAndSettle();
+    final plexSwitch = find.byKey(ValueKey('manage-all-servers-$plexId'));
+    final stashSwitch = find.byKey(ValueKey('manage-all-servers-$stashId'));
+    await tester.ensureVisible(stashSwitch);
+    expect(tester.widget<SwitchListTile>(plexSwitch).value, isTrue);
+    expect(tester.widget<SwitchListTile>(stashSwitch).value, isFalse);
+
+    await tester.tap(stashSwitch);
+    await tester.pumpAndSettle();
+    expect((await store.load()).allServers[SourceId(stashId)], isTrue);
+    expect(tester.widget<SwitchListTile>(stashSwitch).value, isTrue);
+  });
+
+  testWidgets('home Mydia has its own switch when signed in', (tester) async {
+    final store = InMemorySourceStore();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        authStateProvider.overrideWith(_Authenticated.new),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider
+            .overrideWithValue(SourceSecrets(MockAuthStorage())),
+      ],
+      child: const MaterialApp(
+          builder: toastLayerBuilder, home: ManageSourcesScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('manage-all-servers-mydia')), findsOneWidget);
+    expect(find.text('No servers yet.'), findsNothing);
   });
 
   testWidgets('removing a guest whose secret cannot be read still removes it',

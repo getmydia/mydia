@@ -27,6 +27,9 @@ List<Map<String, dynamic>> _list(Object? value) => [
 ArtworkRef? _art(Object? url) =>
     url is String && url.isNotEmpty ? ArtworkRef(url) : null;
 
+DateTime? _instant(Object? value) =>
+    value is String ? DateTime.tryParse(value)?.toUtc() : null;
+
 int? _minutes(Object? runtime) => runtime is int ? runtime * 60 : null;
 
 UserState _progress(Object? progress, {bool? watched}) {
@@ -87,6 +90,8 @@ ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
     userState: _progress(m['progress']),
     overview: m['overview'] as String?,
     defaultVersionId: _firstFileId(m['files']),
+    addedAt: _instant(m['addedAt']),
+    lastPlayedAt: _instant(_map(m['progress'])['lastWatchedAt']),
   );
 }
 
@@ -102,6 +107,7 @@ ItemSummary showSummary(SourceId sid, Map<String, dynamic> s) {
         UserState(watched: _map(s['watchStatus'])['watched'] as bool? ?? false),
     childCount: s['seasonCount'] as int?,
     overview: s['overview'] as String?,
+    addedAt: _instant(s['addedAt']),
   );
 }
 
@@ -140,6 +146,7 @@ ItemSummary episodeSummary(
       overview: e['overview'] as String?,
       airDate: e['airDate'] as String?,
       defaultVersionId: _firstFileId(e['files']),
+      lastPlayedAt: _instant(_map(e['progress'])['lastWatchedAt']),
     );
 
 ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
@@ -161,6 +168,7 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     index: c['episodeNumber'] as int?,
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
+    lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
   );
 }
 
@@ -178,6 +186,19 @@ ItemSummary? searchResultSummary(SourceId sid, Map<String, dynamic> r) {
     year: r['year'] as int?,
     poster: _art(artwork['posterUrl']),
     backdrop: _art(artwork['backdropUrl']),
+  );
+}
+
+ItemSummary? recentlyAddedSummary(SourceId sid, Map<String, dynamic> r) {
+  final base = searchResultSummary(sid, r);
+  if (base == null) return null;
+  return ItemSummary(
+    ref: base.ref,
+    title: base.title,
+    year: base.year,
+    poster: base.poster,
+    backdrop: base.backdrop,
+    addedAt: _instant(r['addedAt']),
   );
 }
 

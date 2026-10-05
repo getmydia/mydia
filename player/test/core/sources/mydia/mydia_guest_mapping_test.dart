@@ -15,6 +15,39 @@ void main() {
     expect(parseSeasonExternalId('m-1'), isNull);
   });
 
+  test('a movie carries added and last played', () {
+    final m = movieSummary(s, {
+      ...fx.movie('m-1'),
+      'addedAt': '2024-03-01T10:00:00Z',
+      'progress': {
+        'positionSeconds': 60,
+        'watched': false,
+        'lastWatchedAt': '2024-04-02T21:30:00Z',
+      },
+    });
+    expect(m.addedAt, DateTime.utc(2024, 3, 1, 10));
+    expect(m.lastPlayedAt, DateTime.utc(2024, 4, 2, 21, 30));
+    expect(m.sortTitle, isNull);
+  });
+
+  test('a recently added entry maps movies and shows, skips the rest', () {
+    final movie = recentlyAddedSummary(
+        s, fx.recentlyAdded('m-9', addedAt: '2024-05-02T00:00:00Z'))!;
+    expect(movie.ref.kind, ItemKind.movie);
+    expect(movie.addedAt, DateTime.utc(2024, 5, 2));
+    final show = recentlyAddedSummary(
+        s,
+        fx.recentlyAdded('s-9',
+            type: 'TV_SHOW', addedAt: '2024-05-01T00:00:00Z'))!;
+    expect(show.ref.kind, ItemKind.show);
+    expect(
+        recentlyAddedSummary(
+            s,
+            fx.recentlyAdded('x',
+                type: 'EPISODE', addedAt: '2024-05-01T00:00:00Z')),
+        isNull);
+  });
+
   test('a movie maps its summary, resume point and artwork', () {
     final m = movieSummary(s, fx.movie('m-1', position: 300));
     expect(m.ref,

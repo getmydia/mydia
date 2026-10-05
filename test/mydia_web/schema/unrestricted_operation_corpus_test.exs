@@ -62,6 +62,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
         "sort" => %{"field" => "TITLE", "direction" => "ASC"}
       },
       "GuestContinueWatching" => %{"first" => 10},
+      "GuestRecentlyAdded" => %{"first" => 10},
       "SeasonEpisodes" => %{"showId" => s.show.id, "seasonNumber" => 1},
       "MovieDetail" => %{"id" => s.movie.id},
       "MovieMediaInfo" => %{"id" => s.movie.id},
