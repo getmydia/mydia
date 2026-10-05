@@ -186,6 +186,18 @@ void main() {
     );
   });
 
+  test('a false sceneSaveActivity is not a confirmed save', () async {
+    final b = build();
+    const ref = ItemRef(sourceId: sid, kind: ItemKind.video, externalId: '2');
+    final sync = b.source.as<ProgressSync>()!;
+    b.server.saveActivityAnswer = false;
+    await expectLater(
+      sync.pushProgress(ref,
+          positionSeconds: 30, durationSeconds: 100, watched: false),
+      throwsA(isA<SourceException>()),
+    );
+  });
+
   test('a schema without a field is unsupported, not a crash', () async {
     final b = build();
     b.server.graphqlError =

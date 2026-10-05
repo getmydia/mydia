@@ -20,6 +20,9 @@ class FakeStashServer {
   /// proxy that swallowed the call.
   bool emptyMutationAnswers = false;
 
+  /// What `sceneSaveActivity` (a Boolean) answers.
+  bool saveActivityAnswer = true;
+
   static Map<String, dynamic> scene(int n,
           {int plays = 0, double resume = 0}) =>
       {
@@ -147,7 +150,7 @@ class FakeStashServer {
       case 'SaveActivity':
         if (emptyMutationAnswers) return _json({});
         return _json({
-          'data': {'sceneSaveActivity': true}
+          'data': {'sceneSaveActivity': saveActivityAnswer}
         });
       case 'AddPlay':
         if (emptyMutationAnswers) return _json({});

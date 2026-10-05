@@ -70,8 +70,11 @@ class StashMediaSource extends MediaSource
 
   /// `query` answers `{}` for a 2xx with no `data`, which is not a result: the
   /// mutation may never have run, and the record must stay unsynced.
+  /// `sceneSaveActivity` is a Boolean, so `false` is Stash declining the save;
+  /// `sceneAddPlay` answers an object, which only has to be present.
   static void _requireResult(Map<String, dynamic> data, String key) {
-    if (data[key] == null) {
+    final result = data[key];
+    if (result == null || result == false) {
       throw const SourceException.server(
           'Stash did not confirm the saved progress.');
     }
