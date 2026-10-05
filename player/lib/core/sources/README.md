@@ -169,6 +169,40 @@ on an error status. `StashClient.query` passes `{400, 422}`, because Stash
 (gqlgen) answers GraphQL validation errors with those statuses and the
 client needs the error body.
 
+## Caching
+
+Every leaf provider in `source_browse_providers.dart` and
+`sourceSimilarProvider` is a `SourceWatcher` (`cache/`). It shows the last
+answer while the fetch log still has a time for its key, always fetches,
+and stores what comes back as JSON in the `source_cache` Hive box. Keys
+are ordinary `QueryKey`s named `<sourceId>/<op>` (`SourceKeys`), so the
+fetch log, `FreshnessHeader`, `WatcherRegistry` and `Invalidator` that
+Mydia's own screens use serve sources too, and the resume sweep covers
+both.
+
+Writes invalidate through `SourceRules`, one family per operation on the
+written item's source: live watchers refetch, the rest lose their
+fetch-log entry and mount cold. With no fetch-log time but a stored entry,
+a failed fetch still shows the entry with the failed-refresh banner. A
+refetch that arrives while a fetch is in flight queues exactly one
+follow-up fetch rather than joining it, so a write mid-fetch cannot leave
+pre-write data stamped as fresh.
+
+Only a library's first page is stored. Once the viewer pages, that
+library's watcher declines automatic refetches and ignores page-1 answers.
+A failed page-2 load clears the paging flag, so page 1 can refresh again.
+
+The source detail notifiers ignore an error from a provider that was
+disposed or rebuilt mid-load, but only when the build itself is stale
+(`_awaitWhileCurrent` in `source_detail_controllers.dart`).
+
+Changing any model's `toJson` shape means bumping
+`SourceCache.schemaVersion`; old entries then read as absent. Entries
+older than 30 days go when the box opens, and removing an account (or
+Forgot PIN) deletes its entries. That delete is best-effort: a failed one
+is logged and does not stop the removal. Locked and hidden servers are
+cached like any other; the router's lock gate is what hides them.
+
 ## Credentials stay out of URLs
 
 Plex tokens travel as `X-Plex-Token`, Stash keys as `ApiKey`, both as
