@@ -161,6 +161,22 @@ iOS blurs the window when it resigns active. While a locked source plays,
 MPRIS and the macOS Dock now-playing menu show "Mydia" with no title or
 artwork.
 
+## Cast
+
+Plex, Jellyfin and Stash items cast to Chromecast and DLNA, not to Mydia
+player targets. `SessionSourceCastBinding` builds the receiver's route from
+the item's playback session in receiver mode: H.264/AAC
+(`receiverDeviceProfile`), and the credential in the query (`X-Plex-Token`,
+`api_key`, `apikey`), because a receiver cannot send headers. Local playback
+never does this. The TV fetches from the source's current connection, so a
+server this device reaches only over a VPN cannot be cast from.
+
+Chromecast gets HLS (copy for H.264, otherwise a transcode, and a transcode
+after one rejected load) and DLNA the direct file. Subtitles: Jellyfin and
+Stash serve WebVTT sidecars; Plex burns the chosen track in after selecting
+it on the part, so changing it restarts the stream. Progress goes to the
+source's own reporter from the receiver's position.
+
 ## HTTP and errors
 
 `SourceHttp` turns non-2xx answers into typed source errors. It has an
@@ -186,9 +202,10 @@ Plex, Stash and Jellyfin share `SourcePlaybackSession` (data from the
 neutral item detail) and `SimplePlaybackTransport` (no readiness probe: all
 serve a complete HLS playlist). Jellyfin asks the server first
 (`PlaybackInfo`, with a device profile built from the same codec list Plex
-uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what only Mydia does
-(downloads, cast, library refresh, its connection's link path); the
-screen checks before using any of them.
+uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what a session
+supports: downloads, library refresh and the connection's link path are
+Mydia's; cast is Mydia's, Plex's, Jellyfin's and Stash's. The screen checks
+before using any of them.
 
 Source episodes get Up Next. `SourcePlaybackSession.seasonEpisodes` walks
 show, season, episodes, and plays each entry's `defaultVersionId`.
