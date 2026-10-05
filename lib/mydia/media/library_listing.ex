@@ -60,7 +60,8 @@ defmodule Mydia.Media.LibraryListing do
           has_more?: boolean(),
           visible_ids: MapSet.t(binary()),
           empty?: boolean(),
-          total_size: non_neg_integer()
+          total_size: non_neg_integer(),
+          description_match_start_id: binary() | nil
         }
 
   @doc """
@@ -72,6 +73,12 @@ defmodule Mydia.Media.LibraryListing do
   `total_size` is the bytes on disk across every matching row, not only the
   page, so a filtered listing can report what the filter actually costs.
 
+  While searching, rows whose title, original title or year match come first
+  and rows that match only through their overview follow, each group in
+  `:sort_by` order. `description_match_start_id` is the id of the first
+  overview-only row across the whole result, not only the page, or nil when
+  there is none, so the caller can mark where that group starts.
+
   Filter options go to `Mydia.Media.media_items_query/2`, along with the
   scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
   `:monitored`, `:library_path_id`. Applied in memory: `:search`, `:quality`,
@@ -82,22 +89,31 @@ defmodule Mydia.Media.LibraryListing do
     user_id = Keyword.fetch!(opts, :user_id)
     limit = Keyword.fetch!(opts, :limit)
     offset = Keyword.get(opts, :offset, 0)
+    query = Keyword.get(opts, :search) || ""
 
-    rows =
+    {title_rows, description_rows} =
       scope
       |> Media.media_items_query(Keyword.take(opts, @filter_keys))
       |> build_rows()
-      |> search(Keyword.get(opts, :search) || "")
       |> filter_quality(Keyword.get(opts, :quality))
       |> filter_progress(Keyword.get(opts, :progress))
-      |> sort(Keyword.get(opts, :sort_by))
+      |> search(query)
+
+    # Sorted after the search so a sort that queries per row (added_*) only
+    # sees the matches, not the whole filtered library.
+    sort_by = Keyword.get(opts, :sort_by)
+    title_rows = sort(title_rows, sort_by)
+    description_rows = sort(description_rows, sort_by)
+
+    rows = title_rows ++ description_rows
 
     %{
       rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
       has_more?: length(rows) > offset + limit,
       visible_ids: MapSet.new(rows, & &1.id),
       empty?: rows == [],
-      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum()
+      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum(),
+      description_match_start_id: description_rows |> List.first() |> row_id()
     }
   end
 
@@ -310,17 +326,34 @@ defmodule Mydia.Media.LibraryListing do
     end)
   end
 
-  defp search(rows, ""), do: rows
+  # Splits the rows into those whose title, original title or year match and
+  # those that match only through their overview, dropping the rest. Each row
+  # is classified once. The caller sorts each group, so this runs before the
+  # sort and keeps the sort's per-row work to the matches.
+  defp search(rows, ""), do: {rows, []}
 
   defp search(rows, query) do
     query = String.downcase(query)
 
-    Enum.filter(rows, fn %LibraryRow{item: item} ->
-      contains?(item.title, query) or contains?(item.original_title, query) or
-        contains?(item.year && to_string(item.year), query) or
-        contains?(overview(item.metadata), query)
-    end)
+    {title, description} =
+      Enum.reduce(rows, {[], []}, fn %LibraryRow{item: item} = row, {title, description} ->
+        cond do
+          title_match?(item, query) -> {[row | title], description}
+          contains?(overview(item.metadata), query) -> {title, [row | description]}
+          true -> {title, description}
+        end
+      end)
+
+    {Enum.reverse(title), Enum.reverse(description)}
   end
+
+  defp title_match?(item, query) do
+    contains?(item.title, query) or contains?(item.original_title, query) or
+      contains?(item.year && to_string(item.year), query)
+  end
+
+  defp row_id(nil), do: nil
+  defp row_id(%LibraryRow{id: id}), do: id
 
   defp contains?(nil, _query), do: false
   defp contains?(text, query), do: String.contains?(String.downcase(text), query)

@@ -422,9 +422,22 @@
       <div
         :for={{id, row} <- @streams.media_items}
         id={id}
-        class={@view_mode == :list && "contents"}
+        class={(@view_mode == :list or row.id == @description_match_start_id) && "contents"}
       >
         <% item = row.item %>
+        <%!-- Overview-only search matches follow this line. In grid view the
+             wrapper is `contents` so the divider spans every column and the
+             card below it stays an ordinary grid cell. --%>
+        <div
+          :if={row.id == @description_match_start_id}
+          id="search-description-divider"
+          class={[
+            "divider text-sm text-base-content/60 col-span-full",
+            @view_mode == :list && "px-4 my-2"
+          ]}
+        >
+          Matched in description
+        </div>
         <%= if @view_mode == :grid do %>
           <%!-- Grid Card View --%>
           <div

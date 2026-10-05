@@ -1352,6 +1352,91 @@ defmodule MydiaWeb.MediaLive.IndexTest do
       %{conn: log_in_user(conn, admin_user_fixture())}
     end
 
+    test "a search marks where description-only matches start", %{conn: conn} do
+      media_item_fixture(%{title: "Kestrel Point", type: "movie"})
+
+      overview_match =
+        media_item_fixture(%{
+          title: "Amber Quarry",
+          type: "movie",
+          metadata: %{"overview" => "A kestrel nests in the cliffs"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+      refute has_element?(view, "#search-description-divider")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "kestrel"})
+
+      assert has_element?(view, "#search-description-divider", "Matched in description")
+
+      assert has_element?(
+               view,
+               "#media-items > [id$='#{overview_match.id}'] #search-description-divider"
+             )
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => ""})
+
+      refute has_element?(view, "#search-description-divider")
+    end
+
+    test "the divider survives refreshing the card below it", %{conn: conn} do
+      media_item_fixture(%{title: "Slate Heron", type: "movie"})
+
+      overview_match =
+        media_item_fixture(%{
+          title: "Copper Basin",
+          type: "movie",
+          monitored: true,
+          metadata: %{"overview" => "A heron hunts at dawn"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "heron"})
+
+      assert has_element?(view, "#search-description-divider")
+
+      view
+      |> element("#grid-item-#{overview_match.id} button[phx-click='toggle_item_monitored']")
+      |> render_click()
+
+      assert has_element?(view, "#search-description-divider")
+    end
+
+    test "list view shows the divider too", %{conn: conn} do
+      media_item_fixture(%{title: "Wren Hollow", type: "movie"})
+
+      overview_match =
+        media_item_fixture(%{
+          title: "Basalt Steps",
+          type: "movie",
+          metadata: %{"overview" => "A wren sings"}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/movies")
+
+      view
+      |> element("button[aria-label='List']")
+      |> render_click()
+
+      view
+      |> element("#library-search-form")
+      |> render_change(%{"search" => "wren"})
+
+      assert has_element?(view, "#search-description-divider", "Matched in description")
+
+      assert has_element?(
+               view,
+               "#media-items > [id$='#{overview_match.id}'] #search-description-divider"
+             )
+    end
+
     test "toggling monitored rebuilds the card from a fresh row", %{conn: conn} do
       movie = media_item_fixture(%{title: "Ember Causeway", type: "movie", monitored: true})
       media_file_fixture(%{media_item_id: movie.id, resolution: "2160p"})
