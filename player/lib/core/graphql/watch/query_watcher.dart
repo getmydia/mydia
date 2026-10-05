@@ -10,6 +10,7 @@ import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:gql/ast.dart' show DocumentNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import 'cache_watcher.dart';
 import 'fetch_log.dart';
 import 'freshness.dart';
 import 'query_key.dart';
@@ -40,7 +41,7 @@ FetchPolicy selectFetchPolicy({
 ///
 /// It exists so eleven controllers do not each hand-roll stream teardown and
 /// refetch-safety guards.
-class QueryWatcher<T> {
+class QueryWatcher<T> implements CacheWatcher {
   QueryWatcher({
     required this.key,
     required Future<GraphQLClient> client,
@@ -60,6 +61,7 @@ class QueryWatcher<T> {
     _started = _start();
   }
 
+  @override
   final QueryKey key;
   final FetchLog fetchLog;
   final DocumentNode document;
@@ -397,6 +399,7 @@ class QueryWatcher<T> {
   /// `Invalidator` must treat a `false` return as "this key was not
   /// refreshed" and fall back accordingly, so the screen does not stay
   /// silently stale forever.
+  @override
   Future<bool> refetchAutomatically() async {
     final allowed = canRefetch == null || canRefetch!();
     if (!allowed) return false;

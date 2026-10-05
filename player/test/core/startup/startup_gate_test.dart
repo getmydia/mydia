@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/startup/startup_gate.dart';
 import 'package:player/core/startup/startup_init.dart';
 
@@ -21,6 +22,7 @@ void main() {
 
     startup.complete(StartupReady(
       fetchLog: InMemoryFetchLog(),
+      sourceCache: InMemorySourceCache(),
       sidebarLayoutStore: InMemorySidebarLayoutStore(),
       initialConnection: null,
     ));

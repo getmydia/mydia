@@ -147,5 +147,5 @@ Future<void> _remove(BuildContext context, WidgetRef ref, ItemRef item) async {
     return;
   }
   if (!context.mounted) return;
-  invalidateSourceItemWrites(ref, item);
+  invalidateSourceContinueWatchingWrites(ref, item);
 }

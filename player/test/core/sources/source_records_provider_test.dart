@@ -6,6 +6,8 @@ import 'package:player/core/downloads/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -41,11 +43,14 @@ void main() {
   late InMemorySourceStore store;
   late MockAuthStorage storage;
   late ProviderContainer container;
+  late InMemorySourceCache cache;
 
   setUp(() {
     store = InMemorySourceStore();
     storage = MockAuthStorage();
+    cache = InMemorySourceCache();
     container = ProviderContainer(overrides: [
+      sourceCacheProvider.overrideWithValue(cache),
       authStateProvider.overrideWith(_Unauthenticated.new),
       noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
@@ -60,6 +65,15 @@ void main() {
     expect(container.read(thirdPartySourcesProvider).single.id,
         const SourceId('acc1:owner:abc123'));
     expect(container.read(sourcesLoadingProvider), isFalse);
+  });
+
+  test('removing an account deletes its cached data', () async {
+    await store.putAccount(plexRecord());
+    final key = QueryKey('acc1:owner:abc123/hubs');
+    await cache.write(key, const [], DateTime.now());
+    await container.read(sourceRecordsProvider.future);
+    await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect(cache.read(key), isNull);
   });
 
   test('adding an account shows up without a reload', () async {

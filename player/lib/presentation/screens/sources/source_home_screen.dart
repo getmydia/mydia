@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../widgets/freshness_header.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
 import 'source_drawer_button.dart';
@@ -41,22 +43,33 @@ class SourceHomeScreen extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: switch (libraries) {
-          AsyncData(:final value) => RefreshIndicator(
-              onRefresh: () => _refresh(ref),
-              child: ListView(
-                key: const Key('source-home-list'),
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding:
-                    EdgeInsets.fromLTRB(0, 16, 0, DockInsets.bottomOf(context)),
-                children: [
-                  _Header(
-                      title: source?.displayName ?? 'Server',
-                      sourceId: sourceId,
-                      searchable: source?.as<Searchable>() != null),
-                  SourceContinueWatchingRow(sourceId: sourceId),
-                  _Rows(sourceId: sourceId, libraries: value),
-                ],
-              ),
+          AsyncData(:final value) => Column(
+              children: [
+                FreshnessHeader(queryKeys: [
+                  SourceKeys.libraries(sourceId),
+                  SourceKeys.continueWatching(sourceId),
+                  SourceKeys.hubs(sourceId),
+                ]),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () => _refresh(ref),
+                    child: ListView(
+                      key: const Key('source-home-list'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                          0, 16, 0, DockInsets.bottomOf(context)),
+                      children: [
+                        _Header(
+                            title: source?.displayName ?? 'Server',
+                            sourceId: sourceId,
+                            searchable: source?.as<Searchable>() != null),
+                        SourceContinueWatchingRow(sourceId: sourceId),
+                        _Rows(sourceId: sourceId, libraries: value),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           AsyncError(:final error) => Column(
               children: [

@@ -7,8 +7,15 @@
 /// player/docs/riverpod.md). State is only restored when `ref.mounted`.
 library;
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/sources/cache/create_source_watcher.dart';
+import '../../../core/sources/cache/source_codecs.dart';
+import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
@@ -27,6 +34,25 @@ MediaSource _source(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
 
+/// Awaits [load] for a build that owns [buildRef] (captured before the first
+/// await: `ref` itself always points at the current build). A stream-backed
+/// provider disposed or rebuilt while loading completes its future with a
+/// StateError; once [buildRef] is stale that error belongs to nobody, so it
+/// becomes null. While the build is current every error still surfaces.
+Future<T?> _awaitWhileCurrent<T>(
+    Ref buildRef, Future<T> Function() load) async {
+  try {
+    return await load();
+  } catch (_) {
+    if (!buildRef.mounted) return null;
+    rethrow;
+  }
+}
+
+/// What a Future-returning build throws once it is stale: Riverpod discards
+/// the result of a build that was replaced, so nobody sees it.
+StateError _staleBuild() => StateError('the build was replaced while loading');
+
 /// The capability [T] of [item]'s source, read without watching so it is safe
 /// at write time. Throws when the source has gone or lacks it.
 T _capability<T extends Object>(Ref ref, ItemRef item) {
@@ -35,25 +61,26 @@ T _capability<T extends Object>(Ref ref, ItemRef item) {
   return source.as<T>() ?? (throw StateError('the source does not support $T'));
 }
 
-/// Everything a finished write should refresh, through the container so it
-/// still works if the notifier was disposed while the write was in flight.
+/// What a finished write should refresh, through the container so it still
+/// works if the notifier was disposed while the write was in flight.
 void Function() _invalidator(Ref ref, ItemRef item) {
   final container = ref.container;
   return () => invalidateSourceDetailWrites(container, item);
 }
 
-/// Progress or watched state of [item] changed, here or in the player: its
-/// own item, its season and show, the detail notifiers built on them, and the
-/// home rows. The item and detail families are dropped whole because the
-/// season and show of [item] are not known without fetching them.
-void invalidateSourceDetailWrites(ProviderContainer container, ItemRef item) {
-  invalidateSourceContainerWrites(container, item);
-  container.invalidate(sourceItemProvider);
-  container.invalidate(sourceMovieProvider);
-  container.invalidate(sourceShowProvider);
-  container.invalidate(sourceSeasonProvider);
-  container.invalidate(sourceEpisodeProvider);
+/// The favorite rule, captured the same way as [_invalidator].
+void Function() _favoriteInvalidator(Ref ref, ItemRef item) {
+  final container = ref.container;
+  return () => unawaited(container
+      .read(invalidatorProvider)
+      .invalidate(SourceRules.favoriteChanged(item.sourceId)));
 }
+
+/// Progress or watched state of [item] changed, here or in the player. The
+/// detail notifiers are built on the item and children watchers, which the
+/// rule refetches, so they follow on their own.
+void invalidateSourceDetailWrites(ProviderContainer container, ItemRef item) =>
+    invalidateSourceContainerWrites(container, item);
 
 Progress? _progressWithWatched(Progress? existing, bool watched) {
   if (!watched) return null;
@@ -78,8 +105,11 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
 
   @override
   Stream<MovieView> build() async* {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
-    final detail = await ref.watch(sourceItemProvider(item).future);
+    final detail = await _awaitWhileCurrent(
+        buildRef, () => ref.watch(sourceItemProvider(item).future));
+    if (detail == null) return;
     // Cast and trailer arrive with the item on both servers, so there is no
     // second fetch to yield after this one.
     yield movieViewFromSource(detail, features: sourceFeatures(source));
@@ -89,11 +119,11 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
   /// back if the write fails.
   Future<void> _write(
     MovieView Function(MovieView) change,
-    Future<void> Function() write,
-  ) async {
+    Future<void> Function() write, {
+    required void Function() invalidate,
+  }) async {
     final snapshot = state.value;
     if (snapshot == null) return;
-    final invalidate = _invalidator(ref, item);
     state = AsyncData(change(snapshot));
     try {
       await write();
@@ -112,6 +142,7 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
           ? m.copyWith(progress: _progressWithWatched(m.progress, true))
           : m.copyWith(clearProgress: true),
       () => watchedState.setWatched(item, watched),
+      invalidate: _invalidator(ref, item),
     );
   }
 
@@ -122,6 +153,7 @@ class SourceMovieNotifier extends StreamNotifier<MovieView>
     await _write(
       (m) => m.copyWith(isFavorite: next),
       () => favorites.setFavorite(item, next),
+      invalidate: _favoriteInvalidator(ref, item),
     );
   }
 
@@ -140,13 +172,30 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
 
   @override
   Stream<ShowView> build() async* {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
     final features = sourceFeatures(source);
-    final (detail, seasons) = await (
-      ref.watch(sourceItemProvider(item).future),
-      ref.watch(sourceChildrenProvider(item).future),
-    ).wait;
-    final first = showViewFromSource(detail, seasons, features: features);
+    // A rebuild (after a write, say) keeps the previous Continue target
+    // until the new next-up answer lands. A new answer, null included,
+    // replaces it.
+    final carriedId = state.value?.nextUpEpisodeId;
+    final carriedSeason = state.value?.nextUpSeasonNumber;
+    final loaded = await _awaitWhileCurrent(
+      buildRef,
+      () => (
+        ref.watch(sourceItemProvider(item).future),
+        ref.watch(sourceChildrenProvider(item).future),
+      ).wait,
+    );
+    if (loaded == null) return;
+    final (detail, seasons) = loaded;
+    final base = showViewFromSource(detail, seasons, features: features);
+    final first = carriedId == null
+        ? base
+        : base.copyWith(
+            nextUpEpisodeId: carriedId,
+            nextUpSeasonNumber: carriedSeason,
+          );
     yield first;
 
     final nextUp = source.as<NextUp>();
@@ -165,6 +214,9 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
         nextUpEpisodeId: next.ref.externalId,
         nextUpSeasonNumber: next.parentIndex,
       );
+    } else if (carriedId != null) {
+      // Nothing left to continue: drop the carried target.
+      yield base.copyWith(isFavorite: (state.value ?? first).isFavorite);
     }
   }
 
@@ -173,7 +225,7 @@ class SourceShowNotifier extends StreamNotifier<ShowView>
     final snapshot = state.value;
     if (snapshot == null) return;
     final favorites = _capability<Favorites>(ref, item);
-    final invalidate = _invalidator(ref, item);
+    final invalidate = _favoriteInvalidator(ref, item);
     final next = !snapshot.isFavorite;
     state = AsyncData(snapshot.copyWith(isFavorite: next));
     try {
@@ -205,28 +257,34 @@ class SourceSeasonNotifier extends AsyncNotifier<List<EpisodeView>>
 
   @override
   Future<List<EpisodeView>> build() async {
+    final buildRef = ref;
     final source = _source(ref, key.show.sourceId);
     // Only the pieces the season needs, so a favorite toggle or a late next
     // up on the show does not refetch the episodes.
-    final head = await ref.watch(
-      sourceShowProvider(key.show).selectAsync(
-        (show) => (
-          title: show.title,
-          poster: show.poster,
-          season: show.seasons
-              .where((s) => s.number == key.seasonNumber)
-              .map((s) => s.target)
-              .firstOrNull,
+    final head = await _awaitWhileCurrent(
+      buildRef,
+      () => ref.watch(
+        sourceShowProvider(key.show).selectAsync(
+          (show) => (
+            title: show.title,
+            poster: show.poster,
+            season: show.seasons
+                .where((s) => s.number == key.seasonNumber)
+                .map((s) => s.target)
+                .firstOrNull,
+          ),
         ),
       ),
     );
+    if (head == null) throw _staleBuild();
     final seasonTarget = head.season;
     if (seasonTarget is! SourceTarget) {
       throw const SourceException.notFound();
     }
     _season = seasonTarget.ref;
-    final children =
-        await ref.watch(sourceChildrenProvider(seasonTarget.ref).future);
+    final children = await _awaitWhileCurrent(buildRef,
+        () => ref.watch(sourceChildrenProvider(seasonTarget.ref).future));
+    if (children == null) throw _staleBuild();
     final features = sourceFeatures(source);
     final poster = head.poster;
     return [
@@ -328,8 +386,11 @@ class SourceEpisodeNotifier extends AsyncNotifier<EpisodeView>
 
   @override
   Future<EpisodeView> build() async {
+    final buildRef = ref;
     final source = _source(ref, item.sourceId);
-    final detail = await ref.watch(sourceItemProvider(item).future);
+    final detail = await _awaitWhileCurrent(
+        buildRef, () => ref.watch(sourceItemProvider(item).future));
+    if (detail == null) throw _staleBuild();
     return episodeViewFromSourceDetail(
       detail,
       features: sourceFeatures(source),
@@ -360,11 +421,18 @@ final sourceEpisodeProvider = AsyncNotifierProvider.autoDispose
 /// Empty for a source without the capability. No automatic retry: a failed
 /// rail stays hidden rather than polling a down server.
 final sourceSimilarProvider =
-    FutureProvider.autoDispose.family<List<ItemSummary>, ItemRef>(
-  (ref, item) async {
+    StreamProvider.autoDispose.family<List<ItemSummary>, ItemRef>(
+  (ref, item) {
     final similar =
         ref.watch(mediaSourceProvider(item.sourceId))?.as<Similar>();
-    return similar == null ? const [] : similar.similar(item);
+    if (similar == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.similar(item),
+      fetch: () => similar.similar(item),
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
   },
   retry: (_, __) => null,
 );

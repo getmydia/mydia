@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -31,6 +33,34 @@ void runMediaSourceContract(
   Future<ContractFixture> Function() setUp,
 ) {
   group('$name MediaSource contract', () {
+    test('item, browse and children survive the cache codec', () async {
+      final f = await setUp();
+      Map<String, Object?> roundTrip(Map<String, Object?> json) =>
+          jsonDecode(jsonEncode(json)) as Map<String, Object?>;
+
+      final detail = (await f.source.item(f.playable)).toJson();
+      expect(ItemDetail.fromJson(roundTrip(detail)).toJson(), detail);
+
+      final page = (await f.source.browse(f.library, const BrowseQuery()))
+          .toJson((i) => i.toJson());
+      expect(
+        Page.fromJson(roundTrip(page), ItemSummary.fromJson)
+            .toJson((i) => i.toJson()),
+        page,
+      );
+
+      final show = f.show;
+      if (show != null) {
+        final children =
+            (await f.source.children(show)).toJson((i) => i.toJson());
+        expect(
+          Page.fromJson(roundTrip(children), ItemSummary.fromJson)
+              .toJson((i) => i.toJson()),
+          children,
+        );
+      }
+    });
+
     test('lists the fixture library', () async {
       final f = await setUp();
       final libraries = await f.source.libraries();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -213,6 +215,9 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
   int continueCalls = 0;
   final removed = <ItemRef>[];
 
+  /// When set, [continueWatching] waits on it before answering.
+  Completer<void>? hold;
+
   /// Refs [canRemoveFromContinueWatching] answers false for.
   final unremovable = <ItemRef>{};
 
@@ -226,6 +231,7 @@ class FakeResumingSource extends FakeMediaSource implements ContinueWatching {
 
   @override
   Future<List<ItemSummary>> continueWatching() async {
+    await hold?.future;
     continueCalls++;
     if (continueError case final e?) throw e;
     return resuming;
@@ -287,6 +293,28 @@ class FakeDetailSource extends FakeMediaSource
   Exception? favoriteError;
   Exception? similarError;
   final favoriteCalls = <(ItemRef, bool)>[];
+
+  /// Appended to the title [item] answers, to tell a fresh answer from a
+  /// cached one.
+  String titleSuffix = '';
+
+  /// When set, [item] waits on it before answering.
+  Completer<void>? itemHold;
+  SourceException? itemError;
+  int itemCalls = 0;
+
+  @override
+  Future<ItemDetail> item(ItemRef ref) async {
+    itemCalls++;
+    await itemHold?.future;
+    if (itemError case final e?) throw e;
+    final detail = await super.item(ref);
+    if (titleSuffix.isEmpty) return detail;
+    final json = detail.toJson();
+    final summary = {...json['summary']! as Map<String, Object?>};
+    summary['title'] = '${summary['title']}$titleSuffix';
+    return ItemDetail.fromJson({...json, 'summary': summary});
+  }
 
   @override
   Set<SourceCapability> get capabilities => {

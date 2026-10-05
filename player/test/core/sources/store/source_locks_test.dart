@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -10,9 +12,10 @@ import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import 'source_json_test.dart' show plexRecord;
 
-ProviderContainer _container(InMemorySourceStore store) {
+ProviderContainer _container(InMemorySourceStore store, {SourceCache? cache}) {
   final c = ProviderContainer(overrides: [
     noDownloadsOverride,
+    if (cache != null) sourceCacheProvider.overrideWithValue(cache),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
   ]);
@@ -48,6 +51,43 @@ SourceAccountRecord _otherAccount() {
     ],
     addedAtMs: 1700000000001,
   );
+}
+
+SourceAccountRecord _thirdAccount() {
+  final other = _otherAccount();
+  return other.copyWith(
+    account: const ProviderAccount(
+      id: 'acc3',
+      kind: SourceKind.plex,
+      displayName: 'finch',
+      storageNamespace: 'source/acc3',
+      activeProfileId: 'owner',
+    ),
+    profiles: const [
+      SourceProfile(
+          id: 'owner', accountId: 'acc3', name: 'Finch', isOwner: true),
+    ],
+    servers: [
+      for (final s in other.servers)
+        SourceServer(
+          id: 'ghi789',
+          accountId: 'acc3',
+          profileId: 'owner',
+          name: 'Attic',
+          machineIdentifier: 'ghi789',
+          owned: true,
+          httpsRequired: true,
+          connections: s.connections,
+        ),
+    ],
+  );
+}
+
+/// A cache whose Hive box fails every account delete.
+class _ThrowingCache extends InMemorySourceCache {
+  @override
+  Future<void> deleteAccount(String accountId) async =>
+      throw StateError('hive io');
 }
 
 void main() {
@@ -121,6 +161,58 @@ void main() {
       await c.read(sourceRecordsProvider.future);
       await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
       expect((await store.load()).accounts.map((a) => a.account.id), ['acc2']);
+    });
+
+    test('removeLockedAccounts deletes the removed accounts cached data',
+        () async {
+      final store = InMemorySourceStore();
+      await store.putAccount(plexRecord()
+          .copyWith(serverLocks: const {'abc123': SourceLock.locked}));
+      await store.putAccount(_otherAccount());
+      final cache = InMemorySourceCache();
+      final lockedKey = QueryKey('acc1:owner:abc123/hubs');
+      final keptKey = QueryKey('acc2:owner:def456/hubs');
+      await cache.write(lockedKey, const [], DateTime.now());
+      await cache.write(keptKey, const [], DateTime.now());
+      final c = _container(store, cache: cache);
+      await c.read(sourceRecordsProvider.future);
+      await c.read(sourceRecordsProvider.notifier).removeLockedAccounts();
+      expect(cache.read(lockedKey), isNull);
+      expect(cache.read(keptKey), isNotNull);
+    });
+
+    test('a failing cache delete does not stop removals', () async {
+      final store = InMemorySourceStore();
+      final storage = MockAuthStorage();
+      final locked1 = plexRecord()
+          .copyWith(serverLocks: const {'abc123': SourceLock.locked});
+      final locked2 = _otherAccount()
+          .copyWith(serverLocks: const {'def456': SourceLock.locked});
+      final third = _thirdAccount();
+      await store.putAccount(locked1);
+      await store.putAccount(locked2);
+      await store.putAccount(third);
+      final secrets = SourceSecrets(storage);
+      await secrets.writeAccountToken(locked1.account, 't1');
+      await secrets.writeAccountToken(locked2.account, 't2');
+      await secrets.writeAccountToken(third.account, 't3');
+      final c = ProviderContainer(overrides: [
+        sourceCacheProvider.overrideWithValue(_ThrowingCache()),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(secrets),
+      ]);
+      addTearDown(c.dispose);
+      await c.read(sourceRecordsProvider.future);
+      final notifier = c.read(sourceRecordsProvider.notifier);
+
+      await notifier.removeLockedAccounts();
+      expect((await store.load()).accounts.map((a) => a.account.id), ['acc3']);
+      expect(await secrets.accountToken(locked1.account), isNull);
+      expect(await secrets.accountToken(locked2.account), isNull);
+
+      await notifier.removeAccount('acc3');
+      expect((await store.load()).accounts, isEmpty);
+      expect(await secrets.accountToken(third.account), isNull);
     });
 
     test('removeLockedAccounts drops the removed accounts All servers choices',
