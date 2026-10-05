@@ -19,7 +19,9 @@ abstract final class SourceOps {
   static const String hubs = 'hubs';
   static const String similar = 'similar';
 
-  /// Every operation. `source_rules_test.dart` checks each one has a rule.
+  /// Every operation. `source_rules_test.dart` only checks that
+  /// `SourceRules.watchedChanged` covers each one; the other rules name
+  /// their operations by hand.
   static const Set<String> all = {
     libraries,
     browse,

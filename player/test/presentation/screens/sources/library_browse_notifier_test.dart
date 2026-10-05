@@ -19,6 +19,10 @@ class _GatedSource extends FakeMediaSource {
   final gate = Completer<void>();
   Error? followUpError;
 
+  /// Answers later first-page requests in reverse order, so a refetch is
+  /// not equal to what is already on screen (equal answers are not emitted).
+  bool reverseFirstPage = false;
+
   @override
   Future<Page<ItemSummary>> browse(LibraryRef library, BrowseQuery query,
       {Cursor? cursor}) async {
@@ -26,7 +30,13 @@ class _GatedSource extends FakeMediaSource {
       await gate.future;
       if (followUpError case final e?) throw e;
     }
-    return super.browse(library, query, cursor: cursor);
+    final page = await super.browse(library, query, cursor: cursor);
+    if (cursor != null || !reverseFirstPage) return page;
+    return Page(
+      items: page.items.reversed.toList(),
+      nextCursor: page.nextCursor,
+      total: page.total,
+    );
   }
 }
 
@@ -128,6 +138,7 @@ void main() {
         .find(SourceKeys.browse(FakeMediaSource.movies, const BrowseQuery()))!;
     expect(await watcher.refetchAutomatically(), isTrue);
 
+    source.reverseFirstPage = true;
     var emissions = 0;
     container.listen(provider, (_, __) => emissions++);
     await (watcher as SourceWatcher).refetch();

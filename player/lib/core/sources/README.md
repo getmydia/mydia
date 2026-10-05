@@ -192,16 +192,26 @@ Only a library's first page is stored. Once the viewer pages, that
 library's watcher declines automatic refetches and ignores page-1 answers.
 A failed page-2 load clears the paging flag, so page 1 can refresh again.
 
+A fetched answer equal to what the watcher already emitted (compared as
+JSON) is not emitted again, though it still refreshes the stored entry and
+the fetch-log time. Pull-to-refresh and retry rebuild the watcher, which
+paints the stored answer first, so the indicator finishes while the
+freshness line keeps running until the network answers.
+
 The source detail notifiers ignore an error from a provider that was
-disposed or rebuilt mid-load, but only when the build itself is stale
-(`_awaitWhileCurrent` in `source_detail_controllers.dart`).
+disposed or rebuilt mid-load, but only when the build itself is stale: an
+error reaching a build that has already been replaced belongs to nobody
+and is dropped (`source_detail_controllers.dart`).
 
 Changing any model's `toJson` shape means bumping
-`SourceCache.schemaVersion`; old entries then read as absent. Entries
-older than 30 days go when the box opens, and removing an account (or
-Forgot PIN) deletes its entries. That delete is best-effort: a failed one
-is logged and does not stop the removal. Locked and hidden servers are
-cached like any other; the router's lock gate is what hides them.
+`SourceCache.schemaVersion`; old entries then read as absent. The box is
+swept in the background after it opens: entries older than 30 days go,
+then the oldest beyond 2000. Removing an account (or Forgot PIN) deletes
+its entries. That delete is best-effort: a failed one is logged and does
+not stop the removal. Fetch-log entries, and entries of servers dropped
+without removing the account, are left for the 30-day sweep; they are
+harmless. Locked and hidden servers are cached like any other; the
+router's lock gate is what hides them.
 
 ## Credentials stay out of URLs
 

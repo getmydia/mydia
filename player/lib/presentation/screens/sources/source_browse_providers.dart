@@ -167,7 +167,9 @@ class LibraryBrowseNotifier extends StreamNotifier<LibraryBrowseState> {
 
   /// Set once the viewer asks for page 2. From then on the watcher declines
   /// automatic refetches and its page-1 answers are ignored: either would
-  /// collapse the pages already on screen. Only page 1 is cached.
+  /// collapse the pages already on screen. Only page 1 is cached. A cached
+  /// page 1 may emit before the fresh one, so paging in that window uses the
+  /// cached cursor.
   bool _paged = false;
 
   @override
