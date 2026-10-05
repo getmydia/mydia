@@ -95,6 +95,11 @@ class _StubDownloadService implements DownloadService {
   }
 
   @override
+  void setDiscreetSources(bool Function(SourceId source) isDiscreet) {
+    // No-op in stub
+  }
+
+  @override
   void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op in stub
   }

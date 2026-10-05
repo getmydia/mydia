@@ -55,7 +55,7 @@ void main() {
         requestOptions: RequestOptions(),
         type: DioExceptionType.connectionError);
     final task = await h.service.start(_request());
-    await h.waitForStatus(task.id, 'failed');
+    await h.waitForStatus(task.id, 'interrupted');
     expect(h.resolver.calls, 1);
 
     h.adapter.failWith = null;

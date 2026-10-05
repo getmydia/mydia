@@ -7,6 +7,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -23,6 +24,7 @@ import '../../domain/sources/source_error.dart';
 import '../sources/source.dart';
 import '../storage/app_hive.dart';
 import 'download_notification_service.dart';
+import 'download_notification_text.dart';
 import 'download_recovery.dart';
 import 'download_service.dart';
 import 'download_job_service.dart';
@@ -374,6 +376,13 @@ class _NativeDownloadService implements DownloadService {
     _artworkFetcher = fetcher;
   }
 
+  bool Function(SourceId source) _isDiscreet = (_) => false;
+
+  @override
+  void setDiscreetSources(bool Function(SourceId source) isDiscreet) {
+    _isDiscreet = isDiscreet;
+  }
+
   /// Saves the poster, backdrop and thumbnail next to the file, so the
   /// Downloads screen has them offline and without credentials. Best-effort:
   /// a picture that fails to arrive never fails the download.
@@ -523,7 +532,10 @@ class _NativeDownloadService implements DownloadService {
         _emit(claimed);
 
         // Not awaited, so the sweep is not held for a whole transfer.
-        _runInBackground(_runTask(claimed), 'resume ${claimed.id}');
+        _runInBackground(
+          _runTask(claimed, attemptsBeforeClaim: task.recoveryAttempts),
+          'resume ${claimed.id}',
+        );
     }
   }
 
@@ -583,72 +595,22 @@ class _NativeDownloadService implements DownloadService {
 
     final activeTasks = _database!
         .getAllTasks()
-        .where((t) => DownloadStatusSets.active.contains(t.status));
-    final activeCount = activeTasks.length;
+        .where((t) => DownloadStatusSets.active.contains(t.status))
+        .toList();
 
-    if (activeCount == 0) {
+    if (activeTasks.isEmpty) {
       await _notificationService.stopService();
       return;
     }
 
-    // Find a representative task for the notification text
-    final downloadingTasks =
-        activeTasks.where((t) => t.status == 'downloading');
-    final transcodingTasks =
-        activeTasks.where((t) => t.status == 'transcoding');
-
-    String title;
-    String text;
-    int progress = 0;
-    bool indeterminate = false;
-
-    if (activeCount == 1) {
-      final task = activeTasks.first;
-      title = 'Downloading';
-      if (task.status == 'transcoding') {
-        final pct = (task.transcodeProgress * 100).round();
-        text = '${task.title} — Preparing';
-        progress = pct;
-      } else if (task.status == 'downloading') {
-        final pct = (task.progress * 100).round();
-        text = '${task.title} — $pct%';
-        progress = pct;
-      } else {
-        text = task.title;
-        indeterminate = true;
-      }
-    } else {
-      title = 'Downloading $activeCount items';
-      // Calculate average progress across all active downloading/transcoding tasks
-      final progressTasks = activeTasks
-          .where((t) => t.status == 'downloading' || t.status == 'transcoding');
-      if (progressTasks.isNotEmpty) {
-        final totalProgress = progressTasks.fold<double>(0.0, (sum, t) {
-          if (t.status == 'transcoding') return sum + t.transcodeProgress;
-          return sum + t.progress;
-        });
-        progress = (totalProgress / progressTasks.length * 100).round();
-
-        final task = downloadingTasks.isNotEmpty
-            ? downloadingTasks.first
-            : transcodingTasks.first;
-        final pct = task.status == 'transcoding'
-            ? (task.transcodeProgress * 100).round()
-            : (task.progress * 100).round();
-        text = '${task.title} — $pct%';
-      } else {
-        text = 'Waiting...';
-        indeterminate = true;
-      }
-    }
-
+    final summary = buildDownloadNotificationText(activeTasks, _isDiscreet);
     final hasPermission = await _notificationService.requestPermissions();
     if (!hasPermission) return;
     await _notificationService.startService(
-      title: title,
-      text: text,
-      progress: progress,
-      indeterminate: indeterminate,
+      title: summary.title,
+      text: summary.text,
+      progress: summary.progress,
+      indeterminate: summary.indeterminate,
     );
   }
 
@@ -757,7 +719,9 @@ class _NativeDownloadService implements DownloadService {
       return await resolver(task);
     } on SourceException catch (e) {
       if (e.kind == SourceErrorKind.unreachable) {
-        throw _ParkTask(e.viewerMessage);
+        // Being offline is not the download's fault, so it must not use up
+        // the sweep's attempts.
+        throw _ParkTask(e.viewerMessage, countsAsAttempt: false);
       }
       throw _TaskFailure(e.viewerMessage, permanent: true);
     } on DownloadServiceException catch (e) {
@@ -819,7 +783,10 @@ class _NativeDownloadService implements DownloadService {
   /// restart comes through here. A cancelled token means someone else (pause,
   /// cancel, restart, the stall watchdog) has claimed the task, so this
   /// returns without writing a status.
-  Future<void> _runTask(DownloadTask task) async {
+  ///
+  /// [attemptsBeforeClaim] is set by the recovery sweep: the attempt count the
+  /// task had before the sweep counted this run.
+  Future<void> _runTask(DownloadTask task, {int? attemptsBeforeClaim}) async {
     if (_database == null) return;
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
@@ -832,6 +799,11 @@ class _NativeDownloadService implements DownloadService {
 
     Future<void> save(DownloadTask next) async {
       if (superseded()) return;
+      // Whatever produced an error text, a URL in it may carry a token.
+      final error = next.error;
+      if (error != null && stripUrlQueries(error) != error) {
+        next = next.copyWith(error: stripUrlQueries(error));
+      }
       current = next;
       await _database!.saveTask(next);
       _emit(next);
@@ -936,7 +908,14 @@ class _NativeDownloadService implements DownloadService {
             from: from,
             cancelToken: cancelToken,
             onProgress: (onDisk, total) async {
-              if (transcodeDone) expected ??= total;
+              // A direct file's real size beats the estimate it was planned
+              // with; a transcode's size is still growing, so its own count
+              // stands.
+              if (plan is! TranscodeJob) {
+                if (total != null) expected = total;
+              } else if (transcodeDone) {
+                expected ??= total;
+              }
               final estimate = expected ?? total;
               final fraction = estimate != null && estimate > 0
                   ? (onDisk / estimate).clamp(0.0, 1.0)
@@ -954,7 +933,11 @@ class _NativeDownloadService implements DownloadService {
               ));
             },
           );
-          if (transcodeDone) expected ??= result.total;
+          if (plan is! TranscodeJob) {
+            if (result.total != null) expected = result.total;
+          } else if (transcodeDone) {
+            expected ??= result.total;
+          }
           final known = expected;
           final whole = known == null || result.bytesOnDisk >= known;
           if (transcodeDone && (whole || result.statusCode == 200)) break;
@@ -989,11 +972,10 @@ class _NativeDownloadService implements DownloadService {
             }
             continue;
           }
-          // A dropped connection mid-body (no HTTP status, bytes already on
-          // disk) is common on remote servers: park it so the sweep resumes it
-          // with a Range request instead of failing it back to byte zero.
-          if (e.response == null &&
-              (await disk.exists() ? await disk.length() : 0) > 0) {
+          // A dropped connection, with or without bytes on disk, is common on
+          // remote servers: park it so the sweep resumes it with a Range
+          // request instead of failing it back to byte zero.
+          if (_isTransportError(e)) {
             throw _ParkTask('Network error: ${e.message ?? e.type.name}');
           }
           rethrow;
@@ -1020,7 +1002,14 @@ class _NativeDownloadService implements DownloadService {
       // disk and must not be delayed or failed by an image fetch.
       unawaited(_saveArtwork(done));
     } on _ParkTask catch (e) {
-      await save(current.copyWith(status: 'interrupted', error: e.message));
+      final before = attemptsBeforeClaim;
+      await save(current.copyWith(
+        status: 'interrupted',
+        error: e.message,
+        recoveryAttempts: !e.countsAsAttempt && before != null
+            ? math.min(before, current.recoveryAttempts)
+            : current.recoveryAttempts,
+      ));
     } on _TaskFailure catch (e) {
       await save(current.copyWith(
         status: 'failed',
@@ -1034,10 +1023,11 @@ class _NativeDownloadService implements DownloadService {
           error: e.message,
           recoveryAttempts: maxRecoveryAttempts));
     } on DioException catch (e) {
-      if (e.type != DioExceptionType.cancel) {
-        await save(current.copyWith(
-            status: 'failed', error: e.message ?? 'Download failed'));
-      }
+      if (e.type == DioExceptionType.cancel) return;
+      // The same rule as in the loop, for a failure before the first byte.
+      await save(current.copyWith(
+          status: _isTransportError(e) ? 'interrupted' : 'failed',
+          error: e.message ?? 'Download failed'));
     } catch (e) {
       await save(current.copyWith(status: 'failed', error: e.toString()));
     } finally {
@@ -1111,24 +1101,10 @@ class _NativeDownloadService implements DownloadService {
     }
     _cancelTokens.remove(taskId);
 
-    // 2. Cancel the server-side transcode job, if the task has one
-    final resolver = _resolver;
-    if (cancelJob &&
-        task != null &&
-        task.transcodeJobId != null &&
-        resolver != null) {
-      try {
-        final plan = await resolver(task);
-        if (plan is TranscodeJob) await plan.cancel(task.transcodeJobId!);
-      } catch (_) {
-        // The job may be gone already, or the server out of reach.
-      }
-    }
-
-    // 3. Clear the speed tracker
+    // 2. Clear the speed tracker
     _speedTracker.clearTask(taskId);
 
-    // 4. Update database and notify listeners
+    // 3. Update database and notify listeners
     if (task != null) {
       final cancelledTask = task.copyWith(
         status: 'cancelled',
@@ -1137,7 +1113,7 @@ class _NativeDownloadService implements DownloadService {
       await _database!.saveTask(cancelledTask);
       _emit(cancelledTask);
 
-      // 5. Delete partial file if exists
+      // 4. Delete partial file if exists
       if (task.filePath != null) {
         final file = File(task.filePath!);
         if (await file.exists()) {
@@ -1148,6 +1124,24 @@ class _NativeDownloadService implements DownloadService {
           }
         }
       }
+    }
+
+    // 5. Cancel the server-side transcode job, if the task has one. Last and
+    // unawaited: an unreachable server must not hold up a cancel the viewer
+    // already sees as done.
+    final resolver = _resolver;
+    if (cancelJob &&
+        task != null &&
+        task.transcodeJobId != null &&
+        resolver != null) {
+      unawaited(() async {
+        try {
+          final plan = await resolver(task);
+          if (plan is TranscodeJob) await plan.cancel(task.transcodeJobId!);
+        } catch (_) {
+          // The job may be gone already, or the server out of reach.
+        }
+      }());
     }
 
     // 6. Process queue to start next download
@@ -1458,11 +1452,29 @@ class _NativeDownloadService implements DownloadService {
   }
 }
 
+/// A failure of the connection itself: no HTTP answer, so nothing says the
+/// download is bad and a retry may well work.
+bool _isTransportError(DioException e) =>
+    e.response == null &&
+    switch (e.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.unknown =>
+        true,
+      _ => false,
+    };
+
 /// The task cannot go on now, but may later: parked as interrupted for the
 /// recovery sweep.
 class _ParkTask implements Exception {
-  const _ParkTask(this.message);
+  const _ParkTask(this.message, {this.countsAsAttempt = true});
   final String message;
+
+  /// False when the park says nothing about the download itself (its source
+  /// is unreachable), so the sweep's claim is handed back.
+  final bool countsAsAttempt;
 }
 
 /// The task cannot finish. [permanent] stops the sweep retrying it.

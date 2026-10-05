@@ -70,6 +70,11 @@ abstract class DownloadService {
   /// Install how artwork is fetched for a completed download.
   void setArtworkFetcher(ArtworkFetcher fetcher);
 
+  /// Install which sources are discreet: locked or hidden ones. Their tasks
+  /// count in the Android foreground notification but never name a title,
+  /// since it shows on the lock screen. Asked at notification time.
+  void setDiscreetSources(bool Function(SourceId source) isDiscreet);
+
   /// Apply the user's download settings. Called whenever settings change.
   void applySettings({
     required int maxConcurrentDownloads,

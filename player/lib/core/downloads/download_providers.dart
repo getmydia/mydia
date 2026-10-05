@@ -81,14 +81,21 @@ Future<DownloadService> downloadManager(Ref ref) async {
   // ref.read inside the closure is deliberate. Watching sources would rebuild
   // this keep-alive provider and dispose the service, cancelling every download.
   service.setPlanResolver((task) async {
-    final downloadable =
-        ref.read(mediaSourceProvider(task.source))?.as<Downloadable>();
+    final source = ref.read(mediaSourceProvider(task.source));
+    final downloadable = source?.as<Downloadable>();
     if (downloadable == null) {
-      throw const SourceException.unsupported(
-          'This server is no longer on this device.');
+      throw source == null && _sourceMayReturn(ref, task.source)
+          ? const SourceException.unreachable()
+          : const SourceException.unsupported(
+              'This server is no longer on this device.');
     }
     return downloadable.resolve(task.itemRef, task.quality);
   });
+
+  // The lock screen shows the foreground notification, so a locked or hidden
+  // source never names its downloads there.
+  service.setDiscreetSources(
+      (source) => ref.read(sourceLocksProvider).containsKey(source));
 
   service.setArtworkFetcher((task, art) async {
     if (task.source == SourceId.legacyMydia) {
@@ -106,6 +113,19 @@ Future<DownloadService> downloadManager(Ref ref) async {
     service.dispose();
   });
   return service;
+}
+
+/// Whether a source with no [MediaSource] right now may have one later: it is
+/// hidden while the app is locked, its records have not loaded yet, or home
+/// Mydia is signed out. Only a third-party account that is gone from the
+/// records is gone for good.
+bool _sourceMayReturn(Ref ref, SourceId source) {
+  if (source == SourceId.legacyMydia) return true;
+  final records = ref.read(sourceRecordsProvider);
+  final snapshot = records.value;
+  if (snapshot == null) return true;
+  return snapshot.accounts
+      .any((record) => source.value.startsWith('${record.account.id}:'));
 }
 
 /// Sources whose downloads may be listed: home, plus every source the

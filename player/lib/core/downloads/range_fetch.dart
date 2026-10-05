@@ -8,6 +8,14 @@ import 'package:dio/dio.dart';
 /// Flush to disk this often so a fast network cannot outrun a slow disk.
 const _flushEvery = 4 * 1024 * 1024;
 
+final _urlQuery = RegExp(r'''(https?://[^\s?'")>]*)\?[^\s'")>]*''');
+
+/// [text] with the query string removed from every URL in it. Home Mydia puts
+/// its media token in the query, and an error saved on a task is shown in the
+/// UI and kept in Hive.
+String stripUrlQueries(String text) =>
+    text.replaceAllMapped(_urlQuery, (m) => m.group(1)!);
+
 class RangeFetchResult {
   const RangeFetchResult({
     required this.bytesOnDisk,
@@ -72,9 +80,21 @@ Future<RangeFetchResult> fetchRange(
       }
       await onProgress(onDisk, total);
     }
-  } catch (_) {
+  } catch (e) {
     // A cancel aborts the request, which errors the body stream.
-    if (!cancelToken.isCancelled) rethrow;
+    if (!cancelToken.isCancelled) {
+      if (e is DioException) rethrow;
+      // Dio does not wrap an error from a streamed body, so a dropped
+      // connection arrives as an HttpException, SocketException or the like.
+      // Its text names the URL, and home Mydia's carries a token, so only the
+      // type survives.
+      throw DioException(
+        requestOptions: response.requestOptions,
+        type: DioExceptionType.connectionError,
+        error: e,
+        message: 'Connection lost (${e.runtimeType})',
+      );
+    }
   } finally {
     await sink.flush();
     await sink.close();

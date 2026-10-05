@@ -105,6 +105,11 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
+  void setDiscreetSources(bool Function(SourceId source) isDiscreet) {
+    // No-op on web
+  }
+
+  @override
   void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op on web
   }

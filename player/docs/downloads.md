@@ -52,12 +52,31 @@ Rules that are easy to break:
 - A 401 or 403 re-resolves the plan once and retries. A second one fails the
   task for good with a "sign in again" message.
 - A resolve failure splits two ways. A `SourceException` of kind `unreachable`
-  parks the task as `interrupted`, to be resumed by the next sweep. Anything
-  else (including a 404 from the server) fails it permanently.
-- A connection dropped mid-body, with bytes already on disk, also parks the
-  task as `interrupted`, so it resumes with a Range request instead of
-  restarting. A failure on the first request, with nothing on disk, still ends
-  as `failed`.
+  parks the task as `interrupted`, to be resumed by the next sweep, and the
+  sweep's attempt is handed back (`_ParkTask.countsAsAttempt`), so being offline
+  never runs a task out of `recoveryAttempts`. Anything else (including a 404
+  from the server) fails it permanently.
+- The resolver (`download_providers.dart`) treats a source with no
+  `MediaSource` as unreachable, not gone, while its account is still in the
+  stored records, while the records have not loaded, and for signed-out home
+  Mydia. A hidden source has no `MediaSource` while the app is locked, and the
+  sweep runs on launch and resume. Only a third-party account missing from the
+  records fails the task for good.
+- Any transport failure with no HTTP response (`connectionError`, a timeout,
+  `unknown`) parks the task as `interrupted`, whether or not bytes are on disk,
+  so it resumes with a Range request. HTTP error statuses keep their own
+  handling. Dio does not wrap an error from a streamed body, so `fetchRange`
+  converts one into a `connectionError` `DioException` whose message is only
+  the error's type name: the platform's text names the URL, and home Mydia's
+  carries a token. Transport drops still count as recovery attempts.
+- No saved `error` keeps a URL query: `_runTask` strips `?...` from any URL in
+  an error text (`stripUrlQueries`) at the save point.
+- For a `DirectFile` the size the response reports replaces the plan's
+  `expectedBytes`, which is only an estimate (a bitrate guess for some
+  sources), for progress, `fileSize` and the completeness check. A transcode
+  job keeps its own count, since the file is still growing.
+- Cancel writes `cancelled` and deletes the partial first, then cancels the
+  server-side job without waiting, so an unreachable server cannot hang it.
 - A `DeadJobException` (the server forgot the job) is only recoverable by
   restarting, which prepares a new job.
 
@@ -121,6 +140,12 @@ run.
 source drops out of the Downloads lists while the app is locked, and its
 downloads with it.
 
+The Android foreground notification shows on the lock screen, so a locked or
+hidden source's downloads count in it but never name a title
+(`buildDownloadNotificationText`). `downloadManagerProvider` installs the
+predicate with `setDiscreetSources`, reading `sourceLocksProvider` at call time
+so the provider never watches sources.
+
 Removing an account deletes the downloads of every profile on it, matched on
 the account prefix of the source id (`deleteAccountDownloads`). Tasks go first,
 so an in-flight download cannot finish and write a media row while the files
@@ -134,6 +159,7 @@ while a different user is active.
 
 `test/core/downloads/download_test_harness.dart` has the pieces: `FakeResolver`
 (counts resolves, can fail or wait on a gate), `RecordingHttpAdapter` (with
-`ignoreRange` to simulate a server that answers 200 to a Range request),
+`ignoreRange` to simulate a server that answers 200 to a Range request, and
+`bodyError` for a connection that dies mid-body),
 `TestClock` and `DownloadHarness`. `download_pipeline_test.dart` drives the
 loop through them.

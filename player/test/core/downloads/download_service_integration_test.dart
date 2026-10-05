@@ -414,15 +414,16 @@ void main() {
       final task = await harness.service
           .start(_request('error_url_test', 'Error URL Test', '720p'));
 
-      await harness.waitForStatus(task.id, 'failed');
+      // A connection error says nothing about the download, so it parks.
+      await harness.waitForStatus(task.id, 'interrupted');
 
       final failedTask = harness.database.getTask(task.id);
       expect(failedTask, isNotNull);
-      expect(failedTask!.downloadStatus, equals(DownloadStatus.failed));
+      expect(failedTask!.downloadStatus, equals(DownloadStatus.interrupted));
       expect(failedTask.error, isNotNull);
     });
 
-    test('retries a failed download', () async {
+    test('resumes a download parked by a connection error', () async {
       harness.adapter.failWith = DioException.connectionError(
         requestOptions: RequestOptions(path: '/'),
         reason: 'unreachable host',
@@ -431,16 +432,16 @@ void main() {
       final task = await harness.service
           .start(_request('retry_test', 'Retry Test Movie', '720p'));
 
-      await harness.waitForStatus(task.id, 'failed');
+      await harness.waitForStatus(task.id, 'interrupted');
       expect(
         harness.database.getTask(task.id)!.downloadStatus,
-        equals(DownloadStatus.failed),
+        equals(DownloadStatus.interrupted),
       );
 
-      // Clear the failure so the retry can succeed.
+      // Clear the failure so the resume can succeed.
       harness.adapter.failWith = null;
 
-      await harness.service.retryDownload(task.id);
+      await harness.service.resumeDownload(task.id);
       await harness.waitForStatus(task.id, 'completed');
 
       final completedTask = harness.database.getTask(task.id);
@@ -457,18 +458,18 @@ void main() {
       final task = await harness.service
           .start(_request('timeout_test', 'Timeout Test Movie', '720p'));
 
-      await harness.waitForStatus(task.id, 'failed');
+      await harness.waitForStatus(task.id, 'interrupted');
 
       final failedTask = harness.database.getTask(task.id);
       expect(failedTask, isNotNull);
-      expect(failedTask!.downloadStatus, equals(DownloadStatus.failed));
+      expect(failedTask!.downloadStatus, equals(DownloadStatus.interrupted));
     });
 
     test('recovers from temporary network failure', () async {
-      // The fake auto-retried inside its simulator. The real non-progressive
-      // path marks the task failed on the first Dio error; recovery is via
-      // retryDownload (or the progressive transient-retry path, covered
-      // elsewhere). Assert that manual retry after a cleared failure works.
+      // The real non-progressive path parks the task on the first connection
+      // error; recovery is via resumeDownload (or the progressive
+      // transient-retry path, covered elsewhere). Assert that a resume after
+      // a cleared failure works.
       harness.adapter.failWith = DioException.connectionError(
         requestOptions: RequestOptions(path: '/'),
         reason: 'temporary outage',
@@ -477,10 +478,10 @@ void main() {
       final task = await harness.service.start(
           _request('network_recovery_test', 'Network Recovery Test', '720p'));
 
-      await harness.waitForStatus(task.id, 'failed');
+      await harness.waitForStatus(task.id, 'interrupted');
       harness.adapter.failWith = null;
 
-      await harness.service.retryDownload(task.id);
+      await harness.service.resumeDownload(task.id);
       await harness.waitForStatus(task.id, 'completed');
 
       final completedTask = harness.database.getTask(task.id);
@@ -499,7 +500,7 @@ void main() {
 
       final failTask = await harness.service
           .start(_request('fail_after_success', 'Fail Movie', '720p'));
-      await harness.waitForStatus(failTask.id, 'failed');
+      await harness.waitForStatus(failTask.id, 'interrupted');
 
       expect(
         harness.database.isDownloaded(_ref('success_before_fail')),
@@ -511,7 +512,7 @@ void main() {
       );
       expect(
         harness.database.getTask(failTask.id)!.downloadStatus,
-        equals(DownloadStatus.failed),
+        equals(DownloadStatus.interrupted),
       );
     });
   });

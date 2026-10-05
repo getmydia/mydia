@@ -179,6 +179,10 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   Uint8List body;
   DioException? failWith;
 
+  /// When set, the body stream errors with this after [bodyErrorAfter] bytes.
+  Exception? bodyError;
+  int bodyErrorAfter = 0;
+
   /// Answers a ranged request with 200 and the whole body, like a server that
   /// does not support `Range`.
   bool ignoreRange;
@@ -219,6 +223,19 @@ class RecordingHttpAdapter implements HttpClientAdapter {
         ? Uint8List(0)
         : Uint8List.sublistView(body, start);
 
+    // A connection that dies mid-body: some bytes arrive, then the stream
+    // errors with whatever the platform throws, which Dio does not wrap.
+    final error = bodyError;
+    if (error != null && slice.length > bodyErrorAfter) {
+      return ResponseBody(
+        _dyingBody(Uint8List.sublistView(slice, 0, bodyErrorAfter), error),
+        statusCode,
+        headers: {
+          Headers.contentLengthHeader: [slice.length.toString()],
+        },
+      );
+    }
+
     return ResponseBody.fromBytes(
       slice,
       statusCode,
@@ -230,6 +247,11 @@ class RecordingHttpAdapter implements HttpClientAdapter {
 
   @override
   void close({bool force = false}) {}
+}
+
+Stream<Uint8List> _dyingBody(Uint8List first, Exception error) async* {
+  yield first;
+  throw error;
 }
 
 /// Stands in for the sources: answers every resolve with [plan], counting

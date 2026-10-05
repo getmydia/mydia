@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +10,13 @@ import 'package:player/core/downloads/download_queue_providers.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/download_settings.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/sources/item.dart';
 
+import '../../presentation/screens/sources/fake_media_source.dart';
+import '../sources/store/source_json_test.dart' show plexRecord;
 import 'download_test_harness.dart';
 
 void main() {
@@ -128,4 +134,80 @@ void main() {
     expect(database.getTask(queued.id)!.status, 'queued',
         reason: 'the new limit of 1 must have reached the service');
   });
+
+  group('a task whose source has no MediaSource right now', () {
+    final seededAt = DateTime(2020);
+
+    /// Seeds an interrupted Plex task, builds the manager over [records] (its
+    /// sweep resolves the task at once) and returns the task once it has run.
+    Future<DownloadTask> sweep(Future<SourceSnapshot> Function() records,
+        {SourceId source = fakeSourceId, bool loaded = true}) async {
+      await database.saveTask(DownloadTask(
+        id: 'hidden-dl',
+        mediaId: '42',
+        title: 'Quill Harbor',
+        quality: 'original',
+        status: 'interrupted',
+        sourceId: source.value,
+        // Recent, or the startup cleanup deletes it once it has failed.
+        createdAt: DateTime.now(),
+        lastProgressAt: seededAt,
+      ));
+      final container = ProviderContainer(overrides: [
+        downloadDatabaseProvider.overrideWith((ref) async => database),
+        unifiedDownloadJobServiceProvider.overrideWith((ref) => null),
+        sourceRecordsProvider.overrideWith(() => _Records(records)),
+        // Hidden while the app is locked: no source is built.
+        mediaSourceProvider(source).overrideWithValue(null),
+      ]);
+      addTearDown(container.dispose);
+      // The app has the records loaded long before a sweep matters.
+      if (loaded) await container.read(sourceRecordsProvider.future);
+      await container.read(downloadManagerProvider.future);
+
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (DateTime.now().isBefore(deadline)) {
+        final task = database.getTask('hidden-dl')!;
+        if (task.status == 'failed' || task.lastProgressAt != seededAt) {
+          // Let a park finish writing.
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      return database.getTask('hidden-dl')!;
+    }
+
+    test('is parked while its account is still stored', () async {
+      final task =
+          await sweep(() async => SourceSnapshot(accounts: [plexRecord()]));
+      expect(task.status, 'interrupted');
+      expect(task.recoveryAttempts, 0);
+    });
+
+    test('is parked while the stored sources have not loaded', () async {
+      final never = Completer<SourceSnapshot>();
+      final task = await sweep(() => never.future, loaded: false);
+      expect(task.status, 'interrupted');
+    });
+
+    test('fails for good once its account is gone', () async {
+      final task = await sweep(() async => SourceSnapshot.empty);
+      expect(task.status, 'failed', reason: '${task.error}');
+    });
+
+    test('home Mydia, signed out, is parked', () async {
+      final task = await sweep(() async => SourceSnapshot.empty,
+          source: SourceId.legacyMydia);
+      expect(task.status, 'interrupted');
+    });
+  });
+}
+
+class _Records extends SourceRecordsNotifier {
+  _Records(this._load);
+  final Future<SourceSnapshot> Function() _load;
+
+  @override
+  Future<SourceSnapshot> build() => _load();
 }
