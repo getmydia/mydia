@@ -1099,7 +1099,7 @@ class _NativeDownloadService implements DownloadService {
   /// - Database is updated
   /// - Queue is processed
   Future<void> _cancelAndCleanupTask(String taskId,
-      {bool processQueue = true}) async {
+      {bool processQueue = true, bool cancelJob = true}) async {
     if (_database == null) return;
 
     final task = _database!.getTask(taskId);
@@ -1113,7 +1113,10 @@ class _NativeDownloadService implements DownloadService {
 
     // 2. Cancel the server-side transcode job, if the task has one
     final resolver = _resolver;
-    if (task != null && task.transcodeJobId != null && resolver != null) {
+    if (cancelJob &&
+        task != null &&
+        task.transcodeJobId != null &&
+        resolver != null) {
       try {
         final plan = await resolver(task);
         if (plan is TranscodeJob) await plan.cancel(task.transcodeJobId!);
@@ -1292,6 +1295,48 @@ class _NativeDownloadService implements DownloadService {
     }
 
     return failedTasks.length;
+  }
+
+  bool _ofAccount(SourceId source, String accountId) =>
+      source != SourceId.legacyMydia &&
+      source.value.split(':').first == accountId;
+
+  @override
+  ({int count, int bytes}) accountDownloads(String accountId) {
+    final media = (_database?.getAllMedia() ?? const <DownloadedMedia>[])
+        .where((m) => _ofAccount(m.source, accountId));
+    return (
+      count: media.length,
+      bytes: media.fold(0, (sum, m) => sum + m.fileSize),
+    );
+  }
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async {
+    if (_database == null) return 0;
+    var count = 0;
+    final media = _database!
+        .getAllMedia()
+        .where((m) => _ofAccount(m.source, accountId))
+        .toList();
+    for (final m in media) {
+      await _deleteMediaFiles(m);
+      await _database!.deleteMedia(m.id);
+      count++;
+    }
+    final tasks = _database!
+        .getAllTasks()
+        .where((t) => _ofAccount(t.source, accountId))
+        .toList();
+    for (final task in tasks) {
+      // The account's credentials are going, so a server-side job cannot be
+      // cancelled; skipping it also keeps removal off the network.
+      await _cancelAndCleanupTask(task.id,
+          processQueue: false, cancelJob: false);
+      await _database!.deleteTask(task.id);
+    }
+    await _processQueue();
+    return count;
   }
 
   @override

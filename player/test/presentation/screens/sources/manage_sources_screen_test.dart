@@ -18,6 +18,7 @@ import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord;
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 
 class _RecordingP2p extends P2pService {
@@ -63,6 +64,7 @@ Future<InMemorySourceStore> _removeGuest(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       authStateProvider.overrideWith(_Authenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       p2pServiceProvider.overrideWithValue(p2p),
@@ -92,6 +94,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],
@@ -123,6 +126,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -140,6 +144,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -162,6 +167,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -199,6 +205,7 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         pinStoreProvider.overrideWithValue(pins),

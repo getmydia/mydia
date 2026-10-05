@@ -121,6 +121,13 @@ abstract class DownloadService {
   Future<int> deleteSeasonDownloads(
       SourceId source, String showId, int seasonNumber);
 
+  /// What removing [accountId] would delete: every download from any of its
+  /// profiles and servers.
+  ({int count, int bytes}) accountDownloads(String accountId);
+
+  /// Cancels and deletes them. Returns how many records went.
+  Future<int> deleteAccountDownloads(String accountId);
+
   List<DownloadTask> getActiveDownloads();
   List<DownloadedMedia> getDownloadedMedia();
   bool isDownloaded(ItemRef ref);

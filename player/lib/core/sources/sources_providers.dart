@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../downloads/download_job_providers.dart';
+import '../downloads/download_providers.dart';
+import '../downloads/download_service.dart';
 import '../graphql/graphql_provider.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
@@ -75,7 +77,20 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         if (record != null) {
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
+        await _deleteDownloads(accountId);
       });
+
+  /// Downloads go with the account: their credentials are gone, so they
+  /// could never sync or be re-fetched. Never blocks the removal.
+  Future<void> _deleteDownloads(String accountId) async {
+    if (!isDownloadSupported) return;
+    try {
+      final manager = await ref.read(downloadManagerProvider.future);
+      await manager.deleteAccountDownloads(accountId);
+    } catch (e) {
+      debugPrint('[sources] Could not delete downloads of $accountId: $e');
+    }
+  }
 
   /// Never throws: a selection that cannot be remembered still applies for
   /// this launch.
@@ -121,6 +136,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
         for (final record in locked) {
           await _write((store) => store.removeAccount(record.account.id));
           await ref.read(sourceSecretsProvider).deleteAll(record);
+          await _deleteDownloads(record.account.id);
         }
       });
 

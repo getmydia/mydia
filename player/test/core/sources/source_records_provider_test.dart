@@ -8,6 +8,7 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
+import '../../test_utils/no_downloads.dart';
 import 'store/source_json_test.dart' show plexRecord;
 
 class _Unauthenticated extends AuthStateNotifier {
@@ -25,6 +26,7 @@ void main() {
     storage = MockAuthStorage();
     container = ProviderContainer(overrides: [
       authStateProvider.overrideWith(_Unauthenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);
@@ -66,6 +68,7 @@ void main() {
 
     final restarted = ProviderContainer(overrides: [
       authStateProvider.overrideWith(_Unauthenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     ]);

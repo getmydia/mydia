@@ -16,6 +16,7 @@ import 'package:player/presentation/screens/sources/unlock_screen.dart';
 
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 
 class _Auth implements DeviceAuth {
@@ -124,6 +125,7 @@ void main() {
       pins,
       overrides: [
         authStateProvider.overrideWith(_Unauthenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       ],

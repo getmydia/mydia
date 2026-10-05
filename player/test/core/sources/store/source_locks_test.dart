@@ -7,10 +7,12 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
 import 'source_json_test.dart' show plexRecord;
 
 ProviderContainer _container(InMemorySourceStore store) {
   final c = ProviderContainer(overrides: [
+    noDownloadsOverride,
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
   ]);

@@ -186,6 +186,13 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
+  ({int count, int bytes}) accountDownloads(String accountId) =>
+      (count: 0, bytes: 0);
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async => 0;
+
+  @override
   List<DownloadTask> getActiveDownloads() => [];
 
   @override
