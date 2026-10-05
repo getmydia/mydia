@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/fetch_log.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/startup/startup_init.dart';
 import 'package:player/core/startup/startup_timeline.dart';
 
@@ -45,6 +46,7 @@ StartupSteps _steps({
     inputCapabilities: track('input'),
     hiveCache: hiveCache ?? track('hive'),
     fetchLog: fetchLog ?? () async => InMemoryFetchLog(),
+    sourceCache: () async => InMemorySourceCache(),
     downloadDb: downloadDb ?? track('downloads'),
     sidebarLayoutStore: sidebar ?? () async => InMemorySidebarLayoutStore(),
     connection: () async => null,
