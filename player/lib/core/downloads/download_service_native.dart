@@ -14,10 +14,12 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../domain/models/download.dart';
-import '../../domain/models/download_option.dart';
+import '../../domain/models/download_plan.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/models/download_settings.dart';
 import '../../domain/models/storage_settings.dart';
 import '../../domain/sources/item.dart';
+import '../../domain/sources/source_error.dart';
 import '../sources/source.dart';
 import '../storage/app_hive.dart';
 import 'download_notification_service.dart';
@@ -25,6 +27,7 @@ import 'download_recovery.dart';
 import 'download_service.dart';
 import 'download_job_service.dart';
 import 'download_speed_tracker.dart';
+import 'range_fetch.dart';
 import 'thumbnail_cache_warmer.dart';
 
 /// Downloads are fully supported on native platforms.
@@ -212,8 +215,6 @@ class _NativeDownloadService implements DownloadService {
   final _speedTracker = DownloadSpeedTracker.instance;
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, bool> _pausedTasks = {};
-  // Track cancellation callbacks for progressive downloads (to cancel server jobs)
-  final Map<String, Future<void> Function(String)> _cancelJobCallbacks = {};
   final StreamController<DownloadTask> _progressController =
       StreamController<DownloadTask>.broadcast();
 
@@ -234,8 +235,7 @@ class _NativeDownloadService implements DownloadService {
   final _notificationService = DownloadNotificationService.instance;
   StreamSubscription<DownloadTask>? _notificationProgressSub;
 
-  // Job service for resuming progressive downloads
-  DownloadJobService? _jobService;
+  DownloadPlanResolver? _resolver;
 
   // Queue management
   int _maxConcurrentDownloads = 2;
@@ -300,6 +300,7 @@ class _NativeDownloadService implements DownloadService {
   /// Process the download queue and start next queued downloads if slots available.
 
   Future<void> _processQueue() async {
+    if (_resolver == null) return;
     if (_database == null || !_autoStartQueued) return;
 
     // Clean up any cancelled tokens before checking slots
@@ -308,7 +309,7 @@ class _NativeDownloadService implements DownloadService {
     while (hasAvailableSlots()) {
       // Get queued tasks sorted by creation date (FIFO)
       // Only pick up 'queued' tasks - 'transcoding' tasks are already actively
-      // managed by _startProgressiveDownloadTask and should not be restarted.
+      // managed by _runTask and should not be restarted.
       final queuedTasks = _database!
           .getAllTasks()
           .where((t) => t.status == 'queued')
@@ -322,46 +323,7 @@ class _NativeDownloadService implements DownloadService {
       final pendingTask = task.copyWith(status: 'pending');
       await _database!.saveTask(pendingTask);
 
-      // Start the download based on type
-      if (task.isProgressive && task.transcodeJobId != null) {
-        // Progressive download with existing transcode job - resume it
-        _driveProgressiveTask(pendingTask);
-      } else if (task.isProgressive && _jobService != null) {
-        // Queued progressive download that hasn't been prepared yet
-        try {
-          final prepareResult = await _jobService!.prepareDownload(
-            contentType: task.mediaType,
-            id: task.mediaId,
-            resolution: task.quality,
-          );
-
-          final preparedTask = pendingTask.copyWith(
-            transcodeJobId: prepareResult.jobId,
-            transcodeProgress: prepareResult.progress,
-            status: prepareResult.status == DownloadJobStatusType.ready
-                ? 'downloading'
-                : 'transcoding',
-            fileSize: prepareResult.currentFileSize,
-            isProgressive: prepareResult.status != DownloadJobStatusType.ready,
-          );
-          await _database!.saveTask(preparedTask);
-          _emit(preparedTask);
-
-          _driveProgressiveTask(preparedTask);
-        } catch (e) {
-          final errorTask = pendingTask.copyWith(
-            status: 'failed',
-            error: 'Failed to prepare download: $e',
-          );
-          await _database!.saveTask(errorTask);
-          _emit(errorTask);
-        }
-      } else if (task.downloadUrl != null) {
-        _runInBackground(
-          _startDownloadTask(pendingTask),
-          'download ${pendingTask.id}',
-        );
-      }
+      _runInBackground(_runTask(pendingTask), 'download ${pendingTask.id}');
     }
   }
 
@@ -406,12 +368,11 @@ class _NativeDownloadService implements DownloadService {
   }
 
   @override
-  void setJobService(dynamic jobService) {
-    if (jobService is DownloadJobService) {
-      _jobService = jobService;
-      // Progressive tasks could not be recovered before a job service existed.
-      unawaited(recoverStuckDownloads());
-    }
+  void setPlanResolver(DownloadPlanResolver resolver) {
+    _resolver = resolver;
+    // Tasks could not be recovered before anything could resolve them.
+    unawaited(recoverStuckDownloads());
+    _runInBackground(_processQueue(), 'process queue');
   }
 
   bool _sweepInFlight = false;
@@ -423,6 +384,7 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   Future<void> recoverStuckDownloads() async {
+    if (_resolver == null) return;
     if (_database == null || _sweepInFlight) return;
     _sweepInFlight = true;
     try {
@@ -472,13 +434,8 @@ class _NativeDownloadService implements DownloadService {
         await _database!.saveTask(claimed);
         _emit(claimed);
 
-        if (claimed.isProgressive && claimed.transcodeJobId != null) {
-          _driveProgressiveTask(claimed);
-        } else if (claimed.downloadUrl != null) {
-          await _startDownloadTask(claimed);
-        } else {
-          await restartDownload(claimed.id);
-        }
+        // Not awaited, so the sweep is not held for a whole transfer.
+        _runInBackground(_runTask(claimed), 'resume ${claimed.id}');
     }
   }
 
@@ -521,29 +478,6 @@ class _NativeDownloadService implements DownloadService {
     }
 
     if (found) await recoverStuckDownloads();
-  }
-
-  /// Start the progressive loop for [task] using the injected job service.
-  ///
-  /// The four call sites that previously inlined this closure all built the
-  /// same adapter around `DownloadJobService`.
-  void _driveProgressiveTask(DownloadTask task) {
-    final jobService = _jobService;
-    if (jobService == null) return;
-
-    _startProgressiveDownloadTask(
-      task,
-      getDownloadUrl: jobService.getDownloadUrl,
-      getJobStatus: (jobId) async {
-        final status = await jobService.getJobStatus(jobId);
-        return (
-          status: status.status.name,
-          progress: status.progress,
-          fileSize: status.currentFileSize,
-          error: status.error,
-        );
-      },
-    );
   }
 
   /// Update the Android foreground service based on current download state.
@@ -709,461 +643,231 @@ class _NativeDownloadService implements DownloadService {
     }
   }
 
-  String _generateFileName(DownloadTask task) {
+  String _generateFileName(DownloadTask task, String extension) {
     final sanitizedTitle = task.title.replaceAll(RegExp(r'[^\w\s-]'), '');
     final sanitizedQuality = task.quality.replaceAll(RegExp(r'[^\w\s-]'), '');
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return '${sanitizedTitle}_${sanitizedQuality}_$timestamp.mp4';
+    return '${sanitizedTitle}_${sanitizedQuality}_$timestamp.$extension';
+  }
+
+  Future<DownloadPlan> _resolve(DownloadTask task) async {
+    final resolver = _resolver;
+    if (resolver == null) {
+      throw const _ParkTask('Downloads are still starting.');
+    }
+    try {
+      return await resolver(task);
+    } on SourceException catch (e) {
+      if (e.kind == SourceErrorKind.unreachable) {
+        throw _ParkTask(e.viewerMessage);
+      }
+      throw _TaskFailure(e.viewerMessage, permanent: true);
+    } on DownloadServiceException catch (e) {
+      if (e.statusCode == 404) {
+        throw const _TaskFailure('This item is no longer on the server.',
+            permanent: true);
+      }
+      rethrow;
+    }
   }
 
   @override
-  Future<DownloadTask> startDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    int? fileSize,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    if (_database == null) {
-      throw StateError('Database not initialized');
-    }
-
-    // Clean up any cancelled tokens before checking slots
+  Future<DownloadTask> start(DownloadRequest request) async {
+    if (_database == null) throw StateError('Database not initialized');
     await _reapCancelledTokens();
 
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-
-    // Check if we should queue this download
+    final m = request.metadata;
     final shouldQueue = !hasAvailableSlots();
-
+    final now = DateTime.now();
     final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: quality,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      posterUrl: posterUrl,
-      createdAt: DateTime.now(),
-      // A task that has just been created has not stalled. Stamping this here
-      // gives the watchdog a baseline from the first moment the task exists.
+      id: '${request.ref.sourceId.value}_${request.ref.externalId}_'
+          '${now.millisecondsSinceEpoch}',
+      mediaId: request.ref.externalId,
+      sourceId: request.ref.sourceId.value,
+      itemKind: request.ref.kind.name,
+      title: m.title,
+      quality: request.optionId,
+      mediaType: m.mediaType == MediaType.episode ? 'episode' : 'movie',
+      posterUrl: m.posterUrl,
+      backdropUrl: m.backdropUrl,
+      thumbnailUrl: m.thumbnailUrl,
+      overview: m.overview,
+      runtime: m.runtime,
+      genres: m.genres,
+      rating: m.rating,
+      year: m.year,
+      contentRating: m.contentRating,
+      seasonNumber: m.seasonNumber,
+      episodeNumber: m.episodeNumber,
+      showId: m.showId,
+      showTitle: m.showTitle,
+      showPosterUrl: m.showPosterUrl,
+      airDate: m.airDate,
+      fileSize: request.expectedBytes,
+      createdAt: now,
       lastProgressAt: _clock(),
-      isProgressive: false,
+      // Counts against the concurrency limit from the first moment, so a
+      // bulk start cannot overrun it before the loops report in.
       status: shouldQueue ? 'queued' : 'downloading',
-      fileSize: fileSize,
-      downloadUrl: downloadUrl,
-      overview: overview,
-      runtime: runtime,
-      genres: genres,
-      rating: rating,
-      backdropUrl: backdropUrl,
-      year: year,
-      contentRating: contentRating,
-      seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber,
-      showId: showId,
-      showTitle: showTitle,
-      showPosterUrl: showPosterUrl,
-      thumbnailUrl: thumbnailUrl,
-      airDate: airDate,
     );
-
     await _database!.saveTask(task);
     _emit(task);
-
-    if (!shouldQueue) {
-      _runInBackground(_startDownloadTask(task), 'download ${task.id}');
-    }
-
+    if (!shouldQueue) _runInBackground(_runTask(task), 'download ${task.id}');
     return task;
   }
 
-  @override
-  Future<DownloadTask> startProgressiveDownload({
-    required String mediaId,
-    required String title,
-    required String contentType,
-    required String resolution,
-    required MediaType mediaType,
-    String? posterUrl,
-    required Future<String> Function(String jobId) getDownloadUrl,
-    required Future<
-                ({String jobId, String status, double progress, int? fileSize})>
-            Function()
-        prepareDownload,
-    required Future<
-                ({
-                  String status,
-                  double progress,
-                  int? fileSize,
-                  String? error
-                })>
-            Function(String jobId)
-        getJobStatus,
-    Future<void> Function(String jobId)? cancelJob,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    if (_database == null) {
-      throw StateError('Database not initialized');
-    }
-
-    // Clean up any cancelled tokens before checking slots
-    await _reapCancelledTokens();
-
-    final taskId = '${mediaId}_${DateTime.now().millisecondsSinceEpoch}';
-
-    // Check if we should queue this download
-    final shouldQueue = !hasAvailableSlots();
-
-    if (shouldQueue) {
-      // Queue the download - don't start transcode yet
-      final task = DownloadTask(
-        id: taskId,
-        mediaId: mediaId,
-        title: title,
-        quality: resolution,
-        mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-        posterUrl: posterUrl,
-        createdAt: DateTime.now(),
-        isProgressive: true,
-        status: 'queued',
-        overview: overview,
-        runtime: runtime,
-        genres: genres,
-        rating: rating,
-        backdropUrl: backdropUrl,
-        year: year,
-        contentRating: contentRating,
-        seasonNumber: seasonNumber,
-        episodeNumber: episodeNumber,
-        showId: showId,
-        showTitle: showTitle,
-        showPosterUrl: showPosterUrl,
-        thumbnailUrl: thumbnailUrl,
-        airDate: airDate,
-      );
-
-      await _database!.saveTask(task);
-      _emit(task);
-      return task;
-    }
-
-    // Before starting progressive, reap any cancelled tokens to free slots
-    await _reapCancelledTokens();
-
-    // Prepare the transcode job on the server
-    final prepareResult = await prepareDownload();
-    final jobId = prepareResult.jobId;
-
-    final task = DownloadTask(
-      id: taskId,
-      mediaId: mediaId,
-      title: title,
-      quality: resolution,
-      mediaType: mediaType == MediaType.movie ? 'movie' : 'episode',
-      posterUrl: posterUrl,
-      createdAt: DateTime.now(),
-      isProgressive: prepareResult.status != 'ready',
-      transcodeJobId: jobId,
-      transcodeProgress: prepareResult.progress,
-      status: prepareResult.status == 'ready' ? 'downloading' : 'transcoding',
-      fileSize: prepareResult.fileSize,
-      overview: overview,
-      runtime: runtime,
-      genres: genres,
-      rating: rating,
-      backdropUrl: backdropUrl,
-      year: year,
-      contentRating: contentRating,
-      seasonNumber: seasonNumber,
-      episodeNumber: episodeNumber,
-      showId: showId,
-      showTitle: showTitle,
-      showPosterUrl: showPosterUrl,
-      thumbnailUrl: thumbnailUrl,
-      airDate: airDate,
-    );
-
-    await _database!.saveTask(task);
-    _emit(task);
-
-    // Store the cancel callback for this task
-    if (cancelJob != null) {
-      _cancelJobCallbacks[taskId] = cancelJob;
-    }
-
-    // Start the progressive download process
-    _runInBackground(
-      _startProgressiveDownloadTask(
-        task,
-        getDownloadUrl: getDownloadUrl,
-        getJobStatus: getJobStatus,
-      ),
-      'progressive download ${task.id}',
-    );
-
-    return task;
-  }
-
-  Future<void> _startProgressiveDownloadTask(
-    DownloadTask task, {
-    required Future<String> Function(String jobId) getDownloadUrl,
-    required Future<
-                ({
-                  String status,
-                  double progress,
-                  int? fileSize,
-                  String? error
-                })>
-            Function(String jobId)
-        getJobStatus,
-  }) async {
+  /// Runs [task] from wherever it stands to done: resolve the plan, see a
+  /// transcode job through, then fetch. Every start, resume, recovery and
+  /// restart comes through here. A cancelled token means someone else (pause,
+  /// cancel, restart, the stall watchdog) has claimed the task, so this
+  /// returns without writing a status.
+  Future<void> _runTask(DownloadTask task) async {
     if (_database == null) return;
-    if (task.transcodeJobId == null) return;
-
-    final jobId = task.transcodeJobId!;
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
-    _pausedTasks[task.id] = false;
+    var current = task;
 
-    DownloadTask updatedTask = task;
+    Future<void> save(DownloadTask next) async {
+      current = next;
+      await _database!.saveTask(next);
+      _emit(next);
+    }
+
+    void release() {
+      if (identical(_cancelTokens[task.id], cancelToken)) {
+        _cancelTokens.remove(task.id);
+      }
+      _pausedTasks.remove(task.id);
+      _speedTracker.clearTask(task.id);
+    }
 
     try {
-      // Reuse the path already recorded for this task so a resumed download
-      // continues into its partial file. Only a genuinely new download gets a
-      // freshly generated name.
-      final filePath = task.filePath ??
-          '${await _getDownloadDirectory()}/${_generateFileName(task)}';
+      var plan = await _resolve(current);
+      var transcodeDone = true;
+      var expected = current.fileSize;
+      String? jobId;
+      late DirectFile file;
 
-      updatedTask = task.copyWith(filePath: filePath);
-      await _database!.saveTask(updatedTask);
-
-      // Phase 1: Wait for transcoding
-      // On mobile: wait for full transcode completion before using background download
-      // On desktop: can start downloading once some content is available (progressive)
-      bool transcodeComplete = updatedTask.transcodeProgress >= 1.0;
-      // Initialize from the task's known file size (e.g. set by prepareDownload).
-      // This is critical for non-transcoded downloads where Phase 1 is skipped
-      // entirely, so the polling loop never gets a chance to populate this.
-      int? lastKnownFileSize = updatedTask.fileSize;
-
-      while (!transcodeComplete && !cancelToken.isCancelled) {
-        if (_pausedTasks[task.id] == true) {
-          // Paused, wait and check again
-          await Future<void>.delayed(const Duration(seconds: 1));
-          continue;
+      Future<void> pollJob(TranscodeJob job, String id) async {
+        final snap = await job.status(id);
+        if (snap.error != null) {
+          throw _TaskFailure('Transcode failed: ${snap.error}');
         }
-
-        final status = await _pollJobStatus(jobId, getJobStatus);
-
-        if (status.error != null) {
-          throw Exception('Transcode failed: ${status.error}');
-        }
-
-        updatedTask = updatedTask.copyWith(
-          transcodeProgress: status.progress,
-          fileSize: status.fileSize ?? updatedTask.fileSize,
-          status: status.status == 'ready' ? 'downloading' : 'transcoding',
+        transcodeDone = snap.ready;
+        expected = snap.fileSize ?? expected;
+        await save(current.copyWith(
+          transcodeProgress: snap.progress,
+          fileSize: expected,
+          status: snap.ready ? 'downloading' : 'transcoding',
           lastProgressAt: _clock(),
           recoveryAttempts: 0,
-        );
-        await _database!.saveTask(updatedTask);
-        _emit(updatedTask);
+        ));
+      }
 
-        if (status.status == 'ready') {
-          transcodeComplete = true;
-          lastKnownFileSize = status.fileSize;
-        } else if (status.status == 'transcoding' &&
-            (status.fileSize ?? 0) > 0) {
-          // File is being produced, we can start progressive download
-          lastKnownFileSize = status.fileSize;
-          break;
+      if (plan is TranscodeJob) {
+        jobId = current.transcodeJobId;
+        if (jobId == null) {
+          final snap = await plan.prepare();
+          jobId = snap.jobId;
+          await save(current.copyWith(
+            transcodeJobId: snap.jobId,
+            transcodeProgress: snap.progress,
+            fileSize: snap.fileSize,
+            isProgressive: !snap.ready,
+            status: snap.ready ? 'downloading' : 'transcoding',
+            lastProgressAt: _clock(),
+          ));
+          expected = snap.fileSize;
         }
-
-        await Future<void>.delayed(const Duration(seconds: 2));
+        transcodeDone = current.transcodeProgress >= 1.0;
+        // Wait until the job is done, or has produced bytes to start on.
+        while (!transcodeDone && !cancelToken.isCancelled) {
+          await pollJob(plan, jobId);
+          if (transcodeDone || (expected ?? 0) > 0) break;
+          await Future<void>.delayed(const Duration(seconds: 2));
+        }
+        if (cancelToken.isCancelled) return;
+        file = await plan.file(jobId);
+      } else {
+        file = plan as DirectFile;
+        expected = file.expectedBytes ?? expected;
       }
 
-      // Check if cancelled - cleanup is handled by cancelDownload
-      if (cancelToken.isCancelled) {
-        return;
-      }
+      final path = current.filePath ??
+          '${await _getDownloadDirectory()}/'
+              '${_generateFileName(current, file.extension)}';
+      await save(current.copyWith(
+          filePath: path, status: 'downloading', fileSize: expected));
+      final disk = File(path);
 
-      // Phase 2: Start downloading
-      final downloadUrl = await getDownloadUrl(jobId);
-      updatedTask = updatedTask.copyWith(
-        downloadUrl: downloadUrl,
-        status: 'downloading',
-        fileSize: lastKnownFileSize ?? updatedTask.fileSize,
-      );
-      await _database!.saveTask(updatedTask);
-      _emit(updatedTask);
-
-      // Progressive download loop - handles the case where file is still growing
-      final file = File(filePath);
-
-      // The file on disk is the truth. The persisted downloadedBytes can
-      // disagree after a crash part-way through a write.
-      int downloadedBytes = await file.exists() ? await file.length() : 0;
-
-      bool downloadComplete = false;
-      // Transient network failures while the transcode is still running used to
-      // retry forever. Three attempts with backoff, then hand the task to the
-      // recovery sweep.
+      var reResolved = false;
       const maxTransientRetries = 3;
       var transientRetries = 0;
 
-      while (!downloadComplete) {
-        // Check if cancelled - cleanup is handled by cancelDownload
-        if (cancelToken.isCancelled) {
-          return;
+      while (true) {
+        if (cancelToken.isCancelled) return;
+        if (!transcodeDone && plan is TranscodeJob) {
+          await pollJob(plan, jobId!);
         }
-        if (_pausedTasks[task.id] == true) {
-          // Save current progress and wait
-          updatedTask = updatedTask.copyWith(
-            status: 'paused',
-            downloadedBytes: downloadedBytes,
-          );
-          await _database!.saveTask(updatedTask);
-          _emit(updatedTask);
-          await Future<void>.delayed(const Duration(seconds: 1));
-          continue;
-        }
-
-        // Check current transcode status
-        if (!transcodeComplete) {
-          final status = await _pollJobStatus(jobId, getJobStatus);
-          if (status.error != null) {
-            throw Exception('Transcode failed: ${status.error}');
-          }
-          updatedTask = updatedTask.copyWith(
-            transcodeProgress: status.progress,
-            fileSize: status.fileSize ?? updatedTask.fileSize,
-            lastProgressAt: _clock(),
-            recoveryAttempts: 0,
-          );
-          transcodeComplete = status.status == 'ready';
-          lastKnownFileSize = status.fileSize ?? lastKnownFileSize;
-        }
-
-        // Download available bytes using Range request
-        final headers = <String, dynamic>{};
-        if (downloadedBytes > 0) {
-          headers['Range'] = 'bytes=$downloadedBytes-';
-        }
-
+        final from = await disk.exists() ? await disk.length() : 0;
         try {
-          final response = await _dio.download(
-            downloadUrl,
-            filePath,
+          final result = await fetchRange(
+            _dio,
+            url: file.url,
+            headers: file.headers,
+            file: disk,
+            from: from,
             cancelToken: cancelToken,
-            deleteOnError: false,
-            fileAccessMode: downloadedBytes > 0
-                ? FileAccessMode.append
-                : FileAccessMode.write,
-            options: Options(
-              headers: headers,
-              responseType: ResponseType.stream,
-            ),
-            onReceiveProgress: (received, total) async {
-              final actualReceived = downloadedBytes + received;
-              final estimatedTotal = lastKnownFileSize ?? total;
-
-              if (estimatedTotal > 0) {
-                final downloadProgress =
-                    (actualReceived / estimatedTotal).clamp(0.0, 1.0);
-                updatedTask = updatedTask.copyWith(
-                  downloadProgress: downloadProgress,
-                  progress: updatedTask.isProgressive
-                      ? (updatedTask.transcodeProgress * 0.3) +
-                          (downloadProgress * 0.7)
-                      : downloadProgress,
-                  downloadedBytes: actualReceived,
-                  lastProgressAt: _clock(),
-                  recoveryAttempts: 0,
-                );
-                _speedTracker.recordProgress(task.id, actualReceived);
-                await _database!.saveTask(updatedTask);
-                _emit(updatedTask);
-              }
+            onProgress: (onDisk, total) async {
+              if (transcodeDone) expected ??= total;
+              final estimate = expected ?? total;
+              final fraction = estimate != null && estimate > 0
+                  ? (onDisk / estimate).clamp(0.0, 1.0)
+                  : 0.0;
+              _speedTracker.recordProgress(task.id, onDisk);
+              await save(current.copyWith(
+                downloadProgress: fraction,
+                progress: current.isProgressive
+                    ? current.transcodeProgress * 0.3 + fraction * 0.7
+                    : fraction,
+                downloadedBytes: onDisk,
+                fileSize: estimate,
+                lastProgressAt: _clock(),
+                recoveryAttempts: 0,
+              ));
             },
           );
-
-          // Check if we got all the data
-          final currentFileSize = await file.length();
-          downloadedBytes = currentFileSize;
-
-          if (transcodeComplete &&
-              lastKnownFileSize != null &&
-              currentFileSize >= lastKnownFileSize) {
-            // We have all the expected bytes
-            downloadComplete = true;
-          } else if (transcodeComplete && response.statusCode == 200) {
-            // Transcode is done and server returned full content (not partial).
-            // This handles the case where file size is unknown but the
-            // server confirmed the download is complete via HTTP 200.
-            downloadComplete = true;
-          } else if (!transcodeComplete) {
-            // Still transcoding, wait a bit then check for more data
-            await Future<void>.delayed(const Duration(seconds: 2));
-          } else if (response.statusCode == 206) {
-            // Partial content received, continue downloading
-            await Future<void>.delayed(const Duration(milliseconds: 500));
-          }
+          if (transcodeDone) expected ??= result.total;
+          final known = expected;
+          final whole = known == null || result.bytesOnDisk >= known;
+          if (transcodeDone && (whole || result.statusCode == 200)) break;
+          await Future<void>.delayed(transcodeDone
+              ? const Duration(milliseconds: 500)
+              : const Duration(seconds: 2));
         } on DioException catch (e) {
-          if (e.type == DioExceptionType.cancel) {
-            // Cancelled - cleanup is handled by cancelDownload
-            return;
+          if (e.type == DioExceptionType.cancel) return;
+          final code = e.response?.statusCode;
+          if (code == 416 && transcodeDone) break;
+          if (code == 401 || code == 403) {
+            if (reResolved) {
+              throw const _TaskFailure(
+                  'This server no longer accepts the saved sign-in. Sign in again.',
+                  permanent: true);
+            }
+            reResolved = true;
+            plan = await _resolve(current);
+            file = plan is TranscodeJob
+                ? await plan.file(jobId!)
+                : plan as DirectFile;
+            continue;
           }
-          // Cap at maxTransientRetries download attempts. Delay after each
-          // failure (2s, 4s, 8s) including the last, then park as interrupted
-          // so the recovery sweep can decide what to do.
-          if (!transcodeComplete) {
+          if (!transcodeDone) {
             transientRetries++;
             await Future<void>.delayed(
                 Duration(seconds: 1 << transientRetries));
             if (transientRetries >= maxTransientRetries) {
-              final interrupted = updatedTask.copyWith(
-                status: 'interrupted',
-                error: 'Network error after $maxTransientRetries attempts: '
-                    '${e.message ?? e.type.name}',
-              );
-              await _database!.saveTask(interrupted);
-              // saveTask is what waitForStatus observes; tearDown may close the
-              // progress stream before we reach add. Skip if already disposed.
-              _emit(interrupted);
-              _cancelTokens.remove(task.id);
-              _pausedTasks.remove(task.id);
-              _speedTracker.clearTask(task.id);
-              _runInBackground(_processQueue(), 'process queue');
-              return;
+              throw _ParkTask('Network error after $maxTransientRetries '
+                  'attempts: ${e.message ?? e.type.name}');
             }
             continue;
           }
@@ -1171,230 +875,46 @@ class _NativeDownloadService implements DownloadService {
         }
       }
 
-      // Final cancellation check - cleanup is handled by cancelDownload
-      if (cancelToken.isCancelled) {
-        return;
-      }
-
-      // Download complete
-      final downloadedFileSize = await file.length();
-      updatedTask = updatedTask.copyWith(
+      if (cancelToken.isCancelled) return;
+      final done = current.copyWith(
         status: 'completed',
         progress: 1.0,
         transcodeProgress: 1.0,
         downloadProgress: 1.0,
-        fileSize: downloadedFileSize,
+        fileSize: await disk.length(),
         completedAt: DateTime.now(),
       );
-      await _database!.saveTask(updatedTask);
-
-      // Save to downloaded media
-      final media = DownloadedMedia.fromTask(updatedTask);
-      await _database!.saveMedia(media);
+      await _database!.saveTask(done);
+      await _database!.saveMedia(DownloadedMedia.fromTask(done));
 
       // Best-effort, and deliberately not awaited: the download is already on
       // disk and must not be delayed or failed by an image fetch.
-      unawaited(warmThumbnailCache(updatedTask));
+      unawaited(warmThumbnailCache(done));
 
-      _emit(updatedTask);
-      _cancelTokens.remove(task.id);
-      _pausedTasks.remove(task.id);
-      _cancelJobCallbacks.remove(task.id);
-      _speedTracker.clearTask(task.id);
-
-      // Process queue to start next download
-      _runInBackground(_processQueue(), 'process queue');
-    } on _DeadJobException catch (e) {
-      final failed = updatedTask.copyWith(
+      _emit(done);
+    } on _ParkTask catch (e) {
+      await save(current.copyWith(status: 'interrupted', error: e.message));
+    } on _TaskFailure catch (e) {
+      await save(current.copyWith(
         status: 'failed',
         error: e.message,
-        recoveryAttempts: maxRecoveryAttempts,
-      );
-      await _database!.saveTask(failed);
-      _emit(failed);
-      _cancelTokens.remove(task.id);
-      _pausedTasks.remove(task.id);
-      _cancelJobCallbacks.remove(task.id);
-      _speedTracker.clearTask(task.id);
-      _runInBackground(_processQueue(), 'process queue');
-    } on DioException catch (e) {
-      // If cancelled, cleanup is handled by cancelDownload
-      if (e.type == DioExceptionType.cancel) {
-        return;
-      }
-      // Handle other Dio errors
-      final errorMessage = e.message ?? 'Download failed';
-      updatedTask = updatedTask.copyWith(status: 'failed', error: errorMessage);
-      await _database!.saveTask(updatedTask);
-      _emit(updatedTask);
-      _cancelTokens.remove(task.id);
-      _pausedTasks.remove(task.id);
-      _cancelJobCallbacks.remove(task.id);
-      _speedTracker.clearTask(task.id);
-      _runInBackground(_processQueue(), 'process queue');
-    } catch (e) {
-      final errorTask = updatedTask.copyWith(
-        status: 'failed',
-        error: e.toString(),
-      );
-      await _database!.saveTask(errorTask);
-      _emit(errorTask);
-      _cancelTokens.remove(task.id);
-      _pausedTasks.remove(task.id);
-      _cancelJobCallbacks.remove(task.id);
-      _speedTracker.clearTask(task.id);
-      _runInBackground(_processQueue(), 'process queue');
-    }
-  }
-
-  /// Fetch job status, converting a missing job into a terminal failure.
-  ///
-  /// A 404 means the server has dropped the transcode job, so the partial file
-  /// on disk can never be completed and retrying is pointless.
-  Future<({String status, double progress, int? fileSize, String? error})>
-      _pollJobStatus(
-    String jobId,
-    Future<({String status, double progress, int? fileSize, String? error})>
-            Function(String)
-        getJobStatus,
-  ) async {
-    try {
-      return await getJobStatus(jobId);
-    } on DownloadServiceException catch (e) {
-      if (e.statusCode == 404) {
-        throw _DeadJobException(
-          'The server no longer has this download job. Restart to try again.',
-        );
-      }
-      rethrow;
-    }
-  }
-
-  Future<void> _startDownloadTask(DownloadTask task) async {
-    if (_database == null) return;
-
-    if (task.downloadUrl == null) {
-      final errorTask = task.copyWith(
-        status: 'failed',
-        error: 'Download URL is not available',
-      );
-      await _database!.saveTask(errorTask);
-      _emit(errorTask);
-      return;
-    }
-
-    final cancelToken = CancelToken();
-    _cancelTokens[task.id] = cancelToken;
-
-    DownloadTask updatedTask = task;
-    try {
-      final filePath = task.filePath ??
-          '${await _getDownloadDirectory()}/${_generateFileName(task)}';
-
-      final existing = File(filePath);
-      final resumeFrom = await existing.exists() ? await existing.length() : 0;
-
-      // Update status to downloading
-      updatedTask = task.copyWith(
-        status: 'downloading',
-        filePath: filePath,
-      );
-      await _database!.saveTask(updatedTask);
-      _emit(updatedTask);
-
-      // Download the file
-      await _dio.download(
-        task.downloadUrl!,
-        filePath,
-        cancelToken: cancelToken,
-        fileAccessMode:
-            resumeFrom > 0 ? FileAccessMode.append : FileAccessMode.write,
-        options: resumeFrom > 0
-            ? Options(headers: {'Range': 'bytes=$resumeFrom-'})
-            : null,
-        onReceiveProgress: (received, total) async {
-          if (total != -1) {
-            final actualReceived = resumeFrom + received;
-            final estimatedTotal = resumeFrom + total;
-            updatedTask = updatedTask.copyWith(
-              progress: actualReceived / estimatedTotal,
-              fileSize: estimatedTotal,
-              downloadedBytes: actualReceived,
-              lastProgressAt: _clock(),
-              recoveryAttempts: 0,
-            );
-            _speedTracker.recordProgress(task.id, actualReceived);
-            await _database!.saveTask(updatedTask);
-            _emit(updatedTask);
-          }
-        },
-      );
-
-      // Mark as completed
-      final file = File(filePath);
-      final downloadedFileSize = await file.length();
-      updatedTask = updatedTask.copyWith(
-        status: 'completed',
-        progress: 1.0,
-        fileSize: downloadedFileSize,
-        completedAt: DateTime.now(),
-      );
-      await _database!.saveTask(updatedTask);
-
-      // Save to downloaded media
-      final media = DownloadedMedia.fromTask(updatedTask);
-      await _database!.saveMedia(media);
-
-      // Best-effort, and deliberately not awaited: the download is already on
-      // disk and must not be delayed or failed by an image fetch.
-      unawaited(warmThumbnailCache(updatedTask));
-
-      _emit(updatedTask);
-      _cancelTokens.remove(task.id);
-      _speedTracker.clearTask(task.id);
-
-      // Process queue to start next download
-      _runInBackground(_processQueue(), 'process queue');
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) {
-        // The token was cancelled, but this loop does not get to decide what
-        // that meant. pauseDownload cancels it and writes 'paused';
-        // restartDownload cancels it and writes 'pending'. Claiming
-        // 'cancelled' unconditionally here would clobber either of those, so
-        // only claim it if nobody else has already moved the task on.
-        final current = _database!.getTask(task.id);
-        if (current == null || current.status == 'downloading') {
-          updatedTask = task.copyWith(
-            status: 'cancelled',
-            error: 'Download cancelled',
-          );
-          await _database!.saveTask(updatedTask);
-          _emit(updatedTask);
-        }
-      } else {
-        updatedTask = task.copyWith(
+        recoveryAttempts:
+            e.permanent ? maxRecoveryAttempts : current.recoveryAttempts,
+      ));
+    } on DeadJobException catch (e) {
+      await save(current.copyWith(
           status: 'failed',
-          error: e.message ?? 'Download failed',
-        );
-        await _database!.saveTask(updatedTask);
-        _emit(updatedTask);
+          error: e.message,
+          recoveryAttempts: maxRecoveryAttempts));
+    } on DioException catch (e) {
+      if (e.type != DioExceptionType.cancel) {
+        await save(current.copyWith(
+            status: 'failed', error: e.message ?? 'Download failed'));
       }
-      _cancelTokens.remove(task.id);
-      _speedTracker.clearTask(task.id);
-
-      // Process queue even on failure/cancel
-      _runInBackground(_processQueue(), 'process queue');
     } catch (e) {
-      final errorTask = task.copyWith(
-        status: 'failed',
-        error: e.toString(),
-      );
-      await _database!.saveTask(errorTask);
-      _emit(errorTask);
-      _cancelTokens.remove(task.id);
-      _speedTracker.clearTask(task.id);
-
-      // Process queue even on error
+      await save(current.copyWith(status: 'failed', error: e.toString()));
+    } finally {
+      release();
       _runInBackground(_processQueue(), 'process queue');
     }
   }
@@ -1406,20 +926,8 @@ class _NativeDownloadService implements DownloadService {
     final task = _database!.getTask(taskId);
     if (task == null) return;
 
-    // For progressive downloads, use the pause flag instead of cancelling
-    if (task.isProgressive) {
-      _pausedTasks[taskId] = true;
-      final pausedTask = task.copyWith(status: 'paused');
-      await _database!.saveTask(pausedTask);
-      _emit(pausedTask);
-      return;
-    }
-
-    // Claim the status BEFORE cancelling the token. The download loop's cancel
-    // handler checks for a task still marked 'downloading' before writing
-    // 'cancelled', so writing 'paused' first means the loop sees the claim and
-    // leaves it alone. Doing it the other way round still ends at 'paused', but
-    // emits a spurious 'cancelled' on the progress stream on the way.
+    // Claim the status BEFORE cancelling the token, so the task never shows
+    // anything but 'paused' on the progress stream on the way.
     final pausedTask = task.copyWith(status: 'paused');
     await _database!.saveTask(pausedTask);
     _emit(pausedTask);
@@ -1441,25 +949,11 @@ class _NativeDownloadService implements DownloadService {
     const resumable = {'paused', 'interrupted', 'stalled'};
     if (task == null || !resumable.contains(task.status)) return;
 
-    // For progressive downloads, clear the pause flag. If no loop is running
-    // (an interrupted or stalled task), start one.
-    if (task.isProgressive) {
-      _pausedTasks[taskId] = false;
-      final resumedTask = task.copyWith(
-        status: task.transcodeProgress >= 1.0 ? 'downloading' : 'transcoding',
-        lastProgressAt: _clock(),
-      );
-      await _database!.saveTask(resumedTask);
-      _emit(resumedTask);
-
-      if (!_cancelTokens.containsKey(taskId) && _jobService != null) {
-        _driveProgressiveTask(resumedTask);
-      }
-      return;
-    }
-
-    // For regular downloads, restart the task
-    await _startDownloadTask(task);
+    final resumed =
+        task.copyWith(status: 'downloading', lastProgressAt: _clock());
+    await _database!.saveTask(resumed);
+    _emit(resumed);
+    _runInBackground(_runTask(resumed), 'resume $taskId');
   }
 
   /// Centralized method to cancel a task and clean up all associated resources.
@@ -1483,25 +977,16 @@ class _NativeDownloadService implements DownloadService {
     }
     _cancelTokens.remove(taskId);
 
-    // 2. Cancel server-side transcode job for progressive downloads
-    if (task != null && task.isProgressive && task.transcodeJobId != null) {
-      // Try the stored callback first, then fall back to the job service
-      final cancelCallback = _cancelJobCallbacks[taskId];
-      if (cancelCallback != null) {
-        try {
-          await cancelCallback(task.transcodeJobId!);
-        } catch (_) {
-          // Ignore errors when cancelling server job - it may have already completed
-        }
-      } else if (_jobService != null) {
-        try {
-          await _jobService!.cancelJob(task.transcodeJobId!);
-        } catch (_) {
-          // Ignore errors when cancelling server job - it may have already completed
-        }
+    // 2. Cancel the server-side transcode job, if the task has one
+    final resolver = _resolver;
+    if (task != null && task.transcodeJobId != null && resolver != null) {
+      try {
+        final plan = await resolver(task);
+        if (plan is TranscodeJob) await plan.cancel(task.transcodeJobId!);
+      } catch (_) {
+        // The job may be gone already, or the server out of reach.
       }
     }
-    _cancelJobCallbacks.remove(taskId);
 
     // 3. Remove from paused tracking and speed tracker
     _pausedTasks.remove(taskId);
@@ -1564,7 +1049,6 @@ class _NativeDownloadService implements DownloadService {
       cancelToken.cancel('Restarted by user');
     }
     _pausedTasks.remove(taskId);
-    _cancelJobCallbacks.remove(taskId);
     _speedTracker.clearTask(taskId);
 
     if (task.filePath != null) {
@@ -1585,45 +1069,16 @@ class _NativeDownloadService implements DownloadService {
       downloadedBytes: 0,
       recoveryAttempts: 0,
       lastProgressAt: _clock(),
-      error: null,
+      clearError: true,
       clearFilePath: true,
+      clearTranscodeJobId: true,
+      isProgressive: false,
       status: 'pending',
     );
 
-    if (task.isProgressive && _jobService != null) {
-      try {
-        final prepared = await _jobService!.prepareDownload(
-          contentType: task.mediaType,
-          id: task.mediaId,
-          resolution: task.quality,
-        );
-
-        final restarted = cleared.copyWith(
-          transcodeJobId: prepared.jobId,
-          transcodeProgress: prepared.progress,
-          fileSize: prepared.currentFileSize,
-          isProgressive: prepared.status != DownloadJobStatusType.ready,
-          status: prepared.status == DownloadJobStatusType.ready
-              ? 'downloading'
-              : 'transcoding',
-        );
-        await _database!.saveTask(restarted);
-        _emit(restarted);
-        _driveProgressiveTask(restarted);
-      } catch (e) {
-        final errorTask = cleared.copyWith(
-          status: 'failed',
-          error: 'Restart failed: $e',
-        );
-        await _database!.saveTask(errorTask);
-        _emit(errorTask);
-      }
-      return;
-    }
-
     await _database!.saveTask(cleared);
     _emit(cleared);
-    await _startDownloadTask(cleared);
+    _runInBackground(_runTask(cleared), 'restart $taskId');
   }
 
   @override
@@ -1836,11 +1291,16 @@ class _NativeDownloadService implements DownloadService {
   }
 }
 
-/// Thrown when the server has dropped a transcode job. Not recoverable by
-/// resuming, only by restarting, which prepares a new job.
-class _DeadJobException implements Exception {
+/// The task cannot go on now, but may later: parked as interrupted for the
+/// recovery sweep.
+class _ParkTask implements Exception {
+  const _ParkTask(this.message);
   final String message;
-  _DeadJobException(this.message);
-  @override
-  String toString() => message;
+}
+
+/// The task cannot finish. [permanent] stops the sweep retrying it.
+class _TaskFailure implements Exception {
+  const _TaskFailure(this.message, {this.permanent = false});
+  final String message;
+  final bool permanent;
 }

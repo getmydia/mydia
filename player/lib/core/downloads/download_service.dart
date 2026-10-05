@@ -8,6 +8,8 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/models/download_plan.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/sources/item.dart';
 import '../sources/source.dart';
 import 'download_service_stub.dart'
@@ -46,14 +48,9 @@ abstract class DownloadDatabase {
   Future<void> close();
 }
 
-/// Callback for progressive download progress updates.
-typedef ProgressiveDownloadCallback = void Function({
-  required String jobId,
-  required double transcodeProgress,
-  required double downloadProgress,
-  required String status,
-  String? error,
-});
+/// Turns a task into what to fetch, through the task's source. Installed by
+/// `downloadManagerProvider`; called on every start, resume and restart.
+typedef DownloadPlanResolver = Future<DownloadPlan> Function(DownloadTask task);
 
 /// Abstract interface for the download service/manager.
 abstract class DownloadService {
@@ -61,10 +58,9 @@ abstract class DownloadService {
   /// Must be called before any other methods.
   void setDatabase(DownloadDatabase database);
 
-  /// Set the job service for managing progressive downloads.
-  /// This is optional but required for resuming interrupted progressive downloads.
-  void setJobService(
-      dynamic jobService); // Dynamic to avoid circular imports in interface
+  /// Install how tasks find their bytes. Runs the recovery sweep, which waits
+  /// for this.
+  void setPlanResolver(DownloadPlanResolver resolver);
 
   /// Apply the user's download settings. Called whenever settings change.
   void applySettings({
@@ -83,79 +79,8 @@ abstract class DownloadService {
 
   Stream<DownloadTask> get progressStream;
 
-  Future<DownloadTask> startDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    int? fileSize,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  });
-
-  /// Start a progressive download that transcodes on the server.
-  ///
-  /// [mediaId] - The media item ID
-  /// [title] - Display title for the download
-  /// [contentType] - Either "movie" or "episode"
-  /// [resolution] - Quality preset ("1080p", "720p", "480p")
-  /// [mediaType] - MediaType.movie or MediaType.episode
-  /// [posterUrl] - Optional poster image URL
-  /// [getDownloadUrl] - Async function to get authenticated download URL
-  /// [prepareDownload] - Async function to prepare download job on server
-  /// [getJobStatus] - Async function to poll job status
-  /// [cancelJob] - Async function to cancel the server-side transcode job
-  Future<DownloadTask> startProgressiveDownload({
-    required String mediaId,
-    required String title,
-    required String contentType,
-    required String resolution,
-    required MediaType mediaType,
-    String? posterUrl,
-    required Future<String> Function(String jobId) getDownloadUrl,
-    required Future<
-                ({String jobId, String status, double progress, int? fileSize})>
-            Function()
-        prepareDownload,
-    required Future<
-                ({
-                  String status,
-                  double progress,
-                  int? fileSize,
-                  String? error
-                })>
-            Function(String jobId)
-        getJobStatus,
-    Future<void> Function(String jobId)? cancelJob,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  });
+  /// Queue or start a download. Failures after this returns land on the task.
+  Future<DownloadTask> start(DownloadRequest request);
 
   Future<void> pauseDownload(String taskId);
   Future<void> resumeDownload(String taskId);
@@ -164,8 +89,8 @@ abstract class DownloadService {
   /// Discard all progress and start the download again.
   ///
   /// Accepts a task in any status except `completed`: it cancels a live loop,
-  /// deletes the partial file, re-prepares the transcode job when the task is
-  /// progressive, and starts fresh.
+  /// deletes the partial file, resolves a fresh plan (which prepares a new
+  /// transcode job when the source needs one), and starts fresh.
   Future<void> restartDownload(String taskId);
 
   /// Retry a `failed` or `cancelled` task. Delegates to [restartDownload].

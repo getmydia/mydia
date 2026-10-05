@@ -7,8 +7,16 @@ import 'package:player/core/downloads/download_job_service.dart';
 import 'package:player/core/downloads/download_recovery.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_request.dart';
+import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+
+final _secondRequest = DownloadRequest(
+  ref: homeMydiaRef(ItemKind.movie, 'm1'),
+  optionId: '1080p',
+  metadata: const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
+);
 
 void main() {
   late DownloadHarness harness;
@@ -49,7 +57,7 @@ void main() {
 
     // Occupy the single slot with a row that is already downloading. Starting
     // a real download first would race: a ten-byte in-memory body can complete
-    // before the second startDownload call reads the slot count.
+    // before the second start call reads the slot count.
     await harness.database.saveTask(DownloadTask(
       id: 'occupying',
       mediaId: 'm0',
@@ -60,13 +68,7 @@ void main() {
       createdAt: DateTime(2026, 1, 1),
     ));
 
-    final queued = await harness.service.startDownload(
-      mediaId: 'm1',
-      title: 'Second',
-      downloadUrl: 'https://test.invalid/1.mp4',
-      quality: '1080p',
-      mediaType: MediaType.movie,
-    );
+    final queued = await harness.service.start(_secondRequest);
 
     expect(harness.database.getTask(queued.id)!.status, 'queued');
   });
@@ -88,17 +90,11 @@ void main() {
       createdAt: DateTime(2026, 1, 1),
     ));
 
-    final started = await harness.service.startDownload(
-      mediaId: 'm1',
-      title: 'Second',
-      downloadUrl: 'https://test.invalid/1.mp4',
-      quality: '1080p',
-      mediaType: MediaType.movie,
-    );
+    final started = await harness.service.start(_secondRequest);
 
     expect(harness.database.getTask(started.id)!.status, isNot('queued'));
     // Drain the fire-and-forget download before tearDown closes the progress
-    // stream; otherwise dispose races with _startDownloadTask.
+    // stream; otherwise dispose races with _runTask.
     await harness.waitForStatus(started.id, 'completed');
   });
 
@@ -202,7 +198,6 @@ void main() {
         () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
 
       final partialPath = '${harness.downloadDir.path}/orphan.mp4';
@@ -232,7 +227,6 @@ void main() {
     test('parks every orphan as queued when autoStart is off', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
       harness.service.applySettings(
         maxConcurrentDownloads: 1,
@@ -263,7 +257,6 @@ void main() {
     test('fails a task that has exhausted its recovery attempts', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
       await harness.database.saveTask(DownloadTask(
         id: 'giveup',
@@ -286,7 +279,6 @@ void main() {
     test('is idempotent when called twice in a row', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
       await harness.database.saveTask(DownloadTask(
         id: 'orphan',
@@ -312,7 +304,6 @@ void main() {
     test('escalates to failed after the attempt ceiling', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
 
       await harness.database.saveTask(DownloadTask(
@@ -337,7 +328,6 @@ void main() {
     test('marks a task stalled once its window elapses', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
       harness.service.applySettings(
         maxConcurrentDownloads: 2,
@@ -365,7 +355,6 @@ void main() {
     test('leaves a task inside its window alone', () async {
       harness = await makeHarness(
         body: Uint8List.fromList(List.filled(10, 7)),
-        attachJobService: false,
       );
 
       await harness.database.saveTask(DownloadTask(
@@ -460,7 +449,6 @@ void main() {
   test('a second sweep recovers a task orphaned since the first', () async {
     harness = await makeHarness(
       body: Uint8List.fromList(List.filled(10, 7)),
-      attachJobService: false,
     );
 
     await harness.service.recoverStuckDownloads();

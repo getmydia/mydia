@@ -13,8 +13,10 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/downloads/download_job_service.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/downloads/download_service_native.dart';
+import 'package:player/core/sources/mydia/mydia_transcode_job.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 
 /// A complete [DownloadDatabase] over two Hive boxes.
@@ -230,6 +232,25 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Stands in for the sources: answers every resolve with [plan], counting
+/// calls, or throws [error] when set.
+class FakeResolver {
+  FakeResolver(this.plan);
+
+  DownloadPlan Function(DownloadTask task) plan;
+  Exception? error;
+  int calls = 0;
+
+  Future<DownloadPlan> call(DownloadTask task) async {
+    calls++;
+    final failure = error;
+    if (failure != null) throw failure;
+    return plan(task);
+  }
+}
+
+const testFileUrl = 'https://test.invalid/file.mp4';
+
 /// A clock the test moves by hand.
 class TestClock {
   DateTime now;
@@ -245,6 +266,7 @@ class DownloadHarness {
   final HiveDownloadDatabase database;
   final RecordingHttpAdapter adapter;
   final FakeDownloadJobService jobService;
+  final FakeResolver resolver;
   final TestClock clock;
   final Directory downloadDir;
   final Directory hiveDir;
@@ -254,6 +276,7 @@ class DownloadHarness {
     required this.database,
     required this.adapter,
     required this.jobService,
+    required this.resolver,
     required this.clock,
     required this.downloadDir,
     required this.hiveDir,
@@ -290,12 +313,12 @@ var _boxCounter = 0;
 
 /// Build a real native service wired to test doubles.
 ///
-/// [attachJobService] controls whether the fake job service is injected, which
-/// also decides whether the service runs its recovery sweep on injection.
+/// [attachResolver] controls whether the fake resolver is installed, which
+/// also decides whether the service runs its recovery sweep on installation.
 Future<DownloadHarness> makeHarness({
   required Uint8List body,
   DownloadJobStatus? jobStatus,
-  bool attachJobService = true,
+  bool attachResolver = true,
   List<DownloadTask> seedTasks = const [],
 }) async {
   final hiveDir = await Directory.systemTemp.createTemp('mydia_hive_');
@@ -326,7 +349,24 @@ Future<DownloadHarness> makeHarness({
     clock: clock.call,
   );
   service.setDatabase(database);
-  if (attachJobService) service.setJobService(jobService);
+  final resolver = FakeResolver((task) {
+    // Tasks seeded as transcodes keep exercising the job path.
+    final transcode = task.isProgressive ||
+        task.transcodeJobId != null ||
+        task.status == 'transcoding';
+    if (!transcode) {
+      return const DirectFile(url: testFileUrl, extension: 'mp4');
+    }
+    return MydiaTranscodeJob(
+      jobs: jobService,
+      contentType: task.mediaType,
+      id: task.mediaId,
+      resolution: task.quality,
+      fileFor: (jobId) async => DirectFile(
+          url: await jobService.getDownloadUrl(jobId), extension: 'mp4'),
+    );
+  });
+  if (attachResolver) service.setPlanResolver(resolver.call);
 
   // setDatabase schedules cleanupOrphanedFiles via Future.microtask. That
   // async work yields across the caller's first awaits and will delete any
@@ -339,6 +379,7 @@ Future<DownloadHarness> makeHarness({
     database: database,
     adapter: adapter,
     jobService: jobService,
+    resolver: resolver,
     clock: clock,
     downloadDir: downloadDir,
     hiveDir: hiveDir,

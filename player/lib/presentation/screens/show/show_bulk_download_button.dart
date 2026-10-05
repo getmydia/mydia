@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/bulk_download_helper.dart';
-import '../../../core/downloads/download_job_providers.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/download_request.dart';
@@ -129,19 +128,6 @@ class ShowBulkDownloadButton extends ConsumerWidget {
 
     if (selectedResolution == null || !context.mounted) return;
 
-    // Get download services
-    final downloadJobService = ref.read(unifiedDownloadJobServiceProvider);
-    if (downloadJobService == null) {
-      if (context.mounted) {
-        showToast(
-          context,
-          'Download service not available',
-          kind: ToastKind.error,
-        );
-      }
-      return;
-    }
-
     final downloadManager = await ref.read(downloadManagerProvider.future);
 
     // Build sets for skip checks
@@ -171,7 +157,6 @@ class ShowBulkDownloadButton extends ConsumerWidget {
       showTitle: show.title,
       showPosterUrl: show.artwork.posterUrl,
       downloadManager: downloadManager,
-      downloadJobService: downloadJobService,
       isMediaDownloaded: (id) => downloadedMediaIds.contains(id),
       isMediaInQueue: (id) => queueMediaIds.contains(id),
     );

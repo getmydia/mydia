@@ -3,10 +3,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/models/download.dart';
 import '../../domain/models/download_settings.dart';
 import '../../domain/sources/item.dart';
+import '../../domain/sources/source_error.dart';
+import '../sources/capabilities.dart';
+import '../sources/sources_providers.dart';
 import 'download_service.dart';
 import 'download_speed_tracker.dart';
 
-import 'download_job_providers.dart';
 import 'download_queue_providers.dart';
 
 part 'download_providers.g.dart';
@@ -75,11 +77,17 @@ Future<DownloadService> downloadManager(Ref ref) async {
     if (settings != null) pushSettings(settings);
   });
 
-  // Inject unified job service (works for both HTTP and P2P modes)
-  final jobService = ref.watch(unifiedDownloadJobServiceProvider);
-  if (jobService != null) {
-    service.setJobService(jobService);
-  }
+  // ref.read inside the closure is deliberate. Watching sources would rebuild
+  // this keep-alive provider and dispose the service, cancelling every download.
+  service.setPlanResolver((task) async {
+    final downloadable =
+        ref.read(mediaSourceProvider(task.source))?.as<Downloadable>();
+    if (downloadable == null) {
+      throw const SourceException.unsupported(
+          'This server is no longer on this device.');
+    }
+    return downloadable.resolve(task.itemRef, task.quality);
+  });
 
   ref.onDispose(() {
     service.dispose();

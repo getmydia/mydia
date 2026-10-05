@@ -7,6 +7,7 @@ library;
 import 'dart:async';
 
 import '../../domain/models/download.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/sources/item.dart';
 import '../sources/source.dart';
 import 'download_service.dart';
@@ -99,7 +100,7 @@ class _WebDownloadService implements DownloadService {
   }
 
   @override
-  void setJobService(dynamic jobService) {
+  void setPlanResolver(DownloadPlanResolver resolver) {
     // No-op on web
   }
 
@@ -119,71 +120,8 @@ class _WebDownloadService implements DownloadService {
   Stream<DownloadTask> get progressStream => _progressController.stream;
 
   @override
-  Future<DownloadTask> startDownload({
-    required String mediaId,
-    required String title,
-    required String downloadUrl,
-    required String quality,
-    required MediaType mediaType,
-    String? posterUrl,
-    int? fileSize,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    throw UnsupportedError('Downloads are not supported on web');
-  }
-
-  @override
-  Future<DownloadTask> startProgressiveDownload({
-    required String mediaId,
-    required String title,
-    required String contentType,
-    required String resolution,
-    required MediaType mediaType,
-    String? posterUrl,
-    required Future<String> Function(String jobId) getDownloadUrl,
-    required Future<
-                ({String jobId, String status, double progress, int? fileSize})>
-            Function()
-        prepareDownload,
-    required Future<
-                ({
-                  String status,
-                  double progress,
-                  int? fileSize,
-                  String? error
-                })>
-            Function(String jobId)
-        getJobStatus,
-    Future<void> Function(String jobId)? cancelJob,
-    String? overview,
-    int? runtime,
-    List<String>? genres,
-    double? rating,
-    String? backdropUrl,
-    int? year,
-    String? contentRating,
-    int? seasonNumber,
-    int? episodeNumber,
-    String? showId,
-    String? showTitle,
-    String? showPosterUrl,
-    String? thumbnailUrl,
-    String? airDate,
-  }) async {
-    throw UnsupportedError('Downloads are not supported on web');
+  Future<DownloadTask> start(DownloadRequest request) async {
+    throw UnsupportedError('Downloads are not supported');
   }
 
   @override

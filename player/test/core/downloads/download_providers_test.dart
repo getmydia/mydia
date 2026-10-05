@@ -7,7 +7,9 @@ import 'package:player/core/downloads/download_job_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_queue_providers.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/download_settings.dart';
+import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
 
@@ -116,13 +118,12 @@ void main() {
       createdAt: DateTime(2026, 1, 1),
     ));
 
-    final queued = await service.startDownload(
-      mediaId: 'm1',
-      title: 'Second',
-      downloadUrl: 'https://test.invalid/1.mp4',
-      quality: '1080p',
-      mediaType: MediaType.movie,
-    );
+    final queued = await service.start(DownloadRequest(
+      ref: homeMydiaRef(ItemKind.movie, 'm1'),
+      optionId: '1080p',
+      metadata:
+          const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
+    ));
 
     expect(database.getTask(queued.id)!.status, 'queued',
         reason: 'the new limit of 1 must have reached the service');
