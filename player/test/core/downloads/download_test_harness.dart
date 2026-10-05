@@ -177,7 +177,15 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   Uint8List body;
   DioException? failWith;
 
-  RecordingHttpAdapter({required this.body, this.failWith});
+  /// Answers a ranged request with 200 and the whole body, like a server that
+  /// does not support `Range`.
+  bool ignoreRange;
+
+  RecordingHttpAdapter({
+    required this.body,
+    this.failWith,
+    this.ignoreRange = false,
+  });
 
   /// The `Range` header of the most recent request, or null if there was none.
   String? get lastRange =>
@@ -197,7 +205,7 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     var start = 0;
     var statusCode = 200;
     final range = options.headers['Range'] as String?;
-    if (range != null) {
+    if (range != null && !ignoreRange) {
       final match = RegExp(r'bytes=(\d+)-').firstMatch(range);
       if (match != null) {
         start = int.parse(match.group(1)!);
