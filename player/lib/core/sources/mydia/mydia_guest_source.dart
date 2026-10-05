@@ -1,6 +1,8 @@
 /// A guest Mydia server browsed as a source.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:gql/ast.dart' show DocumentNode;
 
@@ -350,9 +352,14 @@ class MydiaGuestSource extends MediaSource
         fileFor: _file,
       );
 
+  bool _holdsProxy = false;
+
   Future<DirectFile> _file(String jobId) async {
     final credentials = await client.credentials();
     if (credentials.isP2p) {
+      // The hold lasts as long as the source: nothing observes a download
+      // finishing, so [dispose] is where it is let go.
+      _holdsProxy = true;
       final base = await guestProxyBase(proxy(), credentials,
           owner: this, target: source.account.id);
       return DirectFile(
@@ -425,6 +432,9 @@ class MydiaGuestSource extends MediaSource
 
   @override
   void dispose() {
+    // Only a p2p download ever took a hold, so a source that never
+    // downloaded must not touch the shared proxy.
+    if (_holdsProxy) unawaited(proxy().release(this));
     client.dispose();
     _onDispose?.call();
   }

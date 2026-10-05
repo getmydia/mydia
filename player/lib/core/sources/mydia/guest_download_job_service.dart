@@ -47,6 +47,6 @@ class GuestDownloadJobService implements DownloadJobService {
   /// A guest's file URL depends on its transport and needs headers, so
   /// `MydiaGuestSource.resolve` builds it rather than this.
   @override
-  Future<String> getDownloadUrl(String jobId) =>
+  Future<String> getDownloadUrl(String jobId) async =>
       throw UnsupportedError('guest file URLs come from MydiaGuestSource');
 }
