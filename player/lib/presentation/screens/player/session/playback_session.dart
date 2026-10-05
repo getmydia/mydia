@@ -9,6 +9,7 @@ import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/models/subtitle_search_outcome.dart';
+import '../../../../domain/sources/item.dart';
 import 'playback_session_types.dart';
 
 abstract interface class PlaybackSession {
@@ -60,8 +61,15 @@ abstract interface class PlaybackSession {
   /// What the screen may do beyond playing; see [PlaybackFeature].
   Set<PlaybackFeature> get features;
 
-  /// Progress for a file already on this device. Only a session with
-  /// [PlaybackFeature.downloads] is asked.
+  /// The item this session plays, under its source. Downloads and local
+  /// progress are keyed by it.
+  ItemRef get item;
+
+  /// False when the server is known to be out of reach. The screen then
+  /// plays a downloaded file with no network at all.
+  bool get reachable;
+
+  /// Progress for a file already on this device.
   Future<ProgressReporter> openProgress();
 
   /// Sets up the stream's transport, progress and memory key. [owner] holds

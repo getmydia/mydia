@@ -41,6 +41,7 @@ import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/screens/player/session/playback_session.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
@@ -701,6 +702,9 @@ ProviderContainer buildPlayerScreenContainer({
   required CapturingCastSessionManager castManager,
   required TrackingLocalProxyService proxyService,
   DownloadedMedia? downloaded,
+  // Overrides [downloaded] when a test needs a lookup that depends on the
+  // item asked for.
+  DownloadService? downloadService,
   AuthStatus authStatus = AuthStatus.authenticated,
   PlaybackProgressStore? progressStore,
   SettingsService? settingsService,
@@ -736,8 +740,8 @@ ProviderContainer buildPlayerScreenContainer({
     authStateProvider.overrideWith(
       () => FakeAuthNotifier(AsyncValue.data(authStatus)),
     ),
-    downloadManagerProvider.overrideWith(
-        (ref) async => FakeDownloadService(downloaded: downloaded)),
+    downloadManagerProvider.overrideWith((ref) async =>
+        downloadService ?? FakeDownloadService(downloaded: downloaded)),
     asyncGraphqlClientProvider
         .overrideWith((ref) async => stubClient(link, cache: cache)),
     serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
@@ -782,6 +786,7 @@ Future<void> pumpPlayerScreen(
   String mediaId = 'movie-1',
   String mediaType = 'movie',
   String fileId = 'file-1',
+  PlaybackSession? session,
   Player Function()? createPlayer,
   PlayerWindowSizer Function()? createWindowSizer,
 }) async {
@@ -794,6 +799,7 @@ Future<void> pumpPlayerScreen(
         mediaType: mediaType,
         fileId: fileId,
         title: 'The Long Aurora',
+        session: session,
         createPlayer: createPlayer,
         createWindowSizer: createWindowSizer,
       ),

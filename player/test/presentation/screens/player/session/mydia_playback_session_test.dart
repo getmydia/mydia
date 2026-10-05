@@ -24,6 +24,7 @@ MydiaPlaybackSession _session(
     client: () => hasClient ? client : null,
     awaitClient: () async => client,
     target: () => target,
+    offline: () => false,
   );
 }
 
