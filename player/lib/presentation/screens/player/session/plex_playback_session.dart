@@ -4,6 +4,7 @@ library;
 
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/cast/receiver_profile.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/device_profile.dart';
@@ -12,6 +13,7 @@ import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/plex/plex_media_source.dart';
 import '../../../../core/sources/plex/plex_server_client.dart';
 import '../../../../core/sources/transcode_codecs.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
 import 'source_playback_session.dart';
@@ -84,6 +86,40 @@ class PlexPlaybackSession extends SourcePlaybackSession {
         playbackId: _playbackId,
         profile: _profile,
       );
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      PlexStreamResolver(
+        client: _plex.client,
+        ratingKey: item.externalId,
+        version: version,
+        mediaIndex: detail.versions.indexOf(version).clamp(0, 1 << 20),
+        playbackId: _playbackId,
+        profile: receiverDeviceProfile,
+        forReceiver: true,
+        burnSubtitleStreamId: burnSubtitleStreamId,
+      );
+
+  /// Plex has no WebVTT conversion a receiver can fetch, so every track,
+  /// image ones included, is offered burned in.
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+          MediaVersion version) async =>
+      [
+        for (final s in version.streams)
+          if (s.kind == MediaStreamKind.subtitle)
+            CastSubtitleTrack(
+              trackId: s.id,
+              url: '',
+              label: s.title ?? s.language ?? 'Subtitles',
+              language: s.language ?? 'und',
+              burnedIn: true,
+            ),
+      ];
 }
 
 class PlexStreamResolver implements StreamResolver {

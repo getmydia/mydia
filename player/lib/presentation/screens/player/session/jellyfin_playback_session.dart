@@ -3,6 +3,7 @@
 /// dashboard shows.
 library;
 
+import '../../../../core/cast/receiver_profile.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/device_profile.dart';
@@ -13,6 +14,7 @@ import '../../../../core/sources/jellyfin/jellyfin_mapping.dart';
 import '../../../../core/sources/jellyfin/jellyfin_media_source.dart';
 import '../../../../core/sources/jellyfin/jellyfin_playback_info.dart';
 import '../../../../core/sources/transcode_codecs.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
 import 'playback_session_types.dart';
@@ -146,6 +148,43 @@ class JellyfinPlaybackSession extends SourcePlaybackSession {
         codecs: transcodeCodecs(_profile),
         onPlayMethod: (method) => _playMethod = method,
       );
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      JellyfinStreamResolver(
+        client: _jellyfin.client,
+        itemId: item.externalId,
+        version: version,
+        playSessionId: _loaded?.playSessionId ?? '',
+        codecs: transcodeCodecs(receiverDeviceProfile),
+        onPlayMethod: (method) => _playMethod = method,
+        forReceiver: true,
+      );
+
+  /// Jellyfin converts any text track, embedded or sidecar, to WebVTT.
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+      MediaVersion version) async {
+    final credential = await _jellyfin.client.receiverQuery();
+    return [
+      for (final s in version.streams)
+        if (s.kind == MediaStreamKind.subtitle &&
+            !isImageSubtitleCodec(s.codec))
+          CastSubtitleTrack(
+            trackId: s.id,
+            url: (await _jellyfin.client.url(
+                    '/Videos/${item.externalId}/${version.id}/Subtitles/${s.id}/Stream.vtt',
+                    credential))
+                .toString(),
+            label: s.title ?? s.language ?? 'Subtitles',
+            language: s.language ?? 'und',
+          ),
+    ];
+  }
 }
 
 class JellyfinStreamResolver implements StreamResolver {

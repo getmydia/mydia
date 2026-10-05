@@ -9,6 +9,7 @@ import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/stash/stash_client.dart';
 import '../../../../core/sources/stash/stash_documents.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
+import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/sources/item.dart';
 import 'source_playback_session.dart';
 
@@ -59,6 +60,36 @@ class StashPlaybackSession extends SourcePlaybackSession {
   @override
   StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
       StashStreamResolver(client: _stash.client, sceneId: item.externalId);
+
+  @override
+  StreamResolver createReceiverResolver(
+    ItemDetail detail,
+    MediaVersion version, {
+    String? burnSubtitleStreamId,
+  }) =>
+      StashStreamResolver(
+          client: _stash.client, sceneId: item.externalId, forReceiver: true);
+
+  /// Stash serves every caption as WebVTT from its caption route.
+  @override
+  Future<List<CastSubtitleTrack>> receiverSubtitles(
+      MediaVersion version) async {
+    final credential = await _stash.client.receiverQuery();
+    return [
+      for (final s in version.streams)
+        if (s.kind == MediaStreamKind.subtitle && s.externalPath != null)
+          CastSubtitleTrack(
+            trackId: s.id,
+            url: await _stash.client.url(s.externalPath!).then((u) => u.replace(
+                    queryParameters: {
+                      ...u.queryParameters,
+                      ...credential
+                    }).toString()),
+            label: s.title ?? s.language ?? 'Subtitles',
+            language: s.language ?? 'und',
+          ),
+    ];
+  }
 }
 
 class StashStreamResolver implements StreamResolver {
