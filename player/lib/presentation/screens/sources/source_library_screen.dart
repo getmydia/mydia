@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
+import '../../widgets/freshness_header.dart';
 import '../../widgets/source_artwork.dart';
 import 'source_browse_providers.dart';
 import 'source_drawer_button.dart';
@@ -39,6 +41,9 @@ class SourceLibraryScreen extends ConsumerWidget {
       ),
       body: Column(
         children: [
+          FreshnessHeader(
+            queryKeys: [SourceKeys.browse(library, query)],
+          ),
           if (info != null)
             SizedBox(
               height: 48,

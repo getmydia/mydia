@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/sources/cache/source_keys.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
+import '../../../domain/sources/item.dart';
 import '../episode/episode_detail_controller.dart';
 import '../movie/movie_detail_controller.dart';
 import '../show/season_episodes_controller.dart';
@@ -132,7 +134,7 @@ final episodeActionsProvider =
   },
 );
 
-/// The freshness banner's keys. Only Mydia's watchers report freshness.
+/// The freshness banner's keys.
 List<QueryKey> freshnessKeys(DetailTarget target, {int? seasonNumber}) =>
     switch (target) {
       MydiaTarget(kind: DetailKind.movie, :final id) => [
@@ -145,5 +147,8 @@ List<QueryKey> freshnessKeys(DetailTarget target, {int? seasonNumber}) =>
       MydiaTarget(kind: DetailKind.episode, :final id) => [
           QueryKeys.episodeDetail(id),
         ],
-      SourceTarget() => const [],
+      SourceTarget(:final ref) => [
+          SourceKeys.item(ref),
+          if (ref.kind == ItemKind.show) SourceKeys.children(ref),
+        ],
     };
