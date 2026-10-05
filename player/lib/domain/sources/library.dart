@@ -14,6 +14,13 @@ class LibraryRef {
   final SourceId sourceId;
   final String id;
 
+  factory LibraryRef.fromJson(Map<String, Object?> json) => LibraryRef(
+        sourceId: SourceId(json['sourceId']! as String),
+        id: json['id']! as String,
+      );
+
+  Map<String, Object?> toJson() => {'sourceId': sourceId.value, 'id': id};
+
   @override
   bool operator ==(Object other) =>
       other is LibraryRef && other.sourceId == sourceId && other.id == id;
@@ -41,6 +48,22 @@ class SortOption {
 
   /// Null for an option with no cross-server meaning (rating, random).
   final SharedSort? shared;
+
+  factory SortOption.fromJson(Map<String, Object?> json) => SortOption(
+        id: json['id']! as String,
+        label: json['label']! as String,
+        descendingByDefault: json['descendingByDefault'] as bool? ?? false,
+        shared: json['shared'] == null
+            ? null
+            : SharedSort.values.byName(json['shared']! as String),
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'label': label,
+        'descendingByDefault': descendingByDefault,
+        'shared': shared?.name,
+      };
 }
 
 @immutable
@@ -49,6 +72,13 @@ class FilterOption {
 
   final String id;
   final String label;
+
+  factory FilterOption.fromJson(Map<String, Object?> json) => FilterOption(
+        id: json['id']! as String,
+        label: json['label']! as String,
+      );
+
+  Map<String, Object?> toJson() => {'id': id, 'label': label};
 }
 
 /// A library as its source describes it. The sorts and filters are the
@@ -68,6 +98,28 @@ class Library {
   final LibraryKind kind;
   final List<SortOption> sortOptions;
   final List<FilterOption> filterOptions;
+
+  factory Library.fromJson(Map<String, Object?> json) => Library(
+        ref: LibraryRef.fromJson(json['ref']! as Map<String, Object?>),
+        title: json['title']! as String,
+        kind: LibraryKind.values.byName(json['kind']! as String),
+        sortOptions: [
+          for (final e in (json['sortOptions'] as List?) ?? const [])
+            SortOption.fromJson(e as Map<String, Object?>),
+        ],
+        filterOptions: [
+          for (final e in (json['filterOptions'] as List?) ?? const [])
+            FilterOption.fromJson(e as Map<String, Object?>),
+        ],
+      );
+
+  Map<String, Object?> toJson() => {
+        'ref': ref.toJson(),
+        'title': title,
+        'kind': kind.name,
+        'sortOptions': [for (final o in sortOptions) o.toJson()],
+        'filterOptions': [for (final o in filterOptions) o.toJson()],
+      };
 }
 
 @immutable
@@ -133,4 +185,25 @@ class Page<T> {
   final int? total;
 
   bool get hasMore => nextCursor != null;
+
+  static Page<T> fromJson<T>(
+    Map<String, Object?> json,
+    T Function(Map<String, Object?> item) item,
+  ) =>
+      Page(
+        items: [
+          for (final e in (json['items'] as List?) ?? const [])
+            item(e as Map<String, Object?>),
+        ],
+        nextCursor: json['nextCursor'] == null
+            ? null
+            : Cursor(json['nextCursor']! as String),
+        total: json['total'] as int?,
+      );
+
+  Map<String, Object?> toJson(Object? Function(T item) item) => {
+        'items': [for (final i in items) item(i)],
+        'nextCursor': nextCursor?.value,
+        'total': total,
+      };
 }
