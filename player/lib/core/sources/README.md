@@ -248,6 +248,27 @@ groups new episodes under their show, whose `addedAt` comes from
 `DateLastMediaAdded` (the show's own `DateCreated` is when it was first
 added); browse keeps `DateCreated` to match the server's sort.
 
+## All servers
+
+The switcher's "All servers" row (shown once two or more servers are
+included) opens `/all`: Continue Watching and Recently Added from every
+included server, merged newest first, then merged Movies and TV Shows
+grids (`/all/movies`, `/all/shows`) and search (`/all/search`).
+`LiveMergedReader` (`lib/domain/merged/`) asks each server live with an 8
+second timeout; a server that fails is named in a banner, and one without
+the capability or the chosen sort sits out. Grids are a k-way merge of each
+library's own pages in the `SharedSort` order, so an item is shown only
+once every server still paging has one buffered. Search keeps each
+server's ranking and interleaves servers within Movies, Shows, Episodes and
+Videos. `/all*` redirects to `/` when fewer than two servers are included,
+including on a cold start before the saved servers load, as `/s/<id>` does.
+
+Each server's "Include in All servers" switch (Manage servers) is stored by
+`SourceId` beside the accounts; Stash defaults to off. Home Mydia joins
+through `homeMydiaBrowseSourceProvider`, a `MydiaGuestSource` over home's
+own GraphQL client; it is never registered in `mediaSourceProvider`, and
+home items open Mydia's own detail screens.
+
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the

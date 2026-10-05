@@ -57,6 +57,20 @@ void contract(String name, Future<SourceStore> Function() open) {
       expect([for (final a in (await store.load()).accounts) a.account.id],
           ['acc1', 'acc0']);
     });
+
+    test('keeps the All servers choices', () async {
+      final store = await open();
+      expect((await store.load()).allServers, isEmpty);
+      await store.setAllServers({
+        const SourceId('mydia'): false,
+        const SourceId('acc1:owner:aa11'): true,
+      });
+      final snapshot = await store.load();
+      expect(snapshot.allServers, {
+        const SourceId('mydia'): false,
+        const SourceId('acc1:owner:aa11'): true,
+      });
+    });
   });
 }
 

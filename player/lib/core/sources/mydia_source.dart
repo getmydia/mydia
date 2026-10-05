@@ -8,6 +8,7 @@ import '../../domain/sources/item.dart';
 import '../../domain/sources/library.dart';
 import '../auth/auth_status.dart';
 import 'media_source.dart';
+import 'mydia/mydia_guest_source.dart';
 import 'source.dart';
 
 class MydiaSource extends MediaSource {
@@ -20,7 +21,7 @@ class MydiaSource extends MediaSource {
 
   /// Empty on purpose. Mydia's screens predate this layer and consult
   /// nothing here; capabilities are declared as its controllers move
-  /// behind [MediaSource].
+  /// behind [MediaSource]. Artwork is the one call this stub answers.
   @override
   Set<SourceCapability> get capabilities => const {};
 
@@ -66,7 +67,7 @@ class MydiaSource extends MediaSource {
 
   @override
   Future<ArtworkRequest?> artwork(ArtworkRef art, {required int width}) async =>
-      null;
+      absoluteArtworkRequest(id, art, width);
 
   @override
   void dispose() => _status.dispose();

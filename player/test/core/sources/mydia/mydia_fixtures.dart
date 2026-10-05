@@ -32,10 +32,24 @@ Map<String, dynamic> file(String id) => {
       ],
     };
 
-Map<String, dynamic> movie(String id,
-        {bool watched = false, int position = 0}) =>
+Map<String, dynamic> recentlyAdded(String id,
+        {String type = 'MOVIE', required String addedAt}) =>
     {
       'id': id,
+      'type': type,
+      'title': 'Invented Arrival $id',
+      'year': 2024,
+      'artwork': art('ra-$id'),
+      'addedAt': addedAt,
+    };
+
+Map<String, dynamic> movie(String id,
+        {bool watched = false,
+        int position = 0,
+        String addedAt = '2024-03-01T10:00:00Z'}) =>
+    {
+      'id': id,
+      'addedAt': addedAt,
       'title': 'The Quiet Orchard $id',
       'originalTitle': null,
       'year': 2021,
@@ -50,14 +64,18 @@ Map<String, dynamic> movie(String id,
         'durationSeconds': 6240,
         'percentage': 0.0,
         'watched': watched,
-        'lastWatchedAt': null,
+        'lastWatchedAt':
+            watched || position > 0 ? '2024-04-02T21:30:00Z' : null,
       },
       'files': [file('f-$id')],
       'isFavorite': true,
     };
 
-Map<String, dynamic> show(String id) => {
+Map<String, dynamic> show(String id,
+        {String addedAt = '2024-03-01T10:00:00Z'}) =>
+    {
       'id': id,
+      'addedAt': addedAt,
       'title': 'Lantern Street $id',
       'originalTitle': null,
       'year': 2019,

@@ -11,6 +11,7 @@ import '../../../domain/navigation/sidebar_layout.dart';
 import '../../screens/filter/filter_editor_sheet.dart';
 import '../channel_badge.dart';
 import '../mydia_logo.dart';
+import 'all_servers_nav_list.dart';
 import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
@@ -139,7 +140,10 @@ class SidebarContent extends ConsumerWidget {
     );
 
     final hasBackWidget = backToMydiaWidget != null;
+    final allServers = isAllServersLocation(location);
     final thirdPartyId = sourceIdFromLocation(location);
+    // Both replace Mydia's own destinations, so neither can be edited.
+    final ownsNav = allServers || thirdPartyId != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,7 +179,7 @@ class SidebarContent extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (thirdPartyId == null)
+              if (!ownsNav)
                 IconButton(
                   onPressed: () =>
                       ref.read(sidebarEditModeProvider.notifier).toggle(),
@@ -196,12 +200,20 @@ class SidebarContent extends ConsumerWidget {
           onNavigate: onNavigate,
           onSwitchSource: onSwitchSource,
         ),
-        if (editing && thirdPartyId == null)
+        if (editing && !ownsNav)
           SidebarEditBar(
             onDone: () => ref.read(sidebarEditModeProvider.notifier).exit(),
             onReset: () => _confirmReset(context, ref),
           ),
-        if (thirdPartyId != null)
+        if (allServers)
+          Expanded(
+            child: AllServersNavList(
+              location: location,
+              onNavigate: onNavigate,
+              selectedRowFocusNode: selectedRowFocusNode,
+            ),
+          )
+        else if (thirdPartyId != null)
           Expanded(
             child: SourceNavList(
               sourceId: SourceId(thirdPartyId),

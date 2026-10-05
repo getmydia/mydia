@@ -95,6 +95,14 @@ const guest = Source(
         }
       };
   t.handlers['GuestContinueWatching'] = (_) => {'continueWatching': <Object>[]};
+  t.handlers['GuestRecentlyAdded'] = (_) => {
+        'recentlyAdded': [
+          fx.recentlyAdded('m-4', addedAt: '2024-05-03T00:00:00Z'),
+          fx.recentlyAdded('s-1',
+              type: 'TV_SHOW', addedAt: '2024-05-02T00:00:00Z'),
+          fx.recentlyAdded('m-1', addedAt: '2024-05-01T00:00:00Z'),
+        ],
+      };
   for (final op in [
     'MarkMovieWatched',
     'MarkMovieUnwatched',
@@ -137,6 +145,24 @@ void main() {
       show:
           const ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1'),
     );
+  });
+
+  test('recently added asks for 20 and keeps the server order', () async {
+    final b = build();
+    final items = await b.source.recentlyAdded();
+    expect(items.map((i) => i.ref.externalId), ['m-4', 's-1', 'm-1']);
+    expect(b.t.calls.last.operation, 'GuestRecentlyAdded');
+    expect(b.t.calls.last.vars['first'], 20);
+  });
+
+  test('browse sorts are tagged title and added only', () async {
+    final libs = await build().source.libraries();
+    final shared = {for (final o in libs.first.sortOptions) o.id: o.shared};
+    expect(shared, {
+      'TITLE': SharedSort.title,
+      'ADDED_AT': SharedSort.added,
+      'YEAR': null,
+    });
   });
 
   test('browse sends the sort the viewer picked', () async {

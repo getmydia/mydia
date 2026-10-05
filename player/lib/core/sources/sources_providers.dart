@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +10,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../graphql/graphql_provider.dart';
+import 'all_servers_inclusion.dart';
 import 'lock/source_lock_controller.dart';
 import 'media_source.dart';
+import 'mydia/home_mydia_browse.dart';
 import 'mydia_source.dart';
 import 'source.dart';
 import 'source_factories.dart';
@@ -68,9 +71,30 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             (store) => store.putAccount(record.copyWith(serverLocks: kept)));
       });
 
+  /// Drops [accountId]'s All servers choices. Best effort: a leftover choice
+  /// is inert, and a failure here must not stop the account's credentials
+  /// from being deleted after it.
+  Future<void> _dropAllServersChoices(
+      SourceStore store, String accountId) async {
+    final all = _current?.allServers ?? const <SourceId, bool>{};
+    final kept = {
+      for (final e in all.entries)
+        if (!e.key.value.startsWith('$accountId:')) e.key: e.value,
+    };
+    if (kept.length == all.length) return;
+    try {
+      await store.setAllServers(kept);
+    } catch (e) {
+      debugPrint('[Sources] Could not drop All servers choices: $e');
+    }
+  }
+
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
-        await _write((store) => store.removeAccount(accountId));
+        await _write((store) async {
+          await store.removeAccount(accountId);
+          await _dropAllServersChoices(store, accountId);
+        });
         if (record != null) {
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
@@ -107,6 +131,13 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             (store) => store.putAccount(record.copyWith(serverLocks: locks)));
       });
 
+  Future<void> setIncludedInAllServers(SourceId id, bool included) =>
+      _serialise(() async {
+        final snapshot = await future;
+        final next = {...snapshot.allServers, id: included};
+        await _write((store) => store.setAllServers(next));
+      });
+
   /// "Forgot PIN": every account with a locked or hidden server goes, with
   /// its tokens. Nothing that was out of sight becomes visible.
   ///
@@ -118,7 +149,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             if (r.serverLocks.isNotEmpty) r,
         ];
         for (final record in locked) {
-          await _write((store) => store.removeAccount(record.account.id));
+          final id = record.account.id;
+          await _write((store) async {
+            await store.removeAccount(id);
+            await _dropAllServersChoices(store, id);
+          });
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
       });
@@ -346,6 +381,60 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
   };
   ref.onDispose(media.dispose);
   return media;
+});
+
+/// The viewer's "Include in All servers" choices; empty until they load.
+final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
+    (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {});
+
+/// Included sources the merged views read, home Mydia first. Leaves out
+/// what is locked away and what needs signing in again.
+///
+/// The list compares equal when it holds the same instances in the same
+/// order, so a source-records write that changes nothing here (a picker
+/// switch, an unchanged rediscovery) does not notify, and the merged reader
+/// and grids built on it are not restarted.
+final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
+  final choices = ref.watch(allServersChoicesProvider);
+  final gated = ref.watch(gatedSourceIdsProvider);
+  return _IdentityList([
+    for (final s in ref.watch(sourcesProvider))
+      if (!s.account.needsReauth &&
+          !gated.contains(s.id) &&
+          includedInAllServers(s, choices))
+        if ((s.id == SourceId.legacyMydia
+                ? ref.watch(homeMydiaBrowseSourceProvider)
+                : ref.watch(mediaSourceProvider(s.id)))
+            case final media?)
+          media,
+  ]);
+});
+
+/// An unmodifiable list whose equality is element-wise identity.
+class _IdentityList extends UnmodifiableListView<MediaSource> {
+  _IdentityList(super.source);
+
+  @override
+  bool operator ==(Object other) {
+    if (other is! _IdentityList || other.length != length) return false;
+    for (var i = 0; i < length; i++) {
+      if (!identical(this[i], other[i])) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(map(identityHashCode));
+}
+
+/// Included sources the merged views left out because they need signing in
+/// again, so the views can say so.
+final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
+  final choices = ref.watch(allServersChoicesProvider);
+  return [
+    for (final s in ref.watch(sourcesProvider))
+      if (s.account.needsReauth && includedInAllServers(s, choices)) s,
+  ];
 });
 
 /// Where `/s/:sourceId` lands before its screen builds: home Mydia keeps its

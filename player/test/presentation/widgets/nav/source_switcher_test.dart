@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/source_switcher.dart';
+
+import '../../../domain/merged/fake_merged_source.dart';
 
 class _FixedAuth extends AuthStateNotifier {
   @override
@@ -62,12 +65,14 @@ Future<(ProviderContainer, _Calls)> _pump(
   required List<Source> thirdParty,
   String location = '/',
   bool withSwitchCallback = true,
+  List<MediaSource> included = const [],
 }) async {
   final calls = _Calls();
   final container = ProviderContainer(
     overrides: [
       authStateProvider.overrideWith(_FixedAuth.new),
       thirdPartySourcesProvider.overrideWithValue(thirdParty),
+      allServersSourcesProvider.overrideWithValue(included),
     ],
   );
   addTearDown(container.dispose);
@@ -236,6 +241,20 @@ void main() {
         tester, const ValueKey('source-switcher-acc1:owner:srv9'));
     expect(calls.navigations, ['/sources/add/plex?account=acc1']);
     expect(calls.switches, isEmpty);
+  });
+
+  testWidgets('at /all the header names All servers', (tester) async {
+    await _pump(tester, thirdParty: [_plex()], location: '/all/movies');
+    expect(_headerName(tester), 'All servers');
+  });
+
+  testWidgets('picking All servers navigates to /all', (tester) async {
+    final plex = _plex();
+    final (_, calls) = await _pump(tester,
+        thirdParty: [plex],
+        included: [FakeMergedSource(plex), FakeMergedSource(_guest())]);
+    await _openAndTap(tester, const ValueKey('source-switcher-all'));
+    expect(calls.switches, ['/all']);
   });
 
   test('currentFor prefers the location, then Mydia, then the pick', () {

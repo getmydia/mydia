@@ -4,6 +4,7 @@ import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 
@@ -13,6 +14,22 @@ import 'store/source_json_test.dart' show plexRecord;
 class _Unauthenticated extends AuthStateNotifier {
   @override
   AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
+}
+
+/// Holds All servers choices but refuses to save new ones.
+class _ChoicesFailStore extends InMemorySourceStore {
+  Map<SourceId, bool> choices = const {};
+
+  @override
+  Future<SourceSnapshot> load() async {
+    final s = await super.load();
+    return SourceSnapshot(
+        accounts: s.accounts, activeId: s.activeId, allServers: choices);
+  }
+
+  @override
+  Future<void> setAllServers(Map<SourceId, bool> choices) async =>
+      throw StateError('disk full');
 }
 
 void main() {
@@ -53,6 +70,49 @@ void main() {
     await container.read(sourceRecordsProvider.future);
     await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(container.read(thirdPartySourcesProvider), isEmpty);
+    expect(await storage.read('source/acc1/account_token'), isNull);
+  });
+
+  test('setIncludedInAllServers persists and updates state', () async {
+    await container.read(sourceRecordsProvider.future);
+    const id = SourceId('acc1:owner:abc123');
+    await container
+        .read(sourceRecordsProvider.notifier)
+        .setIncludedInAllServers(id, false);
+    expect((await store.load()).allServers, {id: false});
+    expect(container.read(allServersChoicesProvider), {id: false});
+  });
+
+  test('removing an account drops its All servers choices', () async {
+    await store.putAccount(plexRecord());
+    await store.setAllServers({
+      const SourceId('mydia'): false,
+      const SourceId('acc1:owner:abc123'): true,
+      const SourceId('acc10:owner:zz'): true,
+    });
+    await container.read(sourceRecordsProvider.future);
+    await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect((await store.load()).allServers, {
+      const SourceId('mydia'): false,
+      const SourceId('acc10:owner:zz'): true,
+    });
+  });
+
+  test('a failed choices write still removes the account and its secrets',
+      () async {
+    final failing = _ChoicesFailStore();
+    final c = ProviderContainer(overrides: [
+      authStateProvider.overrideWith(_Unauthenticated.new),
+      sourceStoreProvider.overrideWith((ref) async => failing),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+    ]);
+    addTearDown(c.dispose);
+    await failing.putAccount(plexRecord());
+    failing.choices = {const SourceId('acc1:owner:abc123'): true};
+    await storage.write('source/acc1/account_token', 't');
+    await c.read(sourceRecordsProvider.future);
+    await c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+    expect(c.read(thirdPartySourcesProvider), isEmpty);
     expect(await storage.read('source/acc1/account_token'), isNull);
   });
 

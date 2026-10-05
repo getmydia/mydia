@@ -18,6 +18,7 @@ query GuestMovies($first: Int, $after: String, $sort: SortInput) {
         id
         title
         year
+        addedAt
         runtime
         artwork {
           ...ArtworkFragment
@@ -42,6 +43,7 @@ query GuestTvShows($first: Int, $after: String, $sort: SortInput) {
         id
         title
         year
+        addedAt
         seasonCount
         artwork {
           ...ArtworkFragment
@@ -56,6 +58,19 @@ query GuestTvShows($first: Int, $after: String, $sort: SortInput) {
       endCursor
     }
     totalCount
+  }
+}
+
+query GuestRecentlyAdded($first: Int) {
+  recentlyAdded(first: $first) {
+    id
+    type
+    title
+    year
+    addedAt
+    artwork {
+      ...ArtworkFragment
+    }
   }
 }
 
