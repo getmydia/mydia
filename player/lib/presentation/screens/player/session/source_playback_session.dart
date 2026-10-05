@@ -85,6 +85,36 @@ abstract class SourcePlaybackSession implements PlaybackSession {
           MediaVersion version) async =>
       const [];
 
+  /// The source subtitle stream that matches the track the viewer has on
+  /// locally, for a cast. Sidecars carry the source's stream id; an embedded
+  /// track is an mpv track, matched by language, then title. Null when off or
+  /// nothing matches.
+  Future<String?> receiverSubtitleIdFor(SubtitleTrack? local) async {
+    if (local == null) return null;
+    final (_, version) = await pickedVersion();
+    final subtitles = [
+      for (final s in version?.streams ?? const <MediaStreamInfo>[])
+        if (s.kind == MediaStreamKind.subtitle) s,
+    ];
+
+    for (final s in subtitles) {
+      if (s.id == local.id) return s.id;
+    }
+
+    final language = local.language.toLowerCase();
+    if (language == 'und') return null;
+    final sameLanguage = [
+      for (final s in subtitles)
+        if (s.language?.toLowerCase() == language) s,
+    ];
+    if (sameLanguage.isEmpty) return null;
+
+    final names = {local.title, local.displayName}.whereType<String>();
+    return (sameLanguage.where((s) => names.contains(s.title)).firstOrNull ??
+            sameLanguage.first)
+        .id;
+  }
+
   @override
   Set<PlaybackFeature> get features => const {};
 

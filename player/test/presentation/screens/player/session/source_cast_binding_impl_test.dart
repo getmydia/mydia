@@ -1,7 +1,10 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
+import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/jellyfin_playback_session.dart';
@@ -20,6 +23,29 @@ import '../../../../core/sources/stash/stash_media_source_test.dart' as st
     show build;
 
 void main() {
+  test('a source that is no longer in the app cannot be cast from', () async {
+    final container = ProviderContainer(overrides: [
+      sourcesProvider.overrideWithValue(const []),
+    ]);
+    addTearDown(container.dispose);
+    final refProvider = Provider<Ref>((ref) => ref);
+
+    await expectLater(
+      bindSourceCast(
+        container.read(refProvider),
+        const SourceCastContent(
+          item: ItemRef(
+              sourceId: SourceId('px1:owner:gone'),
+              kind: ItemKind.movie,
+              externalId: '1'),
+          versionId: '1',
+        ),
+      ),
+      throwsA(isA<CastBackendException>()
+          .having((e) => e.kind, 'kind', CastFailureKind.unknown)),
+    );
+  });
+
   group('Plex', () {
     const movie = ItemRef(
         sourceId: SourceId('acc1:owner:abc123'),
@@ -139,6 +165,24 @@ void main() {
         sourceId: SourceId('st1:owner:main'),
         kind: ItemKind.video,
         externalId: '2');
+
+    test('a rejected key surfaces as notAuthorized', () async {
+      final b = st.build();
+      b.server.status = 401;
+      final binding = SessionSourceCastBinding(
+          StashPlaybackSession(source: b.source, item: scene, fileId: '92'));
+
+      await expectLater(
+        binding.resolve(
+          protocol: CastProtocolKind.chromecast,
+          startPosition: Duration.zero,
+          subtitleTrackId: null,
+          forceTranscode: false,
+        ),
+        throwsA(isA<CastBackendException>()
+            .having((e) => e.kind, 'kind', CastFailureKind.notAuthorized)),
+      );
+    });
 
     test('captions become sidecars with apikey', () async {
       final b = st.build();

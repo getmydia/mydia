@@ -172,10 +172,19 @@ never does this. The TV fetches from the source's current connection, so a
 server this device reaches only over a VPN cannot be cast from.
 
 Chromecast gets HLS (copy for H.264, otherwise a transcode, and a transcode
-after one rejected load) and DLNA the direct file. Subtitles: Jellyfin and
-Stash serve WebVTT sidecars; Plex burns the chosen track in after selecting
-it on the part, so changing it restarts the stream. Progress goes to the
-source's own reporter from the receiver's position.
+after one rejected load; DLNA is not retried) and DLNA the direct file.
+Subtitles:
+
+- Jellyfin converts any text track, embedded or sidecar, to WebVTT. Image
+  tracks are excluded.
+- Stash serves its captions as WebVTT.
+- Plex burns the chosen track in, image tracks included. That forces a
+  transcode, and selecting it on the part also changes the track Plex picks
+  for that file on its other clients. Changing the track restarts the stream.
+- DLNA gets no subtitles.
+
+Progress goes to the source's own reporter from the receiver's position. The
+persisted cast record keeps no stream URL, because it carries the credential.
 
 ## HTTP and errors
 

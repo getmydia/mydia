@@ -3,6 +3,7 @@ import 'package:player/core/cast/receiver_profile.dart';
 import 'package:player/core/playback/playback_plan.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/quality_rung.dart';
+import 'package:player/domain/models/subtitle_track.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
@@ -40,6 +41,29 @@ void main() {
     expect(tracks.single.id, '33');
     expect(tracks.single.language, 'spa');
     expect(tracks.single.embedded, isFalse);
+  });
+
+  group('receiverSubtitleIdFor', () {
+    test('null means off', () async {
+      expect(await open().session.receiverSubtitleIdFor(null), isNull);
+    });
+
+    test('a sidecar id matches its source stream', () async {
+      const local = SubtitleTrack(id: '33', language: 'spa');
+      expect(await open().session.receiverSubtitleIdFor(local), '33');
+    });
+
+    test('an mpv track is matched by language', () async {
+      const local = SubtitleTrack(id: 'mk_2', language: 'ENG', embedded: true);
+      expect(await open().session.receiverSubtitleIdFor(local), '34');
+    });
+
+    test('no matching stream gives null', () async {
+      const local = SubtitleTrack(id: 'mk_3', language: 'fre', embedded: true);
+      expect(await open().session.receiverSubtitleIdFor(local), isNull);
+      const unknown = SubtitleTrack(id: 'mk_4', language: 'und');
+      expect(await open().session.receiverSubtitleIdFor(unknown), isNull);
+    });
   });
 
   test('fetches an external subtitle body', () async {

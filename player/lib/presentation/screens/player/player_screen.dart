@@ -5555,8 +5555,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _showToast('Stats copied', kind: ToastKind.success);
   }
 
-  /// Show the cast device picker dialog, then hand the selected device to
-  /// [CastSessionManager] to resolve a route and start playback.
   /// What a cast of the current item plays. A third-party item carries no
   /// Mydia ids; its receiver subtitles come from the source, not from the
   /// local track list.
@@ -5571,6 +5569,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           ),
       };
 
+  /// Show the cast device picker dialog, then hand the selected device to
+  /// [CastSessionManager] to resolve a route and start playback.
   Future<void> _showCastDevicePicker() async {
     if (!_castSupported) return;
     final device = await showCastDevicePicker(context);
@@ -5596,6 +5596,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               offeredSubtitles.any((t) => t.trackId == localSelection.id)
           ? localSelection.id
           : null;
+      // An embedded track is an mpv track whose id no source stream shares, so
+      // a source cast matches it by language instead.
+      final session = _session;
+      final receiverSubtitleId = session is SourcePlaybackSession
+          ? await session.receiverSubtitleIdFor(localSelection)
+          : selectedSubtitleTrackId;
+      if (!mounted) return;
 
       await pushToRemoteTarget(
         startCast: () => manager.startCast(
@@ -5613,9 +5620,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             duration: _knownCastDuration(),
             subtitles:
                 _session is SourcePlaybackSession ? const [] : offeredSubtitles,
-            selectedSubtitleTrackId: _session is SourcePlaybackSession
-                ? _selectedSubtitleTrack?.id
-                : selectedSubtitleTrackId,
+            selectedSubtitleTrackId: receiverSubtitleId,
           ),
         ),
         stopLocal: () async => await _player?.pause(),

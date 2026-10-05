@@ -543,6 +543,16 @@ class CastSessionManager {
     // session (see that field's dartdoc).
     final backend = _registry.forProtocol(device.protocol);
 
+    // A Mydia item replacing a source one ends the source item: its stop
+    // report would otherwise never be sent.
+    if (request.content is MydiaCastContent && _sourceProgress != null) {
+      final stale = _sourceProgress;
+      _sourceProgress = null;
+      _sourceBinding = null;
+      _sourceBindingContent = null;
+      await stale?.stopped();
+    }
+
     // Invalidates any `connectTo` still awaiting `_backend.connect` — see
     // `_connectGeneration`'s dartdoc. Must happen before anything else here,
     // the same way `stopCast` bumps it first: a user can pick a device via
@@ -1149,13 +1159,15 @@ class CastSessionManager {
   Future<SourceCastBinding> _bindingFor(SourceCastContent content) async {
     final bound = _sourceBinding;
     if (bound != null && _sourceBindingContent == content) return bound;
-    // A different item replaces the old one: give it its stop report first.
-    await _sourceProgress?.stopped();
     final bind = _bindSource ??
         (throw const CastBackendException(
             'Casting is not available for this server.',
             CastFailureKind.unknown));
+    // Bound before the old item is stopped: a failed bind must leave the
+    // previous binding and its progress sink untouched.
     final binding = await bind(content);
+    // A different item replaces the old one: give it its stop report.
+    await _sourceProgress?.stopped();
     _sourceBinding = binding;
     _sourceBindingContent = content;
     _sourceProgress = null;
@@ -1371,7 +1383,11 @@ class CastSessionManager {
     List<_ServerSession> startedServerSessions,
   ) async {
     if (request.content is SourceCastContent) {
-      if (e.kind != CastFailureKind.mediaLoadFailed || attempted.transcoded) {
+      // Only Chromecast can take a transcode; on DLNA the same direct file
+      // would come back and fail again.
+      if (device.protocol != CastProtocolKind.chromecast ||
+          e.kind != CastFailureKind.mediaLoadFailed ||
+          attempted.transcoded) {
         return null;
       }
       debugPrint(
@@ -1559,11 +1575,17 @@ class CastSessionManager {
       clearSelectedSubtitle: resolvedSubtitleId == null,
     );
 
-    final mediaUrl = isMydia && mydia != null
-        ? (mydia.isEpisode
-            ? '${mydia.showId ?? mydia.mediaId}:${mydia.mediaId}'
-            : mydia.mediaId)
-        : route.mediaUrl;
+    // A source route's URL carries the server credential (X-Plex-Token,
+    // api_key, apikey) and the store is an unencrypted Hive box, so nothing
+    // from it is persisted. An empty URL already means "discard on restore",
+    // and Chromecast/DLNA records are never adopted anyway.
+    final mediaUrl = request.content is SourceCastContent
+        ? ''
+        : isMydia && mydia != null
+            ? (mydia.isEpisode
+                ? '${mydia.showId ?? mydia.mediaId}:${mydia.mediaId}'
+                : mydia.mediaId)
+            : route.mediaUrl;
 
     _persisted = PersistedCastSession.forContent(
       device: device,
@@ -1945,13 +1967,15 @@ class CastSessionManager {
     final generation = ++_connectGeneration;
 
     _cancelSubscriptions();
-    await _sourceProgress?.stopped();
 
     try {
       await _backend.stop();
     } catch (e) {
       debugPrint('[CastSessionManager] Ignoring stop error: $e');
     }
+
+    // After the receiver is stopped, so a slow server cannot delay that.
+    await _sourceProgress?.stopped();
 
     await _endSession(generation: generation);
   }
@@ -1968,6 +1992,8 @@ class CastSessionManager {
 
     _cancelSubscriptions();
 
+    // No source stop report here: the receiver keeps playing on purpose, so
+    // the item is not stopped as far as the server is concerned.
     await _endSession(generation: generation);
   }
 
@@ -2232,6 +2258,8 @@ class CastSessionManager {
   /// dropped with a live session used to leave the backend connected and the
   /// LAN proxy exposed with nothing left to turn either off.
   void dispose() {
+    // A synchronous dispose cannot await a source's stop report, so none is
+    // sent here; use [stopCast] first when the server should hear about it.
     _cancelSubscriptions();
 
     final hadSession = _current != null;

@@ -49,7 +49,8 @@ class _FakeBinding implements SourceCastBinding {
     ));
     final id = 'srv-${_n++}';
     return CastRoute(
-      mediaUrl: 'http://192.168.1.5:32400/start.m3u8?session=$id',
+      mediaUrl:
+          'http://192.168.1.5:32400/start.m3u8?session=$id&X-Plex-Token=secret',
       kind: CastRouteKind.directServer,
       mediaKind: CastMediaKind.hls,
       hlsSessionId: id,
@@ -123,6 +124,102 @@ void main() {
         const Duration(minutes: 3));
     expect((await store.load())!.content, content);
     expect(mydiaSessions.started, isEmpty);
+  });
+
+  test('the persisted record carries no source credential', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+
+    final record = (await store.load())!;
+    expect(record.mediaUrl, isEmpty);
+    final dump = record.toMap().toString();
+    for (final secret in ['X-Plex-Token', 'api_key', 'apikey', 'secret']) {
+      expect(dump, isNot(contains(secret)));
+    }
+  });
+
+  test('a Mydia cast replacing a source cast stops the source item', () async {
+    final manager = build();
+    await manager.startCast(device: tv, request: request);
+
+    await manager.startCast(
+      device: tv,
+      request: CastLaunchRequest(
+        fileId: 'file-1',
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        title: 'A Mydia Film',
+      ),
+    );
+
+    expect(binding.sink.stops, 1);
+  });
+
+  group('switching source items', () {
+    const otherContent = SourceCastContent(
+      item: ItemRef(
+          sourceId: SourceId('px1:owner:srv'),
+          kind: ItemKind.movie,
+          externalId: '202'),
+      versionId: '31',
+    );
+    const otherRequest = CastLaunchRequest.forContent(
+      content: otherContent,
+      title: 'The Quiet Harbor',
+      duration: Duration(minutes: 80),
+    );
+    late _FakeBinding otherBinding;
+
+    SourceCastBinder perContent({bool failOther = false}) => (c) async {
+          if (c == otherContent) {
+            if (failOther) {
+              throw const CastBackendException(
+                  'bind failed', CastFailureKind.unknown);
+            }
+            return otherBinding;
+          }
+          return binding;
+        };
+
+    setUp(() => otherBinding = _FakeBinding());
+
+    test('a different item stops the previous one', () async {
+      final manager = build(binder: perContent());
+      await manager.startCast(device: tv, request: request);
+      await manager.startCast(device: tv, request: otherRequest);
+
+      expect(binding.sink.stops, 1);
+      expect(otherBinding.resolves, hasLength(1));
+    });
+
+    test('a failed bind leaves the previous item playing', () async {
+      final manager = build(binder: perContent(failOther: true));
+      await manager.startCast(device: tv, request: request);
+
+      await expectLater(
+        manager.startCast(device: tv, request: otherRequest),
+        throwsA(isA<CastBackendException>()),
+      );
+      expect(binding.sink.stops, 0);
+
+      backend.emitDuration(const Duration(minutes: 90));
+      backend.emitPosition(const Duration(minutes: 5));
+      await pumpEventQueue();
+      expect(binding.sink.reports, [const Duration(minutes: 5)]);
+    });
+  });
+
+  test('a DLNA device is not retried with a transcode', () async {
+    const dlna = CastDevice(
+        id: 'tv-2', name: 'Porch TV', protocol: CastProtocolKind.dlna);
+    backend.failNextLoad(CastFailureKind.mediaLoadFailed);
+    final manager = build();
+
+    await expectLater(
+      manager.startCast(device: dlna, request: request),
+      throwsA(isA<CastBackendException>()),
+    );
+    expect(binding.resolves, hasLength(1));
   });
 
   test('a rejected load retries once with a transcode', () async {
