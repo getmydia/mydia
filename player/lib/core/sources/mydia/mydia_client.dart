@@ -2,13 +2,14 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:gql/ast.dart' show DocumentNode;
+import 'package:gql/ast.dart' show DocumentNode, OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
 import '../media_source.dart';
-import 'mydia_gql_transport.dart';
 import 'mydia_credentials.dart';
+import 'mydia_gql_transport.dart';
+import 'schema_downgrade.dart';
 
 /// Unauthenticated on the server on purpose: the device token is the proof.
 const _refreshMutation = r'''
@@ -83,6 +84,37 @@ class MydiaClient {
         rethrow;
       }
     }
+  }
+
+  final Set<String> _downgradedOps = {};
+
+  Future<Map<String, dynamic>> query(
+    DocumentNode document, {
+    DocumentNode? fallback,
+    Map<String, dynamic> variables = const {},
+  }) async {
+    final opName = _operationName(document);
+    if (fallback != null && opName != null && _downgradedOps.contains(opName)) {
+      return request(fallback, variables);
+    }
+
+    try {
+      return await request(document, variables);
+    } catch (e) {
+      if (fallback != null && isUnknownFieldError(e)) {
+        if (opName != null) _downgradedOps.add(opName);
+        return request(fallback, variables);
+      }
+      rethrow;
+    }
+  }
+
+  static String? _operationName(DocumentNode document) {
+    return document.definitions
+        .whereType<OperationDefinitionNode>()
+        .firstOrNull
+        ?.name
+        ?.value;
   }
 
   Future<Map<String, dynamic>> _send(

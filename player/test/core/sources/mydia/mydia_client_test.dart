@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gql/language.dart' show parseString;
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -197,5 +198,73 @@ void main() {
     ]);
     expect(transport.calls.where((c) => c.operation == 'RefreshAccessToken'),
         hasLength(1));
+  });
+
+  test(
+      'retries with fallback on unknown field error and skips straight to fallback on next call',
+      () async {
+    final extended = parseString('query GetItem { item { id newField } }');
+    final fallback = parseString('query GetItemFallback { item { id } }');
+
+    transport.handlers['GetItem'] = (_) => throw const SourceException.server(
+          'Cannot query field "newField" on type "Item"',
+        );
+    transport.handlers['GetItemFallback'] = (_) => {
+          'item': {'id': '1'},
+        };
+
+    final client = build();
+
+    final firstResult = await client.query(extended, fallback: fallback);
+    expect(firstResult, {
+      'item': {'id': '1'}
+    });
+    expect(transport.calls.map((c) => c.operation), [
+      'GetItem',
+      'GetItemFallback',
+    ]);
+
+    final secondResult = await client.query(extended, fallback: fallback);
+    expect(secondResult, {
+      'item': {'id': '1'}
+    });
+    expect(transport.calls.map((c) => c.operation), [
+      'GetItem',
+      'GetItemFallback',
+      'GetItemFallback',
+    ]);
+  });
+
+  test('does not use fallback on ordinary server error', () async {
+    final extended = parseString('query GetItem { item { id newField } }');
+    final fallback = parseString('query GetItemFallback { item { id } }');
+
+    transport.handlers['GetItem'] = (_) => throw const SourceException.server(
+          'Internal server error',
+        );
+
+    final client = build();
+
+    await expectLater(
+      client.query(extended, fallback: fallback),
+      throwsA(isA<SourceException>()),
+    );
+    expect(transport.calls.map((c) => c.operation), ['GetItem']);
+  });
+
+  test('surfaces unknown field error when no fallback is provided', () async {
+    final extended = parseString('query GetItem { item { id newField } }');
+
+    transport.handlers['GetItem'] = (_) => throw const SourceException.server(
+          'Cannot query field "newField" on type "Item"',
+        );
+
+    final client = build();
+
+    await expectLater(
+      client.query(extended),
+      throwsA(isA<SourceException>()),
+    );
+    expect(transport.calls.map((c) => c.operation), ['GetItem']);
   });
 }
