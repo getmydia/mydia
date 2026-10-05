@@ -90,6 +90,17 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
+  /// Deletes [accountId]'s cached data. Best effort: the cache is unreadable
+  /// once the account is gone, the 30-day sweep reclaims leftovers, and a
+  /// failure here must not stop other accounts from being removed.
+  Future<void> _dropCache(String accountId) async {
+    try {
+      await ref.read(sourceCacheProvider).deleteAccount(accountId);
+    } catch (e) {
+      debugPrint('[Sources] Could not clear cached data for $accountId: $e');
+    }
+  }
+
   Future<void> removeAccount(String accountId) => _serialise(() async {
         final record = _record(accountId);
         await _write((store) async {
@@ -100,7 +111,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
           await ref.read(sourceSecretsProvider).deleteAll(record);
         }
         // Keyed by id, so it needs no record.
-        await ref.read(sourceCacheProvider).deleteAccount(accountId);
+        await _dropCache(accountId);
       });
 
   /// Never throws: a selection that cannot be remembered still applies for
@@ -158,7 +169,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
             await _dropAllServersChoices(store, id);
           });
           await ref.read(sourceSecretsProvider).deleteAll(record);
-          await ref.read(sourceCacheProvider).deleteAccount(id);
+          await _dropCache(id);
         }
       });
 
