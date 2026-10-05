@@ -23,8 +23,12 @@ import 'mydia_guest_client.dart';
 import 'mydia_guest_mapping.dart';
 
 const _sorts = [
-  SortOption(id: 'TITLE', label: 'Title'),
-  SortOption(id: 'ADDED_AT', label: 'Date added', descendingByDefault: true),
+  SortOption(id: 'TITLE', label: 'Title', shared: SharedSort.title),
+  SortOption(
+      id: 'ADDED_AT',
+      label: 'Date added',
+      descendingByDefault: true,
+      shared: SharedSort.added),
   SortOption(id: 'YEAR', label: 'Year', descendingByDefault: true),
 ];
 
@@ -38,6 +42,7 @@ class MydiaGuestSource extends MediaSource
         WatchedState,
         Searchable,
         ContinueWatching,
+        RecentlyAdded,
         Favorites,
         NextUp,
         Similar {
@@ -58,6 +63,7 @@ class MydiaGuestSource extends MediaSource
         SourceCapability.watchedState,
         SourceCapability.searchable,
         SourceCapability.continueWatching,
+        SourceCapability.recentlyAdded,
         SourceCapability.favorites,
         SourceCapability.nextUp,
         SourceCapability.similar,
@@ -287,6 +293,15 @@ class MydiaGuestSource extends MediaSource
       for (final c in _maps(data['continueWatching']))
         continueWatchingSummary(id, c),
     ].whereType<ItemSummary>().toList();
+  }
+
+  @override
+  Future<List<ItemSummary>> recentlyAdded() async {
+    final data =
+        await _q(documentNodeQueryGuestRecentlyAdded, {'first': _rowLimit});
+    return [
+      for (final r in _maps(data['recentlyAdded'])) recentlyAddedSummary(id, r),
+    ].whereType<ItemSummary>().take(_rowLimit).toList();
   }
 
   @override
