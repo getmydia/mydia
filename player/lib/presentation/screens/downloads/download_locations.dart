@@ -16,8 +16,8 @@ String downloadedPlayLocation(DownloadedMedia media) {
     return '/player/movie/${media.mediaId}?fileId=offline&title=$title';
   }
   return Uri(
-    path:
-        '/s/${media.source.value}/player/${Uri.encodeComponent(media.mediaId)}',
+    // Raw id: Uri(path:) does the encoding, like the sibling route builders.
+    path: '/s/${media.source.value}/player/${media.mediaId}',
     queryParameters: {
       'kind': media.itemRef.kind.name,
       'fileId': 'offline',

@@ -12,7 +12,7 @@ import 'package:player/presentation/screens/downloads/widgets/downloaded_episode
 
 import '../../../test_utils/mock_network_images.dart';
 
-DownloadedMedia _downloaded(int season, int episode) {
+DownloadedMedia _downloaded(int season, int episode, {String? sourceId}) {
   return DownloadedMedia(
     id: 'd-$season-$episode',
     mediaId: 'ep-$season-$episode',
@@ -25,6 +25,7 @@ DownloadedMedia _downloaded(int season, int episode) {
     seasonNumber: season,
     episodeNumber: episode,
     showId: 'show-1',
+    sourceId: sourceId,
     thumbnailUrl: 'https://example.test/$season-$episode.jpg',
   );
 }
@@ -48,6 +49,7 @@ DownloadTask _queued(int season, int episode) {
 
 Future<void> _pump(
   WidgetTester tester, {
+  SourceId sourceId = SourceId.legacyMydia,
   List<DownloadedMedia> downloaded = const [],
   List<DownloadTask> queue = const [],
 }) async {
@@ -67,9 +69,9 @@ Future<void> _pump(
           playbackProgressStoreProvider
               .overrideWith((ref) async => InMemoryPlaybackProgressStore()),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           home: SeriesDownloadsScreen(
-            sourceId: SourceId.legacyMydia,
+            sourceId: sourceId,
             showId: 'show-1',
             showTitle: 'Test Show',
           ),
@@ -81,6 +83,21 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('lists only its own source when show ids collide',
+      (tester) async {
+    const other = SourceId('acc1:owner:aa11');
+    await _pump(
+      tester,
+      sourceId: other,
+      downloaded: [
+        _downloaded(1, 1),
+        _downloaded(1, 2, sourceId: other.value),
+      ],
+    );
+
+    expect(find.text('(1 episode)'), findsOneWidget);
+  });
+
   testWidgets('renders one rail per season', (tester) async {
     await _pump(tester, downloaded: [
       _downloaded(1, 1),

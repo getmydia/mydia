@@ -129,17 +129,21 @@ Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
   final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial active/queued tasks (exclude failed and completed)
-  yield _getActiveTasks(database)
-      .where((t) => visible.contains(t.source))
-      .toList();
+  yield _visibleOnly(_getActiveTasks(database), visible, (t) => t.source);
 
   // Listen to database changes and emit latest tasks
   await for (final _ in database.watchTasks()) {
-    yield _getActiveTasks(database)
-        .where((t) => visible.contains(t.source))
-        .toList();
+    yield _visibleOnly(_getActiveTasks(database), visible, (t) => t.source);
   }
 }
+
+/// Keeps the rows whose source may be listed.
+List<T> _visibleOnly<T>(
+  Iterable<T> rows,
+  Set<SourceId> visible,
+  SourceId Function(T) sourceOf,
+) =>
+    rows.where((row) => visible.contains(sourceOf(row))).toList();
 
 /// Returns only active tasks (not failed, completed, or cancelled).
 List<DownloadTask> _getActiveTasks(DownloadDatabase database) {
@@ -164,17 +168,11 @@ Stream<List<DownloadedMedia>> downloadedMedia(Ref ref) async* {
   final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit current downloaded media
-  yield manager
-      .getDownloadedMedia()
-      .where((m) => visible.contains(m.source))
-      .toList();
+  yield _visibleOnly(manager.getDownloadedMedia(), visible, (m) => m.source);
 
   // Listen to database changes and emit downloaded media
   await for (final _ in database.watchMedia()) {
-    yield manager
-        .getDownloadedMedia()
-        .where((m) => visible.contains(m.source))
-        .toList();
+    yield _visibleOnly(manager.getDownloadedMedia(), visible, (m) => m.source);
   }
 }
 
@@ -216,15 +214,11 @@ Stream<List<DownloadTask>> failedDownloads(Ref ref) async* {
   final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial failed tasks
-  yield _getFailedTasks(database)
-      .where((t) => visible.contains(t.source))
-      .toList();
+  yield _visibleOnly(_getFailedTasks(database), visible, (t) => t.source);
 
   // Listen to database changes and emit failed tasks
   await for (final _ in database.watchTasks()) {
-    yield _getFailedTasks(database)
-        .where((t) => visible.contains(t.source))
-        .toList();
+    yield _visibleOnly(_getFailedTasks(database), visible, (t) => t.source);
   }
 }
 

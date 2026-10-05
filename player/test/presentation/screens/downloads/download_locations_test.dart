@@ -3,6 +3,7 @@ import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/downloads/download_locations.dart';
 
 DownloadedMedia _m({
+  String mediaId = '42',
   String? sourceId,
   String mediaType = 'movie',
   String? itemKind,
@@ -10,7 +11,7 @@ DownloadedMedia _m({
 }) =>
     DownloadedMedia(
       id: 'r',
-      mediaId: '42',
+      mediaId: mediaId,
       title: 'Quill Harbor',
       quality: 'original',
       filePath: '/f',
@@ -41,5 +42,12 @@ void main() {
       '/s/acc1:owner:aa11/player/42?kind=video&fileId=offline'
       '&title=Quill+Harbor',
     );
+  });
+
+  test('a source id with a space is encoded once', () {
+    final location = downloadedPlayLocation(
+        _m(mediaId: 'a b', sourceId: 'acc1:owner:aa11', itemKind: 'video'));
+    expect(location, startsWith('/s/acc1:owner:aa11/player/a%20b?'));
+    expect(Uri.parse(location).pathSegments.last, 'a b');
   });
 }
