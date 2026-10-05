@@ -39,6 +39,16 @@ class _ChoicesFailStore extends InMemorySourceStore {
       throw StateError('disk full');
 }
 
+class _Recorder extends Fake implements DownloadService {
+  final deleted = <String>[];
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async {
+    deleted.add(accountId);
+    return 0;
+  }
+}
+
 void main() {
   late InMemorySourceStore store;
   late MockAuthStorage storage;
@@ -109,6 +119,43 @@ void main() {
     await stuck.read(sourceRecordsProvider.future);
     await stuck.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(stuck.read(thirdPartySourcesProvider), isEmpty);
+  });
+
+  group('download cleanup of a removed account', () {
+    Future<(ProviderContainer, Completer<DownloadService>, _Recorder)>
+        heldManager() async {
+      final gate = Completer<DownloadService>();
+      final c = ProviderContainer(overrides: [
+        authStateProvider.overrideWith(_Unauthenticated.new),
+        sourceCacheProvider.overrideWithValue(cache),
+        downloadManagerProvider.overrideWith((ref) => gate.future),
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      ]);
+      addTearDown(c.dispose);
+      await store.putAccount(plexRecord());
+      await c.read(sourceRecordsProvider.future);
+      return (c, gate, _Recorder());
+    }
+
+    test('a normal removal deletes the account downloads', () async {
+      final (c, gate, recorder) = await heldManager();
+      final removal =
+          c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+      gate.complete(recorder);
+      await removal;
+      expect(recorder.deleted, ['acc1']);
+    });
+
+    test('an account re-added during the wait keeps its downloads', () async {
+      final (c, gate, recorder) = await heldManager();
+      final notifier = c.read(sourceRecordsProvider.notifier);
+      final removal = notifier.removeAccount('acc1');
+      await notifier.putAccount(plexRecord());
+      gate.complete(recorder);
+      await removal;
+      expect(recorder.deleted, isEmpty);
+    });
   });
 
   group('download cleanup outside the write queue', () {

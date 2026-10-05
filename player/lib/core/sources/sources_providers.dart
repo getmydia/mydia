@@ -140,6 +140,8 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       return;
     }
     for (final id in accountIds) {
+      // Re-added during the wait: same server, so the account owns them again.
+      if (_record(id) != null) continue;
       try {
         await manager.deleteAccountDownloads(id);
       } catch (e) {
