@@ -15,6 +15,7 @@ Deeper reference lives alongside this file in `player/docs/`:
 - [packaging.md](docs/packaging.md) - Windows, iOS and fastlane.
 - [playback.md](docs/playback.md) - who decides direct play, copy or
   transcode, how a source is verified and replaced, and the failure memory.
+- [downloads.md](docs/downloads.md) - the one download pipeline, plans per source, records keyed by source, offline progress sync.
 
 ## Project Overview
 

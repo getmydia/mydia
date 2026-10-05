@@ -124,7 +124,7 @@ QR or URL and password. Removing a guest deletes its secrets and record and
 unwatches the peer; it does not call `revokeDevice`, because pairing never
 learns the server-side device id.
 
-Guests do not do downloads, cast, remote control, device registration or
+Guests do not do cast, remote control, device registration or
 the home Mydia settings. They share the device's single p2p identity and
 `device_id` with home.
 
@@ -187,7 +187,7 @@ neutral item detail) and `SimplePlaybackTransport` (no readiness probe: all
 serve a complete HLS playlist). Jellyfin asks the server first
 (`PlaybackInfo`, with a device profile built from the same codec list Plex
 uses, `transcode_codecs.dart`) and offers only what it allows. `PlaybackFeature` lists what only Mydia does
-(downloads, cast, library refresh, its connection's link path); the
+(cast, library refresh, its connection's link path); the
 screen checks before using any of them.
 
 Source episodes get Up Next. `SourcePlaybackSession.seasonEpisodes` walks
@@ -197,6 +197,10 @@ Plex, Stash and Jellyfin report progress through `PeriodicProgressReporter`: eve
 10 seconds, on every play and pause, and on a seek (a position jump of more
 than 3 seconds). Watched is marked once per playback, at the same 90%
 threshold `ProgressService` uses for Mydia.
+
+## Downloads
+
+Every source implements `Downloadable`; see `player/docs/downloads.md`.
 
 ## Screens
 
