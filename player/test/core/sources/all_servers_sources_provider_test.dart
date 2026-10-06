@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -12,11 +10,7 @@ import 'package:player/presentation/screens/all_servers/all_servers_providers.da
 
 import '../../domain/merged/fake_merged_source.dart';
 import '../../test_utils/mock_auth_storage.dart';
-
-class _Authenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
+import '../../test_utils/mydia_test_source.dart';
 
 SourceAccountRecord record(String id) => SourceAccountRecord(
       account: ProviderAccount(
@@ -50,16 +44,16 @@ void main() {
 
   Future<void> start(List<String> accounts) async {
     store = InMemorySourceStore();
+    await store.putAccount(testMydiaRecord());
     for (final a in accounts) {
       await store.putAccount(record(a));
     }
     home = FakeMergedSource(fakeServer('home', kind: SourceKind.mydia));
     fakes.clear();
     container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Authenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
-      mediaSourceProvider.overrideWith((ref, id) => id == SourceId.legacyMydia
+      mediaSourceProvider.overrideWith((ref, id) => id == testMydiaSourceId
           ? home
           : fakes.putIfAbsent(id,
               () => FakeMergedSource(fakeServer(id.value.split(':').first)))),
@@ -70,7 +64,8 @@ void main() {
 
   List<MediaSource> included() => container.read(allServersSourcesProvider);
 
-  test('gating drops reauth, locked and switched off; home stays first',
+  test(
+      'gating drops reauth, locked and switched off; the Mydia account stays first',
       () async {
     await start(['a', 'b', 'c', 'd']);
     final notifier = container.read(sourceRecordsProvider.notifier);

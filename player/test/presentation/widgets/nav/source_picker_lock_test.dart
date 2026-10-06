@@ -11,6 +11,7 @@ import 'package:player/presentation/widgets/nav/source_picker.dart';
 
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 class _Authenticated extends AuthStateNotifier {
   @override
@@ -20,6 +21,7 @@ class _Authenticated extends AuthStateNotifier {
 Future<String> _pump(WidgetTester tester, SourceLock lock) async {
   final store = InMemorySourceStore();
   final record = plexRecord().copyWith(serverLocks: {'abc123': lock});
+  await store.putAccount(testMydiaRecord());
   await store.putAccount(record);
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -28,7 +30,7 @@ Future<String> _pump(WidgetTester tester, SourceLock lock) async {
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     ],
     child: const MaterialApp(
-      home: Scaffold(body: SourcePickerList(currentId: SourceId.legacyMydia)),
+      home: Scaffold(body: SourcePickerList(currentId: testMydiaSourceId)),
     ),
   ));
   await tester.pumpAndSettle();

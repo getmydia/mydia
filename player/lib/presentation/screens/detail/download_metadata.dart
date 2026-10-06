@@ -3,7 +3,6 @@
 library;
 
 import '../../../domain/detail/detail_art.dart';
-import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
@@ -41,7 +40,7 @@ DownloadMetadata episodeDownloadMetadata(EpisodeView episode) {
     runtime: episode.runtime,
     seasonNumber: episode.seasonNumber,
     episodeNumber: episode.episodeNumber,
-    showId: showTarget == null ? null : itemRefOf(showTarget).externalId,
+    showId: showTarget?.id,
     showTitle: episode.showTitle,
     showPosterUrl: artKey(episode.showPoster),
     airDate: episode.airDate,

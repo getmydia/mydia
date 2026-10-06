@@ -17,6 +17,7 @@ import 'package:player/domain/sources/item.dart';
 import '../../../test_utils/stub_graphql_client.dart';
 import 'player_screen_test_harness.dart';
 import 'session/fake_playback_session.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 const _thirdParty = SourceId('acc1:owner:aa11');
 const _item = ItemRef(
@@ -44,7 +45,7 @@ DownloadedMedia _record({
   String? sourceId,
 }) =>
     DownloadedMedia(
-      id: 'dl-${sourceId ?? 'home'}',
+      id: 'dl-${sourceId ?? 'none'}',
       mediaId: '42',
       sourceId: sourceId,
       title: 'Quill Harbor',
@@ -73,16 +74,16 @@ void main() {
       ..writeAsBytesSync(const [0]);
     // The home record points at a file that does not exist, so choosing it
     // would show "Downloaded file not found" instead of reaching the player.
-    final homeFile = '${tempDir.path}/home-missing.mkv';
+    final homeFile = '${tempDir.path}/mydia-missing.mkv';
 
     final service = _KeyedDownloadService({
       _item:
           _record(filePath: thirdPartyFile.path, sourceId: _thirdParty.value),
       const ItemRef(
-        sourceId: SourceId.legacyMydia,
+        sourceId: testMydiaSourceId,
         kind: ItemKind.movie,
         externalId: '42',
-      ): _record(filePath: homeFile),
+      ): _record(filePath: homeFile, sourceId: testMydiaSourceId.value),
     });
     onReady(service);
 
@@ -160,11 +161,13 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('a home position with the same id is not resumed from',
+  testWidgets(
+      'a position kept for another source with the same id is not resumed from',
       (tester) async {
     await run(
       tester,
       seeded: LocalPlaybackProgress(
+        sourceId: testMydiaSourceId.value,
         mediaId: '42',
         mediaType: 'movie',
         positionSeconds: 2700,

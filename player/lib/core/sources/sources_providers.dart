@@ -7,11 +7,9 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
-import '../graphql/graphql_provider.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
 import 'lock/source_lock_controller.dart';
@@ -334,50 +332,20 @@ final accountProfilesProvider =
       const [];
 });
 
-/// Whether the legacy Mydia login has credentials.
-///
-/// `AuthStateNotifier.retryConnection` sets a bare `AsyncValue.loading()`,
-/// with no previous value. Reading that directly made Mydia vanish from the
-/// switcher for the length of every retry; this holds the last answer
-/// through loading and changes only on data or an error.
-class MydiaPresenceNotifier extends Notifier<bool> {
-  @override
-  bool build() {
-    ref.listen<AsyncValue<AuthStatus>>(authStateProvider, (_, next) {
-      final present = _presentIn(next);
-      if (present != null) state = present;
-    });
-    return _presentIn(ref.read(authStateProvider)) ?? false;
-  }
+/// Every source: the stored accounts, minus hidden ones while the app is
+/// locked.
+final sourcesProvider =
+    Provider<List<Source>>((ref) => ref.watch(thirdPartySourcesProvider));
 
-  static bool? _presentIn(AsyncValue<AuthStatus> auth) => switch (auth) {
-        AsyncData(:final value) =>
-          value == AuthStatus.authenticated || value == AuthStatus.offlineMode,
-        AsyncError() => false,
-        _ => null,
-      };
-}
-
-final mydiaPresentProvider =
-    NotifierProvider<MydiaPresenceNotifier, bool>(MydiaPresenceNotifier.new);
-
-/// Every source, the legacy Mydia login first when it has credentials.
-///
-/// Offline mode counts: the credentials exist even though the server is out
-/// of reach, and the downloads screen still belongs to that source.
-final sourcesProvider = Provider<List<Source>>((ref) {
-  return [
-    if (ref.watch(mydiaPresentProvider)) Source.legacyMydia(),
-    ...ref.watch(thirdPartySourcesProvider),
-  ];
+/// Whether any Mydia account is stored.
+final hasMydiaProvider = Provider<bool>((ref) {
+  final snapshot = _snapshotOf(ref);
+  return snapshot != null &&
+      snapshot.accounts.any((a) => a.account.kind == SourceKind.mydia);
 });
 
 /// The sources the switcher shows: empty unless there is a choice to make.
-///
-/// Reads [thirdPartySourcesProvider] first so that, while no third-party
-/// source exists, building the sidebar never reads the auth state.
 final switchableSourcesProvider = Provider<List<Source>>((ref) {
-  if (ref.watch(thirdPartySourcesProvider).isEmpty) return const [];
   final all = ref.watch(sourcesProvider);
   return all.length > 1 ? all : const [];
 });
@@ -427,15 +395,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
       ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
-  final MediaSource media = switch (source.kind) {
-    SourceKind.mydia when source.id == SourceId.legacyMydia =>
-      buildHomeMydiaSource(ref, source),
-    SourceKind.mydia ||
-    SourceKind.plex ||
-    SourceKind.stash ||
-    SourceKind.jellyfin =>
-      buildThirdPartySource(ref, source),
-  };
+  final MediaSource media = buildThirdPartySource(ref, source);
   ref.onDispose(media.dispose);
   return media;
 });
@@ -444,7 +404,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
 final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
     (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {});
 
-/// Included sources the merged views read, home Mydia first. Leaves out
+/// Included sources the merged views read. Leaves out
 /// what is locked away and what needs signing in again.
 ///
 /// The list compares equal when it holds the same instances in the same
@@ -490,11 +450,15 @@ final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
   ];
 });
 
-/// Where `/s/:sourceId` lands before its screen builds: home Mydia keeps its
-/// unprefixed routes, so its root is `/`; an unknown id goes home; a Plex
-/// or Stash source stays (null).
-String? sourceRootRedirect(String sourceId, List<Source> sources) {
+/// Where `/s/:sourceId` lands before its screen builds: the bound Mydia
+/// instance keeps its unprefixed routes, so its root is `/`; an unknown id
+/// goes home; any other source stays (null).
+String? sourceRootRedirect(
+  String sourceId,
+  List<Source> sources, {
+  SourceId? bound,
+}) {
   final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
-  if (source == null || source.id == SourceId.legacyMydia) return '/';
+  if (source == null || source.id == bound) return '/';
   return null;
 }

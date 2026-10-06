@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 class _Sync implements ProgressSync {
   final pushed = <(String, int, bool)>[];
@@ -35,48 +39,63 @@ LocalPlaybackProgress _p(String source, String id, int pos) =>
     );
 
 void main() {
-  test('home keeps its bare key; sources are prefixed', () {
+  test('every source key is prefixed with its source id', () {
     expect(
         progressKey(const ItemRef(
-            sourceId: SourceId.legacyMydia,
+            sourceId: testMydiaSourceId,
             kind: ItemKind.movie,
             externalId: '7')),
-        '7');
+        'macct:owner:inst-1|7');
     expect(
         progressKey(const ItemRef(
             sourceId: _plex, kind: ItemKind.movie, externalId: '7')),
         'acc1:owner:aa11|7');
-    expect(
-        LocalPlaybackProgress.fromMap({
-          'mediaId': '7',
-          'mediaType': 'movie',
-          'positionSeconds': 1,
-          'durationSeconds': 2,
-          'updatedAt': '2026-01-01T00:00:00.000',
-        }).sourceId,
-        'mydia');
   });
 
-  test('pushes each source its own records, skips home and the unreachable',
-      () async {
+  test('a record without a source id is discarded on read', () async {
+    final dir = await Directory.systemTemp.createTemp('progress_no_source');
+    Hive.init(dir.path);
+    try {
+      final box = await Hive.openBox<Map<dynamic, dynamic>>('no_source_box');
+      await box.put('7', {
+        'mediaId': '7',
+        'mediaType': 'movie',
+        'positionSeconds': 1,
+        'durationSeconds': 2,
+        'updatedAt': '2026-01-01T00:00:00.000',
+      });
+      expect(HivePlaybackProgressStore(box).get('7'), isNull);
+    } finally {
+      await Hive.close();
+      await dir.delete(recursive: true);
+    }
+  });
+
+  test('pushes each source its own records, skips the unreachable', () async {
     final store = InMemoryPlaybackProgressStore();
-    await store.save(_p('mydia', '1', 10));
+    await store.save(_p(testMydiaSourceId.value, '1', 10));
     await store.save(_p(_plex.value, '1', 95));
     await store.save(_p(_jelly.value, '2', 20));
+    final mydia = _Sync();
     final plex = _Sync();
     final jelly = _Sync();
 
     final synced = await flushSourceProgress(
       store: store,
-      syncFor: (id) => id == _plex ? plex : jelly,
-      reachable: (id) => id == _plex,
+      syncFor: (id) => switch (id) {
+        testMydiaSourceId => mydia,
+        _plex => plex,
+        _ => jelly,
+      },
+      reachable: (id) => id != _jelly,
       now: DateTime(2026, 2),
     );
 
-    expect(synced, 1);
+    expect(synced, 2);
+    expect(mydia.pushed, [('1', 10, false)]);
     expect(plex.pushed, [('1', 95, true)]);
     expect(jelly.pushed, isEmpty);
-    expect(store.unsynced().map((r) => r.key).toSet(), {'1', 'acc2:u1:bb22|2'});
+    expect(store.unsynced().map((r) => r.key).toSet(), {'acc2:u1:bb22|2'});
   });
 
   test('a failed push stays unsynced', () async {

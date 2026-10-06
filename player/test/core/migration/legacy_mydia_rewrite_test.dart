@@ -52,7 +52,8 @@ void main() {
 
   late Directory hiveDir;
   late HiveDownloadDatabase downloads;
-  late InMemoryPlaybackProgressStore progress;
+  late Box<Map<dynamic, dynamic>> progressBox;
+  late HivePlaybackProgressStore progress;
   late InMemorySourceStore store;
   late InMemorySourceCache cache;
   late InMemoryCastSessionStore cast;
@@ -73,7 +74,9 @@ void main() {
       tasksBox: await Hive.openBox<DownloadTask>('rw_tasks_$boxCounter'),
       mediaBox: await Hive.openBox<DownloadedMedia>('rw_media_$boxCounter'),
     );
-    progress = InMemoryPlaybackProgressStore();
+    progressBox =
+        await Hive.openBox<Map<dynamic, dynamic>>('rw_progress_$boxCounter');
+    progress = HivePlaybackProgressStore(progressBox);
     store = InMemorySourceStore();
     cache = InMemorySourceCache();
     cast = InMemoryCastSessionStore();
@@ -90,6 +93,20 @@ void main() {
     await downloads.close();
     if (await hiveDir.exists()) await hiveDir.delete(recursive: true);
   });
+
+  /// A position as the player stored it before accounts: under the bare id.
+  Future<void> legacyProgress(String mediaId, {String mediaType = 'movie'}) =>
+      progressBox.put(
+        mediaId,
+        LocalPlaybackProgress(
+          sourceId: 'mydia',
+          mediaId: mediaId,
+          mediaType: mediaType,
+          positionSeconds: 30,
+          durationSeconds: 1200,
+          updatedAt: DateTime(2026),
+        ).toMap(),
+      );
 
   PersistedCastSession sourceCast(SourceId id) =>
       PersistedCastSession.forContent(
@@ -125,13 +142,7 @@ void main() {
   });
 
   test('progress under a bare id is re-keyed', () async {
-    await progress.save(LocalPlaybackProgress(
-        sourceId: 'mydia',
-        mediaId: '42',
-        mediaType: 'episode',
-        positionSeconds: 30,
-        durationSeconds: 1200,
-        updatedAt: DateTime(2026)));
+    await legacyProgress('42', mediaType: 'episode');
     await rewriter.rewrite(from, to);
     expect(progress.get('42'), isNull);
     final moved = progress.get('${to.value}|42')!;
@@ -211,12 +222,7 @@ void main() {
   test('running twice changes nothing the second time', () async {
     await downloads.saveTask(_task('a', null));
     await downloads.saveMedia(_media('a', 'mydia'));
-    await progress.save(LocalPlaybackProgress(
-        mediaId: '42',
-        mediaType: 'movie',
-        positionSeconds: 5,
-        durationSeconds: 100,
-        updatedAt: DateTime(2026)));
+    await legacyProgress('42');
     await store.setAllServers({from: true});
     await store.setActive(from);
     await cast.save(sourceCast(from));

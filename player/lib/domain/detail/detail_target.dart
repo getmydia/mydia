@@ -80,11 +80,13 @@ final class SourceTarget extends DetailTarget {
   String toString() => 'SourceTarget($key)';
 }
 
-/// The item [target] names, home Mydia's under its legacy source id.
-ItemRef itemRefOf(DetailTarget target) => switch (target) {
+/// The item [target] names. A [MydiaTarget] belongs to [bound], the Mydia
+/// instance the legacy screens serve; with none bound it gets [SourceId.none],
+/// which no source answers to.
+ItemRef itemRefOf(DetailTarget target, SourceId? bound) => switch (target) {
       SourceTarget(:final ref) => ref,
       MydiaTarget(:final kind, :final id) => ItemRef(
-          sourceId: SourceId.legacyMydia,
+          sourceId: bound ?? SourceId.none,
           kind: switch (kind) {
             DetailKind.movie => ItemKind.movie,
             DetailKind.show => ItemKind.show,

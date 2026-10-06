@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/source_switcher.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
-
-class _FixedAuth extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
+import '../../../test_utils/mydia_test_source.dart';
 
 Source _plex({bool needsReauth = false}) => Source(
       account: ProviderAccount(
@@ -70,8 +65,9 @@ Future<(ProviderContainer, _Calls)> _pump(
   final calls = _Calls();
   final container = ProviderContainer(
     overrides: [
-      authStateProvider.overrideWith(_FixedAuth.new),
-      thirdPartySourcesProvider.overrideWithValue(thirdParty),
+      thirdPartySourcesProvider
+          .overrideWithValue([testMydiaSource, ...thirdParty]),
+      boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
       allServersSourcesProvider.overrideWithValue(included),
     ],
   );
@@ -127,20 +123,21 @@ void main() {
     expect(_headerName(tester), 'Basement');
   });
 
-  testWidgets('names Mydia on a Mydia page even when Plex is remembered',
+  testWidgets(
+      'names the bound Mydia on a Mydia page even when Plex is remembered',
       (tester) async {
     final (container, _) =
         await _pump(tester, thirdParty: [_plex()], location: '/settings');
     container.read(selectedSourceIdProvider.notifier).select(_plex().id);
     await tester.pump();
-    expect(_headerName(tester), 'Mydia');
+    expect(_headerName(tester), 'Harborview');
   });
 
-  testWidgets('the Mydia header does not repeat its name as a caption',
-      (tester) async {
+  testWidgets('a Mydia header keeps its account caption', (tester) async {
     await _pump(tester, thirdParty: [_plex()]);
     expect(
-      find.descendant(of: find.byKey(_header), matching: find.text('Mydia')),
+      find.descendant(
+          of: find.byKey(_header), matching: find.text('Mydia · Harborview')),
       findsOneWidget,
     );
   });
@@ -155,8 +152,8 @@ void main() {
       (tester) async {
     final calls = _Calls();
     final container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_FixedAuth.new),
-      thirdPartySourcesProvider.overrideWithValue([_plex()]),
+      thirdPartySourcesProvider.overrideWithValue([testMydiaSource, _plex()]),
+      boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
       accountProfilesProvider('acc1').overrideWithValue(const [
         SourceProfile(
             id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
@@ -195,22 +192,23 @@ void main() {
     expect(calls.navigations, isEmpty);
   });
 
-  testWidgets('a guest Mydia is captioned and opens its own routes',
-      (tester) async {
+  testWidgets('a Mydia that is not bound opens its own routes', (tester) async {
     final (_, calls) = await _pump(tester,
         thirdParty: [_guest()], location: '/s/mguest:owner:inst-2');
     expect(find.text('Mydia · Lakeside'), findsOneWidget);
-    await _openAndTap(tester, const ValueKey('source-switcher-mydia'));
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-macct:owner:inst-1'));
     expect(calls.switches, ['/']);
     await _openAndTap(
         tester, const ValueKey('source-switcher-mguest:owner:inst-2'));
     expect(calls.switches.last, '/s/mguest:owner:inst-2');
   });
 
-  testWidgets('switching to Mydia goes home', (tester) async {
+  testWidgets('switching to the bound Mydia goes home', (tester) async {
     final (_, calls) = await _pump(tester,
         thirdParty: [_plex()], location: '/s/acc1:owner:srv9');
-    await _openAndTap(tester, const ValueKey('source-switcher-mydia'));
+    await _openAndTap(
+        tester, const ValueKey('source-switcher-macct:owner:inst-1'));
     expect(calls.switches, ['/']);
   });
 
@@ -257,24 +255,29 @@ void main() {
     expect(calls.switches, ['/all']);
   });
 
-  test('currentFor prefers the location, then Mydia, then the pick', () {
+  test('currentFor prefers the location, then the bound Mydia, then the pick',
+      () {
     final plex = _plex();
-    final mydia = Source.legacyMydia();
+    const mydia = testMydiaSource;
     expect(
-        SourceSwitcher.currentFor(
-            [mydia, plex], '/s/acc1:owner:srv9', mydia.id),
+        SourceSwitcher.currentFor([mydia, plex], '/s/acc1:owner:srv9', mydia.id,
+            bound: mydia.id),
         plex);
     expect(
-        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id), mydia);
+        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id,
+            bound: mydia.id),
+        mydia);
     expect(SourceSwitcher.currentFor([plex], '/sources/manage', plex.id), plex);
   });
 
-  test('currentFor names home, not a guest listed first, off a source route',
-      () {
-    final mydia = Source.legacyMydia();
+  test(
+      'currentFor names the bound Mydia, not one listed first, off a source '
+      'route', () {
+    const mydia = testMydiaSource;
     final guest = _guest();
     expect(
-        SourceSwitcher.currentFor([guest, mydia], '/sources/manage', guest.id),
+        SourceSwitcher.currentFor([guest, mydia], '/sources/manage', guest.id,
+            bound: mydia.id),
         mydia);
   });
 }

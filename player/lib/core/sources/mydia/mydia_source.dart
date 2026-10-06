@@ -29,7 +29,6 @@ import '../../p2p/media_route.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
-import '../../downloads/download_job_service.dart';
 import 'guest_download_job_service.dart';
 import 'guest_proxy.dart';
 import 'mydia_client.dart';
@@ -83,7 +82,6 @@ class MydiaSource extends MediaSource
     required this.source,
     required this.client,
     this.proxy,
-    this.homeJobs,
     ValueListenable<SourceConnectionStatus>? status,
     void Function()? onDispose,
   })  : _status = status,
@@ -93,15 +91,9 @@ class MydiaSource extends MediaSource
   final Source source;
   final MydiaClient client;
 
-  /// The shared local proxy, which carries a paired guest's file bytes.
-  /// Required to download from a paired guest; home never uses it.
+  /// The shared local proxy, which carries a paired server's file bytes.
+  /// Required to download from a paired server.
   final LocalProxyService Function()? proxy;
-
-  /// Set only for home Mydia: its own download job service (HTTP media-token
-  /// URL or the home p2p proxy), or null while signed out or connecting.
-  /// When provided, downloads use it and never touch the guest GraphQL job
-  /// service or [proxy]. A guest leaves it null.
-  final DownloadJobService? Function()? homeJobs;
 
   /// Overrides [MydiaClient.status] when the connection is owned
   final ValueListenable<SourceConnectionStatus>? _status;
@@ -398,33 +390,20 @@ class MydiaSource extends MediaSource
   late final GuestDownloadJobService _jobs =
       GuestDownloadJobService(request: client.request);
 
-  DownloadJobService _service() {
-    final home = homeJobs;
-    if (home == null) return _jobs;
-    return home() ?? (throw const SourceException.unreachable());
-  }
-
   @override
   Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
-      (await _service().getOptions(mydiaContentType(ref.kind), ref.externalId))
+      (await _jobs.getOptions(mydiaContentType(ref.kind), ref.externalId))
           .options;
 
   @override
-  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async {
-    final service = _service();
-    return MydiaTranscodeJob(
-      jobs: service,
-      contentType: mydiaContentType(ref.kind),
-      id: ref.externalId,
-      resolution: optionId,
-      // HTTP signs the URL with the media token and p2p points at the local
-      // proxy, so a home URL carries everything and needs no headers.
-      fileFor: homeJobs != null
-          ? (jobId) async => DirectFile(
-              url: await service.getDownloadUrl(jobId), extension: 'mp4')
-          : _file,
-    );
-  }
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) async =>
+      MydiaTranscodeJob(
+        jobs: _jobs,
+        contentType: mydiaContentType(ref.kind),
+        id: ref.externalId,
+        resolution: optionId,
+        fileFor: _file,
+      );
 
   bool _holdsProxy = false;
 

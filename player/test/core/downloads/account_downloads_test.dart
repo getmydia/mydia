@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/download.dart';
 
+import '../../test_utils/mydia_test_source.dart';
 import 'download_test_harness.dart';
 
 void main() {
@@ -28,7 +29,7 @@ void main() {
     final owner = await media('a', 'acc1:owner:aa11', 10);
     final kid = await media('b', 'acc1:kid:aa11', 5);
     await media('c', 'acc2:owner:bb22', 7);
-    await media('d', null, 3);
+    await media('d', testMydiaSourceId.value, 3);
     await media('e', 'acc10:owner:x', 4);
     await h.database.saveTask(DownloadTask(
         id: 't1',

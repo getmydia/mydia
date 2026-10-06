@@ -1,13 +1,8 @@
 /// What a screen asks the download service for.
 library;
 
-import '../../core/sources/source.dart';
 import '../sources/item.dart';
 import 'download.dart';
-
-/// The home Mydia login's id for [id], for the screens that predate sources.
-ItemRef homeMydiaRef(ItemKind kind, String id) =>
-    ItemRef(sourceId: SourceId.legacyMydia, kind: kind, externalId: id);
 
 /// What the Downloads screen shows for an item, captured when the download
 /// starts so it is there offline.

@@ -7,6 +7,7 @@ import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   late DownloadHarness harness;
@@ -20,7 +21,7 @@ void main() {
   test('a plain download runs to completion through the real service',
       () async {
     final task = await harness.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, 'm1'),
+      ref: testMydiaRef(ItemKind.movie, 'm1'),
       optionId: '1080p',
       metadata: const DownloadMetadata(
           title: 'Test Movie', mediaType: MediaType.movie),

@@ -7,10 +7,6 @@ import '../source.dart';
 import '../store/source_secrets.dart';
 import 'mydia_credentials.dart';
 
-/// A Mydia source other than the home login, which keeps its own storage.
-bool isStandaloneMydia(Source s) =>
-    s.kind == SourceKind.mydia && s.id != SourceId.legacyMydia;
-
 /// Null when nothing is stored or the stored value is not credentials.
 Future<MydiaCredentials?> readMydiaCredentials(
   SourceSecrets secrets,

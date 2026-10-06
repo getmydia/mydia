@@ -10,20 +10,22 @@ import 'package:player/domain/models/download.dart';
 
 import '../../presentation/screens/sources/fake_media_source.dart';
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
-  test('home is always visible; sources only while listed', () {
-    final hidden = ProviderContainer(
-        overrides: [thirdPartySourcesProvider.overrideWithValue(const [])]);
+  test('sources are visible only while listed', () {
+    final hidden = ProviderContainer(overrides: [
+      thirdPartySourcesProvider.overrideWithValue([testMydiaSource])
+    ]);
     addTearDown(hidden.dispose);
-    expect(hidden.read(visibleDownloadSourcesProvider), {SourceId.legacyMydia});
+    expect(hidden.read(visibleDownloadSourcesProvider), {testMydiaSourceId});
 
     final shown = ProviderContainer(overrides: [
-      thirdPartySourcesProvider.overrideWithValue([fakeSource])
+      thirdPartySourcesProvider.overrideWithValue([testMydiaSource, fakeSource])
     ]);
     addTearDown(shown.dispose);
     expect(shown.read(visibleDownloadSourcesProvider),
-        {SourceId.legacyMydia, fakeSourceId});
+        {testMydiaSourceId, fakeSourceId});
   });
 
   group('the lists', () {
@@ -32,8 +34,8 @@ void main() {
     setUp(() async {
       TestWidgetsFlutterBinding.ensureInitialized();
       h = await makeHarness(body: Uint8List(0));
-      for (final source in [null, fakeSourceId.value]) {
-        final tag = source == null ? 'home' : 'plex';
+      for (final source in [testMydiaSourceId.value, fakeSourceId.value]) {
+        final tag = source == testMydiaSourceId.value ? 'mydia' : 'plex';
         await h.database.saveMedia(DownloadedMedia(
           id: 'm-$tag',
           mediaId: '42',
@@ -96,23 +98,23 @@ void main() {
     }
 
     test('drop a hidden source and keep a listed one', () async {
-      final hidden = container(const []);
-      final shown = container([fakeSource]);
-      final both = {SourceId.legacyMydia, fakeSourceId};
-      final home = {SourceId.legacyMydia};
+      final hidden = container([testMydiaSource]);
+      final shown = container([testMydiaSource, fakeSource]);
+      final both = {testMydiaSourceId, fakeSourceId};
+      final mydia = {testMydiaSourceId};
 
       expect(
           await ids<DownloadedMedia>(
               listen(hidden, downloadedMediaProvider), (x) => x.source),
-          home);
+          mydia);
       expect(
           await ids<DownloadTask>(
               listen(hidden, downloadQueueProvider), (x) => x.source),
-          home);
+          mydia);
       expect(
           await ids<DownloadTask>(
               listen(hidden, failedDownloadsProvider), (x) => x.source),
-          home);
+          mydia);
       expect(
           await ids<DownloadedMedia>(
               listen(shown, downloadedMediaProvider), (x) => x.source),

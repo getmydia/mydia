@@ -25,6 +25,9 @@ const _mediaTokenKey = 'pairing_media_token';
 const _mediaTokenExpiryKey = 'pairing_media_token_expiry';
 const _p2pScheme = 'p2p://';
 
+/// The id every record the player stored before accounts carries.
+const preAccountSourceId = SourceId('mydia');
+
 /// Re-keys what the player stored for the legacy sign-in (caches, progress)
 /// from the legacy source id to the migrated account's.
 abstract interface class LegacyDataRewriter {
@@ -65,7 +68,7 @@ Future<String?> migrateLegacyMydia(LegacyMydiaMigrationDeps deps) async {
     // Rerun the idempotent data steps, in case a run died after the marker.
     final record = _recordOf(snapshot, marked);
     if (record != null) {
-      await deps.rewrite.rewrite(SourceId.legacyMydia, mydiaSourceIdOf(record));
+      await deps.rewrite.rewrite(preAccountSourceId, mydiaSourceIdOf(record));
     }
     return marked;
   }
@@ -115,7 +118,7 @@ Future<String?> migrateLegacyMydia(LegacyMydiaMigrationDeps deps) async {
     await deps.store.putAccount(record);
   }
 
-  await deps.rewrite.rewrite(SourceId.legacyMydia, mydiaSourceIdOf(record));
+  await deps.rewrite.rewrite(preAccountSourceId, mydiaSourceIdOf(record));
   await deps.store.setLegacyInstanceId(resolved.accountId);
   return resolved.accountId;
 }

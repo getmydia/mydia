@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
+import '../../../../test_utils/mydia_test_source.dart';
 
 void main() {
   test('Mydia keeps the player route it always used', () {
@@ -10,6 +11,7 @@ void main() {
       target: () => const PlaybackTarget(
           mediaType: 'episode', mediaId: 'e1', fileId: 'f1'),
       offline: () => false,
+      sourceId: () => testMydiaSourceId,
     );
     expect(
       session.episodeLocation(

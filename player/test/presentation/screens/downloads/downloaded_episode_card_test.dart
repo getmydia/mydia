@@ -9,6 +9,7 @@ import 'package:player/presentation/screens/downloads/widgets/downloaded_episode
 import 'package:player/presentation/widgets/quality_badge.dart';
 
 import '../../../test_utils/mock_network_images.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 DownloadedMedia _media({
   String quality = '1080p',
@@ -16,8 +17,8 @@ DownloadedMedia _media({
   String? sourceId,
 }) {
   return DownloadedMedia(
-    sourceId: sourceId,
-    itemKind: sourceId == null ? null : 'episode',
+    sourceId: sourceId ?? testMydiaSourceId.value,
+    itemKind: 'episode',
     id: 'd1',
     mediaId: 'ep-1',
     title: 'Pilot',
@@ -96,6 +97,7 @@ void main() {
       tester,
       media: _media(),
       progress: LocalPlaybackProgress(
+        sourceId: testMydiaSourceId.value,
         mediaId: 'ep-1',
         mediaType: 'episode',
         positionSeconds: 300,

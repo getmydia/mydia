@@ -127,6 +127,8 @@ import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
 import 'up_next_controller.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
+import '../../../core/sources/source.dart' show SourceId;
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -381,6 +383,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// other best-effort failure (already caught and logged there). It also
   /// backs [_session], whose methods read it at call time.
   GraphQLClient? _graphqlClient;
+
+  /// The bound Mydia instance, kept in a field so a session read during
+  /// dispose never touches `ref`.
+  SourceId? _boundSourceId;
 
   /// Every GraphQL data call this screen makes goes through here.
   late final PlaybackSession _session;
@@ -1060,6 +1066,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
+    ref.listenManual<SourceId?>(
+      boundSourceIdProvider,
+      (previous, next) => _boundSourceId = next,
+      fireImmediately: true,
+    );
     _session = widget.session ??
         MydiaPlaybackSession(
           client: () => _graphqlClient,
@@ -1071,6 +1082,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             showId: widget.showId,
             seasonNumber: widget.seasonNumber,
           ),
+          sourceId: () => _boundSourceId,
           offline: () => ref.read(authStateProvider).maybeWhen(
                 data: (s) => s == AuthStatus.offlineMode,
                 orElse: () => false,

@@ -45,10 +45,12 @@ class MydiaPlaybackSession implements PlaybackSession {
     required Future<GraphQLClient> Function() awaitClient,
     required PlaybackTarget Function() target,
     required this.offline,
+    required SourceId? Function() sourceId,
     MydiaStreamingDeps? streaming,
   })  : _client = client,
         _awaitClient = awaitClient,
         _target = target,
+        _sourceId = sourceId,
         _streaming = streaming;
 
   /// True while the app is in offline mode.
@@ -63,6 +65,9 @@ class MydiaPlaybackSession implements PlaybackSession {
   final Future<GraphQLClient> Function() _awaitClient;
   final PlaybackTarget Function() _target;
 
+  /// The bound Mydia instance this playback belongs to, if one is bound.
+  final SourceId? Function() _sourceId;
+
   @override
   bool get canWrite => _client() != null;
 
@@ -71,7 +76,7 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   ItemRef get item => ItemRef(
-        sourceId: SourceId.legacyMydia,
+        sourceId: _sourceId() ?? SourceId.none,
         kind: _target().mediaType == 'episode'
             ? ItemKind.episode
             : ItemKind.movie,

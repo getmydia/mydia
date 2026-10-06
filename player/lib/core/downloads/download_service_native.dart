@@ -1357,7 +1357,6 @@ class _NativeDownloadService implements DownloadService {
   }
 
   bool _ofAccount(SourceId source, String accountId) =>
-      source != SourceId.legacyMydia &&
       source.value.split(':').first == accountId;
 
   @override
@@ -1376,9 +1375,8 @@ class _NativeDownloadService implements DownloadService {
 
   @override
   Future<int> deleteDownloadsOfUnknownAccounts(Set<String> knownAccountIds) =>
-      _deleteDownloadsWhere((source) =>
-          source != SourceId.legacyMydia &&
-          !knownAccountIds.contains(source.value.split(':').first));
+      _deleteDownloadsWhere(
+          (source) => !knownAccountIds.contains(source.value.split(':').first));
 
   Future<int> _deleteDownloadsWhere(bool Function(SourceId) matches) async {
     if (_database == null) return 0;

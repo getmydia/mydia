@@ -367,12 +367,11 @@ class _AppShellState extends ConsumerState<AppShell>
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
 
-    // Keeps the offline-to-online progress flush alive for the whole app
-    // session: AppShell mounts for every reachable route before the
-    // immersive player (which renders outside this shell) can be reached,
-    // so watching it once here is enough for the underlying provider —
-    // not autoDispose — to keep listening for the rest of the session.
-    ref.watch(progressFlushProvider);
+    // Keeps the offline progress flush alive for the whole app session:
+    // AppShell mounts for every reachable route before the immersive player
+    // (which renders outside this shell) can be reached, so watching it once
+    // here is enough for the underlying provider, which is not autoDispose,
+    // to keep listening for the rest of the session.
     ref.watch(sourceProgressFlushProvider);
     ref.watch(orphanDownloadSweepProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.

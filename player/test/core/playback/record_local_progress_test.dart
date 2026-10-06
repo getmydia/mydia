@@ -5,8 +5,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
-import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   test('recordLocalProgress writes a well-formed record', () async {
@@ -14,14 +14,14 @@ void main() {
 
     await recordLocalProgress(
       store: store,
-      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
+      item: testMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: const Duration(seconds: 5400),
       now: DateTime.utc(2026, 8, 2, 12),
     );
 
-    final saved = store.get('movie-1')!;
+    final saved = store.get('${testMydiaSourceId.value}|movie-1')!;
     expect(saved.positionSeconds, 900);
     expect(saved.durationSeconds, 5400);
     expect(saved.updatedAt, DateTime.utc(2026, 8, 2, 12));
@@ -34,14 +34,14 @@ void main() {
 
     await recordLocalProgress(
       store: store,
-      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
+      item: testMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: Duration.zero,
       now: DateTime.utc(2026, 8, 2, 12),
     );
 
-    expect(store.get('movie-1'), isNull,
+    expect(store.get('${testMydiaSourceId.value}|movie-1'), isNull,
         reason: 'a percentage against a zero duration is meaningless, and the '
             'server rejects it too');
   });
@@ -50,7 +50,7 @@ void main() {
     // A store write must never fail playback.
     await recordLocalProgress(
       store: ThrowingStore(),
-      item: homeMydiaRef(ItemKind.movie, 'movie-1'),
+      item: testMydiaRef(ItemKind.movie, 'movie-1'),
       mediaType: 'movie',
       position: const Duration(seconds: 900),
       duration: const Duration(seconds: 5400),

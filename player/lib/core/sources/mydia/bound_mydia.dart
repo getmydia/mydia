@@ -48,3 +48,8 @@ final boundMydiaCredentialsProvider =
     return null;
   }
 });
+
+/// The id of the bound instance, which the legacy screens and services
+/// address as their one Mydia server. Null with none bound.
+final boundSourceIdProvider = Provider<SourceId?>(
+    (ref) => ref.watch(boundMydiaProvider.select((m) => m?.source.id)));

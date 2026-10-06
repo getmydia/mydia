@@ -74,7 +74,8 @@ class HiveLegacyDataRewriter implements LegacyDataRewriter {
       );
       // Save first: a crash leaves a duplicate, not a loss.
       await progress.save(moved);
-      await progress.delete(record.key);
+      // Legacy records were keyed by the bare media id.
+      await progress.delete(record.mediaId);
     }
   }
 

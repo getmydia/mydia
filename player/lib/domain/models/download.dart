@@ -217,7 +217,13 @@ class DownloadTask {
     this.thumbnailPath,
   });
 
-  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+  /// Every writer sets [sourceId] and the startup migration fills it on older
+  /// records. A record that still lacks one belongs to no source, so it
+  /// matches none and is listed nowhere, rather than throwing here.
+  SourceId get source {
+    assert(sourceId != null, 'A download record must carry its sourceId');
+    return sourceId == null ? SourceId.none : SourceId(sourceId!);
+  }
 
   ItemRef get itemRef => ItemRef(
         sourceId: source,
@@ -630,7 +636,13 @@ class DownloadedMedia {
         thumbnailPath: thumbnailPath,
       );
 
-  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+  /// Every writer sets [sourceId] and the startup migration fills it on older
+  /// records. A record that still lacks one belongs to no source, so it
+  /// matches none and is listed nowhere, rather than throwing here.
+  SourceId get source {
+    assert(sourceId != null, 'A download record must carry its sourceId');
+    return sourceId == null ? SourceId.none : SourceId(sourceId!);
+  }
 
   ItemRef get itemRef => ItemRef(
         sourceId: source,

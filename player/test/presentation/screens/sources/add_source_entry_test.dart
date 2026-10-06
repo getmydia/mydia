@@ -13,14 +13,6 @@ import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 
-class _MydiaPresent extends MydiaPresenceNotifier {
-  _MydiaPresent(this.present);
-  final bool present;
-
-  @override
-  bool build() => present;
-}
-
 void main() {
   testWidgets('the login screen offers a way in that opens the add screen',
       (tester) async {
@@ -53,7 +45,7 @@ void main() {
   Future<void> pumpAdd(WidgetTester tester, {required bool mydia}) =>
       tester.pumpWidget(ProviderScope(
         overrides: [
-          mydiaPresentProvider.overrideWith(() => _MydiaPresent(mydia)),
+          hasMydiaProvider.overrideWithValue(mydia),
         ],
         child: const MaterialApp(home: AddSourceScreen()),
       ));
@@ -68,7 +60,7 @@ void main() {
     expect(mydia.enabled, isTrue);
   });
 
-  testWidgets('with a home Mydia, the tile is enabled and adds a guest',
+  testWidgets('with a Mydia account, the tile is enabled and adds another',
       (tester) async {
     final router = GoRouter(routes: [
       GoRoute(path: '/', builder: (_, __) => const AddSourceScreen()),
@@ -79,7 +71,7 @@ void main() {
     ]);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+        hasMydiaProvider.overrideWithValue(true),
       ],
       child: MaterialApp.router(routerConfig: router),
     ));
@@ -95,11 +87,11 @@ void main() {
     expect(find.byKey(const Key('guest-marker')), findsOneWidget);
   });
 
-  testWidgets('on web with a home Mydia, the tile is disabled with a hint',
+  testWidgets('on web with a Mydia account, the tile is disabled with a hint',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+        hasMydiaProvider.overrideWithValue(true),
       ],
       child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
     ));
@@ -110,11 +102,11 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('on web without a home Mydia, the tile still signs in',
+  testWidgets('on web without a Mydia account, the tile still signs in',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(false)),
+        hasMydiaProvider.overrideWithValue(false),
       ],
       child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
     ));

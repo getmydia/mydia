@@ -39,6 +39,7 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/playback_session.dart';
@@ -46,6 +47,7 @@ import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 import '../../../test_utils/toast_harness.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 /// Reports whatever [AsyncValue] it is built with — the auth status this
 /// screen sees is fixed for the lifetime of the test.
@@ -350,6 +352,7 @@ Future<void> seedLocalProgress(
 }) async {
   final store = await container.read(playbackProgressStoreProvider.future);
   await store.save(LocalPlaybackProgress(
+    sourceId: testMydiaSourceId.value,
     mediaId: mediaId,
     mediaType: mediaType,
     positionSeconds: positionSeconds,
@@ -733,6 +736,7 @@ ProviderContainer buildPlayerScreenContainer({
   Completer<void>? castManagerRequested,
 }) {
   return ProviderContainer(overrides: [
+    boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
     settingsServiceProvider
         .overrideWithValue(settingsService ?? FakeSettingsService()),
     if (coreSettingsService != null)

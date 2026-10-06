@@ -13,6 +13,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/models/download.dart';
 
 import '../sources/store/source_json_test.dart' show plexRecord;
+import '../../test_utils/mydia_test_source.dart';
 import 'download_test_harness.dart';
 
 class _Records extends SourceRecordsNotifier {
@@ -79,7 +80,7 @@ void main() {
     final goneKid = await media('b', 'gone1:kid:aa11');
     final goneOther = await media('c', 'gone2:owner:bb22');
     final known = await media('d', 'acc1:owner:aa11');
-    final home = await media('e', null);
+    final mydia = await media('e', testMydiaSourceId.value);
     await h.database.saveTask(DownloadTask(
         id: 't1',
         mediaId: 'm-t1',
@@ -97,13 +98,14 @@ void main() {
         sourceId: 'acc1:owner:aa11',
         createdAt: DateTime(2026)));
 
-    expect(await h.service.deleteDownloadsOfUnknownAccounts({'acc1'}), 3);
+    expect(
+        await h.service.deleteDownloadsOfUnknownAccounts({'acc1', 'macct'}), 3);
 
     for (final path in [gone, goneKid, goneOther]) {
       expect(File(path).existsSync(), isFalse);
     }
     expect(File(known).existsSync(), isTrue);
-    expect(File(home).existsSync(), isTrue);
+    expect(File(mydia).existsSync(), isTrue);
     expect(h.service.getDownloadedMedia().map((m) => m.id).toSet(), {'d', 'e'});
     expect(h.database.getTask('t1'), isNull);
     expect(h.database.getTask('t2'), isNotNull);

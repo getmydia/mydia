@@ -8,7 +8,6 @@ import '../../widgets/freshness_header.dart';
 import '../../widgets/media_poster.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../detail/start_download.dart';
-import '../../../domain/models/download_request.dart' show homeMydiaRef;
 import '../../../domain/sources/item.dart' show ItemKind;
 import '../../widgets/toast/toaster.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
@@ -425,10 +424,8 @@ class _CollectionDownloadButtonState
     final selectedOption = await pickDownloadOption(
       context,
       title: _getCollectionName(),
-      options: homeMydiaDownloadOptions(
-        ref,
-        homeMydiaRef(_getProbeKind(), _getProbeContentId()),
-      ),
+      options:
+          boundMydiaDownloadOptions(ref, _getProbeKind(), _getProbeContentId()),
     );
 
     if (selectedOption == null || !mounted) return;

@@ -86,7 +86,7 @@ void main() {
       expect(creds.instanceName, 'Ada Media');
       expect(await store.legacyInstanceId(), expected);
       final record = await recordOf(expected);
-      expect(rewriter.calls, [(SourceId.legacyMydia, mydiaSourceIdOf(record))]);
+      expect(rewriter.calls, [(preAccountSourceId, mydiaSourceIdOf(record))]);
     });
 
     test('p2p install uses instance_id and keeps the node address', () async {
@@ -203,7 +203,7 @@ void main() {
       await store.setLegacyInstanceId('mx');
       final id = await migrateLegacyMydia(deps(MockAuthStorage()));
       expect(id, 'mx');
-      expect(rewriter.calls.single.$1, SourceId.legacyMydia);
+      expect(rewriter.calls.single.$1, preAccountSourceId);
       expect(rewriter.calls.single.$2, mydiaSourceIdOf(await recordOf('mx')));
     });
 

@@ -12,6 +12,7 @@ import 'package:player/presentation/widgets/nav/source_picker.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../screens/sources/fake_media_source.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 class _Authenticated extends AuthStateNotifier {
   @override
@@ -48,7 +49,7 @@ Source _source(
 Future<List<PickerChoice?>> _open(
   WidgetTester tester,
   List<Source> sources, {
-  SourceId? currentId = SourceId.legacyMydia,
+  SourceId? currentId = testMydiaSourceId,
   Size size = const Size(800, 600),
   Map<SourceId, FakeMediaSource> fakes = const {},
   List<SourceProfile> profiles = const [],
@@ -63,12 +64,15 @@ Future<List<PickerChoice?>> _open(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       authStateProvider.overrideWith(_Authenticated.new),
-      thirdPartySourcesProvider.overrideWithValue(sources),
+      thirdPartySourcesProvider
+          .overrideWithValue([testMydiaSource, ...sources]),
       allServersSourcesProvider.overrideWithValue(included),
-      for (final s in sources)
+      for (final s in [testMydiaSource, ...sources])
         mediaSourceProvider(s.id)
             .overrideWithValue(fakes[s.id] ?? FakeMediaSource()),
-      for (final account in {for (final s in sources) s.account.id})
+      for (final account in {
+        for (final s in [testMydiaSource, ...sources]) s.account.id
+      })
         accountProfilesProvider(account).overrideWithValue([
           for (final p in profiles)
             if (p.accountId == account) p
@@ -114,7 +118,7 @@ void main() {
     ]);
     expect(_row('all'), findsOneWidget);
     expect(tester.getTopLeft(_row('all')).dy,
-        lessThan(tester.getTopLeft(_row('mydia')).dy));
+        lessThan(tester.getTopLeft(_row(testMydiaSourceId.value)).dy));
     await tester.tap(_row('all'));
     await tester.pumpAndSettle();
     expect(results.single, isA<PickAllServers>());
@@ -127,17 +131,14 @@ void main() {
       tester,
       [guest],
       currentId: null,
-      included: [
-        FakeMergedSource(Source.legacyMydia()),
-        FakeMergedSource(guest)
-      ],
+      included: [FakeMergedSource(testMydiaSource), FakeMergedSource(guest)],
     );
     bool selected(Finder f) => tester.widget<SidebarRow>(f).isSelected;
     expect(selected(_row('all')), isTrue);
-    expect(selected(_row('mydia')), isFalse);
+    expect(selected(_row(testMydiaSourceId.value)), isFalse);
     expect(selected(_row(guest.id.value)), isFalse);
     expect(tester.widget<SidebarRow>(_row('all')).focusNode?.hasFocus, isTrue);
-    await tester.tap(_row('mydia'));
+    await tester.tap(_row(testMydiaSourceId.value));
     await tester.pumpAndSettle();
     expect(results.single, isA<PickSource>());
   });
@@ -164,14 +165,13 @@ void main() {
     for (final id in ['acc1:owner:aa11', 'acc1:owner:cc33']) {
       expect(tester.getTopLeft(_row(id)).dy, lessThan(acc2Top));
     }
-    // Mydia heads the list and has no caption.
-    expect(_row('mydia'), findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-account-mydia')),
-        findsNothing);
+    // The Mydia account heads the list, under a caption like any other.
+    expect(_row(testMydiaSourceId.value), findsOneWidget);
+    expect(find.byKey(const ValueKey('source-switcher-account-macct')),
+        findsOneWidget);
   });
 
-  testWidgets('a guest Mydia gets its account caption, home does not',
-      (tester) async {
+  testWidgets('every Mydia account gets its account caption', (tester) async {
     const guest = Source(
       account: ProviderAccount(
         id: 'mguest',
@@ -191,8 +191,8 @@ void main() {
     await _open(tester, [guest]);
     expect(find.byKey(const ValueKey('source-switcher-account-mguest')),
         findsOneWidget);
-    expect(find.byKey(const ValueKey('source-switcher-account-mydia')),
-        findsNothing);
+    expect(find.byKey(const ValueKey('source-switcher-account-macct')),
+        findsOneWidget);
   });
 
   testWidgets('picking a source returns it and closes', (tester) async {

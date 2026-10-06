@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/media_source.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/sources/item.dart';
@@ -24,10 +25,10 @@ String allServersLibraryLocation(LibraryKind kind) => kind == LibraryKind.shows
     ? allServersShowsLocation
     : allServersMoviesLocation;
 
-/// Home items open Mydia's own detail screens; every other server's open
-/// the shared ones under `/s/`.
-String allServersItemLocation(ItemRef ref) {
-  if (ref.sourceId != SourceId.legacyMydia) return sourceItemLocation(ref);
+/// The [bound] Mydia instance's items open Mydia's own detail screens; every
+/// other server's open the shared ones under `/s/`.
+String allServersItemLocation(ItemRef ref, SourceId? bound) {
+  if (ref.sourceId != bound) return sourceItemLocation(ref);
   final kind = detailKindOf(ref.kind);
   return kind == null
       ? sourceItemLocation(ref)
@@ -60,7 +61,8 @@ class AllServersPoster extends ConsumerWidget {
       subtitle: [caption ?? item.year?.toString(), server]
           .whereType<String>()
           .join(' · '),
-      onTap: () => context.push(allServersItemLocation(item.ref)),
+      onTap: () => context.push(
+          allServersItemLocation(item.ref, ref.read(boundSourceIdProvider))),
       onContextMenu: onContextMenu,
     );
   }

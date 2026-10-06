@@ -1,11 +1,8 @@
 import '../../domain/sources/item.dart';
 import '../sources/source.dart';
 
-/// Where a position is stored. Home Mydia keeps the bare id it always had,
-/// so positions recorded before this change are still found.
-String progressKey(ItemRef item) => item.sourceId == SourceId.legacyMydia
-    ? item.externalId
-    : '${item.sourceId.value}|${item.externalId}';
+/// Where a position is stored.
+String progressKey(ItemRef item) => '${item.sourceId.value}|${item.externalId}';
 
 /// One item's playback position as this device knows it.
 ///
@@ -15,8 +12,7 @@ String progressKey(ItemRef item) => item.sourceId == SourceId.legacyMydia
 /// Serialized as a plain map rather than a generated Hive adapter, matching
 /// `HiveCastSessionStore`: no build_runner step, and no type id to claim.
 class LocalPlaybackProgress {
-  /// The source this position belongs to. Records written before third-party
-  /// downloads are home Mydia's.
+  /// The source this position belongs to.
   final String sourceId;
 
   final String mediaId;
@@ -36,7 +32,7 @@ class LocalPlaybackProgress {
   final DateTime? syncedAt;
 
   const LocalPlaybackProgress({
-    this.sourceId = 'mydia',
+    required this.sourceId,
     required this.mediaId,
     required this.mediaType,
     required this.positionSeconds,
@@ -77,7 +73,7 @@ class LocalPlaybackProgress {
   factory LocalPlaybackProgress.fromMap(Map<dynamic, dynamic> map) {
     final synced = map['syncedAt'] as String?;
     return LocalPlaybackProgress(
-      sourceId: map['sourceId'] as String? ?? 'mydia',
+      sourceId: map['sourceId'] as String,
       mediaId: map['mediaId'] as String,
       mediaType: map['mediaType'] as String,
       positionSeconds: map['positionSeconds'] as int,

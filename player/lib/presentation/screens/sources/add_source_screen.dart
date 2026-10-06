@@ -17,7 +17,7 @@ class AddSourceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasMydia = ref.watch(mydiaPresentProvider);
+    final hasMydia = ref.watch(hasMydiaProvider);
     final guestsUnavailable = hasMydia && isWeb;
     return Scaffold(
       appBar: AppBar(title: const Text('Add a server')),

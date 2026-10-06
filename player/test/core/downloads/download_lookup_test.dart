@@ -6,9 +6,10 @@ import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
-      id: 'row-$id-${sourceId ?? 'home'}',
+      id: 'row-$id-${sourceId ?? 'none'}',
       mediaId: id,
       title: 'The Lantern Accord',
       quality: 'original',
@@ -19,11 +20,11 @@ DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
     );
 
 DownloadedMedia _episode(String id, String? sourceId) => DownloadedMedia(
-      id: 'row-$id-${sourceId ?? 'home'}',
+      id: 'row-$id-${sourceId ?? 'none'}',
       mediaId: id,
       title: 'Quill Harbor',
       quality: 'original',
-      filePath: '/nowhere/$id-${sourceId ?? 'home'}',
+      filePath: '/nowhere/$id-${sourceId ?? 'none'}',
       fileSize: 1,
       downloadedAt: DateTime(2026, 1, 1),
       sourceId: sourceId,
@@ -32,7 +33,7 @@ DownloadedMedia _episode(String id, String? sourceId) => DownloadedMedia(
     );
 
 DownloadTask _task(String id, String? sourceId) => DownloadTask(
-      id: 'task-$id-${sourceId ?? 'home'}',
+      id: 'task-$id-${sourceId ?? 'none'}',
       mediaId: id,
       title: 'Quill Harbor',
       quality: 'original',
@@ -51,7 +52,7 @@ void main() {
       final h = await makeHarness(body: Uint8List(0));
       addTearDown(h.dispose);
       const plexId = SourceId('acc1:owner:aa11');
-      for (final s in [null, plexId.value]) {
+      for (final s in [testMydiaSourceId.value, plexId.value]) {
         await h.database.saveMedia(_episode('e1', s));
         await h.database.saveTask(_task('e1', s));
       }
@@ -63,16 +64,16 @@ void main() {
       }
 
       final media = h.database.getAllMedia();
-      expect(media.map((m) => m.source), [SourceId.legacyMydia]);
+      expect(media.map((m) => m.source), [testMydiaSourceId]);
       final tasks = h.database.getAllTasks();
-      expect(tasks.map((t) => t.source), [SourceId.legacyMydia]);
+      expect(tasks.map((t) => t.source), [testMydiaSourceId]);
     });
   }
 
   test('the same id in two sources is two downloads', () async {
     final h = await makeHarness(body: Uint8List(0));
     addTearDown(h.dispose);
-    await h.database.saveMedia(_media('42', null));
+    await h.database.saveMedia(_media('42', testMydiaSourceId.value));
 
     const plex = ItemRef(
       sourceId: SourceId('acc1:owner:aa11'),
@@ -80,7 +81,7 @@ void main() {
       externalId: '42',
     );
     const home = ItemRef(
-      sourceId: SourceId.legacyMydia,
+      sourceId: testMydiaSourceId,
       kind: ItemKind.movie,
       externalId: '42',
     );

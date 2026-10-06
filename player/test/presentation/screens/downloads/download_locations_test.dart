@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/presentation/screens/downloads/download_locations.dart';
 
+import '../../../test_utils/mydia_test_source.dart';
+
 DownloadedMedia _m({
   String mediaId = '42',
   String? sourceId,
@@ -25,13 +27,17 @@ DownloadedMedia _m({
     );
 
 void main() {
-  test('home keeps its offline player route', () {
-    expect(downloadedPlayLocation(_m()),
-        '/player/movie/42?fileId=offline&title=Quill%20Harbor');
+  test('a Mydia account plays through its own player route too', () {
     expect(
-      downloadedPlayLocation(_m(mediaType: 'episode', season: 2)),
-      '/player/episode/42?fileId=offline&title=Quill%20Harbor'
-      '&showId=s1&seasonNumber=2',
+      downloadedPlayLocation(_m(sourceId: testMydiaSourceId.value)),
+      '/s/macct:owner:inst-1/player/42?kind=movie&fileId=offline'
+      '&title=Quill+Harbor',
+    );
+    expect(
+      downloadedPlayLocation(_m(
+          sourceId: testMydiaSourceId.value, mediaType: 'episode', season: 2)),
+      '/s/macct:owner:inst-1/player/42?kind=episode&fileId=offline'
+      '&title=Quill+Harbor&showId=s1&seasonNumber=2',
     );
   });
 

@@ -11,9 +11,10 @@ import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 final _secondRequest = DownloadRequest(
-  ref: homeMydiaRef(ItemKind.movie, 'm1'),
+  ref: testMydiaRef(ItemKind.movie, 'm1'),
   optionId: '1080p',
   metadata: const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
 );

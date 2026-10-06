@@ -16,16 +16,16 @@ per-user call sends as `userId`. A `SourceServer` is what the viewer browses. A
 routes, caches and memories key on. Ids are `[A-Za-z0-9_-]+`; the store
 refuses anything else.
 
-The home Mydia login predates this layer. It appears as
-`Source.legacyMydia()`, read from `AuthService`'s own keys, and keeps its
-unprefixed routes and its own screens and controllers. Its `MediaSource`
-is a `MydiaGuestSource` over home's GraphQL client (`HomeMydiaTransport`),
-whose status follows the auth state; anything that works across sources
-(All servers, artwork, the switcher's status) reads home through it. A
-guest Mydia is an ordinary account (see Guest Mydia servers).
+The Mydia login that predates this layer is migrated at startup into an
+ordinary account (`core/migration/`), and its stored data moves to that
+account's `SourceId`. There is no fixed source id: every Mydia server is a
+stored account with a `MydiaSource`. The legacy screens and the legacy
+GraphQL client still serve one of them, the bound instance
+(`boundMydiaProvider` in `mydia/bound_mydia.dart`): the migrated account while
+it exists, else the first Mydia added. That instance keeps the unprefixed
+routes, so its `/s/<id>` root redirects to `/`.
 
-The source switcher groups servers by account, with a caption per
-non-Mydia account.
+The source switcher groups servers by account, with a caption per account.
 
 ## Storage
 
@@ -343,9 +343,9 @@ Videos. `/all*` redirects to `/` when fewer than two servers are included,
 including on a cold start before the saved servers load, as `/s/<id>` does.
 
 Each server's "Include in All servers" switch (Manage servers) is stored by
-`SourceId` beside the accounts; Stash defaults to off. Home Mydia joins
-through `mediaSourceProvider` like any other server, and home items open
-Mydia's own detail screens.
+`SourceId` beside the accounts; Stash defaults to off. Every Mydia joins
+through `mediaSourceProvider` like any other server, and the bound
+instance's items open Mydia's own detail screens.
 
 ## Tests
 

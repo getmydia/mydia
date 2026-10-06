@@ -14,11 +14,12 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 const _tokenUrl = 'https://host.invalid/f.mp4?token=secret';
 
 DownloadRequest _request([String id = 'm1']) => DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, id),
+      ref: testMydiaRef(ItemKind.movie, id),
       optionId: '1080p',
       metadata: const DownloadMetadata(
           title: 'Quill Harbor', mediaType: MediaType.movie),
@@ -238,7 +239,7 @@ void main() {
 
     DownloadTask running(String title,
             {SourceId? source, double progress = 0.5}) =>
-        _task('x-$title', sourceId: source?.value)
+        _task('x-$title', sourceId: (source ?? testMydiaSourceId).value)
             .copyWith(title: title, progress: progress);
 
     test('a discreet single task never names its title', () {

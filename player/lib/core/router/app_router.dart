@@ -9,6 +9,7 @@ import '../sources/media_source.dart' show MediaSource;
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
+import '../sources/mydia/bound_mydia.dart';
 import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
@@ -453,6 +454,7 @@ GoRouter appRouter(Ref ref) {
             redirect: (context, state) => sourceRootRedirect(
               state.pathParameters['sourceId']!,
               ref.read(sourcesProvider),
+              bound: ref.read(boundSourceIdProvider),
             ),
             builder: (context, state) => SourceHomeScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),

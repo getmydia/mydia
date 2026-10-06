@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/models/download_request.dart';
 import '../../domain/models/episode.dart';
 import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
+import '../../core/sources/mydia/bound_mydia.dart';
 import '../../core/theme/colors.dart';
 import '../../core/downloads/mydia_download_metadata.dart';
 import '../screens/detail/start_download.dart';
@@ -35,24 +35,28 @@ class EpisodeDownloadButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final isDownloadedAsync = ref.watch(
-      isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id)),
-    );
+    final sourceId = ref.watch(boundSourceIdProvider);
+    if (sourceId == null) return const SizedBox.shrink();
+    final item = ItemRef(
+        sourceId: sourceId, kind: ItemKind.episode, externalId: episode.id);
+
+    final isDownloadedAsync = ref.watch(isItemDownloadedProvider(item));
     final isDownloaded = isDownloadedAsync.value ?? false;
 
     return _ActionButton(
       icon: isDownloaded ? Icons.download_done_rounded : Icons.download_rounded,
       color: isDownloaded ? AppColors.success : AppColors.textSecondary,
-      onTap: () => _handleDownload(context, ref),
+      onTap: () => _handleDownload(context, ref, item),
       tooltip: isDownloaded ? 'Downloaded' : 'Download',
     );
   }
 
-  Future<void> _handleDownload(BuildContext context, WidgetRef ref) {
+  Future<void> _handleDownload(
+      BuildContext context, WidgetRef ref, ItemRef item) {
     return startItemDownload(
       context,
       ref,
-      item: homeMydiaRef(ItemKind.episode, episode.id),
+      item: item,
       metadata: mydiaEpisodeMetadata(
         episode,
         showId: showId,

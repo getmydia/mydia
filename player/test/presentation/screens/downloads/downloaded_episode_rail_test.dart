@@ -8,10 +8,12 @@ import 'package:player/presentation/screens/downloads/widgets/downloaded_episode
 import 'package:player/presentation/screens/downloads/widgets/downloaded_episode_rail.dart';
 
 import '../../../test_utils/mock_network_images.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 DownloadedMedia _media(int episodeNumber) {
   return DownloadedMedia(
     id: 'd$episodeNumber',
+    sourceId: testMydiaSourceId.value,
     mediaId: 'ep-$episodeNumber',
     title: 'Episode $episodeNumber',
     quality: '1080p',

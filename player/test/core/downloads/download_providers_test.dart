@@ -18,6 +18,7 @@ import 'package:player/domain/sources/item.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 import '../sources/store/source_json_test.dart' show plexRecord;
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   // The download provider graph reaches secure storage and other bindings on
@@ -121,11 +122,12 @@ void main() {
       quality: '1080p',
       status: 'downloading',
       downloadUrl: 'https://test.invalid/0.mp4',
+      sourceId: testMydiaSourceId.value,
       createdAt: DateTime(2026, 1, 1),
     ));
 
     final queued = await service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, 'm1'),
+      ref: testMydiaRef(ItemKind.movie, 'm1'),
       optionId: '1080p',
       metadata:
           const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
@@ -194,12 +196,6 @@ void main() {
     test('fails for good once its account is gone', () async {
       final task = await sweep(() async => SourceSnapshot.empty);
       expect(task.status, 'failed', reason: '${task.error}');
-    });
-
-    test('home Mydia, signed out, is parked', () async {
-      final task = await sweep(() async => SourceSnapshot.empty,
-          source: SourceId.legacyMydia);
-      expect(task.status, 'interrupted');
     });
   });
 }

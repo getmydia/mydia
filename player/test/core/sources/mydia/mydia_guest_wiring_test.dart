@@ -43,9 +43,4 @@ void main() {
     await secrets.writeAccountToken(guest.account, 'not json');
     expect(await readMydiaCredentials(secrets, guest.account), isNull);
   });
-
-  test('isStandaloneMydia tells a standalone server from home', () {
-    expect(isStandaloneMydia(guest), isTrue);
-    expect(isStandaloneMydia(Source.legacyMydia()), isFalse);
-  });
 }
