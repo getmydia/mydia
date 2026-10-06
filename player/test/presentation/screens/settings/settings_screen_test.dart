@@ -16,6 +16,7 @@ import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -146,16 +147,17 @@ const _status = P2pStatus(
 
 /// Publishes a fixed registration status so a widget test can drive the row
 /// without a p2p host or a server.
-class _StubRegistration extends NodeRegistrationDriver {
+class _StubRegistration extends NodeRegistrations {
   _StubRegistration(this._status);
 
   final RegistrationStatus _status;
 
   @override
-  RegistrationStatus build() => _status;
+  Map<SourceId, RegistrationStatus> build() =>
+      {const SourceId('acct:owner:inst'): _status};
 
   @override
-  void retry() {}
+  void retryAll() {}
 }
 
 /// Resolves and reads normally, but fails the write itself — for proving
@@ -245,7 +247,7 @@ Future<void> _pump(
               ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
               : RemoteControlSettings(box: _remoteControlBox),
         ),
-        nodeRegistrationProvider.overrideWith(
+        nodeRegistrationsProvider.overrideWith(
           () => _StubRegistration(registration),
         ),
         if (crashReporter != null)

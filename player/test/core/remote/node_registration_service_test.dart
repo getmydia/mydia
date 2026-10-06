@@ -346,6 +346,32 @@ void main() {
         expect(service.status, isA<RegistrationSucceeded>());
       });
 
+      test('equal but non-identical scopes count as the same scope', () async {
+        String scope() => (StringBuffer()
+              ..write('a')
+              ..write(':')
+              ..write('false'))
+            .toString();
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: scope());
+        await pumpEventQueue();
+        pending.single.complete(true);
+        await pumpEventQueue();
+
+        service.update(
+            controllable: true,
+            nodeId: 'abc',
+            clientReady: true,
+            clientScope: scope());
+        await pumpEventQueue();
+
+        expect(pending, hasLength(1));
+        expect(service.status, isA<RegistrationSucceeded>());
+      });
+
       test('a client scope change still registers against the new scope',
           () async {
         service.update(

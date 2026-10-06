@@ -31,6 +31,7 @@ import 'core/remote/ambient_lifecycle.dart';
 import 'core/remote/load_content_navigation.dart';
 import 'core/remote/node_registration_providers.dart';
 import 'core/remote/registration_status.dart';
+import 'core/sources/source.dart' show SourceId;
 import 'core/remote/remote_control_intent.dart';
 import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
@@ -267,10 +268,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // proof that both are now present, so it is the right moment to try again.
     // `_initRemoteControlIfEnabled` no-ops once a receiver is wired, so this
     // costs nothing in the common case where the first attempt worked.
-    ref.listenManual<RegistrationStatus>(
-      nodeRegistrationProvider,
+    ref.listenManual<Map<SourceId, RegistrationStatus>>(
+      nodeRegistrationsProvider,
       (previous, next) {
-        if (next is! RegistrationSucceeded) return;
+        if (!next.values.any((s) => s is RegistrationSucceeded)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
       fireImmediately: true,
@@ -340,7 +341,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       await p2pService.initialize();
 
       // Registration deliberately does not happen here any more. It is an
-      // invariant maintained by `nodeRegistrationProvider`, not a startup
+      // invariant maintained by `nodeRegistrationsProvider`, not a startup
       // step: doing it inline meant a node id or GraphQL client that had not
       // arrived yet left this device unregistered, and therefore invisible to
       // every other device, for the rest of the session.

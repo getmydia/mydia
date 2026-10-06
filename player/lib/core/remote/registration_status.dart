@@ -73,3 +73,27 @@ class RegistrationFailed extends RegistrationStatus {
   @override
   String describe() => 'Not discoverable: $reason';
 }
+
+/// The status a single row should show for several instances: the one that
+/// most needs attention, `Failed` > `Waiting` > `InFlight` > `Succeeded` >
+/// `Idle`. Idle with nothing to summarise.
+RegistrationStatus worstRegistrationStatus(
+  Iterable<RegistrationStatus> statuses,
+) {
+  int rank(RegistrationStatus s) => switch (s) {
+        RegistrationFailed() => 4,
+        RegistrationWaiting() => 3,
+        RegistrationInFlight() => 2,
+        RegistrationSucceeded() => 1,
+        RegistrationIdle() => 0,
+      };
+  RegistrationStatus worst = const RegistrationIdle();
+  var worstRank = -1;
+  for (final s in statuses) {
+    if (rank(s) > worstRank) {
+      worst = s;
+      worstRank = rank(s);
+    }
+  }
+  return worst;
+}

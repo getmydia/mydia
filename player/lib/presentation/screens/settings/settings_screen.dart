@@ -268,7 +268,7 @@ class _ManageSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final updateState = ref.watch(updateProvider);
     final controllableEnabled = ref.watch(remoteControlEnabledProvider).value;
-    final registration = ref.watch(nodeRegistrationProvider);
+    final registration = ref.watch(nodeRegistrationSummaryProvider);
 
     return SettingsSection(
       label: 'Manage',
@@ -302,7 +302,8 @@ class _ManageSection extends ConsumerWidget {
             icon: Icons.refresh,
             title: 'Retry registration',
             subtitle: 'Try to make this device discoverable again',
-            onTap: () => ref.read(nodeRegistrationProvider.notifier).retry(),
+            onTap: () =>
+                ref.read(nodeRegistrationsProvider.notifier).retryAll(),
           ),
         const UpdateTrackSection(),
         if (updateState.manualCheck != ManualCheckBehaviour.unavailable)

@@ -4,215 +4,251 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
-import 'package:player/core/remote/node_registration_service.dart';
 import 'package:player/core/remote/registration_status.dart';
 import 'package:player/core/remote/remote_control_settings.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
-import 'package:player/core/sources/mydia/mydia_client.dart';
-import 'package:player/core/sources/mydia/mydia_credentials.dart';
-import 'package:player/graphql/queries/online_devices.graphql.dart';
+import 'package:player/core/remote/remote_roster.dart' show DeviceRoster;
+import 'package:player/domain/models/remote_device.dart';
+import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 
-import '../sources/mydia/fake_mydia_client.dart';
-import '../sources/mydia/fake_mydia_transport.dart';
+import '../../presentation/screens/sources/fake_media_source.dart';
 
-/// Which account the app has bound, switchable mid-test.
-class _Binding extends Notifier<({String? accountId, MydiaClient? client})> {
-  _Binding(this._initial);
+/// A Mydia instance's registration seam: records every node id it is asked to
+/// publish and answers [result].
+class _RemoteSource extends FakeMediaSource implements RemoteTargets {
+  _RemoteSource(SourceId id, this.registered, {this.result = true})
+      : super(id: id);
 
-  final ({String? accountId, MydiaClient? client}) _initial;
+  final List<String> registered;
+  final bool result;
 
   @override
-  ({String? accountId, MydiaClient? client}) build() => _initial;
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.remoteTargets};
 
-  void bind(String accountId, MydiaClient client) =>
-      state = (accountId: accountId, client: client);
+  @override
+  Future<bool> registerNode(String nodeId) async {
+    registered.add(nodeId);
+    return result;
+  }
+
+  @override
+  DeviceRoster get roster => throw UnimplementedError();
+
+  @override
+  Future<List<RemoteDevice>> devices() async => const [];
+
+  @override
+  Future<bool> revokeDevice(String deviceId) async => true;
 }
+
+SourceAccountRecord _record(String account, {bool needsReauth = false}) =>
+    SourceAccountRecord(
+      account: ProviderAccount(
+        id: account,
+        kind: SourceKind.mydia,
+        displayName: 'Instance $account',
+        storageNamespace: 'source/$account',
+        activeProfileId: 'owner',
+        needsReauth: needsReauth,
+      ),
+      profiles: [
+        SourceProfile(
+            id: 'owner', accountId: account, name: 'Owner', isOwner: true),
+      ],
+      servers: [
+        SourceServer(
+            id: 'inst', accountId: account, profileId: 'owner', name: account),
+      ],
+      addedAtMs: account.codeUnitAt(0),
+    );
+
+class _Records extends SourceRecordsNotifier {
+  _Records(this._initial);
+  final List<SourceAccountRecord> _initial;
+
+  @override
+  Future<SourceSnapshot> build() async => SourceSnapshot(accounts: _initial);
+
+  void emit(List<SourceAccountRecord> next) =>
+      state = AsyncData(SourceSnapshot(accounts: next));
+}
+
+/// Bumped to make the source objects get rebuilt, the way a credentials save
+/// does.
+class _Generation extends Notifier<int> {
+  @override
+  int build() => 0;
+  void bump() => state += 1;
+}
+
+final _generation = NotifierProvider<_Generation, int>(_Generation.new);
 
 void main() {
-  group('against the real service and a server', () {
-    late FakeMydiaTransport server;
-    late _FakeP2pStatus statusNotifier;
-    late NotifierProvider<_Binding, ({String? accountId, MydiaClient? client})>
-        binding;
-    late ProviderContainer container;
+  late _FakeP2pStatus p2p;
+  late Map<String, List<String>> sent;
+  late bool result;
+  late ProviderContainer container;
+  late _Records records;
 
-    int registrations() =>
-        server.calls.where((c) => c.operation == 'RegisterDeviceNode').length;
+  SourceId idOf(String account) => mydiaSourceIdOf(_record(account));
 
-    MydiaClient clientFor(String instanceId) => fakeMydiaClient(
-          server,
-          creds: MydiaCredentials(
-            instanceId: instanceId,
-            accessToken: 'access',
-            deviceToken: 'device',
-          ),
-        );
+  Future<void> start({
+    List<String> accounts = const ['a', 'b'],
+    Future<bool>? controllable,
+  }) async {
+    p2p = _FakeP2pStatus();
+    sent = {
+      for (final a in ['a', 'b']) a: <String>[]
+    };
+    records = _Records([for (final a in accounts) _record(a)]);
+    container = ProviderContainer(overrides: [
+      p2pStatusNotifierProvider.overrideWith(() => p2p),
+      remoteControlEnabledProvider
+          .overrideWith((ref) => controllable ?? Future.value(true)),
+      sourceRecordsProvider.overrideWith(() => records),
+      mediaSourceProvider.overrideWith((ref, id) {
+        ref.watch(_generation);
+        for (final a in ['a', 'b']) {
+          if (id == idOf(a)) return _RemoteSource(id, sent[a]!, result: result);
+        }
+        return null;
+      }),
+    ]);
+    addTearDown(container.dispose);
+    container.listen(nodeRegistrationsProvider, (_, __) {});
+    await container.read(sourceRecordsProvider.future);
+    await pumpEventQueue();
+  }
 
-    setUp(() {
-      server = FakeMydiaTransport();
-      server.validTokens = {'access', 'fresh'};
-      server.handlers['RegisterDeviceNode'] = (vars) => {
-            'registerDeviceNode': {'id': 'd', 'nodeId': vars['nodeId']},
-          };
-      server.handlers['Devices'] = (_) => {'devices': <Object>[]};
-      server.handlers['RefreshAccessToken'] = (_) => {
-            'refreshAccessToken': {'token': 'fresh'},
-          };
-      statusNotifier = _FakeP2pStatus();
-      binding = NotifierProvider<_Binding,
-          ({String? accountId, MydiaClient? client})>(
-        () => _Binding((accountId: 'account-a', client: clientFor('a'))),
-      );
-      container = ProviderContainer(overrides: [
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        remoteControlEnabledProvider.overrideWith((ref) async => true),
-        boundAccountIdProvider
-            .overrideWith((ref) => ref.watch(binding).accountId),
-        boundMydiaClientProvider
-            .overrideWith((ref) => ref.watch(binding).client),
-      ]);
-      addTearDown(container.dispose);
-    });
+  setUp(() => result = true);
 
-    test('a token refresh on the bound account does not register again',
-        () async {
-      container.listen(nodeRegistrationProvider, (_, __) {});
-      await container.read(remoteControlEnabledProvider.future);
-      statusNotifier.publish('a' * 64);
-      await pumpEventQueue();
-      expect(registrations(), 1);
+  test('registers with every Mydia instance', () async {
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
 
-      // The access token the server accepts moves on, so an unrelated request
-      // is refused, refreshed and retried.
-      final client = container.read(boundMydiaClientProvider)!;
-      server.validTokens = {'fresh'};
-      await client.request(documentNodeQueryDevices);
-      await pumpEventQueue();
-
-      expect(
-          server.calls.any((c) => c.operation == 'RefreshAccessToken'), isTrue);
-      expect(registrations(), 1,
-          reason: 'the same account refreshed its token, nothing to re-send');
-    });
-
-    test('binding another account registers again', () async {
-      container.listen(nodeRegistrationProvider, (_, __) {});
-      await container.read(remoteControlEnabledProvider.future);
-      statusNotifier.publish('a' * 64);
-      await pumpEventQueue();
-      expect(registrations(), 1);
-
-      container.read(binding.notifier).bind('account-b', clientFor('b'));
-      await pumpEventQueue();
-
-      expect(registrations(), 2);
-    });
+    expect(sent['a'], ['n' * 64]);
+    expect(sent['b'], ['n' * 64]);
+    final states = container.read(nodeRegistrationsProvider);
+    expect(states.keys, {idOf('a'), idOf('b')});
+    expect(states.values, everyElement(isA<RegistrationSucceeded>()));
   });
 
-  group('nodeRegistrationProvider', () {
-    test('registers when the node id arrives after the first build', () async {
-      final sent = <String>[];
-      final statusNotifier = _FakeP2pStatus();
+  test('removing an instance drops only its registration', () async {
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
 
-      final container = ProviderContainer(overrides: [
-        nodeRegistrationServiceProvider.overrideWith((ref) {
-          final service = NodeRegistrationService(
-            register: (nodeId) async {
-              sent.add(nodeId);
-              return true;
-            },
-            delay: (_) async {},
-          );
-          ref.onDispose(service.dispose);
-          return service;
-        }),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        remoteControlEnabledProvider.overrideWith((ref) async => true),
-        // The driver only checks this for null, and the service above never
-        // reaches the client, but an account has to be bound for
-        // `clientReady` to be true.
-        boundAccountIdProvider.overrideWithValue('account-a'),
-      ]);
-      addTearDown(container.dispose);
+    records.emit([_record('a')]);
+    await pumpEventQueue();
 
-      // Keep the driver alive for the whole test.
-      container.listen(nodeRegistrationProvider, (_, __) {});
-      await container.read(remoteControlEnabledProvider.future);
-      await pumpEventQueue();
+    expect(container.read(nodeRegistrationsProvider).keys, {idOf('a')});
+    expect(sent['a'], hasLength(1));
+    expect(sent['b'], hasLength(1));
+  });
 
-      expect(sent, isEmpty,
-          reason: 'no node id yet, so there is nothing to publish');
-      expect(
-          container.read(nodeRegistrationProvider), isA<RegistrationWaiting>());
+  test('a token refresh does not register again', () async {
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
 
-      statusNotifier.publish('a' * 64);
-      await pumpEventQueue();
+    container.read(_generation.notifier).bump();
+    await pumpEventQueue();
 
-      expect(sent, ['a' * 64],
-          reason: 'the late node id must drive a registration, not be missed');
-      expect(container.read(nodeRegistrationProvider),
-          isA<RegistrationSucceeded>());
-    });
+    expect(sent['a'], hasLength(1));
+    expect(sent['b'], hasLength(1));
+  });
 
-    test(
-        'a stored false resolving after a loading period does not '
-        'register', () async {
-      final sent = <String>[];
-      final statusNotifier = _FakeP2pStatus();
-      final controllableCompleter = Completer<bool>();
+  test('signing in again registers again', () async {
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
 
-      final container = ProviderContainer(overrides: [
-        nodeRegistrationServiceProvider.overrideWith((ref) {
-          final service = NodeRegistrationService(
-            register: (nodeId) async {
-              sent.add(nodeId);
-              return true;
-            },
-            delay: (_) async {},
-          );
-          ref.onDispose(service.dispose);
-          return service;
-        }),
-        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        // Never resolves until the test says so, standing in for Hive still
-        // opening its box.
-        remoteControlEnabledProvider
-            .overrideWith((ref) => controllableCompleter.future),
-        boundAccountIdProvider.overrideWithValue('account-a'),
-      ]);
-      addTearDown(container.dispose);
+    records.emit([_record('a', needsReauth: true), _record('b')]);
+    await pumpEventQueue();
+    expect(sent['a'], hasLength(1), reason: 'not ready while signed out');
+    expect(container.read(nodeRegistrationsProvider)[idOf('a')],
+        isA<RegistrationWaiting>());
 
-      // Keep the driver alive for the whole test.
-      container.listen(nodeRegistrationProvider, (_, __) {});
-      // The node id and the client are both ready; only the setting is
-      // still loading, so it alone must be what gates registration.
-      statusNotifier.publish('a' * 64);
-      await pumpEventQueue();
+    records.emit([_record('a'), _record('b')]);
+    await pumpEventQueue();
 
-      expect(sent, isEmpty,
-          reason: 'the setting has not resolved yet, so nothing may '
-              'register even though every other input is ready');
-      expect(
-          container.read(nodeRegistrationProvider), isA<RegistrationWaiting>());
+    expect(sent['a'], hasLength(2));
+    expect(sent['b'], hasLength(1));
+  });
 
-      controllableCompleter.complete(false);
-      await pumpEventQueue();
+  test('retryAll retries only the instances that are not registered', () async {
+    result = false;
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
+    expect(container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationFailed>()));
+    final before = sent['a']!.length;
 
-      expect(sent, isEmpty,
-          reason: 'a stored false resolving after loading must not have '
-              'been treated as enabled during the loading window');
-      expect(container.read(nodeRegistrationProvider), isA<RegistrationIdle>());
+    container.read(nodeRegistrationsProvider.notifier).retryAll();
+    await pumpEventQueue();
+
+    expect(sent['a']!.length, greaterThan(before));
+    expect(sent['b']!.length, greaterThan(before));
+  });
+
+  test('waits for the node id, then registers', () async {
+    await start();
+    expect(container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationWaiting>()));
+    expect(sent['a'], isEmpty);
+
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
+
+    expect(sent['a'], ['n' * 64]);
+  });
+
+  test('a setting that has not resolved is waiting, then idle when off',
+      () async {
+    final setting = Completer<bool>();
+    await start(controllable: setting.future);
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
+
+    expect(sent['a'], isEmpty);
+    expect(container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationWaiting>()));
+
+    setting.complete(false);
+    await pumpEventQueue();
+
+    expect(sent['a'], isEmpty);
+    expect(container.read(nodeRegistrationsProvider).values,
+        everyElement(isA<RegistrationIdle>()));
+  });
+
+  group('worstRegistrationStatus', () {
+    final at = DateTime(2026);
+    test('orders Failed over Waiting over InFlight over Succeeded over Idle',
+        () {
+      const failed = RegistrationFailed('x', 1, null);
+      const waiting = RegistrationWaiting('y');
+      const inFlight = RegistrationInFlight('n', 1);
+      final ok = RegistrationSucceeded('n', at);
+      const idle = RegistrationIdle();
+
+      expect(worstRegistrationStatus([idle, ok, inFlight, waiting, failed]),
+          failed);
+      expect(worstRegistrationStatus([idle, ok, inFlight, waiting]), waiting);
+      expect(worstRegistrationStatus([idle, ok, inFlight]), inFlight);
+      expect(worstRegistrationStatus([idle, ok]), ok);
+      expect(worstRegistrationStatus([idle]), idle);
+      expect(worstRegistrationStatus(const []), isA<RegistrationIdle>());
     });
   });
 }
 
-/// Publishes a node id on demand so a test can decide when the host appears.
-///
-/// The single instance is deliberately captured and reused so `publish` can
-/// reach it. That is safe only because the provider is built once per test: a
-/// Riverpod `Notifier` instance cannot be mounted twice, so a test that lets
-/// this provider be disposed and rebuilt must hand `overrideWith` a factory
-/// that constructs a fresh one instead.
 class _FakeP2pStatus extends P2pStatusNotifier {
   @override
   P2pStatus build() => const P2pStatus.initial();
