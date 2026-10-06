@@ -12,7 +12,7 @@ import '../../core/player/input_capabilities.dart';
 /// private helper, and four hardcoded a 100px top padding that was tuned for
 /// a mobile toolbar and became dead space on desktop.
 ///
-/// Collections deliberately does not use this. `_CollectionCard` is a
+/// Collections deliberately does not use this. `CollectionCard` is a
 /// different shape (aspect 0.85, its own column table), which is a real
 /// design difference rather than drift, so that screen takes `BrowseScaffold`
 /// alone and keeps its own grid.
