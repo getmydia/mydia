@@ -10,6 +10,8 @@ library;
 
 import '../../../domain/models/calendar_entry.dart';
 
+export '../../../core/util/iso_date.dart';
+
 /// Short weekday names, indexed by `DateTime.weekday - 1` (Monday first).
 ///
 /// `package:intl` is not a dependency of this app, so the calendar's labels
@@ -40,12 +42,6 @@ const List<String> _monthNames = [
   'November',
   'December',
 ];
-
-/// Zero-padded `yyyy-MM-dd`, the format the calendar's GraphQL query takes
-/// for its `start`/`end` date arguments.
-String isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
 
 /// [date] with its time-of-day dropped, at local midnight.
 DateTime truncateToDay(DateTime date) =>

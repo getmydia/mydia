@@ -10,6 +10,7 @@ import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/library.dart';
+import 'package:player/presentation/screens/library/library_sort.dart';
 
 import '../media_source_contract.dart';
 import 'fake_mydia_transport.dart';
@@ -17,122 +18,10 @@ import 'mydia_fixtures.dart' as fx;
 
 const sid = SourceId(fx.sid);
 
-const guest = Source(
-  account: ProviderAccount(
-    id: 'mguest',
-    kind: SourceKind.mydia,
-    displayName: 'Lakeside',
-    storageNamespace: 'source/mguest',
-    activeProfileId: 'owner',
-  ),
-  profile: SourceProfile(
-      id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
-  server: SourceServer(
-      id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
-);
+/// Re-exported for the tests that import it from here.
+const guest = fx.guest;
 
-({MydiaSource source, FakeMydiaTransport t}) build(
-    {void Function()? onDispose}) {
-  final t = FakeMydiaTransport();
-  final movies = [for (var i = 1; i <= 5; i++) fx.movie('m-$i')];
-  t.handlers['GuestMovies'] = (v) {
-    final first = v['first'] as int;
-    final start = v['after'] == null ? 0 : int.parse(v['after'] as String);
-    final page = movies.skip(start).take(first).toList();
-    final end = start + page.length;
-    return {
-      'movies': {
-        'edges': [
-          for (final m in page) {'node': m}
-        ],
-        'pageInfo': {'hasNextPage': end < movies.length, 'endCursor': '$end'},
-        'totalCount': movies.length,
-      }
-    };
-  };
-  t.handlers['GuestTvShows'] = (_) => {
-        'tvShows': {
-          'edges': [
-            {'node': fx.show('s-1')}
-          ],
-          'pageInfo': {'hasNextPage': false, 'endCursor': null},
-          'totalCount': 1,
-        }
-      };
-  t.handlers['MovieDetail'] = (v) => {'movie': fx.movie(v['id'] as String)};
-  t.handlers['TvShowDetail'] = (v) => {'tvShow': fx.show(v['id'] as String)};
-  t.handlers['EpisodeDetail'] =
-      (v) => {'episode': fx.episode(v['id'] as String)};
-  t.handlers['SeasonEpisodes'] = (v) => {
-        'seasonEpisodes': [
-          fx.episode('e-21', number: 1),
-          fx.episode('e-22', number: 2)
-        ]
-      };
-  t.handlers['Search'] = (_) => {
-        'search': {
-          'totalCount': 2,
-          'sections': [
-            {
-              'type': 'MOVIE',
-              'totalCount': 1,
-              'results': [
-                {
-                  'id': 'm-1',
-                  'type': 'MOVIE',
-                  'title': 'A',
-                  'year': 2020,
-                  'artwork': null
-                }
-              ]
-            },
-            {
-              'type': 'EPISODE',
-              'totalCount': 1,
-              'results': [
-                {'id': 'e-1', 'type': 'EPISODE', 'title': 'B', 'parentId': null}
-              ]
-            },
-          ]
-        }
-      };
-  t.handlers['GuestContinueWatching'] = (_) => {'continueWatching': <Object>[]};
-  t.handlers['GuestRecentlyAdded'] = (_) => {
-        'recentlyAdded': [
-          fx.recentlyAdded('m-4', addedAt: '2024-05-03T00:00:00Z'),
-          fx.recentlyAdded('s-1',
-              type: 'TV_SHOW', addedAt: '2024-05-02T00:00:00Z'),
-          fx.recentlyAdded('m-1', addedAt: '2024-05-01T00:00:00Z'),
-        ],
-      };
-  for (final op in [
-    'MarkMovieWatched',
-    'MarkMovieUnwatched',
-    'MarkEpisodeWatched',
-    'MarkEpisodeUnwatched',
-    'MarkSeasonWatched',
-    'MarkSeasonUnwatched',
-    'ToggleFavorite',
-    'RemoveFromContinueWatching'
-  ]) {
-    t.handlers[op] = (_) => <String, dynamic>{};
-  }
-  final client = MydiaClient(
-    transport: t,
-    load: () async =>
-        const MydiaCredentials(instanceId: 'inst-2', accessToken: 'access'),
-    save: (_) async {},
-    onUnauthorized: () {},
-  );
-  return (
-    source: MydiaSource(
-        source: guest,
-        client: client,
-        proxy: () => throw StateError('no proxy in this test'),
-        onDispose: onDispose),
-    t: t
-  );
-}
+const build = fx.build;
 
 void main() {
   test('the fixture source id matches the record shape', () {
@@ -156,18 +45,26 @@ void main() {
     final b = build();
     final items = await b.source.recentlyAdded();
     expect(items.map((i) => i.ref.externalId), ['m-4', 's-1', 'm-1']);
-    expect(b.t.calls.last.operation, 'GuestRecentlyAdded');
+    expect(b.t.calls.last.operation, 'RecentlyAddedFull');
     expect(b.t.calls.last.vars['first'], 20);
   });
 
-  test('browse sorts are tagged title and added only', () async {
+  test('browse offers every sort but random, tagging the shared three',
+      () async {
     final libs = await build().source.libraries();
-    final shared = {for (final o in libs.first.sortOptions) o.id: o.shared};
+    final shared = {
+      for (final o in libs.first.sortOptions)
+        if (o.shared != null) o.id: o.shared
+    };
+    expect(libs.first.sortOptions.map((o) => o.id), isNot(contains('RANDOM')));
+    expect(libs.first.sortOptions.length, SortField.values.length - 1);
     expect(shared, {
       'TITLE': SharedSort.title,
       'ADDED_AT': SharedSort.added,
-      'YEAR': null,
+      'RELEASE_DATE': SharedSort.released,
     });
+    expect(
+        libs.first.filterOptions.map((o) => o.id), contains('watch:unwatched'));
   });
 
   test('browse sends the sort the viewer picked', () async {
@@ -257,7 +154,7 @@ void main() {
     expect(s.as<WatchedState>(), isNotNull);
     expect(s.as<Favorites>(), isNotNull);
     expect(s.as<NextUp>(), isNotNull);
-    expect(s.as<HomeHubs>(), isNull);
+    expect(s.as<HomeHubs>(), isNotNull);
   });
 
   const show = ItemRef(sourceId: sid, kind: ItemKind.show, externalId: 's-1');
