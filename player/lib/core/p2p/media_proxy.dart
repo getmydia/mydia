@@ -81,10 +81,10 @@ abstract class MediaProxy {
   /// playback call site can hold a [MediaProxy] and not know which one it has.
   /// Both implementations build it with `MediaRoutes`, which is also what
   /// takes the path apart again on the serving side.
-  String buildHlsUrl(String sessionId);
+  String buildHlsUrl(String sessionId, {required String target});
 
   /// URL that streams a media file's own bytes, with no transcoding.
-  String buildDirectStreamUrl(String fileId);
+  String buildDirectStreamUrl(String fileId, {required String target});
 }
 
 /// Tracks which call sites currently need the proxy up.

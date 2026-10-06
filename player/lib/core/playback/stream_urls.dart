@@ -26,25 +26,28 @@ abstract class StreamUrls {
 }
 
 class ProxyStreamUrls implements StreamUrls {
-  ProxyStreamUrls(this._proxy);
+  ProxyStreamUrls(this._proxy, {required this.target});
 
   final MediaProxy _proxy;
 
+  /// The proxy target this server is served under: its account id.
+  final String target;
+
   @override
   Future<ResolvedSource> directPlay(String fileId) async => ResolvedSource(
-        url: _proxy.buildDirectStreamUrl(fileId),
+        url: _proxy.buildDirectStreamUrl(fileId, target: target),
         headers: const {},
       );
 
   @override
   ResolvedSource hls(String sessionId) => ResolvedSource(
-        url: _proxy.buildHlsUrl(sessionId),
+        url: _proxy.buildHlsUrl(sessionId, target: target),
         headers: const {},
       );
 
   @override
   ResolvedSource hlsFile(String sessionId, String name) => ResolvedSource(
-        url: MediaRoutes.hlsFile(_proxy.baseUrl, sessionId, name),
+        url: MediaRoutes.hlsFile(_proxy.targetBaseUrl(target), sessionId, name),
         headers: const {},
       );
 }

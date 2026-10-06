@@ -1,40 +1,41 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/media_proxy.dart';
+import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/playback/stream_urls.dart';
 
 class _FakeProxy extends Fake implements MediaProxy {
   @override
-  String get baseUrl => 'http://127.0.0.1:1';
+  String targetBaseUrl(String target) => 'http://127.0.0.1:1/t/$target';
 
   @override
-  String buildHlsUrl(String sessionId) =>
-      'http://127.0.0.1:1/hls/$sessionId/index.m3u8';
+  String buildHlsUrl(String sessionId, {required String target}) =>
+      MediaRoutes.hls(targetBaseUrl(target), sessionId);
 
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      'http://127.0.0.1:1/direct/$fileId';
+  String buildDirectStreamUrl(String fileId, {required String target}) =>
+      MediaRoutes.directStream(targetBaseUrl(target), fileId);
 }
 
 void main() {
   group('ProxyStreamUrls', () {
-    final urls = ProxyStreamUrls(_FakeProxy());
+    final urls = ProxyStreamUrls(_FakeProxy(), target: 'acct-1');
 
     test('direct play goes through the proxy with no headers', () async {
       final source = await urls.directPlay('file-1');
-      expect(source.url, 'http://127.0.0.1:1/direct/file-1');
+      expect(source.url, 'http://127.0.0.1:1/t/acct-1/direct/file-1/stream');
       expect(source.headers, isEmpty);
     });
 
     test('hls goes through the proxy; the proxy handles auth', () {
       final source = urls.hls('sess-1');
-      expect(source.url, 'http://127.0.0.1:1/hls/sess-1/index.m3u8');
+      expect(source.url, 'http://127.0.0.1:1/t/acct-1/hls/sess-1/index.m3u8');
       expect(source.headers, isEmpty);
       expect(source.probeHeaders, isNull);
     });
 
     test('a session file goes through the proxy next to the manifest', () {
       final source = urls.hlsFile('sess-1', 'subs_3.mks');
-      expect(source.url, 'http://127.0.0.1:1/hls/sess-1/subs_3.mks');
+      expect(source.url, 'http://127.0.0.1:1/t/acct-1/hls/sess-1/subs_3.mks');
       expect(source.headers, isEmpty);
       expect(source.probeHeaders, isNull);
     });

@@ -83,11 +83,12 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  String buildHlsUrl(String sessionId) => MediaRoutes.hls(baseUrl, sessionId);
+  String buildHlsUrl(String sessionId, {required String target}) =>
+      MediaRoutes.hls(targetBaseUrl(target), sessionId);
 
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      MediaRoutes.directStream(baseUrl, fileId);
+  String buildDirectStreamUrl(String fileId, {required String target}) =>
+      MediaRoutes.directStream(targetBaseUrl(target), fileId);
 
   @override
   Future<void> start({

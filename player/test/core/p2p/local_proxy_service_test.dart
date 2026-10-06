@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
+import 'package:player/core/p2p/media_proxy.dart';
 
 import 'media_proxy_conformance.dart';
 import 'test_p2p_service.dart';
@@ -82,7 +83,9 @@ void main() {
 
       test('throws when not started and buildHlsUrl called', () {
         expect(
-            () => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
+            () =>
+                proxy.buildHlsUrl('session123', target: MediaProxy.homeTarget),
+            throwsA(isA<StateError>()));
       });
 
       test('throws when not started and buildBaseUrl called', () {

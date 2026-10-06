@@ -7,7 +7,6 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../../core/connection/connection_provider.dart' as conn;
 import '../../../../core/p2p/media_proxy.dart';
-import '../../../../core/playback/server_features.dart';
 import '../../../../core/sources/mydia/mydia_client.dart';
 
 class MydiaStreamingDeps {
@@ -17,7 +16,6 @@ class MydiaStreamingDeps {
     required this.connection,
     required this.mediaProxy,
     required this.mediaToken,
-    required this.serverFeatures,
     required this.adoptClient,
     required this.boundClient,
   });
@@ -30,7 +28,6 @@ class MydiaStreamingDeps {
   final conn.ConnectionState Function() connection;
   final MediaProxy Function() mediaProxy;
   final Future<String?> Function() mediaToken;
-  final ServerFeatures Function() serverFeatures;
 
   /// Hands the resolved client to the screen, which must hold it before a
   /// session starts so `dispose` can end what it started.

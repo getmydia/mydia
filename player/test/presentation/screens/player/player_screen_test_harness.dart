@@ -252,11 +252,14 @@ class TrackingLocalProxyService extends Fake
   }
 
   @override
-  String buildHlsUrl(String sessionId) =>
+  String targetBaseUrl(String target) => baseUrl;
+
+  @override
+  String buildHlsUrl(String sessionId, {required String target}) =>
       'http://127.0.0.1:$port/hls/$sessionId/index.m3u8';
 
   @override
-  String buildDirectStreamUrl(String fileId) {
+  String buildDirectStreamUrl(String fileId, {required String target}) {
     directStreamFileIds.add(fileId);
     return 'http://127.0.0.1:$port/direct/$fileId/stream';
   }

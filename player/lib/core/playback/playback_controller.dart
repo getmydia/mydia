@@ -10,10 +10,10 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:http/http.dart' as http;
 
 import '../../domain/models/quality_rung.dart';
+import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session_compat.dart';
@@ -21,9 +21,10 @@ import '../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../graphql/schema.graphql.dart';
 import '../player/stream_timeline.dart';
 import '../player/web_session_limits.dart';
+import '../sources/mydia/mydia_client.dart';
+import '../sources/mydia/root_typename.dart';
 import 'playback_plan.dart';
 import 'playback_transport.dart';
-import 'server_features.dart';
 import 'stream_urls.dart';
 
 typedef PlaylistProbe = Future<({int status, String body})> Function(
@@ -114,26 +115,20 @@ Future<void> _awaitFirstAdvance(
 
 class PlaybackController implements PlaybackTransport {
   PlaybackController({
-    required GraphQLClient? Function() client,
+    required MydiaClient client,
     required StreamUrls urls,
-    required ServerFeatures features,
     required bool relayed,
     PlaylistProbe probe = httpPlaylistProbe,
     Future<void> Function(Duration) wait = Future.delayed,
     this.firstAdvanceTimeout = const Duration(seconds: 60),
   })  : _client = client,
         _urls = urls,
-        _features = features,
         _relayed = relayed,
         _probe = probe,
         _wait = wait;
 
-  /// Resolved on every use rather than captured: a long playback can outlive
-  /// a token refresh, and at dispose time the screen can only hand back what
-  /// its `ref.listenManual` last saw, which may be null.
-  final GraphQLClient? Function() _client;
+  final MydiaClient _client;
   final StreamUrls _urls;
-  final ServerFeatures _features;
   final bool _relayed;
   final PlaylistProbe _probe;
   final Future<void> Function(Duration) _wait;
@@ -228,10 +223,12 @@ class PlaybackController implements PlaybackTransport {
       // Only a server that echoes caps gets to label the stream. The legacy
       // document selects none, so reading them there would label a capped
       // stream Original.
-      final effective = _features.heightCap
-          ? effectiveRungLabel(
-              maxHeight: session.maxHeight, maxBitrateKbps: session.maxBitrate)
-          : null;
+      final effective =
+          !_client.isDowngraded(documentNodeMutationStartStreamingSession)
+              ? effectiveRungLabel(
+                  maxHeight: session.maxHeight,
+                  maxBitrateKbps: session.maxBitrate)
+              : null;
 
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
@@ -295,14 +292,6 @@ class PlaybackController implements PlaybackTransport {
     if (lifetime.isCompleted) throw StateError('Playback ended');
   }
 
-  GraphQLClient _requireClient() {
-    final client = _client();
-    if (client == null) {
-      throw StateError('no GraphQL client is available for streaming');
-    }
-    return client;
-  }
-
   /// The session-start mutation with its legacy fallback, as the screen ran
   /// it: the current document first, and on a server that rejects `maxHeight`
   /// or `playlistMode` the legacy document, remembered per connection.
@@ -313,7 +302,6 @@ class PlaybackController implements PlaybackTransport {
     required Completer<void> lifetime,
   }) async {
     _requireActive(lifetime);
-    final client = _requireClient();
     final strategy = plan.strategy == HlsStrategy.copy
         ? Enum$StreamingStrategy.HLS_COPY
         : Enum$StreamingStrategy.TRANSCODE;
@@ -322,68 +310,37 @@ class PlaybackController implements PlaybackTransport {
     final maxBitrate = tighterCap(plan.rung.maxBitrateKbps, limits.maxBitrate);
     final maxHeight = tighterCap(plan.rung.height, limits.maxHeight);
 
-    Future<QueryResult<Object?>> runLegacy() => client.mutate(
-          MutationOptions(
-            document: documentNodeMutationStartStreamingSessionLegacy,
-            variables: Variables$Mutation$StartStreamingSessionLegacy(
-              fileId: fileId,
-              strategy: strategy,
-              maxBitrate: maxBitrate,
-              startPosition: startPosition,
-            ).toJson(),
-          ),
-        );
+    final base = Variables$Mutation$StartStreamingSessionLegacy(
+      fileId: fileId,
+      strategy: strategy,
+      maxBitrate: maxBitrate,
+      startPosition: startPosition,
+    ).toJson();
+    final full = <String, dynamic>{
+      ...base,
+      if (maxHeight != null) 'maxHeight': maxHeight,
+      'playlistMode': 'FULL',
+    };
 
-    QueryResult<Object?> result;
-    if (_features.heightCap) {
-      result = await client.mutate(
-        MutationOptions(
-          document: documentNodeMutationStartStreamingSession,
-          variables: Variables$Mutation$StartStreamingSession(
-            fileId: fileId,
-            strategy: strategy,
-            maxBitrate: maxBitrate,
-            maxHeight: maxHeight,
-            startPosition: startPosition,
-            playlistMode: Enum$PlaylistMode.FULL,
-          ).toJson(),
-        ),
+    final Map<String, dynamic> response;
+    try {
+      response = await _client.query(
+        documentNodeMutationStartStreamingSession,
+        fallback: documentNodeMutationStartStreamingSessionLegacy,
+        variables: full,
+        fallbackVariables: base,
       );
-      if (_looksLikeMissingHeightSupport(result)) {
-        _requireActive(lifetime);
-        debugPrint('[PlaybackController] Server does not know maxHeight; '
-            'retrying without the height cap');
-        _features.heightCap = false;
-        result = await runLegacy();
-      }
-    } else {
-      result = await runLegacy();
-    }
-
-    if (result.hasException) {
-      throw Exception('Failed to start streaming session: ${result.exception}');
+    } on SourceException catch (e) {
+      throw Exception('Failed to start streaming session: ${e.message}');
     }
     final data = Mutation$StartStreamingSession.fromJson(
-      withPlaylistModeDefault(result.data!),
+      rootMutation(withPlaylistModeDefault(response)),
     );
     final session = data.startStreamingSession;
     if (session == null) {
       throw Exception('No session data returned from server');
     }
     return session;
-  }
-
-  /// Absinthe's verbatim validation text for the two fields an old server
-  /// lacks. Anything else is a real failure and is not retried.
-  static bool _looksLikeMissingHeightSupport(QueryResult<Object?> result) {
-    final errors = result.exception?.graphqlErrors ?? const [];
-    return errors.any((error) {
-      final message = error.message;
-      return message.contains('Unknown argument "maxHeight"') ||
-          message.contains('Cannot query field "maxHeight"') ||
-          message.contains('Unknown argument "playlistMode"') ||
-          message.contains('Cannot query field "playlistMode"');
-    });
   }
 
   /// Polls the manifest until it lists three segments, with the backoff the
@@ -508,28 +465,12 @@ class PlaybackController implements PlaybackTransport {
   }
 
   Future<void> _end(String sessionId) async {
-    final client = _client();
-    if (client == null) {
-      debugPrint('[PlaybackController] Cannot end session $sessionId: '
-          'no GraphQL client resolved yet');
-      return;
-    }
     debugPrint('[PlaybackController] Terminating HLS session: $sessionId');
     try {
-      final result = await client.mutate(
-        MutationOptions(
-          document: documentNodeMutationEndStreamingSession,
-          variables:
-              Variables$Mutation$EndStreamingSession(sessionId: sessionId)
-                  .toJson(),
-        ),
-      );
-      if (result.hasException) {
-        debugPrint('[PlaybackController] Failed to terminate HLS session: '
-            '${result.exception}');
-      }
+      await _client.request(
+          documentNodeMutationEndStreamingSession, {'sessionId': sessionId});
     } catch (e) {
-      debugPrint('[PlaybackController] Error terminating HLS session: $e');
+      debugPrint('[PlaybackController] Could not end session $sessionId: $e');
     }
   }
 }

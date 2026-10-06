@@ -7,6 +7,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/playback/candidates_from_graphql.dart';
 import '../../../../core/playback/playback_controller.dart';
 import '../../../../core/playback/stream_urls.dart';
@@ -172,15 +173,14 @@ class MydiaPlaybackSession implements PlaybackSession {
         isP2PMode: isP2PMode
       ),
       createTransport: ({required bool relayed}) => PlaybackController(
-        client: _client,
+        client: deps.boundClient()!,
         urls: isP2PMode
-            ? ProxyStreamUrls(deps.mediaProxy())
+            ? ProxyStreamUrls(deps.mediaProxy(), target: MediaProxy.homeTarget)
             : HttpStreamUrls(
                 serverUrl: serverUrl,
                 bearerToken: token,
                 mediaToken: deps.mediaToken,
               ),
-        features: deps.serverFeatures(),
         relayed: relayed,
       ),
     ));

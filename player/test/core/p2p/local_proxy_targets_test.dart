@@ -41,7 +41,8 @@ void main() {
     await proxy.start(owner: download, targetPeer: 'home-peer');
 
     expect(proxy.targetBaseUrl(MediaProxy.homeTarget), proxy.baseUrl);
-    expect(proxy.buildHlsUrl('s1'), '${proxy.baseUrl}/hls/s1/index.m3u8');
+    expect(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget),
+        '${proxy.baseUrl}/hls/s1/index.m3u8');
   });
 
   test('each target reaches its own peer with its own token', () async {
@@ -55,7 +56,8 @@ void main() {
 
     expect(await get(MediaRoutes.hls(proxy.targetBaseUrl('mguest'), 's2')),
         HttpStatus.ok);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
 
     expect(p2p.calls.map((c) => (c.peer, c.authToken, c.sessionId)), [
       ('guest-peer', 'guest-tok', 's2'),
@@ -68,7 +70,7 @@ void main() {
     await proxy.start(
         owner: playback, targetPeer: 'guest-peer', target: 'mguest');
 
-    await get(proxy.buildHlsUrl('s1'));
+    await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget));
 
     expect(p2p.calls.single.peer, 'home-peer');
   });
@@ -81,7 +83,8 @@ void main() {
     await proxy.stop(playback, target: 'mguest');
 
     expect(proxy.isRunning, isTrue);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
     expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/mguest', 's2')),
         HttpStatus.serviceUnavailable);
   });
@@ -116,7 +119,8 @@ void main() {
     await proxy.release(playback);
 
     expect(proxy.isRunning, isTrue);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
     expect(await get(MediaRoutes.hls('${proxy.baseUrl}/t/mguest', 's2')),
         HttpStatus.serviceUnavailable);
   });
@@ -135,7 +139,8 @@ void main() {
     await proxy.stop(download, target: 'mguest');
 
     expect(proxy.isRunning, isTrue);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
   });
 
   test('an unknown target answers 503', () async {
@@ -177,7 +182,8 @@ void main() {
     await proxy.stop(playback);
 
     expect(proxy.isRunning, isTrue);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
     expect(p2p.calls.single.peer, 'home-peer');
     expect(p2p.calls.single.authToken, 'home-tok');
 
@@ -207,7 +213,8 @@ void main() {
 
     await proxy.stop(playback, target: 'mguest');
     expect(proxy.isRunning, isTrue);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
 
     await proxy.stop(playback);
     expect(proxy.isRunning, isFalse);
@@ -242,7 +249,8 @@ void main() {
     await proxy.stop(playback);
     expect(proxy.isRunning, isTrue);
     expect(proxy.port, port);
-    expect(await get(proxy.buildHlsUrl('s1')), HttpStatus.ok);
+    expect(await get(proxy.buildHlsUrl('s1', target: MediaProxy.homeTarget)),
+        HttpStatus.ok);
 
     await proxy.stop(download);
     expect(proxy.isRunning, isFalse);

@@ -68,7 +68,7 @@ void mediaProxyConformanceTests(
     test('buildHlsUrl is baseUrl plus the manifest path', () async {
       await startProxy();
       expect(
-        proxy.buildHlsUrl(sessionId),
+        proxy.buildHlsUrl(sessionId, target: MediaProxy.homeTarget),
         '${proxy.baseUrl}/hls/$sessionId/index.m3u8',
       );
     });

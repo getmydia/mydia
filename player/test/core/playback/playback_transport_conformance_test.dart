@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/playback/playback_controller.dart';
 import 'package:player/core/playback/playback_transport.dart';
-import 'package:player/core/playback/server_features.dart';
 import 'package:player/core/playback/stream_urls.dart';
 import 'package:player/core/player/progress_reporter.dart';
 import 'package:player/core/player/progress_service.dart';
@@ -23,9 +22,8 @@ class _NoUrls implements StreamUrls {
 void main() {
   test('the Mydia transport and progress service fit the seams', () {
     final controller = PlaybackController(
-      client: () => null,
+      client: fakeMydiaClient(FakeMydiaTransport()),
       urls: _NoUrls(),
-      features: ServerFeatures(),
       relayed: false,
     );
     expect(controller, isA<PlaybackTransport>());

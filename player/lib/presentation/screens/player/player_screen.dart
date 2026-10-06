@@ -96,7 +96,6 @@ import '../../../domain/models/cast_device.dart';
 import '../../../domain/sources/item.dart';
 import '../../../core/p2p/media_proxy.dart';
 import '../../../core/p2p/media_proxy_factory.dart';
-import '../../../core/playback/server_features.dart';
 import '../../../core/window/desktop_window.dart';
 import '../../../core/window/player_window_sizer.dart';
 import '../../../core/player/resume_plan.dart';
@@ -1092,7 +1091,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             mediaProxy: () => ref.read(mediaProxyProvider),
             mediaToken: () async =>
                 ref.read(boundMydiaClientProvider)?.ensureValidMediaToken(),
-            serverFeatures: () => ref.read(serverFeaturesProvider),
             adoptClient: (client) => _graphqlClient = client,
             boundClient: () => ref.read(boundMydiaClientProvider),
           ),

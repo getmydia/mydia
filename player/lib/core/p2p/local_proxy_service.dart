@@ -381,7 +381,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// Returns the local proxy URL for the HLS playlist.
   /// The video player should use this URL to start playback.
   @override
-  String buildHlsUrl(String sessionId) => MediaRoutes.hls(_urlBase, sessionId);
+  String buildHlsUrl(String sessionId, {required String target}) =>
+      MediaRoutes.hls(targetBaseUrl(target), sessionId);
 
   @override
   String targetBaseUrl(String target) =>
@@ -397,8 +398,8 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// This uses the P2P HLS protocol with a "direct:" session ID prefix
   /// to stream the raw file without HLS transcoding.
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      MediaRoutes.directStream(_urlBase, fileId);
+  String buildDirectStreamUrl(String fileId, {required String target}) =>
+      MediaRoutes.directStream(targetBaseUrl(target), fileId);
 
   /// Build a download URL for a completed transcode job.
   ///
