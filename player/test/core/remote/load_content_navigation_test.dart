@@ -236,7 +236,8 @@ void main() {
       expect((submitted.single as LoadContentIntent).via, _instB);
     });
 
-    test('a named server this device is not signed into is dropped', () async {
+    test('an unknown named server falls back to the first listing instance',
+        () async {
       final submitted = <RemoteControlIntent>[];
       await routeRemoteIntent(
         _intent(via: null, serverInstanceId: 'inst-z'),
@@ -245,15 +246,40 @@ void main() {
         submit: submitted.add,
       );
 
-      expect(submitted, isEmpty);
+      expect((submitted.single as LoadContentIntent).via, _instA);
     });
 
-    test('a named server that does not list the peer is dropped', () async {
+    test('a name in another id form (node id vs instance id) still resolves',
+        () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'nabc123'),
+        'peer-1',
+        instancesOf: (peer) async => [_instB],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instB);
+    });
+
+    test('a named server that does not list the peer falls back too', () async {
       final submitted = <RemoteControlIntent>[];
       await routeRemoteIntent(
         _intent(via: null, serverInstanceId: 'inst-b'),
         'peer-1',
         instancesOf: (peer) async => [_instA],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instA);
+    });
+
+    test('a named server with no listing instance at all is dropped', () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'inst-b'),
+        'peer-1',
+        instancesOf: (peer) async => const [],
         submit: submitted.add,
       );
 

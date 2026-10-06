@@ -237,9 +237,12 @@ paired to several instances is one entry.
   instances. An instance whose roster throws contributes nothing. A sender
   is allowed when any instance allows it.
 - Commands answer against the instance that listed the sender.
-  `MergedRoster.instancesOf(nodeId)` names those instances, and a remote load
-  content command resolves the item against the sending instance, not the
-  bound one.
+  `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
+  content command resolves the item on the server it names
+  (`serverInstanceId`) when a local instance with that id lists the sender,
+  else on the first instance that lists the sender, never the bound one. The
+  fallback exists because the instance id can take a different form on each
+  device (see above).
 - Registration is `NodeRegistrations` (`core/remote/node_registration_providers.dart`):
   one `NodeRegistrationService` per Mydia account, each registering this
   device's node id with its own server. An account's registration restarts

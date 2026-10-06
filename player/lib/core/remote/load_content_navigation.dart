@@ -125,10 +125,10 @@ Future<void> pushLoadContentDestination(
 ///
 /// A `LoadContent` names an item by an id only its sending instance can
 /// resolve. When the sender names its server ([LoadContentIntent
-/// .serverInstanceId]) the command is stamped with that local instance, if the
-/// instance also lists the peer, and dropped otherwise. An older sender names
-/// none, so the first instance that lists the peer is used, or the command is
-/// dropped when none does. Everything else goes through untouched.
+/// .serverInstanceId]) and a local instance with that id lists the peer, the
+/// command is stamped with it. Otherwise (no name, or a name no listing
+/// instance matches) it is stamped with the first instance that lists the
+/// peer, and dropped when none does. Everything else goes through untouched.
 Future<void> routeRemoteIntent(
   RemoteControlIntent intent,
   String peerNodeId, {
@@ -142,18 +142,23 @@ Future<void> routeRemoteIntent(
 
   final candidates = await instancesOf(peerNodeId);
   final wanted = intent.serverInstanceId;
-  final via = wanted == null
-      ? candidates.firstOrNull
+  final named = wanted == null
+      ? null
       : candidates
           .where((id) => mydiaInstanceIdOfSource(id) == wanted)
           .firstOrNull;
+  // The id can take a different form on each device (a real instance id on
+  // one, `n<nodeId>` or a URL hash on another), so a name nobody matches
+  // falls back to the first instance that lists the sender.
+  final via = named ?? candidates.firstOrNull;
   if (via == null) {
-    debugPrint(wanted == null
-        ? '[LoadContentNavigation] No instance lists $peerNodeId, '
-            'dropping LoadContent'
-        : '[LoadContentNavigation] No local instance $wanted lists '
-            '$peerNodeId, dropping LoadContent');
+    debugPrint('[LoadContentNavigation] No instance lists $peerNodeId, '
+        'dropping LoadContent');
     return;
+  }
+  if (wanted != null && named == null) {
+    debugPrint('[LoadContentNavigation] No local instance matches the named '
+        'server $wanted, using $via');
   }
   submit(intent.withVia(via));
 }

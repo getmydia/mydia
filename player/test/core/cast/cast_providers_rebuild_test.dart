@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/cast/mydia_cast_backend.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/merged_roster.dart';
 import 'package:player/core/remote/remote_roster.dart';
@@ -125,6 +127,26 @@ void main() {
             'provider must rebuild rather than keep handing out the '
             'earlier null',
       );
+    });
+
+    test('the backend names the bound account\'s instance in LoadContent',
+        () async {
+      final statusNotifier = _FakeP2pStatusNotifier();
+
+      final container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
+        boundAccountIdProvider.overrideWithValue('minst-b'),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(container.read(mydiaCastBackendProvider), isNull);
+      statusNotifier.publish('a' * 64);
+
+      final backend = container.read(mydiaCastBackendProvider);
+      expect(backend, isA<MydiaCastBackend>());
+      expect((backend! as MydiaCastBackend).serverInstanceId, 'inst-b');
     });
 
     test('a peer connecting does not swap the backend out mid-session',

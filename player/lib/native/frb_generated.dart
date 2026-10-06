@@ -1138,13 +1138,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           protocolVersion: dco_decode_u_32(raw[2]),
         );
       case 1:
-        return FlutterRemoteControlRequest_GetState();
+        return const FlutterRemoteControlRequest_GetState();
       case 2:
-        return FlutterRemoteControlRequest_Play();
+        return const FlutterRemoteControlRequest_Play();
       case 3:
-        return FlutterRemoteControlRequest_Pause();
+        return const FlutterRemoteControlRequest_Pause();
       case 4:
-        return FlutterRemoteControlRequest_Stop();
+        return const FlutterRemoteControlRequest_Stop();
       case 5:
         return FlutterRemoteControlRequest_Seek(
           positionMs: dco_decode_u_64(raw[1]),
@@ -1166,9 +1166,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           id: dco_decode_opt_String(raw[1]),
         );
       case 10:
-        return FlutterRemoteControlRequest_NextEpisode();
+        return const FlutterRemoteControlRequest_NextEpisode();
       case 11:
-        return FlutterRemoteControlRequest_PreviousEpisode();
+        return const FlutterRemoteControlRequest_PreviousEpisode();
       case 12:
         return FlutterRemoteControlRequest_LoadContent(
           dco_decode_box_autoadd_flutter_load_content_request(raw[1]),
@@ -1195,13 +1195,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           dco_decode_box_autoadd_flutter_playback_snapshot(raw[1]),
         );
       case 2:
-        return FlutterRemoteControlResponse_Accepted();
+        return const FlutterRemoteControlResponse_Accepted();
       case 3:
-        return FlutterRemoteControlResponse_NotAuthorized();
+        return const FlutterRemoteControlResponse_NotAuthorized();
       case 4:
-        return FlutterRemoteControlResponse_NotPlaying();
+        return const FlutterRemoteControlResponse_NotPlaying();
       case 5:
-        return FlutterRemoteControlResponse_Unsupported();
+        return const FlutterRemoteControlResponse_Unsupported();
       case 6:
         return FlutterRemoteControlResponse_Error(
           dco_decode_String(raw[1]),
@@ -1759,13 +1759,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             controllerName: var_controllerName,
             protocolVersion: var_protocolVersion);
       case 1:
-        return FlutterRemoteControlRequest_GetState();
+        return const FlutterRemoteControlRequest_GetState();
       case 2:
-        return FlutterRemoteControlRequest_Play();
+        return const FlutterRemoteControlRequest_Play();
       case 3:
-        return FlutterRemoteControlRequest_Pause();
+        return const FlutterRemoteControlRequest_Pause();
       case 4:
-        return FlutterRemoteControlRequest_Stop();
+        return const FlutterRemoteControlRequest_Stop();
       case 5:
         var var_positionMs = sse_decode_u_64(deserializer);
         return FlutterRemoteControlRequest_Seek(positionMs: var_positionMs);
@@ -1782,9 +1782,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_id = sse_decode_opt_String(deserializer);
         return FlutterRemoteControlRequest_SelectSubtitleTrack(id: var_id);
       case 10:
-        return FlutterRemoteControlRequest_NextEpisode();
+        return const FlutterRemoteControlRequest_NextEpisode();
       case 11:
-        return FlutterRemoteControlRequest_PreviousEpisode();
+        return const FlutterRemoteControlRequest_PreviousEpisode();
       case 12:
         var var_field0 =
             sse_decode_box_autoadd_flutter_load_content_request(deserializer);
@@ -1815,13 +1815,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             sse_decode_box_autoadd_flutter_playback_snapshot(deserializer);
         return FlutterRemoteControlResponse_State(var_field0);
       case 2:
-        return FlutterRemoteControlResponse_Accepted();
+        return const FlutterRemoteControlResponse_Accepted();
       case 3:
-        return FlutterRemoteControlResponse_NotAuthorized();
+        return const FlutterRemoteControlResponse_NotAuthorized();
       case 4:
-        return FlutterRemoteControlResponse_NotPlaying();
+        return const FlutterRemoteControlResponse_NotPlaying();
       case 5:
-        return FlutterRemoteControlResponse_Unsupported();
+        return const FlutterRemoteControlResponse_Unsupported();
       case 6:
         var var_field0 = sse_decode_String(deserializer);
         return FlutterRemoteControlResponse_Error(var_field0);

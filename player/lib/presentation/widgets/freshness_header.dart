@@ -30,6 +30,18 @@ double freshnessTopInset(BuildContext context, {double? appBarHeight}) {
   return MediaQuery.paddingOf(context).top + appBarHeight;
 }
 
+/// The location of the route this widget is built under, so a screen below a
+/// pushed route reports its own source rather than the top route's. A context
+/// outside any route (a shell widget) falls back to the router's current
+/// location; no router at all gives null.
+String? _ownLocation(BuildContext context) {
+  try {
+    return GoRouterState.of(context).uri.path;
+  } on GoError {
+    return GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+  }
+}
+
 /// Tells the user, at the top of a screen, whether what they are looking at is
 /// being refreshed, is old, or failed to refresh.
 ///
@@ -53,8 +65,7 @@ class FreshnessHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // The shell's OfflineBanner reports the source of the current route, so
     // this header must read the same one. Outside a router, the active source.
-    final location =
-        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    final location = _ownLocation(context);
     final offline = isOffline(ref.watch(location == null
         ? currentSourceStatusProvider
         : routeSourceStatusProvider(location)));
