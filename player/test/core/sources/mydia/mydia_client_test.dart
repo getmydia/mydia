@@ -686,19 +686,24 @@ void main() {
       expect(await client.fetchCompatibility(), isNull);
     });
 
-    test('returns null on transport failure or unknown field error', () async {
+    test('returns null on transport failure', () async {
       final client = build();
 
-      // Unknown field error (older server without this field)
-      transport.handlers['ServerCompatibility'] = (_) =>
-          throw const SourceException.server(
-              'Cannot query field "serverCompatibility"');
-      expect(await client.fetchCompatibility(), isNull);
-
-      // Transport failure / unreachable
       transport.handlers['ServerCompatibility'] =
           (_) => throw const SourceException.unreachable();
       expect(await client.fetchCompatibility(), isNull);
+    });
+
+    test('flags a server that rejects the query as predating it', () async {
+      final client = build();
+
+      transport.handlers['ServerCompatibility'] = (_) =>
+          throw const SourceException.server(
+              'Cannot query field "serverCompatibility"');
+      final info = await client.fetchCompatibility();
+
+      expect(info, isNotNull);
+      expect(info!.predatesQuery, isTrue);
     });
   });
 

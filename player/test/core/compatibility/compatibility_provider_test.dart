@@ -63,12 +63,18 @@ List<Override> activeServer(MydiaClient client) => [
 
 /// A server answering [response], or refusing the query as a server
 /// predating the feature does when [response] is null.
-MydiaClient serverAnswering(Map<String, dynamic>? response) {
+///
+/// With [unreachable], a null [response] is a dead connection instead, which
+/// says nothing about the server's age.
+MydiaClient serverAnswering(Map<String, dynamic>? response,
+    {bool unreachable = false}) {
   final transport = FakeMydiaTransport();
   transport.handlers['ServerCompatibility'] = (_) =>
       response ??
-      (throw const SourceException.server(
-          'Cannot query field "serverCompatibility"'));
+      (unreachable
+          ? throw const SourceException.unreachable()
+          : throw const SourceException.server(
+              'Cannot query field "serverCompatibility"'));
   return fakeMydiaClient(transport);
 }
 
@@ -123,13 +129,33 @@ void main() {
     expect(state.requiredVersion, '0.9.0');
   });
 
-  test('a failed query yields unknown and no banner', () async {
+  test('a server that predates the compatibility query requires an update',
+      () async {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.9.0',
       response: null,
       box: box,
     );
+
+    final state = await container.read(compatibilityProvider.future);
+
+    expect(state.verdict, CompatibilityVerdict.serverUpdateRequired);
+    expect(state.showBanner, isTrue);
+    expect(state.requiredVersion, Compatibility.minServerVersion);
+    expect(state.serverVersion, isNull);
+  });
+
+  test('an unreachable server yields unknown and no banner', () async {
+    final box = await memoryBox();
+    final container = ProviderContainer(
+      overrides: [
+        ...activeServer(serverAnswering(null, unreachable: true)),
+        playerVersionProvider.overrideWith((ref) async => '0.9.0'),
+        compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
+      ],
+    );
+    addTearDown(container.dispose);
 
     final state = await container.read(compatibilityProvider.future);
 

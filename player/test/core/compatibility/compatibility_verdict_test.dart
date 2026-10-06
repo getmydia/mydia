@@ -34,6 +34,17 @@ void main() {
       );
     });
 
+    test('a server that predates the compatibility query is required to update',
+        () {
+      expect(
+        evaluateCompatibility(
+          playerVersion: currentVersion,
+          server: const ServerCompatibilityInfo.predatesQuery(),
+        ),
+        CompatibilityVerdict.serverUpdateRequired,
+      );
+    });
+
     test('a null server means unknown', () {
       expect(
         evaluateCompatibility(playerVersion: '0.9.0', server: null),
