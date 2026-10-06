@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/app.dart';
 import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
@@ -58,6 +60,8 @@ void main() {
           _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),
+      asyncBoundMydiaClientProvider
+          .overrideWith((ref) => Completer<MydiaClient>().future),
       castSessionProvider.overrideWith((ref) => Stream.value(session)),
       castSessionManagerProvider
           .overrideWith((ref) => Completer<CastSessionManager>().future),

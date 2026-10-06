@@ -251,11 +251,9 @@ final castSessionManagerProvider =
   // casting (a token refresh, an auth-state re-check). The client is used
   // only for progress sync and streaming-session bookkeeping, neither of
   // which is worth dropping an in-flight cast over.
-  final client = await ref.read(asyncGraphqlClientProvider.future);
-  final mydiaClient = ref.read(boundMydiaClientProvider);
-  if (mydiaClient == null) throw StateError('No Mydia server');
+  final client = await ref.read(asyncBoundMydiaClientProvider.future);
   final proxy = ref.read(localProxyServiceProvider);
-  final streamingSessions = GraphqlCastStreamingSessionService(client);
+  final streamingSessions = MydiaCastStreamingSessionService(client);
 
   final manager = CastSessionManager(
     backend: ref.read(castBackendProvider),
@@ -268,19 +266,18 @@ final castSessionManagerProvider =
     capabilities: ref.read(castCapabilitiesProvider),
     bindSource: (content) => bindSourceCast(ref, content),
     store: store,
-    progressService: ProgressService(mydiaClient),
+    progressService: ProgressService(client),
     resolverFactory: () => CastRouteResolver(
       isP2pMode: ref.read(connectionProvider).isP2PMode,
       serverUrl: ref.read(serverUrlProvider).whenOrNull(data: (url) => url),
-      // Awaited, not sampled: `mediaTokenProvider` is read nowhere else, so
-      // a synchronous read on the first cast is always still loading and
-      // yields no token at all — leaving the receiver to 401. Refreshing
+      // Awaited, not sampled: a synchronous read on the first cast would
+      // yield no token at all — leaving the receiver to 401. Refreshing
       // first also keeps a long-idle app from handing out an expired one.
       mediaToken: () async {
         try {
-          final service = await ref.read(asyncMediaTokenServiceProvider.future);
-          await service.ensureValidToken();
-          return await service.getToken();
+          return await ref
+              .read(boundMydiaClientProvider)
+              ?.ensureValidMediaToken();
         } catch (e) {
           // A token is optional (LAN deployments without pairing work
           // without one); failing to fetch it must not kill the cast.
