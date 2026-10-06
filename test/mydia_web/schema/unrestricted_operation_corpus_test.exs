@@ -61,7 +61,6 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "Collections" => %{"first" => 10},
       "CollectionItems" => %{"collectionId" => s.collection.id, "first" => 10},
       "HomeRows" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
-      "HomeRowsLegacy" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
       "MoviesFiltered" => %{
         "first" => 10,
         "sort" => %{"field" => "TITLE", "direction" => "ASC"}
@@ -73,13 +72,10 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "UnwatchedListing" => %{"first" => 10},
       "FavoritesListing" => %{"first" => 10},
       "RecentlyAddedFull" => %{"first" => 10},
-      "RecentlyAddedFullLegacy" => %{"first" => 10},
       "SeasonEpisodes" => %{"showId" => s.show.id, "seasonNumber" => 1},
       "MovieDetail" => %{"id" => s.movie.id},
       "MovieMediaInfo" => %{"id" => s.movie.id},
       "EpisodeMediaInfo" => %{"id" => s.episode.id},
-      "MovieMediaInfoLegacy" => %{"id" => s.movie.id},
-      "EpisodeMediaInfoLegacy" => %{"id" => s.episode.id},
       "StreamingCandidates" => %{"contentType" => "movie", "id" => s.movie.id},
       "SubtitleContent" => %{"mediaFileId" => s.movie_file.id, "trackId" => "0"},
       "SubtitleTrackSettings" => %{"mediaFileId" => s.movie_file.id},

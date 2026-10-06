@@ -16,20 +16,3 @@ query RecentlyAddedFull($first: Int) {
     watchStatus { watched percentage unwatchedEpisodeCount }
   }
 }
-
-# Before 0.14.0: no watchStatus (newEpisodeCount, latestSeasonNumber and
-# latestEpisodeNumber arrived in 0.13.0). Delete when minServerVersion reaches it.
-query RecentlyAddedFullLegacy($first: Int) {
-  recentlyAdded(first: $first) {
-    id
-    type
-    title
-    year
-    artwork {
-      posterUrl
-      backdropUrl
-      thumbnailUrl
-    }
-    addedAt
-  }
-}

@@ -1,8 +1,7 @@
 export 'calendar.graphql.dart' show documentNodeQueryCalendar;
 export 'collections.graphql.dart'
     show documentNodeQueryCollections, documentNodeQueryCollectionItems;
-export 'home_rows.graphql.dart'
-    show documentNodeQueryHomeRows, documentNodeQueryHomeRowsLegacy;
+export 'home_rows.graphql.dart' show documentNodeQueryHomeRows;
 export 'library_filtered.graphql.dart'
     show documentNodeQueryMoviesFiltered, documentNodeQueryTvShowsFiltered;
 export 'listings.graphql.dart'
@@ -12,6 +11,4 @@ export 'mydia_documents.graphql.dart'
         documentNodeQueryMydiaInstanceIdentity,
         documentNodeQueryMydiaContinueWatching;
 export 'recently_added_full.graphql.dart'
-    show
-        documentNodeQueryRecentlyAddedFull,
-        documentNodeQueryRecentlyAddedFullLegacy;
+    show documentNodeQueryRecentlyAddedFull;

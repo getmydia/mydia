@@ -126,37 +126,27 @@ void main() {
     expect(page.items.length, 1);
   });
 
-  test('hubs fall back on an old server and remember it', () async {
+  test('hubs surface a schema rejection without a second document', () async {
     final b = fx.build();
-    b.t.handlers['HomeRows'] = (_) => throw const SourceException.server(
-        'Cannot query field "newEpisodeCount"');
-    b.t.handlers['HomeRowsLegacy'] = (_) => {
-          'recentlyAdded': [fx.listing('m-4')],
-          'favorites': [fx.listing('s-1', type: 'TV_SHOW')],
-        };
-    final hubs = await b.source.hubs();
-    expect(hubs.length, 2);
+    b.t.handlers['HomeRows'] = (_) =>
+        throw const SourceException.server('Cannot query field "watchStatus"');
     b.t.calls.clear();
-    await b.source.hubs();
-    expect(b.t.calls.map((c) => c.operation), ['HomeRowsLegacy']);
+    await expectLater(b.source.hubs(), throwsA(isA<SourceException>()));
+    expect(b.t.calls.map((c) => c.operation), ['HomeRows']);
   });
 
-  test('media info falls back', () async {
+  test('media info surfaces a schema rejection without a second document',
+      () async {
     final b = fx.build();
     b.t.handlers['MovieMediaInfo'] = (_) =>
         throw const SourceException.server('Cannot query field "streams"');
-    b.t.handlers['MovieMediaInfoLegacy'] = (v) => {
-          'movie': {
-            'id': v['id'],
-            'files': [
-              {'id': 'f9', 'size': 10}
-            ]
-          }
-        };
-    final files = await b.source.mediaInfo(
-        const ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1'));
-    expect(files.map((f) => f.id), ['f9']);
-    expect(b.t.calls.last.operation, 'MovieMediaInfoLegacy');
+    b.t.calls.clear();
+    await expectLater(
+      b.source.mediaInfo(const ItemRef(
+          sourceId: sid, kind: ItemKind.movie, externalId: 'm-1')),
+      throwsA(isA<SourceException>()),
+    );
+    expect(b.t.calls.map((c) => c.operation), ['MovieMediaInfo']);
   });
 
   test('registerNode never throws', () async {
