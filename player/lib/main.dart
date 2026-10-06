@@ -13,6 +13,7 @@ import 'core/cast/cast_session_store.dart';
 import 'core/downloads/download_service.dart';
 import 'core/migration/hive_legacy_data_rewriter.dart';
 import 'core/migration/legacy_mydia_migration.dart';
+import 'core/migration/legacy_storage_purge.dart';
 import 'core/playback/playback_progress_store.dart';
 import 'core/config/web_config.dart';
 import 'core/sources/mydia/web_config_account.dart';
@@ -135,18 +136,27 @@ Future<void> _migrateLegacyMydia(
       await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
   // The serving instance re-injects a fresh token on every load.
   final webConfig = kIsWeb ? getWebConfig() : null;
-  Future<void> migrate() => migrateLegacyMydia(LegacyMydiaMigrationDeps(
-        legacy: getAuthStorage(),
+  Future<void> migrate() async {
+    await migrateLegacyMydia(LegacyMydiaMigrationDeps(
+      legacy: getAuthStorage(),
+      store: store,
+      secrets: SourceSecrets(getAuthStorage()),
+      rewrite: HiveLegacyDataRewriter(
+        downloads: downloads,
+        progress: HivePlaybackProgressStore(progressBox),
         store: store,
-        secrets: SourceSecrets(getAuthStorage()),
-        rewrite: HiveLegacyDataRewriter(
-          downloads: downloads,
-          progress: HivePlaybackProgressStore(progressBox),
-          store: store,
-          cache: cache,
-          castSession: HiveCastSessionStore(castBox),
-        ),
-      ));
+        cache: cache,
+        castSession: HiveCastSessionStore(castBox),
+      ),
+    ));
+    // Only reached when the migration did not throw. Never throws itself.
+    await purgeLegacyMydiaStorage(
+      storage: getAuthStorage(),
+      store: store,
+      deleteBox: Hive.deleteBoxFromDisk,
+    );
+  }
+
   if (webConfig == null) {
     await migrate();
     return;
