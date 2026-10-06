@@ -20,10 +20,6 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 import '../../test_utils/toast_harness.dart';
 import '../screens/sources/fake_media_source.dart';
 
-// The shell case below is skipped: 'Needs phase 1B Task 8
-// (currentSourceStatusProvider)'. Today the banner follows the global auth
-// state, so it cannot tell instance A from instance B.
-
 const _idA = SourceId('acc1:owner:aa11');
 const _idB = SourceId('acc2:owner:bb22');
 
@@ -55,7 +51,7 @@ Future<void> _pumpShell(
             AppShell(location: state.uri.path, child: child),
         routes: [
           GoRoute(
-            path: '/s/:id/',
+            path: '/s/:id',
             builder: (_, state) => const SizedBox(),
           ),
         ],
@@ -79,14 +75,14 @@ void main() {
       (tester) async {
     final a = _StatusSource(SourceConnectionStatus.unreachable);
     final b = _StatusSource(SourceConnectionStatus.remote);
-    await _pumpShell(tester, '/s/${_idA.value}/', a: a, b: b);
+    await _pumpShell(tester, '/s/${_idA.value}', a: a, b: b);
     expect(find.byType(OfflineBanner), findsOneWidget);
 
     final context = tester.element(find.byType(AppShell));
-    GoRouter.of(context).go('/s/${_idB.value}/');
+    GoRouter.of(context).go('/s/${_idB.value}');
     await tester.pump();
     expect(find.byType(OfflineBanner), findsNothing);
-  }, skip: true); // _skipUntilTask8
+  });
 
   testWidgets('an unreachable source shows its stored rows, not an error',
       (tester) async {

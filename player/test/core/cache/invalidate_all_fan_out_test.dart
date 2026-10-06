@@ -6,6 +6,8 @@ import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cache/source_group.dart';
 import 'package:player/core/cache/watcher_registry.dart';
+import 'package:player/core/sources/cache/source_keys.dart';
+import 'package:player/core/sources/source.dart';
 
 class _Watcher implements CacheWatcher {
   _Watcher(this.key, this.log, {this.gate});
@@ -27,6 +29,8 @@ void main() {
   test('cacheGroupOf takes the source prefix, or empty for a bare name', () {
     expect(cacheGroupOf(QueryKey('a:o:s/item')), 'a:o:s');
     expect(cacheGroupOf(QueryKey('HomeScreen')), '');
+    const id = SourceId('acc1:owner:aa11');
+    expect(cacheGroupOf(SourceKeys.continueWatching(id)), id.value);
   });
 
   test('a stalled source does not delay another source', () async {
