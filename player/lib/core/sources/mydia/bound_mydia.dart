@@ -22,7 +22,11 @@ final legacyInstanceIdProvider = FutureProvider<String?>((ref) async {
 final boundMydiaProvider = Provider<MydiaSource?>((ref) {
   final snapshot = ref.watch(sourceRecordsProvider).value;
   if (snapshot == null) return null;
-  final legacy = ref.watch(legacyInstanceIdProvider).value;
+  // Binding before the marker loads would pick the first account and then
+  // switch, resetting the GraphQL cache on every cold start.
+  final marker = ref.watch(legacyInstanceIdProvider);
+  if (!marker.hasValue && !marker.hasError) return null;
+  final legacy = marker.value;
   final mydia = [
     for (final r in snapshot.accounts)
       if (r.account.kind == SourceKind.mydia) r,

@@ -17,7 +17,8 @@ import 'mydia_secrets.dart';
 
 /// Stores [partial] as a Mydia account and selects it. [partial] may
 /// carry an empty `instanceId`, which is resolved here. Adding a server that
-/// is already stored replaces its credentials.
+/// is already stored replaces its access token and keeps the rest of its
+/// credentials that [partial] does not supply.
 ///
 /// With [reauthAccountId], the server must be the one that account holds.
 /// [transport] is injectable for tests.
@@ -51,23 +52,37 @@ Future<SourceId> saveMydiaServer(
         'That code belongs to a different server.');
   }
 
-  final serverUrl = partial.serverUrl;
-  final record = buildMydiaAccountRecord(
-    partial,
-    instanceId: instanceId,
-    now: DateTime.now(),
-  );
-  final account = record.account;
+  final stored = match == null
+      ? null
+      : snapshot.accounts.where((r) => r.account.id == match.id).firstOrNull;
+  final kept = match == null
+      ? null
+      : await readMydiaCredentials(ref.read(sourceSecretsProvider), match);
+  // A sign-in supplies only some of what a pairing stored, so what it leaves
+  // out stays: a password login must not drop the device token.
   final credentials = MydiaCredentials(
     instanceId: instanceId,
     accessToken: partial.accessToken,
-    instanceName: partial.instanceName,
-    mediaToken: partial.mediaToken,
-    deviceToken: partial.deviceToken,
-    serverUrl: serverUrl,
-    nodeAddr: partial.nodeAddr,
-    username: partial.username,
+    instanceName: partial.instanceName ?? kept?.instanceName,
+    mediaToken: partial.mediaToken ?? kept?.mediaToken,
+    mediaTokenExpiry: partial.mediaTokenExpiry ?? kept?.mediaTokenExpiry,
+    deviceToken: partial.deviceToken ?? kept?.deviceToken,
+    serverUrl: partial.serverUrl ?? kept?.serverUrl,
+    nodeAddr: partial.nodeAddr ?? kept?.nodeAddr,
+    username: partial.username ?? kept?.username,
   );
+  // Re-adding keeps the account's place in the order and its server choices.
+  final built = buildMydiaAccountRecord(
+    credentials,
+    instanceId: instanceId,
+    now: stored == null
+        ? DateTime.now()
+        : DateTime.fromMillisecondsSinceEpoch(stored.addedAtMs),
+  );
+  final record = stored?.chosenServerIds == null
+      ? built
+      : built.copyWith(chosenServerIds: stored!.chosenServerIds);
+  final account = record.account;
   // Credentials first: a stored server without them would fail every request.
   await writeMydiaCredentials(
       ref.read(sourceSecretsProvider), account, credentials);

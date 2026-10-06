@@ -41,6 +41,22 @@ void main() {
     expect(h.container.read(boundMydiaProvider)?.source.account.id, 'ma');
   });
 
+  test('does not bind the first account while the marker loads', () async {
+    final h = await boundMydiaHarness({'a': _ma, 'b': _mb});
+    addTearDown(h.container.dispose);
+    await h.store.setLegacyInstanceId('mb');
+    final seen = <String?>[];
+    h.container.listen(
+      boundMydiaProvider,
+      (_, next) => seen.add(next?.source.account.id),
+      fireImmediately: true,
+    );
+    await settle(h.container);
+    await Future<void>.delayed(Duration.zero);
+    expect(seen, isNot(contains('ma')));
+    expect(h.container.read(boundMydiaProvider)?.source.account.id, 'mb');
+  });
+
   test('removing the bound instance rebinds to the other', () async {
     final h = await boundMydiaHarness({'a': _ma, 'b': _mb});
     addTearDown(h.container.dispose);
