@@ -106,4 +106,31 @@ void main() {
     expect(router.state.uri.toString(), '/sources/add/mydia?x=1');
     expect(find.byType(LoginScreen), findsOneWidget);
   });
+
+  group('addMydiaRouteRedirect on an instance-hosted web build', () {
+    test('with no Mydia account it stays, so sign-in cannot loop', () {
+      expect(addMydiaRouteRedirect(hasMydia: false, instanceHostedWeb: true),
+          isNull);
+      // `/login` -> `/sources/add/mydia` stays put for a signed-out viewer.
+      expect(
+        appRedirect(
+          auth: const AsyncData(AuthStatus.unauthenticated),
+          location: '/sources/add/mydia',
+          sourcesLoading: false,
+          thirdParty: const [],
+        ),
+        isNull,
+      );
+    });
+
+    test('with a Mydia account it redirects to /', () {
+      expect(
+          addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true), '/');
+    });
+
+    test('off the instance-hosted web it never redirects', () {
+      expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
+          isNull);
+    });
+  });
 }

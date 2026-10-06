@@ -137,10 +137,14 @@ String? allServersRouteRedirect({
 }) =>
     sourcesLoading ? null : allServersRedirect(included);
 
-/// Where `/sources/add/mydia` redirects: only a Mydia instance hosts the web
-/// player, and it cannot add servers of its own.
-String? addMydiaRouteRedirect({bool? instanceHostedWeb}) =>
-    (instanceHostedWeb ?? isInstanceHostedWeb) ? '/' : null;
+/// Where `/sources/add/mydia` redirects: an instance-hosted web player that
+/// already has its Mydia account cannot add servers of its own. With no
+/// account yet it must stay, or sign-in would loop through `/login`.
+String? addMydiaRouteRedirect({
+  required bool hasMydia,
+  bool? instanceHostedWeb,
+}) =>
+    (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
@@ -314,7 +318,12 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/add/mydia',
         name: 'add_source_mydia',
         parentNavigatorKey: rootNavigatorKey,
-        redirect: (context, state) => addMydiaRouteRedirect(),
+        redirect: (context, state) => addMydiaRouteRedirect(
+          hasMydia: ref.read(sourceRecordsProvider).value?.accounts.any(
+                    (r) => r.account.kind == SourceKind.mydia,
+                  ) ??
+              false,
+        ),
         builder: (context, state) => LoginScreen(
           reauthAccountId: state.uri.queryParameters['account'],
         ),

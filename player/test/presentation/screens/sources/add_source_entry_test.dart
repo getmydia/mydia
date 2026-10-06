@@ -125,8 +125,9 @@ void main() {
   });
 
   test('the add Mydia route redirects home on an instance-hosted web only', () {
-    expect(addMydiaRouteRedirect(instanceHostedWeb: true), '/');
-    expect(addMydiaRouteRedirect(instanceHostedWeb: false), isNull);
+    expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true), '/');
+    expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
+        isNull);
   });
 
   testWidgets(

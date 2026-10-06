@@ -81,6 +81,35 @@ class _LoginSuccessAuth extends AuthService {
       const LoginSuccess();
 }
 
+/// Answers a password with a TOTP challenge, then the code with a grant.
+class _TotpAuth extends AuthService {
+  _TotpAuth(MockAuthStorage storage) : super(storage: storage);
+
+  @override
+  Future<LoginOutcome> requestLogin({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async =>
+      TotpChallenge(
+        serverUrl: serverUrl,
+        challengeToken: 'challenge',
+        username: username,
+      );
+
+  @override
+  Future<LoginGranted> requestTotp({
+    required TotpChallenge challenge,
+    required String code,
+  }) async =>
+      LoginGranted(
+        serverUrl: challenge.serverUrl,
+        token: 'tok',
+        userId: 'u1',
+        username: challenge.username,
+      );
+}
+
 class _FakeDeviceInfo extends DeviceInfoService {
   @override
   Future<String> getDeviceId() async => 'device-1';
@@ -192,6 +221,25 @@ void main() {
     final state = second.read(loginControllerProvider);
     expect(state.addedSource, const SourceId('minst-3:owner:inst-3'));
     expect(state.addedIsBound, isFalse);
+  });
+
+  test('a TOTP login saves an account and writes no legacy key', () async {
+    final c = await listening(containerFor(auth: _TotpAuth(authStorage)));
+    final controller = c.read(loginControllerProvider.notifier);
+
+    await controller.login('https://friend.example', 'maya', 'pw');
+    expect(c.read(loginControllerProvider).totpChallenge, isNotNull);
+    expect(c.read(loginControllerProvider).success, isFalse);
+
+    await controller.submitTotpCode('123456');
+
+    final state = c.read(loginControllerProvider);
+    expect(state.error, isNull);
+    expect(state.success, isTrue);
+    expect(state.totpChallenge, isNull);
+    expect(state.addedSource, isNotNull);
+    expect((await store.load()).accounts, hasLength(1));
+    expect(authStorage.keys, isEmpty);
   });
 
   test('the save survives the screen going away mid-pairing', () async {
