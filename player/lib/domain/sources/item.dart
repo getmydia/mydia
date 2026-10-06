@@ -133,6 +133,41 @@ class UserState {
       };
 }
 
+/// The catalogue ids a server knows an item by. The All servers views match
+/// copies of one title on different servers by these.
+@immutable
+class ExternalIds {
+  const ExternalIds({this.tmdb, this.tvdb, this.imdb});
+
+  static const none = ExternalIds();
+
+  final String? tmdb;
+  final String? tvdb;
+  final String? imdb;
+
+  bool get isEmpty => tmdb == null && tvdb == null && imdb == null;
+
+  factory ExternalIds.fromJson(Object? json) => json is Map
+      ? ExternalIds(
+          tmdb: json['tmdb'] as String?,
+          tvdb: json['tvdb'] as String?,
+          imdb: json['imdb'] as String?,
+        )
+      : none;
+
+  Map<String, Object?> toJson() => {'tmdb': tmdb, 'tvdb': tvdb, 'imdb': imdb};
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExternalIds &&
+      other.tmdb == tmdb &&
+      other.tvdb == tvdb &&
+      other.imdb == imdb;
+
+  @override
+  int get hashCode => Object.hash(tmdb, tvdb, imdb);
+}
+
 @immutable
 class ItemSummary {
   const ItemSummary({
@@ -155,10 +190,14 @@ class ItemSummary {
     this.addedAt,
     this.lastPlayedAt,
     this.showRef,
+    this.externalIds = ExternalIds.none,
   });
 
   final ItemRef ref;
   final String title;
+
+  /// Catalogue ids, empty when the server sent none.
+  final ExternalIds externalIds;
 
   /// The series an episode belongs to, when the listing names it. Continue
   /// Watching on Mydia dismisses the series, not the episode.
@@ -228,11 +267,13 @@ class ItemSummary {
         addedAt: _date(json['addedAt']),
         lastPlayedAt: _date(json['lastPlayedAt']),
         showRef: _refOrNull(json['showRef']),
+        externalIds: ExternalIds.fromJson(json['externalIds']),
       );
 
   Map<String, Object?> toJson() => {
         'ref': ref.toJson(),
         'title': title,
+        'externalIds': externalIds.isEmpty ? null : externalIds.toJson(),
         'subtitle': subtitle,
         'showTitle': showTitle,
         'year': year,
