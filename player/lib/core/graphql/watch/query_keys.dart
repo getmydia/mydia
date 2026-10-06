@@ -7,7 +7,7 @@ import '../../cache/query_key.dart';
 /// renamed operation is a single-line change here.
 abstract final class QueryKeys {
   // `static final`, not `static const`: `QueryKey` cannot be const-constructed
-  // (see the class doc comment above). Dart initializes a `static final`
+  // (see the class doc comment on `QueryKey` in core/cache/query_key.dart). Dart initializes a `static final`
   // field lazily on first access and keeps the same instance forever after,
   // so these remain effectively-singleton, exactly like the `const` fields
   // they replaced, just without compile-time canonicalization.

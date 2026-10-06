@@ -1,6 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/query_key.dart';
-import 'package:player/core/graphql/watch/query_keys.dart';
+
+QueryKey _showDetail(String id) => QueryKey('TvShowDetail', {'id': id});
+QueryKey _seasonEpisodes(String showId, int seasonNumber) => QueryKey(
+      'SeasonEpisodes',
+      {'showId': showId, 'seasonNumber': seasonNumber},
+    );
 
 void main() {
   test('keys with the same operation and variables are equal', () {
@@ -58,11 +63,11 @@ void main() {
   });
 
   test('the catalog builds distinct keys per entity id', () {
-    expect(QueryKeys.showDetail('1') == QueryKeys.showDetail('2'), isFalse);
-    expect(QueryKeys.showDetail('1'), QueryKeys.showDetail('1'));
+    expect(_showDetail('1') == _showDetail('2'), isFalse);
+    expect(_showDetail('1'), _showDetail('1'));
     expect(
-      QueryKeys.seasonEpisodes('1', 2),
-      QueryKeys.seasonEpisodes('1', 2),
+      _seasonEpisodes('1', 2),
+      _seasonEpisodes('1', 2),
     );
   });
 }
