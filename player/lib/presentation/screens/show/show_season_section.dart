@@ -92,7 +92,11 @@ class ShowSeasonSection extends ConsumerWidget {
                         .where((s) => s.number == selectedSeason)
                         .firstOrNull
                     case final season?)
-                  SourceSeasonDownloadButton(show: show, season: season),
+                  SourceSeasonDownloadButton(
+                    show: show,
+                    season: season,
+                    seasons: availableSeasons,
+                  ),
               // Season watched actions render on web too, where downloads are
               // unsupported, so they live outside the isDownloadSupported gate.
               if (show.features.contains(DetailFeature.watched))

@@ -24,6 +24,22 @@ ShowView _show({Set<DetailFeature> features = const {}}) => ShowView(
       features: features,
     );
 
+ShowView _twoSeasons() => ShowView(
+      target: SourceTarget(fakeShow.ref),
+      title: 'Invented Series',
+      seasons: [
+        SeasonView(number: 1, target: SourceTarget(fakeSeason.ref)),
+        const SeasonView(
+          number: 2,
+          target: SourceTarget(ItemRef(
+              sourceId: fakeSourceId,
+              kind: ItemKind.season,
+              externalId: 'se2')),
+        ),
+      ],
+      features: const {DetailFeature.seasonDownload},
+    );
+
 /// A download manager that has downloaded nothing and records what starts.
 class _RecordingService extends Fake implements DownloadService {
   final started = <DownloadRequest>[];
@@ -108,6 +124,52 @@ void main() {
 
     expect(service.started.map((r) => r.ref.externalId), ['e1', 'e2']);
     expect(service.started.map((r) => r.optionId), ['720p', '720p']);
+  });
+
+  testWidgets('all seasons queue every season with one quality prompt',
+      (tester) async {
+    final service = _RecordingService();
+    final source = FakeCapableSource()..downloadOptionsResult = _options;
+    await _pump(
+      tester,
+      _twoSeasons(),
+      source: source,
+      service: service,
+    );
+
+    await tester.tap(find.byKey(const Key('source-season-download')));
+    await tester.pumpAndSettle();
+    expect(find.text('Download Season 1'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('source-download-all-seasons')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QualityDownloadDialog), findsOneWidget);
+    expect(find.text('Invented Series - All Seasons'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('download-option-720p')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+
+    expect(service.started, hasLength(4));
+    expect(service.started.map((r) => r.optionId).toSet(), {'720p'});
+    // One probe for the whole show.
+    expect(source.calls.where((c) => c.startsWith('downloadOptions')),
+        hasLength(1));
+  });
+
+  testWidgets('the all-seasons entry is absent for a single season',
+      (tester) async {
+    await _pump(
+      tester,
+      _show(features: {DetailFeature.seasonDownload}),
+      source: FakeCapableSource()..downloadOptionsResult = _options,
+    );
+
+    await tester.tap(find.byKey(const Key('source-season-download')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('source-download-all-seasons')), findsNothing);
+    expect(find.byType(QualityDownloadDialog), findsOneWidget);
   });
 
   testWidgets('cancelling the quality dialog queues nothing', (tester) async {
