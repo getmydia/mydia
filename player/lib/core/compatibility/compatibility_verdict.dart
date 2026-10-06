@@ -12,11 +12,22 @@ class ServerCompatibilityInfo {
   /// The oldest player version the server would rather talk to.
   final String recommendedPlayerVersion;
 
+  /// Whether the server rejected the `serverCompatibility` query as an unknown
+  /// field, so it predates 0.14.0, the release that added the query.
+  final bool predatesQuery;
+
   const ServerCompatibilityInfo({
     required this.version,
     required this.minPlayerVersion,
     required this.recommendedPlayerVersion,
-  });
+  }) : predatesQuery = false;
+
+  /// A server too old to answer the query. Its versions are unknown.
+  const ServerCompatibilityInfo.predatesQuery()
+      : version = '',
+        minPlayerVersion = '',
+        recommendedPlayerVersion = '',
+        predatesQuery = true;
 }
 
 /// Whether this player and the connected server can work together.
@@ -36,8 +47,8 @@ enum CompatibilityVerdict {
   /// The server is below the player's required floor.
   serverUpdateRequired,
 
-  /// We could not tell: the query failed, the server predates this feature, or
-  /// a version string would not parse. Renders nothing.
+  /// We could not tell: the query failed or a version string would not parse.
+  /// Renders nothing.
   unknown;
 
   /// Whether this verdict warrants a banner at all.
@@ -62,9 +73,10 @@ enum CompatibilityVerdict {
 /// Decides whether this player and [server] can work together.
 ///
 /// Fails open: any unparseable version, or a null [server] (which is what a
-/// failed query or a pre-feature server produces), yields
-/// [CompatibilityVerdict.unknown] and renders nothing. A bug here must degrade
-/// to silence, never to a nag.
+/// failed query produces), yields [CompatibilityVerdict.unknown] and renders
+/// nothing. The one exception is a server that rejected the query itself, which
+/// is below the floor by construction. A bug here must degrade to silence,
+/// never to a nag.
 ///
 /// Evaluation order is the tie-break rule: required outranks recommended, and
 /// within a tier the player side wins, because the person holding the phone can
@@ -74,6 +86,9 @@ CompatibilityVerdict evaluateCompatibility({
   required ServerCompatibilityInfo? server,
 }) {
   if (server == null) return CompatibilityVerdict.unknown;
+
+  // The query only exists from 0.14.0, below the 0.15.0 floor.
+  if (server.predatesQuery) return CompatibilityVerdict.serverUpdateRequired;
 
   // A build with no version stamped reports "0.0.0-dev": mix.exs falls back to
   // it whenever BUILD_VERSION is unset, which covers every local dev server,

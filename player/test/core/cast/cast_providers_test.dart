@@ -250,6 +250,7 @@ void main() {
               'sessionId': 'sess-1',
               'duration': null,
               'startPosition': null,
+              'playlistMode': 'WINDOW',
             },
           };
       server.handlers['RefreshMediaToken'] = (_) => {

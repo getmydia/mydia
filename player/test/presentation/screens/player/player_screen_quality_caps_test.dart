@@ -169,53 +169,6 @@ void main() {
   });
 
   testWidgets(
-      'retries through the legacy document when the server does not '
-      'know maxHeight', (tester) async {
-    final link = linkFor(
-      streamingCandidatesResponse(duration: 5400, height: 2160),
-      session: (attempt) => attempt == 1
-          // Absinthe's verbatim text for an argument the schema does not
-          // declare.
-          ? graphqlError(
-              'Unknown argument "maxHeight" on field "startStreamingSession".',
-            )
-          // The retry must survive a reply with no echoed caps at all, which
-          // is the only kind an old server can send.
-          : legacyStartStreamingSessionResponse(),
-    );
-
-    final container = buildPlayerScreenContainer(
-      server: link,
-      connectionState: HarnessLink.direct(),
-      castManager: CapturingCastSessionManager(),
-      proxyService: TrackingLocalProxyService(),
-      settingsService: FakeSettingsService(defaultQuality: '720p'),
-    );
-    addTearDown(container.dispose);
-
-    final logged = <String>[];
-    await withCapturedDebugPrint(logged, () async {
-      await pumpPlayerScreen(tester, container);
-      await pumpUntilSessionStarted(tester, link, count: 2);
-    });
-
-    final attempts = sessionRequests(link);
-    expect(attempts.length, 2, reason: 'exactly one retry, not a loop');
-    expect(attempts.first.variables['maxHeight'], 720);
-    expect(attempts.last.variables.containsKey('maxHeight'), isFalse);
-    expect(attempts.last.variables['maxBitrate'], 4000,
-        reason: 'the bitrate cap predates the height cap, so it survives the '
-            'fallback — the rung still means something on an old server');
-    expect(
-      logged.any((l) => l.contains('HLS session started: sess-1')),
-      isTrue,
-      reason: 'the reply with no echoed caps must parse into a real session; '
-          'without this the test proves only that a retry was sent, not that '
-          'an old server response is usable',
-    );
-  });
-
-  testWidgets(
       'reads the stored default once and carries the rung across a '
       're-initialization', (tester) async {
     // The rung the viewer is watching at must not round-trip through secure

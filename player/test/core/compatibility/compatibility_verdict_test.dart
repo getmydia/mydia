@@ -34,6 +34,17 @@ void main() {
       );
     });
 
+    test('a server that predates the compatibility query is required to update',
+        () {
+      expect(
+        evaluateCompatibility(
+          playerVersion: currentVersion,
+          server: const ServerCompatibilityInfo.predatesQuery(),
+        ),
+        CompatibilityVerdict.serverUpdateRequired,
+      );
+    });
+
     test('a null server means unknown', () {
       expect(
         evaluateCompatibility(playerVersion: '0.9.0', server: null),
@@ -69,20 +80,44 @@ void main() {
       expect(
         evaluateCompatibility(
           playerVersion: '0.8.0',
-          server: server(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+          server: server(min: '0.7.0'),
         ),
         CompatibilityVerdict.playerUpdateRecommended,
       );
     });
 
     test('a server below the player floor is required to update', () {
-      // minServerVersion ships as 0.9.0, so a 0.8.0 server is below it.
+      // minServerVersion is 0.15.0, so a 0.8.0 server is below it.
       expect(
         evaluateCompatibility(
           playerVersion: '0.9.0',
           server: server(version: '0.8.0', min: '0.0.0', recommended: '0.0.0'),
         ),
         CompatibilityVerdict.serverUpdateRequired,
+      );
+    });
+
+    test('a 0.14 server is below the floor', () {
+      // 0.15.0 is the first core version that certainly carries every field
+      // the player sends: playlistMode only reached 0.14.0-beta.5, and a
+      // 0.14.0-beta.1 server would compare equal to a 0.14.0 floor.
+      expect(
+        evaluateCompatibility(
+          playerVersion: currentVersion,
+          server: server(version: '0.14.2', min: '0.0.0', recommended: '0.0.0'),
+        ),
+        CompatibilityVerdict.serverUpdateRequired,
+      );
+    });
+
+    test('a 0.15.0 prerelease server clears the floor', () {
+      expect(
+        evaluateCompatibility(
+          playerVersion: currentVersion,
+          server: server(
+              version: '0.15.0-beta.1', min: '0.0.0', recommended: '0.0.0'),
+        ),
+        CompatibilityVerdict.serverUpdateRecommended,
       );
     });
 

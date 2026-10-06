@@ -99,7 +99,8 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
     final state = CompatibilityState(
       verdict: verdict,
       playerVersion: playerVersion,
-      serverVersion: server?.version,
+      serverVersion:
+          server == null || server.predatesQuery ? null : server.version,
       requiredVersion: _floorFor(verdict, server),
     );
 

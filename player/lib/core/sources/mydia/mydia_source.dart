@@ -474,11 +474,8 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
-    final data = await client.query(
-      documentNodeQueryRecentlyAddedFull,
-      fallback: documentNodeQueryRecentlyAddedFullLegacy,
-      variables: const {'first': _rowLimit},
-    );
+    final data = await _q(
+        documentNodeQueryRecentlyAddedFull, const {'first': _rowLimit});
     return [
       for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r),
     ].whereType<ItemSummary>().take(_rowLimit).toList();
@@ -529,14 +526,11 @@ class MydiaSource extends MediaSource
   @override
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
     final movie = ref.kind == ItemKind.movie;
-    final data = await client.query(
+    final data = await _q(
       movie
           ? documentNodeQueryMovieMediaInfo
           : documentNodeQueryEpisodeMediaInfo,
-      fallback: movie
-          ? documentNodeQueryMovieMediaInfoLegacy
-          : documentNodeQueryEpisodeMediaInfoLegacy,
-      variables: {'id': ref.externalId},
+      {'id': ref.externalId},
     );
     final node = data[movie ? 'movie' : 'episode'];
     final files = node is Map<String, dynamic> ? node['files'] : null;
@@ -545,12 +539,10 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<Hub>> hubs() async {
-    final data = await client.query(documentNodeQueryHomeRows,
-        fallback: documentNodeQueryHomeRowsLegacy,
-        variables: const {
-          'recentlyAddedLimit': _rowLimit,
-          'favoritesLimit': 10,
-        });
+    final data = await _q(documentNodeQueryHomeRows, const {
+      'recentlyAddedLimit': _rowLimit,
+      'favoritesLimit': 10,
+    });
     Hub row(String hubId, String title, Object? list) => Hub(
           id: hubId,
           title: title,

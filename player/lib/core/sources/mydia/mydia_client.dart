@@ -98,10 +98,6 @@ class MydiaClient {
 
   final Set<String> _downgradedOps = {};
 
-  /// Whether this server has answered [document] with its fallback.
-  bool isDowngraded(DocumentNode document) =>
-      _downgradedOps.contains(_operationName(document));
-
   Future<Map<String, dynamic>> query(
     DocumentNode document, {
     DocumentNode? fallback,
@@ -170,8 +166,9 @@ class MydiaClient {
 
   /// Fetches the server's compatibility declaration, or null if we cannot tell.
   ///
-  /// Returns null on older servers predating this feature, an absent declaration,
-  /// or any transport/parsing failure.
+  /// Returns [ServerCompatibilityInfo.predatesQuery] when the server rejects
+  /// the query as an unknown field. Returns null on an absent declaration or
+  /// any transport/parsing failure.
   Future<ServerCompatibilityInfo?> fetchCompatibility() async {
     try {
       final data = await request(documentNodeQueryServerCompatibility);
@@ -196,7 +193,13 @@ class MydiaClient {
         minPlayerVersion: compat.minPlayerVersion,
         recommendedPlayerVersion: compat.recommendedPlayerVersion,
       );
-    } catch (_) {
+    } catch (e) {
+      // A schema rejection means the server predates the query (0.14.0), which
+      // is below the supported floor. Any other failure says nothing about its
+      // age.
+      if (isUnknownFieldError(e)) {
+        return const ServerCompatibilityInfo.predatesQuery();
+      }
       return null;
     }
   }

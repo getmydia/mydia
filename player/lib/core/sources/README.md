@@ -362,11 +362,11 @@ instance, over that instance's `MydiaClient`, wrapping the GraphQL calls,
 `legacyMydiaSourceIdProvider`), so no session is shared between instances.
 Over p2p its streams go through `/t/<accountId>/` on the local proxy, and a
 bare path gets a 404; the web proxy serves its one target at its root. The
-`StartStreamingSession` downgrade for older servers is
-`MydiaClient.query(fallback:, fallbackVariables:)`, remembered per instance
-(`isDowngraded`). GraphQL errors arrive as `MydiaGraphqlError`, carrying the
-partial `data` when the server sent some over HTTP. `subtitleContent` has its
-own 45 second timeout. The screen claims the `PlayingSource` holder
+player requires server 0.15.0 (`Compatibility.minServerVersion`), so
+`StartStreamingSession` has one document and no downgrade. GraphQL errors
+arrive as `MydiaGraphqlError`, carrying the partial `data` when the server
+sent some over HTTP. `subtitleContent` has its own 45 second timeout. The
+screen claims the `PlayingSource` holder
 (`core/media_session/playing_source.dart`) so the OS now-playing bridge knows
 which instance owns what is playing. Downloads and offline progress are
 attributed by `ItemRef` and flushed through each instance's `ProgressSync`.

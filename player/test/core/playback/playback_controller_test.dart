@@ -182,32 +182,19 @@ void main() {
       expect(source.effectiveRung?.label, '720p');
     });
 
-    test('an old server without maxHeight is retried with the legacy document',
+    test('a schema rejection is thrown, not retried with another document',
         () async {
       final server = _server(starts: [
-        graphqlError('Unknown argument "maxHeight" on field '
+        graphqlError('Unknown argument "playlistMode" on field '
             '"startStreamingSession" of type "RootMutationType".'),
-        legacyStartStreamingSessionResponse(sessionId: 's1'),
       ]);
-      final controller = _controller(server);
-      final source = await controller.open(_copy,
-          fileId: 'file-1', startAt: Duration.zero);
-      expect(server.requests, hasLength(2));
-      expect(server.requests.first.operation, 'StartStreamingSession');
-      expect(server.requests.last.operation, 'StartStreamingSessionLegacy');
-      expect(server.requests.last.variables.containsKey('maxHeight'), isFalse);
-      expect(
-          server.requests.last.variables.containsKey('playlistMode'), isFalse);
-      expect(source.sessionId, 's1');
-      expect(source.fullPlaylist, isFalse);
-      // The legacy document echoes no caps, so nothing is claimed.
-      expect(source.effectiveRung, isNull);
-
-      // The next open skips straight to the legacy document.
-      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
-      expect(server.requests, hasLength(3));
-      expect(server.requests.last.operation, 'StartStreamingSessionLegacy');
-      expect(server.requests.last.variables.containsKey('maxHeight'), isFalse);
+      await expectLater(
+        _controller(server)
+            .open(_copy, fileId: 'file-1', startAt: Duration.zero),
+        throwsA(isA<Exception>()),
+      );
+      expect(server.requests, hasLength(1));
+      expect(server.requests.single.operation, 'StartStreamingSession');
     });
 
     test('a genuine mutation failure is thrown, not retried', () async {
@@ -290,39 +277,6 @@ void main() {
       expect(controller.sessionId, isNull);
       expect(server.requests.last.variables['sessionId'], 's1');
     });
-
-    for (final message in [
-      'Cannot query field "maxHeight" on type "StreamingSessionResult".',
-      'Unknown argument "playlistMode" on field "startStreamingSession".',
-      'Cannot query field "playlistMode" on type "StreamingSessionResult".',
-    ]) {
-      test('uses the legacy document for $message', () async {
-        final server = _server(starts: [
-          graphqlError(message),
-          legacyStartStreamingSessionResponse(
-            sessionId: 'legacy',
-            startPosition: 298,
-            duration: 2400,
-          ),
-        ]);
-        final source = await _controller(server).open(
-          _transcode480,
-          fileId: 'file-1',
-          startAt: const Duration(seconds: 300),
-        );
-        expect(server.requests, hasLength(2));
-        expect(server.requests.last.variables, {
-          'fileId': 'file-1',
-          'strategy': 'TRANSCODE',
-          'maxBitrate': 1500,
-          'startPosition': 300,
-        });
-        expect(source.timeline.startOffset, const Duration(seconds: 298));
-        expect(source.timeline.totalDuration, const Duration(seconds: 2400));
-        expect(source.seekOnOpen, isFalse);
-        expect(source.effectiveRung, isNull);
-      });
-    }
 
     test('an unreachable start error carries the viewer message, not "null"',
         () async {
