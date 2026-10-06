@@ -15,6 +15,10 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/domain/sources/library.dart';
+import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
+import 'package:player/presentation/screens/sources/home_header.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/screens/sources/source_home_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -34,6 +38,16 @@ class _RecordingInvalidator implements Invalidator {
   Future<void> invalidateAll() async {}
 }
 
+/// A source whose libraries() waits on [pending].
+class _SlowLibrariesSource extends FakeMediaSource {
+  _SlowLibrariesSource(this.pending);
+
+  final Completer<List<Library>> pending;
+
+  @override
+  Future<List<Library>> libraries() => pending.future;
+}
+
 late GoRouter homeRouter;
 
 Future<List<String>> pumpHome(
@@ -41,12 +55,20 @@ Future<List<String>> pumpHome(
   FakeMediaSource fake, {
   List<Override> overrides = const [],
   bool settle = true,
+  Size size = const Size(1280, 900),
 }) async {
   final pushed = <String>[];
   final router = homeRouter = GoRouter(routes: [
     GoRoute(
       path: '/',
       builder: (_, __) => const SourceHomeScreen(sourceId: fakeSourceId),
+    ),
+    GoRoute(
+      path: '/s/:id/search',
+      builder: (_, s) {
+        pushed.add(s.uri.toString());
+        return const SizedBox();
+      },
     ),
     GoRoute(
       path: '/s/:id/library/:lib',
@@ -84,7 +106,7 @@ Future<List<String>> pumpHome(
       },
     ),
   ]);
-  await tester.binding.setSurfaceSize(const Size(1280, 900));
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -121,10 +143,10 @@ void main() {
 
   testWidgets('an unreachable source shows a retry state', (tester) async {
     final fake = FakeMediaSource(failWith: const SourceException.unreachable());
-    await pumpHome(tester, fake);
+    await pumpHome(tester, fake, size: const Size(390, 844));
     expect(find.byKey(const Key('source-error-retry')), findsOneWidget);
     expect(find.text(fake.displayName), findsOneWidget,
-        reason: 'the header stays so the drawer and title are still there');
+        reason: 'the bar stays so the drawer and title are still there');
     fake.failWith = null;
     await tester.tap(find.byKey(const Key('source-error-retry')));
     await tester.pumpAndSettle();
@@ -232,6 +254,41 @@ void main() {
           const Offset(0, 400), 1000);
       await tester.pumpAndSettle();
       expect(fake.continueCalls, 2);
+    });
+  });
+
+  group('chrome', () {
+    // A source with a hero. Short row titles: the test font is wide enough
+    // that "Continue Watching" overflows a 390px phone.
+    FakeHubSource heroFake() => FakeHubSource(resuming: [])
+      ..hubList = [
+        Hub(id: 'new', title: 'New', items: [fakeMovie(1)]),
+      ];
+    final fakeDisplayName = heroFake().displayName;
+
+    testWidgets('the hero runs under the title bar on desktop', (tester) async {
+      await pumpHome(tester, heroFake());
+      expect(tester.getTopLeft(find.byType(SourceHomeHero)).dy, 0);
+      expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+    });
+
+    testWidgets('mobile bar names the server and opens search', (tester) async {
+      final pushed =
+          await pumpHome(tester, heroFake(), size: const Size(390, 844));
+      // The server name appears once: in the bar, not again in the list.
+      expect(find.text(fakeDisplayName), findsOneWidget);
+      await tester.tap(find.byKey(homeSearchKey));
+      await tester.pumpAndSettle();
+      expect(pushed.last, contains('/search'));
+    });
+
+    testWidgets('loading shows the skeleton', (tester) async {
+      final pending = Completer<List<Library>>();
+      await pumpHome(tester, _SlowLibrariesSource(pending), settle: false);
+      await tester.pump();
+      expect(find.byType(HomeLoadingSkeleton), findsOneWidget);
+      pending.complete(const []);
+      await tester.pumpAndSettle();
     });
   });
 
