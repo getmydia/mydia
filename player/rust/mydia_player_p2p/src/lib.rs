@@ -352,6 +352,7 @@ pub struct FlutterLoadContentRequest {
     pub audio_track: Option<String>,
     pub subtitle_track: Option<String>,
     pub autoplay: bool,
+    pub server_instance_id: Option<String>,
 }
 
 #[frb(non_opaque)]
@@ -505,6 +506,7 @@ impl From<FlutterLoadContentRequest> for LoadContentRequest {
             audio_track: r.audio_track,
             subtitle_track: r.subtitle_track,
             autoplay: r.autoplay,
+            server_instance_id: r.server_instance_id,
         }
     }
 }
@@ -518,6 +520,7 @@ impl From<LoadContentRequest> for FlutterLoadContentRequest {
             audio_track: r.audio_track,
             subtitle_track: r.subtitle_track,
             autoplay: r.autoplay,
+            server_instance_id: r.server_instance_id,
         }
     }
 }

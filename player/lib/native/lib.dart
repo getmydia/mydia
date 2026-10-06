@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'lib.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `from_response`, `init_logging`, `run_event_dispatcher`
+// These functions are ignored because they are not marked as `pub`: `format_log_event`, `forwarded_layer`, `from_response`, `init_logging`, `run_event_dispatcher`, `should_forward_log_event`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `drop`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Space on the volume holding `path`, for sizing the playback spool.
@@ -370,6 +370,7 @@ class FlutterLoadContentRequest {
   final String? audioTrack;
   final String? subtitleTrack;
   final bool autoplay;
+  final String? serverInstanceId;
 
   const FlutterLoadContentRequest({
     required this.mediaItemId,
@@ -378,6 +379,7 @@ class FlutterLoadContentRequest {
     this.audioTrack,
     this.subtitleTrack,
     required this.autoplay,
+    this.serverInstanceId,
   });
 
   @override
@@ -387,7 +389,8 @@ class FlutterLoadContentRequest {
       positionMs.hashCode ^
       audioTrack.hashCode ^
       subtitleTrack.hashCode ^
-      autoplay.hashCode;
+      autoplay.hashCode ^
+      serverInstanceId.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -399,7 +402,8 @@ class FlutterLoadContentRequest {
           positionMs == other.positionMs &&
           audioTrack == other.audioTrack &&
           subtitleTrack == other.subtitleTrack &&
-          autoplay == other.autoplay;
+          autoplay == other.autoplay &&
+          serverInstanceId == other.serverInstanceId;
 }
 
 /// Network statistics for display in the UI

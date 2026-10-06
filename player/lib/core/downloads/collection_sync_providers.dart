@@ -99,12 +99,18 @@ Future<Map<String, Map<String, String>>> allSyncedCollections(Ref ref) async {
 
 /// Deletes every entry that belongs to one of [sourceIds]: the current
 /// `<sourceId>:<collectionId>` keys, and legacy bare-id entries whose recorded
-/// `sourceId` matches. A legacy entry that recorded none is read as the migrated
-/// instance's and is left alone: resolving that instance here would make
-/// the account store depend on itself. Runs when an account is removed, so its
-/// entries cannot outlive it.
-Future<void> deleteCollectionSyncFor(Ref ref, Set<String> sourceIds) async {
-  if (sourceIds.isEmpty) return;
+/// `sourceId` matches. A legacy entry that recorded none is read as the legacy
+/// instance's (`legacyMydiaSourceIdProvider`) and is left alone unless
+/// [dropUnowned] is set: resolving that instance here would make the account
+/// store depend on itself, so the caller, which knows whether the removed
+/// account was the legacy one, says so. Runs when an account is removed, so
+/// its entries cannot outlive it.
+Future<void> deleteCollectionSyncFor(
+  Ref ref,
+  Set<String> sourceIds, {
+  bool dropUnowned = false,
+}) async {
+  if (sourceIds.isEmpty && !dropUnowned) return;
   final box = await ref.read(collectionSyncBoxProvider.future);
   final doomed = <dynamic>[];
   for (final key in box.keys) {
@@ -112,7 +118,8 @@ Future<void> deleteCollectionSyncFor(Ref ref, Set<String> sourceIds) async {
     if (raw == null) continue;
     final owner = raw['sourceId'] as String?;
     final keyed = sourceIds.any((id) => '$key'.startsWith('$id:'));
-    if (keyed || (owner != null && sourceIds.contains(owner))) {
+    final legacyOwned = dropUnowned && owner == null && !'$key'.contains(':');
+    if (keyed || legacyOwned || (owner != null && sourceIds.contains(owner))) {
       doomed.add(key);
     }
   }

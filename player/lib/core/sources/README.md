@@ -167,6 +167,11 @@ Screens and Cast). The shell's offline state follows the route's source, else
 the active one. A test (`no_bound_instance_test.dart`) keeps any one instance
 from becoming special again.
 
+Removing an account also drops its collection auto-sync entries, including
+legacy bare-id entries that recorded no owner when the removed account is the
+one `legacyMydiaSourceIdProvider` names, so they cannot rebind to the next
+Mydia server.
+
 Per-instance link facts (`sourceViaP2pProvider`, `sourceServerUrlProvider` in
 `mydia/source_link.dart`) are read from that source's own credentials.
 
@@ -252,8 +257,13 @@ paired to several instances is one entry.
   instances. An instance whose roster throws contributes nothing. A sender
   is allowed when any instance allows it.
 - Commands answer against the instance that listed the sender.
-  `MergedRoster.instancesOf(nodeId)` names those instances, and a remote load
-  content command resolves the item against the sending instance.
+  `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
+  content command resolves the item on the server it names
+  (`serverInstanceId`) when a local instance with that id lists the sender,
+  else on the first instance that lists the sender. The sender fills the name
+  from the cast's own instance (`MydiaContentRef.serverInstanceId`, read off
+  `MydiaCastContent.sourceId`). The fallback exists because the instance id
+  can take a different form on each device (see above).
 - Registration is `NodeRegistrations` (`core/remote/node_registration_providers.dart`):
   one `NodeRegistrationService` per Mydia account, each registering this
   device's node id with its own server. An account's registration restarts

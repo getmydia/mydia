@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:player/app.dart';
+import 'helpers/login_helpers.dart';
 import 'helpers/test_bootstrap.dart';
 
 /// E2E integration tests for the device pairing flow.
@@ -29,25 +30,6 @@ void main() {
   // Get the pre-generated claim code from dart-define
   const claimCode = String.fromEnvironment('E2E_CLAIM_CODE');
 
-  /// Wait for the login screen to appear (auth state to resolve).
-  /// Uses pump() instead of pumpAndSettle() because the loading screen
-  /// has an infinite CircularProgressIndicator animation.
-  Future<void> waitForLoginScreen(WidgetTester tester,
-      {int maxSeconds = 30}) async {
-    debugPrint('[Test] Waiting for login screen to appear...');
-    for (var i = 0; i < maxSeconds; i++) {
-      await tester.pump(const Duration(seconds: 1));
-      final loginTitle = find.text('Connect to Server');
-      if (loginTitle.evaluate().isNotEmpty) {
-        debugPrint('[Test] Login screen found after $i seconds');
-        // Give it a moment for the screen to fully render
-        await tester.pump(const Duration(milliseconds: 500));
-        return;
-      }
-    }
-    debugPrint('[Test] Login screen not found after $maxSeconds seconds');
-  }
-
   /// Wait for the app to navigate away from the login screen after pairing.
   /// Uses a longer timeout (120s) to account for Flutter web startup time.
   Future<bool> waitForPairingComplete(WidgetTester tester,
@@ -56,6 +38,7 @@ void main() {
     bool sawError = false;
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
+      await dismissStorageWarningIfShown(tester);
       final loginTitle = find.text('Connect to Server');
       if (loginTitle.evaluate().isEmpty) {
         debugPrint('[Test] Navigated away from login screen after $i seconds');
@@ -119,7 +102,9 @@ void main() {
         ),
       );
 
-      // Wait for login screen (uses pump(), not pumpAndSettle due to CircularProgressIndicator)
+      // A fresh install lands on the add-server screen; this taps through to
+      // the login screen (uses pump(), not pumpAndSettle, because of the
+      // loading spinner).
       await waitForLoginScreen(tester);
 
       // Find the claim code input field - it's the first TextFormField on the login screen

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
 import '../../presentation/screens/detail/detail_links.dart';
+import '../sources/mydia/mydia_instance_id.dart';
 import '../sources/source.dart';
 import 'remote_control_intent.dart';
 
@@ -123,8 +124,11 @@ Future<void> pushLoadContentDestination(
 /// Carries out an [intent] that arrived from [peerNodeId].
 ///
 /// A `LoadContent` names an item by an id only its sending instance can
-/// resolve, so it is stamped with the first instance that lists the peer, or
-/// dropped when none does. Everything else goes through untouched.
+/// resolve. When the sender names its server ([LoadContentIntent
+/// .serverInstanceId]) and a local instance with that id lists the peer, the
+/// command is stamped with it. Otherwise (no name, or a name no listing
+/// instance matches) it is stamped with the first instance that lists the
+/// peer, and dropped when none does. Everything else goes through untouched.
 Future<void> routeRemoteIntent(
   RemoteControlIntent intent,
   String peerNodeId, {
@@ -136,11 +140,25 @@ Future<void> routeRemoteIntent(
     return;
   }
 
-  final via = (await instancesOf(peerNodeId)).firstOrNull;
+  final candidates = await instancesOf(peerNodeId);
+  final wanted = intent.serverInstanceId;
+  final named = wanted == null
+      ? null
+      : candidates
+          .where((id) => mydiaInstanceIdOfSource(id) == wanted)
+          .firstOrNull;
+  // The id can take a different form on each device (a real instance id on
+  // one, `n<nodeId>` or a URL hash on another), so a name nobody matches
+  // falls back to the first instance that lists the sender.
+  final via = named ?? candidates.firstOrNull;
   if (via == null) {
     debugPrint('[LoadContentNavigation] No instance lists $peerNodeId, '
         'dropping LoadContent');
     return;
+  }
+  if (wanted != null && named == null) {
+    debugPrint('[LoadContentNavigation] No local instance matches the named '
+        'server $wanted, using $via');
   }
   submit(intent.withVia(via));
 }

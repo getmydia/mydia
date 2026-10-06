@@ -3242,6 +3242,9 @@ void main() {
       expect(loaded.contentRef?.mediaItemId, 'show-789');
       expect(loaded.contentRef?.episodeId, 'ep-456');
       expect(loaded.contentRef?.subtitleTrack, 'sub-1');
+      // The cast names the instance it belongs to, so a target signed into
+      // several servers resolves it on the right one.
+      expect(loaded.contentRef?.serverInstanceId, 'acct');
       expect(loaded.startPosition, const Duration(seconds: 42));
       expect(manager.currentSession?.connectionState,
           CastConnectionState.connected);

@@ -7,7 +7,12 @@ import 'package:player/domain/sources/item.dart';
 const _a = SourceId('mydia-a');
 const _b = SourceId('mydia-b');
 
+// Real Mydia source ids, for the cases that match on the instance id.
+const _instA = SourceId('minst-a:owner:inst-a');
+const _instB = SourceId('minst-b:owner:inst-b');
+
 LoadContentIntent _intent({
+  String? serverInstanceId,
   String mediaItemId = 'm1',
   String? episodeId,
   Duration startAt = Duration.zero,
@@ -23,6 +28,7 @@ LoadContentIntent _intent({
       audioTrack: audioTrack,
       subtitleTrack: subtitleTrack,
       autoplay: autoplay,
+      serverInstanceId: serverInstanceId,
       via: via,
     );
 
@@ -215,6 +221,82 @@ void main() {
       );
 
       expect((submitted.single as LoadContentIntent).via, _a);
+    });
+
+    test('a named server wins even when it is not the first to list the peer',
+        () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'inst-b'),
+        'peer-1',
+        instancesOf: (peer) async => [_instA, _instB],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instB);
+    });
+
+    test('an unknown named server falls back to the first listing instance',
+        () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'inst-z'),
+        'peer-1',
+        instancesOf: (peer) async => [_instA, _instB],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instA);
+    });
+
+    test('a name in another id form (node id vs instance id) still resolves',
+        () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'nabc123'),
+        'peer-1',
+        instancesOf: (peer) async => [_instB],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instB);
+    });
+
+    test('a named server that does not list the peer falls back too', () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'inst-b'),
+        'peer-1',
+        instancesOf: (peer) async => [_instA],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _instA);
+    });
+
+    test('a named server with no listing instance at all is dropped', () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null, serverInstanceId: 'inst-b'),
+        'peer-1',
+        instancesOf: (peer) async => const [],
+        submit: submitted.add,
+      );
+
+      expect(submitted, isEmpty);
+    });
+
+    test('an older sender naming no server still gets the first instance',
+        () async {
+      final submitted = <RemoteControlIntent>[];
+      await routeRemoteIntent(
+        _intent(via: null),
+        'peer-1',
+        instancesOf: (peer) async => [_b, _a],
+        submit: submitted.add,
+      );
+
+      expect((submitted.single as LoadContentIntent).via, _b);
     });
 
     test('a LoadContent from a sender no instance lists is dropped', () async {

@@ -197,6 +197,55 @@ void main() {
     expect((await storedCredentials('minst-2')).accessToken, 'fresh');
   });
 
+  test('a password re-sign-in keeps the device and media tokens', () async {
+    await save(MydiaCredentials(
+      instanceId: 'inst-5',
+      accessToken: 'old',
+      deviceToken: 'device-1',
+      mediaToken: 'media-1',
+      mediaTokenExpiry: DateTime.utc(2030),
+      serverUrl: 'https://home.example',
+      username: 'maya',
+    ));
+    await save(const MydiaCredentials(
+      instanceId: 'inst-5',
+      accessToken: 'fresh',
+      serverUrl: 'https://home.example',
+      username: 'maya',
+    ));
+    final c = await storedCredentials('minst-5');
+    expect(c.accessToken, 'fresh');
+    expect(c.deviceToken, 'device-1');
+    expect(c.mediaToken, 'media-1');
+    expect(c.mediaTokenExpiry, DateTime.utc(2030));
+  });
+
+  test('a re-pair with a new device token replaces it', () async {
+    await save(_paired());
+    await save(const MydiaCredentials(
+      instanceId: 'inst-2',
+      accessToken: 'fresh',
+      deviceToken: 'device-2',
+      nodeAddr: _nodeAddr,
+    ));
+    final c = await storedCredentials('minst-2');
+    expect(c.deviceToken, 'device-2');
+    expect(c.accessToken, 'fresh');
+    expect(c.mediaToken, 'media');
+  });
+
+  test('re-adding keeps the stored addedAtMs', () async {
+    await save(_paired());
+    final first = (await store.load()).accounts.single.addedAtMs;
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await save(const MydiaCredentials(
+      instanceId: 'inst-2',
+      accessToken: 'fresh',
+      nodeAddr: _nodeAddr,
+    ));
+    expect((await store.load()).accounts.single.addedAtMs, first);
+  });
+
   test('a re-auth for a different instance is refused', () async {
     await expectLater(
       save(_paired(instanceId: 'inst-3'), reauth: 'minst-2'),

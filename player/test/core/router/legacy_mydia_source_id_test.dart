@@ -51,6 +51,23 @@ void main() {
     expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
   });
 
+  test('never resolves another account while the legacy marker loads',
+      () async {
+    final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
+    addTearDown(h.container.dispose);
+    await h.store.setLegacyInstanceId('mb');
+    final seen = <SourceId?>[];
+    h.container.listen(
+      legacyMydiaSourceIdProvider,
+      (_, next) => seen.add(next),
+      fireImmediately: true,
+    );
+    await settle(h.container);
+    await Future<void>.delayed(Duration.zero);
+    expect(seen, isNot(contains(idOf('a'))));
+    expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
+  });
+
   test('no legacy id: the only Mydia instance', () async {
     final h = await mydiaAccountHarness({'a': _ma});
     addTearDown(h.container.dispose);

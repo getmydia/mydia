@@ -577,6 +577,45 @@ void main() {
       expect(payload.subtitleTrack, 'sub-fre');
       expect(payload.positionMs, BigInt.from(30000));
       expect(payload.autoplay, isTrue);
+      expect(payload.serverInstanceId, isNull);
+    });
+
+    test('LoadContent names the Mydia server the content ref carries',
+        () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [_welcome]
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      await backend.connect(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+
+      await backend.loadMedia(const CastMediaRequest(
+        url: '',
+        kind: CastMediaKind.hls,
+        title: 'Copper Weather',
+        contentRef: MydiaContentRef(
+          mediaItemId: 'item-1',
+          episodeId: null,
+          audioTrack: null,
+          subtitleTrack: null,
+          serverInstanceId: 'inst-b',
+        ),
+      ));
+
+      final load = transport.requests
+          .whereType<FlutterRemoteControlRequest_LoadContent>()
+          .single
+          .field0;
+      expect(load.serverInstanceId, 'inst-b');
     });
 
     test(

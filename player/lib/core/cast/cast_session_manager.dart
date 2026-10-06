@@ -6,6 +6,7 @@ import '../../domain/models/cast_device.dart';
 import '../../native/lib.dart';
 import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
+import '../sources/mydia/mydia_instance_id.dart';
 import '../sources/source.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
@@ -1616,6 +1617,7 @@ class CastSessionManager {
             episodeId: mydia.isEpisode ? mydia.mediaId : null,
             audioTrack: null,
             subtitleTrack: request.selectedSubtitleTrackId,
+            serverInstanceId: mydiaInstanceIdOfSource(mydia.sourceId),
           )
         : null;
 

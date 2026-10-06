@@ -1347,6 +1347,7 @@ impl SseDecode for crate::FlutterLoadContentRequest {
         let mut var_audioTrack = <Option<String>>::sse_decode(deserializer);
         let mut var_subtitleTrack = <Option<String>>::sse_decode(deserializer);
         let mut var_autoplay = <bool>::sse_decode(deserializer);
+        let mut var_serverInstanceId = <Option<String>>::sse_decode(deserializer);
         return crate::FlutterLoadContentRequest {
             media_item_id: var_mediaItemId,
             episode_id: var_episodeId,
@@ -1354,6 +1355,7 @@ impl SseDecode for crate::FlutterLoadContentRequest {
             audio_track: var_audioTrack,
             subtitle_track: var_subtitleTrack,
             autoplay: var_autoplay,
+            server_instance_id: var_serverInstanceId,
         };
     }
 }
@@ -2010,6 +2012,7 @@ impl flutter_rust_bridge::IntoDart for crate::FlutterLoadContentRequest {
             self.audio_track.into_into_dart().into_dart(),
             self.subtitle_track.into_into_dart().into_dart(),
             self.autoplay.into_into_dart().into_dart(),
+            self.server_instance_id.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2473,6 +2476,7 @@ impl SseEncode for crate::FlutterLoadContentRequest {
         <Option<String>>::sse_encode(self.audio_track, serializer);
         <Option<String>>::sse_encode(self.subtitle_track, serializer);
         <bool>::sse_encode(self.autoplay, serializer);
+        <Option<String>>::sse_encode(self.server_instance_id, serializer);
     }
 }
 

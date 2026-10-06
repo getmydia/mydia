@@ -469,6 +469,7 @@ class MydiaCastBackend
         audioTrack: ref.audioTrack,
         subtitleTrack: ref.subtitleTrack,
         autoplay: true,
+        serverInstanceId: ref.serverInstanceId,
       ),
     ));
   }

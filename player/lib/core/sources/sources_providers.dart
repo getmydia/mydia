@@ -140,17 +140,40 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
 
   /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
   /// like [_dropCache]: leftovers are inert without the account.
-  Future<void> _dropCollectionSync(Set<String> sourceIds) async {
+  Future<void> _dropCollectionSync(Set<String> sourceIds,
+      {bool dropUnowned = false}) async {
     try {
-      await deleteCollectionSyncFor(ref, sourceIds);
+      await deleteCollectionSyncFor(ref, sourceIds, dropUnowned: dropUnowned);
     } catch (e) {
       debugPrint('[Sources] Could not clear collection sync entries: $e');
+    }
+  }
+
+  /// Whether [accountId] is the account `legacyMydiaSourceIdProvider` names:
+  /// the migrated legacy instance while it exists, else the only Mydia
+  /// instance. Read from the records and the store, not that provider, which
+  /// depends on this notifier.
+  Future<bool> _isLegacyMydiaAccount(String accountId) async {
+    try {
+      final mydia = [
+        for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+          if (r.account.kind == SourceKind.mydia) r,
+      ];
+      if (mydia.isEmpty) return false;
+      final store = await ref.read(sourceStoreProvider.future);
+      final legacy = await store.legacyInstanceId();
+      if (mydia.any((r) => r.account.id == legacy)) return legacy == accountId;
+      return mydia.length == 1 && mydia.single.account.id == accountId;
+    } catch (e) {
+      debugPrint('[Sources] Could not resolve the legacy account: $e');
+      return false;
     }
   }
 
   Future<void> removeAccount(String accountId) async {
     await _serialise(() async {
       final record = _record(accountId);
+      final wasLegacy = await _isLegacyMydiaAccount(accountId);
       await _write((store) async {
         await store.removeAccount(accountId);
         await _dropAllServersChoices(store, accountId);
@@ -160,9 +183,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      // Legacy bare-id entries record no owner and read as the legacy
+      // instance's, so they go with the account the legacy rule picked.
       await _dropCollectionSync({
         for (final s in record?.sources ?? const <Source>[]) s.id.value,
-      });
+      }, dropUnowned: wasLegacy);
     });
     await _deleteDownloads([accountId]);
   }

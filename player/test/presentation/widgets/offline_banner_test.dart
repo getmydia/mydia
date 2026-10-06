@@ -24,12 +24,14 @@ const _idB = SourceId('acc2:owner:bb22');
 /// The shell's rule: the banner shows while the current source is
 /// unreachable.
 class _Host extends ConsumerWidget {
-  const _Host();
+  const _Host({this.location = '/'});
+
+  final String location;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Scaffold(
-        body: isOffline(ref.watch(currentSourceStatusProvider))
-            ? const OfflineBanner()
+        body: isOffline(ref.watch(routeSourceStatusProvider(location)))
+            ? OfflineBanner(location: location)
             : const SizedBox.shrink(),
       );
 }
@@ -38,15 +40,17 @@ void main() {
   late FakeMediaSource a;
   late FakeMediaSource b;
   late int builtA;
+  late int builtB;
   late ProviderContainer container;
 
   setUp(() {
     a = FakeMediaSource();
     b = FakeMediaSource();
     builtA = 0;
+    builtB = 0;
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {String location = '/'}) async {
     container = ProviderContainer(overrides: [
       selectedSourceIdProvider.overrideWith(_Selected.new),
       activeSourceIdProvider
@@ -55,12 +59,15 @@ void main() {
         builtA++;
         return a;
       }),
-      mediaSourceProvider(_idB).overrideWithValue(b),
+      mediaSourceProvider(_idB).overrideWith((ref) {
+        builtB++;
+        return b;
+      }),
     ]);
     addTearDown(container.dispose);
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: _Host()),
+      child: MaterialApp(home: _Host(location: location)),
     ));
   }
 
@@ -101,5 +108,21 @@ void main() {
     await tester.pump();
 
     expect(builtA, 2);
+  });
+
+  testWidgets('Retry rebuilds the source on screen, not the active one',
+      (tester) async {
+    b.setStatus(SourceConnectionStatus.unreachable);
+    await pump(tester, location: '/s/${_idB.value}');
+    expect(find.byType(OfflineBanner), findsOneWidget);
+    // A is the active source; the first read of A builds it once.
+    container.read(mediaSourceProvider(_idA));
+    expect((builtA, builtB), (1, 1));
+
+    await tester.tap(find.widgetWithText(BannerButton, 'Retry'));
+    await tester.pump();
+
+    expect(builtB, 2);
+    expect(builtA, 1);
   });
 }

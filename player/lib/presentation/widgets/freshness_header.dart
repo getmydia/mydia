@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/sources/current_source_status.dart';
 import '../../core/format/relative_time.dart';
@@ -29,6 +30,18 @@ double freshnessTopInset(BuildContext context, {double? appBarHeight}) {
   return MediaQuery.paddingOf(context).top + appBarHeight;
 }
 
+/// The location of the route this widget is built under, so a screen below a
+/// pushed route reports its own source rather than the top route's. A context
+/// outside any route (a shell widget) falls back to the router's current
+/// location; no router at all gives null.
+String? _ownLocation(BuildContext context) {
+  try {
+    return GoRouterState.of(context).uri.path;
+  } on GoError {
+    return GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+  }
+}
+
 /// Tells the user, at the top of a screen, whether what they are looking at is
 /// being refreshed, is old, or failed to refresh.
 ///
@@ -50,7 +63,12 @@ class FreshnessHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final offline = isOffline(ref.watch(currentSourceStatusProvider));
+    // The shell's OfflineBanner reports the source of the current route, so
+    // this header must read the same one. Outside a router, the active source.
+    final location = _ownLocation(context);
+    final offline = isOffline(ref.watch(location == null
+        ? currentSourceStatusProvider
+        : routeSourceStatusProvider(location)));
     // OfflineBanner already owns this message. Two stacked warning banners
     // saying overlapping things is how banners get ignored.
     if (offline) return const SizedBox.shrink();
