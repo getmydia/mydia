@@ -36,7 +36,7 @@ class _ContinueWatchingScreenState
       target: MediaContextTarget(
         id: item.ref.externalId,
         type: item.ref.kind.name,
-        continueWatchingId: item.ref.externalId,
+        continueWatchingId: item.dismissRef.externalId,
       ),
       // Unreachable: with `tapPlays` false the menu never offers Play.
       onPlay: () {},
@@ -52,18 +52,20 @@ class _ContinueWatchingScreenState
     // context.
     final toaster = Toaster.of(context);
 
-    setState(() => _hidden.add(item.ref));
+    // Every card of the same series leaves together; see `dismissRef`.
+    final key = item.dismissRef;
+    setState(() => _hidden.add(key));
     try {
-      await continueWatching.removeFromContinueWatching(item.ref);
+      await continueWatching.removeFromContinueWatching(key);
     } catch (_) {
-      if (mounted) setState(() => _hidden.remove(item.ref));
+      if (mounted) setState(() => _hidden.remove(key));
       toaster.show(
         'Could not remove from Continue Watching',
         kind: ToastKind.error,
       );
       return;
     }
-    if (mounted) invalidateSourceContinueWatchingWrites(ref, item.ref);
+    if (mounted) invalidateSourceContinueWatchingWrites(ref, key);
   }
 
   @override
@@ -81,7 +83,7 @@ class _ContinueWatchingScreenState
       items: ref.watch(provider).whenData(
             (items) => [
               for (final item in items)
-                if (!_hidden.contains(item.ref)) item,
+                if (!_hidden.contains(item.dismissRef)) item,
             ],
           ),
       onRetry: () => ref.invalidate(provider),

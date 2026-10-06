@@ -398,10 +398,10 @@ class _CollectionDownloadButtonState
       // Save sync config
       final save = ref.read(saveCollectionSyncProvider);
       await save(
+        sourceId: widget.sourceId.value,
         collectionId: widget.collectionId,
         name: _getCollectionName(),
         resolution: optionId,
-        sourceId: widget.sourceId.value,
       );
 
       if (!mounted) return;
@@ -482,7 +482,8 @@ class _CollectionDownloadButtonState
 
   Future<void> _handleSyncNow() async {
     final config = await ref.read(
-      collectionSyncConfigProvider(widget.collectionId).future,
+      collectionSyncConfigProvider(widget.sourceId.value, widget.collectionId)
+          .future,
     );
     if (config == null || !mounted) return;
     await _startSync(config['resolution']!);
@@ -490,13 +491,13 @@ class _CollectionDownloadButtonState
 
   Future<void> _handleStopSyncing() async {
     final remove = ref.read(removeCollectionSyncProvider);
-    await remove(widget.collectionId);
+    await remove(widget.sourceId.value, widget.collectionId);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSyncedAsync =
-        ref.watch(isCollectionSyncedProvider(widget.collectionId));
+    final isSyncedAsync = ref.watch(
+        isCollectionSyncedProvider(widget.sourceId.value, widget.collectionId));
 
     if (_isSyncing) {
       return const Padding(

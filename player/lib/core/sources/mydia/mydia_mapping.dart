@@ -177,6 +177,9 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
     lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
+    showRef: kind == ItemKind.episode && c['showId'] != null
+        ? _ref(sid, ItemKind.show, c['showId'].toString())
+        : null,
   );
 }
 

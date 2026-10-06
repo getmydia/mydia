@@ -215,6 +215,7 @@ void main() {
               'id': 'e-1',
               'type': 'EPISODE',
               'title': 'B',
+              'showId': 's-9',
               'showTitle': 'S',
               'seasonNumber': 1,
               'episodeNumber': 3,
@@ -226,9 +227,49 @@ void main() {
     final rows = await b.source.continueWatching();
     expect(rows.map((r) => r.ref.kind), [ItemKind.movie, ItemKind.episode]);
     expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
-    await b.source.removeFromContinueWatching(rows.last.ref);
+    expect(b.source.canRemoveFromContinueWatching(rows.last), isTrue);
+    await b.source.removeFromContinueWatching(rows.first.ref);
     expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
-    expect(b.t.calls.last.vars, {'mediaItemId': 'e-1'});
+    expect(b.t.calls.last.vars, {'mediaItemId': 'm-1'});
+  });
+
+  test('removing an episode from continue watching sends its show id',
+      () async {
+    final b = build();
+    b.t.handlers['GuestContinueWatching'] = (_) => {
+          'continueWatching': [
+            {
+              'id': 'e-1',
+              'type': 'EPISODE',
+              'title': 'B',
+              'showId': 's-9',
+              'progress': null,
+              'files': <Object>[]
+            },
+            {
+              'id': 'e-2',
+              'type': 'EPISODE',
+              'title': 'C',
+              'progress': null,
+              'files': <Object>[]
+            },
+          ]
+        };
+    final rows = await b.source.continueWatching();
+
+    expect(b.source.canRemoveFromContinueWatching(rows.first), isTrue);
+    expect(b.source.canRemoveFromContinueWatching(rows.last), isFalse,
+        reason: 'no show id, nothing the server would accept');
+
+    await b.source.removeFromContinueWatching(rows.first.dismissRef);
+    expect(b.t.calls.last.operation, 'RemoveFromContinueWatching');
+    expect(b.t.calls.last.vars, {'mediaItemId': 's-9'});
+
+    expect(
+      b.source.removeFromContinueWatching(rows.first.ref),
+      throwsA(isA<SourceException>()),
+      reason: 'an episode id is refused before it reaches the server',
+    );
   });
 
   test('browsing an unknown library is not found', () async {

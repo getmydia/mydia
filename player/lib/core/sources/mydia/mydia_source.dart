@@ -610,10 +610,16 @@ class MydiaSource extends MediaSource
   }
 
   @override
-  bool canRemoveFromContinueWatching(ItemSummary item) => true;
+  bool canRemoveFromContinueWatching(ItemSummary item) =>
+      item.ref.kind != ItemKind.episode || item.showRef != null;
 
+  /// [ref] is `ItemSummary.dismissRef`: the movie, or for an episode its
+  /// show. The server refuses an episode id.
   @override
   Future<void> removeFromContinueWatching(ItemRef ref) async {
+    if (ref.kind == ItemKind.episode) {
+      throw const SourceException.unsupported();
+    }
     await _q(documentNodeMutationRemoveFromContinueWatching,
         {'mediaItemId': ref.externalId});
   }

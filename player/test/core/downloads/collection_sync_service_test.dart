@@ -24,7 +24,28 @@ ItemSummary _episode(String id, int season, int n) => ItemSummary(
       showTitle: 'Invented Series',
       parentIndex: season,
       index: n,
+      defaultVersionId: 'v$id',
     );
+
+/// Like [_SeasonedSource], but the movie `m2` has no file and the episode
+/// `e12` names no version.
+class _FilelessSource extends _SeasonedSource {
+  @override
+  Future<ItemDetail> item(ItemRef ref) async => ref.externalId == 'm2'
+      ? ItemDetail(summary: fakeMovie(2))
+      : super.item(ref);
+
+  @override
+  Future<Page<ItemSummary>> children(ItemRef parent, {Cursor? cursor}) async {
+    final page = await super.children(parent, cursor: cursor);
+    return Page(items: [
+      for (final i in page.items)
+        i.ref.externalId == 'e12'
+            ? ItemSummary(ref: i.ref, title: i.title, index: i.index)
+            : i,
+    ]);
+  }
+}
 
 /// A show with two seasons of two episodes each.
 class _SeasonedSource extends FakeCapableSource {
@@ -92,6 +113,24 @@ void main() {
         ['m2', 'e11', 'e12', 'e21', 'e22']);
     expect(service.requests.every((r) => r.optionId == '720p'), isTrue);
     expect(source.childCalls, ['s1', 'se1', 'se2']);
+  });
+
+  test('items with no file to download are skipped, not failed', () async {
+    final service = _RecordingService();
+
+    final result = await syncCollectionItems(
+      source: _FilelessSource(),
+      items: [fakeMovie(1), fakeMovie(2), fakeShow],
+      optionId: 'original',
+      manager: service,
+      queue: const [],
+      metadataFor: summaryDownloadMetadata,
+    );
+
+    expect((result.moviesQueued, result.episodesQueued), (1, 3));
+    expect((result.skipped, result.failed), (2, 0));
+    expect(service.requests.map((r) => r.ref.externalId),
+        isNot(containsAll(['m2', 'e12'])));
   });
 
   test('skips a movie that is already queued', () async {

@@ -154,10 +154,20 @@ class ItemSummary {
     this.sortTitle,
     this.addedAt,
     this.lastPlayedAt,
+    this.showRef,
   });
 
   final ItemRef ref;
   final String title;
+
+  /// The series an episode belongs to, when the listing names it. Continue
+  /// Watching on Mydia dismisses the series, not the episode.
+  final ItemRef? showRef;
+
+  /// What "Remove from Continue Watching" dismisses for this entry: the
+  /// series when the listing names it, else the item itself. Entries with the
+  /// same key are one card's worth of history and leave together.
+  ItemRef get dismissRef => showRef ?? ref;
   final String? subtitle;
 
   /// The series an episode belongs to. Null for anything else.
@@ -217,6 +227,7 @@ class ItemSummary {
         sortTitle: json['sortTitle'] as String?,
         addedAt: _date(json['addedAt']),
         lastPlayedAt: _date(json['lastPlayedAt']),
+        showRef: _refOrNull(json['showRef']),
       );
 
   Map<String, Object?> toJson() => {
@@ -238,6 +249,7 @@ class ItemSummary {
         'sortTitle': sortTitle,
         'addedAt': addedAt?.toUtc().toIso8601String(),
         'lastPlayedAt': lastPlayedAt?.toUtc().toIso8601String(),
+        'showRef': showRef?.toJson(),
       };
 }
 

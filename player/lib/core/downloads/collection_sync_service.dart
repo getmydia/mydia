@@ -58,6 +58,13 @@ Future<CollectionSyncResult> syncCollectionItems({
           continue;
         }
         try {
+          // A collection listing does not name versions, so ask the source
+          // before queueing something with no file.
+          if (item.defaultVersionId == null &&
+              (await source.item(item.ref)).versions.isEmpty) {
+            skipped++;
+            continue;
+          }
           await manager.start(DownloadRequest(
             ref: item.ref,
             optionId: optionId,

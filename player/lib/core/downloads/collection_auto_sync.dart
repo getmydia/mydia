@@ -94,8 +94,8 @@ class CollectionAutoSync {
 
       var totalQueued = 0;
       for (final entry in syncConfigs.entries) {
-        final collectionId = entry.key;
         final config = entry.value;
+        final collectionId = config['collectionId'] ?? entry.key;
         final resolution = config['resolution'];
         if (resolution == null) continue;
 

@@ -29,13 +29,26 @@ String? continueWatchingCaption(ItemSummary item) {
   };
 }
 
-class SourceContinueWatchingRow extends ConsumerWidget {
+class SourceContinueWatchingRow extends ConsumerStatefulWidget {
   const SourceContinueWatchingRow({super.key, required this.sourceId});
 
   final SourceId sourceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SourceContinueWatchingRow> createState() =>
+      _SourceContinueWatchingRowState();
+}
+
+class _SourceContinueWatchingRowState
+    extends ConsumerState<SourceContinueWatchingRow> {
+  /// Dismissals sent but not yet answered, by `ItemSummary.dismissRef`. Every
+  /// card of the same series leaves together, and a refusal brings them all
+  /// back, because the provider list itself is never edited.
+  final Set<ItemRef> _hidden = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final sourceId = widget.sourceId;
     final provider = sourceContinueWatchingProvider(sourceId);
     ref.listen(provider, (_, next) {
       if (next case AsyncError(:final error)) {
@@ -44,7 +57,11 @@ class SourceContinueWatchingRow extends ConsumerWidget {
     });
     final state = ref.watch(provider);
     // hasValue first: on a failure with no earlier list, the row is empty.
-    final items = state.hasValue ? state.requireValue : const <ItemSummary>[];
+    final items = [
+      for (final item
+          in state.hasValue ? state.requireValue : const <ItemSummary>[])
+        if (!_hidden.contains(item.dismissRef)) item,
+    ];
     if (items.isEmpty) return const SizedBox.shrink();
     final continueWatching =
         ref.watch(mediaSourceProvider(sourceId))?.as<ContinueWatching>();
@@ -64,9 +81,31 @@ class SourceContinueWatchingRow extends ConsumerWidget {
           item.ref,
           removable:
               continueWatching?.canRemoveFromContinueWatching(item) ?? false,
+          remove: () => _remove(cardContext, item),
         ),
       ),
     );
+  }
+
+  Future<void> _remove(BuildContext context, ItemSummary item) async {
+    final continueWatching = ref
+        .read(mediaSourceProvider(item.ref.sourceId))
+        ?.as<ContinueWatching>();
+    if (continueWatching == null) return;
+    final toaster = Toaster.of(context);
+    final key = item.dismissRef;
+    setState(() => _hidden.add(key));
+    try {
+      await continueWatching.removeFromContinueWatching(key);
+    } catch (e) {
+      if (mounted) setState(() => _hidden.remove(key));
+      toaster.show(
+        e is SourceException ? e.viewerMessage : 'Could not remove this title.',
+        kind: ToastKind.error,
+      );
+      return;
+    }
+    if (mounted) invalidateSourceContinueWatchingWrites(ref, key);
   }
 }
 
@@ -108,6 +147,7 @@ Future<void> _openMenu(
   WidgetRef ref,
   ItemRef item, {
   required bool removable,
+  required Future<void> Function() remove,
 }) async {
   final position = popupPositionBelow(cardContext);
   if (position == null) return;
@@ -133,24 +173,6 @@ Future<void> _openMenu(
     case _Action.details:
       await cardContext.push(sourceItemLocation(item));
     case _Action.remove:
-      await _remove(cardContext, ref, item);
+      await remove();
   }
-}
-
-Future<void> _remove(BuildContext context, WidgetRef ref, ItemRef item) async {
-  final continueWatching =
-      ref.read(mediaSourceProvider(item.sourceId))?.as<ContinueWatching>();
-  if (continueWatching == null) return;
-  final toaster = Toaster.of(context);
-  try {
-    await continueWatching.removeFromContinueWatching(item);
-  } catch (e) {
-    toaster.show(
-      e is SourceException ? e.viewerMessage : 'Could not remove this title.',
-      kind: ToastKind.error,
-    );
-    return;
-  }
-  if (!context.mounted) return;
-  invalidateSourceContinueWatchingWrites(ref, item);
 }

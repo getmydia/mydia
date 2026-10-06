@@ -27,7 +27,9 @@ Future<BulkDownloadResult> queueSourceSeason({
   do {
     final page = await source.children(season, cursor: cursor);
     for (final episode in page.items) {
-      if (manager.isDownloaded(episode.ref) ||
+      // An episode the listing names no version for has no file to fetch.
+      if (episode.defaultVersionId == null ||
+          manager.isDownloaded(episode.ref) ||
           active.any((t) => t.matches(episode.ref))) {
         skipped++;
         continue;

@@ -116,6 +116,50 @@ void main() {
         find.text('Could not remove from Continue Watching'), findsOneWidget);
   });
 
+  ItemSummary episodeOf(ItemSummary base, String id, String title) =>
+      ItemSummary(
+        ref: ItemRef(
+            sourceId: fakeSourceId, kind: ItemKind.episode, externalId: id),
+        title: title,
+        showRef: fakeShow.ref,
+        userState: const UserState(progressSeconds: 60),
+        durationSeconds: 1800,
+      );
+
+  testWidgets('removing an episode dismisses its show and hides its siblings',
+      (tester) async {
+    final a = FakeCapableSource()
+      ..continueWatchingResult = [
+        episodeOf(fakeMovie(1), 'e1', 'Invented Episode 1'),
+        _inProgress(1),
+        episodeOf(fakeMovie(1), 'e2', 'Invented Episode 2'),
+      ];
+    await _pump(tester, a);
+
+    await _removeFirstCard(tester);
+
+    expect(a.removed, [fakeShow.ref]);
+    expect(find.text('Invented Episode 1'), findsNothing);
+    expect(find.text('Invented Episode 2'), findsNothing);
+    expect(find.text('Invented Film 1'), findsOneWidget);
+  });
+
+  testWidgets('a failed episode removal brings every sibling back',
+      (tester) async {
+    final a = FakeCapableSource()
+      ..continueWatchingResult = [
+        episodeOf(fakeMovie(1), 'e1', 'Invented Episode 1'),
+        episodeOf(fakeMovie(1), 'e2', 'Invented Episode 2'),
+      ]
+      ..removeError = StateError('refused');
+    await _pump(tester, a);
+
+    await _removeFirstCard(tester);
+
+    expect(find.text('Invented Episode 1'), findsOneWidget);
+    expect(find.text('Invented Episode 2'), findsOneWidget);
+  });
+
   testWidgets('a source that cannot dismiss an entry offers no menu',
       (tester) async {
     final a = FakeCapableSource()

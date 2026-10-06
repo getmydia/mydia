@@ -104,7 +104,8 @@ void main() {
       overrides: [
         downloadManagerProvider
             .overrideWith((ref) async => EmptyDownloadService()),
-        isCollectionSyncedProvider('c1').overrideWith((ref) async => false),
+        isCollectionSyncedProvider(fakeSourceId.value, 'c1')
+            .overrideWith((ref) async => false),
       ],
     );
 

@@ -124,7 +124,7 @@ class AllServersHomeScreen extends ConsumerWidget {
         if (cw == null) return;
         final toaster = Toaster.of(c);
         try {
-          await cw.removeFromContinueWatching(item.ref);
+          await cw.removeFromContinueWatching(item.dismissRef);
         } catch (e) {
           toaster.show(
             e is SourceException

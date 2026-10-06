@@ -195,6 +195,16 @@ void main() {
     expect(ep.showTitle, 'Lantern Street');
     expect(ep.parentIndex, 2);
     expect(ep.index, 1);
+    expect(ep.showRef,
+        const ItemRef(sourceId: s, kind: ItemKind.show, externalId: 's-1'));
+    expect(ep.dismissRef, ep.showRef);
+    expect(movie.showRef, isNull);
+    expect(movie.dismissRef, movie.ref);
+    // The show ref survives the cache round trip, and an old record without
+    // the key reads as none.
+    expect(ItemSummary.fromJson(ep.toJson()).showRef, ep.showRef);
+    expect(
+        ItemSummary.fromJson((ep.toJson()..remove('showRef'))).showRef, isNull);
 
     expect(
         continueWatchingSummary(s, {
