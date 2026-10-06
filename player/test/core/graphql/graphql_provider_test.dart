@@ -9,7 +9,7 @@ import 'package:player/core/cache/fetch_log.dart';
 import '../../test_utils/query_keys.dart';
 import 'package:player/core/player/device_profile.dart';
 
-import '../sources/mydia/bound_mydia_harness.dart';
+import '../sources/mydia/mydia_account_harness.dart';
 
 /// Always fails [clearAll], to prove a storage error cannot escape
 /// [applyDetectedProfile] and break the "detectDeviceProfile never throws"
@@ -93,7 +93,7 @@ void main() {
     Future<ProviderContainer> containerWith(
       Map<String, MydiaCredentials> accounts,
     ) async {
-      final h = await boundMydiaHarness(accounts, overrides: [
+      final h = await mydiaAccountHarness(accounts, overrides: [
         deviceProfileHolderProvider.overrideWithValue(DeviceProfileHolder()),
       ]);
       addTearDown(h.container.dispose);

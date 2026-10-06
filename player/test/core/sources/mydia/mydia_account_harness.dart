@@ -47,7 +47,7 @@ Future<
       ProviderContainer container,
       InMemorySourceStore store,
       MockAuthStorage storage,
-    })> boundMydiaHarness(
+    })> mydiaAccountHarness(
   Map<String, MydiaCredentials> accounts, {
   List<Override> overrides = const [],
 }) async {

@@ -4,11 +4,11 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/user_settings.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
-import '../../../core/sources/mydia/bound_mydia_harness.dart';
+import '../../../core/sources/mydia/mydia_account_harness.dart';
 
 void main() {
   Future<UserSettings> load(Map<String, MydiaCredentials> accounts) async {
-    final h = await boundMydiaHarness(accounts);
+    final h = await mydiaAccountHarness(accounts);
     addTearDown(h.container.dispose);
     await h.container.read(sourceRecordsProvider.future);
     return h.container.read(settingsControllerProvider.future);

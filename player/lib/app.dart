@@ -273,9 +273,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     unawaited(_windowFrame.load());
   }
 
-  /// Whether a restore has already been attempted this launch. A source
-  /// can re-emit (a token refresh, a reconnect) and restoring is a
-  /// once-per-launch action.
+  /// Whether a restore has already been attempted this launch. The
+  /// `hasMydiaProvider` listener can fire again (a Mydia server added later)
+  /// and restoring is a once-per-launch action.
   bool _castRestoreAttempted = false;
 
   Future<void> _restoreCastSession() async {
@@ -293,9 +293,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   /// Whether the controllable-device startup path still needs to run. Not a
-  /// once-per-launch flag: a source can re-emit
-  /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
-  /// and either must be able to retry an opt-out or a transient failure.
+  /// once-per-launch flag: the `hasMydiaProvider` listener can fire again
+  /// (a Mydia server added after startup) and [remoteControlEnabledProvider]
+  /// can flip from off to on mid-launch, and either must be able to retry an
+  /// opt-out or a transient failure.
   /// What actually stops wiring a second receiver onto
   /// [P2pService.onControlRequest] is [RemoteControlInitGate.succeed] —
   /// once one attempt actually wires [_controlRequestSubscription], every

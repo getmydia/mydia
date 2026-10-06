@@ -36,7 +36,8 @@ import 'package:player/presentation/screens/settings/widgets/settings_identity.d
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 import '../../../test_utils/dock_harness.dart';
-import '../../../core/sources/mydia/bound_mydia_harness.dart' show mydiaRecord;
+import '../../../core/sources/mydia/mydia_account_harness.dart'
+    show mydiaRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
