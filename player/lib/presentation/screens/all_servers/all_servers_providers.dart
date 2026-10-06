@@ -12,6 +12,7 @@ import '../../../domain/merged/merged_grid.dart';
 import '../../../domain/merged/merged_library_reader.dart';
 import '../../../domain/merged/merged_result.dart';
 import '../../../domain/merged/merged_search.dart';
+import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 
@@ -50,6 +51,10 @@ final allServersFavoritesRowProvider =
 final allServersFavoritesProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).favorites());
+
+final allServersCollectionsProvider =
+    FutureProvider.autoDispose<MergedResult<List<SourceCollection>>>(
+        (ref) => ref.watch(allServersReaderProvider).collections());
 
 /// Recently Added splits on this: movies in one rail, TV in the other.
 bool isMovieRow(ItemSummary i) => i.ref.kind == ItemKind.movie;

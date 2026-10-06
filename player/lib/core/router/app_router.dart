@@ -15,7 +15,9 @@ import '../../presentation/screens/sources/source_player_route.dart';
 import '../../presentation/screens/sources/source_search_screen.dart';
 import '../../presentation/screens/sources/source_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_cards.dart';
+import '../../presentation/screens/all_servers/all_servers_collections_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
+import '../../presentation/screens/all_servers/all_servers_listing_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/filter/filter_screen.dart';
@@ -472,6 +474,51 @@ GoRouter appRouter(Ref ref) {
               included: ref.read(allServersSourcesProvider),
             ),
             builder: (context, state) => const AllServersSearchScreen(),
+          ),
+          GoRoute(
+            path: allServersContinueWatchingLocation,
+            name: 'all_servers_continue_watching',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
+            builder: (context, state) => const AllServersListingScreen(
+                listing: AllServersListing.continueWatching),
+          ),
+          GoRoute(
+            path: allServersRecentlyAddedLocation,
+            name: 'all_servers_recently_added',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
+            builder: (context, state) => AllServersListingScreen(
+              listing: AllServersListing.recentlyAdded,
+              kind: switch (state.uri.queryParameters['kind']) {
+                'movies' => LibraryKind.movies,
+                'shows' => LibraryKind.shows,
+                _ => null,
+              },
+            ),
+          ),
+          GoRoute(
+            path: allServersFavoritesLocation,
+            name: 'all_servers_favorites',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
+            builder: (context, state) => const AllServersListingScreen(
+                listing: AllServersListing.favorites),
+          ),
+          GoRoute(
+            path: allServersCollectionsLocation,
+            name: 'all_servers_collections',
+            redirect: (context, state) => allServersRouteRedirect(
+              sourcesLoading: ref.read(sourcesLoadingProvider),
+              included: ref.read(allServersSourcesProvider),
+            ),
+            builder: (context, state) => const AllServersCollectionsScreen(),
           ),
           GoRoute(
             path: '/s/:sourceId',
