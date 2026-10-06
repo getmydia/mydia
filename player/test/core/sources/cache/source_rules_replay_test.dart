@@ -33,14 +33,39 @@ void main() {
       );
     });
 
-    test('movieWatchedChanged: movies grid and the movie itself', () {
-      expect(_ops(SourceRules.watchedChanged(_a)),
-          containsAll(<String>{SourceOps.browse, SourceOps.item}));
+    test('movieWatchedChanged: the movie, its grids, rails and collections',
+        () {
+      expect(
+        _ops(SourceRules.watchedChanged(_a)),
+        containsAll(<String>{
+          SourceOps.hubs,
+          SourceOps.continueWatching,
+          SourceOps.browse,
+          SourceOps.unwatched,
+          SourceOps.favorites,
+          SourceOps.recentlyAdded,
+          SourceOps.collectionItems,
+          SourceOps.item,
+        }),
+      );
     });
 
-    test('playbackFinished: the same set as watchedChanged', () {
-      expect(_ops(SourceRules.offlineProgressSynced(_a)),
-          _ops(SourceRules.watchedChanged(_a)));
+    test('playbackFinished: everything legacy refreshed, via the offline sync',
+        () {
+      expect(
+        _ops(SourceRules.offlineProgressSynced(_a)),
+        containsAll(<String>{
+          SourceOps.hubs,
+          SourceOps.continueWatching,
+          SourceOps.browse,
+          SourceOps.unwatched,
+          SourceOps.favorites,
+          SourceOps.recentlyAdded,
+          SourceOps.collectionItems,
+          SourceOps.item,
+          SourceOps.children,
+        }),
+      );
     });
 
     test('favoriteToggled: favorites, home, grid, and the item itself', () {

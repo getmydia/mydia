@@ -303,7 +303,11 @@ Future<int> flushSourceProgress({
   }
   if (invalidate != null) {
     for (final id in syncedSources) {
-      await invalidate(SourceRules.offlineProgressSynced(id));
+      try {
+        await invalidate(SourceRules.offlineProgressSynced(id));
+      } catch (e) {
+        debugPrint('[PlaybackProgressStore] Invalidating ${id.value}: $e');
+      }
     }
   }
   return synced;

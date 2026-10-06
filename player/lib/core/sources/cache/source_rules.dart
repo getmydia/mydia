@@ -29,6 +29,8 @@ abstract final class SourceRules {
           SourceKeys.family(id, op),
       };
 
+  /// Continue Watching is not refreshed: a favorite does not change what the
+  /// rail shows.
   static Set<InvalidationTarget> favoriteChanged(SourceId id) => {
         for (final op in const [
           SourceOps.item,
