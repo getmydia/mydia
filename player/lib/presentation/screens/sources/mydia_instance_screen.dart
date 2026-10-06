@@ -104,7 +104,12 @@ class MydiaInstanceScreen extends ConsumerWidget {
       );
       if (!confirmed) return;
       await removeMydiaInstance(ref, account);
-      router.go('/sources/manage');
+      // Removing the last or current source can already have sent the router
+      // elsewhere (add-a-server); only step back if still on this route.
+      final path = router.routerDelegate.currentConfiguration.uri.path;
+      if (context.mounted && path.startsWith('/sources/manage/')) {
+        router.go('/sources/manage');
+      }
     } catch (_) {
       toaster.show('Could not remove this server.', kind: ToastKind.error);
     }

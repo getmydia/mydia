@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -85,9 +87,9 @@ void main() {
   final recordA = mydiaRecord('a', addedAtMs: 0);
   final recordB = mydiaRecord('b', addedAtMs: 1);
   final idA = mydiaSourceIdOf(recordA);
-  final idB = mydiaSourceIdOf(recordB);
 
   late InMemorySourceStore store;
+  late SourceSecrets secrets;
   late _Targets targetsA;
   late _Registrations registrations;
 
@@ -95,9 +97,10 @@ void main() {
     WidgetTester tester, {
     RegistrationStatus status = const RegistrationIdle(),
     DownloadService? downloads,
+    WindowChromeInsets? insets,
   }) async {
     store = InMemorySourceStore();
-    final secrets = SourceSecrets(MockAuthStorage());
+    secrets = SourceSecrets(MockAuthStorage());
     for (final r in [recordA, recordB]) {
       await store.putAccount(r);
       await writeMydiaCredentials(
@@ -135,7 +138,17 @@ void main() {
                 )),
       ],
       child: MaterialApp.router(
-        builder: toastLayerBuilder,
+        builder: (context, child) {
+          final layered = toastLayerBuilder(context, child);
+          if (insets == null) return layered;
+          return MediaQuery(
+            data: MediaQueryData(
+              size: const Size(900, 1600),
+              padding: EdgeInsets.only(top: insets.height),
+            ),
+            child: WindowChromeInsets.scope(insets: insets, child: layered),
+          );
+        },
         routerConfig: GoRouter(
           initialLocation: '/sources/manage/x',
           routes: [
@@ -207,7 +220,18 @@ void main() {
 
     expect((await store.load()).accounts.map((r) => r.account.id), ['mb']);
     expect(find.text('manage servers stub'), findsOneWidget);
-    expect(idB, isNot(idA));
+    expect(await readMydiaCredentials(secrets, recordA.account), isNull);
+    expect(await readMydiaCredentials(secrets, recordB.account), isNotNull,
+        reason: 'the other instance keeps its sign-in');
+  });
+
+  testWidgets('draws into the macOS title band with no cast button',
+      (tester) async {
+    await pump(tester,
+        insets: const WindowChromeInsets(height: 40, leading: 80, trailing: 0));
+
+    expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+    expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
   });
 
   testWidgets('cancelling the removal keeps the instance', (tester) async {

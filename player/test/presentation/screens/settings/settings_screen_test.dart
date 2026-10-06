@@ -561,7 +561,6 @@ void main() {
         (tester) async {
       await _pump(tester, settings: null, fail: true);
 
-      expect(find.text('Diagnostics'), findsOneWidget);
       expect(find.byKey(const Key('settings-retry-row')), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
     });
