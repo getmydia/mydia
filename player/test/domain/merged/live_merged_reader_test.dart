@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/merged/merged_library_reader.dart';
 import 'package:player/domain/merged/merged_search.dart';
+import 'package:player/domain/sources/collection.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -106,5 +107,45 @@ void main() {
     expect(cw.value, hasLength(20));
     // Twenty distinct titles: no title used two places.
     expect(cw.value.map((i) => i.externalIds.tmdb).toSet(), hasLength(20));
+  });
+
+  test('favorites pages every server, dedupes and sorts by title', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final r = await LiveMergedReader([
+      FakeMergedSource(a, favPageSize: 1, favs: [
+        item(a, 'a1', title: 'Zephyr Lane'),
+        item(a, 'a2', title: 'Amber Coast', ids: const ExternalIds(tmdb: '3')),
+      ]),
+      FakeMergedSource(b, favs: [
+        item(b, 'b1', title: 'Amber Coast', ids: const ExternalIds(tmdb: '3')),
+        item(b, 'b2', title: 'Moss Hollow'),
+      ]),
+    ]).favorites();
+    expect(r.value.map((i) => i.title),
+        ['Amber Coast', 'Moss Hollow', 'Zephyr Lane']);
+    expect(r.extraCopies.values.single, 1);
+  });
+
+  test('favorites stops at the per-server cap', () async {
+    final a = fakeServer('a');
+    final r = await LiveMergedReader([
+      FakeMergedSource(a, favPageSize: 2, favs: [
+        for (var i = 0; i < 9; i++) item(a, 'a$i'),
+      ]),
+    ]).favorites(perSourceCap: 3);
+    expect(r.value, hasLength(3));
+  });
+
+  test('collections list every server in order; a failure is unavailable',
+      () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final r = await LiveMergedReader([
+      FakeMergedSource(a, cols: [
+        SourceCollection(sourceId: a.id, id: 'c1', name: 'Invented Saga'),
+      ]),
+      FakeMergedSource(b)..failWith = const SourceException.unreachable(),
+    ]).collections();
+    expect(r.value.map((c) => c.id), ['c1']);
+    expect(r.unavailable, [b.id]);
   });
 }
