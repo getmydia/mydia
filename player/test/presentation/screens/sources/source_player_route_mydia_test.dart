@@ -9,7 +9,7 @@ import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
-import 'package:player/presentation/screens/player/session/mydia_source_playback_session.dart';
+import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/screens/sources/source_player_route.dart';
 
@@ -66,12 +66,11 @@ void main() {
     expect(screen.fileId, 'offline');
   });
 
-  testWidgets('another Mydia instance gets the source session with refresh',
+  testWidgets('another Mydia instance gets the same session with every feature',
       (tester) async {
     final screen = await pump(tester, bound: const SourceId('other'));
     final session = screen.session;
-    expect(session, isA<MydiaSourcePlaybackSession>());
-    expect(session!.features, {PlaybackFeature.libraryRefresh});
-    expect(session.features, isNot(contains(PlaybackFeature.cast)));
+    expect(session, isA<MydiaPlaybackSession>());
+    expect(session!.features, PlaybackFeature.values.toSet());
   });
 }

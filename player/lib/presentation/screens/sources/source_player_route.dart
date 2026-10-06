@@ -93,7 +93,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
   /// The bound Mydia instance still plays through the player screen's own
   /// session (cast, library refresh, the Mydia connection, subtitle search,
   /// downloaded playback), which is what `/player/...` gave it before items
-  /// moved to this route. Every other instance uses [MydiaSourcePlaybackSession]
+  /// moved to this route. Every other instance uses [MydiaPlaybackSession]
   /// until the playback rewrite retires the difference.
   late final bool _usesBoundSession =
       ref.read(boundSourceIdProvider) == widget.sourceId;
@@ -115,6 +115,8 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       ),
       _params.fileId,
       proxy: () => ref.read(localProxyServiceProvider),
+      showId: _params.showId,
+      seasonNumber: _params.seasonNumber,
     );
   }();
 

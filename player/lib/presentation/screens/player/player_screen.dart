@@ -9,9 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import '../../../core/app_menu/now_playing.dart';
-import '../../../core/sources/current_source_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/sources/cache/source_rules.dart';
@@ -111,7 +109,6 @@ import '../../../core/settings/stats_overlay_setting.dart';
 import '../../../core/update/update_provider.dart';
 import '../settings/settings_controller.dart';
 import 'session/mydia_playback_session.dart';
-import 'session/mydia_streaming.dart';
 import 'session/playback_session.dart';
 import 'player_key_bindings.dart';
 import 'player_screen_views.dart';
@@ -126,8 +123,6 @@ import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
 import 'up_next_controller.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
-import '../../../core/sources/source.dart' show SourceId;
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -372,20 +367,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// once here, exactly like [_invalidator], and used by
   /// [_terminateHlsSession] instead of a `dispose()`-time `ref.read`.
   late final MediaProxy _mediaProxy;
-
-  /// The most recently resolved GraphQL client, kept in sync via
-  /// `ref.listenManual` rather than read in `dispose()`: a long
-  /// playback session can outlive a token refresh or reconnect that
-  /// produces a new client, so this is refreshed continuously rather than
-  /// captured once. Null until the first resolution completes;
-  /// [_terminateHlsSession] treats a still-null client the same as any
-  /// other best-effort failure (already caught and logged there). It also
-  /// backs [_session], whose methods read it at call time.
-  GraphQLClient? _graphqlClient;
-
-  /// The bound Mydia instance, kept in a field so a session read during
-  /// dispose never touches `ref`.
-  SourceId? _boundSourceId;
 
   /// Every GraphQL data call this screen makes goes through here.
   late final PlaybackSession _session;
@@ -1056,45 +1037,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // initialization branches must honour that, not just the streaming one.
     _resumeOverrideSeconds = widget.resumeSeconds;
 
-    // Set up before `_initializePlayer` so it is live for the whole widget
-    // lifetime, regardless of which playback branch runs (offline,
-    // already-downloaded, or streaming) — `_terminateHlsSession` is called
-    // unconditionally from `dispose()` no matter which branch was taken.
-    ref.listenManual<AsyncValue<GraphQLClient>>(
-      asyncGraphqlClientProvider,
-      (previous, next) => next.whenData((client) => _graphqlClient = client),
-      fireImmediately: true,
-    );
-    ref.listenManual<SourceId?>(
-      boundSourceIdProvider,
-      (previous, next) => _boundSourceId = next,
-      fireImmediately: true,
-    );
-    _session = widget.session ??
-        MydiaPlaybackSession(
-          client: () => _graphqlClient,
-          awaitClient: () => ref.read(asyncGraphqlClientProvider.future),
-          target: () => PlaybackTarget(
-            mediaType: widget.mediaType,
-            mediaId: widget.mediaId,
-            fileId: widget.fileId,
-            showId: widget.showId,
-            seasonNumber: widget.seasonNumber,
-          ),
-          sourceId: () => _boundSourceId,
-          offline: () =>
-              isOffline(ref.read(boundMydiaProvider)?.statusListenable.value),
-          streaming: MydiaStreamingDeps(
-            serverUrl: () => ref.read(serverUrlProvider.future),
-            authToken: () => ref.read(authTokenProvider.future),
-            connection: () => ref.read(conn.connectionProvider),
-            mediaProxy: () => ref.read(mediaProxyProvider),
-            mediaToken: () async =>
-                ref.read(boundMydiaClientProvider)?.ensureValidMediaToken(),
-            adoptClient: (client) => _graphqlClient = client,
-            boundClient: () => ref.read(boundMydiaClientProvider),
-          ),
-        );
+    _session =
+        widget.session ?? (throw StateError('PlayerScreen needs a session'));
 
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
@@ -3742,8 +3686,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// mounts the new route before disposing the old one), so an unconditional
   /// stop here would close the server it streams from.
   ///
-  /// Reads only the fields captured in [initState] ([_mediaProxy],
-  /// [_graphqlClient]) — never `ref` directly. This
+  /// Reads only the fields captured in [initState] ([_mediaProxy]) — never
+  /// `ref` directly. This
   /// runs from `dispose()` (as well as the web beforeunload handler), and
   /// `ref.read`/`ref.watch` unconditionally throw once `dispose()` has
   /// started: `BuildContext.mounted` is already `false` throughout it, a
