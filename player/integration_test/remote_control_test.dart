@@ -82,7 +82,6 @@ import 'package:player/app.dart';
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/channels/pairing_service.dart';
-import 'package:player/core/graphql/client.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
@@ -438,9 +437,7 @@ void main() {
 
     final targetController = RemoteTargetController();
     final receiver = RemoteControlReceiver(
-      roster: RemoteRoster(
-          client: createGraphQLClient(
-              adminApi.mydiaUrl, bResult.credentials!.accessToken)),
+      roster: RemoteRoster(client: bClient),
       targetName: 'Player B (E2E target)',
       snapshotSource: targetController.snapshot,
       onIntent: targetController.submit,

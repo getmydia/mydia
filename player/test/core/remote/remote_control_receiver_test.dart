@@ -6,6 +6,8 @@ import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/stub_link_transport.dart';
+import '../sources/mydia/fake_mydia_client.dart';
 
 const _capabilities = FlutterTargetCapabilities(
   volume: true,
@@ -38,7 +40,7 @@ FlutterPlaybackSnapshot playingSnapshot() => FlutterPlaybackSnapshot(
 
 /// A roster stub backed by a StubLink, so the real query path is exercised.
 RemoteRoster rosterAllowing(List<String> nodeIds) => RemoteRoster(
-      client: stubClient(StubLink.responses([
+      client: fakeMydiaClient(StubLinkTransport(StubLink.responses([
         {
           // Root `__typename` included: without it the normalized cache
           // refuses the write and the query reports a spurious exception.
@@ -54,7 +56,7 @@ RemoteRoster rosterAllowing(List<String> nodeIds) => RemoteRoster(
               }
           ],
         },
-      ])),
+      ]))),
       now: () => DateTime(2026, 8, 20, 12, 0),
     );
 

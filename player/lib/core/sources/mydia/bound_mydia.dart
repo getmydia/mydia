@@ -37,6 +37,17 @@ final boundMydiaProvider = Provider<MydiaSource?>((ref) {
 final boundMydiaClientProvider =
     Provider<MydiaClient?>((ref) => ref.watch(boundMydiaProvider)?.client);
 
+/// The bound client once the stored sources and the migrated instance id have
+/// loaded, for startup code that must not conclude "none bound" too early.
+/// Errors when no Mydia server is bound.
+final asyncBoundMydiaClientProvider = FutureProvider<MydiaClient>((ref) async {
+  await ref.watch(sourceRecordsProvider.future);
+  await ref.watch(legacyInstanceIdProvider.future);
+  final client = ref.watch(boundMydiaClientProvider);
+  if (client == null) throw StateError('No Mydia server');
+  return client;
+});
+
 /// The id of the bound account, which stays the same across its token
 /// refreshes. Null with none bound.
 final boundAccountIdProvider = Provider<String?>(

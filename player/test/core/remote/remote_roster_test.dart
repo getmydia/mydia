@@ -3,8 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart' show Request;
 import 'package:player/core/remote/remote_roster.dart';
+import 'package:player/domain/sources/source_error.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/stub_link_transport.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 /// The root `__typename` is not decoration: without it the normalized cache
 /// refuses to write the result and the query reports a spurious exception,
@@ -32,7 +36,7 @@ Map<String, dynamic> device(
     };
 
 RemoteRoster rosterWith(StubLink link, DateTime Function() now) => RemoteRoster(
-      client: stubClient(link),
+      client: fakeMydiaClient(StubLinkTransport(link)),
       now: now,
     );
 
@@ -204,6 +208,44 @@ void main() {
 
       expect(link.requests.where(asksForOnline).length, 1,
           reason: 'an old server is detected once, not re-asked every scan');
+    });
+
+    test('stops asking for OnlineDevices once the server refused the field',
+        () async {
+      final server = FakeMydiaTransport();
+      server.handlers['OnlineDevices'] = (_) =>
+          throw const SourceException.server(
+              'Cannot query field "online" on type "RemoteDevice".');
+      server.handlers['Devices'] = (_) => devicesResponse([
+            device('d1', 'Hall Screen', 'a' * 64),
+          ]);
+      final roster = RemoteRoster(
+        client: fakeMydiaClient(server),
+        now: () => fixedClock,
+      );
+
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+      expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
+
+      expect(server.calls.where((c) => c.operation == 'OnlineDevices'),
+          hasLength(1));
+    });
+
+    test('an unreachable server is not mistaken for an old one', () async {
+      final server = FakeMydiaTransport();
+      server.unreachable = true;
+      final roster = RemoteRoster(
+        client: fakeMydiaClient(server),
+        now: () => fixedClock,
+      );
+
+      expect(await roster.onlineEntries(), isEmpty);
+      expect(await roster.onlineEntries(), isEmpty);
+
+      expect(server.calls.where((c) => c.operation == 'OnlineDevices'),
+          hasLength(2),
+          reason: 'a transient failure keeps asking for OnlineDevices');
     });
 
     test('recognises the unknown-field error when it arrives over p2p',

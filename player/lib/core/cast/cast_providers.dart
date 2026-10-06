@@ -96,7 +96,7 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;
-  final client = ref.watch(graphqlClientProvider);
+  final client = ref.watch(boundMydiaClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;
 
@@ -155,7 +155,7 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;
-  final client = ref.watch(graphqlClientProvider);
+  final client = ref.watch(boundMydiaClientProvider);
 
   if (host == null || selfNodeId == null || client == null) return null;
 
@@ -222,7 +222,7 @@ final ambientPlayingProvider =
 /// this provider adds a fourth, so it does not introduce a new inconsistency.
 final remoteDeviceNamesProvider =
     FutureProvider<Map<String, String>>((ref) async {
-  final client = ref.watch(graphqlClientProvider);
+  final client = ref.watch(boundMydiaClientProvider);
   if (client == null) return const {};
 
   final entries = await RemoteRoster(client: client).entries();

@@ -22,6 +22,7 @@ import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
 import 'core/graphql/graphql_provider.dart';
+import 'core/sources/mydia/bound_mydia.dart';
 import 'core/graphql/watch/resume_gate.dart';
 import 'core/graphql/watch/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
@@ -348,7 +349,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // step: doing it inline meant a node id or GraphQL client that had not
       // arrived yet left this device unregistered, and therefore invisible to
       // every other device, for the rest of the session.
-      final client = await ref.read(asyncGraphqlClientProvider.future);
+      final client = await ref.read(asyncBoundMydiaClientProvider.future);
 
       final targetController = ref.read(remoteTargetControllerProvider);
       final receiver = RemoteControlReceiver(

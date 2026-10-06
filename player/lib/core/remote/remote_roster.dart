@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart' show debugPrint, immutable;
-import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../domain/sources/source_error.dart';
 import '../../graphql/queries/online_devices.graphql.dart';
+import '../sources/mydia/mydia_client.dart';
+import '../sources/mydia/schema_downgrade.dart';
 
 /// How long a fetched roster is treated as current.
 const _rosterTtl = Duration(minutes: 15);
@@ -33,7 +35,7 @@ class RemoteDeviceEntry {
 /// picker list and the target reads it as an access control list, so the two
 /// cannot drift apart.
 class RemoteRoster {
-  final GraphQLClient _client;
+  final MydiaClient _client;
   final DateTime Function() _now;
 
   List<RemoteDeviceEntry> _entries = const [];
@@ -43,15 +45,10 @@ class RemoteRoster {
   bool _onlineUnsupported = false;
 
   RemoteRoster({
-    required GraphQLClient client,
+    required MydiaClient client,
     DateTime Function()? now,
   })  : _client = client,
         _now = now ?? DateTime.now;
-
-  /// What a server that predates `online` answers. Absinthe words it
-  /// `Cannot query field "online" on type "RemoteDevice".`, and over p2p the
-  /// same text arrives inside an `Exception: ...` message.
-  static const _unknownOnlineFieldMarker = 'Cannot query field "online"';
 
   /// Devices that can actually be dialed. A device with no node ID has never
   /// reported one, so it is omitted rather than listed as permanently
@@ -78,30 +75,21 @@ class RemoteRoster {
     if (_onlineUnsupported) return entries();
 
     try {
-      final result = await _client.query(
-        QueryOptions(
-          document: documentNodeQueryOnlineDevices,
-          fetchPolicy: FetchPolicy.noCache,
-        ),
-      );
-
-      if (result.hasException) {
-        final error = result.exception.toString();
-        if (error.contains(_unknownOnlineFieldMarker)) {
-          debugPrint(
-            '[RemoteRoster] server has no online field, scanning every device',
-          );
-          _onlineUnsupported = true;
-          return await entries();
-        }
-        debugPrint('[RemoteRoster] online fetch failed: $error');
-        return _lastOnline;
-      }
-
+      final data = await _client.request(documentNodeQueryOnlineDevices);
       _lastOnline = _parseDevices(
-        result.data,
+        data,
         keep: (device) => device['online'] == true,
       );
+      return _lastOnline;
+    } on SourceException catch (error) {
+      if (isUnknownFieldError(error)) {
+        debugPrint(
+          '[RemoteRoster] server has no online field, scanning every device',
+        );
+        _onlineUnsupported = true;
+        return await entries();
+      }
+      debugPrint('[RemoteRoster] online fetch failed: $error');
       return _lastOnline;
     } catch (error) {
       debugPrint('[RemoteRoster] online fetch threw: $error');
@@ -160,19 +148,11 @@ class RemoteRoster {
   /// a momentary server blip does not lock out every controller.
   Future<void> refresh() async {
     try {
-      final result = await _client.query(
-        QueryOptions(
-            document: documentNodeQueryDevices,
-            fetchPolicy: FetchPolicy.noCache),
-      );
-
-      if (result.hasException) {
-        debugPrint('[RemoteRoster] refresh failed: ${result.exception}');
-        return;
-      }
-
-      _entries = _parseDevices(result.data);
+      final data = await _client.request(documentNodeQueryDevices);
+      _entries = _parseDevices(data);
       _fetchedAt = _now();
+    } on SourceException catch (error) {
+      debugPrint('[RemoteRoster] refresh failed: $error');
     } catch (error) {
       debugPrint('[RemoteRoster] refresh threw: $error');
     }

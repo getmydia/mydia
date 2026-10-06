@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/stub_link_transport.dart';
+import '../sources/mydia/fake_mydia_client.dart';
 
 /// A P2PHost-typed value for tests. None of its methods are called: the
 /// providers under test only check `host != null` and hand it to a
@@ -86,10 +88,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -124,10 +126,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -156,10 +158,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -186,10 +188,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -222,10 +224,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -256,8 +258,8 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{
               '__typename': 'Query',
               'devices': [
@@ -266,7 +268,7 @@ void main() {
                 _device('attic-tablet', 'c' * 64, online: false),
               ],
             },
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
@@ -289,10 +291,10 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        graphqlClientProvider.overrideWith(
-          (ref) => stubClient(StubLink.responses([
+        boundMydiaClientProvider.overrideWith(
+          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
             <String, dynamic>{'__typename': 'Query'},
-          ])),
+          ]))),
         ),
       ]);
       addTearDown(container.dispose);
