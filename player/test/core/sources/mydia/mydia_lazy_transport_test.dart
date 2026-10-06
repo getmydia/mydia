@@ -6,9 +6,9 @@ import 'package:gql/language.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
-import 'package:player/core/sources/mydia/mydia_guest_secrets.dart';
-import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_secrets.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -52,7 +52,7 @@ class _RecordingP2p extends P2pService {
 final _ping = parseString('query Ping { ok }');
 
 final _sourceProvider =
-    Provider<MydiaGuestSource>((ref) => buildGuestMydiaSource(ref, guest));
+    Provider<MydiaSource>((ref) => buildMydiaSource(ref, guest));
 
 ProviderContainer _container(
   _CountingStorage storage, {
@@ -73,10 +73,10 @@ void main() {
     final storage = _CountingStorage();
     final p2p = _RecordingP2p();
     final secrets = SourceSecrets(storage);
-    await writeGuestCredentials(
+    await writeMydiaCredentials(
         secrets,
         guest.account,
-        const MydiaGuestCredentials(
+        const MydiaCredentials(
             instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
     final c = _container(storage, p2p: p2p);
     expect(await c.read(_sourceProvider).client.request(_ping), {'ok': 1});
@@ -95,10 +95,10 @@ void main() {
           200,
           headers: {'content-type': 'application/json'});
     });
-    await writeGuestCredentials(
+    await writeMydiaCredentials(
         SourceSecrets(storage),
         guest.account,
-        const MydiaGuestCredentials(
+        const MydiaCredentials(
             instanceId: 'inst-2',
             accessToken: 'at',
             serverUrl: 'https://lakeside.example.test'));
@@ -112,10 +112,10 @@ void main() {
   test('a failed credentials read is not cached', () async {
     final storage = _CountingStorage();
     final p2p = _RecordingP2p();
-    await writeGuestCredentials(
+    await writeMydiaCredentials(
         SourceSecrets(storage),
         guest.account,
-        const MydiaGuestCredentials(
+        const MydiaCredentials(
             instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
     storage.reads = 0;
     // Read 1 is the client's, read 2 is the transport's.
@@ -138,10 +138,10 @@ void main() {
   test('concurrent first requests build one transport', () async {
     final storage = _CountingStorage();
     final p2p = _RecordingP2p();
-    await writeGuestCredentials(
+    await writeMydiaCredentials(
         SourceSecrets(storage),
         guest.account,
-        const MydiaGuestCredentials(
+        const MydiaCredentials(
             instanceId: 'inst-2', accessToken: 'at', nodeAddr: '{"id":"n1"}'));
     storage.reads = 0;
     final c = _container(storage, p2p: p2p);

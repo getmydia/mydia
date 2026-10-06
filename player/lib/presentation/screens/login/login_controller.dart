@@ -9,8 +9,8 @@ import '../../../core/auth/auth_service.dart';
 import '../../../core/auth/auth_storage.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
-import '../../../core/sources/mydia/guest_mydia_saver.dart';
-import '../../../core/sources/mydia/mydia_guest_credentials.dart';
+import '../../../core/sources/mydia/mydia_saver.dart';
+import '../../../core/sources/mydia/mydia_credentials.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart'
     show sourceSecretsProvider;
@@ -116,7 +116,7 @@ class GuestTarget {
 /// The viewer-facing message for a failure of the guest save, or null for
 /// any other error.
 String? _guestErrorMessage(Object e) => switch (e) {
-      GuestIsHomeException() => 'This is already your home server.',
+      ServerIsHomeException() => 'This is already your home server.',
       SourceException() => e.viewerMessage,
       _ => null,
     };
@@ -532,7 +532,7 @@ class LoginController extends _$LoginController {
     GuestTarget guest,
   ) =>
       _saveGuest(
-        MydiaGuestCredentials(
+        MydiaCredentials(
           instanceId: c.instanceId ?? '',
           accessToken: c.accessToken,
           mediaToken: c.mediaToken,
@@ -547,7 +547,7 @@ class LoginController extends _$LoginController {
 
   Future<void> _finishGuestLogin(LoginGranted g, GuestTarget guest) =>
       _saveGuest(
-        MydiaGuestCredentials(
+        MydiaCredentials(
           instanceId: '',
           accessToken: g.token,
           serverUrl: normalizeMydiaUrl(g.serverUrl),
@@ -557,12 +557,12 @@ class LoginController extends _$LoginController {
       );
 
   Future<void> _saveGuest(
-    MydiaGuestCredentials credentials,
+    MydiaCredentials credentials,
     GuestTarget guest, {
     ClaimCodeStatus? claimCodeStatus,
     String? claimCodeMessage,
   }) async {
-    final id = await saveGuestMydia(
+    final id = await saveMydiaServer(
       ref,
       credentials,
       reauthAccountId: guest.reauthAccountId,

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show debugPrint, immutable;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../graphql/queries/online_devices.graphql.dart';
+
 /// How long a fetched roster is treated as current.
 const _rosterTtl = Duration(minutes: 15);
 
@@ -46,33 +48,6 @@ class RemoteRoster {
   })  : _client = client,
         _now = now ?? DateTime.now;
 
-  static const _query = r'''
-    query Devices {
-      devices {
-        __typename
-        id
-        deviceName
-        platform
-        nodeId
-        isRevoked
-      }
-    }
-  ''';
-
-  static const _onlineQuery = r'''
-    query OnlineDevices {
-      devices {
-        __typename
-        id
-        deviceName
-        platform
-        nodeId
-        isRevoked
-        online
-      }
-    }
-  ''';
-
   /// What a server that predates `online` answers. Absinthe words it
   /// `Cannot query field "online" on type "RemoteDevice".`, and over p2p the
   /// same text arrives inside an `Exception: ...` message.
@@ -105,7 +80,7 @@ class RemoteRoster {
     try {
       final result = await _client.query(
         QueryOptions(
-          document: gql(_onlineQuery),
+          document: documentNodeQueryOnlineDevices,
           fetchPolicy: FetchPolicy.noCache,
         ),
       );
@@ -186,7 +161,9 @@ class RemoteRoster {
   Future<void> refresh() async {
     try {
       final result = await _client.query(
-        QueryOptions(document: gql(_query), fetchPolicy: FetchPolicy.noCache),
+        QueryOptions(
+            document: documentNodeQueryDevices,
+            fetchPolicy: FetchPolicy.noCache),
       );
 
       if (result.hasException) {

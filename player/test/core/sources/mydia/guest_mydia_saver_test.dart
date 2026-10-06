@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
-import 'package:player/core/sources/mydia/guest_mydia_saver.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_saver.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_records.dart';
@@ -44,8 +44,7 @@ final _refProvider = Provider<Ref>((ref) => ref);
 
 const _nodeAddr = '{"id":"node-abc","addrs":[]}';
 
-MydiaGuestCredentials _paired({String instanceId = 'inst-2'}) =>
-    MydiaGuestCredentials(
+MydiaCredentials _paired({String instanceId = 'inst-2'}) => MydiaCredentials(
       instanceId: instanceId,
       accessToken: 'access',
       mediaToken: 'media',
@@ -74,17 +73,17 @@ void main() {
     addTearDown(container.dispose);
   });
 
-  Future<MydiaGuestCredentials> storedCredentials(String accountId) async =>
-      MydiaGuestCredentials.fromJson(jsonDecode(
+  Future<MydiaCredentials> storedCredentials(String accountId) async =>
+      MydiaCredentials.fromJson(jsonDecode(
               (await secretStorage.read('source/$accountId/account_token'))!)
           as Map<String, dynamic>);
 
   Future<SourceId> save(
-    MydiaGuestCredentials c, {
+    MydiaCredentials c, {
     String? reauth,
   }) async {
     await container.read(sourceRecordsProvider.future);
-    return saveGuestMydia(
+    return saveMydiaServer(
       container.read(_refProvider),
       c,
       reauthAccountId: reauth,
@@ -115,7 +114,7 @@ void main() {
           'serverCompatibility': {'instanceId': 'reported-1'},
         };
     transport.validTokens = {'tok'};
-    final id = await save(const MydiaGuestCredentials(
+    final id = await save(const MydiaCredentials(
       instanceId: '',
       accessToken: 'tok',
       serverUrl: 'https://friend.example',
@@ -134,7 +133,7 @@ void main() {
 
   test('a URL login with no answer falls back to the URL hash', () async {
     transport.unreachable = true;
-    final id = await save(const MydiaGuestCredentials(
+    final id = await save(const MydiaCredentials(
       instanceId: '',
       accessToken: 'tok',
       serverUrl: 'https://friend.example/',
@@ -145,7 +144,7 @@ void main() {
 
   test('a p2p pairing with no id and no answer uses the node id', () async {
     transport.unreachable = true;
-    final id = await save(const MydiaGuestCredentials(
+    final id = await save(const MydiaCredentials(
       instanceId: '',
       accessToken: 'access',
       nodeAddr: _nodeAddr,
@@ -155,7 +154,7 @@ void main() {
 
   test("home's instance id is refused and nothing is written", () async {
     await homeStorage.write('instance_id', 'inst-2');
-    await expectLater(save(_paired()), throwsA(isA<GuestIsHomeException>()));
+    await expectLater(save(_paired()), throwsA(isA<ServerIsHomeException>()));
     expect(store.puts, 0);
     expect(secretStorage.keys, isEmpty);
   });
@@ -163,13 +162,13 @@ void main() {
   test("home's node id is refused", () async {
     await homeStorage.write('server_node_addr', _nodeAddr);
     await expectLater(save(_paired(instanceId: 'other')),
-        throwsA(isA<GuestIsHomeException>()));
+        throwsA(isA<ServerIsHomeException>()));
     expect(store.puts, 0);
   });
 
   test("home's URL is refused, a p2p home URL is skipped", () async {
     await homeStorage.write('server_url', 'p2p://abc');
-    final c = const MydiaGuestCredentials(
+    final c = const MydiaCredentials(
       instanceId: 'inst-9',
       accessToken: 't',
       serverUrl: 'https://Home.example/',
@@ -178,7 +177,7 @@ void main() {
     expect(store.puts, 1);
 
     await homeStorage.write('server_url', 'https://home.example');
-    await expectLater(save(c), throwsA(isA<GuestIsHomeException>()));
+    await expectLater(save(c), throwsA(isA<ServerIsHomeException>()));
     expect(store.puts, 1);
   });
 
@@ -199,7 +198,7 @@ void main() {
         );
     expect((await store.load()).accounts.single.account.needsReauth, isTrue);
 
-    await save(const MydiaGuestCredentials(
+    await save(const MydiaCredentials(
       instanceId: 'inst-2',
       accessToken: 'fresh',
       instanceName: 'Friends',

@@ -24,10 +24,10 @@ import 'connection/source_connection.dart';
 import 'media_source.dart';
 import 'mydia/home_mydia_transport.dart';
 import 'mydia/mydia_gql_transport.dart';
-import 'mydia/mydia_guest_client.dart';
-import 'mydia/mydia_guest_credentials.dart';
-import 'mydia/mydia_guest_secrets.dart';
-import 'mydia/mydia_guest_source.dart';
+import 'mydia/mydia_client.dart';
+import 'mydia/mydia_credentials.dart';
+import 'mydia/mydia_secrets.dart';
+import 'mydia/mydia_source.dart';
 import 'plex/plex_identity.dart';
 import 'plex/plex_media_source.dart';
 import 'plex/plex_server_client.dart';
@@ -46,7 +46,7 @@ MediaSource buildThirdPartySource(Ref ref, Source source) =>
       SourceKind.plex => _plex(ref, source),
       SourceKind.stash => _stash(ref, source),
       SourceKind.jellyfin => _jellyfin(ref, source),
-      SourceKind.mydia => buildGuestMydiaSource(ref, source),
+      SourceKind.mydia => buildMydiaSource(ref, source),
     };
 
 /// Home Mydia's connection status, from its auth state.
@@ -67,15 +67,16 @@ MediaSource buildHomeMydiaSource(Ref ref, Source source) {
   ref.listen<AsyncValue<AuthStatus>>(
       authStateProvider, (_, next) => status.value = homeMydiaStatus(next));
   ref.onDispose(status.dispose);
-  final client = MydiaGuestClient(
+  final client = buildMydiaClient(
+    ref,
     transport:
         HomeMydiaTransport(() => ref.read(asyncGraphqlClientProvider.future)),
     load: () async =>
-        const MydiaGuestCredentials(instanceId: 'home', accessToken: ''),
+        const MydiaCredentials(instanceId: 'home', accessToken: ''),
     save: (_) async {},
     onUnauthorized: () {},
   );
-  return MydiaGuestSource(
+  return MydiaSource(
     source: source,
     client: client,
     status: status,
@@ -300,40 +301,69 @@ Future<List<ServerConnection>> _rediscoverJellyfin(
   return fresh;
 }
 
-/// A guest Mydia server's source. Its credentials are read on first use, so
-/// the source builds synchronously.
-MydiaGuestSource buildGuestMydiaSource(Ref ref, Source source) {
-  final secrets = ref.read(sourceSecretsProvider);
-  Future<MydiaGuestCredentials> load() async =>
-      await readGuestCredentials(secrets, source.account) ??
-      (throw const SourceException.unauthorized());
-  final client = MydiaGuestClient(
-    transport: _LazyGuestTransport(ref, load),
+/// Builds a [MydiaClient] for [transport], wired to inject the session's
+/// device profile header once detected.
+MydiaClient buildMydiaClient(
+  Ref ref, {
+  required MydiaGqlTransport transport,
+  required Future<MydiaCredentials> Function() load,
+  required Future<void> Function(MydiaCredentials) save,
+  required void Function() onUnauthorized,
+  GetDeviceProfile? getDeviceProfile,
+}) {
+  final holder = ref.read(deviceProfileHolderProvider);
+  return MydiaClient(
+    transport: transport,
     load: load,
-    save: (c) => writeGuestCredentials(secrets, source.account, c),
+    save: save,
+    onUnauthorized: onUnauthorized,
+    getDeviceProfile: getDeviceProfile ?? () => holder.profile,
+  );
+}
+
+/// A Mydia server's source. Its credentials are read on first use, so
+/// the source builds synchronously.
+MydiaSource buildMydiaSource(Ref ref, Source source) {
+  final secrets = ref.read(sourceSecretsProvider);
+  Future<MydiaCredentials> load() async =>
+      await readMydiaCredentials(secrets, source.account) ??
+      (throw const SourceException.unauthorized());
+  final client = buildMydiaClient(
+    ref,
+    transport: _LazyMydiaTransport(ref, load),
+    load: load,
+    save: (c) => writeMydiaCredentials(secrets, source.account, c),
     onUnauthorized: () => _flagReauth(ref, source),
   );
-  return MydiaGuestSource(
+  return MydiaSource(
     source: source,
     client: client,
     proxy: () => ref.read(localProxyServiceProvider),
   );
 }
 
+@Deprecated('Use buildMydiaSource instead')
+MydiaSource buildGuestMydiaSource(Ref ref, Source source) =>
+    buildMydiaSource(ref, source);
+
 /// How [c]'s server is reached: p2p to its node, else HTTP to its URL.
-MydiaGqlTransport guestTransportFor(Ref ref, MydiaGuestCredentials c) => c.isP2p
+MydiaGqlTransport mydiaTransportFor(Ref ref, MydiaCredentials c) => c.isP2p
     ? P2pMydiaTransport(
         p2p: ref.read(p2pServiceProvider), nodeAddr: c.nodeAddr!)
     : HttpMydiaTransport(
         serverUrl: c.serverUrl!, http: ref.read(sourceHttpProvider));
 
+@Deprecated('Use mydiaTransportFor instead')
+MydiaGqlTransport guestTransportFor(Ref ref, MydiaCredentials c) =>
+    mydiaTransportFor(ref, c);
+
 /// Builds the real transport from the stored credentials on first use and
 /// keeps it. A failed load is not kept: the next request tries again.
-class _LazyGuestTransport implements MydiaGqlTransport {
-  _LazyGuestTransport(this._ref, this._load);
+class _LazyMydiaTransport implements MydiaGqlTransport {
+  _LazyMydiaTransport(this._ref, this._load);
 
   final Ref _ref;
-  final Future<MydiaGuestCredentials> Function() _load;
+  final Future<MydiaCredentials> Function() _load;
   Future<MydiaGqlTransport>? _transport;
 
   /// One build for concurrent first requests; a failure clears it.
@@ -346,7 +376,7 @@ class _LazyGuestTransport implements MydiaGqlTransport {
       );
 
   Future<MydiaGqlTransport> _build() async {
-    return guestTransportFor(_ref, await _load());
+    return mydiaTransportFor(_ref, await _load());
   }
 
   @override
@@ -357,6 +387,8 @@ class _LazyGuestTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async =>
-      (await _resolve()).send(query, variables, token: token);
+      (await _resolve())
+          .send(query, variables, token: token, deviceProfile: deviceProfile);
 }

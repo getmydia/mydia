@@ -10,7 +10,7 @@ import '../../../core/downloads/download_service.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
-import '../../../core/sources/mydia/mydia_guest_secrets.dart';
+import '../../../core/sources/mydia/mydia_secrets.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
@@ -31,7 +31,7 @@ Future<void> unwatchGuestPeer(
 ) async {
   if (account.kind != SourceKind.mydia) return;
   try {
-    final nodeAddr = (await readGuestCredentials(secrets, account))?.nodeAddr;
+    final nodeAddr = (await readMydiaCredentials(secrets, account))?.nodeAddr;
     if (nodeAddr != null) p2p.unwatchPeer(nodeAddr);
   } catch (e) {
     debugPrint('[Sources] Could not stop watching the guest peer: $e');

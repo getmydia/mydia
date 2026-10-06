@@ -3751,7 +3751,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// core Flutter invariant. Before this, every call from `dispose()` threw
   /// on its very first line, before doing any of the cleanup below.
   Future<void> _terminateHlsSession() async {
-    // Releases every target this screen took (home, or a guest instance's)
+    // Releases every target this screen took (home, or another instance's)
     // rather than stopping the proxy outright. On a next-episode navigation
     // the incoming screen has already started it — Flutter mounts the new
     // route before disposing the old one — so an unconditional stop here

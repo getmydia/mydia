@@ -1,8 +1,9 @@
-/// How a guest Mydia's GraphQL travels: HTTP to its URL, or p2p to its node.
+/// How a Mydia server's GraphQL travels: HTTP to its URL, or p2p to its node.
 library;
 
 import '../../../domain/sources/source_error.dart';
 import '../../p2p/p2p_service.dart';
+import '../../player/device_profile.dart';
 import '../media_source.dart';
 import '../source_http.dart';
 
@@ -14,6 +15,7 @@ abstract interface class MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   });
 
   /// The status a successful request reports.
@@ -44,11 +46,15 @@ class HttpMydiaTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async {
     final body = await _http.json(
       'POST',
       _url,
-      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+        if (deviceProfile != null) DeviceProfile.headerName: deviceProfile,
+      },
       body: {'query': query, 'variables': variables},
     );
     if (body is! Map<String, dynamic>) {
@@ -87,6 +93,7 @@ class P2pMydiaTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async {
     try {
       return await _p2p.sendGraphQLRequest(
@@ -94,6 +101,7 @@ class P2pMydiaTransport implements MydiaGqlTransport {
         query: query,
         variables: variables,
         authToken: token,
+        deviceProfile: deviceProfile,
       );
     } on P2pGraphQLError catch (e) {
       if (isMydiaAuthError(e.message)) {

@@ -7,18 +7,18 @@ import '../../../../core/p2p/local_proxy_service.dart';
 import '../../../../core/player/device_profile.dart';
 import '../../../../core/sources/jellyfin/jellyfin_media_source.dart';
 import '../../../../core/sources/media_source.dart';
-import '../../../../core/sources/mydia/mydia_guest_source.dart';
+import '../../../../core/sources/mydia/mydia_source.dart';
 import '../../../../core/sources/plex/plex_media_source.dart';
 import '../../../../core/sources/stash/stash_media_source.dart';
 import '../../../../domain/sources/item.dart';
 import 'jellyfin_playback_session.dart';
-import 'mydia_guest_playback_session.dart';
+import 'mydia_source_playback_session.dart';
 import 'playback_session.dart';
 import 'plex_playback_session.dart';
 import 'stash_playback_session.dart';
 
-/// Null for a source this app cannot play from, which includes a guest
-/// Mydia when [proxy] is not given.
+/// Null for a source this app cannot play from, which includes a
+/// Mydia source when [proxy] is not given.
 PlaybackSession? playbackSessionFor(
   MediaSource source,
   ItemRef item,
@@ -40,7 +40,7 @@ PlaybackSession? playbackSessionFor(
           fileId: fileId,
           profile: DeviceProfileHolder.instance.profile,
         ),
-      MydiaGuestSource() when proxy != null => MydiaGuestPlaybackSession(
+      MydiaSource() when proxy != null => MydiaSourcePlaybackSession(
           source: source,
           item: item,
           fileId: fileId,

@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_route.dart';
-import 'package:player/core/sources/mydia/mydia_guest_client.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
-import 'package:player/core/sources/mydia/mydia_guest_source.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/mydia/mydia_transcode_job.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download_plan.dart';
@@ -12,16 +12,16 @@ import 'package:player/domain/sources/source_error.dart';
 
 import '../../downloads/download_test_harness.dart';
 import 'fake_mydia_transport.dart';
-import 'mydia_guest_source_test.dart' show guest, sid;
+import 'mydia_source_test.dart' show guest, sid;
 
 const _movie = ItemRef(sourceId: sid, kind: ItemKind.movie, externalId: 'm-1');
 
-const _http = MydiaGuestCredentials(
+const _http = MydiaCredentials(
   instanceId: 'inst-2',
   accessToken: 'secret-token',
   serverUrl: 'https://lake.example//',
 );
-const _p2p = MydiaGuestCredentials(
+const _p2p = MydiaCredentials(
   instanceId: 'inst-2',
   accessToken: 'secret-token',
   nodeAddr: '{"id":"abc"}',
@@ -33,9 +33,9 @@ void main() {
   setUp(() => proxy = LocalProxyService.forTesting());
   tearDown(() => proxy.shutdown());
 
-  MydiaGuestSource guestSource(MydiaGuestCredentials creds) => MydiaGuestSource(
+  MydiaSource guestSource(MydiaCredentials creds) => MydiaSource(
         source: guest,
-        client: MydiaGuestClient(
+        client: MydiaClient(
           transport: FakeMydiaTransport(),
           load: () async => creds,
           save: (_) async {},
@@ -44,7 +44,7 @@ void main() {
         proxy: () => proxy,
       );
 
-  Future<DirectFile> fileOf(MydiaGuestSource source) async {
+  Future<DirectFile> fileOf(MydiaSource source) async {
     final plan = await source.resolve(_movie, 'original') as TranscodeJob;
     return plan.file('job-7');
   }
@@ -60,8 +60,8 @@ void main() {
     });
 
     test('HTTP without a server URL is unreachable', () async {
-      const creds = MydiaGuestCredentials(
-          instanceId: 'inst-2', accessToken: 'secret-token');
+      const creds =
+          MydiaCredentials(instanceId: 'inst-2', accessToken: 'secret-token');
       expect(
         fileOf(guestSource(creds)),
         throwsA(isA<SourceException>()
@@ -100,9 +100,9 @@ void main() {
 
   group('home source', () {
     // Home passes `homeJobs`; the guest client and proxy must stay unused.
-    MydiaGuestSource home(FakeDownloadJobService? jobs) => MydiaGuestSource(
+    MydiaSource home(FakeDownloadJobService? jobs) => MydiaSource(
           source: Source.legacyMydia(),
-          client: MydiaGuestClient(
+          client: MydiaClient(
             transport: FakeMydiaTransport(),
             load: () async => throw StateError('home never loads guest creds'),
             save: (_) async {},

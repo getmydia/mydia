@@ -22,6 +22,7 @@ class HomeMydiaTransport implements MydiaGqlTransport {
     String query,
     Map<String, dynamic> variables, {
     String? token,
+    String? deviceProfile,
   }) async {
     final GraphQLClient client;
     try {

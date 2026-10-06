@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/mydia/mydia_guest_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
 
 void main() {
-  const p2p = MydiaGuestCredentials(
+  const p2p = MydiaCredentials(
     instanceId: 'inst-2',
     instanceName: 'Lakeside',
     accessToken: 'access',
@@ -12,7 +12,13 @@ void main() {
   );
 
   test('round-trips through JSON', () {
-    expect(MydiaGuestCredentials.fromJson(p2p.toJson()), p2p);
+    expect(MydiaCredentials.fromJson(p2p.toJson()), p2p);
+  });
+
+  test('round-trips through JSON with mediaTokenExpiry', () {
+    final expiry = DateTime.parse('2026-10-06T12:00:00.000Z');
+    final creds = p2p.copyWith(mediaTokenExpiry: expiry);
+    expect(MydiaCredentials.fromJson(creds.toJson()), creds);
   });
 
   test('a p2p guest exposes its node id', () {
@@ -21,7 +27,7 @@ void main() {
   });
 
   test('a URL guest is not p2p', () {
-    const direct = MydiaGuestCredentials(
+    const direct = MydiaCredentials(
         instanceId: 'u1', accessToken: 'a', serverUrl: 'https://m.example');
     expect(direct.isP2p, isFalse);
     expect(direct.nodeId, isNull);

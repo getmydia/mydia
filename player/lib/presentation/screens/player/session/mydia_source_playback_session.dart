@@ -1,9 +1,9 @@
-/// Playing an item from a guest Mydia server: the file's own bytes for
-/// direct play, an HLS session the guest starts for copy and transcode, and
-/// progress written back to the guest's own account of the viewer.
+/// Playing an item from a Mydia server: the file's own bytes for
+/// direct play, an HLS session the server starts for copy and transcode, and
+/// progress written back to the server's own account of the viewer.
 ///
-/// A guest reached by URL is played over plain HTTP with a bearer token. A
-/// paired guest has no address to dial, so its bytes travel through its own
+/// A server reached by URL is played over plain HTTP with a bearer token. A
+/// paired server has no address to dial, so its bytes travel through its own
 /// target on the local media proxy.
 library;
 
@@ -18,9 +18,9 @@ import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/periodic_progress_reporter.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/sources/mydia/guest_proxy.dart';
-import '../../../../core/sources/mydia/mydia_guest_client.dart';
-import '../../../../core/sources/mydia/mydia_guest_credentials.dart';
-import '../../../../core/sources/mydia/mydia_guest_source.dart';
+import '../../../../core/sources/mydia/mydia_client.dart';
+import '../../../../core/sources/mydia/mydia_credentials.dart';
+import '../../../../core/sources/mydia/mydia_source.dart';
 import '../../../../core/sources/source_http.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/source_error.dart';
@@ -34,23 +34,23 @@ import 'jellyfin_playback_session.dart' show jellyfinCandidates;
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 
-class MydiaGuestPlaybackSession extends SourcePlaybackSession {
-  MydiaGuestPlaybackSession({
-    required MydiaGuestSource source,
+class MydiaSourcePlaybackSession extends SourcePlaybackSession {
+  MydiaSourcePlaybackSession({
+    required MydiaSource source,
     required super.item,
     required super.fileId,
     required LocalProxyService Function() proxy,
     SourceHttp? http,
-  })  : _guest = source,
+  })  : _source = source,
         _proxy = proxy,
         _http = http ?? SourceHttp(),
         super(source: source);
 
-  final MydiaGuestSource _guest;
+  final MydiaSource _source;
   final LocalProxyService Function() _proxy;
   final SourceHttp _http;
 
-  MydiaGuestClient get _client => _guest.client;
+  MydiaClient get _client => _source.client;
 
   Future<List<CandidateStrategy>>? _streaming;
   List<CandidateStrategy>? _offered;
@@ -61,7 +61,7 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
 
   bool get _isEpisode => item.kind == ItemKind.episode;
 
-  /// What the guest says it can serve for this item, fetched once. A failure
+  /// What the server says it can serve for this item, fetched once. A failure
   /// is not cached.
   Future<List<CandidateStrategy>> _streamingCandidates() {
     final cached = _streaming;
@@ -128,7 +128,7 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
   List<CandidateStrategy> candidatesFor(MediaVersion version) =>
       _offered ?? jellyfinCandidates(version, null);
 
-  /// A p2p guest cannot serve sidecar subtitle files ([fetchText] refuses
+  /// A p2p server cannot serve sidecar subtitle files ([fetchText] refuses
   /// them), so it lists none rather than tracks that can never load.
   @override
   Future<PlaybackDetail?> detail() async {
@@ -161,7 +161,7 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
   }
 
   @override
-  ProgressReporter createProgress() => MydiaGuestProgressReporter(
+  ProgressReporter createProgress() => MydiaSourceProgressReporter(
         client: _client,
         itemId: item.externalId,
         isEpisode: _isEpisode,
@@ -169,11 +169,11 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
 
   @override
   StreamResolver createResolver(ItemDetail detail, MediaVersion version) =>
-      MydiaGuestStreamResolver(
+      MydiaSourceStreamResolver(
         client: _client,
         proxy: _proxy,
         owner: _owner,
-        target: _guest.source.account.id,
+        target: _source.source.account.id,
       );
 
   @override
@@ -182,31 +182,31 @@ class MydiaGuestPlaybackSession extends SourcePlaybackSession {
     MediaVersion version, {
     String? burnSubtitleStreamId,
   }) =>
-      throw UnsupportedError('Guest Mydia servers do not cast.');
+      throw UnsupportedError('Mydia sources do not cast.');
 }
 
-class MydiaGuestStreamResolver implements StreamResolver {
-  MydiaGuestStreamResolver({
+class MydiaSourceStreamResolver implements StreamResolver {
+  MydiaSourceStreamResolver({
     required this.client,
     required this.proxy,
     required this.owner,
     required this.target,
   });
 
-  final MydiaGuestClient client;
+  final MydiaClient client;
   final LocalProxyService Function() proxy;
 
   /// Holds the proxy target: the player screen, which releases it on exit.
   /// Null until `prepareStreaming` has named one.
   final Object? owner;
 
-  /// The proxy target key, the guest's account id.
+  /// The proxy target key, the server's account id.
   final String target;
 
-  /// The proxy base for a paired guest, starting its target on first use. A
+  /// The proxy base for a paired server, starting its target on first use. A
   /// repeat start re-targets with the credentials as they are now, which
   /// picks up a refreshed token.
-  Future<String> _proxyBase(MydiaGuestCredentials credentials) async {
+  Future<String> _proxyBase(MydiaCredentials credentials) async {
     final holder = owner;
     if (holder == null) {
       // A hold keyed on anything but the screen could never be released.
@@ -272,7 +272,7 @@ class MydiaGuestStreamResolver implements StreamResolver {
           url: viaProxy
               ? MediaRoutes.hls(base, sessionId)
               : '$base/api/v1/hls/$sessionId/index.m3u8',
-          // The guest's HLS routes need the token too; the proxy adds its
+          // The server's HLS routes need the token too; the proxy adds its
           // own when the bytes travel over p2p.
           headers: viaProxy
               ? const {}
@@ -288,19 +288,19 @@ class MydiaGuestStreamResolver implements StreamResolver {
       await client.request(
           documentNodeMutationEndStreamingSession, {'sessionId': sessionId});
     } catch (_) {
-      // Best effort: the guest reaps idle sessions itself.
+      // Best effort: the server reaps idle sessions itself.
     }
   }
 }
 
-class MydiaGuestProgressReporter extends PeriodicProgressReporter {
-  MydiaGuestProgressReporter({
+class MydiaSourceProgressReporter extends PeriodicProgressReporter {
+  MydiaSourceProgressReporter({
     required this.client,
     required this.itemId,
     required this.isEpisode,
   });
 
-  final MydiaGuestClient client;
+  final MydiaClient client;
   final String itemId;
   final bool isEpisode;
 

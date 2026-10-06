@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../graphql/mutations/register_device_node.graphql.dart';
+
 /// Tells the server which iroh node ID this device is currently reachable at.
 ///
 /// Runs on every app start rather than only at pairing. A device that
@@ -16,16 +18,6 @@ class NodeRegistration {
   })  : _client = client,
         _nodeId = nodeId;
 
-  static const _mutation = r'''
-    mutation RegisterDeviceNode($nodeId: String!) {
-      registerDeviceNode(nodeId: $nodeId) {
-        __typename
-        id
-        nodeId
-      }
-    }
-  ''';
-
   /// Whether the server now knows where to reach this device.
   ///
   /// Never throws. A player that cannot register is merely uncontrollable,
@@ -38,8 +30,8 @@ class NodeRegistration {
 
       final result = await _client.mutate(
         MutationOptions(
-          document: gql(_mutation),
-          variables: {'nodeId': id},
+          document: documentNodeMutationRegisterDeviceNode,
+          variables: Variables$Mutation$RegisterDeviceNode(nodeId: id).toJson(),
           fetchPolicy: FetchPolicy.noCache,
         ),
       );

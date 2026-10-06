@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/mydia/mydia_guest_mapping.dart';
+import 'package:player/core/sources/mydia/mydia_mapping.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 

@@ -1,4 +1,4 @@
-/// A guest Mydia server browsed as a source.
+/// A Mydia server browsed as a source.
 library;
 
 import 'dart:async';
@@ -18,9 +18,9 @@ import '../../../graphql/mutations/toggle_favorite.graphql.dart';
 import '../../../graphql/mutations/update_episode_progress.graphql.dart';
 import '../../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
-import '../../../graphql/queries/guest_mydia.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
+import '../../../graphql/queries/mydia_queries.dart';
 import '../../../graphql/queries/search.graphql.dart';
 import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/queries/show_detail.graphql.dart';
@@ -32,8 +32,8 @@ import '../source.dart';
 import '../../downloads/download_job_service.dart';
 import 'guest_download_job_service.dart';
 import 'guest_proxy.dart';
-import 'mydia_guest_client.dart';
-import 'mydia_guest_mapping.dart';
+import 'mydia_client.dart';
+import 'mydia_mapping.dart';
 import 'mydia_transcode_job.dart';
 
 const _sorts = [
@@ -67,7 +67,7 @@ ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
   );
 }
 
-class MydiaGuestSource extends MediaSource
+class MydiaSource extends MediaSource
     implements
         WatchedState,
         Searchable,
@@ -79,7 +79,7 @@ class MydiaGuestSource extends MediaSource
         SkipSegments,
         Downloadable,
         ProgressSync {
-  MydiaGuestSource({
+  MydiaSource({
     required this.source,
     required this.client,
     this.proxy,
@@ -91,7 +91,7 @@ class MydiaGuestSource extends MediaSource
 
   @override
   final Source source;
-  final MydiaGuestClient client;
+  final MydiaClient client;
 
   /// The shared local proxy, which carries a paired guest's file bytes.
   /// Required to download from a paired guest; home never uses it.
@@ -103,8 +103,7 @@ class MydiaGuestSource extends MediaSource
   /// service or [proxy]. A guest leaves it null.
   final DownloadJobService? Function()? homeJobs;
 
-  /// Overrides [MydiaGuestClient.status] when the connection is owned
-  /// elsewhere: home Mydia's follows its auth state.
+  /// Overrides [MydiaClient.status] when the connection is owned
   final ValueListenable<SourceConnectionStatus>? _status;
   final void Function()? _onDispose;
 
@@ -220,7 +219,7 @@ class MydiaGuestSource extends MediaSource
         _sorts.where((o) => o.id == query.sortId).firstOrNull ?? _sorts.first;
     final descending = query.descending ?? sort.descendingByDefault;
     final data = await _q(
-      isMovies ? documentNodeQueryGuestMovies : documentNodeQueryGuestTvShows,
+      isMovies ? documentNodeQueryMydiaMovies : documentNodeQueryMydiaTvShows,
       {
         'first': query.pageSize,
         'after': cursor?.value,
@@ -363,14 +362,14 @@ class MydiaGuestSource extends MediaSource
   @override
   Future<List<ItemSummary>> continueWatching() async {
     final data =
-        await _q(documentNodeQueryGuestContinueWatching, {'first': _rowLimit});
+        await _q(documentNodeQueryMydiaContinueWatching, {'first': _rowLimit});
     return [
       for (final c in _maps(data['continueWatching']))
         continueWatchingSummary(id, c),
     ].whereType<ItemSummary>().toList();
   }
 
-  /// Its own request: an unknown field fails the whole document, so a guest
+  /// Its own request: an unknown field fails the whole document, so a server
   /// predating segments must cost only the skip button.
   @override
   Future<List<MediaSegment>> skipSegments(ItemRef ref,
@@ -456,7 +455,7 @@ class MydiaGuestSource extends MediaSource
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
     final data =
-        await _q(documentNodeQueryGuestRecentlyAdded, {'first': _rowLimit});
+        await _q(documentNodeQueryMydiaRecentlyAdded, {'first': _rowLimit});
     return [
       for (final r in _maps(data['recentlyAdded'])) recentlyAddedSummary(id, r),
     ].whereType<ItemSummary>().take(_rowLimit).toList();
