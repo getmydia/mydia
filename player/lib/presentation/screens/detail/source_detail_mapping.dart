@@ -46,21 +46,6 @@ Progress? progressFromUserState(
   );
 }
 
-List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
-      for (final v in versions)
-        MediaFile(
-          id: v.id,
-          resolution: v.height == null ? null : '${v.height}p',
-          codec: v.videoCodec,
-          audioCodec: v.audioCodec,
-          // MediaFile.bitrate is bits per second; versions carry kilobits.
-          bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
-          size: v.sizeBytes,
-          hdrFormat: v.hdrFormat,
-          directPlaySupported: true,
-        ),
-    ];
-
 List<CastView> _cast(SourceId sourceId, List<Person> people) => [
       for (final p in people)
         CastView(

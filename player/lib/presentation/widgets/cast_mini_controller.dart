@@ -763,6 +763,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       // `GoRouter` above it to find; `rootNavigatorKey.currentContext` is
       // the router's own root, same fallback `_confirmStop` already uses.
       final router = GoRouter.of(rootNavigatorKey.currentContext ?? context);
+      final screenWidth =
+          MediaQuery.sizeOf(rootNavigatorKey.currentContext ?? context).width;
 
       if (intent.via == null) {
         showToast(context, 'Could not tell which server that session is on.',
@@ -772,6 +774,7 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 
       await pushLoadContentDestination(
         intent,
+        screenWidth: screenWidth,
         fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) => router.push(path),
       );

@@ -1,3 +1,5 @@
+import '../sources/item.dart';
+
 class MediaFile {
   final String id;
   final String? resolution;
@@ -46,3 +48,18 @@ class MediaFile {
     return parts.isEmpty ? 'Unknown' : parts.join(' • ');
   }
 }
+
+List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
+      for (final v in versions)
+        MediaFile(
+          id: v.id,
+          resolution: v.height == null ? null : '${v.height}p',
+          codec: v.videoCodec,
+          audioCodec: v.audioCodec,
+          // MediaFile.bitrate is bits per second; versions carry kilobits.
+          bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
+          size: v.sizeBytes,
+          hdrFormat: v.hdrFormat,
+          directPlaySupported: true,
+        ),
+    ];

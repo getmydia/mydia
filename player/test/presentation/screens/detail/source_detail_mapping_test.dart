@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/domain/detail/detail_art.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/detail/detail_views.dart';
+import 'package:player/domain/models/media_file.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/source_detail_mapping.dart';
 
