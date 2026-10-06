@@ -10,7 +10,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/cache/fetch_log.dart';
-import 'package:player/core/graphql/watch/query_keys.dart';
+import '../../test_utils/query_keys.dart';
 import 'package:player/core/player/device_profile.dart';
 
 import '../sources/mydia/bound_mydia_harness.dart';

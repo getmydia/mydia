@@ -13,6 +13,8 @@ void main() {
         'lib/core/router/app_router.dart',
         'lib/core/router/legacy_routes.dart',
         'lib/core/router/source_detail_routes.dart',
+        // Playback belongs to stage 3, which removes this entry.
+        'lib/presentation/screens/player/session/mydia_playback_session.dart',
       };
       final pattern =
           RegExp(r"""['"]/(movie|show|episode|collection|player)/""");
@@ -27,6 +29,5 @@ void main() {
       ];
       expect(offenders, isEmpty);
     },
-    skip: 'Until Task 18 removes the legacy screens',
   );
 }

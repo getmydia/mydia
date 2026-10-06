@@ -12,7 +12,7 @@ import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cache/watcher_registry.dart';
-import 'package:player/core/graphql/watch/query_keys.dart';
+import '../../test_utils/query_keys.dart';
 import 'package:player/presentation/widgets/freshness_header.dart';
 
 class _StubFreshnessRegistry extends FreshnessRegistry {

@@ -200,19 +200,6 @@ ItemSummary? searchResultSummary(SourceId sid, Map<String, dynamic> r) {
   );
 }
 
-ItemSummary? recentlyAddedSummary(SourceId sid, Map<String, dynamic> r) {
-  final base = searchResultSummary(sid, r);
-  if (base == null) return null;
-  return ItemSummary(
-    ref: base.ref,
-    title: base.title,
-    year: base.year,
-    poster: base.poster,
-    backdrop: base.backdrop,
-    addedAt: _instant(r['addedAt']),
-  );
-}
-
 /// The "what arrived" label the listings have always drawn under a show.
 String? _newContentLabel(Map<String, dynamic> m) {
   final count = m['newEpisodeCount'];

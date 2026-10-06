@@ -5,11 +5,10 @@ import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cache/watcher_registry.dart';
-import 'package:player/core/graphql/watch/invalidation_rules.dart';
-import 'package:player/core/graphql/watch/query_keys.dart';
 import 'package:player/core/graphql/watch/query_watcher.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/query_keys.dart';
+import '../../test_utils/stub_graphql_client.dart';
 
 const String _pingQuery = r'''
 query Ping {
@@ -186,128 +185,6 @@ QueryWatcher<String> makeWatcher(
 }
 
 void main() {
-  group('InvalidationRules', () {
-    test('toggling a show favorite refreshes favorites, home and the show list',
-        () {
-      final keys = InvalidationRules.favoriteToggled(isMovie: false);
-
-      expect(keys, contains(QueryKeys.favorites.target));
-      expect(keys, contains(QueryKeys.home.target));
-      expect(keys, contains(QueryKeys.tvShowsList.target));
-      expect(keys, isNot(contains(QueryKeys.moviesList.target)));
-    });
-
-    test('toggling a movie favorite refreshes the movie list, not the shows',
-        () {
-      final keys = InvalidationRules.favoriteToggled(isMovie: true);
-
-      expect(keys, contains(QueryKeys.moviesList.target));
-      expect(keys, isNot(contains(QueryKeys.tvShowsList.target)));
-    });
-
-    test('toggling a show favorite with an id also refreshes its own detail',
-        () {
-      final keys = InvalidationRules.favoriteToggled(isMovie: false, id: 's1');
-
-      expect(keys, contains(QueryKeys.showDetail('s1').target));
-      expect(keys, isNot(contains(QueryKeys.movieDetail('s1').target)));
-    });
-
-    test('toggling a movie favorite with an id also refreshes its own detail',
-        () {
-      final keys = InvalidationRules.favoriteToggled(isMovie: true, id: 'm1');
-
-      expect(keys, contains(QueryKeys.movieDetail('m1').target));
-      expect(keys, isNot(contains(QueryKeys.showDetail('m1').target)));
-    });
-
-    test('marking watched refreshes home, unwatched and that show', () {
-      final keys = InvalidationRules.watchedChanged(showId: '7');
-
-      expect(keys, {
-        QueryKeys.home.target,
-        QueryKeys.unwatched.target,
-        QueryKeys.tvShowsList.target,
-        QueryKeys.favorites.target,
-        QueryKeys.favoritesList.target,
-        QueryKeys.unwatchedList.target,
-        QueryKeys.continueWatchingList.target,
-        QueryKeys.recentlyAdded.target,
-        Families.collectionItems,
-        QueryKeys.showDetail('7').target,
-      });
-    });
-
-    test('marking watched with a season number also refreshes that season', () {
-      final keys =
-          InvalidationRules.watchedChanged(showId: '7', seasonNumber: 2);
-
-      expect(keys, contains(QueryKeys.seasonEpisodes('7', 2).target));
-    });
-
-    test('marking a movie watched refreshes home, unwatched and the list', () {
-      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
-
-      expect(keys, {
-        QueryKeys.home.target,
-        QueryKeys.unwatched.target,
-        QueryKeys.moviesList.target,
-        QueryKeys.favorites.target,
-        QueryKeys.favoritesList.target,
-        QueryKeys.unwatchedList.target,
-        QueryKeys.continueWatchingList.target,
-        QueryKeys.recentlyAdded.target,
-        Families.collectionItems,
-        QueryKeys.movieDetail('m1').target,
-      });
-    });
-
-    test('marking a movie watched touches no show keys', () {
-      final keys = InvalidationRules.movieWatchedChanged(movieId: 'm1');
-
-      expect(keys, isNot(contains(QueryKeys.tvShowsList.target)));
-      expect(keys, isNot(contains(QueryKeys.showDetail('m1').target)));
-    });
-
-    test('progress sync invalidates nothing', () {
-      // The 10s sync timer would otherwise refetch Home hundreds of times per
-      // movie, over what may be a p2p relay.
-      expect(InvalidationRules.progressSynced, isEmpty);
-    });
-
-    test('finishing a movie refreshes home, unwatched and that movie', () {
-      final keys = InvalidationRules.playbackFinished(
-        mediaType: 'movie',
-        mediaId: 'm1',
-      );
-
-      expect(keys, {
-        QueryKeys.home.target,
-        QueryKeys.unwatched.target,
-        QueryKeys.tvShowsList.target,
-        QueryKeys.moviesList.target,
-        QueryKeys.favorites.target,
-        QueryKeys.favoritesList.target,
-        QueryKeys.unwatchedList.target,
-        QueryKeys.continueWatchingList.target,
-        QueryKeys.recentlyAdded.target,
-        Families.collectionItems,
-        QueryKeys.movieDetail('m1').target,
-      });
-    });
-
-    test('finishing an episode also refreshes its show when known', () {
-      final keys = InvalidationRules.playbackFinished(
-        mediaType: 'episode',
-        mediaId: 'e1',
-        showId: 's1',
-      );
-
-      expect(keys, contains(QueryKeys.episodeDetail('e1').target));
-      expect(keys, contains(QueryKeys.showDetail('s1').target));
-    });
-  });
-
   group('Invalidator', () {
     test('a live watcher is refetched', () async {
       final log = InMemoryFetchLog();

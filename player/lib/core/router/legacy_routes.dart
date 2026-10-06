@@ -1,11 +1,8 @@
 /// Where the unprefixed pre-instance locations live now.
 library;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../presentation/screens/sources/source_drawer_button.dart';
-import '../layout/dock_insets.dart';
 import '../sources/mydia/bound_mydia.dart';
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
@@ -116,26 +113,3 @@ final mydiaSourceIdsProvider = Provider<List<SourceId>>((ref) {
   if (key.isEmpty) return const [];
   return [for (final id in key.split('\n')) SourceId(id)];
 });
-
-/// Placeholder for a Mydia listing until its screen is source-scoped.
-class SourceRouteStub extends StatelessWidget {
-  final SourceId sourceId;
-  final String name;
-
-  const SourceRouteStub(
-      {super.key, required this.sourceId, required this.name});
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          leading: SourceDrawerButton.maybe(context),
-          title: Text(name),
-        ),
-        body: Column(
-          children: [
-            Expanded(child: Center(child: Text(name))),
-            const DockGap(),
-          ],
-        ),
-      );
-}

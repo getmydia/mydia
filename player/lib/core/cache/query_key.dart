@@ -13,11 +13,10 @@ import 'package:flutter/foundation.dart' show immutable;
 /// final` field, memoized once per instance, and Dart forbids `late final`
 /// fields (and non-final ones) in any class that declares a const generative
 /// constructor, full stop, regardless of whether a given call site actually
-/// uses `const`. The catalog below relies on that memoization: `QueryKeys.home`
-/// and friends are `static final` singletons, each looked up by every
-/// `FreshnessHeader` build for as long as the app runs, so computing
-/// `canonical` once per singleton (instead of once per lookup) is the whole
-/// point.
+/// uses `const`. Keys that are looked up on every
+/// `FreshnessHeader` build are held as `static final` singletons, so
+/// computing `canonical` once per singleton (instead of once per lookup) is
+/// the whole point.
 @immutable
 class QueryKey {
   QueryKey(this.operationName, [this.variables = const {}]);
