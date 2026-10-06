@@ -232,7 +232,7 @@
       # Pre-fetch npm dependencies (required for sandbox build)
       npmDeps = pkgs.fetchNpmDeps {
         src = ../../assets;
-        hash = "sha256-36RFPmc6ZNl6BqUQ3fTMqKWS7xrrKSm+m7hjzP1qaZI=";
+        hash = "sha256-qu1bkV2nVXCHgnlc4hk3a8tW5XEYaa3Cc0AO+jSI7Iw=";
       };
 
       # Tailwind CSS v4 standalone binary. nixpkgs does ship tailwindcss_4, but
