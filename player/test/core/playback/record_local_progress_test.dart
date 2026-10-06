@@ -70,5 +70,11 @@ class ThrowingStore implements PlaybackProgressStore {
   List<LocalPlaybackProgress> unsynced() => const [];
 
   @override
+  List<LocalPlaybackProgress> all() => const [];
+
+  @override
+  Future<void> delete(String key) async {}
+
+  @override
   Future<void> markSynced(String mediaId, DateTime syncedAt) async {}
 }

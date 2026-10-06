@@ -19,12 +19,25 @@ abstract interface class SourceStore {
 
   /// Replaces every "Include in All servers" choice.
   Future<void> setAllServers(Map<SourceId, bool> choices);
+
+  /// The account the previous single-server sign-in was migrated into. Set
+  /// once, last, by the legacy migration; null on a fresh install.
+  Future<String?> legacyInstanceId();
+  Future<void> setLegacyInstanceId(String accountId);
 }
 
 class InMemorySourceStore implements SourceStore {
   final _accounts = <String, SourceAccountRecord>{};
   SourceId? _active;
   Map<SourceId, bool> _allServers = const {};
+  String? _legacyInstanceId;
+
+  @override
+  Future<String?> legacyInstanceId() async => _legacyInstanceId;
+
+  @override
+  Future<void> setLegacyInstanceId(String accountId) async =>
+      _legacyInstanceId = accountId;
 
   @override
   Future<SourceSnapshot> load() async => SourceSnapshot(
@@ -55,6 +68,7 @@ class HiveSourceStore implements SourceStore {
   static const boxName = 'source_accounts';
   static const _activeKey = 'active';
   static const _allServersKey = 'all_servers';
+  static const _legacyInstanceIdKey = 'legacy_instance_id';
   static const _accountPrefix = 'account:';
 
   static Future<HiveSourceStore> open() async {
@@ -113,6 +127,13 @@ class HiveSourceStore implements SourceStore {
   @override
   Future<void> removeAccount(String accountId) =>
       _box.delete('$_accountPrefix$accountId');
+
+  @override
+  Future<String?> legacyInstanceId() async => _box.get(_legacyInstanceIdKey);
+
+  @override
+  Future<void> setLegacyInstanceId(String accountId) =>
+      _box.put(_legacyInstanceIdKey, accountId);
 
   @override
   Future<void> setActive(SourceId? id) =>

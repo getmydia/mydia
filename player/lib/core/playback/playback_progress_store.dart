@@ -22,6 +22,12 @@ abstract class PlaybackProgressStore {
 
   List<LocalPlaybackProgress> unsynced();
 
+  /// Every readable stored record. For migrations.
+  List<LocalPlaybackProgress> all();
+
+  /// [key] is a [progressKey].
+  Future<void> delete(String key);
+
   /// [key] is a [progressKey].
   Future<void> markSynced(String key, DateTime syncedAt);
 }
@@ -66,6 +72,19 @@ class HivePlaybackProgressStore implements PlaybackProgressStore {
   }
 
   @override
+  List<LocalPlaybackProgress> all() {
+    final out = <LocalPlaybackProgress>[];
+    for (final key in _box.keys) {
+      final record = get(key as String);
+      if (record != null) out.add(record);
+    }
+    return out;
+  }
+
+  @override
+  Future<void> delete(String key) => _box.delete(key);
+
+  @override
   Future<void> markSynced(String key, DateTime syncedAt) async {
     final existing = get(key);
     if (existing == null) return;
@@ -87,6 +106,14 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
   @override
   List<LocalPlaybackProgress> unsynced() =>
       _records.values.where((p) => !p.isSynced).toList();
+
+  @override
+  List<LocalPlaybackProgress> all() => _records.values.toList();
+
+  @override
+  Future<void> delete(String key) async {
+    _records.remove(key);
+  }
 
   @override
   Future<void> markSynced(String key, DateTime syncedAt) async {

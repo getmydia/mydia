@@ -180,6 +180,36 @@ void main() {
     });
   });
 
+  group('all and delete', () {
+    test('in memory: all() lists every record and delete() removes one',
+        () async {
+      final store = InMemoryPlaybackProgressStore();
+      await store.save(progress(mediaId: '10'));
+      expect(store.all().map((r) => r.key), ['10']);
+      await store.delete('10');
+      expect(store.all(), isEmpty);
+    });
+
+    test('hive: all() skips unreadable records and delete() removes one',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('playback_all_test');
+      Hive.init(dir.path);
+      try {
+        final box =
+            await Hive.openBox<Map<dynamic, dynamic>>('playback_all_box');
+        final store = HivePlaybackProgressStore(box);
+        await store.save(progress(mediaId: '10'));
+        await box.put('bad', {'nonsense': true});
+        expect(store.all().map((r) => r.key), ['10']);
+        await store.delete('10');
+        expect(store.all(), isEmpty);
+      } finally {
+        await Hive.close();
+        await dir.delete(recursive: true);
+      }
+    });
+  });
+
   group('pickNewerProgress', () {
     test('takes the local record when it is newer', () {
       final result = pickNewerProgress(
