@@ -27,18 +27,18 @@
 /// - 0.9.0: initial baseline. The value is a no-op at ship time: only builds
 ///   carrying this feature ever send or answer the compatibility query, so
 ///   both floors are unreachable regardless of which version they name.
+/// - 0.15.0: required. The player sends `maxHeight` and `playlistMode` when it
+///   starts a stream and selects `watchStatus` and per-stream media info, and
+///   no longer carries the older documents that left them out. `playlistMode`
+///   reached 0.14.0 only at 0.14.0-beta.5, and a prerelease suffix compares
+///   equal to its core version, so 0.15.0 is the lowest floor that every build
+///   carrying `playlistMode` clears and every build lacking it fails.
 /// - 0.16.0: recommended only. `preferredSubtitle` arrived in this release, so
 ///   an older server cannot remember a viewer's per-show subtitle choice.
 ///   Everything else works, which is what makes this the recommended floor
 ///   rather than the required one. `VersionComparator.compareCore` ignores a
 ///   prerelease suffix, so a 0.15.0-beta build reads as exactly 0.15.0; 0.16.0
 ///   is the first core version that certainly carries the field.
-/// - 0.15.0: required. The player sends `maxHeight` and `playlistMode` when it
-///   starts a stream and selects `watchStatus` and per-stream media info, and
-///   no longer carries the older documents that left them out. `playlistMode`
-///   reached 0.14.0 only at 0.14.0-beta.5, and a prerelease suffix compares
-///   equal to its core version, so 0.15.0 is the first floor every build at
-///   or above it clears.
 class Compatibility {
   const Compatibility._();
 

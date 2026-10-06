@@ -60,7 +60,7 @@ Pass `fallbackVariables` when the fallback takes different variables.
 Delete the pair once `Compatibility.minServerVersion` reaches that version.
 `compareCore` ignores prerelease suffixes, so the floor has to be the first core
 version whose every build carries the field, not the release whose betas
-introduced it. None are left at 0.15.0.
+introduced it. No `*Legacy` documents remain at the 0.15.0 floor.
 
 ## Guards
 

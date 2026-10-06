@@ -285,9 +285,9 @@ the browser's engine.
 ## Compatibility
 
 Old player, new server: unchanged, byte for byte. New player, old server:
-the legacy `startStreamingSession` document on a server that rejects the
-`maxHeight` or `playlistMode` argument or field, remembered per connection in
-`ServerFeatures`.
+the player requires server 0.15.0 (`Compatibility.minServerVersion`), and an
+older server gets the non-dismissible server-update-required verdict. A stream
+start against such a server fails instead of degrading.
 
 ## Testing
 

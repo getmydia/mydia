@@ -64,8 +64,9 @@ class PlaybackSource {
   /// Null for direct play.
   final String? sessionId;
 
-  /// The rung the server said it applied, for the label. Null when the
-  /// server did not say (the legacy document selects no echo fields).
+  /// The rung the server said it applied, for the label. A 0.15 server always
+  /// echoes the caps, so null means `effectiveRungLabel` could not place them:
+  /// a bitrate cap with no positive height.
   final QualityRung? effectiveRung;
 }
 
