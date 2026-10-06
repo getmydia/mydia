@@ -12,7 +12,7 @@ import '../p2p/local_proxy_service.dart';
 import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
 import '../remote/ambient_targets.dart';
-import '../remote/remote_roster.dart';
+import '../remote/merged_roster.dart';
 import '../sources/mydia/bound_mydia.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
@@ -38,10 +38,10 @@ final castBackendProvider = Provider<CastBackend>((ref) {
 });
 
 /// The Mydia peer-to-peer cast transport, or null until this device has a
-/// live P2P host, a resolved node ID, and a GraphQL client to look up the
-/// paired-device roster with.
+/// live P2P host and a resolved node ID. Its roster is every Mydia
+/// instance's, merged ([mergedRosterProvider]).
 ///
-/// All three are already in place by the time a user reaches the cast
+/// Both are already in place by the time a user reaches the cast
 /// picker in normal use — `_initRemoteControlIfEnabled` in app.dart starts
 /// the P2P host unconditionally at launch, independent of whether this
 /// device opts in to being controlled itself — so `null` on first read is a
@@ -96,12 +96,13 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;
-  final client = ref.watch(boundMydiaClientProvider);
+  final roster = ref.watch(mergedRosterProvider);
 
-  if (host == null || selfNodeId == null || client == null) return null;
+  if (host == null || selfNodeId == null) return null;
 
   final backend = MydiaCastBackend(
-    roster: RemoteRoster(client: client),
+    roster: roster,
+    instancesOf: roster.instancesOf,
     transport: P2pControlTransport(host),
     selfNodeId: selfNodeId,
   );
@@ -141,7 +142,7 @@ const _ambientResweepInterval = Duration(seconds: 30);
 /// be live, which is exactly the coupling keeping this independent avoids.
 ///
 /// Null under the same conditions as [mydiaCastBackendProvider]: no p2p
-/// host yet, no resolved node ID, or no signed-in GraphQL client.
+/// host yet or no resolved node ID.
 final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   final p2pService = ref.watch(p2pServiceProvider);
   // Same reason, and the same narrowing, as `mydiaCastBackendProvider`
@@ -155,11 +156,10 @@ final ambientTargetsProvider = Provider<AmbientTargets?>((ref) {
   ));
   final host = p2pService.host;
   final selfNodeId = identity.$2;
-  final client = ref.watch(boundMydiaClientProvider);
+  final roster = ref.watch(mergedRosterProvider);
 
-  if (host == null || selfNodeId == null || client == null) return null;
+  if (host == null || selfNodeId == null) return null;
 
-  final roster = RemoteRoster(client: client);
   final transport = P2pControlTransport(host);
 
   final targets = AmbientTargets(
@@ -212,20 +212,12 @@ final ambientPlayingProvider =
 /// [AmbientTarget.device]'s bare node ID (see that field's own dartdoc) to a
 /// real name before it reaches the ambient banner.
 ///
-/// A separate [RemoteRoster] instance from [ambientTargetsProvider]'s own —
-/// matching how `mydiaCastBackendProvider` and `app.dart`'s remote-control
-/// receiver already each keep their own independent instance rather than
-/// sharing one; see `mydiaCastBackendProvider`'s dartdoc for the staleness
-/// caveat that already applies to that split. Consolidating all of them onto
-/// one shared, provider-scoped `RemoteRoster` is a real improvement but a
-/// separate one — this file already has three independent instances before
-/// this provider adds a fourth, so it does not introduce a new inconsistency.
+/// Every consumer here and `app.dart`'s receiver reads the one
+/// [mergedRosterProvider], so a device known to several Mydia instances is
+/// named once.
 final remoteDeviceNamesProvider =
     FutureProvider<Map<String, String>>((ref) async {
-  final client = ref.watch(boundMydiaClientProvider);
-  if (client == null) return const {};
-
-  final entries = await RemoteRoster(client: client).entries();
+  final entries = await ref.watch(mergedRosterProvider).entries();
   return {for (final entry in entries) entry.nodeId: entry.deviceName};
 });
 

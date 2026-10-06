@@ -35,7 +35,7 @@ import 'core/sources/source.dart' show SourceId;
 import 'core/remote/remote_control_intent.dart';
 import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
-import 'core/remote/remote_roster.dart';
+import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
@@ -345,14 +345,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       // step: doing it inline meant a node id or GraphQL client that had not
       // arrived yet left this device unregistered, and therefore invisible to
       // every other device, for the rest of the session.
-      final client = await ref.read(asyncBoundMydiaClientProvider.future);
-
       final targetController = ref.read(remoteTargetControllerProvider);
       final receiver = RemoteControlReceiver(
-        roster: RemoteRoster(client: client),
+        // Any instance's device may drive this one. Read per request, so an
+        // instance added later is covered without rewiring.
+        roster: CurrentDeviceRoster(() => ref.read(mergedRosterProvider)),
         targetName: await DeviceInfoService().getDeviceName(),
         snapshotSource: targetController.snapshot,
-        onIntent: targetController.submit,
+        onIntent: (intent, peer) => unawaited(routeRemoteIntent(
+          intent,
+          peer,
+          instancesOf: ref.read(mergedRosterProvider).instancesOf,
+          submit: targetController.submit,
+        )),
         respond: p2pService.respondToControl,
       );
 
@@ -413,7 +418,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// chosen yet" fallback every other entry point in this app takes (see
   /// a Continue Watching tap) — when nothing resolves.
   ///
-  /// `router` and `screenWidth` are read from [context] before the only
+  /// The item is read from the instance the command arrived through
+  /// ([LoadContentIntent.via]); one with no such instance pushes nothing.
+  ///
+  /// `router` is read from [context] before the only
   /// `await` in this method, never after: this device could navigate away
   /// or tear down while [pushLoadContentDestination] runs, and neither
   /// `context` nor anything derived from it would be safe to touch once
@@ -427,13 +435,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   ) async {
     try {
       final router = GoRouter.of(context);
-      final screenWidth = MediaQuery.sizeOf(context).width;
 
       await pushLoadContentDestination(
         intent,
-        screenWidth,
-        fetchMovieTarget: (id) => fetchLoadContentMovie(ref, id),
-        fetchEpisodeTarget: (id) => fetchLoadContentEpisode(ref, id),
+        fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
           if (!mounted) return;
           router.push(path);

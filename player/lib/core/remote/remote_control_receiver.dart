@@ -22,7 +22,9 @@ class RemoteControlReceiver {
   final DeviceRoster _roster;
   final String _targetName;
   final PlaybackSnapshotSource _snapshotSource;
-  final void Function(RemoteControlIntent) _onIntent;
+
+  /// Receives each intent with the node id of the peer that sent it.
+  final void Function(RemoteControlIntent, String peerNodeId) _onIntent;
   final Future<void> Function(String requestId, FlutterRemoteControlResponse)
       _respond;
 
@@ -30,7 +32,7 @@ class RemoteControlReceiver {
     required DeviceRoster roster,
     required String targetName,
     required PlaybackSnapshotSource snapshotSource,
-    required void Function(RemoteControlIntent) onIntent,
+    required void Function(RemoteControlIntent, String peerNodeId) onIntent,
     required Future<void> Function(String, FlutterRemoteControlResponse)
         respond,
   })  : _roster = roster,
@@ -102,7 +104,7 @@ class RemoteControlReceiver {
       return;
     }
 
-    _onIntent(intent);
+    _onIntent(intent, inbound.peer);
     await _respond(
         inbound.requestId, const FlutterRemoteControlResponse_Accepted());
   }

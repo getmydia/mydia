@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show immutable;
 
 import '../../native/lib.dart';
+import '../sources/source.dart';
 
 enum TransportAction { play, pause, stop, seek }
 
@@ -106,6 +107,11 @@ class LoadContentIntent extends RemoteControlIntent {
   final String? subtitleTrack;
   final bool autoplay;
 
+  /// The Mydia instance the command arrived through, the only one its item
+  /// id means anything on. Null until the app resolves the sender; a command
+  /// whose sender no instance lists is dropped, never tried elsewhere.
+  final SourceId? via;
+
   const LoadContentIntent({
     required this.mediaItemId,
     required this.episodeId,
@@ -113,5 +119,16 @@ class LoadContentIntent extends RemoteControlIntent {
     required this.audioTrack,
     required this.subtitleTrack,
     required this.autoplay,
+    this.via,
   });
+
+  LoadContentIntent withVia(SourceId via) => LoadContentIntent(
+        mediaItemId: mediaItemId,
+        episodeId: episodeId,
+        startAt: startAt,
+        audioTrack: audioTrack,
+        subtitleTrack: subtitleTrack,
+        autoplay: autoplay,
+        via: via,
+      );
 }

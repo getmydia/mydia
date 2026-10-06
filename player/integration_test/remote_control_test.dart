@@ -441,7 +441,7 @@ void main() {
       roster: RemoteRoster(client: bClient),
       targetName: 'Player B (E2E target)',
       snapshotSource: targetController.snapshot,
-      onIntent: targetController.submit,
+      onIntent: (intent, _) => targetController.submit(intent),
       respond: bP2p.respondToControl,
     );
     final controlSub = bP2p.onControlRequest

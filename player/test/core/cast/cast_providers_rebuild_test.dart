@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/remote/merged_roster.dart';
+import 'package:player/core/remote/remote_roster.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
@@ -66,6 +69,15 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   }
 }
 
+/// One Mydia instance whose roster answers [response].
+Override _rosterOf(Map<String, dynamic> response) =>
+    mergedRosterProvider.overrideWithValue(MergedRoster({
+      const SourceId('mydia-a'): RemoteRoster(
+        client:
+            fakeMydiaClient(StubLinkTransport(StubLink.responses([response]))),
+      ),
+    }));
+
 Map<String, dynamic> _device(String id, String nodeId,
         {required bool online}) =>
     {
@@ -88,11 +100,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 
@@ -126,11 +134,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 
@@ -158,11 +162,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 
@@ -188,11 +188,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 
@@ -224,11 +220,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 
@@ -258,18 +250,14 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{
-              '__typename': 'Query',
-              'devices': [
-                _device('this-device', 'a' * 64, online: true),
-                _device('hall-screen', 'b' * 64, online: true),
-                _device('attic-tablet', 'c' * 64, online: false),
-              ],
-            },
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{
+          '__typename': 'Query',
+          'devices': [
+            _device('this-device', 'a' * 64, online: true),
+            _device('hall-screen', 'b' * 64, online: true),
+            _device('attic-tablet', 'c' * 64, online: false),
+          ],
+        }),
       ]);
       addTearDown(container.dispose);
 
@@ -291,11 +279,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
         p2pStatusNotifierProvider.overrideWith(() => statusNotifier),
-        boundMydiaClientProvider.overrideWith(
-          (ref) => fakeMydiaClient(StubLinkTransport(StubLink.responses([
-            <String, dynamic>{'__typename': 'Query'},
-          ]))),
-        ),
+        _rosterOf(<String, dynamic>{'__typename': 'Query'}),
       ]);
       addTearDown(container.dispose);
 

@@ -7,6 +7,8 @@ import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
 import '../../core/cast/cast_session_manager.dart' show PulledSession;
 import '../../core/cast/cast_target.dart';
+import '../../core/cast/mydia_cast_backend.dart' show sourceIdsOfCastDevice;
+import '../../core/sources/source.dart' show SourceId;
 import '../../core/remote/ambient_dismissals.dart';
 import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
@@ -736,12 +738,19 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
   Future<void> _pullToLocal() async {
     if (!mounted) return;
     try {
+      // The ids in the pulled session are the target's own instance's, so
+      // the instance comes from the device before pulling ends the session.
+      final device = ref.read(castSessionProvider).value?.device;
+      final via =
+          device == null ? null : sourceIdsOfCastDevice(device).firstOrNull;
+
       final manager = await ref.read(castSessionManagerProvider.future);
       final pulled = await manager.pullToLocal();
       if (!mounted) return;
 
-      final intent =
-          pulled == null ? null : loadContentIntentForPulledSession(pulled);
+      final intent = pulled == null
+          ? null
+          : loadContentIntentForPulledSession(pulled, via: via);
       if (intent == null) {
         showToast(context, 'Nothing to bring over yet.');
         return;
@@ -759,14 +768,16 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       // `GoRouter` above it to find; `rootNavigatorKey.currentContext` is
       // the router's own root, same fallback `_confirmStop` already uses.
       final router = GoRouter.of(rootNavigatorKey.currentContext ?? context);
-      final screenWidth =
-          MediaQuery.sizeOf(rootNavigatorKey.currentContext ?? context).width;
+
+      if (intent.via == null) {
+        showToast(context, 'Could not tell which server that session is on.',
+            kind: ToastKind.error);
+        return;
+      }
 
       await pushLoadContentDestination(
         intent,
-        screenWidth,
-        fetchMovieTarget: (id) => fetchLoadContentMovie(ref, id),
-        fetchEpisodeTarget: (id) => fetchLoadContentEpisode(ref, id),
+        fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) => router.push(path),
       );
     } catch (e) {
@@ -930,11 +941,15 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
 /// which a bare unit test can stand up around — but the mapping itself
 /// depends on none of them.
 @visibleForTesting
-LoadContentIntent? loadContentIntentForPulledSession(PulledSession pulled) {
+LoadContentIntent? loadContentIntentForPulledSession(
+  PulledSession pulled, {
+  SourceId? via,
+}) {
   final mediaItemId = pulled.mediaItemId;
   if (mediaItemId == null) return null;
 
   return LoadContentIntent(
+    via: via,
     mediaItemId: mediaItemId,
     episodeId: pulled.episodeId,
     startAt: pulled.position,

@@ -22,6 +22,9 @@ class SourcePlayerParams {
     this.showId,
     this.seasonNumber,
     this.resumeSeconds,
+    this.audioTrack,
+    this.subtitleTrack,
+    this.autoplay = true,
   });
 
   factory SourcePlayerParams.fromUri(Uri uri) {
@@ -33,6 +36,11 @@ class SourcePlayerParams {
       showId: q['showId'],
       seasonNumber: int.tryParse(q['seasonNumber'] ?? ''),
       resumeSeconds: int.tryParse(q['resume'] ?? ''),
+      audioTrack: q['audioTrack'],
+      subtitleTrack: q['subtitleTrack'],
+      // Absent means play. Only a remote load content with autoplay off
+      // sends this.
+      autoplay: q['autoplay'] != 'false',
     );
   }
 
@@ -42,6 +50,9 @@ class SourcePlayerParams {
   final String? showId;
   final int? seasonNumber;
   final int? resumeSeconds;
+  final String? audioTrack;
+  final String? subtitleTrack;
+  final bool autoplay;
 
   /// The player screen's vocabulary: episodes are episodes, anything else
   /// plays as a movie (no season list, no up-next).
@@ -141,6 +152,9 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
       showId: _params.showId,
       seasonNumber: _params.seasonNumber,
       resumeSeconds: _params.resumeSeconds,
+      audioTrack: _params.audioTrack,
+      subtitleTrack: _params.subtitleTrack,
+      autoplay: _params.autoplay,
       session: session,
     );
   }
