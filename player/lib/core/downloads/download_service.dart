@@ -52,8 +52,8 @@ abstract class DownloadDatabase {
 /// `downloadManagerProvider`; called on every start, resume and restart.
 typedef DownloadPlanResolver = Future<DownloadPlan> Function(DownloadTask task);
 
-/// Where one piece of a task's artwork is. [art] is a URL for home Mydia and
-/// an `ArtworkRef.path` for any other source. Null when there is none.
+/// Where one piece of a task's artwork is. [art] is a URL for art that is one
+/// (`UrlArt`) and an `ArtworkRef.path` otherwise. Null when there is none.
 typedef ArtworkFetcher = Future<({String url, Map<String, String> headers})?>
     Function(DownloadTask task, String art);
 
@@ -134,8 +134,8 @@ abstract class DownloadService {
   Future<int> deleteAccountDownloads(String accountId);
 
   /// Deletes the downloads of every third-party account not in
-  /// [knownAccountIds], for removals whose cleanup never ran. Home Mydia's are
-  /// never touched. Returns how many records went.
+  /// [knownAccountIds], for removals whose cleanup never ran. Pre-account
+  /// records (no `sourceId`, not yet migrated) are never touched. Returns how many records went.
   Future<int> deleteDownloadsOfUnknownAccounts(Set<String> knownAccountIds);
 
   List<DownloadTask> getActiveDownloads();

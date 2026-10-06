@@ -7,8 +7,8 @@ import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
 
-/// What a download stores for a picture: the URL for home Mydia, the
-/// server path for a source (resolved with credentials at save time).
+/// What a download stores for a picture: the URL for a `UrlArt`, the
+/// server path for a source's artwork (resolved with credentials at save time).
 String? artKey(DetailArt? art) => switch (art) {
       UrlArt(:final url) => url,
       SourceArt(:final ref) => ref.path,

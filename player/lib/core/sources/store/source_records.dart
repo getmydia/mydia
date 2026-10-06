@@ -128,8 +128,8 @@ class SourceSnapshot {
   final SourceId? activeId;
 
   /// The viewer's "Include in All servers" choices. A source with no entry
-  /// takes its kind's default. Lives beside the accounts so home Mydia,
-  /// which has no record, can have one.
+  /// takes its kind's default. Lives beside the accounts so a source with
+  /// no account record can have one.
   final Map<SourceId, bool> allServers;
 }
 

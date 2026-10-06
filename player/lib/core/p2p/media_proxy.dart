@@ -10,8 +10,8 @@ import 'dart:collection';
 /// downloads alike — so it is started and stopped against an *owner* rather
 /// than outright. See [start] and [stop].
 abstract class MediaProxy {
-  /// Key of the home Mydia's target. Its URLs carry no target prefix, so
-  /// every URL built before targets existed is still valid.
+  /// Key of the default target, the bound Mydia
+  /// instance's. Its URLs carry no target prefix, so every URL built before targets existed is still valid.
   static const homeTarget = 'home';
 
   /// Begin serving [target] for [owner], sending its requests to

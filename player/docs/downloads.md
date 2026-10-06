@@ -15,8 +15,7 @@ There are two kinds of plan:
 - `DirectFile` is a URL, the headers that carry the credential, a file
   extension and an optional expected size. Plex, Jellyfin and Stash return one
   for their single `original` option (`core/sources/original_download.dart`).
-  The credential goes in the headers, never in the URL, except for Mydia's
-  existing `?token=` media URL.
+  The credential goes in the headers, never in the URL.
 - `TranscodeJob` is a server-side job the pipeline prepares, polls and then
   fetches from. `MydiaTranscodeJob` implements it for every Mydia instance.
   There "original" is just one of the server's options beside the quality
@@ -68,8 +67,8 @@ Rules that are easy to break:
   save. HTTP error statuses keep their own
   handling. Dio does not wrap an error from a streamed body, so `fetchRange`
   converts one into a `connectionError` `DioException` whose message is only
-  the error's type name: the platform's text names the URL, and Mydia's
-  carries a token. Transport drops still count as recovery attempts.
+  the error's type name: the platform's text names the URL, and a URL can carry
+  a token in its query. Transport drops still count as recovery attempts.
 - The transcode job calls (`prepare` and `status`) go through `_guardJobCall`,
   which maps a dropped connection the same way. The HTTP job service
   throws `http` `ClientException`, `SocketException` or `HttpException`, and a
@@ -149,7 +148,7 @@ run.
 
 ## Locks and removal
 
-`visibleDownloadSources` is home plus every source the switcher shows. A hidden
+`visibleDownloadSources` is every source the switcher shows. A hidden
 source drops out of the Downloads lists while the app is locked, and its
 downloads with it.
 

@@ -7,8 +7,8 @@ import 'download.dart';
 /// What the Downloads screen shows for an item, captured when the download
 /// starts so it is there offline.
 ///
-/// The art fields hold a URL for home Mydia and an `ArtworkRef.path` for
-/// every other source; the pipeline turns them into local files at the end.
+/// The art fields hold a URL for art that is one (`UrlArt`) and an
+/// `ArtworkRef.path` otherwise; the pipeline turns them into local files at the end.
 class DownloadMetadata {
   const DownloadMetadata({
     required this.title,
