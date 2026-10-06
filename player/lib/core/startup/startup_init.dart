@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
-import '../connection/connection_provider.dart';
 import '../graphql/watch/fetch_log.dart';
 import '../navigation/sidebar_layout_store.dart';
 import '../sources/cache/source_cache.dart';
@@ -20,7 +19,7 @@ class StartupSteps {
     required this.sourceCache,
     required this.downloadDb,
     required this.sidebarLayoutStore,
-    required this.connection,
+    this.legacyMigration,
   });
 
   /// Null when this build has no Rust bridge to load (web without p2p).
@@ -35,7 +34,10 @@ class StartupSteps {
   /// Null where downloads are unsupported.
   final Future<void> Function()? downloadDb;
   final Future<SidebarLayoutStore> Function() sidebarLayoutStore;
-  final Future<ConnectionState?> Function() connection;
+
+  /// Moves the single-server sign-in into an ordinary account. Runs once the
+  /// source cache and download database are open; given the opened cache.
+  final Future<void> Function(SourceCache cache)? legacyMigration;
 }
 
 sealed class StartupOutcome {
@@ -47,13 +49,11 @@ final class StartupReady extends StartupOutcome {
     required this.fetchLog,
     required this.sourceCache,
     required this.sidebarLayoutStore,
-    required this.initialConnection,
   });
 
   final FetchLog fetchLog;
   final SourceCache sourceCache;
   final SidebarLayoutStore sidebarLayoutStore;
-  final ConnectionState? initialConnection;
 }
 
 final class StartupRustFailed extends StartupOutcome {
@@ -130,8 +130,6 @@ Future<StartupOutcome> runStartup(
     timeline.mark('hive');
   }
 
-  ConnectionState? connection;
-
   final rustFuture = rust();
   await Future.wait([
     rustFuture,
@@ -141,13 +139,6 @@ Future<StartupOutcome> runStartup(
       guarded('Download database', db).then((_) => timeline.mark('download_db'))
     else
       Future<void>.sync(() => timeline.mark('download_db')),
-    steps
-        .connection()
-        .then((value) => connection = value)
-        .catchError((Object e) {
-      debugPrint('[Startup] Connection state read failed: $e');
-      return null;
-    }).whenComplete(() => timeline.mark('connection')),
   ]);
 
   final rustFailure = await rustFuture;
@@ -155,6 +146,13 @@ Future<StartupOutcome> runStartup(
     return StartupRustFailed(rustFailure.$1, rustFailure.$2);
   }
   if (lockError case final error?) return StartupAlreadyRunning(error);
+
+  // After the source cache and download database are open, which the
+  // data rewrite reads and writes.
+  if (steps.legacyMigration case final migrate?) {
+    await guarded('Legacy Mydia migration', () => migrate(sourceCache));
+    timeline.mark('legacy_migration');
+  }
 
   final sidebar = await steps.sidebarLayoutStore();
   timeline.mark('sidebar');
@@ -164,6 +162,5 @@ Future<StartupOutcome> runStartup(
     fetchLog: fetchLog,
     sourceCache: sourceCache,
     sidebarLayoutStore: sidebar,
-    initialConnection: connection,
   );
 }

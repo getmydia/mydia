@@ -82,18 +82,22 @@ import 'package:player/app.dart';
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/channels/pairing_service.dart';
-import 'package:player/core/graphql/client.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_control_receiver.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_gql_transport.dart';
+import 'package:player/core/sources/source_http.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 import 'helpers/e2e_api_client.dart';
+import 'helpers/login_helpers.dart';
 import 'helpers/test_bootstrap.dart';
 
 /// The E2E seed's single movie (`scripts/e2e/seed.sh`): a 5-second
@@ -301,25 +305,13 @@ Future<bool> _pumpUntil(
   return condition();
 }
 
-/// Same "pump in a loop, real time" pattern `pairing_flow_test.dart` and
-/// `p2p_streaming_test.dart` already use — `pumpAndSettle` never returns
-/// while a loading spinner's animation is running.
-Future<void> _waitForLoginScreen(WidgetTester tester,
-    {int maxSeconds = 30}) async {
-  for (var i = 0; i < maxSeconds; i++) {
-    await tester.pump(const Duration(seconds: 1));
-    if (find.text('Connect to Server').evaluate().isNotEmpty) return;
-  }
-  throw StateError('Login screen not found after $maxSeconds seconds');
-}
-
 /// Drives player A's real UI through claim-code pairing (step 1's A side).
 Future<void> _pairPlayerA(
   WidgetTester tester,
   String claimCode, {
   int maxSeconds = 120,
 }) async {
-  await _waitForLoginScreen(tester);
+  await waitForLoginScreen(tester);
 
   final textField = find.byType(TextFormField).first;
   expect(textField, findsOneWidget,
@@ -334,6 +326,7 @@ Future<void> _pairPlayerA(
 
   for (var i = 0; i < maxSeconds; i++) {
     await tester.pump(const Duration(seconds: 1));
+    await dismissStorageWarningIfShown(tester);
     if (find.text('Connect to Server').evaluate().isEmpty) return;
   }
   fail('Player A pairing did not complete after $maxSeconds seconds');
@@ -414,8 +407,17 @@ void main() {
     final bNodeId = bP2p.nodeId;
     expect(bNodeId, isNotNull, reason: 'Player B has no node ID after pairing');
 
-    final bClient = createGraphQLClient(
-        adminApi.mydiaUrl, bResult.credentials!.accessToken);
+    final bCredentials = MydiaCredentials(
+      instanceId: 'player-b',
+      accessToken: bResult.credentials!.accessToken,
+    );
+    final bClient = MydiaClient(
+      transport:
+          HttpMydiaTransport(serverUrl: adminApi.mydiaUrl, http: SourceHttp()),
+      load: () async => bCredentials,
+      save: (_) async {},
+      onUnauthorized: () {},
+    );
 
     final bRegistered = await NodeRegistration(
       client: bClient,
@@ -454,19 +456,20 @@ void main() {
     // Clear the shared store first, or this test cannot run inside
     // `all_tests.dart`. That aggregator runs every file in ONE isolate (see
     // `helpers/test_bootstrap.dart`), so the app's default `AuthStorage` is
-    // process-wide — and `pairing_flow_test.dart`, which runs earlier, pairs a
+    // process-wide (as is the Hive source box that holds the account) — and
+    // `pairing_flow_test.dart`, which runs earlier, pairs a
     // real device into it and never clears it. Player B sidesteps this with an
     // injected in-memory store, but player A is a real `MyApp()` and uses the
     // default one, so without this it boots ALREADY AUTHENTICATED, routes
-    // straight past the login screen, and `_waitForLoginScreen` times out
+    // straight past the login screen, and `waitForLoginScreen` times out
     // looking for text that will never render. Verified exactly that way in
-    // CI run 32455230401: `[MyApp] authState=...AuthStatus.authenticated`
-    // immediately after mount, then `Login screen not found after 30 seconds`.
+    // CI run 32455230401: the app signed in immediately after mount,
+    // then `Login screen not found after 30 seconds`.
     //
     // Deliberately not in `setUpAll`: player B pairs above and stores its
     // credentials in its own injected store, but clearing here rather than
     // earlier keeps the reset adjacent to the mount it exists to protect.
-    await getAuthStorage().deleteAll();
+    await resetStoredSources();
 
     // Registered before the mount so any of the seven steps below failing
     // still tears the app down. This test has the most assertions of any

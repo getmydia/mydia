@@ -1,7 +1,7 @@
 /// Connection diagnostics provider for displaying connection status in settings.
 ///
 /// This provider aggregates connection information from various sources:
-/// - Direct URLs from stored credentials
+/// - The bound server's URL
 /// - Connection attempt results and errors
 /// - Last probe timestamps
 ///
@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
 import '../format/relative_time.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'connection_provider.dart';
 
 /// Storage keys for diagnostics.
@@ -151,19 +152,10 @@ class ConnectionDiagnosticsNotifier
   /// Loads diagnostics from storage and credentials.
   Future<void> _loadDiagnostics() async {
     try {
-      // Load direct URLs from stored credentials
-      final directUrlsJson = await _authStorage.read('pairing_direct_urls');
-      List<String> directUrls = [];
-      if (directUrlsJson != null) {
-        try {
-          final decoded = jsonDecode(directUrlsJson);
-          if (decoded is List) {
-            directUrls = decoded.cast<String>();
-          }
-        } catch (e) {
-          debugPrint('[ConnectionDiagnostics] Failed to parse direct URLs: $e');
-        }
-      }
+      // The bound server's address, when it has one (a p2p server has none).
+      final credentials = await ref.read(boundMydiaCredentialsProvider.future);
+      final serverUrl = credentials?.serverUrl;
+      final directUrls = [if (serverUrl != null) serverUrl];
 
       // Load last direct attempt timestamp
       DateTime? lastDirectAttempt;

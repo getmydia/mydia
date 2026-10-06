@@ -12,8 +12,7 @@ import 'local_playback_progress.dart';
 abstract class PlaybackProgressStore {
   Future<void> save(LocalPlaybackProgress progress);
 
-  /// [key] is a [progressKey]: the bare id for home Mydia, `source|id` for
-  /// the rest.
+  /// [key] is a [progressKey].
   ///
   /// Synchronous so the resume decision can read it without an extra await on
   /// a path that is already several awaits deep. Hive keeps an open box in
@@ -21,6 +20,12 @@ abstract class PlaybackProgressStore {
   LocalPlaybackProgress? get(String key);
 
   List<LocalPlaybackProgress> unsynced();
+
+  /// Every readable stored record. For migrations.
+  List<LocalPlaybackProgress> all();
+
+  /// [key] is a [progressKey].
+  Future<void> delete(String key);
 
   /// [key] is a [progressKey].
   Future<void> markSynced(String key, DateTime syncedAt);
@@ -66,6 +71,19 @@ class HivePlaybackProgressStore implements PlaybackProgressStore {
   }
 
   @override
+  List<LocalPlaybackProgress> all() {
+    final out = <LocalPlaybackProgress>[];
+    for (final key in _box.keys) {
+      final record = get(key as String);
+      if (record != null) out.add(record);
+    }
+    return out;
+  }
+
+  @override
+  Future<void> delete(String key) => _box.delete(key);
+
+  @override
   Future<void> markSynced(String key, DateTime syncedAt) async {
     final existing = get(key);
     if (existing == null) return;
@@ -87,6 +105,14 @@ class InMemoryPlaybackProgressStore implements PlaybackProgressStore {
   @override
   List<LocalPlaybackProgress> unsynced() =>
       _records.values.where((p) => !p.isSynced).toList();
+
+  @override
+  List<LocalPlaybackProgress> all() => _records.values.toList();
+
+  @override
+  Future<void> delete(String key) async {
+    _records.remove(key);
+  }
 
   @override
   Future<void> markSynced(String key, DateTime syncedAt) async {
@@ -173,7 +199,7 @@ Future<void> recordLocalProgress({
 /// always writes `syncedAt: null`, meaning "the server does not have this
 /// yet" — true while offline, but wrong the moment the very same save also
 /// reaches the server. Left unmarked, those records pile up as permanently
-/// unsynced, and the first [flushUnsyncedProgress] after offline detection is
+/// unsynced, and the first [flushSourceProgress] after offline detection is
 /// reinstated would replay a queue of stale positions over newer server
 /// progress.
 ///
@@ -232,58 +258,9 @@ Future<void> saveDownloadedProgress({
   }
 }
 
-/// Pushes every locally-recorded position the server does not have yet.
-///
-/// Records are attempted independently: one unreachable item must not strand
-/// the rest of the queue. A record is only marked synced when
-/// `ProgressService` reports the server actually received it — its `false`
-/// return covers both "nothing was sent" (an invalid position/duration) and
-/// "sent but rejected/failed" — so a flaky reconnect can no longer discard
-/// progress the local store exists to protect. The try/catch is a
-/// belt-and-braces guard for a future throwing implementation; `false` is the
-/// primary failure signal today. Either way, a failure leaves `syncedAt` null
-/// so the next reconnect retries — indefinitely, for a record the server
-/// keeps rejecting; there is no dead-letter handling.
-Future<int> flushUnsyncedProgress({
-  required PlaybackProgressStore store,
-  required ProgressService progressService,
-  required DateTime now,
-}) async {
-  var synced = 0;
-
-  final home =
-      store.unsynced().where((r) => r.sourceId == SourceId.legacyMydia.value);
-  for (final record in home) {
-    final position = Duration(seconds: record.positionSeconds);
-    final duration = Duration(seconds: record.durationSeconds);
-
-    try {
-      final ok = record.mediaType == 'episode'
-          ? await progressService.syncEpisodePosition(
-              record.mediaId, position, duration)
-          : await progressService.syncMoviePosition(
-              record.mediaId, position, duration);
-
-      if (!ok) {
-        debugPrint(
-            '[PlaybackProgressStore] Server did not accept sync for ${record.mediaId}, leaving unsynced');
-        continue;
-      }
-
-      await store.markSynced(record.key, now);
-      synced++;
-    } catch (e) {
-      debugPrint(
-          '[PlaybackProgressStore] Deferring sync for ${record.mediaId}: $e');
-    }
-  }
-
-  return synced;
-}
-
 /// Hands every source its positions recorded while out of reach. Pushes
-/// unconditionally, as the home flush does: newer-wins is decided at play
-/// time by [pickNewerProgress]. Records of sources that are gone, out of
+/// unconditionally: newer-wins is decided at play time by
+/// [pickNewerProgress]. Records of sources that are gone, out of
 /// reach, or refuse the push stay unsynced for the next run.
 Future<int> flushSourceProgress({
   required PlaybackProgressStore store,
@@ -293,7 +270,6 @@ Future<int> flushSourceProgress({
 }) async {
   var synced = 0;
   for (final record in store.unsynced()) {
-    if (record.sourceId == SourceId.legacyMydia.value) continue;
     final id = SourceId(record.sourceId);
     final sync = syncFor(id);
     if (sync == null || !reachable(id)) continue;

@@ -7,13 +7,13 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/download_request.dart';
 import '../../domain/models/movie_detail.dart';
 import '../../domain/models/recently_added_item.dart';
 import '../../domain/sources/item.dart';
 import '../../presentation/screens/movie/movie_detail_controller.dart';
 import '../../presentation/screens/show/season_episodes_controller.dart';
 import '../../presentation/screens/show/show_detail_controller.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'bulk_download_helper.dart';
 import 'download_providers.dart';
 
@@ -45,6 +45,15 @@ Future<CollectionSyncResult> syncCollectionItems({
   required WidgetRef ref,
 }) async {
   final downloadManager = await ref.read(downloadManagerProvider.future);
+  final sourceId = ref.read(boundSourceIdProvider);
+  if (sourceId == null) {
+    return CollectionSyncResult(
+      moviesQueued: 0,
+      episodesQueued: 0,
+      skipped: 0,
+      failed: items.length,
+    );
+  }
 
   // Build skip sets
   final downloadedIds = <String>{};
@@ -59,7 +68,8 @@ Future<CollectionSyncResult> syncCollectionItems({
 
   bool Function(String) isDownloadedAs(ItemKind kind) => (id) =>
       downloadedIds.contains(id) ||
-      downloadManager.isDownloaded(homeMydiaRef(kind, id));
+      downloadManager.isDownloaded(
+          ItemRef(sourceId: sourceId, kind: kind, externalId: id));
   final isMovieDownloaded = isDownloadedAs(ItemKind.movie);
   final isEpisodeDownloaded = isDownloadedAs(ItemKind.episode);
   bool isInQueue(String id) => queueIds.contains(id);
@@ -99,6 +109,7 @@ Future<CollectionSyncResult> syncCollectionItems({
       final result = await startBulkMovieDownloads(
         movies: movieDetails,
         resolution: resolution,
+        sourceId: sourceId,
         downloadManager: downloadManager,
         isMediaDownloaded: isMovieDownloaded,
         isMediaInQueue: isInQueue,
@@ -138,6 +149,7 @@ Future<CollectionSyncResult> syncCollectionItems({
               showId: item.id,
               showTitle: show.title,
               showPosterUrl: show.artwork.posterUrl,
+              sourceId: sourceId,
               downloadManager: downloadManager,
               isMediaDownloaded: isEpisodeDownloaded,
               isMediaInQueue: isInQueue,

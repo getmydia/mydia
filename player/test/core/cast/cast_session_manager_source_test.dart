@@ -13,7 +13,8 @@ import 'package:player/domain/sources/item.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
-import 'cast_session_manager_test.mocks.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 class _FakeSink implements CastProgressSink {
   final reports = <Duration>[];
@@ -96,7 +97,7 @@ void main() {
         backend: backend,
         mydiaBackend: backend,
         store: store,
-        progressService: ProgressService(MockGraphQLClient()),
+        progressService: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
         streamingSessions: mydiaSessions,
         resolverFactory: () => CastRouteResolver(
           isP2pMode: false,

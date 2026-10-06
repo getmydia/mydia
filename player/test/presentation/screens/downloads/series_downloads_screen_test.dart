@@ -11,6 +11,7 @@ import 'package:player/presentation/screens/downloads/widgets/download_queue_row
 import 'package:player/presentation/screens/downloads/widgets/downloaded_episode_rail.dart';
 
 import '../../../test_utils/mock_network_images.dart';
+import '../../../test_utils/mydia_test_source.dart';
 
 DownloadedMedia _downloaded(int season, int episode, {String? sourceId}) {
   return DownloadedMedia(
@@ -25,7 +26,7 @@ DownloadedMedia _downloaded(int season, int episode, {String? sourceId}) {
     seasonNumber: season,
     episodeNumber: episode,
     showId: 'show-1',
-    sourceId: sourceId,
+    sourceId: sourceId ?? testMydiaSourceId.value,
     thumbnailUrl: 'https://example.test/$season-$episode.jpg',
   );
 }
@@ -38,6 +39,7 @@ DownloadTask _queued(int season, int episode) {
     quality: '1080p',
     progress: 0.25,
     status: 'downloading',
+    sourceId: testMydiaSourceId.value,
     mediaType: 'episode',
     fileSize: 2048,
     createdAt: DateTime(2026, 1, 1),
@@ -49,7 +51,7 @@ DownloadTask _queued(int season, int episode) {
 
 Future<void> _pump(
   WidgetTester tester, {
-  SourceId sourceId = SourceId.legacyMydia,
+  SourceId sourceId = testMydiaSourceId,
   List<DownloadedMedia> downloaded = const [],
   List<DownloadTask> queue = const [],
 }) async {

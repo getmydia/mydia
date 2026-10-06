@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/plex/plex_identity.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_factories.dart';
@@ -18,11 +16,6 @@ import 'package:player/presentation/screens/sources/plex_sign_in_controller.dart
 import '../../../core/sources/plex/plex_home_fixtures.dart';
 import '../../../core/sources/plex/plex_tv_client_test.dart' show resourcesJson;
 import '../../../test_utils/mock_auth_storage.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 Future<void> until(bool Function() condition) async {
   for (var i = 0; i < 200 && !condition(); i++) {
@@ -68,7 +61,6 @@ void main() {
       return http.Response('', 404);
     });
     container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),

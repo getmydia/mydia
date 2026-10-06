@@ -3,9 +3,6 @@ import 'dart:async';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:mockito/mockito.dart';
-import 'package:player/core/auth/media_token_service.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
@@ -16,11 +13,15 @@ import 'package:player/core/cast/multicast_lock.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
-import '../../test_utils/mock_auth_storage.dart';
-import 'cast_session_manager_test.mocks.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 /// Records acquire/release without touching a platform channel.
 class _RecordingMulticastLock implements MulticastLock {
@@ -45,6 +46,7 @@ void main() {
       castBackendProvider.overrideWithValue(backend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -151,6 +153,7 @@ void main() {
       mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
 
@@ -183,6 +186,7 @@ void main() {
       mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
 
@@ -222,29 +226,24 @@ void main() {
       title: 'Arrival',
     );
 
-    late MockGraphQLClient client;
-    late MockAuthStorage tokenStorage;
+    late FakeMydiaTransport server;
 
     /// Wires the whole real provider chain `castSessionManagerProvider`
-    /// depends on (store, GraphQL client, LAN proxy, server URL, media
-    /// token) with hermetic test doubles, so `startCast` resolves a real
-    /// direct route instead of failing on missing configuration.
+    /// depends on (store, bound client, LAN proxy, server URL, media token)
+    /// with hermetic test doubles, so `startCast` resolves a real direct
+    /// route instead of failing on missing configuration.
     ///
     /// Deliberately does *not* pre-resolve the media token: the whole point
     /// is that the first cast in a fresh app is the one that used to ship a
     /// URL with no credential on it.
-    ProviderContainer buildFullContainer() {
-      client = MockGraphQLClient();
+    ProviderContainer buildFullContainer({
+      Duration mediaTokenLifetime = const Duration(days: 1),
+    }) {
+      server = FakeMydiaTransport();
       // A well-formed `StartStreamingSession` payload, because a direct
-      // Chromecast route now opens a real server-side session (that is what
-      // gives it a session id to end and an offset to resume at). The media
-      // token refresh mutation shares this stub and tolerates the extra key:
-      // it reads only `refreshMediaToken`, and a null there is a benign
-      // "refresh failed" that leaves the stored token in place.
-      when(client.mutate<Object?>(any)).thenAnswer(
-        (_) async => QueryResult(
-          source: QueryResultSource.network,
-          data: const {
+      // Chromecast route opens a real server-side session (that is what
+      // gives it a session id to end and an offset to resume at).
+      server.handlers['StartStreamingSession'] = (_) => {
             '__typename': 'RootMutationType',
             'startStreamingSession': {
               '__typename': 'StreamingSessionResult',
@@ -252,17 +251,25 @@ void main() {
               'duration': null,
               'startPosition': null,
             },
-          },
-          options: QueryOptions(document: gql('{ __typename }')),
+          };
+      server.handlers['RefreshMediaToken'] = (_) => {
+            'refreshMediaToken': {
+              '__typename': 'MediaToken',
+              'token': 'tok-refreshed',
+              'expiresAt':
+                  DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+              'permissions': <String>[],
+            },
+          };
+      final client = fakeMydiaClient(
+        server,
+        creds: MydiaCredentials(
+          instanceId: 'test',
+          accessToken: 'access',
+          mediaToken: 'tok',
+          mediaTokenExpiry: DateTime.now().add(mediaTokenLifetime),
         ),
       );
-
-      tokenStorage = MockAuthStorage()
-        ..seedData({
-          'pairing_media_token': 'tok',
-          'pairing_media_token_expiry':
-              DateTime.now().add(const Duration(days: 1)).toIso8601String(),
-        });
 
       final container = ProviderContainer(overrides: [
         castBackendProvider.overrideWithValue(backend),
@@ -271,13 +278,11 @@ void main() {
         multicastLockProvider.overrideWithValue(lock),
         castSessionStoreProvider
             .overrideWith((ref) async => InMemoryCastSessionStore()),
-        asyncGraphqlClientProvider.overrideWith((ref) async => client),
+        boundMydiaClientProvider.overrideWithValue(client),
+        asyncBoundMydiaClientProvider.overrideWith((ref) async => client),
         localProxyServiceProvider
             .overrideWithValue(LocalProxyService.forTesting()),
         serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
-        asyncMediaTokenServiceProvider.overrideWith(
-          (ref) async => MediaTokenService(client, storage: tokenStorage),
-        ),
       ]);
       addTearDown(container.dispose);
       return container;
@@ -293,10 +298,9 @@ void main() {
     }
 
     test('the very first cast carries a media token', () async {
-      // `mediaTokenProvider` is read nowhere else in the app, so sampling it
-      // synchronously here always saw AsyncLoading: the receiver got a URL
-      // with no `token=` and no way to send an Authorization header, i.e. a
-      // guaranteed 401.
+      // A media token sampled synchronously on the first cast was not there
+      // yet: the receiver got a URL with no `token=` and no way to send an
+      // Authorization header, i.e. a guaranteed 401.
       final container = buildFullContainer();
       final manager = await readyManager(container);
 
@@ -307,18 +311,18 @@ void main() {
 
     test('a token close to expiry is refreshed before the URL is built',
         () async {
-      final container = buildFullContainer();
+      final container =
+          buildFullContainer(mediaTokenLifetime: const Duration(minutes: 5));
       final manager = await readyManager(container);
-      await tokenStorage.write(
-        'pairing_media_token_expiry',
-        DateTime.now().add(const Duration(minutes: 5)).toIso8601String(),
-      );
 
       await manager.startCast(device: device, request: launch);
 
-      // ensureValidToken saw an imminent expiry and called the refresh
-      // mutation; without that call an idle app hands out a dead token.
-      verify(client.mutate<Object?>(any)).called(greaterThanOrEqualTo(1));
+      // The client saw an imminent expiry and called the refresh mutation;
+      // without that call an idle app hands out a dead token.
+      expect(
+          server.calls.map((c) => c.operation), contains('RefreshMediaToken'));
+      expect(
+          backend.loadedRequests.single.url, contains('token=tok-refreshed'));
     });
 
     test(

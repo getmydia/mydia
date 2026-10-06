@@ -16,10 +16,6 @@ enum SourceKind { mydia, plex, stash, jellyfin }
 /// of every list until the app is unlocked.
 enum SourceLock { none, locked, hidden }
 
-/// Storage namespace of the one Mydia login that predates sources. Its
-/// credentials stay under `AuthService`'s original keys, unmigrated.
-const kLegacyStorageNamespace = 'legacy';
-
 /// Profile id of the account holder: Mydia's and Stash's only profile, and
 /// a Plex account's admin. Other Plex Home users use their plex.tv uuid.
 const kOwnerProfileId = 'owner';
@@ -39,8 +35,9 @@ class SourceId {
 
   final String value;
 
-  /// The single Mydia login read from `AuthService`.
-  static const legacyMydia = SourceId('mydia');
+  /// The id no source has, for a lookup that has nothing to find: a record
+  /// with no source, or a screen with no Mydia instance bound.
+  static const none = SourceId('');
 
   @override
   bool operator ==(Object other) => other is SourceId && other.value == value;
@@ -51,6 +48,12 @@ class SourceId {
   @override
   String toString() => value;
 }
+
+/// The id of records the player wrote before accounts existed, which carry
+/// either this value or no source id at all. It exists only so the startup
+/// migration can move them and so nothing deletes them before it has. No
+/// account ever has this id.
+const preAccountSourceId = SourceId('mydia');
 
 /// A credential: one plex.tv identity, one Stash API key, one Mydia login.
 @immutable
@@ -329,38 +332,11 @@ class Source {
     required this.server,
   });
 
-  /// The Mydia login `AuthService` already holds. Nothing is read from
-  /// storage here: the keys stay where they are, under
-  /// [kLegacyStorageNamespace].
-  factory Source.legacyMydia() => const Source(
-        account: ProviderAccount(
-          id: 'mydia',
-          kind: SourceKind.mydia,
-          displayName: 'Mydia',
-          storageNamespace: kLegacyStorageNamespace,
-          activeProfileId: 'owner',
-        ),
-        profile: SourceProfile(
-          id: 'owner',
-          accountId: 'mydia',
-          name: 'Owner',
-          isOwner: true,
-        ),
-        server: SourceServer(
-          id: 'mydia',
-          accountId: 'mydia',
-          profileId: 'owner',
-          name: 'Mydia',
-        ),
-      );
-
   final ProviderAccount account;
   final SourceProfile profile;
   final SourceServer server;
 
-  SourceId get id => account.storageNamespace == kLegacyStorageNamespace
-      ? SourceId.legacyMydia
-      : SourceId('${account.id}:${profile.id}:${server.id}');
+  SourceId get id => SourceId('${account.id}:${profile.id}:${server.id}');
 
   SourceKind get kind => account.kind;
 

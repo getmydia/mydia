@@ -4,7 +4,8 @@ import 'package:player/core/cast/cast_capabilities.dart';
 void main() {
   group('CastCapabilities', () {
     test('any is false only when both protocols are unavailable', () {
-      expect(const CastCapabilities(chromecast: false, dlna: false).any, isFalse);
+      expect(
+          const CastCapabilities(chromecast: false, dlna: false).any, isFalse);
       expect(const CastCapabilities(chromecast: true, dlna: false).any, isTrue);
       expect(const CastCapabilities(chromecast: false, dlna: true).any, isTrue);
     });

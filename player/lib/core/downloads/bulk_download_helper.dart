@@ -5,6 +5,7 @@ import '../../domain/models/episode.dart';
 import '../../domain/models/movie_detail.dart';
 import '../../domain/sources/item.dart';
 import 'download_service.dart';
+import '../sources/source.dart';
 import 'mydia_download_metadata.dart';
 
 /// Result of a bulk download operation.
@@ -29,6 +30,7 @@ class BulkDownloadResult {
 Future<BulkDownloadResult> startBulkEpisodeDownloads({
   required List<Episode> episodes,
   required String resolution,
+  required SourceId sourceId,
   required String showId,
   required String showTitle,
   required String? showPosterUrl,
@@ -49,7 +51,8 @@ Future<BulkDownloadResult> startBulkEpisodeDownloads({
 
     try {
       await downloadManager.start(DownloadRequest(
-        ref: homeMydiaRef(ItemKind.episode, episode.id),
+        ref: ItemRef(
+            sourceId: sourceId, kind: ItemKind.episode, externalId: episode.id),
         optionId: resolution,
         metadata: mydiaEpisodeMetadata(
           episode,
@@ -75,6 +78,7 @@ Future<BulkDownloadResult> startBulkEpisodeDownloads({
 Future<BulkDownloadResult> startBulkMovieDownloads({
   required List<MovieDetail> movies,
   required String resolution,
+  required SourceId sourceId,
   required DownloadService downloadManager,
   required bool Function(String mediaId) isMediaDownloaded,
   required bool Function(String mediaId) isMediaInQueue,
@@ -92,7 +96,8 @@ Future<BulkDownloadResult> startBulkMovieDownloads({
 
     try {
       await downloadManager.start(DownloadRequest(
-        ref: homeMydiaRef(ItemKind.movie, movie.id),
+        ref: ItemRef(
+            sourceId: sourceId, kind: ItemKind.movie, externalId: movie.id),
         optionId: resolution,
         metadata: mydiaMovieMetadata(movie),
       ));

@@ -12,8 +12,9 @@ import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
-ItemRef _ref(String mediaId) => homeMydiaRef(ItemKind.movie, mediaId);
+ItemRef _ref(String mediaId) => testMydiaRef(ItemKind.movie, mediaId);
 
 DownloadRequest _request(
   String mediaId,

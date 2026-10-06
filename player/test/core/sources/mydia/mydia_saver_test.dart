@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/mydia/mydia_saver.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/source.dart';
@@ -15,11 +13,6 @@ import 'package:player/domain/sources/source_error.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_mydia_transport.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// Records whether the secret was already stored when the record landed.
 class _OrderingStore extends InMemorySourceStore {
@@ -55,18 +48,15 @@ MydiaCredentials _paired({String instanceId = 'inst-2'}) => MydiaCredentials(
 
 void main() {
   late MockAuthStorage secretStorage;
-  late MockAuthStorage homeStorage;
   late _OrderingStore store;
   late ProviderContainer container;
   late FakeMydiaTransport transport;
 
   setUp(() {
     secretStorage = MockAuthStorage();
-    homeStorage = MockAuthStorage();
     store = _OrderingStore(secretStorage);
     transport = FakeMydiaTransport();
     container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secretStorage)),
     ]);
@@ -87,7 +77,6 @@ void main() {
       container.read(_refProvider),
       c,
       reauthAccountId: reauth,
-      homeStorage: homeStorage,
       transport: transport,
     );
   }
@@ -152,33 +141,30 @@ void main() {
     expect(id.value, startsWith('mnnode-abc:'));
   });
 
-  test("home's instance id is refused and nothing is written", () async {
-    await homeStorage.write('instance_id', 'inst-2');
-    await expectLater(save(_paired()), throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 0);
-    expect(secretStorage.keys, isEmpty);
+  test('the first server on a fresh install is saved and selected', () async {
+    expect((await store.load()).accounts, isEmpty);
+    final id = await save(_paired());
+    expect((await store.load()).accounts, hasLength(1));
+    expect(container.read(selectedSourceIdProvider), id);
   });
 
-  test("home's node id is refused", () async {
-    await homeStorage.write('server_node_addr', _nodeAddr);
-    await expectLater(save(_paired(instanceId: 'other')),
-        throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 0);
-  });
-
-  test("home's URL is refused, a p2p home URL is skipped", () async {
-    await homeStorage.write('server_url', 'p2p://abc');
-    final c = const MydiaCredentials(
+  test('the migrated instance can be re-added', () async {
+    await save(const MydiaCredentials(
       instanceId: 'inst-9',
-      accessToken: 't',
-      serverUrl: 'https://Home.example/',
-    );
-    await save(c);
-    expect(store.puts, 1);
+      accessToken: 'old',
+      serverUrl: 'https://home.example',
+    ));
+    await store.setLegacyInstanceId('minst-9');
 
-    await homeStorage.write('server_url', 'https://home.example');
-    await expectLater(save(c), throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 1);
+    final id = await save(const MydiaCredentials(
+      instanceId: 'inst-9',
+      accessToken: 'fresh',
+      serverUrl: 'https://Home.example/',
+    ));
+
+    expect(id.value, startsWith('minst-9:'));
+    expect((await store.load()).accounts, hasLength(1));
+    expect((await storedCredentials('minst-9')).accessToken, 'fresh');
   });
 
   test('an id this app cannot use is refused', () async {
@@ -211,6 +197,55 @@ void main() {
     expect((await storedCredentials('minst-2')).accessToken, 'fresh');
   });
 
+  test('a password re-sign-in keeps the device and media tokens', () async {
+    await save(MydiaCredentials(
+      instanceId: 'inst-5',
+      accessToken: 'old',
+      deviceToken: 'device-1',
+      mediaToken: 'media-1',
+      mediaTokenExpiry: DateTime.utc(2030),
+      serverUrl: 'https://home.example',
+      username: 'maya',
+    ));
+    await save(const MydiaCredentials(
+      instanceId: 'inst-5',
+      accessToken: 'fresh',
+      serverUrl: 'https://home.example',
+      username: 'maya',
+    ));
+    final c = await storedCredentials('minst-5');
+    expect(c.accessToken, 'fresh');
+    expect(c.deviceToken, 'device-1');
+    expect(c.mediaToken, 'media-1');
+    expect(c.mediaTokenExpiry, DateTime.utc(2030));
+  });
+
+  test('a re-pair with a new device token replaces it', () async {
+    await save(_paired());
+    await save(const MydiaCredentials(
+      instanceId: 'inst-2',
+      accessToken: 'fresh',
+      deviceToken: 'device-2',
+      nodeAddr: _nodeAddr,
+    ));
+    final c = await storedCredentials('minst-2');
+    expect(c.deviceToken, 'device-2');
+    expect(c.accessToken, 'fresh');
+    expect(c.mediaToken, 'media');
+  });
+
+  test('re-adding keeps the stored addedAtMs', () async {
+    await save(_paired());
+    final first = (await store.load()).accounts.single.addedAtMs;
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    await save(const MydiaCredentials(
+      instanceId: 'inst-2',
+      accessToken: 'fresh',
+      nodeAddr: _nodeAddr,
+    ));
+    expect((await store.load()).accounts.single.addedAtMs, first);
+  });
+
   test('a re-auth for a different instance is refused', () async {
     await expectLater(
       save(_paired(instanceId: 'inst-3'), reauth: 'minst-2'),
@@ -218,6 +253,64 @@ void main() {
           'That code belongs to a different server.')),
     );
     expect(store.puts, 0);
+  });
+
+  group('a migrated URL account', () {
+    final urlId = urlInstanceId('https://home.example');
+    final accountId = 'm$urlId';
+
+    Future<void> seedMigrated() async {
+      await save(MydiaCredentials(
+        instanceId: urlId,
+        accessToken: 'old',
+        serverUrl: 'https://home.example',
+      ));
+      await container
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
+    }
+
+    const login = MydiaCredentials(
+      instanceId: '',
+      accessToken: 'fresh',
+      serverUrl: 'https://Home.example/',
+    );
+
+    setUp(() {
+      transport.handlers['GuestInstanceIdentity'] = (_) => {
+            'serverCompatibility': {'instanceId': 'reported-uuid'},
+          };
+      transport.validTokens = {'fresh'};
+    });
+
+    test('is signed in again when the server reports another id', () async {
+      await seedMigrated();
+      final id = await save(login);
+
+      expect(id.value, startsWith('$accountId:'));
+      final records = (await store.load()).accounts;
+      expect(records, hasLength(1));
+      expect(records.single.account.needsReauth, isFalse);
+      expect((await storedCredentials(accountId)).accessToken, 'fresh');
+    });
+
+    test('is reauthed under its own id', () async {
+      await seedMigrated();
+      await save(login, reauth: accountId);
+      expect((await store.load()).accounts, hasLength(1));
+      expect((await storedCredentials(accountId)).accessToken, 'fresh');
+    });
+
+    test('does not absorb a genuinely different server', () async {
+      await seedMigrated();
+      final id = await save(const MydiaCredentials(
+        instanceId: '',
+        accessToken: 'fresh',
+        serverUrl: 'https://elsewhere.example',
+      ));
+      expect(id.value, startsWith('mreported-uuid:'));
+      expect((await store.load()).accounts, hasLength(2));
+    });
   });
 
   test('a re-auth for the same instance is accepted', () async {

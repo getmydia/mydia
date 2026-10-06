@@ -20,7 +20,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
@@ -107,15 +106,6 @@ Future<void> pumpWithInsets(
   );
 }
 
-/// `FreshnessHeader` renders nothing at all in offline mode, and the real
-/// `AuthStateNotifier` reaches for secure storage on build, which a widget
-/// test has no business doing. Mirrors `browse_scaffold_test.dart`'s stub.
-class _StubAuthState extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() =>
-      const AsyncValue.data(AuthStatus.authenticated);
-}
-
 /// A single-movie library page. Every object needs `__typename`, the root
 /// included: `gql()` injects a `__typename` selection into every selection
 /// set, and the normalized cache refuses to write data that lacks a matching
@@ -186,7 +176,7 @@ void main() {
           tester,
           insets,
           width: _kWidth,
-          extraOverrides: [authStateProvider.overrideWith(_StubAuthState.new)],
+          extraOverrides: [],
           child: BrowseScaffold(
             icon: Icons.star,
             title: 'Starlit Shelf',
@@ -208,7 +198,7 @@ void main() {
         tester,
         _cases['macOS']!,
         width: _kWidth,
-        extraOverrides: [authStateProvider.overrideWith(_StubAuthState.new)],
+        extraOverrides: [],
         child: BrowseScaffold(
           icon: Icons.star,
           title: 'Starlit Shelf',

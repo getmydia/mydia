@@ -7,11 +7,9 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
 import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
-import '../graphql/graphql_provider.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
 import 'lock/source_lock_controller.dart';
@@ -35,15 +33,42 @@ final sourceStoreProvider = FutureProvider<SourceStore>(
 final sourceSecretsProvider =
     Provider<SourceSecrets>((ref) => SourceSecrets(getAuthStorage()));
 
+/// Overridable so tests can exercise the web rules in the VM.
+final isWebProvider = Provider<bool>((_) => kIsWeb);
+
+/// Plex, Jellyfin and Stash send no CORS headers for a foreign origin, and
+/// the web player is served by Mydia itself. Web keeps Mydia only.
+bool sourceKindAllowedOnWeb(SourceKind k) => k == SourceKind.mydia;
+
 /// Every stored third-party account, plus the remembered active source.
 class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   @override
   Future<SourceSnapshot> build() async {
-    // Plex and Stash send no CORS headers for a foreign origin, and the web
-    // player is served by Mydia itself. Web keeps Mydia only.
-    if (kIsWeb) return SourceSnapshot.empty;
+    final isWeb = ref.watch(isWebProvider);
     final store = await ref.watch(sourceStoreProvider.future);
-    return store.load();
+    final snapshot = await store.load();
+    return isWeb ? _webOnly(snapshot) : snapshot;
+  }
+
+  /// What web can use of [snapshot]: Mydia accounts and their choices.
+  static SourceSnapshot _webOnly(SourceSnapshot snapshot) {
+    final accounts = [
+      for (final a in snapshot.accounts)
+        if (sourceKindAllowedOnWeb(a.account.kind)) a,
+    ];
+    if (accounts.length == snapshot.accounts.length) return snapshot;
+    bool kept(SourceId id) =>
+        accounts.any((a) => id.value.startsWith('${a.account.id}:'));
+    return SourceSnapshot(
+      accounts: accounts,
+      activeId: snapshot.activeId != null && kept(snapshot.activeId!)
+          ? snapshot.activeId
+          : null,
+      allServers: {
+        for (final e in snapshot.allServers.entries)
+          if (kept(e.key)) e.key: e.value,
+      },
+    );
   }
 
   SourceSnapshot? get _current => switch (state) {
@@ -66,6 +91,12 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// record's locks for servers the new record still lists, so signing in
   /// again never unhides a server.
   Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+        if (ref.read(isWebProvider) &&
+            !sourceKindAllowedOnWeb(record.account.kind)) {
+          debugPrint(
+              '[Sources] ${record.account.kind} accounts cannot run on web.');
+          return Future<void>.value();
+        }
         final stored = _record(record.account.id);
         final ids = {for (final s in record.servers) s.id};
         final kept = {
@@ -153,7 +184,6 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// Never throws: a selection that cannot be remembered still applies for
   /// this launch.
   Future<void> setActive(SourceId? id) async {
-    if (kIsWeb) return;
     try {
       await _serialise(() => _write((store) => store.setActive(id)));
     } catch (e) {
@@ -248,12 +278,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
 
   Future<void> _write(Future<void> Function(SourceStore store) write) async {
-    if (kIsWeb) return;
     final store = await ref.read(sourceStoreProvider.future);
     await write(store);
     final next = await store.load();
     if (!ref.mounted) return;
-    state = AsyncData(next);
+    state = AsyncData(ref.read(isWebProvider) ? _webOnly(next) : next);
   }
 }
 
@@ -334,50 +363,20 @@ final accountProfilesProvider =
       const [];
 });
 
-/// Whether the legacy Mydia login has credentials.
-///
-/// `AuthStateNotifier.retryConnection` sets a bare `AsyncValue.loading()`,
-/// with no previous value. Reading that directly made Mydia vanish from the
-/// switcher for the length of every retry; this holds the last answer
-/// through loading and changes only on data or an error.
-class MydiaPresenceNotifier extends Notifier<bool> {
-  @override
-  bool build() {
-    ref.listen<AsyncValue<AuthStatus>>(authStateProvider, (_, next) {
-      final present = _presentIn(next);
-      if (present != null) state = present;
-    });
-    return _presentIn(ref.read(authStateProvider)) ?? false;
-  }
+/// Every source: the stored accounts, minus hidden ones while the app is
+/// locked.
+final sourcesProvider =
+    Provider<List<Source>>((ref) => ref.watch(thirdPartySourcesProvider));
 
-  static bool? _presentIn(AsyncValue<AuthStatus> auth) => switch (auth) {
-        AsyncData(:final value) =>
-          value == AuthStatus.authenticated || value == AuthStatus.offlineMode,
-        AsyncError() => false,
-        _ => null,
-      };
-}
-
-final mydiaPresentProvider =
-    NotifierProvider<MydiaPresenceNotifier, bool>(MydiaPresenceNotifier.new);
-
-/// Every source, the legacy Mydia login first when it has credentials.
-///
-/// Offline mode counts: the credentials exist even though the server is out
-/// of reach, and the downloads screen still belongs to that source.
-final sourcesProvider = Provider<List<Source>>((ref) {
-  return [
-    if (ref.watch(mydiaPresentProvider)) Source.legacyMydia(),
-    ...ref.watch(thirdPartySourcesProvider),
-  ];
+/// Whether any Mydia account is stored.
+final hasMydiaProvider = Provider<bool>((ref) {
+  final snapshot = _snapshotOf(ref);
+  return snapshot != null &&
+      snapshot.accounts.any((a) => a.account.kind == SourceKind.mydia);
 });
 
 /// The sources the switcher shows: empty unless there is a choice to make.
-///
-/// Reads [thirdPartySourcesProvider] first so that, while no third-party
-/// source exists, building the sidebar never reads the auth state.
 final switchableSourcesProvider = Provider<List<Source>>((ref) {
-  if (ref.watch(thirdPartySourcesProvider).isEmpty) return const [];
   final all = ref.watch(sourcesProvider);
   return all.length > 1 ? all : const [];
 });
@@ -427,15 +426,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
       ref.watch(sourcesProvider.select((all) => all.any((s) => s.id == id)));
   if (!exists) return null;
   final source = ref.read(sourcesProvider).firstWhere((s) => s.id == id);
-  final MediaSource media = switch (source.kind) {
-    SourceKind.mydia when source.id == SourceId.legacyMydia =>
-      buildHomeMydiaSource(ref, source),
-    SourceKind.mydia ||
-    SourceKind.plex ||
-    SourceKind.stash ||
-    SourceKind.jellyfin =>
-      buildThirdPartySource(ref, source),
-  };
+  final MediaSource media = buildThirdPartySource(ref, source);
   ref.onDispose(media.dispose);
   return media;
 });
@@ -444,7 +435,7 @@ final mediaSourceProvider = Provider.family<MediaSource?, SourceId>((ref, id) {
 final allServersChoicesProvider = Provider<Map<SourceId, bool>>(
     (ref) => ref.watch(sourceRecordsProvider).value?.allServers ?? const {});
 
-/// Included sources the merged views read, home Mydia first. Leaves out
+/// Included sources the merged views read. Leaves out
 /// what is locked away and what needs signing in again.
 ///
 /// The list compares equal when it holds the same instances in the same
@@ -490,11 +481,15 @@ final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
   ];
 });
 
-/// Where `/s/:sourceId` lands before its screen builds: home Mydia keeps its
-/// unprefixed routes, so its root is `/`; an unknown id goes home; a Plex
-/// or Stash source stays (null).
-String? sourceRootRedirect(String sourceId, List<Source> sources) {
+/// Where `/s/:sourceId` lands before its screen builds: the bound Mydia
+/// instance keeps its unprefixed routes, so its root is `/`; an unknown id
+/// goes home; any other source stays (null).
+String? sourceRootRedirect(
+  String sourceId,
+  List<Source> sources, {
+  SourceId? bound,
+}) {
   final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
-  if (source == null || source.id == SourceId.legacyMydia) return '/';
+  if (source == null || source.id == bound) return '/';
   return null;
 }

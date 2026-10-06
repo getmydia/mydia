@@ -12,6 +12,7 @@ import '../../../../core/playback/playback_controller.dart';
 import '../../../../core/playback/stream_urls.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/player/progress_service.dart';
+import '../../../../core/sources/mydia/mydia_client.dart';
 import '../../../../core/sources/source.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/models/media_segment.dart';
@@ -45,10 +46,12 @@ class MydiaPlaybackSession implements PlaybackSession {
     required Future<GraphQLClient> Function() awaitClient,
     required PlaybackTarget Function() target,
     required this.offline,
+    required SourceId? Function() sourceId,
     MydiaStreamingDeps? streaming,
   })  : _client = client,
         _awaitClient = awaitClient,
         _target = target,
+        _sourceId = sourceId,
         _streaming = streaming;
 
   /// True while the app is in offline mode.
@@ -63,6 +66,9 @@ class MydiaPlaybackSession implements PlaybackSession {
   final Future<GraphQLClient> Function() _awaitClient;
   final PlaybackTarget Function() _target;
 
+  /// The bound Mydia instance this playback belongs to, if one is bound.
+  final SourceId? Function() _sourceId;
+
   @override
   bool get canWrite => _client() != null;
 
@@ -71,7 +77,7 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   ItemRef get item => ItemRef(
-        sourceId: SourceId.legacyMydia,
+        sourceId: _sourceId() ?? SourceId.none,
         kind: _target().mediaType == 'episode'
             ? ItemKind.episode
             : ItemKind.movie,
@@ -93,6 +99,12 @@ class MydiaPlaybackSession implements PlaybackSession {
       '&title=${Uri.encodeComponent(title)}&showId=$showId'
       '&seasonNumber=$seasonNumber';
 
+  MydiaClient _boundClient(MydiaStreamingDeps deps) {
+    final client = deps.boundClient();
+    if (client == null) throw StateError('No Mydia server');
+    return client;
+  }
+
   @override
   Future<ProgressReporter> openProgress() async {
     final deps = _streaming;
@@ -101,7 +113,7 @@ class MydiaPlaybackSession implements PlaybackSession {
     }
     final client = await _awaitClient();
     deps.adoptClient(client);
-    return ProgressService(client);
+    return ProgressService(_boundClient(deps));
   }
 
   /// The streaming branch of the player screen's `_initializePlayer`, moved
@@ -153,7 +165,7 @@ class MydiaPlaybackSession implements PlaybackSession {
 
     return StreamingReady(StreamingSetup(
       memoryKey: isP2PMode ? connectionState.serverNodeAddr! : serverUrl,
-      progress: ProgressService(graphqlClient),
+      progress: ProgressService(_boundClient(deps)),
       scrubThumbnails: (
         serverUrl: serverUrl,
         token: token,

@@ -24,10 +24,10 @@ import 'login/login_controller.dart';
 import 'sources/add_source_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key, this.guest});
+  const LoginScreen({super.key, this.reauthAccountId});
 
-  /// Set when adding a guest Mydia server beside home, not signing in to it.
-  final GuestTarget? guest;
+  /// Set when signing in again to this account, which the server must be.
+  final String? reauthAccountId;
 
   /// Whether to offer the camera QR scanner.
   ///
@@ -45,6 +45,11 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
+  /// A re-auth, or a screen pushed over another one (Add a server), rather
+  /// than the first sign-in of a fresh install.
+  bool get _isAdding =>
+      widget.reauthAccountId != null || Navigator.canPop(context);
+
   final _formKey = GlobalKey<FormState>();
   final _serverUrlController = TextEditingController();
   final _usernameController = TextEditingController();
@@ -256,13 +261,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       if (!mounted) return;
     }
 
-    final guestSource = state.guestSource;
-    context.go(guestSource == null ? '/' : '/s/${guestSource.value}');
+    final added = state.addedSource;
+    // The instance the legacy screens serve opens on `/`; any other server
+    // opens on its own page.
+    context.go(added == null || state.addedIsBound ? '/' : '/s/${added.value}');
   }
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {
     final controller = ref.read(loginControllerProvider.notifier);
-    await controller.pairWithQrCode(qrData, guest: widget.guest);
+    await controller.pairWithQrCode(qrData,
+        reauthAccountId: widget.reauthAccountId);
 
     await _completePairing();
   }
@@ -275,7 +283,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _serverUrlController.text.trim(),
       _usernameController.text.trim(),
       _passwordController.text,
-      guest: widget.guest,
+      reauthAccountId: widget.reauthAccountId,
     );
 
     await _completePairing();
@@ -288,7 +296,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final controller = ref.read(loginControllerProvider.notifier);
     // No custom relay URL: the claim code resolves through the relay API and
     // iroh's default discovery.
-    await controller.pairWithClaimCode(code, guest: widget.guest);
+    await controller.pairWithClaimCode(code,
+        reauthAccountId: widget.reauthAccountId);
 
     await _completePairing();
   }
@@ -512,7 +521,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         card,
-        if (widget.guest == null) ...const [
+        if (widget.reauthAccountId == null) ...const [
           SizedBox(height: 16),
           ConnectOtherServerButton(),
           ShowHiddenSourcesButton(),
@@ -679,7 +688,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           children: [
             Flexible(
               child: Text(
-                widget.guest != null ? 'Add a Mydia server' : 'Mydia Player',
+                _isAdding ? 'Add a Mydia server' : 'Mydia Player',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -834,9 +843,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 children: [
                   Flexible(
                     child: Text(
-                      widget.guest != null
-                          ? 'Add a Mydia server'
-                          : 'Mydia Player',
+                      _isAdding ? 'Add a Mydia server' : 'Mydia Player',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1489,7 +1496,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
     await ref
         .read(loginControllerProvider.notifier)
-        .submitTotpCode(code, guest: widget.guest);
+        .submitTotpCode(code, reauthAccountId: widget.reauthAccountId);
     await _completePairing();
   }
 

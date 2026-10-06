@@ -4,9 +4,7 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -21,11 +19,6 @@ class _StubConnectionNotifier extends ConnectionNotifier {
   ConnectionState build() => ConnectionState.direct();
 }
 
-class _FixedAuth extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
-
 Future<void> _pump(WidgetTester tester, String location) async {
   tester.view.physicalSize = const Size(1200, 1400);
   tester.view.devicePixelRatio = 1.0;
@@ -34,7 +27,6 @@ Future<void> _pump(WidgetTester tester, String location) async {
 
   final container = ProviderContainer(overrides: [
     connectionProvider.overrideWith(_StubConnectionNotifier.new),
-    authStateProvider.overrideWith(_FixedAuth.new),
     sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
     thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
     mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),

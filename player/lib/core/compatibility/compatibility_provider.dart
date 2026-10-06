@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../graphql/graphql_provider.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'compatibility.dart';
-import 'compatibility_service.dart';
 import 'compatibility_verdict.dart';
 
 /// Hive box holding dismissals of the soft compatibility nudge.
@@ -87,9 +86,9 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
   @override
   Future<CompatibilityState> build() async {
     final playerVersion = await ref.watch(playerVersionProvider.future);
-    final client = ref.watch(graphqlClientProvider);
+    final client = ref.watch(boundMydiaClientProvider);
 
-    final server = await CompatibilityService(client).fetch();
+    final server = await client?.fetchCompatibility();
     final verdict = evaluateCompatibility(
       playerVersion: playerVersion,
       server: server,

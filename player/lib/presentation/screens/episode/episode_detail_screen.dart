@@ -17,6 +17,7 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
   EpisodeDetailScreen({super.key, required String id})
@@ -463,7 +464,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
   Widget _buildDownloadButton(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
-    final item = itemRefOf(episode.target);
+    final item = itemRefOf(episode.target, ref.watch(boundSourceIdProvider));
     final isDownloadedAsync = ref.watch(isItemDownloadedProvider(item));
     final isDownloaded = isDownloadedAsync.value ?? false;
     final hasFiles = episode.hasFile;

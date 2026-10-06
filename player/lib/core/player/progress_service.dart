@@ -1,9 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../domain/sources/source_error.dart';
+import '../sources/mydia/mydia_client.dart';
 import '../../graphql/mutations/update_movie_progress.graphql.dart';
 import '../../graphql/mutations/update_episode_progress.graphql.dart';
 import 'progress_reporter.dart';
@@ -14,7 +15,7 @@ import 'stream_timeline.dart';
 /// Handles periodic progress updates during playback and saves
 /// final position when playback stops.
 class ProgressService implements ProgressReporter {
-  final GraphQLClient _client;
+  final MydiaClient _client;
   Timer? _syncTimer;
   DateTime? _lastSyncTime;
 
@@ -252,22 +253,18 @@ class ProgressService implements ProgressReporter {
         'position=${progress.positionSeconds}, duration=${progress.durationSeconds}',
       );
 
-      final result = await _client.mutate(MutationOptions(
-        document: documentNodeMutationUpdateMovieProgress,
-        variables: Variables$Mutation$UpdateMovieProgress(
+      await _client.request(
+        documentNodeMutationUpdateMovieProgress,
+        Variables$Mutation$UpdateMovieProgress(
           movieId: movieId,
           positionSeconds: progress.positionSeconds,
           durationSeconds: progress.durationSeconds,
         ).toJson(),
-      ));
-
-      if (result.hasException) {
-        debugPrint(
-            '[ProgressService] Error syncing movie progress: ${result.exception}');
-        return false;
-      }
-
+      );
       return true;
+    } on SourceException catch (e) {
+      debugPrint('[ProgressService] Error syncing movie progress: $e');
+      return false;
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing movie progress: $e');
       return false;
@@ -286,22 +283,18 @@ class ProgressService implements ProgressReporter {
         'position=${progress.positionSeconds}, duration=${progress.durationSeconds}',
       );
 
-      final result = await _client.mutate(MutationOptions(
-        document: documentNodeMutationUpdateEpisodeProgress,
-        variables: Variables$Mutation$UpdateEpisodeProgress(
+      await _client.request(
+        documentNodeMutationUpdateEpisodeProgress,
+        Variables$Mutation$UpdateEpisodeProgress(
           episodeId: episodeId,
           positionSeconds: progress.positionSeconds,
           durationSeconds: progress.durationSeconds,
         ).toJson(),
-      ));
-
-      if (result.hasException) {
-        debugPrint(
-            '[ProgressService] Error syncing episode progress: ${result.exception}');
-        return false;
-      }
-
+      );
       return true;
+    } on SourceException catch (e) {
+      debugPrint('[ProgressService] Error syncing episode progress: $e');
+      return false;
     } catch (e) {
       debugPrint('[ProgressService] Exception syncing episode progress: $e');
       return false;

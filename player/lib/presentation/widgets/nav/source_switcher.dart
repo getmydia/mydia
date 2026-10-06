@@ -18,6 +18,7 @@ import '../focus_highlight.dart';
 import 'all_servers_nav_list.dart' show allServersRoot, isAllServersLocation;
 import 'source_nav_list.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 
 class SourceSwitcher extends ConsumerWidget {
   const SourceSwitcher({
@@ -38,17 +39,18 @@ class SourceSwitcher extends ConsumerWidget {
   final ValueChanged<String>? onSwitchSource;
 
   /// The source the header names: the one in a `/s/<id>` location,
-  /// otherwise Mydia, whose screens are every other location. The remembered
-  /// pick only decides when Mydia is absent, on screens such as
-  /// `/sources/manage`.
+  /// otherwise the [bound] Mydia instance, whose screens are every other
+  /// location. The remembered pick only decides when none is bound, on
+  /// screens such as `/sources/manage`.
   static Source currentFor(
     List<Source> sources,
     String location,
-    SourceId? active,
-  ) {
+    SourceId? active, {
+    SourceId? bound,
+  }) {
     final fromLocation = sourceIdFromLocation(location);
     return sources.where((s) => s.id.value == fromLocation).firstOrNull ??
-        sources.where((s) => s.id == SourceId.legacyMydia).firstOrNull ??
+        sources.where((s) => s.id == bound).firstOrNull ??
         sources.where((s) => s.id == active).firstOrNull ??
         sources.first;
   }
@@ -57,8 +59,9 @@ class SourceSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(switchableSourcesProvider);
     if (sources.isEmpty) return const SizedBox.shrink();
-    final current =
-        currentFor(sources, location, ref.watch(activeSourceIdProvider));
+    final current = currentFor(
+        sources, location, ref.watch(activeSourceIdProvider),
+        bound: ref.watch(boundSourceIdProvider));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -107,7 +110,9 @@ class SourceSwitcher extends ConsumerWidget {
       case PickSource(:final source):
         ref.read(selectedSourceIdProvider.notifier).select(source.id);
         (onSwitchSource ?? onNavigate)(
-            source.id == SourceId.legacyMydia ? '/' : '/s/${source.id.value}');
+            source.id == ref.read(boundSourceIdProvider)
+                ? '/'
+                : '/s/${source.id.value}');
       case SwitchUser(:final account):
         await showPlexHomeSheet(
           anchorContext,
@@ -139,14 +144,11 @@ class _Header extends StatelessWidget {
   /// Receives this row's own context, which the picker's popover hangs under.
   final ValueChanged<BuildContext> onOpen;
 
-  /// The line under the name, or null when it would only repeat it: Mydia's
-  /// display name is already "Mydia".
+  /// The line under the name.
   static String? _caption(Source source, String? homeUser) {
     if (source.account.needsReauth) return 'Sign in again';
     return switch (source.kind) {
-      SourceKind.mydia => source.id == SourceId.legacyMydia
-          ? null
-          : 'Mydia · ${source.account.displayName}',
+      SourceKind.mydia => 'Mydia · ${source.account.displayName}',
       SourceKind.plex => homeUser == null
           ? 'Plex · ${source.account.displayName}'
           : 'Plex · ${source.account.displayName} · $homeUser',

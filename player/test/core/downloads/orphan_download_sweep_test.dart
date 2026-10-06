@@ -13,6 +13,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/models/download.dart';
 
 import '../sources/store/source_json_test.dart' show plexRecord;
+import '../../test_utils/mydia_test_source.dart';
 import 'download_test_harness.dart';
 
 class _Records extends SourceRecordsNotifier {
@@ -79,7 +80,7 @@ void main() {
     final goneKid = await media('b', 'gone1:kid:aa11');
     final goneOther = await media('c', 'gone2:owner:bb22');
     final known = await media('d', 'acc1:owner:aa11');
-    final home = await media('e', null);
+    final mydia = await media('e', testMydiaSourceId.value);
     await h.database.saveTask(DownloadTask(
         id: 't1',
         mediaId: 'm-t1',
@@ -97,16 +98,65 @@ void main() {
         sourceId: 'acc1:owner:aa11',
         createdAt: DateTime(2026)));
 
-    expect(await h.service.deleteDownloadsOfUnknownAccounts({'acc1'}), 3);
+    expect(
+        await h.service.deleteDownloadsOfUnknownAccounts({'acc1', 'macct'}), 3);
 
     for (final path in [gone, goneKid, goneOther]) {
       expect(File(path).existsSync(), isFalse);
     }
     expect(File(known).existsSync(), isTrue);
-    expect(File(home).existsSync(), isTrue);
+    expect(File(mydia).existsSync(), isTrue);
     expect(h.service.getDownloadedMedia().map((m) => m.id).toSet(), {'d', 'e'});
     expect(h.database.getTask('t1'), isNull);
     expect(h.database.getTask('t2'), isNotNull);
+  });
+
+  test('downloads from before accounts survive a sweep that knows nothing',
+      () async {
+    final h = await makeHarness(body: Uint8List(0));
+    addTearDown(h.dispose);
+    Future<String> media(String id, String? source) async {
+      final file = File('${h.downloadDir.path}/$id')..writeAsBytesSync([1]);
+      await h.database.saveMedia(DownloadedMedia(
+          id: id,
+          mediaId: id,
+          title: 'Quill Harbor',
+          quality: 'original',
+          filePath: file.path,
+          fileSize: 1,
+          downloadedAt: DateTime(2026),
+          sourceId: source));
+      return file.path;
+    }
+
+    DownloadTask task(String id, String? source) => DownloadTask(
+        id: id,
+        mediaId: 'm-$id',
+        title: 'Quill Harbor',
+        quality: 'original',
+        status: 'interrupted',
+        sourceId: source,
+        createdAt: DateTime(2026));
+
+    final unset = await media('a', null);
+    final bare = await media('b', preAccountSourceId.value);
+    final gone = await media('c', 'gone1:owner:aa11');
+    await h.database.saveTask(task('t-null', null));
+    await h.database.saveTask(task('t-bare', preAccountSourceId.value));
+    await h.database.saveTask(task('t-gone', 'gone1:owner:aa11'));
+
+    expect(await h.service.deleteDownloadsOfUnknownAccounts(<String>{}), 1);
+
+    expect(File(unset).existsSync(), isTrue);
+    expect(File(bare).existsSync(), isTrue);
+    expect(File(gone).existsSync(), isFalse);
+    expect(h.database.getTask('t-null'), isNotNull);
+    expect(h.database.getTask('t-bare'), isNotNull);
+    expect(h.database.getTask('t-gone'), isNull);
+
+    expect(await h.service.deleteAccountDownloads('mydia'), 0,
+        reason: 'removing an account never reaches pre-account records');
+    expect(File(unset).existsSync(), isTrue);
   });
 
   group('the trigger', () {

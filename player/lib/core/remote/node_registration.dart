@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/register_device_node.graphql.dart';
+import '../sources/mydia/mydia_client.dart';
 
 /// Tells the server which iroh node ID this device is currently reachable at.
 ///
@@ -9,11 +10,11 @@ import '../../graphql/mutations/register_device_node.graphql.dart';
 /// regenerated its keypair would otherwise sit in the roster under an address
 /// nobody can reach, which reads to a controller as permanently offline.
 class NodeRegistration {
-  final GraphQLClient _client;
+  final MydiaClient _client;
   final Future<String?> Function() _nodeId;
 
   NodeRegistration({
-    required GraphQLClient client,
+    required MydiaClient client,
     required Future<String?> Function() nodeId,
   })  : _client = client,
         _nodeId = nodeId;
@@ -28,22 +29,16 @@ class NodeRegistration {
       final id = await _nodeId();
       if (id == null || id.isEmpty) return false;
 
-      final result = await _client.mutate(
-        MutationOptions(
-          document: documentNodeMutationRegisterDeviceNode,
-          variables: Variables$Mutation$RegisterDeviceNode(nodeId: id).toJson(),
-          fetchPolicy: FetchPolicy.noCache,
-        ),
+      final data = await _client.request(
+        documentNodeMutationRegisterDeviceNode,
+        Variables$Mutation$RegisterDeviceNode(nodeId: id).toJson(),
       );
 
-      if (result.hasException) {
-        debugPrint('[NodeRegistration] failed: ${result.exception}');
-        return false;
-      }
-
-      final registered =
-          result.data?['registerDeviceNode'] as Map<String, Object?>?;
+      final registered = data['registerDeviceNode'] as Map<String, Object?>?;
       return registered?['nodeId'] == id;
+    } on SourceException catch (error) {
+      debugPrint('[NodeRegistration] failed: $error');
+      return false;
     } catch (error) {
       debugPrint('[NodeRegistration] threw: $error');
       return false;

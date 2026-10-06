@@ -6,9 +6,12 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/compatibility/compatibility.dart';
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/domain/sources/source_error.dart';
 
-import '../../test_utils/stub_graphql_client.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 /// A server at the player's current recommended floor, with both of its own
 /// floors at that same version: the parity case that draws no banner.
@@ -42,15 +45,25 @@ var _boxCounter = 0;
 Future<Box<bool>> memoryBox() =>
     Hive.openBox<bool>('compat-test-${_boxCounter++}', bytes: Uint8List(0));
 
+/// A bound server answering [response], or refusing the query as a server
+/// predating the feature does when [response] is null.
+MydiaClient serverAnswering(Map<String, dynamic>? response) {
+  final transport = FakeMydiaTransport();
+  transport.handlers['ServerCompatibility'] = (_) =>
+      response ??
+      (throw const SourceException.server(
+          'Cannot query field "serverCompatibility"'));
+  return fakeMydiaClient(transport);
+}
+
 ProviderContainer harness({
   required String playerVersion,
-  required Object response,
+  required Map<String, dynamic>? response,
   required Box<bool> box,
 }) {
   final container = ProviderContainer(
     overrides: [
-      graphqlClientProvider
-          .overrideWithValue(stubClient(StubLink.responses([response]))),
+      boundMydiaClientProvider.overrideWithValue(serverAnswering(response)),
       playerVersionProvider.overrideWith((ref) async => playerVersion),
       compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
     ],
@@ -98,8 +111,7 @@ void main() {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.9.0',
-      response:
-          graphqlErrorResponse('Cannot query field "serverCompatibility"'),
+      response: null,
       box: box,
     );
 
@@ -233,11 +245,9 @@ void main() {
       // instead of retrying for a real Exception until the test times out.
       retry: (retryCount, error) => null,
       overrides: [
-        graphqlClientProvider.overrideWithValue(
-          stubClient(
-            StubLink.responses([
-              okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
-            ]),
+        boundMydiaClientProvider.overrideWithValue(
+          serverAnswering(
+            okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
           ),
         ),
         playerVersionProvider.overrideWith((ref) async => '0.8.0'),

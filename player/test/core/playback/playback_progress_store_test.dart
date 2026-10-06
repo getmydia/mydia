@@ -10,6 +10,11 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 
+import '../../test_utils/mydia_test_source.dart';
+
+/// The store key of the test account's `mediaId`.
+String key(String mediaId) => '${testMydiaSourceId.value}|$mediaId';
+
 void main() {
   LocalPlaybackProgress progress({
     String mediaId = 'movie-1',
@@ -19,6 +24,7 @@ void main() {
     DateTime? syncedAt,
   }) =>
       LocalPlaybackProgress(
+        sourceId: testMydiaSourceId.value,
         mediaId: mediaId,
         mediaType: 'movie',
         positionSeconds: positionSeconds,
@@ -51,8 +57,8 @@ void main() {
       final store = InMemoryPlaybackProgressStore();
       await store.save(progress(positionSeconds: 900));
 
-      expect(store.get('movie-1')!.positionSeconds, 900);
-      expect(store.get('movie-2'), isNull);
+      expect(store.get(key('movie-1'))!.positionSeconds, 900);
+      expect(store.get(key('movie-2')), isNull);
     });
 
     test('a later save replaces an earlier one', () async {
@@ -60,7 +66,7 @@ void main() {
       await store.save(progress(positionSeconds: 600));
       await store.save(progress(positionSeconds: 900));
 
-      expect(store.get('movie-1')!.positionSeconds, 900);
+      expect(store.get(key('movie-1'))!.positionSeconds, 900);
     });
 
     test('unsynced lists only records the server does not have', () async {
@@ -77,12 +83,12 @@ void main() {
       final store = InMemoryPlaybackProgressStore();
       await store.save(progress(mediaId: 'a'));
 
-      await store.markSynced('a', DateTime.utc(2026, 8, 2, 14));
+      await store.markSynced(key('a'), DateTime.utc(2026, 8, 2, 14));
 
       expect(store.unsynced(), isEmpty);
-      expect(store.get('a')!.syncedAt, DateTime.utc(2026, 8, 2, 14));
+      expect(store.get(key('a'))!.syncedAt, DateTime.utc(2026, 8, 2, 14));
       expect(
-        store.get('a')!.positionSeconds,
+        store.get(key('a'))!.positionSeconds,
         600,
         reason: 'marking synced must not disturb the position',
       );
@@ -90,8 +96,8 @@ void main() {
 
     test('markSynced on an unknown id is a no-op', () async {
       final store = InMemoryPlaybackProgressStore();
-      await store.markSynced('ghost', DateTime.utc(2026, 8, 2, 14));
-      expect(store.get('ghost'), isNull);
+      await store.markSynced(key('ghost'), DateTime.utc(2026, 8, 2, 14));
+      expect(store.get(key('ghost')), isNull);
     });
   });
 
@@ -117,7 +123,7 @@ void main() {
         progress(positionSeconds: 900, updatedAt: DateTime.utc(2026, 8, 2, 12)),
       );
 
-      final loaded = store.get('movie-1');
+      final loaded = store.get(key('movie-1'));
 
       expect(loaded, isNotNull);
       expect(loaded!.mediaId, 'movie-1');
@@ -132,7 +138,7 @@ void main() {
       final store = HivePlaybackProgressStore(box);
       await store.save(progress(syncedAt: DateTime.utc(2026, 8, 2, 13)));
 
-      expect(store.get('movie-1')?.syncedAt, DateTime.utc(2026, 8, 2, 13));
+      expect(store.get(key('movie-1'))?.syncedAt, DateTime.utc(2026, 8, 2, 13));
     });
 
     test('unsynced reads only unsynced records from a real box', () async {
@@ -149,12 +155,12 @@ void main() {
       final store = HivePlaybackProgressStore(box);
       await store.save(progress(mediaId: 'a', positionSeconds: 600));
 
-      await store.markSynced('a', DateTime.utc(2026, 8, 2, 14));
+      await store.markSynced(key('a'), DateTime.utc(2026, 8, 2, 14));
 
       // Read back through a fresh store instance wrapping the same box, to
       // prove the write landed in the box itself rather than in some
       // instance-level cache the store does not actually have.
-      final reloaded = HivePlaybackProgressStore(box).get('a');
+      final reloaded = HivePlaybackProgressStore(box).get(key('a'));
       expect(reloaded?.syncedAt, DateTime.utc(2026, 8, 2, 14));
       expect(
         reloaded?.positionSeconds,
@@ -177,6 +183,36 @@ void main() {
       // neither assertion below depends on.
       expect(store.get('bad'), isNull);
       expect(store.unsynced(), isEmpty);
+    });
+  });
+
+  group('all and delete', () {
+    test('in memory: all() lists every record and delete() removes one',
+        () async {
+      final store = InMemoryPlaybackProgressStore();
+      await store.save(progress(mediaId: '10'));
+      expect(store.all().map((r) => r.key), [key('10')]);
+      await store.delete(key('10'));
+      expect(store.all(), isEmpty);
+    });
+
+    test('hive: all() skips unreadable records and delete() removes one',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('playback_all_test');
+      Hive.init(dir.path);
+      try {
+        final box =
+            await Hive.openBox<Map<dynamic, dynamic>>('playback_all_box');
+        final store = HivePlaybackProgressStore(box);
+        await store.save(progress(mediaId: '10'));
+        await box.put('bad', {'nonsense': true});
+        expect(store.all().map((r) => r.key), [key('10')]);
+        await store.delete(key('10'));
+        expect(store.all(), isEmpty);
+      } finally {
+        await Hive.close();
+        await dir.delete(recursive: true);
+      }
     });
   });
 

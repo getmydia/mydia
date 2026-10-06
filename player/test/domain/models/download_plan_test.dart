@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download_plan.dart';
-import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   group('extensionForContainer', () {
@@ -25,9 +24,9 @@ void main() {
     });
   });
 
-  test('homeMydiaRef points at the legacy source', () {
-    final ref = homeMydiaRef(ItemKind.episode, 'e7');
-    expect(ref.sourceId, SourceId.legacyMydia);
+  test('testMydiaRef points at the test account', () {
+    final ref = testMydiaRef(ItemKind.episode, 'e7');
+    expect(ref.sourceId, testMydiaSourceId);
     expect(ref.kind, ItemKind.episode);
     expect(ref.externalId, 'e7');
   });

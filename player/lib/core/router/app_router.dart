@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -10,6 +9,7 @@ import '../sources/media_source.dart' show MediaSource;
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
+import '../sources/mydia/bound_mydia.dart';
 import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
@@ -22,8 +22,6 @@ import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
-import '../../presentation/screens/login/login_controller.dart'
-    show GuestTarget;
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -51,7 +49,6 @@ import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
 import '../../domain/models/search_result.dart';
 import '../../presentation/widgets/app_shell.dart';
-import '../auth/auth_status.dart';
 import '../graphql/graphql_provider.dart';
 import 'navigator_keys.dart';
 
@@ -61,10 +58,11 @@ part 'app_router.g.dart';
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Simple ChangeNotifier to trigger GoRouter refreshes.
-/// The actual auth state is read directly from the provider in the redirect callback.
-class _AuthRefreshNotifier extends ChangeNotifier {
+/// What the redirect decides on is read directly from the providers in the
+/// redirect callback.
+class _RouterRefreshNotifier extends ChangeNotifier {
   void refresh() {
-    debugPrint('[AppRouter] _AuthRefreshNotifier.refresh() called');
+    debugPrint('[AppRouter] _RouterRefreshNotifier.refresh() called');
     notifyListeners();
   }
 }
@@ -131,8 +129,6 @@ SourceId? _sourceIdIn(String location) {
   }
 }
 
-/// Where `/sources/add/mydia` redirects: third-party sources do not exist on
-/// web, so a guest added there would vanish.
 /// The `/all*` redirect, held while saved sources are still loading so a
 /// cold start does not read an empty set and bounce to `/`. The router
 /// refreshes when loading ends.
@@ -142,25 +138,26 @@ String? allServersRouteRedirect({
 }) =>
     sourcesLoading ? null : allServersRedirect(included);
 
-String? guestMydiaRouteRedirect({bool isWeb = kIsWeb}) => isWeb ? '/' : null;
+/// Where `/sources/add/mydia` redirects: an instance-hosted web player that
+/// already has its Mydia account cannot add servers of its own. With no
+/// account yet it must stay, or sign-in would loop through `/login`.
+String? addMydiaRouteRedirect({
+  required bool hasMydia,
+  bool? instanceHostedWeb,
+}) =>
+    (instanceHostedWeb ?? isInstanceHostedWeb) && hasMydia ? '/' : null;
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
 String? appRedirect({
-  required AsyncValue<AuthStatus> auth,
   required String location,
   required bool sourcesLoading,
-  required List<Source> thirdParty,
+  required List<Source> sources,
+  SourceId? boundId,
   SourceId? activeId,
   Set<SourceId> gated = const {},
   String? fullLocation,
 }) {
-  final authStatus = auth.maybeWhen(
-    data: (status) => status,
-    orElse: () => AuthStatus.unauthenticated,
-  );
-  if (auth.isLoading) return null;
-
   // A locked or hidden source opens only after unlocking. Same screen for
   // both, so a deep link never confirms that a hidden source exists.
   final target = _sourceIdIn(location);
@@ -170,8 +167,6 @@ String? appRedirect({
   final isUnlockRoute = location == '/unlock';
 
   final isLoginRoute = location == '/login';
-  final isDownloadsRoute = location == '/downloads';
-  final isPlayerRoute = location.startsWith('/player');
   // Reached from the login screen's "Connect another server instead" and
   // "Show hidden servers" (Manage servers, after the unlock screen).
   final isSignedOutSourcesRoute = location == '/sources/add' ||
@@ -181,33 +176,25 @@ String? appRedirect({
   final isSourceRoute =
       location.startsWith('/s/') || location.startsWith('/sources');
 
-  if (authStatus == AuthStatus.unauthenticated &&
+  if (boundId == null &&
       !isLoginRoute &&
       !isUnlockRoute &&
       !isSignedOutSourcesRoute) {
-    // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
+    // Usable with any one server alone: land there, not on add-a-server.
     if (sourcesLoading) return null;
-    if (thirdParty.isNotEmpty) {
+    if (sources.isNotEmpty) {
       if (isSourceRoute) return null;
       // The remembered source when it still exists, else the first.
-      final open = thirdParty.where((s) => !gated.contains(s.id));
+      final open = sources.where((s) => !gated.contains(s.id));
       final landing =
           open.where((s) => s.id == activeId).firstOrNull ?? open.firstOrNull;
       if (landing == null) {
-        return unlockLocation('/s/${thirdParty.first.id.value}');
+        return unlockLocation('/s/${sources.first.id.value}');
       }
       return '/s/${landing.id.value}';
     }
-    return '/login';
+    return '/sources/add';
   }
-  if (authStatus == AuthStatus.offlineMode &&
-      !isDownloadsRoute &&
-      !isUnlockRoute &&
-      !isPlayerRoute &&
-      !isSourceRoute) {
-    return '/downloads';
-  }
-  if (authStatus == AuthStatus.authenticated && isLoginRoute) return '/';
   return null;
 }
 
@@ -216,13 +203,10 @@ GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Creating appRouter provider');
 
   // Simple notifier just to trigger GoRouter refreshes
-  final refreshNotifier = _AuthRefreshNotifier();
+  final refreshNotifier = _RouterRefreshNotifier();
 
-  // Listen to auth state changes and trigger router refresh
-  ref.listen<AsyncValue<AuthStatus>>(authStateProvider, (previous, next) {
-    debugPrint('[AppRouter] Auth state changed: $previous -> $next');
-    refreshNotifier.refresh();
-  });
+  // Binding or removing the Mydia instance changes where the router lands.
+  ref.listen(boundMydiaProvider, (_, __) => refreshNotifier.refresh());
 
   // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
@@ -249,10 +233,10 @@ GoRouter appRouter(Ref ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final target = appRedirect(
-        auth: ref.read(authStateProvider),
         location: state.matchedLocation,
         sourcesLoading: ref.read(sourcesLoadingProvider),
-        thirdParty: ref.read(thirdPartySourcesProvider),
+        sources: ref.read(thirdPartySourcesProvider),
+        boundId: ref.read(boundMydiaProvider)?.source.id,
         activeId: ref.read(selectedSourceIdProvider),
         gated: ref.read(gatedSourceIdsProvider),
         fullLocation: state.uri.toString(),
@@ -269,7 +253,11 @@ GoRouter appRouter(Ref ref) {
         path: '/login',
         name: 'login',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        redirect: (context, state) => Uri(
+          path: '/sources/add/mydia',
+          query: state.uri.hasQuery ? state.uri.query : null,
+        ).toString(),
+        builder: (context, state) => const SizedBox.shrink(),
       ),
       GoRoute(
         path: '/unlock',
@@ -312,11 +300,14 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/add/mydia',
         name: 'add_source_mydia',
         parentNavigatorKey: rootNavigatorKey,
-        redirect: (context, state) => guestMydiaRouteRedirect(),
+        redirect: (context, state) => addMydiaRouteRedirect(
+          hasMydia: ref.read(sourceRecordsProvider).value?.accounts.any(
+                    (r) => r.account.kind == SourceKind.mydia,
+                  ) ??
+              false,
+        ),
         builder: (context, state) => LoginScreen(
-          guest: GuestTarget(
-            reauthAccountId: state.uri.queryParameters['account'],
-          ),
+          reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),
 
@@ -444,6 +435,7 @@ GoRouter appRouter(Ref ref) {
             redirect: (context, state) => sourceRootRedirect(
               state.pathParameters['sourceId']!,
               ref.read(sourcesProvider),
+              bound: ref.read(boundSourceIdProvider),
             ),
             builder: (context, state) => SourceHomeScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),

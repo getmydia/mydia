@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:player/core/downloads/download_job_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_queue_providers.dart';
 import 'package:player/domain/models/download.dart';
@@ -18,6 +17,7 @@ import 'package:player/domain/sources/item.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 import '../sources/store/source_json_test.dart' show plexRecord;
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   // The download provider graph reaches secure storage and other bindings on
@@ -57,10 +57,6 @@ void main() {
   ProviderContainer makeContainer() {
     final container = ProviderContainer(overrides: [
       downloadDatabaseProvider.overrideWith((ref) async => database),
-      // Cut the graph down to the question under test. Left real, this pulls
-      // in the connection and GraphQL providers, whose async initialisation
-      // outlives container teardown and errors out on a disposed Ref.
-      unifiedDownloadJobServiceProvider.overrideWith((ref) => null),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -121,11 +117,12 @@ void main() {
       quality: '1080p',
       status: 'downloading',
       downloadUrl: 'https://test.invalid/0.mp4',
+      sourceId: testMydiaSourceId.value,
       createdAt: DateTime(2026, 1, 1),
     ));
 
     final queued = await service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, 'm1'),
+      ref: testMydiaRef(ItemKind.movie, 'm1'),
       optionId: '1080p',
       metadata:
           const DownloadMetadata(title: 'Second', mediaType: MediaType.movie),
@@ -155,7 +152,6 @@ void main() {
       ));
       final container = ProviderContainer(overrides: [
         downloadDatabaseProvider.overrideWith((ref) async => database),
-        unifiedDownloadJobServiceProvider.overrideWith((ref) => null),
         sourceRecordsProvider.overrideWith(() => _Records(records)),
         // Hidden while the app is locked: no source is built.
         mediaSourceProvider(source).overrideWithValue(null),
@@ -194,12 +190,6 @@ void main() {
     test('fails for good once its account is gone', () async {
       final task = await sweep(() async => SourceSnapshot.empty);
       expect(task.status, 'failed', reason: '${task.error}');
-    });
-
-    test('home Mydia, signed out, is parked', () async {
-      final task = await sweep(() async => SourceSnapshot.empty,
-          source: SourceId.legacyMydia);
-      expect(task.status, 'interrupted');
     });
   });
 }

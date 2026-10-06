@@ -1,14 +1,11 @@
 /// Saves a Mydia server paired or signed in from the add-server screen.
 library;
 
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
 import '../../../graphql/queries/mydia_queries.dart';
-import '../../auth/auth_storage.dart';
 import '../source.dart';
 import '../source_factories.dart';
 import '../sources_providers.dart';
@@ -18,35 +15,32 @@ import 'mydia_gql_transport.dart';
 import 'mydia_credentials.dart';
 import 'mydia_secrets.dart';
 
-/// The server being added is the one this device already signs in to as home.
-class ServerIsHomeException implements Exception {
-  const ServerIsHomeException();
-
-  @override
-  String toString() => 'This is already your home server.';
-}
-
-// Home's own storage keys, written by `PairingService.saveHomeCredentials`
-// and `AuthService.setServerUrl`.
-const _homeInstanceIdKey = 'instance_id';
-const _homeNodeAddrKey = 'server_node_addr';
-const _homeServerUrlKey = 'server_url';
-
 /// Stores [partial] as a Mydia account and selects it. [partial] may
-/// carry an empty `instanceId`, which is resolved here.
+/// carry an empty `instanceId`, which is resolved here. Adding a server that
+/// is already stored replaces its access token and keeps the rest of its
+/// credentials that [partial] does not supply.
 ///
 /// With [reauthAccountId], the server must be the one that account holds.
-/// [homeStorage] and [transport] are injectable for tests.
+/// [transport] is injectable for tests.
 Future<SourceId> saveMydiaServer(
   Ref ref,
   MydiaCredentials partial, {
   String? reauthAccountId,
-  AuthStorage? homeStorage,
   MydiaGqlTransport? transport,
 }) async {
-  final instanceId =
-      await _resolveInstanceId(ref, partial, transport: transport);
-  await _refuseHome(partial, instanceId, homeStorage ?? getAuthStorage());
+  final reported = await _resolveInstanceId(ref, partial, transport: transport);
+
+  // A server that is already stored keeps its account id, whatever id it
+  // reports now: a migrated URL install is named by a URL hash.
+  final snapshot = await ref.read(sourceRecordsProvider.future);
+  final match = await findMatchingMydiaAccount(
+    snapshot,
+    ref.read(sourceSecretsProvider),
+    instanceId: reported,
+    nodeId: partial.nodeId,
+    url: partial.serverUrl,
+  );
+  final instanceId = match == null ? reported : match.id.substring(1);
 
   if (!isValidSourceIdComponent(instanceId)) {
     throw const SourceException.server(
@@ -58,34 +52,69 @@ Future<SourceId> saveMydiaServer(
         'That code belongs to a different server.');
   }
 
-  final serverUrl = partial.serverUrl;
-  final account = ProviderAccount(
-    id: accountId,
-    kind: SourceKind.mydia,
-    displayName: partial.instanceName ?? _hostOf(serverUrl) ?? 'Mydia',
-    storageNamespace: SourceSecrets.newStorageNamespace(accountId),
-    activeProfileId: kOwnerProfileId,
-  );
+  final stored = match == null
+      ? null
+      : snapshot.accounts.where((r) => r.account.id == match.id).firstOrNull;
+  final kept = match == null
+      ? null
+      : await readMydiaCredentials(ref.read(sourceSecretsProvider), match);
+  // A sign-in supplies only some of what a pairing stored, so what it leaves
+  // out stays: a password login must not drop the device token.
   final credentials = MydiaCredentials(
     instanceId: instanceId,
     accessToken: partial.accessToken,
-    instanceName: partial.instanceName,
-    mediaToken: partial.mediaToken,
-    deviceToken: partial.deviceToken,
-    serverUrl: serverUrl,
-    nodeAddr: partial.nodeAddr,
-    username: partial.username,
+    instanceName: partial.instanceName ?? kept?.instanceName,
+    mediaToken: partial.mediaToken ?? kept?.mediaToken,
+    mediaTokenExpiry: partial.mediaTokenExpiry ?? kept?.mediaTokenExpiry,
+    deviceToken: partial.deviceToken ?? kept?.deviceToken,
+    serverUrl: partial.serverUrl ?? kept?.serverUrl,
+    nodeAddr: partial.nodeAddr ?? kept?.nodeAddr,
+    username: partial.username ?? kept?.username,
   );
+  // Re-adding keeps the account's place in the order and its server choices.
+  final built = buildMydiaAccountRecord(
+    credentials,
+    instanceId: instanceId,
+    now: stored == null
+        ? DateTime.now()
+        : DateTime.fromMillisecondsSinceEpoch(stored.addedAtMs),
+  );
+  final record = stored?.chosenServerIds == null
+      ? built
+      : built.copyWith(chosenServerIds: stored!.chosenServerIds);
+  final account = record.account;
   // Credentials first: a stored server without them would fail every request.
   await writeMydiaCredentials(
       ref.read(sourceSecretsProvider), account, credentials);
-  final record = SourceAccountRecord(
+  await ref.read(sourceRecordsProvider.notifier).putAccount(record);
+  final id = record.sources.single.id;
+  ref.invalidate(mediaSourceProvider(id));
+  ref.read(selectedSourceIdProvider.notifier).select(id);
+  return id;
+}
+
+/// The account record for a Mydia server: one owner profile, one server.
+SourceAccountRecord buildMydiaAccountRecord(
+  MydiaCredentials c, {
+  required String instanceId,
+  required DateTime now,
+}) {
+  final accountId = 'm$instanceId';
+  final serverUrl = c.serverUrl;
+  final account = ProviderAccount(
+    id: accountId,
+    kind: SourceKind.mydia,
+    displayName: c.instanceName ?? _hostOf(serverUrl) ?? 'Mydia',
+    storageNamespace: SourceSecrets.newStorageNamespace(accountId),
+    activeProfileId: kOwnerProfileId,
+  );
+  return SourceAccountRecord(
     account: account,
     profiles: [
       SourceProfile(
         id: kOwnerProfileId,
         accountId: accountId,
-        name: partial.username ?? 'Owner',
+        name: c.username ?? 'Owner',
         isOwner: true,
       ),
     ],
@@ -100,13 +129,8 @@ Future<SourceId> saveMydiaServer(
         ],
       ),
     ],
-    addedAtMs: DateTime.now().millisecondsSinceEpoch,
+    addedAtMs: now.millisecondsSinceEpoch,
   );
-  await ref.read(sourceRecordsProvider.notifier).putAccount(record);
-  final id = record.sources.single.id;
-  ref.invalidate(mediaSourceProvider(id));
-  ref.read(selectedSourceIdProvider.notifier).select(id);
-  return id;
 }
 
 String? _hostOf(String? url) {
@@ -147,41 +171,6 @@ Future<String?> _askInstanceId(
     final compat = data['serverCompatibility'];
     return compat is Map ? compat['instanceId'] as String? : null;
   } on SourceException {
-    return null;
-  }
-}
-
-Future<void> _refuseHome(
-  MydiaCredentials partial,
-  String instanceId,
-  AuthStorage home,
-) async {
-  final homeInstance = await home.read(_homeInstanceIdKey);
-  if (homeInstance != null && homeInstance == instanceId) {
-    throw const ServerIsHomeException();
-  }
-
-  final nodeId = partial.nodeId;
-  final homeAddr = await home.read(_homeNodeAddrKey);
-  if (nodeId != null && homeAddr != null && _nodeIdOf(homeAddr) == nodeId) {
-    throw const ServerIsHomeException();
-  }
-
-  final url = partial.serverUrl;
-  final homeUrl = await home.read(_homeServerUrlKey);
-  if (url != null &&
-      homeUrl != null &&
-      !homeUrl.startsWith('p2p://') &&
-      normalizeMydiaUrl(url) == normalizeMydiaUrl(homeUrl)) {
-    throw const ServerIsHomeException();
-  }
-}
-
-String? _nodeIdOf(String addr) {
-  try {
-    final decoded = jsonDecode(addr);
-    return decoded is Map ? decoded['id'] as String? : null;
-  } on FormatException {
     return null;
   }
 }

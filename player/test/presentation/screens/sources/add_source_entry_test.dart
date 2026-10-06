@@ -6,23 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
-import 'package:player/core/router/app_router.dart'
-    show guestMydiaRouteRedirect;
+import 'package:player/core/router/app_router.dart' show addMydiaRouteRedirect;
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/presentation/screens/login/login_controller.dart'
-    show GuestTarget;
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
-
-class _MydiaPresent extends MydiaPresenceNotifier {
-  _MydiaPresent(this.present);
-  final bool present;
-
-  @override
-  bool build() => present;
-}
 
 void main() {
   testWidgets('the login screen offers a way in that opens the add screen',
@@ -56,7 +45,7 @@ void main() {
   Future<void> pumpAdd(WidgetTester tester, {required bool mydia}) =>
       tester.pumpWidget(ProviderScope(
         overrides: [
-          mydiaPresentProvider.overrideWith(() => _MydiaPresent(mydia)),
+          hasMydiaProvider.overrideWithValue(mydia),
         ],
         child: const MaterialApp(home: AddSourceScreen()),
       ));
@@ -71,7 +60,7 @@ void main() {
     expect(mydia.enabled, isTrue);
   });
 
-  testWidgets('with a home Mydia, the tile is enabled and adds a guest',
+  testWidgets('with a Mydia account, the tile is enabled and adds another',
       (tester) async {
     final router = GoRouter(routes: [
       GoRoute(path: '/', builder: (_, __) => const AddSourceScreen()),
@@ -82,7 +71,7 @@ void main() {
     ]);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+        hasMydiaProvider.overrideWithValue(true),
       ],
       child: MaterialApp.router(routerConfig: router),
     ));
@@ -98,11 +87,11 @@ void main() {
     expect(find.byKey(const Key('guest-marker')), findsOneWidget);
   });
 
-  testWidgets('on web with a home Mydia, the tile is disabled with a hint',
+  testWidgets('on web with a Mydia account, the tile is disabled with a hint',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(true)),
+        hasMydiaProvider.overrideWithValue(true),
       ],
       child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
     ));
@@ -113,11 +102,11 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('on web without a home Mydia, the tile still signs in',
+  testWidgets('on web without a Mydia account, the tile still signs in',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        mydiaPresentProvider.overrideWith(() => _MydiaPresent(false)),
+        hasMydiaProvider.overrideWithValue(false),
       ],
       child: const MaterialApp(home: AddSourceScreen(isWeb: true)),
     ));
@@ -127,13 +116,14 @@ void main() {
     expect(find.text('Sign in to a Mydia server'), findsOneWidget);
   });
 
-  test('the guest add route redirects home on web only', () {
-    expect(guestMydiaRouteRedirect(isWeb: true), '/');
-    expect(guestMydiaRouteRedirect(isWeb: false), isNull);
+  test('the add Mydia route redirects home on an instance-hosted web only', () {
+    expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: true), '/');
+    expect(addMydiaRouteRedirect(hasMydia: true, instanceHostedWeb: false),
+        isNull);
   });
 
   testWidgets(
-      'guest mode retitles the login screen and hides the other-server link',
+      'a re-auth retitles the login screen and hides the other-server link',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -142,7 +132,7 @@ void main() {
         authServiceProvider
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
       ],
-      child: const MaterialApp(home: LoginScreen(guest: GuestTarget())),
+      child: const MaterialApp(home: LoginScreen(reauthAccountId: 'mabc')),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Add a Mydia server'), findsOneWidget);

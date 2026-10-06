@@ -12,7 +12,8 @@ import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_actions.dart';
 
-import '../../core/cast/cast_session_manager_test.mocks.dart';
+import '../../core/sources/mydia/fake_mydia_client.dart';
+import '../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import '../../test_utils/toast_harness.dart';
@@ -97,7 +98,7 @@ void main() {
       return CastSessionManager(
         backend: backend,
         store: InMemoryCastSessionStore(),
-        progressService: ProgressService(MockGraphQLClient()),
+        progressService: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
         streamingSessions: FakeStreamingSessionService(),
         resolverFactory: () => CastRouteResolver(
           isP2pMode: false,

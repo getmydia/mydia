@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/downloads/download_providers.dart';
-import '../../../core/downloads/download_service.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
@@ -15,16 +13,16 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
-import '../../../domain/models/download.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
+import 'confirm_remove_account.dart';
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
 
-/// A guest Mydia reached over p2p stops being watched. Unreadable credentials
+/// A Mydia reached over p2p stops being watched. Unreadable credentials
 /// must not block the removal.
-Future<void> unwatchGuestPeer(
+Future<void> unwatchMydiaPeer(
   SourceSecrets secrets,
   P2pService p2p,
   ProviderAccount account,
@@ -34,8 +32,17 @@ Future<void> unwatchGuestPeer(
     final nodeAddr = (await readMydiaCredentials(secrets, account))?.nodeAddr;
     if (nodeAddr != null) p2p.unwatchPeer(nodeAddr);
   } catch (e) {
-    debugPrint('[Sources] Could not stop watching the guest peer: $e');
+    debugPrint('[Sources] Could not stop watching the peer: $e');
   }
+}
+
+/// Removes a Mydia instance from this device: stops watching its peer, then
+/// drops the account and everything stored for it. Nothing changes on the
+/// server.
+Future<void> removeMydiaInstance(WidgetRef ref, ProviderAccount account) async {
+  await unwatchMydiaPeer(
+      ref.read(sourceSecretsProvider), ref.read(p2pServiceProvider), account);
+  await ref.read(sourceRecordsProvider.notifier).removeAccount(account.id);
 }
 
 class ManageSourcesScreen extends ConsumerWidget {
@@ -45,7 +52,6 @@ class ManageSourcesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final records = ref.watch(sourceRecordsProvider);
     final unlocked = ref.watch(sourceLockProvider);
-    final mydiaPresent = ref.watch(mydiaPresentProvider);
     List<SourceAccountRecord> visible(SourceSnapshot s) => [
           for (final r in s.accounts)
             if (unlocked ||
@@ -66,8 +72,7 @@ class ManageSourcesScreen extends ConsumerWidget {
         ],
       ),
       body: switch (records) {
-        AsyncData(:final value) when visible(value).isEmpty && !mydiaPresent =>
-          ListView(
+        AsyncData(:final value) when visible(value).isEmpty => ListView(
             padding: const EdgeInsets.all(16),
             children: const [
               Padding(
@@ -80,7 +85,6 @@ class ManageSourcesScreen extends ConsumerWidget {
         AsyncData(:final value) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (mydiaPresent) const _HomeMydiaCard(),
               for (final record in visible(value))
                 _AccountCard(
                     key: ValueKey(record.account.id),
@@ -117,28 +121,6 @@ class _AllServersSwitch extends ConsumerWidget {
       );
 }
 
-/// This device's own Mydia has no stored account, so it gets a card of its
-/// own to hold its switch.
-class _HomeMydiaCard extends StatelessWidget {
-  const _HomeMydiaCard();
-
-  @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Mydia', style: Theme.of(context).textTheme.titleMedium),
-              Text("This device's home server",
-                  style: Theme.of(context).textTheme.bodySmall),
-              _AllServersSwitch(source: Source.legacyMydia()),
-            ],
-          ),
-        ),
-      );
-}
-
 class _AccountCard extends ConsumerWidget {
   const _AccountCard({super.key, required this.record, required this.unlocked});
 
@@ -146,48 +128,11 @@ class _AccountCard extends ConsumerWidget {
   final bool unlocked;
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    var footprint = (count: 0, bytes: 0);
-    if (isDownloadSupported) {
-      try {
-        footprint = (await ref
-                .read(downloadManagerProvider.future)
-                .timeout(downloadLookupTimeout))
-            .accountDownloads(record.account.id);
-      } catch (_) {
-        // The dialog still works without the count.
-      }
-    }
-    if (!context.mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove this account?'),
-        content: Text('${record.account.displayName} and its servers are '
-            'removed from this device. Nothing changes on the server.'
-            '${footprint.count == 0 ? '' : '\n\nThis also deletes ${footprint.count} '
-                'download${footprint.count == 1 ? '' : 's'} '
-                '(${DownloadTask.formatBytes(footprint.bytes)}).'}'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('manage-remove-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
+    final confirmed = await confirmRemoveAccount(context, ref, record.account);
+    if (!confirmed || !context.mounted) return;
     final toaster = Toaster.of(context);
-    await unwatchGuestPeer(ref.read(sourceSecretsProvider),
-        ref.read(p2pServiceProvider), record.account);
     try {
-      await ref
-          .read(sourceRecordsProvider.notifier)
-          .removeAccount(record.account.id);
+      await removeMydiaInstance(ref, record.account);
     } catch (_) {
       toaster.show('Could not remove this account.', kind: ToastKind.error);
     }
@@ -209,7 +154,6 @@ class _AccountCard extends ConsumerWidget {
                   SourceKind.plex => 'Plex account',
                   SourceKind.stash => 'Stash server',
                   SourceKind.jellyfin => 'Jellyfin user',
-                  // A guest Mydia server; home is not a stored account.
                   SourceKind.mydia => 'Mydia account',
                 },
                 style: Theme.of(context).textTheme.bodySmall),

@@ -5,8 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/sources/store/source_records.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -16,11 +14,6 @@ import 'package:player/presentation/screens/sources/stash_connect_screen.dart';
 
 import '../../../core/sources/stash/fake_stash_server.dart';
 import '../../../test_utils/mock_auth_storage.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 class _FailingStore extends InMemorySourceStore {
   @override
@@ -55,7 +48,6 @@ void main() {
     );
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
@@ -97,7 +89,6 @@ void main() {
       var requests = 0;
       await tester.pumpWidget(ProviderScope(
         overrides: [
-          authStateProvider.overrideWith(_Unauthenticated.new),
           sourceStoreProvider
               .overrideWith((ref) async => InMemorySourceStore()),
           sourceSecretsProvider
@@ -149,7 +140,6 @@ void main() {
     final server = FakeStashServer();
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => _FailingStore()),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -173,7 +163,6 @@ void main() {
     final server = FakeStashServer();
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -198,7 +187,6 @@ void main() {
     // First, save with an API key
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),
@@ -221,7 +209,6 @@ void main() {
     // Now re-auth with an empty key using a mock client that accepts no key
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
         sourceHttpProvider.overrideWithValue(SourceHttp(

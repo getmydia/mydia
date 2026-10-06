@@ -108,23 +108,9 @@ class MyWidget extends ConsumerWidget {
 
 ### Authentication
 
-Set authentication credentials using the auth state notifier:
-
-```dart
-// Login
-await ref.read(authStateProvider.notifier).login(
-  serverUrl: 'https://mydia.example.com',
-  token: 'your-auth-token',
-  userId: 'user-id',
-  username: 'username',
-);
-
-// Logout
-await ref.read(authStateProvider.notifier).logout();
-
-// Check auth status
-final isAuth = ref.watch(authStateProvider);
-```
+There is no global auth state. The client talks to the bound Mydia instance
+(`boundMydiaClientProvider`), which owns its token and refresh. Add or remove
+the server through the sources screens (`removeMydiaInstance` signs out).
 
 ## Available Queries
 

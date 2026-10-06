@@ -58,8 +58,7 @@ Rules that are easy to break:
   from the server) fails it permanently.
 - The resolver (`download_providers.dart`) treats a source with no
   `MediaSource` as unreachable, not gone, while its account is still in the
-  stored records, while the records have not loaded, and for signed-out home
-  Mydia. A hidden source has no `MediaSource` while the app is locked, and the
+  stored records and while the records have not loaded. A hidden source has no `MediaSource` while the app is locked, and the
   sweep runs on launch and resume. Only a third-party account missing from the
   records fails the task for good.
 - Any transport failure with no HTTP response (`connectionError`, a timeout,
@@ -102,8 +101,9 @@ watchdog tick), not on their own.
 
 `DownloadTask` and `DownloadedMedia` (`domain/models/download.dart`) carry
 `sourceId`, `itemKind` and the art paths (`posterPath`, `backdropPath`,
-`thumbnailPath`). A null `sourceId` means home Mydia, so records written
-before sources existed keep working (`SourceId.legacyMydia`). The option id
+`thumbnailPath`). Every writer sets `sourceId`; the startup migration filled
+it on records written before accounts, and `source` asserts it is there. The
+option id
 lives in the existing `quality` field; Plex, Jellyfin and Stash always store
 `original`.
 
@@ -119,16 +119,15 @@ For an episode the saved poster is the show's poster, and the episode's own
 still becomes the thumbnail. A failed picture never fails the download, and it
 is skipped quietly if the download was deleted meanwhile.
 
-`DownloadArtwork` prefers the saved copy. Only legacy home records, made
+`DownloadArtwork` prefers the saved copy. Only old Mydia records, made
 before pictures were saved, fall back to a URL, and it never fetches a source's
 art path, which would need credentials.
 
 ## Playback
 
-The Downloads screen builds the location in `downloadedPlayLocation`: the home
-player route for home Mydia, `/s/<sourceId>/player/<id>?fileId=offline` for
-anything else, so a source's route also puts the download behind that source's
-lock. `fileId=offline` tells the player to use the local file.
+The Downloads screen builds the location in `downloadedPlayLocation`:
+`/s/<sourceId>/player/<id>?fileId=offline` for every source, so a source's
+route also puts the download behind that source's lock. `fileId=offline` tells the player to use the local file.
 
 The player asks `getDownloaded(session.item)`, under the session's own source.
 When `session.reachable` is false it takes the offline path and plays only the

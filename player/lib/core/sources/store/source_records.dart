@@ -132,3 +132,8 @@ class SourceSnapshot {
   /// which has no record, can have one.
   final Map<SourceId, bool> allServers;
 }
+
+/// The [SourceId] of the owner profile's server in [r], as `sourcesProvider`
+/// derives it from [SourceAccountRecord.sources].
+SourceId mydiaSourceIdOf(SourceAccountRecord r) =>
+    r.sources.firstWhere((s) => s.profile.isOwner).id;

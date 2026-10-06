@@ -98,9 +98,6 @@ Future<DownloadService> downloadManager(Ref ref) async {
       (source) => ref.read(sourceLocksProvider).containsKey(source));
 
   service.setArtworkFetcher((task, art) async {
-    if (task.source == SourceId.legacyMydia) {
-      return (url: art, headers: const <String, String>{});
-    }
     final request = await ref
         .read(mediaSourceProvider(task.source))
         ?.artwork(ArtworkRef(art), width: 600);
@@ -116,11 +113,9 @@ Future<DownloadService> downloadManager(Ref ref) async {
 }
 
 /// Whether a source with no [MediaSource] right now may have one later: it is
-/// hidden while the app is locked, its records have not loaded yet, or home
-/// Mydia is signed out. Only a third-party account that is gone from the
-/// records is gone for good.
+/// hidden while the app is locked or its records have not loaded yet. Only an
+/// account that is gone from the records is gone for good.
 bool _sourceMayReturn(Ref ref, SourceId source) {
-  if (source == SourceId.legacyMydia) return true;
   final records = ref.read(sourceRecordsProvider);
   final snapshot = records.value;
   if (snapshot == null) return true;
@@ -128,13 +123,12 @@ bool _sourceMayReturn(Ref ref, SourceId source) {
       .any((record) => source.value.startsWith('${record.account.id}:'));
 }
 
-/// Sources whose downloads may be listed: home, plus every source the
-/// switcher shows. A hidden source drops out while the app is locked, and
-/// its downloads with it.
+/// Sources whose downloads may be listed: every source the switcher shows.
+/// A hidden source drops out while the app is locked, and its downloads with
+/// it.
 @riverpod
 Set<SourceId> visibleDownloadSources(Ref ref) => {
-      SourceId.legacyMydia,
-      for (final source in ref.watch(thirdPartySourcesProvider)) source.id,
+      for (final source in ref.watch(sourcesProvider)) source.id,
     };
 
 @riverpod

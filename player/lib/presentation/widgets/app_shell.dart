@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/auth/auth_status.dart';
+import '../../core/sources/current_source_status.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
@@ -12,7 +12,6 @@ import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
-import '../../core/graphql/graphql_provider.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/router/root_routes.dart';
@@ -300,13 +299,9 @@ class _AppShellState extends ConsumerState<AppShell>
     }
   }
 
-  /// Check if the app is currently in offline mode
+  /// Whether the source the current route belongs to is unreachable.
   bool _isOfflineMode() {
-    final authState = ref.watch(authStateProvider);
-    return authState.maybeWhen(
-      data: (status) => status == AuthStatus.offlineMode,
-      orElse: () => false,
-    );
+    return isOffline(ref.watch(routeSourceStatusProvider(widget.location)));
   }
 
   /// Show a toast when a disabled nav item is tapped in offline mode
@@ -367,12 +362,11 @@ class _AppShellState extends ConsumerState<AppShell>
     final showBackToMydia = isEmbedMode;
     final isOffline = _isOfflineMode();
 
-    // Keeps the offline-to-online progress flush alive for the whole app
-    // session: AppShell mounts for every reachable route before the
-    // immersive player (which renders outside this shell) can be reached,
-    // so watching it once here is enough for the underlying provider —
-    // not autoDispose — to keep listening for the rest of the session.
-    ref.watch(progressFlushProvider);
+    // Keeps the offline progress flush alive for the whole app session:
+    // AppShell mounts for every reachable route before the immersive player
+    // (which renders outside this shell) can be reached, so watching it once
+    // here is enough for the underlying provider, which is not autoDispose,
+    // to keep listening for the rest of the session.
     ref.watch(sourceProgressFlushProvider);
     ref.watch(orphanDownloadSweepProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.

@@ -1,9 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/all_servers_inclusion.dart';
-import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
@@ -11,18 +8,14 @@ import 'package:player/core/sources/store/source_store.dart';
 import '../../test_utils/mock_auth_storage.dart';
 import 'stash/stash_media_source_test.dart' show stashRecord;
 import 'store/source_json_test.dart' show plexRecord;
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
+import '../../test_utils/mydia_test_source.dart';
 
 void main() {
   final plexSource = plexRecord().sources.single;
   final stashSource = stashRecord.sources.single;
 
   test('defaults: everything but Stash', () {
-    expect(includedInAllServers(Source.legacyMydia(), const {}), isTrue);
+    expect(includedInAllServers(testMydiaSource, const {}), isTrue);
     expect(includedInAllServers(plexSource, const {}), isTrue);
     expect(includedInAllServers(stashSource, const {}), isFalse);
   });
@@ -39,7 +32,6 @@ void main() {
     setUp(() {
       store = InMemorySourceStore();
       container = ProviderContainer(overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),

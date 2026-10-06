@@ -7,6 +7,7 @@ import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/sources/item.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 Future<void> _untilSaved(DownloadHarness h, String id) async {
   for (var i = 0; i < 100 && h.database.getMedia(id)?.posterPath == null; i++) {
@@ -45,7 +46,7 @@ void main() {
     });
 
     final task = await h.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, '9'),
+      ref: testMydiaRef(ItemKind.movie, '9'),
       optionId: 'original',
       metadata: const DownloadMetadata(
           title: 'Quill Harbor',
@@ -81,7 +82,7 @@ void main() {
     });
 
     final task = await h.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.episode, '12'),
+      ref: testMydiaRef(ItemKind.episode, '12'),
       optionId: 'original',
       metadata: const DownloadMetadata(
         title: 'The Lantern Accord',
@@ -119,7 +120,7 @@ void main() {
         ));
 
     final task = await h.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, '9'),
+      ref: testMydiaRef(ItemKind.movie, '9'),
       optionId: 'original',
       metadata: const DownloadMetadata(
           title: 'Quill Harbor', mediaType: MediaType.movie, posterUrl: 'p'),
@@ -144,7 +145,7 @@ void main() {
         (url: 'https://test.invalid/$art', headers: const <String, String>{}));
 
     final task = await h.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, '9'),
+      ref: testMydiaRef(ItemKind.movie, '9'),
       optionId: 'original',
       metadata: const DownloadMetadata(
           title: 'Quill Harbor', mediaType: MediaType.movie, posterUrl: 'p'),
@@ -169,7 +170,7 @@ void main() {
         (url: 'https://test.invalid/$art', headers: const <String, String>{}));
 
     final task = await h.service.start(DownloadRequest(
-      ref: homeMydiaRef(ItemKind.movie, '9'),
+      ref: testMydiaRef(ItemKind.movie, '9'),
       optionId: 'original',
       metadata: const DownloadMetadata(
           title: 'Quill Harbor', mediaType: MediaType.movie, posterUrl: 'p'),

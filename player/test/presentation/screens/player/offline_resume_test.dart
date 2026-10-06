@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
 
@@ -45,7 +44,7 @@ void main() {
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
-      authStatus: AuthStatus.offlineMode,
+      offline: true,
     );
     addTearDown(container.dispose);
 
@@ -106,7 +105,7 @@ void main() {
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
-      authStatus: AuthStatus.offlineMode,
+      offline: true,
     );
     addTearDown(container.dispose);
 
@@ -142,7 +141,7 @@ void main() {
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
-      authStatus: AuthStatus.offlineMode,
+      offline: true,
       progressStore: store,
     );
     addTearDown(container.dispose);
@@ -192,7 +191,7 @@ void main() {
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
-      authStatus: AuthStatus.offlineMode,
+      offline: true,
       progressStore: store,
     );
     addTearDown(container.dispose);

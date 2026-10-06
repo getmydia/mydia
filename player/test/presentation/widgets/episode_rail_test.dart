@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/detail/detail_views.dart';
-import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
@@ -11,6 +10,7 @@ import 'package:player/presentation/widgets/episode_rail.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 
 import '../../test_utils/mock_network_images.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 Episode _episode(int n, {bool hasFile = true}) {
   return Episode(
@@ -37,7 +37,7 @@ Future<void> _pump(
       ProviderScope(
         overrides: [
           for (final e in episodes)
-            isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, e.id))
+            isItemDownloadedProvider(testMydiaRef(ItemKind.episode, e.id))
                 .overrideWith((ref) => false),
         ],
         child: MaterialApp(

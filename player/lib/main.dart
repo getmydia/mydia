@@ -3,14 +3,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:hive_ce/hive.dart' show Hive;
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/auth/auth_storage.dart';
 import 'core/auth/device_info_service.dart';
-import 'core/connection/connection_provider.dart';
 import 'core/crash_reporting/crash_app_context.dart';
+import 'core/cast/cast_session_store.dart';
 import 'core/downloads/download_service.dart';
+import 'core/migration/hive_legacy_data_rewriter.dart';
+import 'core/migration/legacy_mydia_migration.dart';
+import 'core/playback/playback_progress_store.dart';
+import 'core/config/web_config.dart';
+import 'core/sources/mydia/web_config_account.dart';
+import 'core/sources/store/source_secrets.dart';
+import 'core/sources/store/source_store.dart';
 import 'core/crash_reporting/crash_report.dart';
 import 'core/crash_reporting/crash_reporter.dart';
 import 'core/crash_reporting/crash_reporter_provider.dart';
@@ -117,6 +125,39 @@ void main() async {
   ));
 }
 
+/// Moves the single-server sign-in into an ordinary account. Opens the same
+/// boxes the providers do; Hive hands back the already-open box.
+Future<void> _migrateLegacyMydia(
+    SourceCache cache, DownloadDatabase? downloads) async {
+  final store = await HiveSourceStore.open();
+  final progressBox = await Hive.openBox<Map<dynamic, dynamic>>(
+      HivePlaybackProgressStore.boxName);
+  final castBox =
+      await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
+  // The serving instance re-injects a fresh token on every load.
+  final webConfig = kIsWeb ? getWebConfig() : null;
+  Future<void> migrate() => migrateLegacyMydia(LegacyMydiaMigrationDeps(
+        legacy: getAuthStorage(),
+        store: store,
+        secrets: SourceSecrets(getAuthStorage()),
+        rewrite: HiveLegacyDataRewriter(
+          downloads: downloads,
+          progress: HivePlaybackProgressStore(progressBox),
+          store: store,
+          cache: cache,
+          castSession: HiveCastSessionStore(castBox),
+        ),
+      ));
+  if (webConfig == null) {
+    await migrate();
+    return;
+  }
+  await migrateThenSeed(
+      migrate,
+      () => upsertWebConfigAccount(
+          store, SourceSecrets(getAuthStorage()), webConfig));
+}
+
 /// Hands `runApp` a [StartupGate] immediately, so the first frame is a
 /// splash rather than a black window, and runs the rest of startup behind it.
 ///
@@ -148,6 +189,9 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
   await initDesktopWindow();
   timeline.mark('desktop_window');
 
+  // One instance for the init step and the migration, which reads its boxes.
+  final downloadDb = isDownloadSupported ? getDownloadDatabase() : null;
+
   final startup = runStartup(
     StartupSteps(
       rustInit: (!kIsWeb || kWebP2pEnabled)
@@ -163,8 +207,8 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
       },
       fetchLog: HiveFetchLog.open,
       sourceCache: HiveSourceCache.open,
-      downloadDb:
-          isDownloadSupported ? () => getDownloadDatabase().initialize() : null,
+      downloadDb: downloadDb?.initialize,
+      legacyMigration: (cache) => _migrateLegacyMydia(cache, downloadDb),
       sidebarLayoutStore: () async {
         final container = ProviderContainer();
         try {
@@ -173,7 +217,6 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           container.dispose();
         }
       },
-      connection: () => loadStoredConnectionState(getAuthStorage()),
     ),
     timeline: timeline,
   ).then((outcome) async {
@@ -191,8 +234,6 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           sourceCacheProvider.overrideWithValue(ready.sourceCache),
           sidebarLayoutStoreProvider
               .overrideWithValue(ready.sidebarLayoutStore),
-          initialConnectionStateProvider
-              .overrideWithValue(ready.initialConnection),
           logUploaderProvider.overrideWithValue(
             _buildLogUploader(logSink, logStore),
           ),

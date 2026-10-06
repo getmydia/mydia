@@ -248,8 +248,7 @@ class _SourcePickerListState extends ConsumerState<SourcePickerList> {
                 onTap: () => _pick(const PickAllServers()),
               ),
             for (final group in groupSourcesByAccount(sources)) ...[
-              if (group.first.id != SourceId.legacyMydia)
-                _AccountCaption(account: group.first.account),
+              _AccountCaption(account: group.first.account),
               for (final source in group)
                 _SourceRow(
                   source: source,

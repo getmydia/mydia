@@ -7,6 +7,7 @@ import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 
 import '../../../../test_utils/stub_graphql_client.dart';
 import '../player_screen_test_harness.dart';
+import '../../../../test_utils/mydia_test_source.dart';
 
 const _movieTarget = PlaybackTarget(
   mediaType: 'movie',
@@ -25,6 +26,7 @@ MydiaPlaybackSession _session(
     awaitClient: () async => client,
     target: () => target,
     offline: () => false,
+    sourceId: () => testMydiaSourceId,
   );
 }
 

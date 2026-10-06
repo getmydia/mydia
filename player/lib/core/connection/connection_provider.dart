@@ -1,15 +1,12 @@
 library;
 
-import 'dart:async';
-
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
+import '../sources/mydia/bound_mydia.dart';
 
 /// Storage keys for connection credentials.
 abstract class _ConnectionStorageKeys {
-  static const serverNodeAddr = 'server_node_addr';
   static const relayUrl = 'relay_url';
 }
 
@@ -73,115 +70,21 @@ class ConnectionState {
   }
 }
 
-/// The connection mode read during startup, before the first frame of
-/// `MyApp`. Lets [ConnectionNotifier.build] start in p2p mode directly,
-/// so `graphqlClientProvider` is not built once in direct mode and then
-/// rebuilt when the stored credentials arrive. Null (the default, and in
-/// tests) keeps the old deferred load.
-final initialConnectionStateProvider =
-    Provider<ConnectionState?>((ref) => null);
+/// The relay URL stored for p2p reconnection, if any.
+final storedRelayUrlProvider = FutureProvider<String?>(
+    (ref) => getAuthStorage().read(_ConnectionStorageKeys.relayUrl));
 
-/// Reads the stored p2p credentials into a [ConnectionState], or null when
-/// this install was never paired over p2p.
-Future<ConnectionState?> loadStoredConnectionState(AuthStorage storage) async {
-  final values = await Future.wait([
-    storage.read(_ConnectionStorageKeys.serverNodeAddr),
-    storage.read(_ConnectionStorageKeys.relayUrl),
-  ]);
-  final serverNodeAddr = values[0];
-  if (serverNodeAddr == null) return null;
-  return ConnectionState.p2p(
-      serverNodeAddr: serverNodeAddr, relayUrl: values[1]);
-}
-
-/// Notifier for managing connection state.
+/// How the bound Mydia instance is reached, derived from its credentials.
+/// Direct until they load or when none is bound.
 class ConnectionNotifier extends Notifier<ConnectionState> {
   @override
   ConnectionState build() {
-    final initial = ref.read(initialConnectionStateProvider);
-    if (initial != null) return initial;
-    // No startup read (tests, or a container built outside `main`): fall
-    // back to loading the stored state after build completes.
-    Future.microtask(_loadStoredState);
-    return ConnectionState.direct();
-  }
-
-  AuthStorage get _authStorage => getAuthStorage();
-
-  /// Loads stored connection state on startup.
-  Future<void> _loadStoredState() async {
-    final serverNodeAddr =
-        await _authStorage.read(_ConnectionStorageKeys.serverNodeAddr);
-    final relayUrl = await _authStorage.read(_ConnectionStorageKeys.relayUrl);
-
-    // The container can be disposed while those two reads are in flight —
-    // `build` fires this off with an unawaited `Future.microtask`, so nothing
-    // holds the provider open for it. Reading `state` below would then throw
-    // UnmountedRefException as an UNHANDLED async error rather than a caught
-    // one, which is far worse than it sounds: escaping during a widget
-    // unmount corrupts TestAsyncUtils' pump guard for the rest of the
-    // isolate, so every later test in the same process dies on "Guarded
-    // function conflict" without running. That is exactly how this surfaced —
-    // CI run 32464761435, where it took down all five integration suites from
-    // inside `simple_test.dart`'s mount/unmount.
-    //
-    // Same guard, same reason, as `compatibility_provider.dart` and
-    // `login_controller.dart`. The `state.isP2PMode` check below is a
-    // different concern: that one is about `setP2PMode` having won the race,
-    // not about the provider being gone.
-    if (!ref.mounted) return;
-
-    // Check AFTER awaits - setP2PMode may have run during the async gap
-    if (state.isP2PMode) {
-      debugPrint(
-          '[ConnectionNotifier] Already in P2P mode, skipping stored state load');
-      return;
-    }
-
-    // If we have P2P credentials (serverNodeAddr), enter P2P mode
-    if (serverNodeAddr != null) {
-      debugPrint(
-          '[ConnectionNotifier] Found P2P credentials, entering P2P mode');
-      state = ConnectionState.p2p(
-        serverNodeAddr: serverNodeAddr,
-        relayUrl: relayUrl,
-      );
-    }
-  }
-
-  /// Sets the connection to P2P mode.
-  Future<void> setP2PMode({
-    required String serverNodeAddr,
-    String? relayUrl,
-  }) async {
-    debugPrint('[ConnectionNotifier] Setting P2P mode with serverNodeAddr');
-
-    // Store credentials for reconnection
-    await _authStorage.write(
-        _ConnectionStorageKeys.serverNodeAddr, serverNodeAddr);
-    if (relayUrl != null) {
-      await _authStorage.write(_ConnectionStorageKeys.relayUrl, relayUrl);
-    }
-
-    state = ConnectionState.p2p(
-      serverNodeAddr: serverNodeAddr,
-      relayUrl: relayUrl ?? state.relayUrl,
+    final nodeAddr = ref.watch(boundMydiaCredentialsProvider).value?.nodeAddr;
+    if (nodeAddr == null) return ConnectionState.direct();
+    return ConnectionState.p2p(
+      serverNodeAddr: nodeAddr,
+      relayUrl: ref.watch(storedRelayUrlProvider).value,
     );
-  }
-
-  /// Sets the connection to direct mode.
-  Future<void> setDirectMode() async {
-    debugPrint('[ConnectionNotifier] Setting direct mode (runtime only)');
-    state = ConnectionState.direct();
-  }
-
-  Future<void> clear() async {
-    debugPrint('[ConnectionNotifier] Clearing connection state');
-
-    await _authStorage.delete(_ConnectionStorageKeys.serverNodeAddr);
-    await _authStorage.delete(_ConnectionStorageKeys.relayUrl);
-
-    state = ConnectionState.direct();
   }
 
   /// Check if tunnel is active (for P2P mode).

@@ -4,13 +4,10 @@ import 'package:player/core/p2p/media_route.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
-import 'package:player/core/sources/mydia/mydia_transcode_job.dart';
-import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 
-import '../../downloads/download_test_harness.dart';
 import 'fake_mydia_transport.dart';
 import 'mydia_source_test.dart' show guest, sid;
 
@@ -96,39 +93,5 @@ void main() {
     await pumpEventQueue();
     expect(proxy.isRunning, isTrue);
     await proxy.release(other);
-  });
-
-  group('home source', () {
-    // Home passes `homeJobs`; the guest client and proxy must stay unused.
-    MydiaSource home(FakeDownloadJobService? jobs) => MydiaSource(
-          source: Source.legacyMydia(),
-          client: MydiaClient(
-            transport: FakeMydiaTransport(),
-            load: () async => throw StateError('home never loads guest creds'),
-            save: (_) async {},
-            onUnauthorized: () {},
-          ),
-          homeJobs: () => jobs,
-        );
-
-    test('without a job service it is unreachable', () {
-      final source = home(null);
-      final unreachable = throwsA(isA<SourceException>()
-          .having((e) => e.kind, 'kind', SourceErrorKind.unreachable));
-      expect(source.downloadOptions(_movie), unreachable);
-      expect(source.resolve(_movie, 'original'), unreachable);
-    });
-
-    test('resolve builds a job whose file URL comes from the service',
-        () async {
-      final jobs = FakeDownloadJobService(downloadUrl: 'https://h.invalid/f');
-      final plan = await home(jobs).resolve(_movie, '720p');
-      expect(plan, isA<MydiaTranscodeJob>());
-      final file = await (plan as TranscodeJob).file('job-1');
-      expect(file.url, 'https://h.invalid/f');
-      expect(file.headers, isEmpty);
-      await plan.prepare();
-      expect(jobs.prepareCount, 1);
-    });
   });
 }

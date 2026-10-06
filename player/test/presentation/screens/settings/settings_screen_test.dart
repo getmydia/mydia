@@ -10,9 +10,14 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/build_channel.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/downloads/download_service.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_secrets.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_secrets.dart';
+import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/node_registration_providers.dart';
 import 'package:player/core/remote/registration_status.dart';
@@ -31,7 +36,10 @@ import 'package:player/presentation/screens/settings/widgets/settings_identity.d
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 import '../../../test_utils/dock_harness.dart';
+import '../../../core/sources/mydia/bound_mydia_harness.dart' show mydiaRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/no_downloads.dart';
+import '../../../test_utils/toast_harness.dart';
 
 /// A real, isolated Hive box per test: `RemoteControlSettings` takes a real
 /// `Box`, and the settings screen's row is the thing under test here, not a
@@ -56,26 +64,6 @@ class _FakeConnectionNotifier extends ConnectionNotifier {
 
   @override
   ConnectionState build() => _state;
-
-  /// Sign-out used to call this before ending the session, so a throw here
-  /// left the user signed in. Nothing else on this screen calls it.
-  @override
-  Future<void> clear() async => throw Exception('keyring unavailable');
-}
-
-/// Reports a signed-in session and records logout calls, without touching
-/// storage. The real teardown is covered in session_teardown_test.dart.
-class _RecordingAuthNotifier extends AuthStateNotifier {
-  static int logoutCalls = 0;
-
-  @override
-  AsyncValue<AuthStatus> build() =>
-      const AsyncValue.data(AuthStatus.authenticated);
-
-  @override
-  Future<void> logout() async {
-    logoutCalls++;
-  }
 }
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
@@ -94,6 +82,24 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 
   @override
   UpdateState build() => _state;
+}
+
+/// Reports a fixed download footprint; nothing else is used by the dialog.
+class _FakeDownloads implements DownloadService {
+  _FakeDownloads({required this.count, required this.bytes});
+
+  final int count;
+  final int bytes;
+
+  @override
+  ({int count, int bytes}) accountDownloads(String accountId) =>
+      (count: count, bytes: bytes);
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async => 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Serves a fixed settings value, or fails, without touching secure storage.
@@ -166,6 +172,20 @@ class _ThrowingRemoteControlSettings extends RemoteControlSettings {
       throw Exception('disk full');
 }
 
+/// Two stored Mydia servers, `ma` added first and so bound.
+Future<({InMemorySourceStore store, SourceSecrets secrets})>
+    _twoMydiaServers() async {
+  final store = InMemorySourceStore();
+  final secrets = SourceSecrets(MockAuthStorage());
+  for (final (i, id) in ['a', 'b'].indexed) {
+    final record = mydiaRecord(id, addedAtMs: i);
+    await store.putAccount(record);
+    await writeMydiaCredentials(secrets, record.account,
+        MydiaCredentials(instanceId: id, accessToken: 'access-$id'));
+  }
+  return (store: store, secrets: secrets);
+}
+
 Future<void> _pump(
   WidgetTester tester, {
   UserSettings? settings = _settings,
@@ -178,7 +198,12 @@ Future<void> _pump(
   CrashReporter? crashReporter,
   SettingsService? coreSettingsService,
   bool inShell = false,
+  ({InMemorySourceStore store, SourceSecrets secrets})? mydia,
+  DownloadService? downloads,
 }) async {
+  final stored = mydia ?? await _twoMydiaServers();
+  final sources = stored.store;
+  final secrets = stored.secrets;
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -209,7 +234,12 @@ Future<void> _pump(
                 ),
           ),
         ),
-        authStateProvider.overrideWith(_RecordingAuthNotifier.new),
+        if (downloads == null)
+          noDownloadsOverride
+        else
+          downloadManagerProvider.overrideWith((ref) async => downloads),
+        sourceStoreProvider.overrideWith((ref) async => sources),
+        sourceSecretsProvider.overrideWithValue(secrets),
         remoteControlSettingsProvider.overrideWith(
           (ref) async => failRemoteControlWrite
               ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
@@ -229,6 +259,7 @@ Future<void> _pump(
           coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
       ],
       child: MaterialApp.router(
+        builder: toastLayerBuilder,
         routerConfig: GoRouter(
           initialLocation: '/settings',
           routes: [
@@ -305,9 +336,11 @@ void main() {
     expect(title.style?.color, Theme.of(context).colorScheme.error);
   });
 
-  testWidgets('confirming sign out signs the user out', (tester) async {
-    _RecordingAuthNotifier.logoutCalls = 0;
-    await _pump(tester);
+  testWidgets('confirming sign out removes the bound server only',
+      (tester) async {
+    final mydia = await _twoMydiaServers();
+    final store = mydia.store;
+    await _pump(tester, mydia: mydia);
 
     await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
     await tester.tap(find.byKey(const Key('settings-sign-out')));
@@ -315,16 +348,46 @@ void main() {
 
     await tester.tap(find.descendant(
       of: find.byType(AlertDialog),
-      matching: find.widgetWithText(TextButton, 'Sign out'),
+      matching: find.widgetWithText(TextButton, 'Remove server'),
     ));
     await tester.pumpAndSettle();
 
-    expect(_RecordingAuthNotifier.logoutCalls, 1);
+    final left = (await store.load()).accounts.map((r) => r.account.id);
+    expect(left, ['mb']);
   });
 
-  testWidgets('cancelling sign out leaves the session alone', (tester) async {
-    _RecordingAuthNotifier.logoutCalls = 0;
+  testWidgets('the sign out dialog says how many downloads it deletes',
+      (tester) async {
+    await _pump(tester, downloads: _FakeDownloads(count: 3, bytes: 2048));
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    final dialog = find.byType(AlertDialog);
+    expect(
+        find.descendant(
+            of: dialog,
+            matching: find.textContaining('also deletes 3 downloads')),
+        findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Remove server'), findsOneWidget);
+  });
+
+  testWidgets('the sign out dialog has no download line without downloads',
+      (tester) async {
     await _pump(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('also deletes'), findsNothing);
+  });
+
+  testWidgets('cancelling sign out leaves the server in place', (tester) async {
+    final mydia = await _twoMydiaServers();
+    final store = mydia.store;
+    await _pump(tester, mydia: mydia);
 
     await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
     await tester.tap(find.byKey(const Key('settings-sign-out')));
@@ -333,7 +396,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
 
-    expect(_RecordingAuthNotifier.logoutCalls, 0);
+    expect((await store.load()).accounts, hasLength(2));
   });
 
   testWidgets('the footer names the running version', (tester) async {

@@ -40,6 +40,9 @@ abstract class SourceCache {
   /// `account:profile:server` and keys start with the source id, so the
   /// prefix is `accountId:`.
   Future<void> deleteAccount(String accountId);
+
+  /// Every entry whose key starts with [prefix].
+  Future<void> deletePrefix(String prefix);
 }
 
 class InMemorySourceCache implements SourceCache {
@@ -59,8 +62,11 @@ class InMemorySourceCache implements SourceCache {
   }
 
   @override
-  Future<void> deleteAccount(String accountId) async {
-    _entries.removeWhere((key, _) => key.startsWith('$accountId:'));
+  Future<void> deleteAccount(String accountId) => deletePrefix('$accountId:');
+
+  @override
+  Future<void> deletePrefix(String prefix) async {
+    _entries.removeWhere((key, _) => key.startsWith(prefix));
   }
 }
 
@@ -121,9 +127,12 @@ class HiveSourceCache implements SourceCache {
   Future<void> delete(QueryKey key) => _box.delete(key.canonical);
 
   @override
-  Future<void> deleteAccount(String accountId) => _box.deleteAll(_box.keys
+  Future<void> deleteAccount(String accountId) => deletePrefix('$accountId:');
+
+  @override
+  Future<void> deletePrefix(String prefix) => _box.deleteAll(_box.keys
       .whereType<String>()
-      .where((key) => key.startsWith('$accountId:'))
+      .where((key) => key.startsWith(prefix))
       .toList());
 
   Future<void> _sweep(DateTime now) async {

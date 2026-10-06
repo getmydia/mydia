@@ -17,7 +17,7 @@ class AddSourceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hasMydia = ref.watch(mydiaPresentProvider);
+    final hasMydia = ref.watch(hasMydiaProvider);
     final guestsUnavailable = hasMydia && isWeb;
     return Scaffold(
       appBar: AppBar(title: const Text('Add a server')),
@@ -62,8 +62,7 @@ class AddSourceScreen extends ConsumerWidget {
                   (true, false) => "Add a friend's or family member's server",
                   _ => 'Sign in to a Mydia server',
                 }),
-                onTap: () =>
-                    context.push(hasMydia ? '/sources/add/mydia' : '/login'),
+                onTap: () => context.push('/sources/add/mydia'),
               ),
             ],
           ),

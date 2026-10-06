@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../graphql/graphql_provider.dart';
 import '../p2p/p2p_service.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'node_registration.dart';
 import 'node_registration_service.dart';
 import 'registration_status.dart';
@@ -9,14 +9,15 @@ import 'remote_control_settings.dart';
 
 /// One service for the app's lifetime.
 ///
-/// The `register` callback resolves the GraphQL client per attempt rather than
-/// capturing one, so a token refresh or a switch between direct and p2p mode
-/// is picked up by the next retry instead of pinning a stale client.
+/// The `register` callback resolves the bound client per attempt rather than
+/// capturing one, so a switch between direct and p2p mode or to another
+/// account is picked up by the next retry instead of pinning a stale client.
 final nodeRegistrationServiceProvider =
     Provider<NodeRegistrationService>((ref) {
   final service = NodeRegistrationService(
     register: (nodeId) async {
-      final client = await ref.read(asyncGraphqlClientProvider.future);
+      final client = ref.read(boundMydiaClientProvider);
+      if (client == null) throw StateError('No Mydia server');
       return NodeRegistration(
         client: client,
         nodeId: () async => nodeId,
@@ -38,7 +39,7 @@ class NodeRegistrationDriver extends Notifier<RegistrationStatus> {
   RegistrationStatus build() {
     final service = ref.watch(nodeRegistrationServiceProvider);
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
-    final client = ref.watch(graphqlClientProvider);
+    final accountId = ref.watch(boundAccountIdProvider);
     final controllableAsync = ref.watch(remoteControlEnabledProvider);
 
     // `AsyncValue.value` is null both while Hive is still opening its box
@@ -78,11 +79,12 @@ class NodeRegistrationDriver extends Notifier<RegistrationStatus> {
     service.update(
       controllable: controllable,
       nodeId: p2pStatus.nodeId,
-      clientReady: client != null,
-      // Scopes the service's "already registered" cache to this client, so
-      // signing into a different account or server on the same device (same
-      // iroh node id) re-registers instead of being skipped as a no-op.
-      clientScope: client,
+      clientReady: accountId != null,
+      // Scopes the service's "already registered" cache to this account, so
+      // binding a different account or server on the same device (same iroh
+      // node id) re-registers instead of being skipped as a no-op. The id,
+      // not the client: a token refresh keeps it.
+      clientScope: accountId,
     );
 
     return reportedStatus(service.status);

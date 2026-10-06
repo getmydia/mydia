@@ -11,6 +11,8 @@ import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/stub_link_transport.dart';
+import '../sources/mydia/fake_mydia_client.dart';
 
 /// A transport that answers from a script instead of dialing a real node.
 class FakeTransport implements MydiaControlTransport {
@@ -135,7 +137,7 @@ const _connectedDevice = CastDevice(
 );
 
 RemoteRoster rosterOf(List<(String, String)> devices) => RemoteRoster(
-      client: stubClient(StubLink.responses([
+      client: fakeMydiaClient(StubLinkTransport(StubLink.responses([
         {
           // Root `__typename` included: without it the normalized cache
           // refuses the write and the query reports a spurious exception.
@@ -151,7 +153,7 @@ RemoteRoster rosterOf(List<(String, String)> devices) => RemoteRoster(
               }
           ],
         },
-      ])),
+      ]))),
       now: () => DateTime(2026, 8, 20, 12, 0),
     );
 

@@ -5,6 +5,7 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 DownloadTask _task(
         {String? sourceId, String? itemKind, String mediaType = 'movie'}) =>
@@ -20,13 +21,18 @@ DownloadTask _task(
     );
 
 void main() {
-  test('a record with no source reads as home Mydia', () {
+  test('a record with no source id reads as pre-account', () {
     final task = _task(mediaType: 'episode');
-    expect(task.source, SourceId.legacyMydia);
+    expect(task.source, preAccountSourceId);
+  });
+
+  test('itemRef carries the record\'s source', () {
+    final task = _task(sourceId: testMydiaSourceId.value, mediaType: 'episode');
+    expect(task.source, testMydiaSourceId);
     expect(
         task.itemRef,
         const ItemRef(
-            sourceId: SourceId.legacyMydia,
+            sourceId: testMydiaSourceId,
             kind: ItemKind.episode,
             externalId: '42'));
   });
@@ -47,7 +53,7 @@ void main() {
         isTrue);
     expect(
         task.matches(const ItemRef(
-            sourceId: SourceId.legacyMydia,
+            sourceId: testMydiaSourceId,
             kind: ItemKind.movie,
             externalId: '42')),
         isFalse);

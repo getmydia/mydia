@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/download_request.dart';
 import '../../../domain/models/episode.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/models/season_info.dart';
@@ -123,16 +123,16 @@ class ShowBulkDownloadButton extends ConsumerWidget {
       title: seasonNumbers.length == 1
           ? '${show.title} - Season ${seasonNumbers.first}'
           : '${show.title} - All Seasons',
-      options: homeMydiaDownloadOptions(
-        ref,
-        homeMydiaRef(ItemKind.episode, allEpisodes.first.id),
-      ),
+      options: boundMydiaDownloadOptions(
+          ref, ItemKind.episode, allEpisodes.first.id),
     );
 
     if (selectedOption == null || !context.mounted) return;
     final selectedResolution = selectedOption.resolution;
 
     final downloadManager = await ref.read(downloadManagerProvider.future);
+    final sourceId = ref.read(boundSourceIdProvider);
+    if (sourceId == null) return;
 
     // Build sets for skip checks
     final downloadedMediaIds = <String>{};
@@ -140,7 +140,8 @@ class ShowBulkDownloadButton extends ConsumerWidget {
 
     for (final episode in allEpisodes) {
       if (downloadManager.isDownloaded(
-        homeMydiaRef(ItemKind.episode, episode.id),
+        ItemRef(
+            sourceId: sourceId, kind: ItemKind.episode, externalId: episode.id),
       )) {
         downloadedMediaIds.add(episode.id);
       }
@@ -160,6 +161,7 @@ class ShowBulkDownloadButton extends ConsumerWidget {
       showId: showId,
       showTitle: show.title,
       showPosterUrl: show.artwork.posterUrl,
+      sourceId: sourceId,
       downloadManager: downloadManager,
       isMediaDownloaded: (id) => downloadedMediaIds.contains(id),
       isMediaInQueue: (id) => queueMediaIds.contains(id),

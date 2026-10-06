@@ -10,22 +10,7 @@ void main() {
     });
   });
 
-  group('Source.legacyMydia', () {
-    test('uses the fixed legacy id and the legacy namespace', () {
-      final source = Source.legacyMydia();
-      expect(source.id, SourceId.legacyMydia);
-      expect(source.kind, SourceKind.mydia);
-      expect(source.account.storageNamespace, kLegacyStorageNamespace);
-      expect(source.profile.isOwner, isTrue);
-      expect(source.displayName, 'Mydia');
-    });
-
-    test('two legacy sources are equal', () {
-      expect(Source.legacyMydia(), Source.legacyMydia());
-    });
-  });
-
-  group('Source.id for non-legacy accounts', () {
+  group('Source.id', () {
     test('joins account, profile and server ids', () {
       const account = ProviderAccount(
         id: 'acc1',

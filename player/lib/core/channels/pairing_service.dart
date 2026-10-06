@@ -386,33 +386,6 @@ class PairingService {
     return null;
   }
 
-  /// Stores [credentials] as the home Mydia's pairing, under the keys
-  /// [clearCredentials] erases and `ReconnectionService` reads.
-  ///
-  /// Pairing itself writes nothing, so a guest instance's credentials can be
-  /// stored under its own namespace instead.
-  Future<void> saveHomeCredentials(PairingCredentials credentials) async {
-    await _authStorage.write(_StorageKeys.accessToken, credentials.accessToken);
-    await _authStorage.write(_StorageKeys.mediaToken, credentials.mediaToken);
-    final nodeAddr = credentials.serverNodeAddr;
-    if (nodeAddr != null) {
-      await _authStorage.write(_StorageKeys.serverNodeAddr, nodeAddr);
-    }
-    final instanceId = credentials.instanceId;
-    if (instanceId != null) {
-      await _authStorage.write(_StorageKeys.instanceId, instanceId);
-    } else {
-      await _authStorage.delete(_StorageKeys.instanceId);
-    }
-    final deviceToken = credentials.deviceToken;
-    if (deviceToken != null) {
-      await _authStorage.write(_StorageKeys.deviceToken, deviceToken);
-    } else {
-      // A token left from an earlier pairing would be sent to this server.
-      await _authStorage.delete(_StorageKeys.deviceToken);
-    }
-  }
-
   /// Clears stored pairing credentials.
   ///
   /// The deletes run concurrently, not sequentially, and each is wrapped in

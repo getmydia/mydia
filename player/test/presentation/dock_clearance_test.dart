@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/domain/models/calendar_entry.dart';
 import 'package:player/presentation/screens/calendar/calendar_controller.dart';
@@ -16,14 +14,6 @@ import 'package:player/presentation/widgets/media_poster.dart';
 
 import '../test_utils/dock_harness.dart';
 import 'screens/library/library_screen_layout_test.dart' show pumpLibrary;
-
-/// The real `AuthStateNotifier` reads secure storage on build. The calendar's
-/// `FreshnessHeader` watches it, so the calendar test needs this stub.
-class _StubAuthState extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() =>
-      const AsyncValue.data(AuthStatus.authenticated);
-}
 
 /// Thirty episodes over ten days from today: far more than 800px of rows, so
 /// the footer starts well below the fold.
@@ -89,7 +79,6 @@ Future<void> _pumpCalendar(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_StubAuthState.new),
         calendarControllerProvider.overrideWith(controller),
         calendarViewModeControllerProvider
             .overrideWith(() => _FixedViewMode(mode)),

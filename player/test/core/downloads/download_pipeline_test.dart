@@ -14,6 +14,7 @@ import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 
 import 'download_test_harness.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 const _plex = ItemRef(
     sourceId: SourceId('acc1:owner:aa11'),
@@ -170,7 +171,7 @@ void main() {
       final jobPlan = h.resolver.plan;
       h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
       final task =
-          await h.service.start(_request(homeMydiaRef(ItemKind.movie, '7')));
+          await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
       while (h.adapter.requests.isEmpty) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
@@ -283,7 +284,7 @@ void main() {
     final jobPlan = h.resolver.plan;
     h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
     final task =
-        await h.service.start(_request(homeMydiaRef(ItemKind.movie, '7')));
+        await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
     await h.waitForStatus(task.id, 'completed');
     expect(h.jobService.prepareCount, 1);
   });
@@ -347,7 +348,7 @@ void main() {
       h.resolver.plan = (task) => jobPlan(task.copyWith(isProgressive: true));
 
       final task =
-          await h.service.start(_request(homeMydiaRef(ItemKind.movie, '7')));
+          await h.service.start(_request(testMydiaRef(ItemKind.movie, '7')));
       await h.waitForStatus(task.id, 'interrupted');
     });
   });

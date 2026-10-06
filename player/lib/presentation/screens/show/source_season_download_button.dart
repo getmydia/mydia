@@ -12,6 +12,7 @@ import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/download_metadata.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 
 /// Queues every episode of the selected season of a non-Mydia show.
 class SourceSeasonDownloadButton extends ConsumerWidget {
@@ -45,7 +46,7 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     WidgetRef ref,
     DetailTarget seasonTarget,
   ) async {
-    final showRef = itemRefOf(show.target);
+    final showRef = itemRefOf(show.target, ref.read(boundSourceIdProvider));
     final source = ref.read(mediaSourceProvider(showRef.sourceId));
     final manager = await ref.read(downloadManagerProvider.future);
     if (!context.mounted) return;
@@ -57,7 +58,7 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     try {
       result = await queueSourceSeason(
         source: source,
-        season: itemRefOf(seasonTarget),
+        season: itemRefOf(seasonTarget, showRef.sourceId),
         manager: manager,
         metadataFor: (e) {
           final seasonNumber = e.parentIndex ?? season.number;

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/theme/colors.dart';
-import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/episode.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/models/progress.dart';
@@ -14,6 +13,7 @@ import 'package:player/presentation/widgets/watch_indicator.dart';
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/mock_network_images.dart';
 import '../../test_utils/poster_contract.dart';
+import '../../test_utils/mydia_test_source.dart';
 
 Episode _episode({
   bool hasFile = true,
@@ -44,7 +44,7 @@ Future<void> _pump(
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id))
+          isItemDownloadedProvider(testMydiaRef(ItemKind.episode, episode.id))
               .overrideWith((ref) => false),
         ],
         child: MaterialApp(

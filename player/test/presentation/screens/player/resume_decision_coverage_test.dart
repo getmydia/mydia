@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
@@ -85,13 +84,8 @@ void main() {
       await pumpUntil(tester, () => find.text('Resume').evaluate().isNotEmpty);
     },
     'downloaded, offline': (tester) async {
-      // AuthStatus.offlineMode is reachable here only because the harness
-      // overrides authStateProvider directly. As of this writing nothing in
-      // player/lib actually writes that status in production — the three
-      // writers were dropped during the p2p transport migration and never
-      // reinstated, a known, separately tracked gap. This case still guards
-      // the offline branch against a future regression; it is not proof the
-      // status is reachable end to end today.
+      // The bound instance reports `unreachable`, which is what the player
+      // reads as offline.
       final tempDir =
           Directory.systemTemp.createTempSync('mydia_resume_coverage_test_');
       addTearDown(() => tempDir.deleteSync(recursive: true));
@@ -107,7 +101,7 @@ void main() {
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
         downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
-        authStatus: AuthStatus.offlineMode,
+        offline: true,
         progressStore: store,
       );
       addTearDown(container.dispose);

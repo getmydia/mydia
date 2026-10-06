@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -20,6 +18,7 @@ import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../core/sources/stash/stash_media_source_test.dart'
     show stashRecord;
 import '../../../test_utils/mock_auth_storage.dart';
+import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
 
@@ -65,7 +64,6 @@ Future<InMemorySourceStore> _removeGuest(
   await store.putAccount(_guestRecord());
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      authStateProvider.overrideWith(_Authenticated.new),
       noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -82,11 +80,6 @@ Future<InMemorySourceStore> _removeGuest(
   return store;
 }
 
-class _Authenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
-
 void main() {
   testWidgets('removes an account after confirming', (tester) async {
     final store = InMemorySourceStore();
@@ -95,7 +88,6 @@ void main() {
     await store.putAccount(plexRecord());
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -127,7 +119,6 @@ void main() {
     ]));
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
@@ -145,7 +136,6 @@ void main() {
     await store.putAccount(jellyfinRecord);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
@@ -168,7 +158,6 @@ void main() {
         .copyWith(serverLocks: const {'abc123': SourceLock.hidden}));
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
@@ -186,7 +175,6 @@ void main() {
   testWidgets('Show hidden is there with nothing hidden', (tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -206,7 +194,6 @@ void main() {
     final pins = PinStore(storage, iterations: 1000);
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -264,7 +251,6 @@ void main() {
     final stashId = stashRecord.sources.single.id.value;
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -285,11 +271,13 @@ void main() {
     expect(tester.widget<SwitchListTile>(stashSwitch).value, isTrue);
   });
 
-  testWidgets('home Mydia has its own switch when signed in', (tester) async {
+  testWidgets('the migrated Mydia server is an ordinary account with a remove',
+      (tester) async {
     final store = InMemorySourceStore();
+    await store.putAccount(testMydiaRecord());
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_Authenticated.new),
+        noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider
             .overrideWithValue(SourceSecrets(MockAuthStorage())),
@@ -298,8 +286,11 @@ void main() {
           builder: toastLayerBuilder, home: ManageSourcesScreen()),
     ));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('manage-remove-macct')), findsOneWidget);
     expect(
-        find.byKey(const ValueKey('manage-all-servers-mydia')), findsOneWidget);
+        find.byKey(ValueKey('manage-all-servers-${testMydiaSourceId.value}')),
+        findsOneWidget);
+    expect(find.text('Mydia account'), findsOneWidget);
     expect(find.text('No servers yet.'), findsNothing);
   });
 

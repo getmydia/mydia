@@ -23,6 +23,7 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -543,7 +544,7 @@ class ShowDetailScreen extends ConsumerWidget {
   }) {
     final seasonKey = (show: target, seasonNumber: episode.seasonNumber);
     final mydiaEpisode = episode.mydia;
-    final item = itemRefOf(episode.target);
+    final item = itemRefOf(episode.target, ref.watch(boundSourceIdProvider));
     final canDownload = isDownloadSupported &&
         show.features.contains(DetailFeature.download) &&
         episode.files.isNotEmpty;

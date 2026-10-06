@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gql/ast.dart' show DocumentNode;
-import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../domain/sources/source_error.dart';
 import '../../graphql/queries/now_playing.graphql.dart';
-import '../graphql/graphql_provider.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'media_session_state.dart';
 
 /// Runs one GraphQL query and returns its `data`, or null.
@@ -96,15 +96,12 @@ final nowPlayingMetadataResolverProvider =
   return NowPlayingMetadataResolver((document, variables) async {
     // Read per call, not captured: the client is rebuilt on reconnect and
     // token refresh.
-    final client = ref.read(graphqlClientProvider);
+    final client = ref.read(boundMydiaClientProvider);
     if (client == null) throw NowPlayingFetchUnavailable();
-    final result = await client.query(QueryOptions(
-      document: document,
-      variables: variables,
-      // A detail screen usually just loaded this item.
-      fetchPolicy: FetchPolicy.cacheFirst,
-    ));
-    if (result.hasException) return null;
-    return result.data;
+    try {
+      return await client.request(document, variables);
+    } on SourceException {
+      return null;
+    }
   });
 });

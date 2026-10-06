@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/auth/auth_status.dart';
+import '../../core/sources/current_source_status.dart';
 import '../../core/format/relative_time.dart';
-import '../../core/graphql/graphql_provider.dart';
 import '../../core/graphql/watch/freshness.dart';
 import '../../core/graphql/watch/invalidation_target.dart';
 import '../../core/graphql/watch/query_key.dart';
@@ -51,13 +50,10 @@ class FreshnessHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOffline = ref.watch(authStateProvider).maybeWhen(
-          data: (status) => status == AuthStatus.offlineMode,
-          orElse: () => false,
-        );
+    final offline = isOffline(ref.watch(currentSourceStatusProvider));
     // OfflineBanner already owns this message. Two stacked warning banners
     // saying overlapping things is how banners get ignored.
-    if (isOffline) return const SizedBox.shrink();
+    if (offline) return const SizedBox.shrink();
 
     final registry = ref.watch(freshnessRegistryProvider);
     final freshness = Freshness.combine(

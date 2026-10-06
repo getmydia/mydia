@@ -11,7 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import '../../../core/app_menu/now_playing.dart';
-import '../../../core/auth/auth_status.dart';
+import '../../../core/sources/current_source_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
@@ -127,6 +127,8 @@ import 'subtitle_preference.dart';
 import 'subtitle_selection_target.dart';
 import 'subtitle_track_builder.dart';
 import 'up_next_controller.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
+import '../../../core/sources/source.dart' show SourceId;
 
 export '../../../core/player/resume_plan.dart'
     show
@@ -381,6 +383,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// other best-effort failure (already caught and logged there). It also
   /// backs [_session], whose methods read it at call time.
   GraphQLClient? _graphqlClient;
+
+  /// The bound Mydia instance, kept in a field so a session read during
+  /// dispose never touches `ref`.
+  SourceId? _boundSourceId;
 
   /// Every GraphQL data call this screen makes goes through here.
   late final PlaybackSession _session;
@@ -1060,6 +1066,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       (previous, next) => next.whenData((client) => _graphqlClient = client),
       fireImmediately: true,
     );
+    ref.listenManual<SourceId?>(
+      boundSourceIdProvider,
+      (previous, next) => _boundSourceId = next,
+      fireImmediately: true,
+    );
     _session = widget.session ??
         MydiaPlaybackSession(
           client: () => _graphqlClient,
@@ -1071,23 +1082,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             showId: widget.showId,
             seasonNumber: widget.seasonNumber,
           ),
-          offline: () => ref.read(authStateProvider).maybeWhen(
-                data: (s) => s == AuthStatus.offlineMode,
-                orElse: () => false,
-              ),
+          sourceId: () => _boundSourceId,
+          offline: () =>
+              isOffline(ref.read(boundMydiaProvider)?.statusListenable.value),
           streaming: MydiaStreamingDeps(
             serverUrl: () => ref.read(serverUrlProvider.future),
             authToken: () => ref.read(authTokenProvider.future),
             connection: () => ref.read(conn.connectionProvider),
             mediaProxy: () => ref.read(mediaProxyProvider),
-            mediaToken: () async {
-              final service =
-                  await ref.read(asyncMediaTokenServiceProvider.future);
-              await service.ensureValidToken();
-              return service.getToken();
-            },
+            mediaToken: () async =>
+                ref.read(boundMydiaClientProvider)?.ensureValidMediaToken(),
             serverFeatures: () => ref.read(serverFeaturesProvider),
             adoptClient: (client) => _graphqlClient = client,
+            boundClient: () => ref.read(boundMydiaClientProvider),
           ),
         );
 

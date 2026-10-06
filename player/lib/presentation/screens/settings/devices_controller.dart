@@ -1,6 +1,5 @@
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../domain/models/remote_device.dart';
 import '../../../graphql/queries/devices_list.graphql.dart';
 import '../../../graphql/mutations/revoke_device.graphql.dart';
@@ -17,24 +16,15 @@ class DevicesController extends _$DevicesController {
 
   /// Load all devices for the current user.
   Future<List<RemoteDevice>> _loadDevices() async {
-    final client = ref.read(graphqlClientProvider);
+    final client = ref.read(boundMydiaClientProvider);
 
     if (client == null) {
-      throw Exception('GraphQL client not available');
+      throw Exception('No Mydia server');
     }
 
-    final result = await client.query(
-      QueryOptions(
-        document: documentNodeQueryDevicesList,
-        fetchPolicy: FetchPolicy.networkOnly,
-      ),
-    );
+    final data = await client.request(documentNodeQueryDevicesList);
 
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
-    }
-
-    final query = Query$DevicesList.fromJson(result.data!);
+    final query = Query$DevicesList.fromJson(data);
     final devices = query.devices ?? [];
 
     return devices
@@ -51,24 +41,18 @@ class DevicesController extends _$DevicesController {
 
   /// Revoke a device by ID.
   Future<bool> revokeDevice(String deviceId) async {
-    final client = ref.read(graphqlClientProvider);
+    final client = ref.read(boundMydiaClientProvider);
 
     if (client == null) {
-      throw Exception('GraphQL client not available');
+      throw Exception('No Mydia server');
     }
 
-    final result = await client.mutate(
-      MutationOptions(
-        document: documentNodeMutationRevokeDevice,
-        variables: {'id': deviceId},
-      ),
+    final data = await client.request(
+      documentNodeMutationRevokeDevice,
+      {'id': deviceId},
     );
 
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
-    }
-
-    final mutation = Mutation$RevokeDevice.fromJson(result.data!);
+    final mutation = Mutation$RevokeDevice.fromJson(data);
     final success = mutation.revokeDevice?.success ?? false;
 
     if (success) {

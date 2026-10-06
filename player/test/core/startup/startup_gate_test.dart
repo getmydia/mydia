@@ -24,7 +24,6 @@ void main() {
       fetchLog: InMemoryFetchLog(),
       sourceCache: InMemorySourceCache(),
       sidebarLayoutStore: InMemorySidebarLayoutStore(),
-      initialConnection: null,
     ));
     // Not pumpAndSettle: the splash's CircularProgressIndicator animates
     // forever, so pumpAndSettle never sees the frame count settle. One pump

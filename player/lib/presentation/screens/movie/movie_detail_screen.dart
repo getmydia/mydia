@@ -21,6 +21,7 @@ import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/toast/toaster.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the wide-layout mockup's tablet/desktop
@@ -287,7 +288,7 @@ class MovieDetailScreen extends ConsumerWidget {
     required bool compact,
   }) {
     final mydia = movie.mydia;
-    final item = itemRefOf(movie.target);
+    final item = itemRefOf(movie.target, ref.watch(boundSourceIdProvider));
     final canDownload = isDownloadSupported &&
         movie.features.contains(DetailFeature.download) &&
         movie.files.isNotEmpty;

@@ -217,7 +217,11 @@ class DownloadTask {
     this.thumbnailPath,
   });
 
-  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+  /// Every writer sets [sourceId]. A record without one predates accounts, so
+  /// it reads as [preAccountSourceId]: listed under no account, and moved by
+  /// the startup migration when it runs.
+  SourceId get source =>
+      sourceId == null ? preAccountSourceId : SourceId(sourceId!);
 
   ItemRef get itemRef => ItemRef(
         sourceId: source,
@@ -561,6 +565,38 @@ class DownloadedMedia {
     this.thumbnailPath,
   });
 
+  /// This record under another source; nothing else changes.
+  DownloadedMedia copyWith({String? sourceId}) => DownloadedMedia(
+        id: id,
+        mediaId: mediaId,
+        title: title,
+        quality: quality,
+        filePath: filePath,
+        fileSize: fileSize,
+        mediaType: mediaType,
+        posterUrl: posterUrl,
+        downloadedAt: downloadedAt,
+        overview: overview,
+        runtime: runtime,
+        genres: genres,
+        rating: rating,
+        backdropUrl: backdropUrl,
+        year: year,
+        contentRating: contentRating,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber,
+        showId: showId,
+        showTitle: showTitle,
+        showPosterUrl: showPosterUrl,
+        thumbnailUrl: thumbnailUrl,
+        airDate: airDate,
+        sourceId: sourceId ?? this.sourceId,
+        itemKind: itemKind,
+        posterPath: posterPath,
+        backdropPath: backdropPath,
+        thumbnailPath: thumbnailPath,
+      );
+
   /// This record with its saved artwork paths replaced; nothing else changes.
   DownloadedMedia withArtwork({
     String? posterPath,
@@ -598,7 +634,11 @@ class DownloadedMedia {
         thumbnailPath: thumbnailPath,
       );
 
-  SourceId get source => SourceId(sourceId ?? SourceId.legacyMydia.value);
+  /// Every writer sets [sourceId]. A record without one predates accounts, so
+  /// it reads as [preAccountSourceId]: listed under no account, and moved by
+  /// the startup migration when it runs.
+  SourceId get source =>
+      sourceId == null ? preAccountSourceId : SourceId(sourceId!);
 
   ItemRef get itemRef => ItemRef(
         sourceId: source,

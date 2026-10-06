@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/graphql/graphql_provider.dart';
+import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
 import 'banner_button.dart';
 
-/// Banner displayed at the top of the screen when the app is in offline mode.
+/// Banner displayed at the top of the screen when the selected source cannot be reached.
 ///
 /// Shows a message indicating offline status and provides a "Retry Connection"
 /// button to attempt reconnecting to the server.
@@ -22,7 +22,9 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
     setState(() => _isRetrying = true);
 
     try {
-      await ref.read(authStateProvider.notifier).retryConnection();
+      // Rebuilding the source re-probes its connection.
+      final id = ref.read(activeSourceIdProvider);
+      if (id != null) ref.invalidate(mediaSourceProvider(id));
     } finally {
       if (mounted) {
         setState(() => _isRetrying = false);

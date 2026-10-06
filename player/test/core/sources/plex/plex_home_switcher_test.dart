@@ -2,8 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/plex/plex_home_switcher.dart';
 import 'package:player/core/sources/plex/plex_identity.dart';
 import 'package:player/core/sources/plex/plex_providers.dart';
@@ -20,11 +18,6 @@ import 'package:player/domain/sources/source_error.dart';
 import '../../../test_utils/mock_auth_storage.dart';
 import 'plex_home_fixtures.dart';
 import 'plex_tv_client_test.dart' show resourcesJson;
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// Fails every write once [fail] is set.
 class _FailingStore extends InMemorySourceStore {
@@ -114,7 +107,6 @@ void main() {
     await storage.write('source/acc1/owner/aa11/token', 'server-token-1');
     await storage.write('source/acc1/owner/bb22/token', 'server-token-2');
     container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(

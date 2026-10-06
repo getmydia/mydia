@@ -26,7 +26,7 @@ class _FakeLoginController extends LoginController {
       );
 
   @override
-  Future<void> submitTotpCode(String code, {GuestTarget? guest}) async =>
+  Future<void> submitTotpCode(String code, {String? reauthAccountId}) async =>
       submittedCode = code;
 
   @override
@@ -50,7 +50,7 @@ class _ExpiringLoginController extends LoginController {
       );
 
   @override
-  Future<void> submitTotpCode(String code, {GuestTarget? guest}) async {
+  Future<void> submitTotpCode(String code, {String? reauthAccountId}) async {
     state = state.copyWith(
       clearTotpChallenge: true,
       error: 'Sign-in expired, please try again',
