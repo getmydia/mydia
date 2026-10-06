@@ -93,7 +93,10 @@ void main() {
     );
 
     final screens = _shellBuilder
-        .allMatches(_shellRouteBlock(router.readAsStringSync()))
+        .allMatches(_shellRouteBlock(router.readAsStringSync())
+            // The search route is built by a helper so a test can mount it;
+            // it is still a shell screen.
+            .replaceAll('sourceSearchRoute()', '=> SourceSearchScreen('))
         .map((m) => m.group(1)!)
         .toSet();
 

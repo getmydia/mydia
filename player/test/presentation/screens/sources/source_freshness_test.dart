@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cache/freshness.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';
@@ -10,6 +12,7 @@ import 'package:player/presentation/screens/detail/detail_providers.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_media_source.dart';
 
 void main() {
@@ -28,6 +31,8 @@ void main() {
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       // No artwork requests: see source_library_screen_test.dart.
       sourceArtworkProvider.overrideWith((ref, key) async => null),
+      coreSettingsServiceProvider
+          .overrideWithValue(SettingsService(storage: MockAuthStorage())),
     ]);
     addTearDown(container.dispose);
     await tester.pumpWidget(UncontrolledProviderScope(

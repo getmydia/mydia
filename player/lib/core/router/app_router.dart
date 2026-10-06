@@ -123,6 +123,17 @@ SourceId? _sourceIdIn(String location) {
 
 /// Builder for the unprefixed pre-instance routes. They stay registered so
 /// go_router matches them, but `appRedirect` always moves them first.
+/// A source's search; `?q=` fills the box, which is where the legacy
+/// `/search?q=` redirect lands.
+GoRoute sourceSearchRoute() => GoRoute(
+      path: '/s/:sourceId/search',
+      name: 'source_search',
+      builder: (context, state) => SourceSearchScreen(
+        sourceId: SourceId(state.pathParameters['sourceId']!),
+        initialQuery: state.uri.queryParameters['q'],
+      ),
+    );
+
 Widget _legacyStub(BuildContext context, GoRouterState state) =>
     const SizedBox.shrink();
 
@@ -485,14 +496,7 @@ GoRouter appRouter(Ref ref) {
             ),
           ),
           sourceItemRoute(),
-          GoRoute(
-            path: '/s/:sourceId/search',
-            name: 'source_search',
-            builder: (context, state) => SourceSearchScreen(
-              sourceId: SourceId(state.pathParameters['sourceId']!),
-              initialQuery: state.uri.queryParameters['q'],
-            ),
-          ),
+          sourceSearchRoute(),
           for (final (path, name, build) in _sourceListings)
             GoRoute(
               path: '/s/:sourceId/$path',

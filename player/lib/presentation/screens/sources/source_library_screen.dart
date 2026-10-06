@@ -8,7 +8,12 @@ import '../../../core/cache/invalidation_target.dart';
 import '../../../core/cache/watcher_registry.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/settings/settings_providers.dart';
 import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/media_source.dart' show SourceCapability;
+import '../../../domain/navigation/media_filter.dart';
+import '../filter/filter_editor_sheet.dart';
+import '../library/library_sort.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/sources/item.dart';
@@ -24,6 +29,34 @@ import 'source_pages.dart';
 
 enum _ViewMode { grid, list }
 
+SortOption? _sortOption(Library info, BrowseQuery query) {
+  final options = info.sortOptions;
+  return options.where((o) => o.id == query.sortId).firstOrNull ??
+      options.firstOrNull;
+}
+
+/// `<sortId>|asc`, `<sortId>|desc`, or `<sortId>|` for the sort's own order.
+String _encodeSort(BrowseQuery query) =>
+    '${query.sortId ?? ''}|${switch (query.descending) {
+      null => '',
+      true => 'desc',
+      false => 'asc',
+    }}';
+
+BrowseQuery? _decodeSort(String? raw) {
+  if (raw == null) return null;
+  final split = raw.lastIndexOf('|');
+  if (split <= 0) return null;
+  return BrowseQuery(
+    sortId: raw.substring(0, split),
+    descending: switch (raw.substring(split + 1)) {
+      'desc' => true,
+      'asc' => false,
+      _ => null,
+    },
+  );
+}
+
 /// A library of any source: sort and filter chips over a poster grid, or a
 /// list. Saved filters open it with an [initialQuery] and the filter's
 /// [title].
@@ -35,9 +68,13 @@ class SourceLibraryScreen extends ConsumerStatefulWidget {
     this.title,
     this.icon,
     this.actions = const [],
+    this.canSaveAsFilter = true,
   });
 
   final LibraryRef library;
+
+  /// False where the screen supplies its own save menu, as a saved filter does.
+  final bool canSaveAsFilter;
 
   /// Title-bar actions placed before the view toggle.
   final List<Widget> actions;
@@ -63,9 +100,21 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   _ViewMode _viewMode = _ViewMode.grid;
   bool _seeded = false;
 
+  /// A plain library remembers its sort across visits; a saved filter's own
+  /// query wins and is never stored.
+  bool get _remembers => widget.initialQuery == null;
+
+  String get _sortKey =>
+      '${widget.library.sourceId.value}/${widget.library.id}';
+
+  /// True until the remembered sort has been read, so the library never
+  /// fetches under the default and then again under the stored order.
+  late bool _loadingSort = _remembers;
+
   @override
   void initState() {
     super.initState();
+    if (_remembers) _loadSort();
     // A provider cannot be written while the tree builds, so the seed lands
     // after it; `build` already answers with the seed until then, so the
     // first fetch is the right one.
@@ -79,6 +128,64 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
         notifier.set(initial);
       }
     });
+  }
+
+  Future<void> _loadSort() async {
+    BrowseQuery? stored;
+    try {
+      final raw =
+          await ref.read(coreSettingsServiceProvider).getLibrarySort(_sortKey);
+      stored = _decodeSort(raw);
+    } catch (_) {
+      // An unreadable preference is the default order, not an error.
+    }
+    if (!mounted) return;
+    if (stored != null &&
+        ref.read(libraryQueryProvider(widget.library)) == _defaultQuery) {
+      ref.read(libraryQueryProvider(widget.library).notifier).set(stored);
+    }
+    setState(() => _loadingSort = false);
+  }
+
+  Future<void> _setQuery(BrowseQuery query) async {
+    ref.read(libraryQueryProvider(widget.library).notifier).set(query);
+    if (!_remembers) return;
+    try {
+      await ref
+          .read(coreSettingsServiceProvider)
+          .setLibrarySort(_sortKey, _encodeSort(query));
+    } catch (_) {
+      // The order still applies for this visit.
+    }
+  }
+
+  /// Opens the filter editor on this library's kind and the current sort.
+  void _saveAsFilter(Library info, BrowseQuery query) {
+    final kind = switch (info.kind) {
+      LibraryKind.movies => MediaKind.movies,
+      LibraryKind.shows => MediaKind.shows,
+      LibraryKind.videos => null,
+    };
+    if (kind == null) return;
+    final option = _sortOption(info, query);
+    final field = SortField.fromWireName(query.sortId ?? option?.id ?? '') ??
+        LibrarySort.defaultSort.field;
+    final descending = query.descending ??
+        option?.descendingByDefault ??
+        LibrarySort.defaultSort.direction == SortDirection.desc;
+    showFilterEditor(
+      context: context,
+      ref: ref,
+      initialFilter: MediaFilter(
+        kind: kind,
+        category: null,
+        watch: WatchScope.all,
+        sort: LibrarySort(
+          field: field,
+          direction: descending ? SortDirection.desc : SortDirection.asc,
+        ),
+      ),
+    );
   }
 
   BrowseQuery _effective(BrowseQuery stored) {
@@ -99,12 +206,24 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
     };
     final query = _effective(ref.watch(libraryQueryProvider(library)));
     final pages = LibraryPages(library, query);
-    final browse = ref.watch(sourcePagesProvider(pages));
-    final notifier = ref.read(sourcePagesProvider(pages).notifier);
-    final queryNotifier = ref.read(libraryQueryProvider(library).notifier);
+    // Held back while the remembered sort loads: a fetch under the default
+    // order would be thrown away a moment later.
+    final browse = _loadingSort
+        ? const AsyncLoading<PagedItems>()
+        : ref.watch(sourcePagesProvider(pages));
     final key = SourceKeys.browse(library, query);
     final isList = _viewMode == _ViewMode.list;
     final isShows = info?.kind == LibraryKind.shows;
+    final sort = info == null ? null : _sortOption(info, query);
+    final descending = query.descending ?? sort?.descendingByDefault ?? false;
+    final canSaveFilter = info != null &&
+        widget.canSaveAsFilter &&
+        info.kind != LibraryKind.videos &&
+        (ref
+                .watch(mediaSourceProvider(library.sourceId))
+                ?.capabilities
+                .contains(SourceCapability.savedFilters) ??
+            false);
 
     return BrowseScaffold(
       icon: widget.icon ?? (isShows ? Icons.tv_rounded : Icons.movie_rounded),
@@ -113,6 +232,25 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
       actions: [
         ...widget.actions,
         ...sourceSearchActions(context, library.sourceId),
+        if (sort != null)
+          IconButton(
+            key: const Key('source-sort-direction'),
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                descending
+                    ? Icons.arrow_downward_rounded
+                    : Icons.arrow_upward_rounded,
+                size: 20,
+              ),
+            ),
+            tooltip: descending ? 'Descending' : 'Ascending',
+            onPressed: () => _setQuery(query.copyWith(descending: !descending)),
+          ),
         IconButton(
           key: const Key('source-view-toggle'),
           icon: Container(
@@ -130,13 +268,37 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           onPressed: () => setState(
               () => _viewMode = isList ? _ViewMode.grid : _ViewMode.list),
         ),
+        if (canSaveFilter)
+          PopupMenuButton<String>(
+            key: const Key('source-library-menu'),
+            icon: const Icon(
+              Icons.more_vert_rounded,
+              color: AppColors.textSecondary,
+              size: 22,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            color: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            onSelected: (value) {
+              if (value == 'save_filter') _saveAsFilter(info, query);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'save_filter',
+                child: Text('Save this view as a filter'),
+              ),
+            ],
+          ),
       ],
       secondRow: info == null
           ? null
           : _ChipRow(
               info: info,
               query: query,
-              onChanged: queryNotifier.set,
+              onChanged: _setQuery,
             ),
       onRefresh: () async =>
           ref.read(invalidatorProvider).invalidate([key.target]),
@@ -147,7 +309,9 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
           ),
         AsyncData(:final value) => NotificationListener<ScrollNotification>(
             onNotification: (n) {
-              if (n.metrics.extentAfter < 800) notifier.loadMore();
+              if (n.metrics.extentAfter < 800) {
+                ref.read(sourcePagesProvider(pages).notifier).loadMore();
+              }
               return false;
             },
             child: isList
@@ -206,8 +370,12 @@ class _ChipRow extends StatelessWidget {
               label: Text(option.label),
               selected:
                   (query.sortId ?? info.sortOptions.first.id) == option.id,
-              onSelected: (_) => onChanged(
-                  BrowseQuery(sortId: option.id, filterIds: query.filterIds)),
+              // A new sort starts in its own default direction.
+              onSelected: (_) => onChanged(BrowseQuery(
+                sortId: option.id,
+                filterIds: query.filterIds,
+                pageSize: query.pageSize,
+              )),
             ),
           ),
         for (final filter in info.filterOptions)

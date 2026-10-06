@@ -55,6 +55,7 @@ class FilterScreen extends ConsumerWidget {
           initialQuery: query.query,
           title: destination.label,
           icon: Icons.filter_alt_rounded,
+          canSaveAsFilter: false,
           actions: [
             PopupMenuButton<String>(
               icon: const Icon(

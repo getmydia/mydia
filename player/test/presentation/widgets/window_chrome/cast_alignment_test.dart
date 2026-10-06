@@ -32,6 +32,8 @@ import 'package:player/presentation/screens/collections/collection_detail_screen
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/screens/filter/filter_screen.dart';
 import 'package:player/presentation/screens/sources/source_home_screen.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
@@ -169,6 +171,8 @@ void main() {
           extraOverrides: [
             mediaSourceProvider(fakeSourceId)
                 .overrideWithValue(FakeMediaSource()),
+            coreSettingsServiceProvider
+                .overrideWithValue(SettingsService(storage: MockAuthStorage())),
             sourceArtworkProvider.overrideWith((ref, key) async => null),
           ],
           child: const SourceLibraryScreen(library: FakeMediaSource.movies),

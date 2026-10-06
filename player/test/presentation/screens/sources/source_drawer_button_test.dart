@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/screens/sources/source_search_screen.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_media_source.dart';
 
 /// Mounts [screen] the way the narrow shell does: inside the Scaffold that
@@ -23,6 +26,7 @@ Future<void> _pumpInShell(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      _settings,
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
       sourceArtworkProvider.overrideWith((ref, key) async => null),
     ],
@@ -48,6 +52,10 @@ Future<void> _pumpInShell(
     await tester.pumpAndSettle();
   }
 }
+
+// A library reads its remembered sort first; real storage never answers here.
+final _settings = coreSettingsServiceProvider
+    .overrideWithValue(SettingsService(storage: MockAuthStorage()));
 
 // The tooltip is the button's accessible name.
 final _menu = find.byTooltip('Menu');
@@ -88,6 +96,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(ProviderScope(
       overrides: [
+        _settings,
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
       ],

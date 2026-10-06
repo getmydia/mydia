@@ -8,6 +8,8 @@ import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/current_source_status.dart';
 import 'package:player/core/sources/media_source.dart'
@@ -18,6 +20,7 @@ import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
+import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_media_source.dart';
 
 /// The status bar inset every test in this file runs with.
@@ -61,6 +64,8 @@ Future<void> pumpLibrary(
         mediaSourceProvider(fakeSourceId)
             .overrideWithValue(FakeMediaSource(movieCount: itemCount)),
         sourceArtworkProvider.overrideWith((ref, key) async => null),
+        coreSettingsServiceProvider
+            .overrideWithValue(SettingsService(storage: MockAuthStorage())),
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         ...extraOverrides,
