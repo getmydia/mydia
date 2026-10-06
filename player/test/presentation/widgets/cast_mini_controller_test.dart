@@ -31,6 +31,7 @@ import 'package:player/presentation/widgets/cast_bar/dock_extents.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
+import '../../test_utils/dock_harness.dart' show kDockNavEntries;
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import '../../core/sources/mydia/fake_mydia_client.dart';
@@ -1972,7 +1973,10 @@ void main() {
                     drawerOpen: false,
                     child: KeyedSubtree(
                       key: dockKey,
-                      child: BottomNav(location: '/', onNavigate: (_) {}),
+                      child: BottomNav(
+                          location: '/',
+                          onNavigate: (_) {},
+                          entries: kDockNavEntries),
                     ),
                   )
                 : null,

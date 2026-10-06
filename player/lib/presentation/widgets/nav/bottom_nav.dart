@@ -1,19 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/config/web_config.dart';
-import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/theme/colors.dart';
-import '../../../domain/navigation/nav_destination.dart';
+import '../../../domain/navigation/source_nav.dart';
 import '../focus_highlight.dart';
 import '../glass_surface.dart';
 import '../toast/toast_obstruction.dart';
 import 'dock_glass.dart';
 import 'nav_badges.dart';
 
+/// The bar's items out of a source's [entries]: Home, Movies, Shows, then
+/// Downloads (Favorites where downloads are unsupported) and Settings. An
+/// entry the source cannot serve is left out.
+List<SourceNavEntry> bottomNavEntries(
+  List<SourceNavEntry> entries, {
+  required bool downloadSupported,
+}) {
+  final ids = [
+    'home',
+    'movies',
+    'shows',
+    if (downloadSupported) 'downloads' else 'favorites',
+    'settings',
+  ];
+  return [
+    for (final id in ids) ...entries.where((e) => e.id == id).take(1),
+  ];
+}
+
 /// Mobile bottom navigation bar
 class BottomNav extends StatelessWidget {
   final String location;
   final ValueChanged<String> onNavigate;
+
+  /// The bar's items, in order. The shell picks them from the current
+  /// source's navigation (see [bottomNavEntries]).
+  final List<SourceNavEntry> entries;
   final bool isOffline;
   final bool showBackToMydia;
 
@@ -21,6 +43,7 @@ class BottomNav extends StatelessWidget {
     super.key,
     required this.location,
     required this.onNavigate,
+    required this.entries,
     this.isOffline = false,
     this.showBackToMydia = false,
   });
@@ -59,54 +82,22 @@ class BottomNav extends StatelessWidget {
                         isSelected: false,
                         onTap: navigateToMydiaApp,
                       ),
-                    NavItem(
-                      icon: Icons.home_outlined,
-                      selectedIcon: Icons.home_rounded,
-                      label: 'Home',
-                      isSelected: builtinDestinations
-                          .firstWhere((d) => d.id == 'home')
-                          .matches(location),
-                      isDisabled: isOffline,
-                      onTap: () => onNavigate('/'),
-                    ),
-                    NavItem(
-                      icon: Icons.movie_outlined,
-                      selectedIcon: Icons.movie_rounded,
-                      label: 'Movies',
-                      isSelected: location.startsWith('/movies'),
-                      isDisabled: isOffline,
-                      onTap: () => onNavigate('/movies'),
-                    ),
-                    NavItem(
-                      icon: Icons.tv_outlined,
-                      selectedIcon: Icons.tv_rounded,
-                      label: 'Shows',
-                      isSelected: location.startsWith('/shows'),
-                      isDisabled: isOffline,
-                      onTap: () => onNavigate('/shows'),
-                    ),
-                    if (isDownloadSupported)
-                      NavItem(
-                        icon: Icons.download_outlined,
-                        selectedIcon: Icons.download_rounded,
-                        label: 'Downloads',
-                        isSelected: location.startsWith('/downloads'),
-                        onTap: () => onNavigate('/downloads'),
-                      )
-                    else
-                      NavItem(
-                        icon: Icons.favorite_outline_rounded,
-                        selectedIcon: Icons.favorite_rounded,
-                        label: 'Favorites',
-                        isSelected: location.startsWith('/favorites'),
-                        isDisabled: isOffline,
-                        onTap: () => onNavigate('/favorites'),
-                      ),
-                    SettingsNavItem(
-                      isSelected: location.startsWith('/settings'),
-                      isDisabled: isOffline,
-                      onTap: () => onNavigate('/settings'),
-                    ),
+                    for (final entry in entries)
+                      if (entry.id == 'settings')
+                        SettingsNavItem(
+                          isSelected: entry.matches(location),
+                          isDisabled: isOffline,
+                          onTap: () => onNavigate(entry.route),
+                        )
+                      else
+                        NavItem(
+                          icon: entry.icon,
+                          selectedIcon: entry.selectedIcon,
+                          label: entry.id == 'shows' ? 'Shows' : entry.label,
+                          isSelected: entry.matches(location),
+                          isDisabled: isOffline && entry.id != 'downloads',
+                          onTap: () => onNavigate(entry.route),
+                        ),
                   ],
                 ),
               ),

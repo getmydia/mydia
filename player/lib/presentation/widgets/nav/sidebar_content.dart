@@ -16,8 +16,10 @@ import 'nav_badges.dart';
 import 'sidebar_edit_bar.dart';
 import 'sidebar_middle_list.dart';
 import 'sidebar_row.dart';
-import '../../../core/sources/source.dart';
-import 'source_nav_list.dart';
+import '../../../core/sources/media_source.dart' show SourceCapability;
+import '../../../core/sources/sources_providers.dart';
+import '../../../domain/navigation/source_nav.dart';
+import 'current_source.dart';
 import 'source_switcher.dart';
 
 /// Shared sidebar navigation content used by both the desktop sidebar and the
@@ -141,9 +143,8 @@ class SidebarContent extends ConsumerWidget {
 
     final hasBackWidget = backToMydiaWidget != null;
     final allServers = isAllServersLocation(location);
-    final thirdPartyId = sourceIdFromLocation(location);
-    // Both replace Mydia's own destinations, so neither can be edited.
-    final ownsNav = allServers || thirdPartyId != null;
+    // All servers replaces the layout, so it cannot be edited.
+    final ownsNav = allServers;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,16 +214,17 @@ class SidebarContent extends ConsumerWidget {
               selectedRowFocusNode: selectedRowFocusNode,
             ),
           )
-        else if (thirdPartyId != null)
+        else if (!editing)
           Expanded(
-            child: SourceNavList(
-              sourceId: SourceId(thirdPartyId),
-              location: location,
-              onNavigate: onNavigate,
-              selectedRowFocusNode: selectedRowFocusNode,
+            child: _buildSourceNav(
+              context: context,
+              ref: ref,
+              destinations: destinations,
             ),
           )
         else
+          // Edit mode arranges the viewer's whole layout, hidden rows
+          // included, so it renders the layout rather than one source's rows.
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -302,6 +304,113 @@ class SidebarContent extends ConsumerWidget {
     );
   }
 
+  /// The rows for the source this location belongs to. Search and the app's
+  /// own entries (Downloads, Settings) stay pinned around a scrolling middle,
+  /// as they are in edit mode.
+  Widget _buildSourceNav({
+    required BuildContext context,
+    required WidgetRef ref,
+    required List<NavDestination> destinations,
+  }) {
+    final entries = ref.watch(sourceNavEntriesProvider(location));
+    final source = ref.watch(currentSourceIdProvider(location));
+    final canFilter = source != null &&
+        (ref
+                .watch(mediaSourceProvider(source))
+                ?.capabilities
+                .contains(SourceCapability.savedFilters) ??
+            false);
+
+    SourceNavEntry? selected;
+    for (final entry in entries) {
+      if (!entry.matches(location)) continue;
+      if (selected == null || entry.route.length > selected.route.length) {
+        selected = entry;
+      }
+    }
+    // The shell's node goes on the selected row, else the first one, so a
+    // remote can reach the sidebar from routes the entries do not list.
+    final focusId = selected?.id ?? entries.firstOrNull?.id;
+
+    Widget row(SourceNavEntry entry) {
+      final destination =
+          destinations.where((d) => d.id == entry.id).firstOrNull;
+      final isSelected = selected?.id == entry.id;
+      if (destination == null) {
+        return SidebarRow(
+          key: ValueKey('source-nav-${entry.id}'),
+          focusNode: entry.id == focusId ? selectedRowFocusNode : null,
+          icon: entry.icon,
+          selectedIcon: entry.selectedIcon,
+          label: entry.label,
+          isSelected: isSelected,
+          isDisabled: isOffline,
+          onTap: () => onNavigate(entry.route),
+        );
+      }
+      return _buildRow(
+        ref: ref,
+        context: context,
+        destination: destination,
+        selected: null,
+        focusRowId: focusId,
+        route: entry.route,
+        isSelectedOverride: isSelected,
+      );
+    }
+
+    final leading = entries.where((e) => e.anchored && e.id == 'search');
+    final trailing = entries.where((e) => e.anchored && e.id != 'search');
+    final middle = entries.where((e) => !e.anchored);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        children: [
+          for (final entry in leading) ...[
+            row(entry),
+            const SizedBox(height: 2)
+          ],
+          Expanded(
+            child: ListView(
+              children: [
+                for (final entry in middle) ...[
+                  row(entry),
+                  const SizedBox(height: 2),
+                ],
+              ],
+            ),
+          ),
+          if (canFilter)
+            SidebarRow(
+              icon: Icons.add_rounded,
+              selectedIcon: Icons.add_rounded,
+              label: '+ New filter',
+              isSelected: false,
+              onTap: () => showFilterEditor(
+                context: context,
+                ref: ref,
+                initialFilter: MediaFilter.allMovies,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Divider(
+              height: 1,
+              color: AppColors.divider.withValues(alpha: 0.15),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final entry in trailing) ...[
+            row(entry),
+            const SizedBox(height: 2)
+          ],
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
   void _onReorder({
     required WidgetRef ref,
     required int oldIndex,
@@ -365,8 +474,13 @@ class SidebarContent extends ConsumerWidget {
     bool isEditing = false,
     bool isHidden = false,
     Widget? editingTrailing,
+    // A source's rows navigate to the source's own route and carry their own
+    // selection, so both override what the layout destination says.
+    String? route,
+    bool? isSelectedOverride,
   }) {
-    final isSelected = selected?.id == destination.id;
+    final target = route ?? destination.route;
+    final isSelected = isSelectedOverride ?? selected?.id == destination.id;
     final isDisabled = isOffline && destination.id != 'downloads';
     final canCustomise = !destination.isAnchored;
 
@@ -389,7 +503,7 @@ class SidebarContent extends ConsumerWidget {
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
         isDisabled: isDisabled,
-        onTap: () => onNavigate(destination.route),
+        onTap: () => onNavigate(target),
         isEditing: isEditing,
         isHidden: isHidden,
         editingTrailing: trailing,
@@ -404,7 +518,7 @@ class SidebarContent extends ConsumerWidget {
         label: destination.label,
         isSelected: isSelected,
         isDisabled: isDisabled,
-        onTap: () => onNavigate(destination.route),
+        onTap: () => onNavigate(target),
         canCustomise: canCustomise,
         onHide: canCustomise
             ? () =>
@@ -417,12 +531,11 @@ class SidebarContent extends ConsumerWidget {
           editing: destination,
         ),
         onDelete: () async {
-          final route = destination.route;
           await ref
               .read(sidebarLayoutControllerProvider)
               .deleteFilter(destination.id);
           if (context.mounted &&
-              (location == route || location.startsWith('$route/'))) {
+              (location == target || location.startsWith('$target/'))) {
             context.go('/');
           }
         },
@@ -439,7 +552,7 @@ class SidebarContent extends ConsumerWidget {
       label: destination.label,
       isSelected: isSelected,
       isDisabled: isDisabled,
-      onTap: () => onNavigate(destination.route),
+      onTap: () => onNavigate(target),
       canCustomise: canCustomise,
       onHide: canCustomise
           ? () => ref.read(sidebarLayoutControllerProvider).hide(destination.id)

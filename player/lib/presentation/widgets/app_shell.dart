@@ -23,6 +23,7 @@ import 'ambient_backdrop_provider.dart';
 import 'cast_bar/dock_extents.dart';
 import 'compatibility_banner.dart';
 import 'nav/bottom_nav.dart';
+import 'nav/current_source.dart';
 import 'nav/desktop_sidebar.dart';
 import 'nav/mobile_drawer.dart';
 import 'offline_banner.dart';
@@ -31,8 +32,8 @@ import 'update_banner.dart';
 
 /// Modern app shell with adaptive navigation.
 /// Shows sidebar on desktop (≥900px) and bottom nav on mobile.
-/// Routes a Mydia user in offline mode may still open: downloads, and the
-/// third-party sources, which do not depend on the Mydia server.
+/// Routes a viewer in offline mode may still open: downloads, and the
+/// per-source pages (`/s/`), which serve what the source has cached.
 bool offlineRouteAllowed(String route) =>
     route == '/downloads' ||
     route.startsWith('/s/') ||
@@ -500,19 +501,19 @@ class _AppShellState extends ConsumerState<AppShell>
             ),
           ],
         ),
-        // The bottom bar holds Mydia's destinations; a third-party source screen
-        // uses the drawer, which holds that source's.
-        bottomNavigationBar: location.startsWith('/s/')
-            ? null
-            : AppShell.dockChrome(
-                drawerOpen: _drawerOpen,
-                child: BottomNav(
-                  location: location,
-                  onNavigate: _navigateTo,
-                  isOffline: isOffline,
-                  showBackToMydia: showBackToMydia,
-                ),
-              ),
+        bottomNavigationBar: AppShell.dockChrome(
+          drawerOpen: _drawerOpen,
+          child: BottomNav(
+            location: location,
+            onNavigate: _navigateTo,
+            entries: bottomNavEntries(
+              ref.watch(sourceNavEntriesProvider(location)),
+              downloadSupported: isDownloadSupported,
+            ),
+            isOffline: isOffline,
+            showBackToMydia: showBackToMydia,
+          ),
+        ),
       ),
     );
   }

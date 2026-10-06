@@ -17,7 +17,7 @@ import '../../screens/detail/detail_links.dart';
 import '../../screens/sources/plex_home_sheet.dart';
 import '../focus_highlight.dart';
 import 'all_servers_nav_list.dart' show allServersRoot, isAllServersLocation;
-import 'source_nav_list.dart' show sourceIdFromLocation;
+import '../../../domain/navigation/source_nav.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
 import '../../../core/sources/mydia/bound_mydia.dart';
 
