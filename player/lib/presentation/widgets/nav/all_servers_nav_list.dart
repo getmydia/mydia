@@ -4,16 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../domain/navigation/all_servers_locations.dart';
 import 'sidebar_row.dart';
-
-const allServersRoot = '/all';
-const allServersMoviesLocation = '/all/movies';
-const allServersShowsLocation = '/all/shows';
-const allServersSearchLocation = '/all/search';
-
-/// Whether [location] is one of the merged `/all` views.
-bool isAllServersLocation(String location) =>
-    location == '/all' || location.startsWith('/all/');
 
 class AllServersNavList extends StatelessWidget {
   const AllServersNavList({

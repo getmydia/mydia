@@ -45,4 +45,17 @@ void main() {
     expect(allServersRedirect([fake('a')]), '/');
     expect(allServersRedirect([fake('a'), fake('b')]), isNull);
   });
+
+  test('a merged card names its server with +N', () {
+    expect(allServersServerLabel('Server a', 0), 'Server a');
+    expect(allServersServerLabel('Server a', 2), 'Server a +2');
+    expect(allServersServerLabel(null, 2), isNull);
+  });
+
+  test('the new merged locations', () {
+    expect(allServersFavoritesLocation, '/all/favorites');
+    expect(isAllServersLocation('/all'), isTrue);
+    expect(isAllServersLocation('/all/collections'), isTrue);
+    expect(isAllServersLocation('/allx'), isFalse);
+  });
 }
