@@ -32,7 +32,9 @@ ItemSummary item(Source s, String id,
         String? sortTitle,
         DateTime? addedAt,
         DateTime? lastPlayedAt,
-        String? airDate}) =>
+        String? airDate,
+        ExternalIds ids = ExternalIds.none,
+        int? progress}) =>
     ItemSummary(
       ref: ItemRef(sourceId: s.id, kind: kind, externalId: id),
       title: title ?? 'Invented $id',
@@ -40,6 +42,8 @@ ItemSummary item(Source s, String id,
       addedAt: addedAt,
       lastPlayedAt: lastPlayedAt,
       airDate: airDate,
+      externalIds: ids,
+      userState: UserState(progressSeconds: progress),
     );
 
 /// One movie library (and optionally a show library) served from a sorted
