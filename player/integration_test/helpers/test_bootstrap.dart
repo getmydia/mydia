@@ -112,3 +112,21 @@ bool _startupLoading(ProviderContainer container) {
   }
   return false;
 }
+
+/// Opens the Mydia sign-in form when the app is sitting on the add-a-server
+/// picker, and does nothing otherwise.
+///
+/// A fresh install has no sources, so the router sends `/` to `/sources/add`
+/// rather than straight to the claim-code form. Signing in to Mydia is the
+/// "Mydia" tile there, which pushes `/sources/add/mydia`. Call this from
+/// every wait-for-login loop. Returns whether it tapped.
+Future<bool> openMydiaSignInIfOffered(WidgetTester tester) async {
+  final tile = find.byKey(const Key('add-source-mydia'));
+  if (tile.evaluate().isEmpty ||
+      find.text('Connect to Server').evaluate().isNotEmpty) {
+    return false;
+  }
+  await tester.tap(tile.first);
+  await tester.pump(const Duration(milliseconds: 500));
+  return true;
+}

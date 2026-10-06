@@ -37,6 +37,7 @@ void main() {
     debugPrint('[Test] Waiting for login screen to appear...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
+      await openMydiaSignInIfOffered(tester);
       final loginTitle = find.text('Connect to Server');
       if (loginTitle.evaluate().isNotEmpty) {
         debugPrint('[Test] Login screen found after $i seconds');

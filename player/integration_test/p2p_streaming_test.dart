@@ -69,6 +69,7 @@ void main() {
     debugPrint('[P2P Streaming Test] Waiting for login screen...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
+      await openMydiaSignInIfOffered(tester);
       final loginTitle = find.text('Connect to Server');
       if (loginTitle.evaluate().isNotEmpty) {
         debugPrint('[P2P Streaming Test] Login screen found after $i seconds');

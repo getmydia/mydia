@@ -311,6 +311,7 @@ Future<void> _waitForLoginScreen(WidgetTester tester,
     {int maxSeconds = 30}) async {
   for (var i = 0; i < maxSeconds; i++) {
     await tester.pump(const Duration(seconds: 1));
+    await openMydiaSignInIfOffered(tester);
     if (find.text('Connect to Server').evaluate().isNotEmpty) return;
   }
   throw StateError('Login screen not found after $maxSeconds seconds');
