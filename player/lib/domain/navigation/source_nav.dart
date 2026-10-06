@@ -20,7 +20,11 @@ class SourceNavEntry {
     required this.selectedIcon,
     required this.route,
     this.anchored = false,
+    this.shortLabel,
   });
+
+  /// A shorter label for the bottom bar, when [label] does not fit.
+  final String? shortLabel;
 
   final String id;
   final String label;
@@ -47,11 +51,12 @@ class SourceNavEntry {
       other.icon == icon &&
       other.selectedIcon == selectedIcon &&
       other.route == route &&
-      other.anchored == anchored;
+      other.anchored == anchored &&
+      other.shortLabel == shortLabel;
 
   @override
   int get hashCode =>
-      Object.hash(id, label, icon, selectedIcon, route, anchored);
+      Object.hash(id, label, icon, selectedIcon, route, anchored, shortLabel);
 }
 
 /// The source id in a `/s/<id>/...` location, or null elsewhere.
@@ -144,6 +149,7 @@ List<SourceNavEntry> resolveSourceNav({
       selectedIcon: d.selectedIcon,
       route: route,
       anchored: d.isAnchored,
+      shortLabel: d.id == 'shows' ? 'Shows' : null,
     ));
     if (d.id == 'shows' || (d.id == 'movies' && afterLibraries == -1)) {
       afterLibraries = entries.length;

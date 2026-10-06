@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../../core/navigation/sidebar_layout_providers.dart';
 import '../../../core/sources/source.dart';
-import '../../../core/sources/sources_providers.dart';
+import '../../../core/sources/sources_providers.dart'
+    show activeSourceIdProvider, mediaSourceProvider;
 import '../../../domain/navigation/sidebar_layout.dart';
 import '../../../domain/navigation/source_nav.dart';
 import '../../../domain/sources/library.dart';
@@ -28,7 +29,7 @@ final sourceNavEntriesProvider =
       SidebarLayout.defaults.reconcile(downloadSupported: isDownloadSupported),
   };
   final source = ref.watch(currentSourceIdProvider(location));
-  final entries = source == null
+  return source == null
       ? anchoredNavEntries(layout)
       : resolveSourceNav(
           layout: layout,
@@ -40,11 +41,4 @@ final sourceNavEntriesProvider =
             _ => const <Library>[],
           },
         );
-  // Without a Mydia account the router sends `/settings` back to the
-  // source's home, so the row would be a dead end.
-  if (ref.watch(hasMydiaProvider)) return entries;
-  return [
-    for (final e in entries)
-      if (e.id != 'settings') e,
-  ];
 });

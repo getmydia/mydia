@@ -131,10 +131,16 @@ void main() {
     ]);
   });
 
-  testWidgets('no Settings row without a Mydia account', (tester) async {
-    // `/settings` redirects back to the source's home without Mydia.
+  testWidgets('Settings is shown for a Plex-only setup', (tester) async {
     await _pump(tester, root, editing: false, hasMydia: false);
-    expect(find.text('Settings'), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
+  });
+
+  testWidgets('a source without Calendar or Collections shows neither',
+      (tester) async {
+    await _pump(tester, root, editing: false);
+    expect(find.text('Calendar'), findsNothing);
+    expect(find.text('Collections'), findsNothing);
   });
 
   testWidgets('Settings sits below the libraries', (tester) async {

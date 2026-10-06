@@ -93,7 +93,7 @@ class BottomNav extends StatelessWidget {
                         NavItem(
                           icon: entry.icon,
                           selectedIcon: entry.selectedIcon,
-                          label: entry.id == 'shows' ? 'Shows' : entry.label,
+                          label: entry.shortLabel ?? entry.label,
                           isSelected: entry.matches(location),
                           isDisabled: isOffline && entry.id != 'downloads',
                           onTap: () => onNavigate(entry.route),
