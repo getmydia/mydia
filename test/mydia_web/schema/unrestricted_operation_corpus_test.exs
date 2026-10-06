@@ -25,6 +25,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     "Login" => "authentication flow, runs before any scope exists",
     "VerifyTotp" => "authentication flow, runs before any scope exists",
     "RefreshMediaToken" => "token flow, reads no media",
+    "RefreshAccessToken" => "token flow, reads no media",
     "SubtitleSearch" => "calls an external subtitle provider",
     "DownloadSubtitle" => "calls an external subtitle provider",
     "StartStreamingSession" => "starts ffmpeg; covered by streaming_access_test.exs",
@@ -33,6 +34,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     "PrepareDownload" => "starts a transcode job",
     "DownloadJobStatus" => "needs a transcode job",
     "CancelDownloadJob" => "needs a transcode job",
+    "RegisterDeviceNode" => "device management, reads no media",
     "RevokeDevice" => "device management, reads no media"
   }
 
@@ -43,6 +45,10 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     %{
       "TvShowDetail" => %{"id" => s.show.id},
       "EpisodeDetail" => %{"id" => s.episode.id},
+      "NowPlayingEpisode" => %{"id" => s.episode.id},
+      "NowPlayingMovie" => %{"id" => s.movie.id},
+      "Devices" => %{},
+      "OnlineDevices" => %{},
       "DevicesList" => %{},
       "ServerCompatibility" => %{},
       "MovieSegments" => %{"id" => s.movie.id},
