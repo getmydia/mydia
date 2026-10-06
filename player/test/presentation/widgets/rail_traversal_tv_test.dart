@@ -1,6 +1,6 @@
 // The directional tier of rail_traversal_test.dart: proof that
 // InputCapabilities.directionalPrimary == true actually raises the cache
-// margin on ContentRail, HorizontalRail and BrowseGrid, and that the raised
+// margin on HorizontalRail and BrowseGrid, and that the raised
 // margin is enough for real D-pad focus traversal to walk a rail past its
 // initially built viewport and scroll it with it.
 //
@@ -21,9 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/player/input_capabilities.dart';
-import 'package:player/domain/models/recently_added_item.dart';
 import 'package:player/presentation/widgets/browse_grid.dart';
-import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/horizontal_rail.dart';
 import 'package:player/presentation/widgets/media_card.dart';
 
@@ -33,9 +31,25 @@ Widget _host(Widget child) => ProviderScope(
       ),
     );
 
-List<RecentlyAddedItem> _items(int n) => List.generate(
-      n,
-      (i) => RecentlyAddedItem(id: '$i', type: 'movie', title: 'Title $i'),
+/// A rail of focusable poster cards, built the way the source rows build one.
+Widget _cardRail(int n) => SizedBox(
+      height: 250,
+      child: HorizontalRail(
+        itemCount: n,
+        height: 250,
+        leftFadeKey: const ValueKey('rail-traversal-tv-cards-left-fade'),
+        rightFadeKey: const ValueKey('rail-traversal-tv-cards-right-fade'),
+        itemBuilder: (context, index) => SizedBox(
+          width: 140,
+          child: MediaCard(
+            title: 'Title $index',
+            action: MediaCardAction.open,
+            width: 130,
+            height: 195,
+            onTap: () {},
+          ),
+        ),
+      ),
     );
 
 void main() {
@@ -48,18 +62,6 @@ void main() {
           'runs it explicitly in the "Run television-tier tests" step.';
 
   group('Directional tier (requires MYDIA_FORCE_TV=true)', () {
-    testWidgets(
-        'ContentRail carries the gated cacheExtent in the directional tier',
-        (tester) async {
-      await tester.pumpWidget(
-        _host(ContentRail(title: 'Recently Added', items: _items(20))),
-      );
-      await tester.pump();
-
-      final list = tester.widget<ListView>(find.byType(ListView));
-      expect(list.scrollCacheExtent, isNotNull);
-    });
-
     testWidgets(
         'HorizontalRail carries the gated cacheExtent in the directional '
         'tier', (tester) async {
@@ -101,7 +103,7 @@ void main() {
       expect(grid.scrollCacheExtent, isNotNull);
     });
 
-    group('ContentRail directional traversal', () {
+    group('HorizontalRail directional traversal', () {
       setUp(() {
         FocusManager.instance.highlightStrategy =
             FocusHighlightStrategy.alwaysTraditional;
@@ -119,9 +121,7 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
-        await tester.pumpWidget(
-          _host(ContentRail(title: 'Recently Added', items: _items(40))),
-        );
+        await tester.pumpWidget(_host(_cardRail(40)));
         await tester.pump();
 
         final scope =

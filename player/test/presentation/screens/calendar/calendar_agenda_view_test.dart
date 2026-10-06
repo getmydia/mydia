@@ -1,30 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/calendar_entry.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_agenda_view.dart';
 import 'package:player/presentation/screens/calendar/calendar_today_requests.dart';
+
+import 'calendar_test_items.dart';
 
 final _today = DateTime(2026, 8, 27);
 
 const _agenda = ValueKey('calendar-agenda-view');
 const _todayHeader = ValueKey('calendar-day-2026-08-27');
 
-CalendarEntry _entry(String id, DateTime airDate) => CalendarEntry(
-      id: id,
-      kind: CalendarEntryKind.episode,
-      airDate: airDate,
-      title: 'Episode $id',
-      seasonNumber: 1,
-      episodeNumber: 1,
-      mediaItemId: '7',
-      mediaItemTitle: 'A Show',
-    );
+ItemSummary _entry(String id, DateTime airDate) =>
+    calendarEntry(id, airDate, title: 'Episode $id');
 
 /// One entry a day from Aug 1 to Aug 20, then Aug 27 to Sep 10, so today's
 /// section starts well below the fold and has enough days after it to reach
 /// the top.
-List<CalendarEntry> _entries() => [
+List<ItemSummary> _entries() => [
       for (var day = 1; day <= 20; day++)
         _entry('past-$day', DateTime(2026, 8, day)),
       for (var offset = 0; offset <= 14; offset++)

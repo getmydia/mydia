@@ -3,7 +3,6 @@ import 'season_info.dart';
 import 'next_episode.dart';
 import 'show_next_up.dart';
 import 'cast_member.dart';
-import 'recently_added_item.dart';
 import 'watch_status.dart';
 
 class ShowDetail {
@@ -30,7 +29,6 @@ class ShowDetail {
   final bool isFavorite;
   final List<CastMember> cast;
   final String? trailerUrl;
-  final List<RecentlyAddedItem> similar;
   final WatchStatus? watchStatus;
 
   const ShowDetail({
@@ -57,7 +55,6 @@ class ShowDetail {
     required this.isFavorite,
     this.cast = const [],
     this.trailerUrl,
-    this.similar = const [],
     this.watchStatus,
   });
 
@@ -101,11 +98,6 @@ class ShowDetail {
               .toList() ??
           [],
       trailerUrl: json['trailerUrl'] as String?,
-      similar: (json['similar'] as List<dynamic>?)
-              ?.map(
-                  (e) => RecentlyAddedItem.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
       watchStatus: json['watchStatus'] == null
           ? null
           : WatchStatus.fromJson(json['watchStatus'] as Map<String, dynamic>),

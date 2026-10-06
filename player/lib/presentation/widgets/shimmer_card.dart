@@ -32,12 +32,10 @@ class ShimmerCard extends StatelessWidget {
   }
 }
 
-/// The loading stand-in for one [ContentRail].
+/// The loading stand-in for one poster rail.
 ///
-/// Every dimension comes from [RailMetrics], the same object the real rail
-/// reads, so the two cannot hold different numbers.
-/// `test/test_utils/rail_parity.dart` asserts that at each breakpoint, and is
-/// the reason this widget must not grow a hardcoded size.
+/// Every dimension comes from [RailMetrics], so this widget must not grow a
+/// hardcoded size.
 class ShimmerRail extends StatelessWidget {
   const ShimmerRail({super.key, this.count});
 

@@ -1,7 +1,9 @@
 /// Providers for collection auto-sync persistence.
 ///
 /// Stores sync configuration per collection in a Hive box.
-/// Each entry maps a collection ID to {name, resolution}.
+/// Each entry maps a collection ID to {name, resolution, sourceId}. An entry
+/// saved before sources were addressable has no sourceId and belongs to the
+/// bound Mydia instance.
 library;
 
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -64,14 +66,20 @@ Future<void> Function({
   required String collectionId,
   required String name,
   required String resolution,
+  String? sourceId,
 }) saveCollectionSync(Ref ref) {
   return ({
     required String collectionId,
     required String name,
     required String resolution,
+    String? sourceId,
   }) async {
     final box = await ref.read(collectionSyncBoxProvider.future);
-    await box.put(collectionId, {'name': name, 'resolution': resolution});
+    await box.put(collectionId, {
+      'name': name,
+      'resolution': resolution,
+      if (sourceId != null) 'sourceId': sourceId,
+    });
     ref.invalidate(isCollectionSyncedProvider(collectionId));
     ref.invalidate(collectionSyncConfigProvider(collectionId));
     ref.invalidate(allSyncedCollectionsProvider);

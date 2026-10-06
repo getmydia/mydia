@@ -1,5 +1,7 @@
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/media_source.dart';
+import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_plan.dart';
 import 'package:player/domain/models/media_stream.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/sources/collection.dart';
@@ -21,11 +23,26 @@ class FakeCapableSource extends FakeMediaSource
         FavoritesListing,
         MediaInfo,
         HomeHubs,
-        RecentlyAdded {
+        RecentlyAdded,
+        ContinueWatching,
+        Downloadable {
   FakeCapableSource({super.id});
 
   /// `method(arg, ...)` for every capability call, in order.
   final calls = <String>[];
+
+  List<ItemSummary> continueWatchingResult = const [];
+
+  /// What `canRemoveFromContinueWatching` answers.
+  bool removable = true;
+
+  /// Thrown by `removeFromContinueWatching` when set, after the call is
+  /// recorded.
+  Error? removeError;
+  final removed = <ItemRef>[];
+
+  /// Answers `downloadOptions` for every item.
+  List<DownloadOption> downloadOptionsResult = const [];
 
   List<SourceCollection> collectionsResult = const [];
 
@@ -51,6 +68,8 @@ class FakeCapableSource extends FakeMediaSource
         SourceCapability.mediaInfo,
         SourceCapability.hubs,
         SourceCapability.recentlyAdded,
+        SourceCapability.continueWatching,
+        SourceCapability.downloadable,
       };
 
   Page<ItemSummary> _page(List<Page<ItemSummary>> pages, Cursor? cursor) {
@@ -114,4 +133,30 @@ class FakeCapableSource extends FakeMediaSource
     calls.add('recentlyAdded()');
     return recentlyAddedResult;
   }
+
+  @override
+  Future<List<ItemSummary>> continueWatching() async {
+    calls.add('continueWatching()');
+    return continueWatchingResult;
+  }
+
+  @override
+  bool canRemoveFromContinueWatching(ItemSummary item) => removable;
+
+  @override
+  Future<void> removeFromContinueWatching(ItemRef ref) async {
+    calls.add('removeFromContinueWatching(${ref.externalId})');
+    removed.add(ref);
+    if (removeError case final e?) throw e;
+  }
+
+  @override
+  Future<List<DownloadOption>> downloadOptions(ItemRef ref) async {
+    calls.add('downloadOptions(${ref.externalId})');
+    return downloadOptionsResult;
+  }
+
+  @override
+  Future<DownloadPlan> resolve(ItemRef ref, String optionId) =>
+      throw UnimplementedError('FakeCapableSource does not resolve plans');
 }

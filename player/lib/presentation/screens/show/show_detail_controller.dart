@@ -72,7 +72,6 @@ class ShowDetailController extends _$ShowDetailController {
         isFavorite: !currentState.isFavorite,
         cast: currentState.cast,
         trailerUrl: currentState.trailerUrl,
-        similar: currentState.similar,
         watchStatus: currentState.watchStatus,
       ),
     );

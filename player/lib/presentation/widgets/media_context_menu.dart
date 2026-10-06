@@ -17,9 +17,9 @@ enum MediaContextAction {
 /// The subject of a long-press menu, flattened out of whichever rail item the
 /// card was built from.
 ///
-/// The menu deliberately knows nothing about `ContinueWatchingItem`,
-/// `UpNextItem` or `RecentlyAddedItem`. Each converts itself into one of these
-/// where the card is built, so a new rail item type needs no change here.
+/// The menu deliberately knows nothing about the item type a card was built
+/// from. Each card converts its item into one of these where it is built, so
+/// a new item type needs no change here.
 class MediaContextTarget {
   /// What the card depicts: a movie id or an episode id.
   final String id;

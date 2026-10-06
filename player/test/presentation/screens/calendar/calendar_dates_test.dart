@@ -1,15 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/calendar_entry.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_dates.dart';
 
-CalendarEntry _entry(String id, DateTime airDate) => CalendarEntry(
-      id: id,
-      kind: CalendarEntryKind.episode,
-      airDate: airDate,
-      title: 'Episode $id',
-      mediaItemId: '7',
-      mediaItemTitle: 'A Show',
-    );
+import 'calendar_test_items.dart';
+
+ItemSummary _entry(String id, DateTime airDate) =>
+    calendarEntry(id, airDate, title: 'Episode $id');
 
 void main() {
   group('isoDate', () {
@@ -72,7 +68,8 @@ void main() {
 
       expect(grouped.length, 2);
       expect(grouped.first.key, DateTime(2026, 8, 20));
-      expect(grouped.first.value.map((e) => e.id).toList(), ['1', '2']);
+      expect(grouped.first.value.map((e) => e.ref.externalId).toList(),
+          ['1', '2']);
       expect(grouped.last.key, DateTime(2026, 8, 22));
     });
 
@@ -99,6 +96,16 @@ void main() {
 
     test('returns nothing for an empty list', () {
       expect(groupByDay(const []), isEmpty);
+    });
+
+    test('leaves out an entry the server gave no air date', () {
+      final undated = ItemSummary(
+        ref: _entry('x', DateTime(2026, 8, 20)).ref,
+        title: 'Undated',
+      );
+
+      expect(groupByDay([undated]), isEmpty);
+      expect(undated.day, isNull);
     });
   });
 
@@ -158,7 +165,7 @@ void main() {
 
   group('weeksInWindow', () {
     test('covers the calendar window a day in September loads', () {
-      // CalendarController.windowFor(Sep 16 2026) is Aug 17 to Dec 15.
+      // calendarWindow(Sep 16 2026) is Aug 17 to Dec 15.
       final weeks =
           weeksInWindow(DateTime(2026, 8, 17), DateTime(2026, 12, 15));
 

@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/download_request.dart';
 import '../../domain/models/episode.dart';
-import '../../domain/models/movie_detail.dart';
 import '../../domain/sources/item.dart';
 import 'download_service.dart';
 import '../sources/source.dart';
@@ -64,46 +63,6 @@ Future<BulkDownloadResult> startBulkEpisodeDownloads({
       queued++;
     } catch (e) {
       debugPrint('Failed to queue download for ${episode.episodeCode}: $e');
-      failed++;
-    }
-  }
-
-  return BulkDownloadResult(queued: queued, skipped: skipped, failed: failed);
-}
-
-/// Queues downloads for a list of movies, skipping already downloaded
-/// or in-queue movies.
-///
-/// Returns a [BulkDownloadResult] with counts of queued, skipped, and failed.
-Future<BulkDownloadResult> startBulkMovieDownloads({
-  required List<MovieDetail> movies,
-  required String resolution,
-  required SourceId sourceId,
-  required DownloadService downloadManager,
-  required bool Function(String mediaId) isMediaDownloaded,
-  required bool Function(String mediaId) isMediaInQueue,
-}) async {
-  int queued = 0;
-  int skipped = 0;
-  int failed = 0;
-
-  for (final movie in movies) {
-    // Skip already downloaded or queued movies
-    if (isMediaDownloaded(movie.id) || isMediaInQueue(movie.id)) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      await downloadManager.start(DownloadRequest(
-        ref: ItemRef(
-            sourceId: sourceId, kind: ItemKind.movie, externalId: movie.id),
-        optionId: resolution,
-        metadata: mydiaMovieMetadata(movie),
-      ));
-      queued++;
-    } catch (e) {
-      debugPrint('Failed to queue download for movie ${movie.title}: $e');
       failed++;
     }
   }

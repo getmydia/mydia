@@ -20,6 +20,14 @@ import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
+import '../../presentation/screens/detail/detail_links.dart' show SourceListing;
+import '../../presentation/screens/calendar/calendar_screen.dart';
+import '../../presentation/screens/collections/collection_detail_screen.dart';
+import '../../presentation/screens/collections/collections_screen.dart';
+import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
+import '../../presentation/screens/favorites/favorites_screen.dart';
+import '../../presentation/screens/recently_added/recently_added_screen.dart';
+import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
@@ -117,14 +125,39 @@ SourceId? _sourceIdIn(String location) {
 Widget _legacyStub(BuildContext context, GoRouterState state) =>
     const SizedBox.shrink();
 
-/// The listings every Mydia source shows: path, route name, title.
-const _sourceListings = [
-  ('collections', 'source_collections', 'Collections'),
-  ('calendar', 'source_calendar', 'Calendar'),
-  ('favorites', 'source_favorites', 'Favorites'),
-  ('unwatched', 'source_unwatched', 'Unwatched'),
-  ('recently-added', 'source_recently_added', 'Recently added'),
-  ('continue-watching', 'source_continue_watching', 'Continue watching'),
+/// The listings every Mydia source shows: path, route name, screen. The paths
+/// are `SourceListing.segment`.
+final List<(String, String, Widget Function(SourceId))> _sourceListings = [
+  (
+    SourceListing.collections.segment,
+    'source_collections',
+    (id) => CollectionsScreen(sourceId: id)
+  ),
+  (
+    SourceListing.calendar.segment,
+    'source_calendar',
+    (id) => CalendarScreen(sourceId: id)
+  ),
+  (
+    SourceListing.favorites.segment,
+    'source_favorites',
+    (id) => FavoritesScreen(sourceId: id)
+  ),
+  (
+    SourceListing.unwatched.segment,
+    'source_unwatched',
+    (id) => UnwatchedScreen(sourceId: id)
+  ),
+  (
+    SourceListing.recentlyAdded.segment,
+    'source_recently_added',
+    (id) => RecentlyAddedScreen(sourceId: id)
+  ),
+  (
+    SourceListing.continueWatching.segment,
+    'source_continue_watching',
+    (id) => ContinueWatchingScreen(sourceId: id)
+  ),
 ];
 
 /// The `/all*` redirect, held while saved sources are still loading so a
@@ -458,24 +491,13 @@ GoRouter appRouter(Ref ref) {
               sourceId: SourceId(state.pathParameters['sourceId']!),
             ),
           ),
-          // Each listing below is replaced by its source-scoped screen.
-          for (final (path, name, label) in _sourceListings)
+          for (final (path, name, build) in _sourceListings)
             GoRoute(
               path: '/s/:sourceId/$path',
               name: name,
-              builder: (context, state) => SourceRouteStub(
-                sourceId: SourceId(state.pathParameters['sourceId']!),
-                name: label,
-              ),
+              builder: (context, state) =>
+                  build(SourceId(state.pathParameters['sourceId']!)),
             ),
-          GoRoute(
-            path: '/s/:sourceId/collection/:collectionId',
-            name: 'source_collection',
-            builder: (context, state) => SourceRouteStub(
-              sourceId: SourceId(state.pathParameters['sourceId']!),
-              name: 'Collection',
-            ),
-          ),
           GoRoute(
             path: '/s/:sourceId/filter/:filterId',
             name: 'source_filter',
@@ -510,6 +532,17 @@ GoRouter appRouter(Ref ref) {
         name: 'collection_detail',
         parentNavigatorKey: rootNavigatorKey,
         builder: _legacyStub,
+      ),
+      // Full window, like the item detail routes: the screen owns the
+      // title-bar band.
+      GoRoute(
+        path: '/s/:sourceId/collection/:collectionId',
+        name: 'source_collection',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => CollectionDetailScreen(
+          sourceId: SourceId(state.pathParameters['sourceId']!),
+          collectionId: state.pathParameters['collectionId']!,
+        ),
       ),
       GoRoute(
         path: '/movie/:id',

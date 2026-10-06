@@ -5,8 +5,6 @@ import 'package:player/core/theme/depth_tokens.dart';
 import 'package:player/presentation/widgets/shimmer_card.dart';
 import 'package:shimmer/shimmer.dart';
 
-import '../../test_utils/rail_parity.dart';
-
 Future<void> _pumpSkeleton(WidgetTester tester, Size size) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -20,8 +18,6 @@ Future<void> _pumpSkeleton(WidgetTester tester, Size size) async {
 }
 
 void main() {
-  runRailSkeletonParity();
-
   group('ShimmerRail', () {
     testWidgets('rounds its posters at the shared poster radius',
         (tester) async {

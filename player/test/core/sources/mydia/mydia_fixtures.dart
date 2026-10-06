@@ -190,7 +190,7 @@ Map<String, dynamic> collection(String id, {String type = 'manual'}) => {
       'posterPaths': ['https://img.example/$id-1.jpg'],
     };
 
-/// A `RecentlyAddedItem`-shaped map, as the listing documents select it.
+/// A listing-shaped map, as the listing documents select it.
 Map<String, dynamic> listing(String id,
         {String type = 'MOVIE',
         bool watched = false,

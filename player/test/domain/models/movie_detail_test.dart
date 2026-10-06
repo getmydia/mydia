@@ -182,7 +182,7 @@ void main() {
           'isFavorite': false,
         };
 
-    test('parses cast, trailerUrl, and similar', () {
+    test('parses cast and trailerUrl', () {
       final json = {
         ...baseJson(),
         'cast': [
@@ -193,16 +193,6 @@ void main() {
           },
         ],
         'trailerUrl': 'https://www.youtube.com/watch?v=abc123',
-        'similar': [
-          {
-            'id': 's-1',
-            'type': 'movie',
-            'title': 'Low Orbit',
-            'year': 2021,
-            'artwork': null,
-            'addedAt': null,
-          },
-        ],
       };
 
       final movie = MovieDetail.fromJson(json);
@@ -210,8 +200,6 @@ void main() {
       expect(movie.cast, hasLength(1));
       expect(movie.cast.first.name, 'Ana Bergström');
       expect(movie.trailerUrl, 'https://www.youtube.com/watch?v=abc123');
-      expect(movie.similar, hasLength(1));
-      expect(movie.similar.first.title, 'Low Orbit');
     });
 
     test('defaults to empty/null when absent', () {
@@ -219,26 +207,15 @@ void main() {
 
       expect(movie.cast, isEmpty);
       expect(movie.trailerUrl, isNull);
-      expect(movie.similar, isEmpty);
     });
 
-    test('copyWith preserves cast, trailerUrl, and similar', () {
+    test('copyWith preserves cast and trailerUrl', () {
       final json = {
         ...baseJson(),
         'cast': [
           {'name': 'Ana Bergström', 'character': null, 'profileUrl': null},
         ],
         'trailerUrl': 'https://www.youtube.com/watch?v=abc123',
-        'similar': [
-          {
-            'id': 's-1',
-            'type': 'movie',
-            'title': 'Low Orbit',
-            'year': 2021,
-            'artwork': null,
-            'addedAt': null,
-          },
-        ],
       };
 
       final movie = MovieDetail.fromJson(json);
@@ -246,8 +223,6 @@ void main() {
 
       expect(toggled.cast, hasLength(1));
       expect(toggled.trailerUrl, 'https://www.youtube.com/watch?v=abc123');
-      expect(toggled.similar, hasLength(1));
-      expect(toggled.similar.first.title, 'Low Orbit');
     });
   });
 }

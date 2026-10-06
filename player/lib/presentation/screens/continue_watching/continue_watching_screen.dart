@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/graphql/watch/query_keys.dart';
-import '../../../core/layout/breakpoints.dart';
-import '../../../core/theme/colors.dart';
-import '../../../domain/models/continue_watching_item.dart';
-import '../../../domain/models/watch_status.dart';
-import '../../widgets/browse_grid.dart';
-import '../../widgets/browse_scaffold.dart';
+import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/source.dart';
+import '../../../core/sources/sources_providers.dart';
+import '../../../domain/sources/item.dart';
 import '../../widgets/media_context_menu.dart';
-import '../../widgets/media_poster.dart';
-import 'continue_watching_actions.dart' as cw_actions;
-import 'continue_watching_controller.dart';
+import '../../widgets/source_artwork.dart';
+import '../../widgets/toast/toaster.dart';
+import '../sources/source_browse_providers.dart';
+import '../sources/source_listing_screen.dart';
 
 class ContinueWatchingScreen extends ConsumerStatefulWidget {
-  const ContinueWatchingScreen({super.key});
+  const ContinueWatchingScreen({super.key, required this.sourceId});
+
+  final SourceId sourceId;
 
   @override
   ConsumerState<ContinueWatchingScreen> createState() =>
@@ -24,201 +24,87 @@ class ContinueWatchingScreen extends ConsumerStatefulWidget {
 
 class _ContinueWatchingScreenState
     extends ConsumerState<ContinueWatchingScreen> {
-  final ScrollController _scrollController = ScrollController();
+  /// Cards taken off the grid before the server has answered. The list from
+  /// the provider is never edited, so a failed removal returns its card to
+  /// exactly where it was, and a refetch that lands mid-flight cannot be
+  /// undone by it.
+  final Set<ItemRef> _hidden = {};
 
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_onScroll);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      ref.read(continueWatchingControllerProvider.notifier).loadMore();
-    }
-  }
-
-  void _openMenu(BuildContext posterContext, ContinueWatchingItem item) {
+  void _openMenu(BuildContext posterContext, ItemSummary item) {
     showMediaContextMenu(
       posterContext,
       target: MediaContextTarget(
-        id: item.id,
-        type: item.type,
-        showId: item.showId,
-        hasFile: item.files.isNotEmpty,
-        continueWatchingId: item.continueWatchingKey,
+        id: item.ref.externalId,
+        type: item.ref.kind.name,
+        continueWatchingId: item.ref.externalId,
       ),
       // Unreachable: with `tapPlays` false the menu never offers Play.
       onPlay: () {},
-      onRemoveFromContinueWatching: () => _handleRemove(item),
+      onRemoveFromContinueWatching: () => _remove(item),
     );
   }
 
-  Future<void> _handleRemove(ContinueWatchingItem item) async {
-    final key = item.continueWatchingKey;
-    if (key == null) return;
+  Future<void> _remove(ItemSummary item) async {
+    final continueWatching =
+        ref.read(mediaSourceProvider(widget.sourceId))?.as<ContinueWatching>();
+    if (continueWatching == null) return;
+    // Captured before the await: the card is being removed from under this
+    // context.
+    final toaster = Toaster.of(context);
 
-    await cw_actions.reportRemovalFailure(
-      context,
-      () => ref
-          .read(continueWatchingControllerProvider.notifier)
-          .removeFromContinueWatching(key),
-    );
-  }
-
-  void _handleItemTap(BuildContext context, ContinueWatchingItem item) {
-    final normalizedType = item.type.toLowerCase();
-    if (normalizedType == 'movie') {
-      context.push('/movie/${item.id}');
-    } else if (normalizedType == 'episode') {
-      context.push('/episode/${item.id}');
+    setState(() => _hidden.add(item.ref));
+    try {
+      await continueWatching.removeFromContinueWatching(item.ref);
+    } catch (_) {
+      if (mounted) setState(() => _hidden.remove(item.ref));
+      toaster.show(
+        'Could not remove from Continue Watching',
+        kind: ToastKind.error,
+      );
+      return;
     }
+    if (mounted) invalidateSourceContinueWatchingWrites(ref, item.ref);
   }
 
   @override
   Widget build(BuildContext context) {
-    final data = ref.watch(continueWatchingControllerProvider);
+    final sourceId = widget.sourceId;
+    final provider = sourceContinueWatchingProvider(sourceId);
+    final continueWatching =
+        ref.watch(mediaSourceProvider(sourceId))?.as<ContinueWatching>();
 
-    return BrowseScaffold(
+    return SourceListingScreen(
+      sourceId: sourceId,
       icon: Icons.play_circle_outline_rounded,
       title: 'Continue Watching',
-      queryKeys: [QueryKeys.continueWatchingList],
-      actions: [
-        if (!Breakpoints.isDesktop(context))
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.search_rounded, size: 20),
-            ),
-            onPressed: () => context.push('/search'),
-            tooltip: 'Search',
+      queryKey: SourceKeys.continueWatching(sourceId),
+      items: ref.watch(provider).whenData(
+            (items) => [
+              for (final item in items)
+                if (!_hidden.contains(item.ref)) item,
+            ],
           ),
-      ],
-      onRefresh: () async {
-        await ref.read(continueWatchingControllerProvider.notifier).refresh();
+      onRetry: () => ref.invalidate(provider),
+      errorTitle: 'Failed to load continue watching',
+      emptyTitle: 'Nothing in progress.',
+      // `tapPlays` stays false: this grid opens the title, it does not play
+      // it. That suppresses the navigation entries, which would only repeat
+      // the tap, and leaves the removal. A source that cannot dismiss an
+      // entry gets no menu rather than one that opens empty.
+      posterFor: (context, item, open) {
+        final removable =
+            continueWatching?.canRemoveFromContinueWatching(item) ?? false;
+        return SourcePoster(
+          key: ValueKey('source-poster-${item.ref.externalId}'),
+          item: item,
+          subtitle: item.showTitle,
+          onTap: open,
+          onContextMenu: removable
+              ? (posterContext) => _openMenu(posterContext, item)
+              : null,
+          showMenuButton: removable,
+        );
       },
-      body: (context, scrollTopPadding) => data.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _buildErrorView(context, error, ref),
-        data: (page) {
-          if (page.isEmpty) return _buildEmptyState(context);
-          return BrowseGrid(
-            controller: _scrollController,
-            itemCount: page.items.length,
-            scrollTopPadding: scrollTopPadding,
-            itemBuilder: (context, index) {
-              final item = page.items[index];
-              return MediaPoster(
-                key: ValueKey(item.id),
-                posterUrl: item.posterUrl,
-                title: item.title,
-                subtitle: item.showTitle,
-                // Continue Watching keeps `ProgressFragment` and adapts it
-                // here rather than asking the server for a `watchStatus` it
-                // would have to compute for a rail where every item is
-                // part-played by definition. Going through `WatchStatus` is
-                // what puts this rail on the same rendering rule as every
-                // other surface, instead of the legacy percentage prop.
-                watchStatus: item.progress == null
-                    ? null
-                    : WatchStatus.fromProgress(item.progress!),
-                onTap: () => _handleItemTap(context, item),
-                // `tapPlays` stays false here: this grid opens the title, it
-                // does not play it. That suppresses the navigation entries,
-                // which would only repeat the tap, and leaves the removal.
-                // Null when there is nothing to hide, rather than installing a
-                // gesture that opens an empty menu. An episode the server sent
-                // without a show id is the only card in that position.
-                onContextMenu: item.continueWatchingKey == null
-                    ? null
-                    : (posterContext) => _openMenu(posterContext, item),
-                showMenuButton: item.continueWatchingKey != null,
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildErrorView(BuildContext context, Object error, WidgetRef ref) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.error_outline_rounded,
-                size: 48,
-                color: AppColors.error,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Failed to load continue watching',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: () {
-                ref.read(continueWatchingControllerProvider.notifier).refresh();
-              },
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try Again'),
-              style: FilledButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          'Nothing in progress.',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-          textAlign: TextAlign.center,
-        ),
-      ),
     );
   }
 }

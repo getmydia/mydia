@@ -2,7 +2,6 @@ import 'artwork.dart';
 import 'progress.dart';
 import 'media_file.dart';
 import 'cast_member.dart';
-import 'recently_added_item.dart';
 
 class MovieDetail {
   final String id;
@@ -25,7 +24,6 @@ class MovieDetail {
   final bool isFavorite;
   final List<CastMember> cast;
   final String? trailerUrl;
-  final List<RecentlyAddedItem> similar;
 
   const MovieDetail({
     required this.id,
@@ -48,7 +46,6 @@ class MovieDetail {
     required this.isFavorite,
     this.cast = const [],
     this.trailerUrl,
-    this.similar = const [],
   });
 
   factory MovieDetail.fromJson(Map<String, dynamic> json) {
@@ -86,11 +83,6 @@ class MovieDetail {
               .toList() ??
           [],
       trailerUrl: json['trailerUrl'] as String?,
-      similar: (json['similar'] as List<dynamic>?)
-              ?.map(
-                  (e) => RecentlyAddedItem.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
     );
   }
 
@@ -141,7 +133,6 @@ class MovieDetail {
       isFavorite: isFavorite ?? this.isFavorite,
       cast: cast,
       trailerUrl: trailerUrl,
-      similar: similar,
     );
   }
 

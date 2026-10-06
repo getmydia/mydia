@@ -2,47 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/graphql/watch/query_keys.dart';
+import '../../../core/cache/invalidation_target.dart';
+import '../../../core/cache/watcher_registry.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/collection.dart';
-import '../../widgets/artwork_image.dart';
+import '../../../domain/sources/collection.dart';
 import '../../widgets/browse_scaffold.dart';
-import 'collections_controller.dart';
+import '../../widgets/source_artwork.dart';
+import '../detail/detail_links.dart';
+import '../sources/source_browse_providers.dart';
+import '../sources/source_listing_screen.dart';
 
 class CollectionsScreen extends ConsumerWidget {
-  const CollectionsScreen({super.key});
+  const CollectionsScreen({super.key, required this.sourceId});
+
+  final SourceId sourceId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final collectionsData = ref.watch(collectionsControllerProvider);
+    final provider = sourceCollectionsProvider(sourceId);
+    final collectionsData = ref.watch(provider);
+    final key = SourceKeys.collections(sourceId);
 
     return BrowseScaffold(
       icon: Icons.collections_bookmark_rounded,
       title: 'Collections',
-      queryKeys: [QueryKeys.collections],
-      actions: [
-        if (!Breakpoints.isDesktop(context))
-          IconButton(
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.search_rounded, size: 20),
-            ),
-            onPressed: () => context.push('/search'),
-            tooltip: 'Search',
-          ),
-      ],
-      onRefresh: () async {
-        await ref.read(collectionsControllerProvider.notifier).refresh();
-      },
+      queryKeys: [key],
+      actions: sourceSearchActions(context, sourceId),
+      onRefresh: () => ref.read(invalidatorProvider).invalidate([key.target]),
       body: (context, scrollTopPadding) => collectionsData.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _buildErrorView(context, error, ref),
+        error: (error, _) =>
+            _buildErrorView(context, error, () => ref.invalidate(provider)),
         data: (collections) {
           if (collections.isEmpty) {
             return _buildEmptyState(context);
@@ -53,7 +47,8 @@ class CollectionsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildErrorView(BuildContext context, Object error, WidgetRef ref) {
+  Widget _buildErrorView(
+      BuildContext context, Object error, VoidCallback onRetry) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -90,9 +85,7 @@ class CollectionsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () {
-                ref.read(collectionsControllerProvider.notifier).refresh();
-              },
+              onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Try Again'),
               style: FilledButton.styleFrom(
@@ -149,7 +142,7 @@ class CollectionsScreen extends ConsumerWidget {
 
   Widget _buildGridView(
     BuildContext context,
-    List<Collection> collections,
+    List<SourceCollection> collections,
     double scrollTopPadding,
   ) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
@@ -179,7 +172,8 @@ class CollectionsScreen extends ConsumerWidget {
             return _CollectionCard(
               key: ValueKey(collection.id),
               collection: collection,
-              onTap: () => context.push('/collection/${collection.id}'),
+              onTap: () =>
+                  context.push(collectionLocation(sourceId, collection.id)),
             );
           },
         );
@@ -198,7 +192,7 @@ class CollectionsScreen extends ConsumerWidget {
 }
 
 class _CollectionCard extends StatefulWidget {
-  final Collection collection;
+  final SourceCollection collection;
   final VoidCallback onTap;
 
   const _CollectionCard({
@@ -274,7 +268,7 @@ class _CollectionCardState extends State<_CollectionCard> {
                     Row(
                       children: [
                         Icon(
-                          widget.collection.isSmart
+                          widget.collection.smart
                               ? Icons.auto_awesome_rounded
                               : Icons.list_rounded,
                           size: 14,
@@ -301,7 +295,8 @@ class _CollectionCardState extends State<_CollectionCard> {
   }
 
   Widget _buildPosterCollage() {
-    final posters = widget.collection.posterPaths;
+    final posters = widget.collection.posters;
+    final sourceId = widget.collection.sourceId;
 
     if (posters.isEmpty) {
       return Container(
@@ -317,10 +312,10 @@ class _CollectionCardState extends State<_CollectionCard> {
     }
 
     if (posters.length == 1) {
-      return ArtworkImage(
-        imageUrl: posters[0],
-        fit: BoxFit.cover,
-        errorWidget: (_) => _placeholderTile(),
+      return SourceArtworkImage(
+        sourceId: sourceId,
+        art: posters[0],
+        fallback: _placeholderTile(),
       );
     }
 
@@ -332,10 +327,10 @@ class _CollectionCardState extends State<_CollectionCard> {
       crossAxisSpacing: 1,
       children: List.generate(4, (index) {
         if (index < posters.length) {
-          return ArtworkImage(
-            imageUrl: posters[index],
-            fit: BoxFit.cover,
-            errorWidget: (_) => _placeholderTile(),
+          return SourceArtworkImage(
+            sourceId: sourceId,
+            art: posters[index],
+            fallback: _placeholderTile(),
           );
         }
         return _placeholderTile();

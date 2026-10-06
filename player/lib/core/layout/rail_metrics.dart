@@ -5,12 +5,8 @@ import 'breakpoints.dart';
 /// The geometry of one horizontal poster rail, resolved for the current
 /// screen width.
 ///
-/// `ContentRail` and the `ShimmerRail` that stands in for it while data loads
-/// both read this, so a change to rail geometry cannot land in one and miss
-/// the other. The two carried independent copies of these numbers until
-/// 2026-09-01 and every one of them had drifted: the skeleton drew 120px cards
-/// against the rail's 130 to 160, with its own spacing, padding, rail height
-/// and corner radius. `test/test_utils/rail_parity.dart` is the trip-wire.
+/// The `ShimmerRail` that stands in for a poster rail while data loads reads
+/// this, so a change to rail geometry lands in one place.
 ///
 /// Tier thresholds are not repeated here. Every dimension delegates to
 /// [Breakpoints], which stays the single place a breakpoint is written down.

@@ -304,11 +304,8 @@ class ShowDetailScreen extends ConsumerWidget {
             child: CastRail(members: show.cast),
           ),
         ),
-        // Collapsed by default: you open a show to reach its episodes, and a
-        // strip of other titles between the cast and the seasons pulls
-        // against that.
         SliverToBoxAdapter(
-          child: DetailSimilarRail(show: show, collapsible: true),
+          child: DetailSimilarRail(show: show),
         ),
         SliverToBoxAdapter(
           child: Column(

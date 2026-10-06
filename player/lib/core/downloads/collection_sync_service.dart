@@ -5,17 +5,16 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../domain/models/movie_detail.dart';
-import '../../domain/models/recently_added_item.dart';
+import '../../domain/models/download.dart';
+import '../../domain/models/download_request.dart';
 import '../../domain/sources/item.dart';
-import '../../presentation/screens/movie/movie_detail_controller.dart';
-import '../../presentation/screens/show/season_episodes_controller.dart';
-import '../../presentation/screens/show/show_detail_controller.dart';
-import '../sources/mydia/bound_mydia.dart';
-import 'bulk_download_helper.dart';
-import 'download_providers.dart';
+import '../../domain/sources/library.dart';
+import '../../domain/sources/source_error.dart';
+import '../sources/capabilities.dart';
+import '../sources/media_source.dart';
+import '../sources/source_season_download.dart';
+import 'download_service.dart';
 
 /// Result of syncing a collection's items for download.
 class CollectionSyncResult {
@@ -37,137 +36,62 @@ class CollectionSyncResult {
 
 /// Syncs all items in a collection for offline download.
 ///
-/// Partitions items into movies and shows, fetches full details,
-/// and queues bulk downloads for each.
+/// A movie is started directly. A show is walked season by season through
+/// the source. [optionId] is one the source offered for these items, and
+/// [queue] is what is already queued, so nothing is queued twice.
 Future<CollectionSyncResult> syncCollectionItems({
-  required List<RecentlyAddedItem> items,
-  required String resolution,
-  required WidgetRef ref,
+  required MediaSource source,
+  required List<ItemSummary> items,
+  required String optionId,
+  required DownloadService manager,
+  required List<DownloadTask> queue,
+  required DownloadMetadata Function(ItemSummary item) metadataFor,
 }) async {
-  final downloadManager = await ref.read(downloadManagerProvider.future);
-  final sourceId = ref.read(boundSourceIdProvider);
-  if (sourceId == null) {
-    return CollectionSyncResult(
-      moviesQueued: 0,
-      episodesQueued: 0,
-      skipped: 0,
-      failed: items.length,
-    );
-  }
+  var moviesQueued = 0, episodesQueued = 0, skipped = 0, failed = 0;
 
-  // Build skip sets
-  final downloadedIds = <String>{};
-  final queueIds = <String>{};
-
-  final queueAsync = ref.read(downloadQueueProvider);
-  if (queueAsync.hasValue) {
-    for (final task in queueAsync.value!) {
-      queueIds.add(task.mediaId);
-    }
-  }
-
-  bool Function(String) isDownloadedAs(ItemKind kind) => (id) =>
-      downloadedIds.contains(id) ||
-      downloadManager.isDownloaded(
-          ItemRef(sourceId: sourceId, kind: kind, externalId: id));
-  final isMovieDownloaded = isDownloadedAs(ItemKind.movie);
-  final isEpisodeDownloaded = isDownloadedAs(ItemKind.episode);
-  bool isInQueue(String id) => queueIds.contains(id);
-
-  // Partition items
-  final movieItems = items.where((i) => i.isMovie).toList();
-  final showItems = items.where((i) => i.isShow).toList();
-
-  int moviesQueued = 0;
-  int episodesQueued = 0;
-  int skipped = 0;
-  int failed = 0;
-
-  // Process movies
-  if (movieItems.isNotEmpty) {
-    final movieDetails = <MovieDetail>[];
-    for (final item in movieItems) {
-      // Skip if already downloaded/queued (avoid fetching details)
-      if (isMovieDownloaded(item.id) || isInQueue(item.id)) {
-        skipped++;
-        continue;
-      }
-      try {
-        final movie = await ref.read(
-          movieDetailControllerProvider(item.id).future,
-        );
-        if (movie.files.isNotEmpty) {
-          movieDetails.add(movie);
+  for (final item in items) {
+    switch (item.ref.kind) {
+      case ItemKind.movie:
+        if (manager.isDownloaded(item.ref) ||
+            queue.any((t) => t.matches(item.ref))) {
+          skipped++;
+          continue;
         }
-      } catch (e) {
-        debugPrint('Failed to fetch movie details for ${item.title}: $e');
-        failed++;
-      }
-    }
-
-    if (movieDetails.isNotEmpty) {
-      final result = await startBulkMovieDownloads(
-        movies: movieDetails,
-        resolution: resolution,
-        sourceId: sourceId,
-        downloadManager: downloadManager,
-        isMediaDownloaded: isMovieDownloaded,
-        isMediaInQueue: isInQueue,
-      );
-      moviesQueued += result.queued;
-      skipped += result.skipped;
-      failed += result.failed;
-    }
-  }
-
-  // Process shows
-  for (final item in showItems) {
-    try {
-      final show = await ref.read(
-        showDetailControllerProvider(item.id).future,
-      );
-
-      // Get seasons that have files
-      final seasonsWithFiles = show.seasons.where((s) => s.hasFiles).toList();
-
-      for (final season in seasonsWithFiles) {
         try {
-          final episodes = await ref.read(
-            seasonEpisodesControllerProvider(
-              showId: item.id,
-              seasonNumber: season.seasonNumber,
-            ).future,
-          );
-
-          final downloadableEpisodes =
-              episodes.where((e) => e.hasFile && e.files.isNotEmpty).toList();
-
-          if (downloadableEpisodes.isNotEmpty) {
-            final result = await startBulkEpisodeDownloads(
-              episodes: downloadableEpisodes,
-              resolution: resolution,
-              showId: item.id,
-              showTitle: show.title,
-              showPosterUrl: show.artwork.posterUrl,
-              sourceId: sourceId,
-              downloadManager: downloadManager,
-              isMediaDownloaded: isEpisodeDownloaded,
-              isMediaInQueue: isInQueue,
+          await manager.start(DownloadRequest(
+            ref: item.ref,
+            optionId: optionId,
+            metadata: metadataFor(item),
+          ));
+          moviesQueued++;
+        } catch (e) {
+          debugPrint('Failed to queue download for movie ${item.title}: $e');
+          failed++;
+        }
+      case ItemKind.show:
+        try {
+          for (final season in await _seasonsOf(source, item.ref)) {
+            final result = await queueSourceSeason(
+              source: source,
+              season: season.ref,
+              manager: manager,
+              optionId: optionId,
+              metadataFor: (episode) => metadataFor(episode).withShow(
+                showId: item.ref.externalId,
+                showTitle: item.title,
+                showPosterUrl: item.poster?.path,
+              ),
             );
             episodesQueued += result.queued;
             skipped += result.skipped;
             failed += result.failed;
           }
         } catch (e) {
-          debugPrint(
-            'Failed to fetch episodes for ${show.title} S${season.seasonNumber}: $e',
-          );
+          debugPrint('Failed to list seasons for ${item.title}: $e');
           failed++;
         }
-      }
-    } catch (e) {
-      debugPrint('Failed to fetch show details for ${item.title}: $e');
-      failed++;
+      default:
+        break;
     }
   }
 
@@ -177,4 +101,34 @@ Future<CollectionSyncResult> syncCollectionItems({
     skipped: skipped,
     failed: failed,
   );
+}
+
+/// Every item of [collectionId], following pages until the source says there
+/// are no more.
+Future<List<ItemSummary>> allCollectionItems(
+  MediaSource source,
+  String collectionId,
+) async {
+  final collections =
+      source.as<Collections>() ?? (throw const SourceException.unsupported());
+  final items = <ItemSummary>[];
+  Cursor? cursor;
+  do {
+    final page =
+        await collections.collectionItems(collectionId, cursor: cursor);
+    items.addAll(page.items);
+    cursor = page.nextCursor;
+  } while (cursor != null);
+  return items;
+}
+
+Future<List<ItemSummary>> _seasonsOf(MediaSource source, ItemRef show) async {
+  final seasons = <ItemSummary>[];
+  Cursor? cursor;
+  do {
+    final page = await source.children(show, cursor: cursor);
+    seasons.addAll(page.items.where((i) => i.ref.kind == ItemKind.season));
+    cursor = page.nextCursor;
+  } while (cursor != null);
+  return seasons;
 }

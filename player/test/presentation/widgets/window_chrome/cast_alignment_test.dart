@@ -26,7 +26,7 @@ import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/models/download.dart';
-import 'package:player/domain/models/recently_added_item.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
@@ -47,6 +47,7 @@ import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
+import '../../screens/sources/fake_media_source.dart' show fakeSourceId;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/stub_graphql_client.dart';
@@ -348,8 +349,7 @@ void main() {
   });
 
   group('CollectionDetailScreen cast alignment', () {
-    // CollectionDetailScreen.build watches
-    // collectionDetailControllerProvider(id), a GraphQL-backed stream.
+    // CollectionDetailScreen.build watches the collection's paged provider.
     // `CollectionDetailScreen.header` is the exact widget `build` puts in
     // `Scaffold.appBar`, extracted as a `@visibleForTesting static` seam that
     // takes the already-resolved items rather than watching the provider
@@ -364,8 +364,9 @@ void main() {
           child: Builder(
             builder: (context) => CollectionDetailScreen.header(
               context,
-              id: 'c1',
-              itemsData: const AsyncValue.data(<RecentlyAddedItem>[]),
+              sourceId: fakeSourceId,
+              collectionId: 'c1',
+              itemsData: const AsyncValue.data(<ItemSummary>[]),
             ),
           ),
         );

@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/calendar_entry.dart';
-import 'calendar_controller.dart';
+import '../../../domain/sources/item.dart';
 import 'calendar_dates.dart';
 import 'calendar_day_header.dart';
 import 'calendar_row.dart';
 import 'calendar_today_requests.dart';
+import 'calendar_window.dart';
 import 'week_strip.dart';
 
 /// The day in the week starting [weekStart] that shares [day]'s weekday,
@@ -35,7 +35,7 @@ DateTime sameWeekdayIn(
 
 /// One week at a time: a [WeekStrip] above the selected day's entries.
 ///
-/// Pages only within the window [CalendarController] loaded, so every day
+/// Pages only within the [calendarWindow] that was loaded, so every day
 /// the strip can show already has its data and paging never fetches.
 class CalendarWeekView extends StatefulWidget {
   const CalendarWeekView({
@@ -47,7 +47,7 @@ class CalendarWeekView extends StatefulWidget {
   });
 
   /// Never empty: the screen shows its own empty state instead.
-  final List<CalendarEntry> entries;
+  final List<ItemSummary> entries;
 
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
@@ -77,10 +77,10 @@ class _CalendarWeekViewState extends State<CalendarWeekView> {
   @override
   void initState() {
     super.initState();
-    final (start, end) = CalendarController.windowFor(widget.today);
-    _windowStart = start;
-    _windowEnd = end;
-    _weeks = weeksInWindow(start, end);
+    final window = calendarWindow(widget.today);
+    _windowStart = window.start;
+    _windowEnd = window.end;
+    _weeks = weeksInWindow(window.start, window.end);
     _selectedDay = truncateToDay(widget.today);
     _page = _pageOf(_selectedDay);
     _pageController = PageController(initialPage: _page);
@@ -148,7 +148,7 @@ class _CalendarWeekViewState extends State<CalendarWeekView> {
       for (final MapEntry(:key, :value) in days.entries)
         key: value.any((entry) => entry.isPlayable),
     };
-    final dayEntries = days[_selectedDay] ?? const <CalendarEntry>[];
+    final dayEntries = days[_selectedDay] ?? const <ItemSummary>[];
 
     return Column(
       key: const ValueKey('calendar-week-view'),
@@ -202,7 +202,7 @@ class _CalendarWeekViewState extends State<CalendarWeekView> {
                   itemBuilder: (context, index) {
                     final entry = dayEntries[index];
                     return CalendarRow(
-                      key: ValueKey('calendar-entry-${entry.id}'),
+                      key: ValueKey('calendar-entry-${entry.ref.externalId}'),
                       entry: entry,
                       today: widget.today,
                     );

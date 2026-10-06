@@ -210,7 +210,7 @@ ItemSummary? recentlyAddedSummary(SourceId sid, Map<String, dynamic> r) {
   );
 }
 
-/// The legacy `RecentlyAddedItem.newContentLabel`.
+/// The "what arrived" label the listings have always drawn under a show.
 String? _newContentLabel(Map<String, dynamic> m) {
   final count = m['newEpisodeCount'];
   if (count is! int || count == 0) return null;
@@ -223,7 +223,7 @@ String? _newContentLabel(Map<String, dynamic> m) {
   return count == 1 ? '1 new episode' : '$count new episodes';
 }
 
-/// A `RecentlyAddedItem`-shaped map: collection items, unwatched, favorites,
+/// A listing-shaped map: collection items, unwatched, favorites,
 /// recently added and the home rows.
 ItemSummary? listingSummary(SourceId sid, Map<String, dynamic> m) {
   final kind = switch (m['type']) {

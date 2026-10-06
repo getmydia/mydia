@@ -2,52 +2,56 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'collection_detail_controller.dart';
-import 'collections_controller.dart';
 import '../../widgets/freshness_header.dart';
-import '../../widgets/media_poster.dart';
 import '../../widgets/quality_download_dialog.dart';
-import '../detail/start_download.dart';
-import '../../../domain/sources/item.dart' show ItemKind;
+import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
+import '../../../core/cache/watcher_registry.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
 import '../../../core/downloads/collection_sync_service.dart';
+import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
-import '../../../core/graphql/watch/query_keys.dart';
+import '../../../core/downloads/summary_download_metadata.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/cache/invalidation_target.dart';
+import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/source.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/recently_added_item.dart';
+import '../../../domain/detail/detail_target.dart';
+import '../../../domain/models/download_option.dart';
+import '../../../domain/sources/item.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
+import '../detail/detail_links.dart';
+import '../sources/source_browse_providers.dart';
+import '../sources/source_pages.dart';
 
 class CollectionDetailScreen extends ConsumerWidget {
-  final String id;
+  final SourceId sourceId;
+  final String collectionId;
 
-  const CollectionDetailScreen({super.key, required this.id});
-
-  void _handleItemTap(BuildContext context, String itemId, String type) {
-    final normalizedType = type.toLowerCase();
-    if (normalizedType == 'movie') {
-      context.push('/movie/$itemId');
-    } else if (normalizedType == 'tv_show' || normalizedType == 'show') {
-      context.push('/show/$itemId');
-    }
-  }
+  const CollectionDetailScreen({
+    super.key,
+    required this.sourceId,
+    required this.collectionId,
+  });
 
   /// Builds Collection detail's title-bar header.
   ///
   /// A static, `@visibleForTesting` seam rather than inlined in [build]:
-  /// `build` also watches `collectionDetailControllerProvider(id)`, a
-  /// GraphQL-backed stream, expensive to satisfy in a widget test that only
-  /// wants to check where the cast button lands. This is the exact widget
-  /// [build] puts in `Scaffold.appBar`, taking [itemsData] already resolved
-  /// rather than watching the provider itself.
+  /// `build` also watches the collection's paged provider, expensive to
+  /// satisfy in a widget test that only wants to check where the cast button
+  /// lands. This is the exact widget [build] puts in `Scaffold.appBar`,
+  /// taking [itemsData] already resolved rather than watching the provider
+  /// itself.
   @visibleForTesting
   static PreferredSizeWidget header(
     BuildContext context, {
-    required String id,
-    required AsyncValue<List<RecentlyAddedItem>> itemsData,
+    required SourceId sourceId,
+    required String collectionId,
+    required AsyncValue<List<ItemSummary>> itemsData,
   }) {
     return WindowTitleBar(
       height: WindowTitleRow.heightOf(context),
@@ -57,7 +61,8 @@ class CollectionDetailScreen extends ConsumerWidget {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/collections');
+            context
+                .go(sourceListingLocation(sourceId, SourceListing.collections));
           }
         },
       ),
@@ -73,7 +78,8 @@ class CollectionDetailScreen extends ConsumerWidget {
           itemsData.whenOrNull(
                 data: (items) => items.isNotEmpty
                     ? _CollectionDownloadButton(
-                        collectionId: id,
+                        sourceId: sourceId,
+                        collectionId: collectionId,
                         items: items,
                       )
                     : null,
@@ -132,7 +138,9 @@ class CollectionDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final itemsData = ref.watch(collectionDetailControllerProvider(id));
+    final pages = CollectionPages(sourceId, collectionId);
+    final provider = sourcePagesProvider(pages);
+    final itemsData = ref.watch(provider).whenData((paged) => paged.items);
 
     // This is a full-window route (pushed outside the shell), and so the sole
     // owner of the title-bar band here: the body has to sit under
@@ -145,29 +153,41 @@ class CollectionDetailScreen extends ConsumerWidget {
           final gridTop = gridTopPadding(context);
           return Scaffold(
             extendBodyBehindAppBar: true,
-            appBar: header(context, id: id, itemsData: itemsData),
+            appBar: header(
+              context,
+              sourceId: sourceId,
+              collectionId: collectionId,
+              itemsData: itemsData,
+            ),
             body: Column(
               children: [
                 FreshnessHeader(
-                  queryKeys: [QueryKeys.collectionItems(id)],
+                  queryKeys: [pages.key],
                   topInset: freshnessTopInset(context, appBarHeight: barHeight),
                 ),
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: () async {
-                      await ref
-                          .read(collectionDetailControllerProvider(id).notifier)
-                          .refresh();
-                    },
+                    onRefresh: () => ref
+                        .read(invalidatorProvider)
+                        .invalidate([pages.key.target]),
                     child: itemsData.when(
                       loading: () =>
                           const Center(child: CircularProgressIndicator()),
-                      error: (error, _) => _buildErrorView(context, error, ref),
+                      error: (error, _) => _buildErrorView(
+                          context, error, () => ref.invalidate(provider)),
                       data: (items) {
                         if (items.isEmpty) {
                           return _buildEmptyState(context);
                         }
-                        return _buildGridView(context, items, gridTop);
+                        return NotificationListener<ScrollNotification>(
+                          onNotification: (n) {
+                            if (n.metrics.extentAfter < 800) {
+                              ref.read(provider.notifier).loadMore();
+                            }
+                            return false;
+                          },
+                          child: _buildGridView(context, items, gridTop),
+                        );
                       },
                     ),
                   ),
@@ -180,7 +200,8 @@ class CollectionDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildErrorView(BuildContext context, Object error, WidgetRef ref) {
+  Widget _buildErrorView(
+      BuildContext context, Object error, VoidCallback onRetry) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -217,11 +238,7 @@ class CollectionDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () {
-                ref
-                    .read(collectionDetailControllerProvider(id).notifier)
-                    .refresh();
-              },
+              onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Try Again'),
               style: FilledButton.styleFrom(
@@ -277,7 +294,7 @@ class CollectionDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildGridView(
-      BuildContext context, List<RecentlyAddedItem> items, double topPadding) {
+      BuildContext context, List<ItemSummary> items, double topPadding) {
     final horizontalPadding = Breakpoints.getHorizontalPadding(context);
     final cardSpacing = Breakpoints.getCardSpacing(context);
     final bottomPadding = DockInsets.bottomOf(context);
@@ -298,12 +315,10 @@ class CollectionDetailScreen extends ConsumerWidget {
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            return MediaPoster(
-              key: ValueKey(item.id),
-              posterUrl: item.posterUrl,
-              title: item.title,
-              watchStatus: item.watchStatus,
-              onTap: () => _handleItemTap(context, item.id, item.type),
+            return SourcePoster(
+              key: ValueKey('source-poster-${item.ref.externalId}'),
+              item: item,
+              onTap: () => context.push(detailLocation(SourceTarget(item.ref))),
             );
           },
         );
@@ -324,10 +339,12 @@ class CollectionDetailScreen extends ConsumerWidget {
 
 /// Download button for a collection that toggles between download and sync states.
 class _CollectionDownloadButton extends ConsumerStatefulWidget {
+  final SourceId sourceId;
   final String collectionId;
-  final List<RecentlyAddedItem> items;
+  final List<ItemSummary> items;
 
   const _CollectionDownloadButton({
+    required this.sourceId,
     required this.collectionId,
     required this.items,
   });
@@ -343,35 +360,39 @@ class _CollectionDownloadButtonState
 
   /// Look up the collection name from the cached collections list.
   String _getCollectionName() {
-    final collectionsAsync = ref.read(collectionsControllerProvider);
+    final collectionsAsync =
+        ref.read(sourceCollectionsProvider(widget.sourceId));
     if (collectionsAsync.hasValue) {
-      for (final c in collectionsAsync.value!) {
+      for (final c in collectionsAsync.requireValue) {
         if (c.id == widget.collectionId) return c.name;
       }
     }
     return 'Collection';
   }
 
-  /// Find a content ID suitable for the quality dialog.
-  /// Prefers the first movie, falls back to the collection's first item.
-  String _getProbeContentId() {
-    final movies = widget.items.where((i) => i.isMovie);
-    if (movies.isNotEmpty) return movies.first.id;
-    return widget.items.first.id;
-  }
+  /// The item whose options the dialog offers, for every item of the
+  /// collection. Prefers the first movie, falls back to the first item.
+  ItemRef _probe() =>
+      (widget.items.where((i) => i.ref.kind == ItemKind.movie).firstOrNull ??
+              widget.items.first)
+          .ref;
 
-  ItemKind _getProbeKind() =>
-      widget.items.any((i) => i.isMovie) ? ItemKind.movie : ItemKind.episode;
-
-  Future<void> _startSync(String resolution) async {
+  Future<void> _startSync(String optionId) async {
     if (_isSyncing) return;
+    final source = ref.read(mediaSourceProvider(widget.sourceId));
+    if (source == null) return;
     setState(() => _isSyncing = true);
 
     try {
+      final manager = await ref.read(downloadManagerProvider.future);
+      final items = await allCollectionItems(source, widget.collectionId);
       final result = await syncCollectionItems(
-        items: widget.items,
-        resolution: resolution,
-        ref: ref,
+        source: source,
+        items: items,
+        optionId: optionId,
+        manager: manager,
+        queue: manager.getActiveDownloads(),
+        metadataFor: summaryDownloadMetadata,
       );
 
       // Save sync config
@@ -379,7 +400,8 @@ class _CollectionDownloadButtonState
       await save(
         collectionId: widget.collectionId,
         name: _getCollectionName(),
-        resolution: resolution,
+        resolution: optionId,
+        sourceId: widget.sourceId.value,
       );
 
       if (!mounted) return;
@@ -421,12 +443,38 @@ class _CollectionDownloadButtonState
   }
 
   Future<void> _handleDownloadTap() async {
-    final selectedOption = await pickDownloadOption(
-      context,
-      title: _getCollectionName(),
-      options:
-          boundMydiaDownloadOptions(ref, _getProbeKind(), _getProbeContentId()),
-    );
+    final downloadable =
+        ref.read(mediaSourceProvider(widget.sourceId))?.as<Downloadable>();
+    if (downloadable == null) {
+      showToast(context, 'This server is not available to download from',
+          kind: ToastKind.error);
+      return;
+    }
+
+    final List<DownloadOption> options;
+    try {
+      options = await downloadable.downloadOptions(_probe());
+    } catch (e) {
+      if (!mounted) return;
+      showToast(context, 'Could not list download options: $e',
+          kind: ToastKind.error);
+      return;
+    }
+    if (!mounted) return;
+    if (options.isEmpty) {
+      showToast(context, 'Nothing in this collection can be downloaded',
+          kind: ToastKind.error);
+      return;
+    }
+
+    // One option is no choice to make.
+    final selectedOption = options.length == 1
+        ? options.first
+        : await pickDownloadOption(
+            context,
+            title: _getCollectionName(),
+            options: Future.value(options),
+          );
 
     if (selectedOption == null || !mounted) return;
     await _startSync(selectedOption.resolution);
