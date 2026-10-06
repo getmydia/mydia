@@ -6,8 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/player/input_capabilities.dart';
-import '../detail/detail_links.dart';
 import '../../../core/sources/plex/plex_tv_client.dart';
+import '../detail/detail_links.dart';
 import 'plex_sign_in_controller.dart';
 
 class PlexSignInScreen extends ConsumerStatefulWidget {

@@ -114,6 +114,19 @@ void main() {
           '/s/a:o:s/item/video/v%2F1');
     });
 
+    // Uri(pathSegments:) keeps `:` and `@` literal (the old encodeComponent
+    // wrote %3A/%40); go_router decodes both forms to the same id.
+    test('ids keep `:` and `@` literal and encode `/`', () {
+      const colon =
+          ItemRef(sourceId: id, kind: ItemKind.movie, externalId: 'a:b@c');
+      expect(sourceItemLocation(colon), '/s/a:o:s/movie/a:b@c');
+      const slash =
+          ItemRef(sourceId: id, kind: ItemKind.movie, externalId: 'a/b');
+      expect(sourceItemLocation(slash), '/s/a:o:s/movie/a%2Fb');
+      expect(sourcePlayerLocation(slash), startsWith('/s/a:o:s/player/a%2Fb?'));
+      expect(Uri.parse(sourceItemLocation(slash)).pathSegments.last, 'a/b');
+    });
+
     test('the player location carries kind, file, title and extras', () {
       expect(
         sourcePlayerLocation(ref,

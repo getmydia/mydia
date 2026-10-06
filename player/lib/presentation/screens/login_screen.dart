@@ -9,7 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/auth/auth_service.dart';
-import 'detail/detail_links.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/theme/colors.dart';
@@ -21,6 +20,7 @@ import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
 import '../widgets/channel_badge.dart';
+import 'detail/detail_links.dart';
 import 'login/login_controller.dart';
 import 'sources/add_source_screen.dart';
 

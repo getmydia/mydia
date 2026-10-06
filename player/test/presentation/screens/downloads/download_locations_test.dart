@@ -50,6 +50,13 @@ void main() {
     );
   });
 
+  test('an item id with a slash stays one path segment', () {
+    final location = downloadedPlayLocation(
+        _m(mediaId: 'a/b', sourceId: 'acc1:owner:aa11', itemKind: 'video'));
+    expect(location, startsWith('/s/acc1:owner:aa11/player/a%2Fb?'));
+    expect(Uri.parse(location).pathSegments.last, 'a/b');
+  });
+
   test('a source id with a space is encoded once', () {
     final location = downloadedPlayLocation(
         _m(mediaId: 'a b', sourceId: 'acc1:owner:aa11', itemKind: 'video'));

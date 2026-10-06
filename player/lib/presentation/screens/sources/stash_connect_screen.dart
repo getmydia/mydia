@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/sources/connection/source_connection.dart';
-import '../detail/detail_links.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/source_factories.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -14,6 +13,7 @@ import '../../../core/sources/stash/stash_client.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
+import '../detail/detail_links.dart';
 import 'server_url.dart';
 
 /// What the viewer typed, as a Stash server root.

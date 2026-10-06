@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/downloads/download_providers.dart';
-import '../detail/detail_links.dart';
 import '../../../core/downloads/download_service.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
@@ -18,6 +17,7 @@ import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/models/download.dart';
 import '../../widgets/toast/toaster.dart';
+import '../detail/detail_links.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'plex_home_sheet.dart';
