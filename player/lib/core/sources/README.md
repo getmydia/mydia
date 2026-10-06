@@ -111,8 +111,9 @@ older server answers with GraphQL errors.
 sends GraphQL over a `MydiaGqlTransport`, an HTTP POST to `/api/graphql` or
 `P2pService.sendGraphQLRequest` for a paired instance. It owns that account's
 token refresh (the device token for a new access token, and the media token,
-which it renews within an hour of expiry), reports a refused refresh as
-`needsReauth` through its status, and builds media URLs. The documents are the
+which it renews within an hour of expiry), and builds media URLs. A refused
+refresh calls its `onUnauthorized` callback, which flags the account
+`needsReauth`; its `status` carries reachability only. The documents are the
 generated `documentNode...` constants, so the schema guard checks them. Status
 is per source: there is no global auth state.
 
@@ -164,8 +165,9 @@ shell's offline state follows the route's source.
 Mydia accounts are kept on web, where other third-party sources are filtered
 out. The instance-hosted build upserts its own account from the injected
 `window.mydiaConfig` on every load (`upsertWebConfigAccount`): a fresh token
-for the hosting server, matched to a stored account by instance id, node or
-URL. It runs even when the migration fails.
+for the hosting server, matched to a stored account by normalized URL (the
+config carries no instance id or node), else stored under the URL-hash id.
+It runs even when the migration fails.
 
 ## Locks
 
