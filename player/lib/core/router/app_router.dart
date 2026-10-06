@@ -58,10 +58,11 @@ part 'app_router.g.dart';
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Simple ChangeNotifier to trigger GoRouter refreshes.
-/// The actual auth state is read directly from the provider in the redirect callback.
-class _AuthRefreshNotifier extends ChangeNotifier {
+/// What the redirect decides on is read directly from the providers in the
+/// redirect callback.
+class _RouterRefreshNotifier extends ChangeNotifier {
   void refresh() {
-    debugPrint('[AppRouter] _AuthRefreshNotifier.refresh() called');
+    debugPrint('[AppRouter] _RouterRefreshNotifier.refresh() called');
     notifyListeners();
   }
 }
@@ -151,7 +152,7 @@ String? addMydiaRouteRedirect({
 String? appRedirect({
   required String location,
   required bool sourcesLoading,
-  required List<Source> thirdParty,
+  required List<Source> sources,
   SourceId? boundId,
   SourceId? activeId,
   Set<SourceId> gated = const {},
@@ -181,14 +182,14 @@ String? appRedirect({
       !isSignedOutSourcesRoute) {
     // Usable with any one server alone: land there, not on add-a-server.
     if (sourcesLoading) return null;
-    if (thirdParty.isNotEmpty) {
+    if (sources.isNotEmpty) {
       if (isSourceRoute) return null;
       // The remembered source when it still exists, else the first.
-      final open = thirdParty.where((s) => !gated.contains(s.id));
+      final open = sources.where((s) => !gated.contains(s.id));
       final landing =
           open.where((s) => s.id == activeId).firstOrNull ?? open.firstOrNull;
       if (landing == null) {
-        return unlockLocation('/s/${thirdParty.first.id.value}');
+        return unlockLocation('/s/${sources.first.id.value}');
       }
       return '/s/${landing.id.value}';
     }
@@ -202,7 +203,7 @@ GoRouter appRouter(Ref ref) {
   debugPrint('[AppRouter] Creating appRouter provider');
 
   // Simple notifier just to trigger GoRouter refreshes
-  final refreshNotifier = _AuthRefreshNotifier();
+  final refreshNotifier = _RouterRefreshNotifier();
 
   // Binding or removing the Mydia instance changes where the router lands.
   ref.listen(boundMydiaProvider, (_, __) => refreshNotifier.refresh());
@@ -234,7 +235,7 @@ GoRouter appRouter(Ref ref) {
       final target = appRedirect(
         location: state.matchedLocation,
         sourcesLoading: ref.read(sourcesLoadingProvider),
-        thirdParty: ref.read(thirdPartySourcesProvider),
+        sources: ref.read(thirdPartySourcesProvider),
         boundId: ref.read(boundMydiaProvider)?.source.id,
         activeId: ref.read(selectedSourceIdProvider),
         gated: ref.read(gatedSourceIdsProvider),

@@ -99,7 +99,7 @@ void main() {
         appRedirect(
           location: '/sources/add/mydia',
           sourcesLoading: false,
-          thirdParty: const [],
+          sources: const [],
         ),
         isNull,
       );

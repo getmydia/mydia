@@ -299,9 +299,9 @@ class _AppShellState extends ConsumerState<AppShell>
     }
   }
 
-  /// Check if the app is currently in offline mode
+  /// Whether the source the current route belongs to is unreachable.
   bool _isOfflineMode() {
-    return isOffline(ref.watch(currentSourceStatusProvider));
+    return isOffline(ref.watch(routeSourceStatusProvider(widget.location)));
   }
 
   /// Show a toast when a disabled nav item is tapped in offline mode

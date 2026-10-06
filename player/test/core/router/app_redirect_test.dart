@@ -26,7 +26,7 @@ void main() {
   String? go(String location, {SourceId? boundId}) => appRedirect(
         location: location,
         sourcesLoading: false,
-        thirdParty: const [],
+        sources: const [],
         boundId: boundId,
       );
 
@@ -53,7 +53,7 @@ void main() {
         appRedirect(
           location: '/',
           sourcesLoading: true,
-          thirdParty: const [],
+          sources: const [],
         ),
         isNull);
   });
@@ -73,7 +73,7 @@ void main() {
     String? go(String location, {bool loading = false}) => appRedirect(
           location: location,
           sourcesLoading: loading,
-          thirdParty: const [fakeSource],
+          sources: const [fakeSource],
         );
 
     test('lands on the source instead of add-a-server', () {
@@ -98,7 +98,7 @@ void main() {
       String? landing(SourceId? active) => appRedirect(
             location: '/',
             sourcesLoading: false,
-            thirdParty: const [fakeSource, second],
+            sources: const [fakeSource, second],
             activeId: active,
           );
       expect(landing(second.id), '/s/acc2:owner:main');
@@ -135,13 +135,13 @@ void main() {
         );
 
     String? goGated(String location,
-            {List<Source> thirdParty = const [], SourceId? boundId}) =>
+            {List<Source> sources = const [], SourceId? boundId}) =>
         appRedirect(
           boundId: boundId,
           location: location,
           fullLocation: location,
           sourcesLoading: false,
-          thirdParty: thirdParty,
+          sources: sources,
           gated: gated,
         );
 
@@ -152,7 +152,7 @@ void main() {
           location: '/s/acc1:owner:srv9/player/42',
           fullLocation: '/s/acc1:owner:srv9/player/42?fileId=7',
           sourcesLoading: false,
-          thirdParty: const [],
+          sources: const [],
           gated: gated,
         ),
         unlockLocation('/s/acc1:owner:srv9/player/42?fileId=7'),
@@ -167,7 +167,7 @@ void main() {
           location: location,
           fullLocation: location,
           sourcesLoading: false,
-          thirdParty: const [],
+          sources: const [],
           gated: gated,
         ),
         unlockLocation(location),
@@ -186,8 +186,8 @@ void main() {
     test('with no Mydia, the landing skips a gated source', () {
       final locked = sourceOf('acc1', 'srv9');
       final open = sourceOf('acc2', 'srv1');
-      expect(goGated('/', thirdParty: [locked, open]), '/s/acc2:owner:srv1');
-      expect(goGated('/', thirdParty: [locked]),
+      expect(goGated('/', sources: [locked, open]), '/s/acc2:owner:srv1');
+      expect(goGated('/', sources: [locked]),
           unlockLocation('/s/acc1:owner:srv9'));
     });
 

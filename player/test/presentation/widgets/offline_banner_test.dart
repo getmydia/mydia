@@ -49,6 +49,8 @@ void main() {
   Future<void> pump(WidgetTester tester) async {
     container = ProviderContainer(overrides: [
       selectedSourceIdProvider.overrideWith(_Selected.new),
+      activeSourceIdProvider
+          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
       mediaSourceProvider(_idA).overrideWith((ref) {
         builtA++;
         return a;

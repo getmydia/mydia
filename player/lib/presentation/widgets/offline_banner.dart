@@ -23,7 +23,7 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
 
     try {
       // Rebuilding the source re-probes its connection.
-      final id = ref.read(selectedSourceIdProvider);
+      final id = ref.read(activeSourceIdProvider);
       if (id != null) ref.invalidate(mediaSourceProvider(id));
     } finally {
       if (mounted) {

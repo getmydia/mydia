@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/current_source_status.dart';
@@ -27,6 +28,8 @@ const _idB = SourceId('acc2:owner:bb22');
   final b = FakeMediaSource();
   final container = ProviderContainer(overrides: [
     selectedSourceIdProvider.overrideWith(() => _Selected(selected)),
+    activeSourceIdProvider
+        .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
     mediaSourceProvider(_idA).overrideWithValue(a),
     mediaSourceProvider(_idB).overrideWithValue(b),
   ]);
@@ -35,6 +38,16 @@ const _idB = SourceId('acc2:owner:bb22');
 }
 
 void main() {
+  test('statusSourceIdFor: /s/<id> wins, else bound, else active', () {
+    expect(
+        statusSourceIdFor('/s/acc2%3Aowner%3Abb22/library/1',
+            bound: _idA, active: _idA),
+        _idB);
+    expect(statusSourceIdFor('/', bound: _idA, active: _idB), _idA);
+    expect(statusSourceIdFor('/movies', active: _idB), _idB);
+    expect(statusSourceIdFor('/'), isNull);
+  });
+
   test('follows the selected source: connecting, remote, unreachable', () {
     final t = _setup();
     t.a.setStatus(SourceConnectionStatus.connecting);
@@ -73,20 +86,43 @@ void main() {
         SourceConnectionStatus.unreachable);
   });
 
-  test('the old source is detached after a switch', () {
-    final t = _setup();
-    var rebuilds = 0;
-    t.container.listen(currentSourceStatusProvider, (_, __) => rebuilds++,
+  test('the old source is detached after a switch', () async {
+    final a = _Probed();
+    final b = _Probed();
+    final container = ProviderContainer(overrides: [
+      selectedSourceIdProvider.overrideWith(() => _Selected(_idA)),
+      activeSourceIdProvider
+          .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
+      mediaSourceProvider(_idA).overrideWithValue(a),
+      mediaSourceProvider(_idB).overrideWithValue(b),
+    ]);
+    addTearDown(container.dispose);
+    container.listen(currentSourceStatusProvider, (_, __) {},
         fireImmediately: true);
-    t.container.read(selectedSourceIdProvider.notifier).select(_idB);
-    t.container.read(currentSourceStatusProvider);
-    final before = rebuilds;
+    expect(a.notifier.hasListening, isTrue);
+    expect(b.notifier.hasListening, isFalse);
 
-    t.a.setStatus(SourceConnectionStatus.unreachable);
-    t.container.read(currentSourceStatusProvider);
+    container.read(selectedSourceIdProvider.notifier).select(_idB);
+    container.read(currentSourceStatusProvider);
+    await container.pump();
 
-    expect(rebuilds, before);
-    expect(t.container.read(currentSourceStatusProvider),
-        SourceConnectionStatus.local);
+    expect(a.notifier.hasListening, isFalse);
+    expect(b.notifier.hasListening, isTrue);
   });
+}
+
+class _ProbedNotifier extends ValueNotifier<SourceConnectionStatus> {
+  _ProbedNotifier() : super(SourceConnectionStatus.local);
+
+  bool get hasListening => hasListeners;
+}
+
+class _Probed extends FakeMediaSource {
+  final notifier = _ProbedNotifier();
+
+  @override
+  SourceConnectionStatus get connection => notifier.value;
+
+  @override
+  ValueListenable<SourceConnectionStatus> get statusListenable => notifier;
 }
