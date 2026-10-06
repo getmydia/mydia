@@ -46,7 +46,7 @@ DownloadedMedia _media(String id, String? sourceId) => DownloadedMedia(
     );
 
 void main() {
-  const from = SourceId('mydia');
+  const from = preAccountSourceId;
   const to = SourceId('mabc:owner:abc');
   const other = SourceId('x:o:s');
 
@@ -99,7 +99,7 @@ void main() {
       progressBox.put(
         mediaId,
         LocalPlaybackProgress(
-          sourceId: 'mydia',
+          sourceId: preAccountSourceId.value,
           mediaId: mediaId,
           mediaType: mediaType,
           positionSeconds: 30,
@@ -125,10 +125,10 @@ void main() {
 
   test('downloads with null or mydia sourceId move; others stay', () async {
     await downloads.saveTask(_task('a', null));
-    await downloads.saveTask(_task('b', 'mydia'));
+    await downloads.saveTask(_task('b', preAccountSourceId.value));
     await downloads.saveTask(_task('c', 'mplex:o:s'));
     await downloads.saveMedia(_media('a', null));
-    await downloads.saveMedia(_media('b', 'mydia'));
+    await downloads.saveMedia(_media('b', preAccountSourceId.value));
     await downloads.saveMedia(_media('c', 'mplex:o:s'));
 
     await rewriter.rewrite(from, to);
@@ -147,6 +147,23 @@ void main() {
     expect(progress.get('42'), isNull);
     final moved = progress.get('${to.value}|42')!;
     expect(moved.sourceId, to.value);
+    expect(moved.positionSeconds, 30);
+    expect(moved.isSynced, isFalse);
+  });
+
+  test('progress with no sourceId key is moved, position and state kept',
+      () async {
+    await progressBox.put('42', {
+      'mediaId': '42',
+      'mediaType': 'movie',
+      'positionSeconds': 30,
+      'durationSeconds': 1200,
+      'updatedAt': DateTime(2026).toIso8601String(),
+    });
+    expect(progress.all(), hasLength(1), reason: 'reading must not delete it');
+    await rewriter.rewrite(from, to);
+    expect(progressBox.containsKey('42'), isFalse);
+    final moved = progress.get('${to.value}|42')!;
     expect(moved.positionSeconds, 30);
     expect(moved.isSynced, isFalse);
   });
@@ -221,7 +238,7 @@ void main() {
 
   test('running twice changes nothing the second time', () async {
     await downloads.saveTask(_task('a', null));
-    await downloads.saveMedia(_media('a', 'mydia'));
+    await downloads.saveMedia(_media('a', preAccountSourceId.value));
     await legacyProgress('42');
     await store.setAllServers({from: true});
     await store.setActive(from);

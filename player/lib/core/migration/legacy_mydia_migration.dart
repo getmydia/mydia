@@ -25,9 +25,6 @@ const _mediaTokenKey = 'pairing_media_token';
 const _mediaTokenExpiryKey = 'pairing_media_token_expiry';
 const _p2pScheme = 'p2p://';
 
-/// The id every record the player stored before accounts carries.
-const preAccountSourceId = SourceId('mydia');
-
 /// Re-keys what the player stored for the legacy sign-in (caches, progress)
 /// from the legacy source id to the migrated account's.
 abstract interface class LegacyDataRewriter {

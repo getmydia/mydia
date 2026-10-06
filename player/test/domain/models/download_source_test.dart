@@ -21,10 +21,9 @@ DownloadTask _task(
     );
 
 void main() {
-  test('a record with no source id trips the assert that every writer sets it',
-      () {
+  test('a record with no source id reads as pre-account', () {
     final task = _task(mediaType: 'episode');
-    expect(() => task.source, throwsAssertionError);
+    expect(task.source, preAccountSourceId);
   });
 
   test('itemRef carries the record\'s source', () {

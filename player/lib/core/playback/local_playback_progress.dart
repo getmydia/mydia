@@ -73,7 +73,7 @@ class LocalPlaybackProgress {
   factory LocalPlaybackProgress.fromMap(Map<dynamic, dynamic> map) {
     final synced = map['syncedAt'] as String?;
     return LocalPlaybackProgress(
-      sourceId: map['sourceId'] as String,
+      sourceId: map['sourceId'] as String? ?? preAccountSourceId.value,
       mediaId: map['mediaId'] as String,
       mediaType: map['mediaType'] as String,
       positionSeconds: map['positionSeconds'] as int,

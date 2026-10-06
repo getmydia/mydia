@@ -49,6 +49,12 @@ class SourceId {
   String toString() => value;
 }
 
+/// The id of records the player wrote before accounts existed, which carry
+/// either this value or no source id at all. It exists only so the startup
+/// migration can move them and so nothing deletes them before it has. No
+/// account ever has this id.
+const preAccountSourceId = SourceId('mydia');
+
 /// A credential: one plex.tv identity, one Stash API key, one Mydia login.
 @immutable
 class ProviderAccount {

@@ -52,7 +52,7 @@ void main() {
         'acc1:owner:aa11|7');
   });
 
-  test('a record without a source id is discarded on read', () async {
+  test('a record without a source id is kept as pre-account', () async {
     final dir = await Directory.systemTemp.createTemp('progress_no_source');
     Hive.init(dir.path);
     try {
@@ -64,7 +64,12 @@ void main() {
         'durationSeconds': 2,
         'updatedAt': '2026-01-01T00:00:00.000',
       });
-      expect(HivePlaybackProgressStore(box).get('7'), isNull);
+      final store = HivePlaybackProgressStore(box);
+      expect(store.get('7')!.sourceId, preAccountSourceId.value);
+      expect(store.all(), hasLength(1));
+      expect(store.unsynced(), hasLength(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(box.containsKey('7'), isTrue);
     } finally {
       await Hive.close();
       await dir.delete(recursive: true);
