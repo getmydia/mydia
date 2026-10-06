@@ -279,7 +279,7 @@ class MydiaClient {
       // If mutation fails or throws, returns existing token if not expired, or null.
     }
 
-    if (expiry != null && expiry.isAfter(DateTime.now())) {
+    if (expiry == null || expiry.isAfter(DateTime.now())) {
       return mediaToken;
     }
     return null;

@@ -525,6 +525,21 @@ void main() {
       expect(token, 'old-media');
     });
 
+    test(
+        'media token returns existing token if refresh fails and expiry is null',
+        () async {
+      transport.handlers['RefreshMediaToken'] =
+          (_) => throw const SourceException.unreachable();
+
+      final client = build(
+        mediaToken: 'legacy-media',
+        mediaTokenExpiry: null,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'legacy-media');
+    });
+
     test('returns null if refresh fails and token is expired', () async {
       final expired = DateTime.now().subtract(const Duration(minutes: 10));
       transport.handlers['RefreshMediaToken'] =
