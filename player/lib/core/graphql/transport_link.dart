@@ -28,8 +28,6 @@ class TransportLink extends Link {
       switch (e.kind) {
         case SourceErrorKind.unreachable:
           throw ServerException(originalException: e);
-        case SourceErrorKind.unauthorized:
-          throw ServerException(originalException: e, statusCode: 401);
         case _:
           final message = e.message ?? e.viewerMessage;
           yield Response(

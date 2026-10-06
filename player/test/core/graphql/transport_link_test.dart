@@ -85,6 +85,17 @@ void main() {
     expect(r.exception.toString(), contains('Cannot query field "online"'));
   });
 
+  test('a refused refresh becomes a graphqlError, not a link exception',
+      () async {
+    transport.validTokens = {};
+    transport.handlers['ServerCompatibility'] = (_) => _compat('1.2.3');
+    final r = await gqlOver(clientWith(token: 'stale')).query(compatQuery());
+    expect(r.hasException, isTrue);
+    expect(r.exception!.linkException, isNull);
+    expect(r.exception!.graphqlErrors.single.message,
+        const SourceException.unauthorized().viewerMessage);
+  });
+
   test('mutations go through the same path', () async {
     transport.handlers['RefreshMediaToken'] = (_) => {
           '__typename': 'RootMutationType',

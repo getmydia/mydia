@@ -23,7 +23,7 @@ import 'watch/fetch_log.dart';
 /// `profile` field is mutated in place once [detectDeviceProfile] resolves,
 /// and mutating a field does not notify Riverpod, so nothing that reads this
 /// provider ever rebuilds because the probe finished. That is deliberate.
-/// `DeviceProfileLink` (see `client.dart`) reads `profile` fresh on every
+/// `MydiaClient` (via `buildMydiaClient`) reads `profile` fresh on every
 /// outgoing request instead, so:
 ///
 /// - a request issued before the probe resolves carries no header, which
@@ -290,7 +290,7 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
     await SessionTeardown().run();
 
     // Last, because this is what redirects the router to /login. Guarded
-    // because the two awaits above are storage work: this notifier outlives
+    // because the teardown above is storage work: this notifier outlives
     // the screen that calls it, but not a teardown of the whole container.
     if (!ref.mounted) return;
     state = const AsyncValue.data(AuthStatus.unauthenticated);

@@ -71,7 +71,7 @@ class ConnectionState {
 }
 
 /// The relay URL stored for p2p reconnection, if any.
-final _relayUrlProvider = FutureProvider<String?>(
+final storedRelayUrlProvider = FutureProvider<String?>(
     (ref) => getAuthStorage().read(_ConnectionStorageKeys.relayUrl));
 
 /// How the bound Mydia instance is reached, derived from its credentials.
@@ -83,7 +83,7 @@ class ConnectionNotifier extends Notifier<ConnectionState> {
     if (nodeAddr == null) return ConnectionState.direct();
     return ConnectionState.p2p(
       serverNodeAddr: nodeAddr,
-      relayUrl: ref.watch(_relayUrlProvider).value,
+      relayUrl: ref.watch(storedRelayUrlProvider).value,
     );
   }
 

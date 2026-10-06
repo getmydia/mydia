@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/connection/connection_provider.dart'
+    show storedRelayUrlProvider;
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
@@ -68,6 +70,7 @@ Future<
   final container = ProviderContainer(overrides: [
     authStateProvider.overrideWith(_Unauthenticated.new),
     noDownloadsOverride,
+    storedRelayUrlProvider.overrideWith((ref) async => null),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(secrets),
     ...overrides,
