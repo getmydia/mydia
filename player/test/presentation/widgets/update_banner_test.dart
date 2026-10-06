@@ -53,7 +53,7 @@ class _UnresolvedCompatibilityNotifier extends CompatibilityNotifier {
 }
 
 /// Resolves to an `AsyncError`, the way a broken `PackageInfo` read or an
-/// unexpected exception outside `CompatibilityService.fetch()`'s own
+/// unexpected exception outside `MydiaClient.fetchCompatibility()`'s own
 /// try/catch would.
 class _ErrorCompatibilityNotifier extends CompatibilityNotifier {
   @override
