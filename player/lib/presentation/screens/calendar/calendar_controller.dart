@@ -6,14 +6,9 @@ import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/calendar_entry.dart';
 import 'calendar_dates.dart';
+import 'calendar_window.dart';
 
 part 'calendar_controller.g.dart';
-
-/// Days of past the window reaches back.
-const int kCalendarDaysBack = 30;
-
-/// Days of future the window reaches forward.
-const int kCalendarDaysForward = 90;
 
 const String calendarQuery = r'''
 query Calendar($start: Date!, $end: Date!) {
@@ -57,23 +52,10 @@ List<CalendarEntry> parseCalendar(Map<String, dynamic> data) {
 class CalendarController extends _$CalendarController {
   late QueryWatcher<List<CalendarEntry>> _watcher;
 
-  /// The window the calendar loads, as whole local days.
-  ///
-  /// Exposed so the screen and the tests share one definition instead of
-  /// each doing the arithmetic. The server takes explicit dates because only
-  /// the client knows the viewer's timezone.
-  ///
-  /// Built by overflowing the day field rather than adding a `Duration`:
-  /// `DateTime`'s constructor normalizes an out-of-range day by calendar
-  /// arithmetic, not by adding elapsed real time, so it lands on the right
-  /// calendar day even when the span crosses a daylight-saving transition. A
-  /// `Duration`-based add/subtract would drift by an hour across such a
-  /// transition, which running this in a DST-observing timezone reproduces.
+  /// See [calendarWindow]; removed with this controller.
   static (DateTime, DateTime) windowFor(DateTime today) {
-    return (
-      DateTime(today.year, today.month, today.day - kCalendarDaysBack),
-      DateTime(today.year, today.month, today.day + kCalendarDaysForward),
-    );
+    final window = calendarWindow(today);
+    return (window.start, window.end);
   }
 
   @override

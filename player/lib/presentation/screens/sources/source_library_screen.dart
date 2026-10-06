@@ -13,6 +13,7 @@ import '../../widgets/source_artwork.dart';
 import 'source_browse_providers.dart';
 import 'source_drawer_button.dart';
 import 'source_error_view.dart';
+import 'source_pages.dart';
 
 class SourceLibraryScreen extends ConsumerWidget {
   const SourceLibraryScreen({super.key, required this.library});
@@ -27,12 +28,11 @@ class SourceLibraryScreen extends ConsumerWidget {
         value.where((l) => l.ref == library).firstOrNull,
       _ => null,
     };
-    final browse = ref.watch(libraryBrowseProvider(library));
-    final notifier = ref.read(libraryBrowseProvider(library).notifier);
-    final query = switch (browse) {
-      AsyncData(:final value) => value.query,
-      _ => const BrowseQuery(),
-    };
+    final query = ref.watch(libraryQueryProvider(library));
+    final pages = LibraryPages(library, query);
+    final browse = ref.watch(sourcePagesProvider(pages));
+    final notifier = ref.read(sourcePagesProvider(pages).notifier);
+    final queryNotifier = ref.read(libraryQueryProvider(library).notifier);
 
     return Scaffold(
       appBar: AppBar(
@@ -59,7 +59,7 @@ class SourceLibraryScreen extends ConsumerWidget {
                         label: Text(option.label),
                         selected: (query.sortId ?? info.sortOptions.first.id) ==
                             option.id,
-                        onSelected: (_) => notifier.setQuery(BrowseQuery(
+                        onSelected: (_) => queryNotifier.set(BrowseQuery(
                             sortId: option.id, filterIds: query.filterIds)),
                       ),
                     ),
@@ -70,7 +70,7 @@ class SourceLibraryScreen extends ConsumerWidget {
                         key: Key('source-filter-${filter.id}'),
                         label: Text(filter.label),
                         selected: query.filterIds.contains(filter.id),
-                        onSelected: (on) => notifier.setQuery(query.copyWith(
+                        onSelected: (on) => queryNotifier.set(query.copyWith(
                           filterIds: on
                               ? {...query.filterIds, filter.id}
                               : ({...query.filterIds}..remove(filter.id)),
@@ -107,7 +107,7 @@ class SourceLibraryScreen extends ConsumerWidget {
                       .watch(mediaSourceProvider(library.sourceId))
                       ?.source
                       .account,
-                  onRetry: () => ref.invalidate(libraryBrowseProvider(library)),
+                  onRetry: () => ref.invalidate(sourcePagesProvider(pages)),
                 ),
               _ => const Center(child: CircularProgressIndicator()),
             },

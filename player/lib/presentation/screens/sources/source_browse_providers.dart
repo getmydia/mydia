@@ -18,13 +18,17 @@ import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/detail/detail_target.dart';
+import '../../../domain/models/media_stream.dart';
+import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
+import '../calendar/calendar_window.dart';
 import '../detail/detail_links.dart';
 
-MediaSource _require(Ref ref, SourceId id) =>
+/// The live source for [id], or a not-found error when it is gone.
+MediaSource requireSource(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
 
@@ -49,7 +53,7 @@ String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
 
 final sourceLibrariesProvider =
     StreamProvider.autoDispose.family<List<Library>, SourceId>((ref, id) {
-  final source = _require(ref, id);
+  final source = requireSource(ref, id);
   return createSourceWatcher(
     ref,
     key: SourceKeys.libraries(id),
@@ -62,7 +66,7 @@ final sourceLibrariesProvider =
 /// The home row for [library]: its "Recently added" sort when it has one.
 final sourceLibraryPreviewProvider = StreamProvider.autoDispose
     .family<List<ItemSummary>, LibraryRef>((ref, library) async* {
-  final source = _require(ref, library.sourceId);
+  final source = requireSource(ref, library.sourceId);
   // selectAsync: a fresh libraries answer with the same sort must not
   // rebuild this row and fetch it twice.
   final sortId = await ref.watch(
@@ -89,7 +93,7 @@ final sourceLibraryPreviewProvider = StreamProvider.autoDispose
 
 final sourceItemProvider =
     StreamProvider.autoDispose.family<ItemDetail, ItemRef>((ref, item) {
-  final source = _require(ref, item.sourceId);
+  final source = requireSource(ref, item.sourceId);
   return createSourceWatcher(
     ref,
     key: SourceKeys.item(item),
@@ -102,7 +106,7 @@ final sourceItemProvider =
 /// Every child of [parent], following pages up to a sane cap.
 final sourceChildrenProvider = StreamProvider.autoDispose
     .family<List<ItemSummary>, ItemRef>((ref, parent) {
-  final source = _require(ref, parent.sourceId);
+  final source = requireSource(ref, parent.sourceId);
   return createSourceWatcher(
     ref,
     key: SourceKeys.children(parent),
@@ -125,128 +129,13 @@ Future<List<ItemSummary>> _allChildren(
   return items;
 }
 
-class LibraryBrowseState {
-  const LibraryBrowseState({
-    required this.query,
-    required this.items,
-    this.nextCursor,
-    this.total,
-    this.loadingMore = false,
-  });
-
-  final BrowseQuery query;
-  final List<ItemSummary> items;
-  final Cursor? nextCursor;
-  final int? total;
-  final bool loadingMore;
-
-  LibraryBrowseState copyWith({
-    List<ItemSummary>? items,
-    Cursor? nextCursor,
-    bool clearCursor = false,
-    bool? loadingMore,
-  }) =>
-      LibraryBrowseState(
-        query: query,
-        items: items ?? this.items,
-        nextCursor: clearCursor ? null : (nextCursor ?? this.nextCursor),
-        total: total,
-        loadingMore: loadingMore ?? this.loadingMore,
-      );
-}
-
-class LibraryBrowseNotifier extends StreamNotifier<LibraryBrowseState> {
-  LibraryBrowseNotifier(this.library);
-
-  final LibraryRef library;
-  BrowseQuery _query = const BrowseQuery();
-
-  /// Bumped whenever the list is rebuilt for a (new) query, so a page that
-  /// was requested for the old one is dropped when it lands.
-  int _generation = 0;
-
-  /// Set once the viewer asks for page 2. From then on the watcher declines
-  /// automatic refetches and its page-1 answers are ignored: either would
-  /// collapse the pages already on screen. Only page 1 is cached. A cached
-  /// page 1 may emit before the fresh one, so paging in that window uses the
-  /// cached cursor.
-  bool _paged = false;
-
-  @override
-  Stream<LibraryBrowseState> build() {
-    _generation++;
-    _paged = false;
-    final query = _query;
-    final source = _require(ref, library.sourceId);
-    final watcher = createSourceWatcher<Page<ItemSummary>>(
-      ref,
-      key: SourceKeys.browse(library, query),
-      fetch: () => source.browse(library, query),
-      encode: encodeSummaryPage,
-      decode: decodeSummaryPage,
-      canRefetch: () => !_paged,
-    );
-    return watcher.stream.where((_) => !_paged).map(
-          (page) => LibraryBrowseState(
-            query: query,
-            items: page.items,
-            nextCursor: page.nextCursor,
-            total: page.total,
-          ),
-        );
-  }
-
-  Future<void> setQuery(BrowseQuery query) async {
-    _query = query;
-    _generation++;
-    state = const AsyncLoading();
-    ref.invalidateSelf();
-    await future;
-  }
-
-  Future<void> loadMore() async {
-    final current = switch (state) {
-      AsyncData(:final value) => value,
-      _ => null,
-    };
-    final cursor = current?.nextCursor;
-    if (current == null || cursor == null || current.loadingMore) return;
-    final generation = _generation;
-    _paged = true;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      final page = await _require(ref, library.sourceId)
-          .browse(library, current.query, cursor: cursor);
-      if (!ref.mounted || generation != _generation) return;
-      state = AsyncData(current.copyWith(
-        items: [...current.items, ...page.items],
-        nextCursor: page.nextCursor,
-        clearCursor: page.nextCursor == null,
-        loadingMore: false,
-      ));
-    } catch (_) {
-      // Any failure, not just a SourceException: loadingMore must not stick.
-      if (ref.mounted && generation == _generation) {
-        // Page 2 never landed, so page 1 is still the whole list: let the
-        // watcher refresh it again.
-        _paged = false;
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-    }
-  }
-}
-
-final libraryBrowseProvider = StreamNotifierProvider.autoDispose
-    .family<LibraryBrowseNotifier, LibraryBrowseState, LibraryRef>(
-        LibraryBrowseNotifier.new);
-
 /// Empty for a source without the capability. No automatic retry: a failed
 /// row stays hidden until the next refresh rather than polling a down
 /// server.
 final sourceContinueWatchingProvider =
     StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
   (ref, id) {
-    final continueWatching = _require(ref, id).as<ContinueWatching>();
+    final continueWatching = requireSource(ref, id).as<ContinueWatching>();
     if (continueWatching == null) return Stream.value(const []);
     return createSourceWatcher(
       ref,
@@ -259,11 +148,77 @@ final sourceContinueWatchingProvider =
   retry: (_, __) => null,
 );
 
+/// Empty for a source without collections. Same retry rule as Continue
+/// Watching.
+final sourceCollectionsProvider =
+    StreamProvider.autoDispose.family<List<SourceCollection>, SourceId>(
+  (ref, id) {
+    final collections = requireSource(ref, id).as<Collections>();
+    if (collections == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.collections(id),
+      fetch: collections.collections,
+      encode: encodeCollections,
+      decode: decodeCollections,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
+/// The calendar over `calendarWindow` of today, empty for a source without
+/// one.
+final sourceCalendarProvider =
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
+    final calendar = requireSource(ref, id).as<Calendar>();
+    if (calendar == null) return Stream.value(const []);
+    final window = calendarWindow(DateTime.now());
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.calendar(id, window.start, window.end),
+      fetch: () => calendar.calendar(window.start, window.end),
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
+/// Empty for a source without the capability.
+final sourceRecentlyAddedProvider =
+    StreamProvider.autoDispose.family<List<ItemSummary>, SourceId>(
+  (ref, id) {
+    final recentlyAdded = requireSource(ref, id).as<RecentlyAdded>();
+    if (recentlyAdded == null) return Stream.value(const []);
+    return createSourceWatcher(
+      ref,
+      key: SourceKeys.recentlyAdded(id),
+      fetch: recentlyAdded.recentlyAdded,
+      encode: encodeSummaries,
+      decode: decodeSummaries,
+    ).stream;
+  },
+  retry: (_, __) => null,
+);
+
+/// The files of [item] for the Media Info panel. Not cached: it is read on
+/// demand, and a source without the capability is an error the panel shows.
+final sourceMediaInfoProvider =
+    FutureProvider.autoDispose.family<List<MediaFileInfo>, ItemRef>(
+  (ref, item) {
+    final info = requireSource(ref, item.sourceId).as<MediaInfo>();
+    if (info == null) throw const SourceException.unsupported();
+    return info.mediaInfo(item);
+  },
+  retry: (_, __) => null,
+);
+
 /// Null for a source without hubs, whose home keeps one row per library.
 final sourceHubsProvider =
     StreamProvider.autoDispose.family<List<Hub>?, SourceId>(
   (ref, id) {
-    final hubs = _require(ref, id).as<HomeHubs>();
+    final hubs = requireSource(ref, id).as<HomeHubs>();
     if (hubs == null) return Stream.value(null);
     return createSourceWatcher<List<Hub>?>(
       ref,
@@ -282,6 +237,12 @@ final sourceHubsProvider =
 void invalidateSourceItemWrites(WidgetRef ref, ItemRef item) => unawaited(ref
     .read(invalidatorProvider)
     .invalidate(SourceRules.watchedChanged(item.sourceId)));
+
+/// [item] was favorited or unfavorited. See `SourceRules.favoriteChanged`.
+void invalidateSourceFavoriteWrites(WidgetRef ref, ItemRef item) =>
+    unawaited(ref
+        .read(invalidatorProvider)
+        .invalidate(SourceRules.favoriteChanged(item.sourceId)));
 
 /// [invalidateSourceItemWrites] through a container, for a write that
 /// finishes after its notifier is disposed: a `Ref` throws then, a container
