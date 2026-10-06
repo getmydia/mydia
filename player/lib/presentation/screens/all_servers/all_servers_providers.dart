@@ -52,6 +52,7 @@ class AllServersGridState {
     this.skipped = const [],
     this.hasMore = false,
     this.loadingMore = false,
+    this.extraCopies = const {},
   });
 
   final List<ItemSummary> items;
@@ -60,6 +61,7 @@ class AllServersGridState {
   final List<SourceId> skipped;
   final bool hasMore;
   final bool loadingMore;
+  final Map<ItemRef, int> extraCopies;
 }
 
 class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
@@ -78,6 +80,7 @@ class AllServersGridNotifier extends AsyncNotifier<AllServersGridState> {
         skipped: g.skipped,
         hasMore: g.hasMore,
         loadingMore: loadingMore,
+        extraCopies: Map.unmodifiable(g.extraCopies),
       );
 
   @override

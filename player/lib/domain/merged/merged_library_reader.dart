@@ -9,6 +9,7 @@ import '../../core/sources/media_source.dart';
 import '../../core/sources/source.dart';
 import '../sources/item.dart';
 import '../sources/library.dart';
+import 'merge_key.dart';
 import 'merged_grid.dart';
 import 'merged_result.dart';
 import 'merged_search.dart';
@@ -66,10 +67,21 @@ class LiveMergedReader implements MergedLibraryReader {
     );
   }
 
+  List<SourceId> get _order => [for (final s in sources) s.id];
+
+  /// Every server's row, newest first, one card per title, at most [limit].
+  /// Duplicates collapse before the cap so they do not use up places.
   MergedResult<List<ItemSummary>> _row(MergedResult<List<List<ItemSummary>>> r,
-          DateTime? Function(ItemSummary) at) =>
-      MergedResult(newestFirst(r.value, at),
-          unavailable: r.unavailable, skipped: r.skipped);
+      DateTime? Function(ItemSummary) at,
+      {int limit = 20}) {
+    final all = newestFirst(r.value, at,
+        limit: r.value.fold(0, (n, l) => n + l.length));
+    final d = dedupe(all, _order);
+    return MergedResult(d.items.take(limit).toList(),
+        unavailable: r.unavailable,
+        skipped: r.skipped,
+        extraCopies: d.extraCopies);
+  }
 
   @override
   Future<MergedResult<List<ItemSummary>>> continueWatching() async => _row(
@@ -78,7 +90,9 @@ class LiveMergedReader implements MergedLibraryReader {
 
   @override
   Future<MergedResult<List<ItemSummary>>> recentlyAdded() async => _row(
-      await _each<RecentlyAdded>((c) => c.recentlyAdded()), (i) => i.addedAt);
+      await _each<RecentlyAdded>((c) => c.recentlyAdded()), (i) => i.addedAt,
+      // The home splits this into movies and TV, so each half needs room.
+      limit: 40);
 
   @override
   Future<MergedGrid> grid(LibraryKind kind, SharedSort sort,
@@ -123,21 +137,23 @@ class LiveMergedReader implements MergedLibraryReader {
   @override
   Future<MergedResult<MergedSearch>> search(String query) async {
     final r = await _each<Searchable>((c) => c.search(query));
-    return MergedResult(
-      MergedSearch({
-        for (final section in MergedSection.values)
-          if (roundRobin([
+    final sections = <MergedSection, List<ItemSummary>>{};
+    final extra = <ItemRef, int>{};
+    for (final section in MergedSection.values) {
+      final d = dedupe(
+          roundRobin([
             for (final list in r.value)
               [
                 for (final i in list)
                   if (sectionOf(i.ref.kind) == section) i
               ],
-          ])
-              case final items when items.isNotEmpty)
-            section: items,
-      }),
-      unavailable: r.unavailable,
-      skipped: r.skipped,
-    );
+          ]),
+          _order);
+      if (d.items.isEmpty) continue;
+      sections[section] = d.items;
+      extra.addAll(d.extraCopies);
+    }
+    return MergedResult(MergedSearch(sections),
+        unavailable: r.unavailable, skipped: r.skipped, extraCopies: extra);
   }
 }

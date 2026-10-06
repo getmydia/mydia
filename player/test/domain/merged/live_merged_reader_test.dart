@@ -63,4 +63,48 @@ void main() {
     expect(r.value, isEmpty);
     expect(r.unavailable, [a.id]);
   });
+
+  test('rows and search show one card per title', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    const ids = ExternalIds(tmdb: '9');
+    final t = DateTime.utc(2024);
+    final reader = LiveMergedReader([
+      FakeMergedSource(a,
+          resuming: [item(a, 'a1', ids: ids, lastPlayedAt: t)],
+          found: [item(a, 'a1', ids: ids)]),
+      FakeMergedSource(b, resuming: [
+        item(b, 'b1',
+            ids: ids,
+            progress: 60,
+            lastPlayedAt: t.add(const Duration(hours: 1)))
+      ], found: [
+        item(b, 'b1', ids: ids)
+      ]),
+    ]);
+    final cw = await reader.continueWatching();
+    expect(cw.value.map((i) => i.ref.externalId), ['b1']);
+    expect(cw.extraCopies, {cw.value.single.ref: 1});
+    final s = await reader.search('invented');
+    expect(s.value.sections[MergedSection.movies], hasLength(1));
+    expect(s.extraCopies, hasLength(1));
+  });
+
+  test('the 20-item cap applies after duplicates collapse', () async {
+    final a = fakeServer('a'), b = fakeServer('b');
+    final t = DateTime.utc(2024);
+    List<ItemSummary> twenty(Source s) => [
+          for (var i = 0; i < 20; i++)
+            item(s, '${s.id.value}$i',
+                ids: ExternalIds(tmdb: '$i'),
+                lastPlayedAt: t.add(Duration(minutes: i + 1)))
+        ];
+    final cw = await LiveMergedReader([
+      FakeMergedSource(a, resuming: twenty(a)),
+      FakeMergedSource(b,
+          resuming: [...twenty(b), item(b, 'oldest', lastPlayedAt: t)]),
+    ]).continueWatching();
+    expect(cw.value, hasLength(20));
+    // Twenty distinct titles: no title used two places.
+    expect(cw.value.map((i) => i.externalIds.tmdb).toSet(), hasLength(20));
+  });
 }
