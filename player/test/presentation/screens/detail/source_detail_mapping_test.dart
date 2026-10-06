@@ -44,7 +44,6 @@ void main() {
     expect(
         v.cast.single.photo, const SourceArt(fakeSourceId, ArtworkRef('/p/1')));
     expect(v.features, features);
-    expect(v.mydia, isNull);
   });
 
   test('a source show lists seasons by index and its next up', () {
@@ -80,9 +79,8 @@ void main() {
         isTrue);
   });
 
-  test('targets key by source, kind and id', () {
-    expect(
-        SourceTarget(fakeMovie(1).ref).key, '${fakeSourceId.value}|movie|m1');
+  test('a target names its item, and only some kinds have a detail screen', () {
+    expect(SourceTarget(fakeMovie(1).ref).ref, fakeMovie(1).ref);
     expect(detailKindOf(ItemKind.video), isNull);
   });
 }

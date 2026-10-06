@@ -38,8 +38,7 @@ import 'core/remote/remote_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
-import 'presentation/screens/episode/episode_detail_controller.dart';
-import 'presentation/screens/movie/movie_detail_controller.dart';
+import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart';
@@ -432,27 +431,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       await pushLoadContentDestination(
         intent,
         screenWidth,
-        fetchMovieTarget: (id) async {
-          final movie = await readDetailKeepingAlive(
-            ref,
-            provider: movieDetailControllerProvider(id),
-            future: movieDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(files: movie.files, title: movie.title);
-        },
-        fetchEpisodeTarget: (id) async {
-          final episode = await readDetailKeepingAlive(
-            ref,
-            provider: episodeDetailControllerProvider(id),
-            future: episodeDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(
-            files: episode.files,
-            title: episode.title,
-            showId: episode.show.id,
-            seasonNumber: episode.seasonNumber,
-          );
-        },
+        fetchMovieTarget: (id) => fetchLoadContentMovie(ref, id),
+        fetchEpisodeTarget: (id) => fetchLoadContentEpisode(ref, id),
         push: (path) {
           if (!mounted) return;
           router.push(path);

@@ -16,8 +16,7 @@ import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import '../../core/p2p/p2p_service.dart' show p2pStatusNotifierProvider;
 import '../../core/playback/local_playback_state.dart';
-import '../screens/episode/episode_detail_controller.dart';
-import '../screens/movie/movie_detail_controller.dart';
+import '../screens/detail/load_content_fetchers.dart';
 import 'cast_actions.dart';
 import 'cast_bar/cast_bar_parts.dart';
 import 'cast_bar/cast_pill.dart';
@@ -766,27 +765,8 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
       await pushLoadContentDestination(
         intent,
         screenWidth,
-        fetchMovieTarget: (id) async {
-          final movie = await readDetailKeepingAlive(
-            ref,
-            provider: movieDetailControllerProvider(id),
-            future: movieDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(files: movie.files, title: movie.title);
-        },
-        fetchEpisodeTarget: (id) async {
-          final episode = await readDetailKeepingAlive(
-            ref,
-            provider: episodeDetailControllerProvider(id),
-            future: episodeDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(
-            files: episode.files,
-            title: episode.title,
-            showId: episode.show.id,
-            seasonNumber: episode.seasonNumber,
-          );
-        },
+        fetchMovieTarget: (id) => fetchLoadContentMovie(ref, id),
+        fetchEpisodeTarget: (id) => fetchLoadContentEpisode(ref, id),
         push: (path) => router.push(path),
       );
     } catch (e) {

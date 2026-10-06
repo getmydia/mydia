@@ -13,8 +13,9 @@ import '../detail/detail_providers.dart';
 import '../detail/detail_similar_rail.dart';
 import '../detail/download_metadata.dart';
 import '../detail/start_download.dart';
-import 'show_detail_controller.dart';
+import '../../../domain/sources/item.dart';
 import 'show_season_section.dart';
+import 'show_selection_providers.dart';
 import '../../widgets/detail_hero_app_bar.dart';
 import '../../widgets/freshness_header.dart';
 import '../../../core/player/resume_plan.dart';
@@ -23,7 +24,6 @@ import '../../widgets/cast_rail.dart';
 import '../../widgets/detail_action_row.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the movie detail hero's breakpoint — see
@@ -49,10 +49,6 @@ int? _resumeSeconds(EpisodeView episode) {
 }
 
 class ShowDetailScreen extends ConsumerWidget {
-  ShowDetailScreen({super.key, required String id})
-      : target = MydiaTarget(DetailKind.show, id),
-        initialSeason = null;
-
   const ShowDetailScreen.target({
     super.key,
     required this.target,
@@ -67,14 +63,16 @@ class ShowDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showAsync = ref.watch(showViewProvider(target));
-    final selectedSeason = ref.watch(selectedSeasonProvider(target.key));
+    // Held from the first frame so the season `_InitialSeasonSeed` selects
+    // survives while the show is still loading.
+    ref.watch(selectedSeasonProvider(target.ref));
 
     // This is a full-window route (pushed outside the shell), and so the sole
     // owner of the title-bar band here: the body has to sit under
     // `removeBand`, or the ambient `MediaQuery.padding.top` still carries the
     // band on top of the hero's own title row a second time.
     return _InitialSeasonSeed(
-      showKey: target.key,
+      show: target.ref,
       season: initialSeason,
       child: WindowChromeInsets.removeBand(
         child: Scaffold(
@@ -82,7 +80,7 @@ class ShowDetailScreen extends ConsumerWidget {
           body: Column(
             children: [
               FreshnessHeader(
-                queryKeys: freshnessKeys(target, seasonNumber: selectedSeason),
+                queryKeys: freshnessKeys(target),
                 topInset: freshnessTopInset(context, appBarHeight: 0),
               ),
               Expanded(
@@ -103,8 +101,8 @@ class ShowDetailScreen extends ConsumerWidget {
   /// Exposes [_buildLoadingState] for
   /// `detail_screen_inset_test.dart`: that test proves the back button
   /// clears the window chrome in this transient state too, not only in the
-  /// loaded hero, without needing `showDetailControllerProvider`'s GraphQL
-  /// stream to reach the loading branch.
+  /// loaded hero, without needing the source's item stream to reach the
+  /// loading branch.
   @visibleForTesting
   Widget loadingStateForTest(BuildContext context) =>
       _buildLoadingState(context);
@@ -266,7 +264,7 @@ class ShowDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildContent(BuildContext context, WidgetRef ref, ShowView show) {
-    final key = target.key;
+    final key = target.ref;
     final selectedEpisodeId = ref.watch(selectedEpisodeProvider(key));
 
     // A screen opened on a season never seeds next up: that would pull the
@@ -540,8 +538,7 @@ class ShowDetailScreen extends ConsumerWidget {
     required bool compact,
   }) {
     final seasonKey = (show: target, seasonNumber: episode.seasonNumber);
-    final mydiaEpisode = episode.mydia;
-    final item = itemRefOf(episode.target, ref.watch(boundSourceIdProvider));
+    final item = episode.target.ref;
     final canDownload = isDownloadSupported &&
         show.features.contains(DetailFeature.download) &&
         episode.files.isNotEmpty;
@@ -570,15 +567,10 @@ class ShowDetailScreen extends ConsumerWidget {
       // the selected episode.
       isDownloaded: canDownload &&
           (ref.watch(isItemDownloadedProvider(item)).value ?? false),
-      onShowMediaInfo: mydiaEpisode == null ||
-              !show.features.contains(DetailFeature.mediaInfo) ||
+      onShowMediaInfo: !show.features.contains(DetailFeature.mediaInfo) ||
               episode.files.isEmpty
           ? null
-          : () => showMediaInfo(
-                context: context,
-                id: mydiaEpisode.id,
-                target: MediaInfoTarget.episode,
-              ),
+          : () => showMediaInfo(context: context, item: item),
     );
   }
 
@@ -741,12 +733,12 @@ class ShowDetailScreen extends ConsumerWidget {
 /// The latch lives in this State, so a later season tap is never reverted.
 class _InitialSeasonSeed extends ConsumerStatefulWidget {
   const _InitialSeasonSeed({
-    required this.showKey,
+    required this.show,
     required this.season,
     required this.child,
   });
 
-  final String showKey;
+  final ItemRef show;
   final int? season;
   final Widget child;
 
@@ -762,7 +754,7 @@ class _InitialSeasonSeedState extends ConsumerState<_InitialSeasonSeed> {
     if (season == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(selectedSeasonProvider(widget.showKey).notifier).select(season);
+      ref.read(selectedSeasonProvider(widget.show).notifier).select(season);
     });
   }
 

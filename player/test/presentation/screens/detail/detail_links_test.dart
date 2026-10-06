@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/query_keys.dart';
+import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/detail/detail_target.dart';
 import 'package:player/domain/sources/item.dart';
@@ -12,46 +12,47 @@ import 'package:player/presentation/screens/detail/detail_providers.dart';
 void main() {
   const file = MediaFile(id: 'f1', directPlaySupported: true);
 
-  test('Mydia detail locations keep their routes', () {
+  const src = SourceId('a:o:s');
+  const movieRef =
+      ItemRef(sourceId: src, kind: ItemKind.movie, externalId: 'm1');
+  const showRef = ItemRef(sourceId: src, kind: ItemKind.show, externalId: 's1');
+  const episodeRef =
+      ItemRef(sourceId: src, kind: ItemKind.episode, externalId: 'e1');
+
+  test('detail locations name the source and the kind', () {
+    expect(detailLocation(const SourceTarget(movieRef)), '/s/a:o:s/movie/m1');
+    expect(detailLocation(const SourceTarget(showRef)), '/s/a:o:s/show/s1');
     expect(
-      detailLocation(const MydiaTarget(DetailKind.movie, 'm1')),
-      '/movie/m1',
-    );
-    expect(
-      detailLocation(const MydiaTarget(DetailKind.show, 's1')),
-      '/show/s1',
-    );
-    expect(
-      detailLocation(const MydiaTarget(DetailKind.episode, 'e1')),
-      '/episode/e1',
+      detailLocation(const SourceTarget(episodeRef)),
+      '/s/a:o:s/episode/e1',
     );
   });
 
-  test('a Mydia movie plays through /player/movie', () {
+  test('a movie plays through its source player route', () {
     const movie = MovieView(
-      target: MydiaTarget(DetailKind.movie, 'm1'),
+      target: SourceTarget(movieRef),
       title: 'Meridian Drift',
     );
     expect(
       moviePlayerLocation(movie, file),
-      '/player/movie/m1?fileId=f1&title=Meridian%20Drift',
+      '/s/a:o:s/player/m1?kind=movie&fileId=f1&title=Meridian+Drift',
     );
   });
 
   const episode = EpisodeView(
-    target: MydiaTarget(DetailKind.episode, 'e1'),
-    showTarget: MydiaTarget(DetailKind.show, 's1'),
+    target: SourceTarget(episodeRef),
+    showTarget: SourceTarget(showRef),
     showTitle: 'Invented Series',
     seasonNumber: 2,
     episodeNumber: 4,
     title: 'Glass',
   );
 
-  test('a Mydia episode plays with its show and season', () {
+  test('an episode plays with its show and season', () {
     expect(
       episodePlayerLocation(episode, file, resumeSeconds: 300),
-      '/player/episode/e1?fileId=f1'
-      '&title=${Uri.encodeComponent('Invented Series - S02E04')}'
+      '/s/a:o:s/player/e1?kind=episode&fileId=f1'
+      '&title=Invented+Series+-+S02E04'
       '&showId=s1&seasonNumber=2&resume=300',
     );
   });
@@ -59,24 +60,24 @@ void main() {
   test('an episode without resume omits the suffix', () {
     expect(
       episodePlayerLocation(episode, file),
-      '/player/episode/e1?fileId=f1'
-      '&title=${Uri.encodeComponent('Invented Series - S02E04')}'
+      '/s/a:o:s/player/e1?kind=episode&fileId=f1'
+      '&title=Invented+Series+-+S02E04'
       '&showId=s1&seasonNumber=2',
     );
   });
 
-  test('freshness keys match the controllers', () {
+  test('freshness keys follow the item, and a show also its children', () {
     expect(
-      freshnessKeys(const MydiaTarget(DetailKind.movie, 'm1')),
-      [QueryKeys.movieDetail('m1')],
+      freshnessKeys(const SourceTarget(movieRef)),
+      [SourceKeys.item(movieRef)],
     );
     expect(
-      freshnessKeys(const MydiaTarget(DetailKind.show, 's1'), seasonNumber: 2),
-      [QueryKeys.showDetail('s1'), QueryKeys.seasonEpisodes('s1', 2)],
+      freshnessKeys(const SourceTarget(showRef)),
+      [SourceKeys.item(showRef), SourceKeys.children(showRef)],
     );
     expect(
-      freshnessKeys(const MydiaTarget(DetailKind.episode, 'e1')),
-      [QueryKeys.episodeDetail('e1')],
+      freshnessKeys(const SourceTarget(episodeRef)),
+      [SourceKeys.item(episodeRef)],
     );
   });
 

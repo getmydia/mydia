@@ -14,6 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
+import 'package:player/domain/detail/detail_target.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
@@ -21,6 +23,7 @@ import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../helpers/cast_test_overrides.dart';
+import 'sources/fake_media_source.dart' show fakeSourceId;
 
 const Key _backKey = Key('detail-back');
 const Key _heroKey = Key('detail-hero');
@@ -166,19 +169,31 @@ void main() {
     // `@visibleForTesting` seam, rather than mirroring the shape (a plain
     // `Object error` stands in for a real GraphQL failure since only the
     // header, not the error message body, is under test).
+    const movie = MovieDetailScreen.target(
+      target: SourceTarget(ItemRef(
+          sourceId: fakeSourceId, kind: ItemKind.movie, externalId: 'm1')),
+    );
+    const show = ShowDetailScreen.target(
+      target: SourceTarget(ItemRef(
+          sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's1')),
+    );
+    const episode = EpisodeDetailScreen.target(
+      target: SourceTarget(ItemRef(
+          sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e1')),
+    );
     final cases = <String, Widget Function(BuildContext, WidgetRef)>{
       'MovieDetailScreen loading': (context, ref) =>
-          MovieDetailScreen(id: 'm1').loadingStateForTest(context),
+          movie.loadingStateForTest(context),
       'MovieDetailScreen error': (context, ref) =>
-          MovieDetailScreen(id: 'm1').errorStateForTest(context, ref, 'boom'),
+          movie.errorStateForTest(context, ref, 'boom'),
       'ShowDetailScreen loading': (context, ref) =>
-          ShowDetailScreen(id: 's1').loadingStateForTest(context),
+          show.loadingStateForTest(context),
       'ShowDetailScreen error': (context, ref) =>
-          ShowDetailScreen(id: 's1').errorStateForTest(context, ref, 'boom'),
+          show.errorStateForTest(context, ref, 'boom'),
       'EpisodeDetailScreen loading': (context, ref) =>
-          EpisodeDetailScreen(id: 'e1').loadingStateForTest(context),
+          episode.loadingStateForTest(context),
       'EpisodeDetailScreen error': (context, ref) =>
-          EpisodeDetailScreen(id: 'e1').errorStateForTest(context, ref, 'boom'),
+          episode.errorStateForTest(context, ref, 'boom'),
     };
 
     for (final MapEntry(key: name, value: builder) in cases.entries) {

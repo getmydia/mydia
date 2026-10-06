@@ -4,11 +4,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/media_stream.dart';
+import '../../../domain/sources/item.dart';
+import '../../screens/sources/source_browse_providers.dart';
 import 'media_info_content.dart';
-import 'media_info_controller.dart';
 
-/// Which detail screen the panel was opened from.
-enum MediaInfoTarget { movie, episode }
+/// The panel for [item]: what its source says about each of the item's
+/// files, with the loading and failure states.
+class MediaInfoSheet extends ConsumerWidget {
+  final ItemRef item;
+
+  const MediaInfoSheet({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(sourceMediaInfoProvider(item)).when(
+          loading: () => const _PanelShell(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+          error: (_, __) => _PanelShell(
+            child: _ErrorBody(
+              onRetry: () => ref.invalidate(sourceMediaInfoProvider(item)),
+            ),
+          ),
+          data: (files) => MediaInfoPanel(files: files),
+        );
+  }
+}
 
 /// The panel body: version state plus the readout.
 ///
@@ -162,8 +186,7 @@ class _PanelHeader extends StatelessWidget {
 /// cannot walk out of it into the detail screen underneath.
 Future<void> showMediaInfo({
   required BuildContext context,
-  required String id,
-  required MediaInfoTarget target,
+  required ItemRef item,
 }) {
   final isWide = Breakpoints.isDesktop(context);
 
@@ -178,29 +201,7 @@ Future<void> showMediaInfo({
         autofocus: true,
         child: Align(
           alignment: isWide ? Alignment.centerRight : Alignment.bottomCenter,
-          child: Consumer(
-            builder: (consumerContext, ref, _) {
-              final async =
-                  ref.watch(mediaInfoProvider((id: id, target: target)));
-
-              return async.when(
-                loading: () => const _PanelShell(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-                error: (_, __) => _PanelShell(
-                  child: _ErrorBody(
-                    onRetry: () => ref.invalidate(
-                      mediaInfoProvider((id: id, target: target)),
-                    ),
-                  ),
-                ),
-                data: (files) => MediaInfoPanel(files: files),
-              );
-            },
-          ),
+          child: MediaInfoSheet(item: item),
         ),
       );
     },

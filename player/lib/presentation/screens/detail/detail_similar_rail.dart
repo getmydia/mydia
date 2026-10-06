@@ -9,9 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../sources/source_poster_row.dart';
 import 'source_detail_controllers.dart';
@@ -38,13 +36,12 @@ class _DetailSimilarRailState extends ConsumerState<DetailSimilarRail> {
   Widget build(BuildContext context) {
     final target = widget.movie?.target ?? widget.show?.target;
     if (target == null) return const SizedBox.shrink();
-    final item = itemRefOf(target, ref.watch(boundSourceIdProvider));
-    final items = ref.watch(sourceSimilarProvider(item)).value;
+    final items = ref.watch(sourceSimilarProvider(target.ref)).value;
     if (items == null || items.isEmpty) return const SizedBox.shrink();
 
     if (widget.movie != null) {
       return SourcePosterRow(
-        title: target is SourceTarget ? 'More like this' : _title,
+        title: 'More like this',
         railId: 'similar',
         items: items,
       );

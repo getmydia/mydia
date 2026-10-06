@@ -3,40 +3,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/theme/colors.dart';
-import 'package:player/domain/models/episode.dart';
-import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/progress.dart';
-import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 import 'package:player/presentation/widgets/watch_indicator.dart';
 
+import '../../test_utils/episode_views.dart';
 import '../../test_utils/hover_affordance.dart';
 import '../../test_utils/mock_network_images.dart';
 import '../../test_utils/poster_contract.dart';
-import '../../test_utils/mydia_test_source.dart';
 
-Episode _episode({
+EpisodeView _episode({
   bool hasFile = true,
   Progress? progress,
   String? thumbnailUrl = 'https://example.test/thumb.jpg',
   String? overview,
-}) {
-  return Episode(
-    id: 'ep-1',
-    seasonNumber: 1,
-    episodeNumber: 1,
-    title: 'Pilot',
-    overview: overview,
-    monitored: true,
-    hasFile: hasFile,
-    thumbnailUrl: thumbnailUrl,
-    progress: progress,
-  );
-}
+}) =>
+    testEpisodeView(
+      overview: overview,
+      hasFile: hasFile,
+      thumbnailUrl: thumbnailUrl,
+      progress: progress,
+    );
 
 Future<void> _pump(
   WidgetTester tester,
-  Episode episode, {
+  EpisodeView episode, {
   VoidCallback? onTap,
   bool selected = false,
 }) async {
@@ -44,13 +36,13 @@ Future<void> _pump(
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          isItemDownloadedProvider(testMydiaRef(ItemKind.episode, episode.id))
+          isItemDownloadedProvider(episode.target.ref)
               .overrideWith((ref) => false),
         ],
         child: MaterialApp(
           home: Scaffold(
             body: EpisodeRailCard(
-              episode: episodeViewFromMydia(episode, show: null),
+              episode: episode,
               onWatchedAction: (_) async {},
               onTap: onTap,
               selected: selected,

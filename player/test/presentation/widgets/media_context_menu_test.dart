@@ -6,15 +6,23 @@
 // nothing but presentation and routing.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/widgets/media_context_menu.dart';
+
+const _source = SourceId('a:b:c');
+
+ItemRef _ref(ItemKind kind, String id) =>
+    ItemRef(sourceId: _source, kind: kind, externalId: id);
+
+final _show = _ref(ItemKind.show, 'show-1');
 
 void main() {
   group('mediaContextActionsFor', () {
     test('an Up Next episode offers play, its show, and its own details', () {
-      const target = MediaContextTarget(
-        id: 'ep-1',
-        type: 'episode',
-        showId: 'show-1',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-1'),
+        show: _show,
         hasFile: true,
         tapPlays: true,
       );
@@ -27,9 +35,8 @@ void main() {
     });
 
     test('a Continue Watching movie offers play and its own details', () {
-      const target = MediaContextTarget(
-        id: 'mv-1',
-        type: 'movie',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.movie, 'mv-1'),
         hasFile: true,
         tapPlays: true,
       );
@@ -41,10 +48,9 @@ void main() {
     });
 
     test('a target with no playable file offers no play', () {
-      const target = MediaContextTarget(
-        id: 'ep-2',
-        type: 'episode',
-        showId: 'show-1',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-2'),
+        show: _show,
         tapPlays: true,
       );
 
@@ -55,9 +61,8 @@ void main() {
     });
 
     test('an episode with no known show omits Go to show', () {
-      const target = MediaContextTarget(
-        id: 'ep-3',
-        type: 'episode',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-3'),
         hasFile: true,
         tapPlays: true,
       );
@@ -72,7 +77,7 @@ void main() {
     // would only offer to open the title, so it gets no menu at all. This is
     // what keeps the Recently Added and Favorites rails untouched.
     test('a movie whose tap already navigates earns an empty menu', () {
-      const target = MediaContextTarget(id: 'mv-2', type: 'movie');
+      final target = MediaContextTarget(item: _ref(ItemKind.movie, 'mv-2'));
 
       expect(mediaContextActionsFor(target), isEmpty);
     });
@@ -82,10 +87,9 @@ void main() {
     // offered Play, which routes through a nullable onItemActivate and would
     // have done nothing, plus an Episode details entry duplicating its own tap.
     test('a playable episode whose tap navigates earns an empty menu', () {
-      const target = MediaContextTarget(
-        id: 'ep-4',
-        type: 'episode',
-        showId: 'show-1',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-4'),
+        show: _show,
         hasFile: true,
       );
 
@@ -93,18 +97,17 @@ void main() {
     });
 
     test('no target that navigates on tap is ever offered Play', () {
-      for (final type in ['movie', 'tv_show', 'episode']) {
+      for (final kind in [ItemKind.movie, ItemKind.show, ItemKind.episode]) {
         final target = MediaContextTarget(
-          id: 'x',
-          type: type,
-          showId: 'show-1',
+          item: _ref(kind, 'x'),
+          show: _show,
           hasFile: true,
         );
 
         expect(
           mediaContextActionsFor(target),
           isEmpty,
-          reason: '$type with tapPlays false must earn no menu',
+          reason: '${kind.name} with tapPlays false must earn no menu',
         );
       }
     });
@@ -119,9 +122,8 @@ void main() {
 
   group('mediaContextActionsFor removal', () {
     test('a card with no dismissal target is offered no removal', () {
-      const target = MediaContextTarget(
-        id: 'mv-1',
-        type: 'movie',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.movie, 'mv-1'),
         hasFile: true,
         tapPlays: true,
       );
@@ -134,15 +136,14 @@ void main() {
 
     // The case the tapPlays early return used to swallow. The
     // `/continue-watching` grid opens the title on tap rather than playing it,
-    // so every target it builds has tapPlays false — and it is the surface
+    // so every target it builds has tapPlays false, and it is the surface
     // where removal matters most.
     test('a card that navigates on tap is still offered removal', () {
-      const target = MediaContextTarget(
-        id: 'ep-1',
-        type: 'episode',
-        showId: 'show-1',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-1'),
+        show: _show,
         hasFile: true,
-        continueWatchingId: 'show-1',
+        continueWatching: _show,
       );
 
       expect(mediaContextActionsFor(target), [
@@ -151,13 +152,12 @@ void main() {
     });
 
     test('removal comes last, after the navigation entries', () {
-      const target = MediaContextTarget(
-        id: 'ep-1',
-        type: 'episode',
-        showId: 'show-1',
+      final target = MediaContextTarget(
+        item: _ref(ItemKind.episode, 'ep-1'),
+        show: _show,
         hasFile: true,
         tapPlays: true,
-        continueWatchingId: 'show-1',
+        continueWatching: _show,
       );
 
       expect(mediaContextActionsFor(target), [
@@ -169,12 +169,12 @@ void main() {
     });
 
     test('a movie card is offered removal keyed on itself', () {
-      const target = MediaContextTarget(
-        id: 'mv-1',
-        type: 'movie',
+      final movie = _ref(ItemKind.movie, 'mv-1');
+      final target = MediaContextTarget(
+        item: movie,
         hasFile: true,
         tapPlays: true,
-        continueWatchingId: 'mv-1',
+        continueWatching: movie,
       );
 
       expect(mediaContextActionsFor(target), [

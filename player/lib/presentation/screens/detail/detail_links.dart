@@ -1,5 +1,5 @@
 /// Routes out of a detail screen. Screens never build these strings
-/// themselves, so a third-party screen cannot route into a Mydia id.
+/// themselves, so every route names the source that owns the item.
 library;
 
 import '../../../core/sources/source.dart';
@@ -71,14 +71,8 @@ String sourcePlayerLocation(
       ...extra,
     });
 
-String detailLocation(DetailTarget target) => switch (target) {
-      MydiaTarget(kind: DetailKind.movie, :final id) => '/movie/$id',
-      MydiaTarget(kind: DetailKind.show || DetailKind.season, :final id) =>
-        '/show/$id',
-      MydiaTarget(kind: DetailKind.episode, :final id) => '/episode/$id',
-      SourceTarget(:final ref) =>
-        _sourcePath(ref.sourceId, [_detailSegment(ref.kind), ref.externalId]),
-    };
+String detailLocation(DetailTarget target) => _sourcePath(target.ref.sourceId,
+    [_detailSegment(target.ref.kind), target.ref.externalId]);
 
 String _detailSegment(ItemKind kind) => switch (kind) {
       ItemKind.movie => 'movie',
@@ -88,12 +82,7 @@ String _detailSegment(ItemKind kind) => switch (kind) {
     };
 
 String moviePlayerLocation(MovieView movie, MediaFile file) =>
-    switch (movie.target) {
-      MydiaTarget(:final id) => '/player/movie/$id?fileId=${file.id}'
-          '&title=${Uri.encodeComponent(movie.title)}',
-      SourceTarget(:final ref) =>
-        sourcePlayerLocation(ref, fileId: file.id, title: movie.title),
-    };
+    sourcePlayerLocation(movie.target.ref, fileId: file.id, title: movie.title);
 
 String episodePlayerLocation(
   EpisodeView episode,
@@ -101,21 +90,14 @@ String episodePlayerLocation(
   int? resumeSeconds,
 }) {
   final showTarget = episode.showTarget;
-  return switch (episode.target) {
-    MydiaTarget(:final id) => '/player/episode/$id?fileId=${file.id}'
-        '&title=${Uri.encodeComponent(episode.fullTitle)}'
-        '${showTarget == null ? '' : '&showId=${showTarget.id}'}'
-        '&seasonNumber=${episode.seasonNumber}'
-        '${resumeSeconds == null ? '' : '&resume=$resumeSeconds'}',
-    SourceTarget(:final ref) => sourcePlayerLocation(
-        ref,
-        fileId: file.id,
-        title: episode.fullTitle,
-        extra: {
-          if (showTarget != null) 'showId': showTarget.id,
-          'seasonNumber': '${episode.seasonNumber}',
-          if (resumeSeconds != null) 'resume': '$resumeSeconds',
-        },
-      ),
-  };
+  return sourcePlayerLocation(
+    episode.target.ref,
+    fileId: file.id,
+    title: episode.fullTitle,
+    extra: {
+      if (showTarget != null) 'showId': showTarget.id,
+      'seasonNumber': '${episode.seasonNumber}',
+      if (resumeSeconds != null) 'resume': '$resumeSeconds',
+    },
+  );
 }

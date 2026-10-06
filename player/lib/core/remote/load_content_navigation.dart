@@ -65,13 +65,12 @@ class LoadContentTarget {
 /// all.
 ///
 /// Deliberately not implemented in this file: a real fetcher reads
-/// `movieDetailControllerProvider`/`episodeDetailControllerProvider`, both
-/// `presentation/` code, and `core/remote/` never imports `presentation/` —
-/// see `RemotePlayerBinding`'s dartdoc in `remote_target_controller.dart` for
-/// the same rule applied to the receiver side. `app.dart`'s
-/// `_pushLoadContent` and `CastMiniController._pullToLocal`
-/// (`presentation/widgets/cast_mini_controller.dart`) each build their own
-/// closures against those providers instead.
+/// `sourceItemProvider`, which is `presentation/` code, and `core/remote/`
+/// never imports `presentation/` — see `RemotePlayerBinding`'s dartdoc in
+/// `remote_target_controller.dart` for the same rule applied to the receiver
+/// side. `app.dart`'s `_pushLoadContent` and `CastMiniController._pullToLocal`
+/// (`presentation/widgets/cast_mini_controller.dart`) pass the fetchers in
+/// `presentation/screens/detail/load_content_fetchers.dart` instead.
 typedef LoadContentTargetFetcher = Future<LoadContentTarget> Function(
     String id);
 

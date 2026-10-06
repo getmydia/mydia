@@ -1,16 +1,12 @@
 /// What the movie, show and episode screens render, whichever server
-/// answered. Mydia-only actions read the original model from `mydia`, and
-/// only when the view lists the matching [DetailFeature].
+/// answered. A screen offers an action only when the view lists the matching
+/// [DetailFeature].
 library;
 
 import 'package:flutter/foundation.dart';
 
-import '../models/episode.dart';
-import '../models/episode_detail.dart';
 import '../models/media_file.dart';
-import '../models/movie_detail.dart';
 import '../models/progress.dart';
-import '../models/show_detail.dart';
 import '../models/watch_status.dart';
 import 'detail_art.dart';
 import 'detail_target.dart';
@@ -23,11 +19,43 @@ enum DetailFeature {
   /// Download to this device.
   download,
 
-  /// Mydia's media info sheet. Reads `mydia`.
+  /// The source's media info sheet.
   mediaInfo,
 
-  /// Download a whole season (Mydia also offers the whole show).
+  /// Download a whole season.
   seasonDownload,
+}
+
+const _monthAbbreviations = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// Formats [lastWatchedAt] for the watched badge.
+///
+/// [now] is a parameter rather than an internal `DateTime.now()` so the
+/// year-elision branch is testable without depending on the wall clock.
+/// Returns `''` when there is nothing to show, which is the caller's cue
+/// to render the badge without a date.
+String formatWatchedAt(String? lastWatchedAt, DateTime now) {
+  if (lastWatchedAt == null) return '';
+
+  final parsed = DateTime.tryParse(lastWatchedAt);
+  if (parsed == null) return '';
+
+  final local = parsed.toLocal();
+  final label = '${_monthAbbreviations[local.month - 1]} ${local.day}';
+  return local.year == now.year ? label : '$label, ${local.year}';
 }
 
 String _runtime(int? minutes) {
@@ -58,8 +86,7 @@ class SeasonView {
 
   final int number;
 
-  /// The server's own season, when it has one (Plex, Jellyfin). Null for
-  /// Mydia, which addresses a season by show and number.
+  /// The server's own season, when it names one.
   final DetailTarget? target;
   final WatchStatus? watchStatus;
 
@@ -86,8 +113,6 @@ class EpisodeView {
     this.files = const [],
     this.hasFile = true,
     this.features = const {},
-    this.mydia,
-    this.mydiaDetail,
   });
 
   final DetailTarget target;
@@ -108,12 +133,6 @@ class EpisodeView {
   final List<MediaFile> files;
   final bool hasFile;
   final Set<DetailFeature> features;
-
-  /// The Mydia episode behind a season-list entry, for the download button.
-  final Episode? mydia;
-
-  /// The Mydia episode behind the episode screen, for its download button.
-  final EpisodeDetail? mydiaDetail;
 
   /// The id the show screen's selection state holds.
   String get id => target.id;
@@ -145,8 +164,6 @@ class EpisodeView {
         files: files,
         hasFile: hasFile,
         features: features,
-        mydia: mydia,
-        mydiaDetail: mydiaDetail,
       );
 }
 
@@ -169,7 +186,6 @@ class MovieView {
     this.trailerUrl,
     this.cast = const [],
     this.features = const {},
-    this.mydia,
   });
 
   final DetailTarget target;
@@ -192,7 +208,6 @@ class MovieView {
   final String? trailerUrl;
   final List<CastView> cast;
   final Set<DetailFeature> features;
-  final MovieDetail? mydia;
 
   bool get isWatched => progress?.watched ?? false;
 
@@ -202,7 +217,7 @@ class MovieView {
   }
 
   String get watchedAtDisplay =>
-      MovieDetail.formatWatchedAt(progress?.lastWatchedAt, DateTime.now());
+      formatWatchedAt(progress?.lastWatchedAt, DateTime.now());
 
   String get yearDisplay => year?.toString() ?? '';
 
@@ -234,7 +249,6 @@ class MovieView {
         trailerUrl: trailerUrl ?? this.trailerUrl,
         cast: cast ?? this.cast,
         features: features,
-        mydia: mydia,
       );
 }
 
@@ -258,7 +272,6 @@ class ShowView {
     this.trailerUrl,
     this.cast = const [],
     this.features = const {},
-    this.mydia,
   });
 
   final DetailTarget target;
@@ -282,7 +295,6 @@ class ShowView {
   final String? trailerUrl;
   final List<CastView> cast;
   final Set<DetailFeature> features;
-  final ShowDetail? mydia;
 
   String get yearDisplay => year?.toString() ?? '';
 
@@ -313,6 +325,5 @@ class ShowView {
         trailerUrl: trailerUrl ?? this.trailerUrl,
         cast: cast ?? this.cast,
         features: features,
-        mydia: mydia,
       );
 }

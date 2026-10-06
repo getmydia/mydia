@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/presentation/widgets/media_info/media_info_controller.dart';
+import 'package:player/core/sources/mydia/mydia_media_info.dart';
 
 void main() {
   test('maps external subtitles from the query payload', () {

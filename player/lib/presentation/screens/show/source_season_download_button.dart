@@ -3,18 +3,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/downloads/bulk_download_helper.dart';
 import '../../../core/downloads/download_providers.dart';
+import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/media_source.dart';
+import '../../../core/sources/original_download.dart';
 import '../../../core/sources/source_season_download.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_request.dart';
+import '../../../domain/sources/item.dart';
+import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/toast/toaster.dart';
 import '../detail/download_metadata.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 
-/// Queues every episode of the selected season of a non-Mydia show.
+/// Queues every episode of the selected season. A source that offers more
+/// than one quality is asked which, once, for the whole season.
 class SourceSeasonDownloadButton extends ConsumerWidget {
   final ShowView show;
   final SeasonView season;
@@ -37,16 +41,44 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
         size: 22,
       ),
       tooltip: 'Download season',
-      onPressed: () => _download(context, ref, seasonTarget),
+      onPressed: () => _download(context, ref, seasonTarget.ref),
     );
+  }
+
+  /// The option to queue every episode with: the lone one a source offers
+  /// without asking, else the viewer's pick. Null when cancelled. The first
+  /// episode with a file stands for the season, as every episode of one
+  /// season is offered the same choices.
+  Future<String?> _chooseOption(
+    BuildContext context,
+    MediaSource source,
+    ItemRef seasonRef,
+  ) async {
+    final downloadable = source.as<Downloadable>();
+    if (downloadable == null) return originalOptionId;
+    final page = await source.children(seasonRef);
+    final first =
+        page.items.where((e) => e.defaultVersionId != null).firstOrNull;
+    if (first == null) return originalOptionId;
+    final options = await downloadable.downloadOptions(first.ref);
+    if (options.length < 2) {
+      return options.firstOrNull?.resolution ?? originalOptionId;
+    }
+    if (!context.mounted) return null;
+    final picked = await pickDownloadOption(
+      context,
+      title: '${show.title} - Season ${season.number}',
+      options: Future.value(options),
+    );
+    return picked?.resolution;
   }
 
   Future<void> _download(
     BuildContext context,
     WidgetRef ref,
-    DetailTarget seasonTarget,
+    ItemRef seasonRef,
   ) async {
-    final showRef = itemRefOf(show.target, ref.read(boundSourceIdProvider));
+    final showRef = show.target.ref;
     final source = ref.read(mediaSourceProvider(showRef.sourceId));
     final manager = await ref.read(downloadManagerProvider.future);
     if (!context.mounted) return;
@@ -56,9 +88,12 @@ class SourceSeasonDownloadButton extends ConsumerWidget {
     }
     final BulkDownloadResult result;
     try {
+      final optionId = await _chooseOption(context, source, seasonRef);
+      if (optionId == null) return;
       result = await queueSourceSeason(
         source: source,
-        season: itemRefOf(seasonTarget, showRef.sourceId),
+        season: seasonRef,
+        optionId: optionId,
         manager: manager,
         metadataFor: (e) {
           final seasonNumber = e.parentIndex ?? season.number;

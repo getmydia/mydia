@@ -34,9 +34,8 @@ class _ContinueWatchingScreenState
     showMediaContextMenu(
       posterContext,
       target: MediaContextTarget(
-        id: item.ref.externalId,
-        type: item.ref.kind.name,
-        continueWatchingId: item.dismissRef.externalId,
+        item: item.ref,
+        continueWatching: item.dismissRef,
       ),
       // Unreachable: with `tapPlays` false the menu never offers Play.
       onPlay: () {},
