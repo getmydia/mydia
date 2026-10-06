@@ -7,6 +7,7 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_search_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -46,6 +47,17 @@ void main() {
     expect(find.byKey(const Key('all-search-section-movies')), findsOneWidget);
     expect(find.byKey(const Key('all-search-section-shows')), findsOneWidget);
     expect(find.byKey(const Key('all-search-section-episodes')), findsNothing);
+  });
+
+  testWidgets('the field sits in the browse bar beside the cast button',
+      (t) async {
+    await pump(t, sources: [
+      FakeMergedSource(fakeServer('a')),
+      FakeMergedSource(fakeServer('b')),
+    ]);
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+    expect(find.byKey(const Key('all-search-field')), findsOneWidget);
   });
 
   testWidgets('nothing found says so', (t) async {
