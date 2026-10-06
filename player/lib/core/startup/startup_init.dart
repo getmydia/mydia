@@ -21,6 +21,7 @@ class StartupSteps {
     required this.downloadDb,
     required this.sidebarLayoutStore,
     required this.connection,
+    this.legacyMigration,
   });
 
   /// Null when this build has no Rust bridge to load (web without p2p).
@@ -36,6 +37,10 @@ class StartupSteps {
   final Future<void> Function()? downloadDb;
   final Future<SidebarLayoutStore> Function() sidebarLayoutStore;
   final Future<ConnectionState?> Function() connection;
+
+  /// Moves the single-server sign-in into an ordinary account. Runs once the
+  /// source cache and download database are open; given the opened cache.
+  final Future<void> Function(SourceCache cache)? legacyMigration;
 }
 
 sealed class StartupOutcome {
@@ -155,6 +160,13 @@ Future<StartupOutcome> runStartup(
     return StartupRustFailed(rustFailure.$1, rustFailure.$2);
   }
   if (lockError case final error?) return StartupAlreadyRunning(error);
+
+  // After the source cache and download database are open, which the
+  // data rewrite reads and writes.
+  if (steps.legacyMigration case final migrate?) {
+    await guarded('Legacy Mydia migration', () => migrate(sourceCache));
+    timeline.mark('legacy_migration');
+  }
 
   final sidebar = await steps.sidebarLayoutStore();
   timeline.mark('sidebar');

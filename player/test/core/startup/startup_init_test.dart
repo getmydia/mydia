@@ -35,6 +35,7 @@ StartupSteps _steps({
   Future<SourceCache> Function()? sourceCache,
   Future<void> Function()? downloadDb,
   Future<SidebarLayoutStore> Function()? sidebar,
+  Future<void> Function(SourceCache cache)? legacyMigration,
   List<String>? started,
 }) {
   Future<void> Function() track(String name, [Future<void> Function()? body]) =>
@@ -51,6 +52,7 @@ StartupSteps _steps({
     downloadDb: downloadDb ?? track('downloads'),
     sidebarLayoutStore: sidebar ?? () async => InMemorySidebarLayoutStore(),
     connection: () async => null,
+    legacyMigration: legacyMigration,
   );
 }
 
@@ -123,6 +125,43 @@ void main() {
     );
     expect(outcome, isA<StartupReady>());
     expect((outcome as StartupReady).sourceCache, isA<InMemorySourceCache>());
+  });
+
+  test('the legacy migration runs after the cache and downloads open',
+      () async {
+    final order = <String>[];
+    final cache = InMemorySourceCache();
+    SourceCache? given;
+    final timeline = StartupTimeline('t');
+    final outcome = await runStartup(
+      _steps(
+        sourceCache: () async {
+          order.add('cache');
+          return cache;
+        },
+        downloadDb: () async => order.add('downloads'),
+        legacyMigration: (c) async {
+          given = c;
+          order.add('migration');
+        },
+      ),
+      timeline: timeline,
+    );
+    expect(outcome, isA<StartupReady>());
+    expect(given, same(cache));
+    expect(order.last, 'migration');
+    expect(order, containsAll(['cache', 'downloads']));
+    expect(timeline.marks.keys, contains('legacy_migration'));
+  });
+
+  test('a throwing legacy migration does not stop startup', () async {
+    final timeline = StartupTimeline('t');
+    final outcome = await runStartup(
+      _steps(legacyMigration: (_) async => throw StateError('boom')),
+      timeline: timeline,
+    );
+    expect(outcome, isA<StartupReady>());
+    expect(timeline.marks.keys, contains('legacy_migration'));
   });
 
   test('records the step marks', () async {
