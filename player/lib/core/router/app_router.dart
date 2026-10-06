@@ -9,7 +9,6 @@ import '../sources/media_source.dart' show MediaSource;
 import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../sources/sources_providers.dart';
-import '../sources/mydia/bound_mydia.dart';
 import '../../domain/sources/library.dart';
 import '../../presentation/screens/sources/unlock_screen.dart';
 import '../../presentation/screens/sources/source_player_route.dart';
@@ -241,9 +240,6 @@ GoRouter appRouter(Ref ref) {
 
   // Simple notifier just to trigger GoRouter refreshes
   final refreshNotifier = _RouterRefreshNotifier();
-
-  // Binding or removing the Mydia instance changes where the router lands.
-  ref.listen(boundMydiaProvider, (_, __) => refreshNotifier.refresh());
 
   // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());

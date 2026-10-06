@@ -3,7 +3,6 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../sources/mydia/bound_mydia.dart';
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
 import '../sources/store/source_records.dart';
@@ -79,6 +78,12 @@ String? legacyLocation(
   }
   return null;
 }
+
+/// The account id the startup migration made of the legacy sign-in, if any.
+final legacyInstanceIdProvider = FutureProvider<String?>((ref) async {
+  final store = await ref.watch(sourceStoreProvider.future);
+  return store.legacyInstanceId();
+});
 
 /// The migrated instance's source, while its account exists.
 final legacyMydiaSourceIdProvider = Provider<SourceId?>((ref) {

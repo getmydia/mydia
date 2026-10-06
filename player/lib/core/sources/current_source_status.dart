@@ -5,7 +5,6 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'media_source.dart';
-import 'mydia/bound_mydia.dart';
 import 'source.dart';
 import 'sources_providers.dart';
 
@@ -29,12 +28,8 @@ final currentSourceStatusProvider = Provider<SourceConnectionStatus?>((ref) {
 });
 
 /// Which source a screen at [location] belongs to: the `/s/<id>` source, else
-/// the bound Mydia instance (the legacy screens), else the [active] source.
-SourceId? statusSourceIdFor(
-  String location, {
-  SourceId? bound,
-  SourceId? active,
-}) {
+/// the [active] source.
+SourceId? statusSourceIdFor(String location, {SourceId? active}) {
   if (location.startsWith('/s/')) {
     final segment = location.substring(3).split('/').first;
     if (segment.isNotEmpty) {
@@ -47,7 +42,7 @@ SourceId? statusSourceIdFor(
       }
     }
   }
-  return bound ?? active;
+  return active;
 }
 
 /// The connection status of the source the screen at a location belongs to.
@@ -55,7 +50,6 @@ final routeSourceStatusProvider = Provider.autoDispose
     .family<SourceConnectionStatus?, String>((ref, location) {
   final id = statusSourceIdFor(
     location,
-    bound: ref.watch(boundSourceIdProvider),
     active: ref.watch(activeSourceIdProvider),
   );
   return id == null ? null : ref.watch(sourceStatusProvider(id));

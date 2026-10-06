@@ -3,16 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'test_utils/bound_mydia_override.dart';
 import 'package:player/app.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
-import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 const _device = CastDevice(
@@ -45,12 +41,9 @@ void main() {
     CastSession? session,
   }) async {
     final container = ProviderContainer(overrides: [
-      ...boundMydiaOverrides(),
+      sourcesLoadingProvider.overrideWithValue(false),
+      hasMydiaProvider.overrideWithValue(true),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      asyncGraphqlClientProvider
-          .overrideWith((ref) => Completer<GraphQLClient>().future),
-      asyncBoundMydiaClientProvider
-          .overrideWith((ref) => Completer<MydiaClient>().future),
       castSessionProvider.overrideWith((ref) => Stream.value(session)),
       castSessionManagerProvider
           .overrideWith((ref) => Completer<CastSessionManager>().future),

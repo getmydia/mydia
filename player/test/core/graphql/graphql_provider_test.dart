@@ -1,9 +1,5 @@
-import 'dart:io';
-import 'package:hive_ce/hive.dart' show Hive;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart'
-    show GraphQLClient, HiveStore;
-import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/source_link.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -86,7 +82,7 @@ void main() {
     });
   });
 
-  group('derived from the bound Mydia instance', () {
+  group('source link', () {
     const urlAccount = MydiaCredentials(
         instanceId: 'a',
         accessToken: 'tok-a',
@@ -94,82 +90,26 @@ void main() {
     const p2pAccount = MydiaCredentials(
         instanceId: 'b', accessToken: 'tok-b', nodeAddr: '{"id":"node-b"}');
 
-    late Directory hiveDir;
-
-    setUpAll(() async {
-      hiveDir = Directory.systemTemp.createTempSync('graphql_provider_test');
-      Hive.init(hiveDir.path);
-      await HiveStore.open();
-    });
-
-    tearDownAll(() async {
-      await Hive.close();
-      hiveDir.deleteSync(recursive: true);
-    });
-
     Future<ProviderContainer> containerWith(
-      Map<String, MydiaCredentials> accounts, {
-      void Function()? onReset,
-    }) async {
+      Map<String, MydiaCredentials> accounts,
+    ) async {
       final h = await boundMydiaHarness(accounts, overrides: [
         deviceProfileHolderProvider.overrideWithValue(DeviceProfileHolder()),
-        if (onReset != null)
-          graphqlCacheResetProvider.overrideWithValue(onReset),
       ]);
       addTearDown(h.container.dispose);
       await h.container.read(sourceRecordsProvider.future);
-      await h.container.read(legacyInstanceIdProvider.future);
       return h.container;
     }
 
-    test('graphqlClientProvider is null with no Mydia account', () async {
-      final container = await containerWith({});
-      expect(container.read(graphqlClientProvider), isNull);
-    });
-
-    test('graphqlClientProvider is a client once an account exists', () async {
+    test('a URL account is not via p2p', () async {
       final container = await containerWith({'a': urlAccount});
-      expect(container.read(graphqlClientProvider), isA<GraphQLClient>());
-      expect(await container.read(asyncGraphqlClientProvider.future),
-          isA<GraphQLClient>());
-    });
-
-    test('removing the bound instance rebuilds the client and resets the cache',
-        () async {
-      var resets = 0;
-      final container = await containerWith({'a': urlAccount, 'b': p2pAccount},
-          onReset: () => resets++);
-      container.listen(graphqlClientProvider, (_, __) {});
-      final before = container.read(graphqlClientProvider);
-      expect(before, isNotNull);
-
-      await container.read(sourceRecordsProvider.notifier).removeAccount('ma');
-
-      final after = container.read(graphqlClientProvider);
-      expect(after, isNotNull);
-      expect(after, isNot(same(before)));
-      expect(resets, 1);
-    });
-
-    test('serverUrlProvider and authTokenProvider read the bound credentials',
-        () async {
-      final container = await containerWith({'a': urlAccount});
-      expect(await container.read(serverUrlProvider.future),
-          'https://a.example.test');
-      expect(await container.read(authTokenProvider.future), 'tok-a');
-    });
-
-    test('the bound source is not via p2p for a URL account', () async {
-      final container = await containerWith({'a': urlAccount});
-      await container.read(boundMydiaCredentialsProvider.future);
-      final id = container.read(boundSourceIdProvider)!;
+      final id = container.read(mydiaSourceIdsProvider).single;
       expect(await container.read(sourceViaP2pProvider(id).future), isFalse);
     });
 
-    test('the bound source is via p2p for a p2p account', () async {
+    test('a p2p account is via p2p', () async {
       final container = await containerWith({'b': p2pAccount});
-      await container.read(boundMydiaCredentialsProvider.future);
-      final id = container.read(boundSourceIdProvider)!;
+      final id = container.read(mydiaSourceIdsProvider).single;
       expect(await container.read(sourceViaP2pProvider(id).future), isTrue);
     });
   });

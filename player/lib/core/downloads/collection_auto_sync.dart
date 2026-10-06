@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
-import '../sources/mydia/bound_mydia.dart';
+import '../router/legacy_routes.dart';
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
 import 'collection_sync_providers.dart';
@@ -101,10 +101,10 @@ class CollectionAutoSync {
 
         try {
           // A config saved before sources were addressable belongs to the
-          // bound Mydia instance, which is where it was made.
+          // migrated legacy instance, which is where it was made.
           final configSourceId = config['sourceId'];
           final sourceId = configSourceId == null
-              ? _read(boundSourceIdProvider)
+              ? _read(legacyMydiaSourceIdProvider)
               : SourceId(configSourceId);
           final source =
               sourceId == null ? null : _read(mediaSourceProvider(sourceId));

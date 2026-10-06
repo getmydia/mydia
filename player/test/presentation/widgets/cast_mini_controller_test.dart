@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
@@ -15,7 +14,6 @@ import 'package:player/core/cast/cast_seek.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_dismissals.dart';
@@ -101,8 +99,6 @@ Future<ProviderContainer> _pump(
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
     hasMydiaProvider.overrideWithValue(true),
-    asyncGraphqlClientProvider
-        .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(session)),
     ...extraOverrides,
   ]);
@@ -245,8 +241,6 @@ Future<ProviderContainer> _pumpWithManager(
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
     hasMydiaProvider.overrideWithValue(true),
-    asyncGraphqlClientProvider
-        .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionManagerProvider.overrideWith((ref) async {
       ref.onDispose(harness.manager.dispose);
       return harness.manager;
@@ -285,8 +279,6 @@ Future<bool Function()> _pumpLayer(
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
     hasMydiaProvider.overrideWithValue(true),
-    asyncGraphqlClientProvider
-        .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(null)),
   ]);
   addTearDown(container.dispose);
@@ -1506,8 +1498,6 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.web()),
         hasMydiaProvider.overrideWithValue(true),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
       ]);
@@ -1532,8 +1522,6 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         hasMydiaProvider.overrideWithValue(false),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
       ]);
@@ -1568,8 +1556,6 @@ void main() {
             .overrideWithValue(const CastCapabilities.web()),
         mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
         hasMydiaProvider.overrideWithValue(true),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider
             .overrideWith((ref) => Stream.value([ambientTarget])),
@@ -1599,8 +1585,6 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         hasMydiaProvider.overrideWithValue(true),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
       ]);
@@ -1631,8 +1615,6 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         hasMydiaProvider.overrideWithValue(true),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider
             .overrideWith((ref) => Stream.value([ambientTarget])),
@@ -1958,8 +1940,6 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         hasMydiaProvider.overrideWithValue(true),
-        asyncGraphqlClientProvider
-            .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
         ambientPlayingProvider.overrideWith((ref) =>
             Stream.value([_ambient('node-tv', 'The Lantern Keepers')])),

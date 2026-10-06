@@ -2,11 +2,11 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/compatibility/compatibility.dart';
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/domain/sources/source_error.dart';
 
@@ -52,7 +52,16 @@ var _boxCounter = 0;
 Future<Box<bool>> memoryBox() =>
     Hive.openBox<bool>('compat-test-${_boxCounter++}', bytes: Uint8List(0));
 
-/// A bound server answering [response], or refusing the query as a server
+const _activeId = SourceId('mydia-active');
+
+/// The overrides that make a server answering [client] the active source.
+List<Override> activeServer(MydiaClient client) => [
+      activeSourceIdProvider.overrideWithValue(_activeId),
+      mediaSourceProvider(_activeId)
+          .overrideWithValue(MydiaSource(source: guest, client: client)),
+    ];
+
+/// A server answering [response], or refusing the query as a server
 /// predating the feature does when [response] is null.
 MydiaClient serverAnswering(Map<String, dynamic>? response) {
   final transport = FakeMydiaTransport();
@@ -70,7 +79,7 @@ ProviderContainer harness({
 }) {
   final container = ProviderContainer(
     overrides: [
-      boundMydiaClientProvider.overrideWithValue(serverAnswering(response)),
+      ...activeServer(serverAnswering(response)),
       playerVersionProvider.overrideWith((ref) async => playerVersion),
       compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
     ],
@@ -252,11 +261,9 @@ void main() {
       // instead of retrying for a real Exception until the test times out.
       retry: (retryCount, error) => null,
       overrides: [
-        boundMydiaClientProvider.overrideWithValue(
-          serverAnswering(
-            okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
-          ),
-        ),
+        ...activeServer(serverAnswering(
+          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+        )),
         playerVersionProvider.overrideWith((ref) async => '0.8.0'),
         compatibilityDismissalBoxProvider
             .overrideWith((ref) async => throw Exception('box open failed')),
@@ -315,7 +322,6 @@ void main() {
         {MediaSource? other}) async {
       final box = await memoryBox();
       final container = ProviderContainer(overrides: [
-        boundMydiaClientProvider.overrideWithValue(null),
         activeSourceIdProvider.overrideWithValue(active),
         mediaSourceProvider(a).overrideWithValue(
             MydiaSource(source: guest, client: serverAnswering(okResponse()))),

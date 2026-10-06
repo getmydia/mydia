@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/downloads/orphan_download_sweep.dart';
 import 'package:player/core/playback/playback_progress_providers.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
@@ -25,7 +24,7 @@ class _Src extends FakeMediaSource {
 
 const _plexId = fakeSourceId;
 
-/// Pumps the real shell at [location], with the bound Mydia and a Plex source
+/// Pumps the real shell at [location], with a Mydia and a Plex source
 /// whose statuses the caller sets, and Plex as the active source.
 Future<void> _pumpShell(
   WidgetTester tester,
@@ -42,7 +41,6 @@ Future<void> _pumpShell(
     overrides: [
       sourceProgressFlushProvider.overrideWith((ref) {}),
       orphanDownloadSweepProvider.overrideWith((ref) {}),
-      boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
       activeSourceIdProvider.overrideWithValue(_plexId),
       mediaSourceProvider(testMydiaSourceId).overrideWithValue(mydiaSource),
       mediaSourceProvider(_plexId).overrideWithValue(plexSource),
@@ -78,10 +76,18 @@ void main() {
   group('the shell follows the source its route belongs to', () {
     testWidgets('Plex unreachable while on a Mydia route: no banner',
         (tester) async {
-      await _pumpShell(tester, '/',
+      await _pumpShell(tester, '/s/${testMydiaSourceId.value}',
           mydia: SourceConnectionStatus.remote,
           plex: SourceConnectionStatus.unreachable);
       expect(find.byType(OfflineBanner), findsNothing);
+    });
+
+    testWidgets('off any source route the active source decides',
+        (tester) async {
+      await _pumpShell(tester, '/sources/manage',
+          mydia: SourceConnectionStatus.remote,
+          plex: SourceConnectionStatus.unreachable);
+      expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
     testWidgets('on the Plex route with Plex unreachable: banner shows',
@@ -92,9 +98,9 @@ void main() {
       expect(find.byType(OfflineBanner), findsOneWidget);
     });
 
-    testWidgets('bound Mydia unreachable on a Mydia route: banner shows',
+    testWidgets('Mydia unreachable on its own route: banner shows',
         (tester) async {
-      await _pumpShell(tester, '/',
+      await _pumpShell(tester, '/s/${testMydiaSourceId.value}',
           mydia: SourceConnectionStatus.unreachable,
           plex: SourceConnectionStatus.remote);
       expect(find.byType(OfflineBanner), findsOneWidget);

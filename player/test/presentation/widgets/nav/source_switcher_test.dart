@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/source_switcher.dart';
@@ -67,7 +66,6 @@ Future<(ProviderContainer, _Calls)> _pump(
     overrides: [
       thirdPartySourcesProvider
           .overrideWithValue([testMydiaSource, ...thirdParty]),
-      boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
       allServersSourcesProvider.overrideWithValue(included),
     ],
   );
@@ -123,14 +121,12 @@ void main() {
     expect(_headerName(tester), 'Basement');
   });
 
-  testWidgets(
-      'names the bound Mydia on a Mydia page even when Plex is remembered',
-      (tester) async {
+  testWidgets('names the remembered pick off a source route', (tester) async {
     final (container, _) =
         await _pump(tester, thirdParty: [_plex()], location: '/settings');
     container.read(selectedSourceIdProvider.notifier).select(_plex().id);
     await tester.pump();
-    expect(_headerName(tester), 'Harborview');
+    expect(_headerName(tester), 'Basement');
   });
 
   testWidgets('a Mydia header keeps its account caption', (tester) async {
@@ -153,7 +149,6 @@ void main() {
     final calls = _Calls();
     final container = ProviderContainer(overrides: [
       thirdPartySourcesProvider.overrideWithValue([testMydiaSource, _plex()]),
-      boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
       accountProfilesProvider('acc1').overrideWithValue(const [
         SourceProfile(
             id: 'owner', accountId: 'acc1', name: 'Owner', isOwner: true),
@@ -192,24 +187,25 @@ void main() {
     expect(calls.navigations, isEmpty);
   });
 
-  testWidgets('a Mydia that is not bound opens its own routes', (tester) async {
+  testWidgets('every Mydia opens its own routes', (tester) async {
     final (_, calls) = await _pump(tester,
         thirdParty: [_guest()], location: '/s/mguest:owner:inst-2');
     expect(find.text('Mydia · Lakeside'), findsOneWidget);
     await _openAndTap(
         tester, const ValueKey('source-switcher-macct:owner:inst-1'));
-    expect(calls.switches, ['/']);
+    expect(calls.switches, ['/s/macct:owner:inst-1']);
     await _openAndTap(
         tester, const ValueKey('source-switcher-mguest:owner:inst-2'));
     expect(calls.switches.last, '/s/mguest:owner:inst-2');
   });
 
-  testWidgets('switching to the bound Mydia goes home', (tester) async {
+  testWidgets('switching to the first Mydia goes to its own home, not `/`',
+      (tester) async {
     final (_, calls) = await _pump(tester,
         thirdParty: [_plex()], location: '/s/acc1:owner:srv9');
     await _openAndTap(
         tester, const ValueKey('source-switcher-macct:owner:inst-1'));
-    expect(calls.switches, ['/']);
+    expect(calls.switches, ['/s/macct:owner:inst-1']);
   });
 
   testWidgets('without onSwitchSource a switch goes through onNavigate',
@@ -255,29 +251,16 @@ void main() {
     expect(calls.switches, ['/all']);
   });
 
-  test('currentFor prefers the location, then the bound Mydia, then the pick',
-      () {
+  test('currentFor prefers the location, then the pick, then the first', () {
     final plex = _plex();
     const mydia = testMydiaSource;
     expect(
-        SourceSwitcher.currentFor([mydia, plex], '/s/acc1:owner:srv9', mydia.id,
-            bound: mydia.id),
+        SourceSwitcher.currentFor(
+            [mydia, plex], '/s/acc1:owner:srv9', mydia.id),
         plex);
     expect(
-        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id,
-            bound: mydia.id),
-        mydia);
+        SourceSwitcher.currentFor([mydia, plex], '/settings', plex.id), plex);
     expect(SourceSwitcher.currentFor([plex], '/sources/manage', plex.id), plex);
-  });
-
-  test(
-      'currentFor names the bound Mydia, not one listed first, off a source '
-      'route', () {
-    const mydia = testMydiaSource;
-    final guest = _guest();
-    expect(
-        SourceSwitcher.currentFor([guest, mydia], '/sources/manage', guest.id,
-            bound: mydia.id),
-        mydia);
+    expect(SourceSwitcher.currentFor([plex, mydia], '/settings', null), plex);
   });
 }

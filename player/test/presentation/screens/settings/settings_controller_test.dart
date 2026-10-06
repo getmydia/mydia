@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/models/user_settings.dart';
@@ -12,11 +11,10 @@ void main() {
     final h = await boundMydiaHarness(accounts);
     addTearDown(h.container.dispose);
     await h.container.read(sourceRecordsProvider.future);
-    await h.container.read(legacyInstanceIdProvider.future);
     return h.container.read(settingsControllerProvider.future);
   }
 
-  test('identity comes from the bound server credentials', () async {
+  test('identity comes from the active server credentials', () async {
     final settings = await load({
       'a': const MydiaCredentials(
         instanceId: 'a',
@@ -41,7 +39,7 @@ void main() {
     expect(settings.username, '');
   });
 
-  test('nothing bound reads as blank', () async {
+  test('no server reads as blank', () async {
     final settings = await load({});
     expect(settings.serverUrl, '');
     expect(settings.username, '');

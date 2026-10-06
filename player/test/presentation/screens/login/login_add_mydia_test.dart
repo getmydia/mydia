@@ -197,23 +197,23 @@ void main() {
     expect(authStorage.keys, isEmpty);
   });
 
-  test('the first server added is the bound one, the next is not', () async {
+  test('every server added reports its own source, the first included',
+      () async {
     final c = await listening(
         containerFor(pairing: _FakePairing(_credentials('inst-2'))));
     final controller = c.read(loginControllerProvider.notifier);
 
     await controller.pairWithClaimCode('ABC123');
-    expect(c.read(loginControllerProvider).addedIsBound, isTrue);
+    expect(c.read(loginControllerProvider).addedSource,
+        const SourceId('minst-2:owner:inst-2'));
 
     final second = await listening(
         containerFor(pairing: _FakePairing(_credentials('inst-3'))));
     await second
         .read(loginControllerProvider.notifier)
         .pairWithClaimCode('ABC123');
-    // Same store: inst-2 was there first, so inst-3 is not the bound one.
     final state = second.read(loginControllerProvider);
     expect(state.addedSource, const SourceId('minst-3:owner:inst-3'));
-    expect(state.addedIsBound, isFalse);
   });
 
   test('a TOTP login saves an account and writes no legacy key', () async {

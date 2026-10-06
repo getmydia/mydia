@@ -38,12 +38,10 @@ const _idB = SourceId('acc2:owner:bb22');
 }
 
 void main() {
-  test('statusSourceIdFor: /s/<id> wins, else bound, else active', () {
-    expect(
-        statusSourceIdFor('/s/acc2%3Aowner%3Abb22/library/1',
-            bound: _idA, active: _idA),
+  test('statusSourceIdFor: /s/<id> wins, else active', () {
+    expect(statusSourceIdFor('/s/acc2%3Aowner%3Abb22/library/1', active: _idA),
         _idB);
-    expect(statusSourceIdFor('/', bound: _idA, active: _idB), _idA);
+    expect(statusSourceIdFor('/', active: _idB), _idB);
     expect(statusSourceIdFor('/movies', active: _idB), _idB);
     expect(statusSourceIdFor('/'), isNull);
   });

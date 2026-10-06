@@ -20,9 +20,9 @@ The Mydia login that predates this layer is migrated at startup into an
 ordinary account (`core/migration/`), and its stored data moves to that
 account's `SourceId`. There is no fixed source id: every Mydia server is a
 stored account with a `MydiaSource`, and its screens are the same `/s/<id>/...`
-screens every other source uses. Playback still goes through one of them, the
-bound instance (`boundMydiaProvider` in `mydia/bound_mydia.dart`): the
-migrated account while it exists, else the first Mydia added.
+screens every other source uses. No Mydia instance is special. The migrated
+account is only remembered (`legacyMydiaSourceIdProvider`) so old unprefixed
+links and pre-instance download-sync entries find their owner.
 
 The source switcher groups servers by account, with a caption per account.
 
@@ -118,7 +118,7 @@ is per source: there is no global auth state.
 
 HLS uses `playlistMode: FULL` and `SimplePlaybackTransport`, with the bearer
 token on the stream. Over p2p the local proxy serves an instance at
-`/t/<accountId>/...`, and the bound instance also keeps the bare path. The
+`/t/<accountId>/...`. The
 player screen lets go of its targets with `MediaProxy.release(owner)`, which
 releases every target that owner took.
 
@@ -147,18 +147,13 @@ migration only reads the legacy keys: nothing deletes them before the stage
 that retires `AuthService` and the pairing storage, which also keeps a
 downgrade working.
 
-### The bound instance
+### Per-instance reads
 
-Browsing, search, details, the Mydia settings, the device list and node
-registration read the instance that owns the item or the route (see Screens
-and Cast). Playback does not yet: the player screen, `MydiaPlaybackSession`,
-`castSessionManagerProvider`, `ProgressService`, the download job services and
-`graphqlClientProvider` ride one instance. `boundMydiaProvider`
-(`mydia/bound_mydia.dart`) is the account named by `legacy_instance_id` while
-that account exists, else the first Mydia account added. The GraphQL client is
-a `TransportLink` over its `MydiaClient`, so those services share its token and
-refresh. Signing out removes the bound instance, and the first Mydia left
-becomes bound. The shell's offline state follows the route's source.
+Browsing, search, details, playback, the Mydia settings, the device list and
+node registration read the instance that owns the item or the route (see
+Screens and Cast). The shell's offline state follows the route's source, else
+the active one. A test (`no_bound_instance_test.dart`) keeps any one instance
+from becoming special again.
 
 ### Web
 
@@ -251,8 +246,6 @@ paired to several instances is one entry.
   settings screen, `/sources/manage/:sourceId` (`MydiaInstanceScreen`).
   `/settings/devices` redirects there.
 
-The cast session itself (`castSessionManagerProvider`) still runs on the
-bound instance.
 
 ## HTTP and errors
 

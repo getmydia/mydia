@@ -1,8 +1,11 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
+import '../../../core/sources/mydia/mydia_credentials.dart';
+import '../../../core/sources/mydia/mydia_source.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../core/settings/settings_providers.dart';
 import '../../../core/settings/settings_service.dart';
 import '../../../domain/models/user_settings.dart';
+import '../../../domain/sources/source_error.dart';
 
 part 'settings_controller.g.dart';
 
@@ -26,11 +29,20 @@ class SettingsController extends _$SettingsController {
   Future<UserSettings> _loadSettings() async {
     final settingsService = ref.read(settingsServiceProvider);
 
-    // The bound server's own credentials, not the legacy sign-in keys.
+    // The active Mydia server's own credentials, not the legacy sign-in keys.
     // Watched before any await, so a switch of server reloads this.
+    final id = ref.watch(activeSourceIdProvider);
+    final source = id == null ? null : ref.watch(mediaSourceProvider(id));
     final accountName =
-        ref.watch(boundMydiaProvider)?.source.account.displayName;
-    final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
+        source is MydiaSource ? source.source.account.displayName : null;
+    MydiaCredentials? credentials;
+    if (source is MydiaSource) {
+      try {
+        credentials = await source.client.credentials();
+      } on SourceException {
+        credentials = null;
+      }
+    }
     final defaultQuality = await settingsService.getDefaultQuality();
     final autoSkipSegments = await settingsService.getAutoSkipSegments();
 

@@ -71,54 +71,14 @@ flutter pub run build_runner watch
 
 ### Using the GraphQL Client
 
-The GraphQL client is provided via Riverpod and automatically includes authentication headers.
-
-```dart
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
-
-class MyWidget extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final client = ref.watch(graphqlClientProvider);
-
-    if (client == null) {
-      return Text('Not connected to server');
-    }
-
-    return GraphQLProvider(
-      client: ValueNotifier(client),
-      child: Query(
-        options: QueryOptions(
-          document: gql(homeScreenQuery),
-          variables: {
-            'continueWatchingLimit': 10,
-            'recentlyAddedLimit': 20,
-          },
-        ),
-        builder: (result, {refetch, fetchMore}) {
-          if (result.isLoading) {
-            return CircularProgressIndicator();
-          }
-
-          if (result.hasException) {
-            return Text('Error: ${result.exception}');
-          }
-
-          final data = result.data!;
-          // Use the data...
-        },
-      ),
-    );
-  }
-}
-```
+There is no app-wide GraphQL client. Each Mydia instance's `MydiaSource` owns a
+`MydiaClient` that carries its authentication headers, and screens reach it
+through `mediaSourceProvider(sourceId)`.
 
 ### Authentication
 
-There is no global auth state. The client talks to the bound Mydia instance
-(`boundMydiaClientProvider`), which owns its token and refresh. Add or remove
+There is no global auth state. Each Mydia instance's `MydiaClient` (from its
+`MydiaSource`) owns its token and refresh. Add or remove
 the server through the sources screens (`removeMydiaInstance` signs out).
 
 ## Available Queries

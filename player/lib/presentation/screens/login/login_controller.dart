@@ -5,7 +5,6 @@ import '../../../core/channels/pairing_service.dart';
 import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/p2p/p2p_service.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/sources/mydia/mydia_saver.dart';
 import '../../../core/sources/mydia/mydia_credentials.dart';
 import '../../../core/sources/source.dart';
@@ -91,7 +90,6 @@ class LoginState {
     this.credentialsNotPersisted = false,
     this.totpChallenge,
     this.addedSource,
-    this.addedIsBound = false,
   });
 
   final ConnectionMode mode;
@@ -113,10 +111,6 @@ class LoginState {
   /// The Mydia source a successful add produced.
   final SourceId? addedSource;
 
-  /// Whether [addedSource] is the instance the legacy screens serve, which
-  /// the app opens on `/` rather than on the source's own page.
-  final bool addedIsBound;
-
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
@@ -128,7 +122,6 @@ class LoginState {
     TotpChallenge? totpChallenge,
     bool clearTotpChallenge = false,
     SourceId? addedSource,
-    bool? addedIsBound,
   }) {
     return LoginState(
       mode: mode ?? this.mode,
@@ -142,7 +135,6 @@ class LoginState {
       totpChallenge:
           clearTotpChallenge ? null : (totpChallenge ?? this.totpChallenge),
       addedSource: addedSource ?? this.addedSource,
-      addedIsBound: addedIsBound ?? this.addedIsBound,
     );
   }
 
@@ -410,17 +402,15 @@ class LoginController extends _$LoginController {
       reauthAccountId: reauthAccountId,
     );
     if (!ref.mounted) return;
-    // The record may not have reached the bound-instance provider yet, so
-    // wait for the stores it reads before asking which instance is bound.
+    // The record may not have reached the source providers yet, so wait for
+    // the store before the caller navigates to the new source's page.
     await ref.read(sourceRecordsProvider.future);
-    await ref.read(legacyInstanceIdProvider.future);
     if (!ref.mounted) return;
     state = state.copyWith(
       isLoading: false,
       success: true,
       credentialsNotPersisted: ref.read(sourceSecretsProvider).degraded,
       addedSource: id,
-      addedIsBound: ref.read(boundMydiaProvider)?.source.id == id,
       clearTotpChallenge: true,
       claimCodeStatus: claimCodeStatus,
       claimCodeMessage: claimCodeMessage,

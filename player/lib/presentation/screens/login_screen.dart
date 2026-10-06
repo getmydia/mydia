@@ -263,10 +263,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
 
     final added = state.addedSource;
-    // The instance the legacy screens serve opens on `/`; any other server
-    // opens on its own page.
-    context.go(
-        added == null || state.addedIsBound ? '/' : sourceHomeLocation(added));
+    // A new server opens on its own page.
+    context.go(added == null ? '/' : sourceHomeLocation(added));
   }
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {

@@ -92,10 +92,10 @@ Future<void> handleControlRequest({
 /// Deliberately not "have we ever attempted" — an opt-out or a transient
 /// startup failure (no reachable server yet, a registration error) must stay
 /// retryable for the rest of the launch, not just for the first
-/// bound-instance change. What actually latches this closed is a
+/// source change. What actually latches this closed is a
 /// receiver successfully wired ([succeed]): from then on every further call
-/// is a no-op, whether the setting flips off and back on or the bound
-/// instance re-emits.
+/// is a no-op, whether the setting flips off and back on or a source
+/// re-emits.
 ///
 /// Extracted as its own class — like [handleControlRequest] above — because
 /// `_initRemoteControlIfEnabled` itself cannot be exercised by a widget test
@@ -241,10 +241,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // wired (see `RemoteControlInitGate`), so re-invoking it here on every
     // change is safe, and is what makes the settings switch take effect for
     // the rest of this launch instead of only the next one. Gated on auth
-    // the same way `_initRemoteControlIfEnabled` itself is — see that
-    // method's own dartdoc for why reading `asyncGraphqlClientProvider`
-    // before a server is bound is not merely pointless but actively harmful in
-    // tests.
+    // the same way `_initRemoteControlIfEnabled` itself is: with no Mydia
+    // server stored there is nothing to register with.
     ref.listenManual<AsyncValue<bool>>(
       remoteControlEnabledProvider,
       (previous, next) {
@@ -275,8 +273,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     unawaited(_windowFrame.load());
   }
 
-  /// Whether a restore has already been attempted this launch. The bound
-  /// instance can re-emit (a token refresh, a reconnect) and restoring is a
+  /// Whether a restore has already been attempted this launch. A source
+  /// can re-emit (a token refresh, a reconnect) and restoring is a
   /// once-per-launch action.
   bool _castRestoreAttempted = false;
 
@@ -295,7 +293,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   /// Whether the controllable-device startup path still needs to run. Not a
-  /// once-per-launch flag: the bound instance can re-emit
+  /// once-per-launch flag: a source can re-emit
   /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
   /// and either must be able to retry an opt-out or a transient failure.
   /// What actually stops wiring a second receiver onto

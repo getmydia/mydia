@@ -195,14 +195,9 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     if (!capabilities.any && !hasMydia) return null;
 
     // Gate on a Mydia server before touching anything else in the cast stack.
-    // `isCastingProvider` reaches `castSessionManagerProvider`, whose body
-    // awaits `asyncGraphqlClientProvider` — and that provider does not resolve
-    // until a Mydia server is stored. Building the chain beforehand leaves it
-    // loading indefinitely on every screen, and when the container is disposed
-    // while it is still pending (app teardown, or an integration test finishing
-    // on the pairing screen) Riverpod completes it with a StateError that
-    // escapes as an unhandled async error. There is also nothing to show: you
-    // cannot be casting before you have a server.
+    // Building the cast chain before a server is stored does work for
+    // nothing: you cannot be casting before you have a server, so there is
+    // nothing to show.
     if (!ref.watch(hasMydiaProvider)) return null;
 
     final session = ref.watch(castSessionProvider).value;

@@ -3,13 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show debugPrint, debugPrintStack, kIsWeb, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import '../config/web_config.dart';
 import '../player/device_profile.dart';
-import '../sources/mydia/bound_mydia.dart';
-import '../sources/mydia/mydia_client.dart';
-import '../sources/sources_providers.dart';
-import 'transport_link.dart';
 import '../cache/fetch_log.dart';
 
 /// This device's decode-capability profile, probed once per app session and
@@ -115,66 +110,3 @@ Future<void> applyDetectedProfile(
 /// use the same p2p link the desktop app uses. The instance is the only thing
 /// that injects `window.mydiaConfig`, so its presence is the signal.
 bool get isInstanceHostedWeb => kIsWeb && getWebConfig() != null;
-
-/// Clears the GraphQL response cache. A provider so a test can observe it.
-final graphqlCacheResetProvider =
-    Provider<void Function()>((ref) => () => HiveStore().reset());
-
-/// Provider for the server URL.
-///
-/// On the instance-hosted web build, always uses window.location.origin to
-/// ensure correct browser-accessible URL (not internal Docker hostnames like
-/// 'storage:4000'). Everywhere else it is the bound instance's URL, null for
-/// an instance reached over p2p.
-final serverUrlProvider = FutureProvider<String?>((ref) async {
-  if (isInstanceHostedWeb) {
-    final origin = getOriginUrl();
-    debugPrint('[serverUrlProvider] instance-hosted web, origin=$origin');
-    if (origin != null) {
-      return origin;
-    }
-  }
-
-  final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
-  return credentials?.serverUrl;
-});
-
-/// Provider for the bound instance's access token.
-final authTokenProvider = FutureProvider<String?>((ref) async {
-  final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
-  return credentials?.accessToken;
-});
-
-/// Provider for the GraphQL client: every operation goes through the bound
-/// instance's [MydiaClient], which owns its token, refresh and transport.
-/// Null while no Mydia instance is bound.
-final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
-  final client = ref.watch(boundMydiaClientProvider);
-
-  // The cache is keyed by operation, not by server: another instance's
-  // answers must never be served for this one.
-  ref.listen(boundMydiaProvider.select((s) => s?.source.account.id),
-      (prev, next) {
-    if (prev != null && prev != next) ref.read(graphqlCacheResetProvider)();
-  });
-
-  if (client == null) return null;
-  return GraphQLClient(
-    link: TransportLink(() async => client),
-    cache: GraphQLCache(store: HiveStore()),
-    queryRequestTimeout: null,
-  );
-});
-
-/// Async provider for the GraphQL client.
-///
-/// Use this provider in async controllers that need to wait for the client
-/// to be available: it waits for the stored sources and the migrated
-/// instance id to load first.
-final asyncGraphqlClientProvider = FutureProvider<GraphQLClient>((ref) async {
-  await ref.watch(sourceRecordsProvider.future);
-  await ref.watch(legacyInstanceIdProvider.future);
-  final client = ref.watch(graphqlClientProvider);
-  if (client == null) throw StateError('No Mydia server');
-  return client;
-});
