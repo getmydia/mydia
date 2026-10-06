@@ -50,13 +50,17 @@ validates only the files, and an inline string gets no schema check.
 
 ## Fallbacks for older servers
 
-When a field is newer than some servers, keep the old shape as a second
-operation named `<Op>Legacy` and put a comment above it naming the server
-version that dropped the need for it. Send the pair with
+When a field is newer than some servers the player still supports, keep the
+old shape as a second operation named `<Op>Legacy` and put a comment above it
+naming the server version that introduced the field. Send the pair with
 `MydiaClient.query(document, fallback: legacyDocument)`: an unknown-field error
-retries the fallback, and the client remembers the downgrade for that instance
-(`isDowngraded`). Pass `fallbackVariables` when the fallback takes different
-variables.
+retries the fallback, and the client remembers the downgrade for that instance.
+Pass `fallbackVariables` when the fallback takes different variables.
+
+Delete the pair once `Compatibility.minServerVersion` reaches that version.
+`compareCore` ignores prerelease suffixes, so the floor has to be the first core
+version whose every build carries the field, not the release whose betas
+introduced it. None are left at 0.15.0.
 
 ## Guards
 
