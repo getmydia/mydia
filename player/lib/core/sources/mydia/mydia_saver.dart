@@ -59,13 +59,12 @@ Future<SourceId> saveMydiaServer(
   }
 
   final serverUrl = partial.serverUrl;
-  final account = ProviderAccount(
-    id: accountId,
-    kind: SourceKind.mydia,
-    displayName: partial.instanceName ?? _hostOf(serverUrl) ?? 'Mydia',
-    storageNamespace: SourceSecrets.newStorageNamespace(accountId),
-    activeProfileId: kOwnerProfileId,
+  final record = buildMydiaAccountRecord(
+    partial,
+    instanceId: instanceId,
+    now: DateTime.now(),
   );
+  final account = record.account;
   final credentials = MydiaCredentials(
     instanceId: instanceId,
     accessToken: partial.accessToken,
@@ -79,13 +78,35 @@ Future<SourceId> saveMydiaServer(
   // Credentials first: a stored server without them would fail every request.
   await writeMydiaCredentials(
       ref.read(sourceSecretsProvider), account, credentials);
-  final record = SourceAccountRecord(
+  await ref.read(sourceRecordsProvider.notifier).putAccount(record);
+  final id = record.sources.single.id;
+  ref.invalidate(mediaSourceProvider(id));
+  ref.read(selectedSourceIdProvider.notifier).select(id);
+  return id;
+}
+
+/// The account record for a Mydia server: one owner profile, one server.
+SourceAccountRecord buildMydiaAccountRecord(
+  MydiaCredentials c, {
+  required String instanceId,
+  required DateTime now,
+}) {
+  final accountId = 'm$instanceId';
+  final serverUrl = c.serverUrl;
+  final account = ProviderAccount(
+    id: accountId,
+    kind: SourceKind.mydia,
+    displayName: c.instanceName ?? _hostOf(serverUrl) ?? 'Mydia',
+    storageNamespace: SourceSecrets.newStorageNamespace(accountId),
+    activeProfileId: kOwnerProfileId,
+  );
+  return SourceAccountRecord(
     account: account,
     profiles: [
       SourceProfile(
         id: kOwnerProfileId,
         accountId: accountId,
-        name: partial.username ?? 'Owner',
+        name: c.username ?? 'Owner',
         isOwner: true,
       ),
     ],
@@ -100,13 +121,8 @@ Future<SourceId> saveMydiaServer(
         ],
       ),
     ],
-    addedAtMs: DateTime.now().millisecondsSinceEpoch,
+    addedAtMs: now.millisecondsSinceEpoch,
   );
-  await ref.read(sourceRecordsProvider.notifier).putAccount(record);
-  final id = record.sources.single.id;
-  ref.invalidate(mediaSourceProvider(id));
-  ref.read(selectedSourceIdProvider.notifier).select(id);
-  return id;
 }
 
 String? _hostOf(String? url) {
