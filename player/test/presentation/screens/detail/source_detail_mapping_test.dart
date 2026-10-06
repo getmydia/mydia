@@ -83,4 +83,12 @@ void main() {
     expect(SourceTarget(fakeMovie(1).ref).ref, fakeMovie(1).ref);
     expect(detailKindOf(ItemKind.video), isNull);
   });
+
+  test('files keep size and HDR for the quality picker', () {
+    final f = filesFromVersions(const [
+      MediaVersion(id: 'f1', height: 2160, sizeBytes: 9, hdrFormat: 'HDR10'),
+    ]).single;
+    expect(f.size, 9);
+    expect(f.hdrFormat, 'HDR10');
+  });
 }

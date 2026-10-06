@@ -237,4 +237,15 @@ void main() {
       };
     expect(movieSummary(s, m).poster, isNull);
   });
+
+  test('a Mydia file carries its size and HDR format', () {
+    final v = mediaVersion({
+      'id': 'f1',
+      'resolution': '2160p',
+      'size': 4200000000,
+      'hdrFormat': 'Dolby Vision',
+    });
+    expect(v.sizeBytes, 4200000000);
+    expect(v.hdrFormat, 'Dolby Vision');
+  });
 }

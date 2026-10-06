@@ -50,6 +50,8 @@ List<MediaFile> filesFromVersions(List<MediaVersion> versions) => [
           audioCodec: v.audioCodec,
           // MediaFile.bitrate is bits per second; versions carry kilobits.
           bitrate: v.bitrateKbps == null ? null : v.bitrateKbps! * 1000,
+          size: v.sizeBytes,
+          hdrFormat: v.hdrFormat,
           directPlaySupported: true,
         ),
     ];

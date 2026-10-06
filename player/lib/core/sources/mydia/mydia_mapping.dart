@@ -70,6 +70,8 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
     height: _height(file['resolution']),
     bitrateKbps: bps is int && bps > 0 ? (bps / 1000).round() : null,
     durationSeconds: durationSeconds,
+    sizeBytes: file['size'] is int ? file['size'] as int : null,
+    hdrFormat: file['hdrFormat'] as String?,
     streams: [
       for (final sub in _list(file['subtitles']))
         if (sub['embedded'] != true &&

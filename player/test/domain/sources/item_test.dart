@@ -54,4 +54,14 @@ void main() {
     expect(Favorites, isNotNull);
     expect(NextUp, isNotNull);
   });
+
+  test('MediaVersion round-trips size and HDR, and reads old entries', () {
+    const v = MediaVersion(id: 'f1', sizeBytes: 4200000000, hdrFormat: 'HDR10');
+    final back = MediaVersion.fromJson(v.toJson());
+    expect(back.sizeBytes, 4200000000);
+    expect(back.hdrFormat, 'HDR10');
+    final old = MediaVersion.fromJson(const {'id': 'f1'});
+    expect(old.sizeBytes, isNull);
+    expect(old.hdrFormat, isNull);
+  });
 }
