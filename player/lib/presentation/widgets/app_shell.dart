@@ -433,7 +433,8 @@ class _AppShellState extends ConsumerState<AppShell>
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  if (isOffline) const OfflineBanner(),
+                                  if (isOffline)
+                                    OfflineBanner(location: widget.location),
                                   const CompatibilityBanner(),
                                   const UpdateBanner(),
                                 ],
@@ -489,7 +490,7 @@ class _AppShellState extends ConsumerState<AppShell>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (isOffline) const OfflineBanner(),
+                        if (isOffline) OfflineBanner(location: widget.location),
                         const CompatibilityBanner(),
                         const UpdateBanner(),
                       ],
