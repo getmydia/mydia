@@ -1,49 +1,31 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
 void main() {
-  /// Restoring a cast session builds `castSessionManagerProvider`, whose body
-  /// awaits `asyncGraphqlClientProvider`. That provider stays in the loading
-  /// state until a Mydia server is bound, so starting the chain beforehand
-  /// leaves it in flight indefinitely. If the container is then disposed while
-  /// it is still loading — app teardown, or an integration test finishing on
-  /// the pairing screen — Riverpod completes the pending future with a
-  /// StateError raised *inside* the provider body, where no caller can catch
-  /// it. It escapes as an unhandled async error and fails the run, which is
-  /// how this surfaced in the Player E2E suite.
+  /// Restoring a cast session needs a Mydia instance to sync progress to, so
+  /// it is meaningless before one exists. A manager built earlier would also
+  /// be torn down mid-build when the container is disposed on the pairing
+  /// screen.
   ///
-  /// These pin the gate that prevents it: the cast stack is untouched until
-  /// a Mydia server is bound, and is reached once it is.
+  /// These pin the gate: the cast stack is untouched until a Mydia account
+  /// exists, and is reached once it does.
   group('MyApp cast session restore', () {
     late bool managerBuilt;
 
-    // `asyncGraphqlClientProvider` never completes here, standing in for its
-    // real pre-auth behaviour; the manager override awaits it exactly as the
-    // real provider body does, so a regression reproduces the original race
-    // rather than a sanitised version of it.
     buildOverrides({required bool bound}) => [
           sourcesLoadingProvider.overrideWithValue(false),
-          boundAccountIdProvider.overrideWithValue(bound ? 'macct' : null),
-          boundMydiaProvider.overrideWithValue(null),
+          hasMydiaProvider.overrideWithValue(bound),
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
-          asyncGraphqlClientProvider
-              .overrideWith((ref) => Completer<GraphQLClient>().future),
           castSessionManagerProvider.overrideWith((ref) async {
             managerBuilt = true;
-            await ref.read(asyncGraphqlClientProvider.future);
             throw StateError('unreachable in these tests');
           }),
         ];
@@ -61,20 +43,20 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('does not touch the cast stack while no server is bound',
+    testWidgets('does not touch the cast stack while no Mydia account exists',
         (tester) async {
       await pumpApp(tester, bound: false);
 
       expect(managerBuilt, isFalse,
-          reason: 'the cast stack must not be built before a server is '
-              'bound — its GraphQL dependency cannot resolve yet');
+          reason: 'the cast stack must not be built before a Mydia account '
+              'exists');
     });
 
-    testWidgets('restores once a server is bound', (tester) async {
+    testWidgets('restores once a Mydia account exists', (tester) async {
       await pumpApp(tester, bound: true);
 
       expect(managerBuilt, isTrue,
-          reason: 'gating on a bound server must not disable restore '
+          reason: 'gating on a Mydia account must not disable restore '
               'outright');
     });
   });
@@ -94,11 +76,8 @@ void main() {
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           hasMydiaProvider.overrideWithValue(false),
-          asyncGraphqlClientProvider
-              .overrideWith((ref) => Completer<GraphQLClient>().future),
           castSessionManagerProvider.overrideWith((ref) async {
             managerBuilt = true;
-            await ref.read(asyncGraphqlClientProvider.future);
             throw StateError('unreachable in this test');
           }),
         ],
@@ -122,11 +101,11 @@ void main() {
   /// body reads `castSessionManagerProvider.future` with no try/catch of its
   /// own.
   ///
-  /// A permanently-loading `Completer().future`, as the two groups above use,
-  /// cannot reproduce this one: nothing ever rejects, so nothing ever needs
-  /// to escape. What reproduces it is a rejection that arrives *after* the
-  /// container is already disposed — exactly what happens in production when
-  /// `asyncGraphqlClientProvider` is force-completed with a StateError by
+  /// A manager that never builds cannot reproduce this one: nothing ever
+  /// rejects, so nothing ever needs to escape. What reproduces it is a
+  /// rejection that arrives *after* the container is already disposed —
+  /// exactly what happens in production when a pending provider future is
+  /// force-completed with a StateError by
   /// `ElementWithFuture.dispose` (see that class in the riverpod package, and
   /// `castSessionProvider`'s own dartdoc in cast_providers.dart). A `Future`
   /// that resolves on a real delay stands in for that: the delay outlives the

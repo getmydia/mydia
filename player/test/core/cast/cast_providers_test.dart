@@ -10,17 +10,16 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/cast/multicast_lock.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
-import '../sources/mydia/fake_mydia_client.dart';
+import '../../test_utils/mydia_test_source.dart';
 import '../sources/mydia/fake_mydia_transport.dart';
 
 /// Records acquire/release without touching a platform channel.
@@ -220,6 +219,7 @@ void main() {
     );
 
     final launch = CastLaunchRequest(
+      sourceId: testMydiaSourceId,
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',
@@ -261,11 +261,12 @@ void main() {
               'permissions': <String>[],
             },
           };
-      final client = fakeMydiaClient(
+      final source = testMydiaSourceOver(
         server,
         creds: MydiaCredentials(
           instanceId: 'test',
           accessToken: 'access',
+          serverUrl: 'https://mydia.test',
           mediaToken: 'tok',
           mediaTokenExpiry: DateTime.now().add(mediaTokenLifetime),
         ),
@@ -278,24 +279,18 @@ void main() {
         multicastLockProvider.overrideWithValue(lock),
         castSessionStoreProvider
             .overrideWith((ref) async => InMemoryCastSessionStore()),
-        boundMydiaClientProvider.overrideWithValue(client),
-        asyncBoundMydiaClientProvider.overrideWith((ref) async => client),
+        mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
         localProxyServiceProvider
             .overrideWithValue(LocalProxyService.forTesting()),
-        serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
       ]);
       addTearDown(container.dispose);
       return container;
     }
 
-    /// Builds the manager and waits for the server URL, which the resolver
-    /// reads synchronously. The media token is deliberately *not* awaited
+    /// Builds the manager. The media token is deliberately *not* awaited
     /// here — the resolver has to fetch it itself.
-    Future<CastSessionManager> readyManager(ProviderContainer container) async {
-      final manager = await container.read(castSessionManagerProvider.future);
-      await container.read(serverUrlProvider.future);
-      return manager;
-    }
+    Future<CastSessionManager> readyManager(ProviderContainer container) =>
+        container.read(castSessionManagerProvider.future);
 
     test('the very first cast carries a media token', () async {
       // A media token sampled synchronously on the first cast was not there
@@ -377,6 +372,78 @@ void main() {
         container.read(castPlaybackStateProvider),
         CastPlaybackState.idle,
       );
+    });
+  });
+
+  group('mydiaCastDepsFor', () {
+    final depsProvider = FutureProvider.family<MydiaCastDeps?, SourceId>(
+      (ref, id) => mydiaCastDepsFor(ref, id),
+    );
+
+    ProviderContainer containerFor(
+      MydiaCredentials creds,
+      LocalProxyService proxy,
+    ) {
+      final container = ProviderContainer(overrides: [
+        mediaSourceProvider(testMydiaSourceId).overrideWithValue(
+            testMydiaSourceOver(FakeMydiaTransport(), creds: creds)),
+        localProxyServiceProvider.overrideWithValue(proxy),
+      ]);
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('is null for an instance that is gone', () async {
+      final container = containerFor(
+          const MydiaCredentials(instanceId: 'i', accessToken: 'a'),
+          LocalProxyService.forTesting());
+
+      expect(await container.read(depsProvider(const SourceId('gone')).future),
+          isNull);
+    });
+
+    test(
+        'over p2p holds the instance target for the cast, and the bridge URL '
+        'names it', () async {
+      // The cast can start with no player open (a restore), so nothing else
+      // keeps the target serving.
+      final proxy = LocalProxyService.forTesting();
+      addTearDown(proxy.shutdown);
+      final container = containerFor(
+          const MydiaCredentials(
+              instanceId: 'i', accessToken: 'a', nodeAddr: '{"id":"peer"}'),
+          proxy);
+
+      final deps =
+          (await container.read(depsProvider(testMydiaSourceId).future))!;
+
+      expect(proxy.isRunning, isTrue);
+      await proxy.setLanAccess(true);
+      if (proxy.isLanAccessible) {
+        // No usable LAN interface in some sandboxes; the prefix is also
+        // pinned in cast_route_resolver_test.
+        expect(deps.resolver().lanBaseUrl(), '${proxy.lanBaseUrl}/t/macct');
+      }
+
+      await deps.release!();
+      expect(proxy.isRunning, isFalse);
+    });
+
+    test('over a direct URL starts no proxy and holds nothing', () async {
+      final proxy = LocalProxyService.forTesting();
+      addTearDown(proxy.shutdown);
+      final container = containerFor(
+          const MydiaCredentials(
+              instanceId: 'i',
+              accessToken: 'a',
+              serverUrl: 'https://mydia.test'),
+          proxy);
+
+      final deps =
+          (await container.read(depsProvider(testMydiaSourceId).future))!;
+
+      expect(proxy.isRunning, isFalse);
+      expect(deps.release, isNull);
     });
   });
 

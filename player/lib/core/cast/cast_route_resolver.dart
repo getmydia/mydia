@@ -90,9 +90,10 @@ class CastRouteResolver {
   /// Fetches (refreshing if needed) the media token for direct URLs.
   final Future<String?> Function() mediaToken;
 
-  /// Reads the proxy's current LAN base URL. Returns null while the proxy is
-  /// loopback-only, which the manager avoids by enabling LAN access before
-  /// asking for a bridge route.
+  /// Reads the LAN base URL of the instance's proxy target (the proxy's LAN
+  /// base plus `/t/<target>`). Returns null while the proxy is loopback-only,
+  /// which the manager avoids by enabling LAN access before asking for a
+  /// bridge route.
   final String? Function() lanBaseUrl;
 
   /// Starts the server-side HLS session a bridged Chromecast route needs.

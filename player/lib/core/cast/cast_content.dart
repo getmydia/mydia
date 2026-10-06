@@ -14,7 +14,13 @@ sealed class CastContent {
   /// is Mydia.
   Map<String, dynamic> toMap();
 
-  static CastContent fromMap(Map<dynamic, dynamic> map) =>
+  /// [legacyMydia] is the instance a record without a `sourceId` belongs to:
+  /// one written before casts named their instance. Null drops such a record
+  /// (the read throws and the store discards it).
+  static CastContent fromMap(
+    Map<dynamic, dynamic> map, {
+    SourceId? legacyMydia,
+  }) =>
       switch (map['contentKind']) {
         'source' => SourceCastContent(
             item: ItemRef(
@@ -25,6 +31,12 @@ sealed class CastContent {
             versionId: map['versionId'] as String,
           ),
         _ => MydiaCastContent(
+            sourceId: switch (map['sourceId']) {
+              final String id => SourceId(id),
+              _ => legacyMydia ??
+                  (throw const FormatException(
+                      'Mydia cast record has no instance')),
+            },
             fileId: map['fileId'] as String,
             mediaId: map['mediaId'] as String,
             mediaType: map['mediaType'] as String,
@@ -36,12 +48,15 @@ sealed class CastContent {
 @immutable
 final class MydiaCastContent extends CastContent {
   const MydiaCastContent({
+    required this.sourceId,
     required this.fileId,
     required this.mediaId,
     required this.mediaType,
     this.showId,
   });
 
+  /// The Mydia instance that owns the file.
+  final SourceId sourceId;
   final String fileId;
   final String mediaId;
   final String mediaType;
@@ -50,6 +65,7 @@ final class MydiaCastContent extends CastContent {
   bool get isEpisode => mediaType == 'episode';
 
   MydiaCastContent withShowId(String? showId) => MydiaCastContent(
+        sourceId: sourceId,
         fileId: fileId,
         mediaId: mediaId,
         mediaType: mediaType,
@@ -59,6 +75,7 @@ final class MydiaCastContent extends CastContent {
   @override
   Map<String, dynamic> toMap() => {
         'contentKind': 'mydia',
+        'sourceId': sourceId.value,
         'mediaId': mediaId,
         'mediaType': mediaType,
         'fileId': fileId,
@@ -68,13 +85,14 @@ final class MydiaCastContent extends CastContent {
   @override
   bool operator ==(Object other) =>
       other is MydiaCastContent &&
+      other.sourceId == sourceId &&
       other.fileId == fileId &&
       other.mediaId == mediaId &&
       other.mediaType == mediaType &&
       other.showId == showId;
 
   @override
-  int get hashCode => Object.hash(fileId, mediaId, mediaType, showId);
+  int get hashCode => Object.hash(sourceId, fileId, mediaId, mediaType, showId);
 }
 
 @immutable

@@ -20,7 +20,6 @@ import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
-import 'core/sources/mydia/bound_mydia.dart';
 import 'core/cache/resume_gate.dart';
 import 'core/cache/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
@@ -219,24 +218,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Reattach to a cast session left running by a previous app launch, on
     // builds that can actually cast.
     //
-    // Deliberately gated on a bound server rather than fired at startup. The
-    // cast stack awaits `asyncGraphqlClientProvider`, which stays in the
-    // loading state until a Mydia server is bound. Kicking it off before
-    // then leaves that chain in flight indefinitely, and if the container is
-    // disposed while it is still loading — app teardown, or an integration
-    // test finishing on the pairing screen — Riverpod completes the pending
-    // future with a StateError from inside `castSessionManagerProvider`'s own
-    // body, where no caller can catch it. It surfaces as an unhandled async
-    // error and fails the test run. Restoring a cast session before auth is
-    // meaningless anyway: there is no reachable server yet.
+    // Deliberately gated on a stored Mydia account rather than fired at
+    // startup. Restoring a cast session before one exists is meaningless
+    // anyway: there is no instance to sync progress to or reach.
     //
     // Starting remote control shares the same gate for the same reason:
-    // `NodeRegistration` and `RemoteRoster` both need a signed-in GraphQL
-    // client too.
-    ref.listenManual<String?>(
-      boundAccountIdProvider,
+    // `NodeRegistration` and `RemoteRoster` both need a Mydia instance.
+    ref.listenManual<bool>(
+      hasMydiaProvider,
       (previous, next) {
-        if (next == null) return;
+        if (!next) return;
         _restoreCastSession();
         unawaited(_initRemoteControlIfEnabled());
       },
@@ -258,7 +249,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       remoteControlEnabledProvider,
       (previous, next) {
         if (next.value != true) return;
-        if (ref.read(boundMydiaProvider) == null) return;
+        if (!ref.read(hasMydiaProvider)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
     );

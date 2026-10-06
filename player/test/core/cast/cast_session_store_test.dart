@@ -5,10 +5,12 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/cast/cast_session_store.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 void main() {
   PersistedCastSession sessionAt(DateTime savedAt) => PersistedCastSession(
+        sourceId: const SourceId('macct'),
         device: const CastDevice(
           id: 'd1',
           name: 'Living Room',
@@ -58,6 +60,7 @@ void main() {
 
     test('preserves the bridge route kind', () {
       final original = PersistedCastSession(
+        sourceId: const SourceId('macct'),
         device: const CastDevice(
           id: 'd2',
           name: 'Bedroom',
@@ -82,6 +85,7 @@ void main() {
   group('selected subtitle track', () {
     test('round-trips through storage', () {
       final session = PersistedCastSession(
+        sourceId: const SourceId('macct'),
         device: const CastDevice(
           id: 'd1',
           name: 'Living Room',
@@ -106,6 +110,7 @@ void main() {
       // point is a real record from before this field existed, where the key
       // is absent entirely, not merely set to null.
       final map = PersistedCastSession(
+        sourceId: const SourceId('macct'),
         device: const CastDevice(
           id: 'd1',
           name: 'Living Room',
@@ -130,6 +135,7 @@ void main() {
 
     test('copyWith replaces the id', () {
       final session = PersistedCastSession(
+        sourceId: const SourceId('macct'),
         device: const CastDevice(
           id: 'd1',
           name: 'Living Room',
@@ -220,6 +226,32 @@ void main() {
       await store.clear();
 
       expect(await store.load(), isNull);
+    });
+
+    Map<dynamic, dynamic> legacyRecord() {
+      final map = sessionAt(DateTime.utc(2026, 7, 28)).toMap()
+        ..remove('sourceId');
+      return map;
+    }
+
+    test('a record without an instance reads as the legacy Mydia', () async {
+      await box.put('session', legacyRecord());
+
+      final loaded = await HiveCastSessionStore(
+        box,
+        legacyMydia: () => const SourceId('macct'),
+      ).load();
+
+      expect((loaded?.content as MydiaCastContent).sourceId,
+          const SourceId('macct'));
+    });
+
+    test('a record without an instance is dropped when there is no legacy',
+        () async {
+      await box.put('session', legacyRecord());
+
+      expect(await HiveCastSessionStore(box).load(), isNull);
+      expect(box.get('session'), isNull);
     });
 
     test('load returns null when the stored map is malformed', () async {

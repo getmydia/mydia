@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../domain/models/cast_device.dart';
+import '../sources/source.dart';
 import 'cast_content.dart';
 import 'cast_route_resolver.dart';
 
@@ -52,6 +53,7 @@ class PersistedCastSession {
   /// A Mydia record, taking the ids a caller already has.
   PersistedCastSession({
     required CastDevice device,
+    required SourceId sourceId,
     required String mediaId,
     required String mediaType,
     required String fileId,
@@ -66,6 +68,7 @@ class PersistedCastSession {
   }) : this.forContent(
           device: device,
           content: MydiaCastContent(
+            sourceId: sourceId,
             fileId: fileId,
             mediaId: mediaId,
             mediaType: mediaType,
@@ -98,12 +101,17 @@ class PersistedCastSession {
         'selectedSubtitleTrackId': selectedSubtitleTrackId,
       };
 
-  factory PersistedCastSession.fromMap(Map<dynamic, dynamic> map) {
+  /// [legacyMydia] names the instance a Mydia record without a `sourceId`
+  /// belongs to; see [CastContent.fromMap].
+  factory PersistedCastSession.fromMap(
+    Map<dynamic, dynamic> map, {
+    SourceId? legacyMydia,
+  }) {
     return PersistedCastSession.forContent(
       device: CastDevice.fromJson(
         Map<String, dynamic>.from(map['device'] as Map),
       ),
-      content: CastContent.fromMap(map),
+      content: CastContent.fromMap(map, legacyMydia: legacyMydia),
       title: map['title'] as String,
       position: Duration(seconds: map['positionSeconds'] as int),
       routeKind: map['routeKind'] == 'bridge'
@@ -168,7 +176,12 @@ class HiveCastSessionStore implements CastSessionStore {
 
   final Box<Map<dynamic, dynamic>> _box;
 
-  const HiveCastSessionStore(this._box);
+  /// Read when a record is loaded, not when the store is built: the migrated
+  /// instance's source may not exist yet at construction.
+  final SourceId? Function()? _legacyMydia;
+
+  const HiveCastSessionStore(this._box, {SourceId? Function()? legacyMydia})
+      : _legacyMydia = legacyMydia;
 
   @override
   Future<void> save(PersistedCastSession session) async {
@@ -181,7 +194,10 @@ class HiveCastSessionStore implements CastSessionStore {
     if (raw == null) return null;
 
     try {
-      return PersistedCastSession.fromMap(raw);
+      return PersistedCastSession.fromMap(
+        raw,
+        legacyMydia: _legacyMydia?.call(),
+      );
     } catch (e) {
       // A malformed record must never block startup.
       debugPrint('[CastSessionStore] Discarding unreadable session: $e');

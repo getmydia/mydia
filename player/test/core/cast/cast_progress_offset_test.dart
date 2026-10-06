@@ -10,6 +10,7 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/player/stream_timeline.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -76,14 +77,16 @@ void main() {
     final manager = CastSessionManager(
       backend: backend,
       store: store,
-      progressService: progress,
-      streamingSessions: sessions,
-      resolverFactory: () => CastRouteResolver(
-        isP2pMode: false,
-        serverUrl: 'https://mydia.test',
-        mediaToken: () async => 'tok',
-        lanBaseUrl: () => null,
+      mydiaDeps: (_) async => MydiaCastDeps(
+        progress: progress,
         streamingSessions: sessions,
+        resolver: () => CastRouteResolver(
+          isP2pMode: false,
+          serverUrl: 'https://mydia.test',
+          mediaToken: () async => 'tok',
+          lanBaseUrl: () => null,
+          streamingSessions: sessions,
+        ),
       ),
       setLanAccess: (_) async {},
       clock: () => DateTime.utc(2026, 8, 2, 12),
@@ -107,6 +110,7 @@ void main() {
     await manager.startCast(
       device: device,
       request: CastLaunchRequest(
+        sourceId: const SourceId('macct'),
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -212,6 +216,7 @@ void main() {
     await manager.startCast(
       device: device,
       request: CastLaunchRequest(
+        sourceId: const SourceId('macct'),
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -230,6 +235,7 @@ void main() {
     await manager.startCast(
       device: device,
       request: CastLaunchRequest(
+        sourceId: const SourceId('macct'),
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -258,6 +264,7 @@ void main() {
     await manager.startCast(
       device: dlna,
       request: CastLaunchRequest(
+        sourceId: const SourceId('macct'),
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',

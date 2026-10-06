@@ -138,15 +138,17 @@ _ManagerHarness _buildManagerHarness() {
   final manager = CastSessionManager(
     backend: backend,
     store: InMemoryCastSessionStore(),
-    progressService: ProgressService(client),
-    resolverFactory: () => CastRouteResolver(
-      isP2pMode: false,
-      serverUrl: 'https://mydia.test',
-      mediaToken: () async => null,
-      lanBaseUrl: () => null,
+    mydiaDeps: (_) async => MydiaCastDeps(
+      progress: ProgressService(client),
       streamingSessions: sessions,
+      resolver: () => CastRouteResolver(
+        isP2pMode: false,
+        serverUrl: 'https://mydia.test',
+        mediaToken: () async => null,
+        lanBaseUrl: () => null,
+        streamingSessions: sessions,
+      ),
     ),
-    streamingSessions: sessions,
     setLanAccess: (enabled) async {},
   );
 
@@ -170,15 +172,17 @@ _ManagerHarness _buildMydiaManagerHarness() {
     // even though this harness has no separate Chromecast/DLNA fake.
     mydiaBackend: backend,
     store: InMemoryCastSessionStore(),
-    progressService: ProgressService(client),
-    resolverFactory: () => CastRouteResolver(
-      isP2pMode: false,
-      serverUrl: 'https://mydia.test',
-      mediaToken: () async => null,
-      lanBaseUrl: () => null,
+    mydiaDeps: (_) async => MydiaCastDeps(
+      progress: ProgressService(client),
       streamingSessions: sessions,
+      resolver: () => CastRouteResolver(
+        isP2pMode: false,
+        serverUrl: 'https://mydia.test',
+        mediaToken: () async => null,
+        lanBaseUrl: () => null,
+        streamingSessions: sessions,
+      ),
     ),
-    streamingSessions: sessions,
     setLanAccess: (enabled) async {},
   );
 

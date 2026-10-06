@@ -5532,6 +5532,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         final SourcePlaybackSession s =>
           SourceCastContent(item: s.item, versionId: s.fileId),
         _ => MydiaCastContent(
+            sourceId: _session.item.sourceId,
             fileId: fileId,
             mediaId: widget.mediaId,
             mediaType: widget.mediaType,
