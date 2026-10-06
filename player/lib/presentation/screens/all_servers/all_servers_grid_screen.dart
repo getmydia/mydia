@@ -89,8 +89,10 @@ class AllServersGridScreen extends ConsumerWidget {
                   child: BrowseGrid(
                     scrollTopPadding: 8,
                     itemCount: items.length,
-                    itemBuilder: (context, index) =>
-                        AllServersPoster(item: items[index]),
+                    itemBuilder: (context, index) => AllServersPoster(
+                      item: items[index],
+                      extraCopies: state.extraCopies[items[index].ref] ?? 0,
+                    ),
                   ),
                 ),
             },

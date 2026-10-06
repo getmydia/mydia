@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_home_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
@@ -15,7 +16,9 @@ Future<List<String>> pump(
     WidgetTester tester, List<MediaSource> sources) async {
   final pushed = <String>[];
   final router = GoRouter(routes: [
-    GoRoute(path: '/', builder: (_, __) => const AllServersHomeScreen()),
+    GoRoute(
+        path: '/',
+        builder: (_, __) => const Scaffold(body: AllServersHomeScreen())),
     GoRoute(
       path: '/s/:id/:kind/:item',
       builder: (_, s) {
@@ -24,7 +27,7 @@ Future<List<String>> pump(
       },
     ),
   ]);
-  await tester.binding.setSurfaceSize(const Size(1280, 900));
+  await tester.binding.setSurfaceSize(const Size(1280, 1800));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(ProviderScope(
     overrides: [
@@ -46,7 +49,11 @@ FakeMergedSource serverWith(String id) {
     resuming: [
       item(s, '${id}1', lastPlayedAt: DateTime.utc(2024, 1, id == 'b' ? 2 : 1)),
     ],
-    recent: [item(s, '${id}2', addedAt: DateTime.utc(2024, 1, 1))],
+    recent: [
+      item(s, '${id}2', addedAt: DateTime.utc(2024, 1, 1)),
+      item(s, '${id}3', kind: ItemKind.show, addedAt: DateTime.utc(2024, 1, 1)),
+    ],
+    favs: [item(s, '${id}4')],
   );
 }
 
@@ -56,13 +63,41 @@ void main() {
     await pump(t, [a, b]);
     expect(find.byKey(const Key('all-servers-home')), findsOneWidget);
     expect(find.byKey(const Key('all-continue-watching')), findsOneWidget);
-    expect(find.byKey(const Key('all-recently-added')), findsOneWidget);
+    expect(find.byKey(const Key('all-recent-movies')), findsOneWidget);
     final first =
         t.getTopLeft(find.byKey(ValueKey('all-poster-${b.id.value}-b1')));
     final second =
         t.getTopLeft(find.byKey(ValueKey('all-poster-${a.id.value}-a1')));
     expect(first.dx, lessThan(second.dx));
     expect(find.textContaining('Server b'), findsWidgets);
+  });
+
+  testWidgets('hero, then the four rails in order', (t) async {
+    await pump(t, [serverWith('a'), serverWith('b')]);
+    for (final k in [
+      'all-home-hero',
+      'all-continue-watching',
+      'all-recent-movies',
+      'all-recent-shows',
+      'all-favorites',
+    ]) {
+      expect(find.byKey(Key(k)), findsOneWidget, reason: k);
+    }
+    double y(String k) => t.getTopLeft(find.byKey(Key(k))).dy;
+    expect(y('all-continue-watching'), lessThan(y('all-recent-movies')));
+    expect(y('all-recent-movies'), lessThan(y('all-recent-shows')));
+    expect(y('all-recent-shows'), lessThan(y('all-favorites')));
+  });
+
+  testWidgets('an empty rail is hidden', (t) async {
+    final s = fakeServer('a');
+    await pump(t, [
+      FakeMergedSource(s, recent: [item(s, 'm', addedAt: DateTime.utc(2024))]),
+      FakeMergedSource(fakeServer('b')),
+    ]);
+    expect(find.byKey(const Key('all-recent-movies')), findsOneWidget);
+    expect(find.byKey(const Key('all-recent-shows')), findsNothing);
+    expect(find.byKey(const Key('all-favorites')), findsNothing);
   });
 
   testWidgets('a failed server shows the banner; retry reloads', (t) async {

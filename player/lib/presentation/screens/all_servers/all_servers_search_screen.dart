@@ -58,7 +58,10 @@ class AllServersSearchScreen extends ConsumerWidget {
                   title: _sectionTitle(entry.key),
                   railId: 'all-search-${entry.key.name}',
                   items: entry.value,
-                  posterFor: (context, item) => AllServersPoster(item: item),
+                  posterFor: (context, item) => AllServersPoster(
+                    item: item,
+                    extraCopies: value.extraCopies[item.ref] ?? 0,
+                  ),
                 ),
             ],
           ),

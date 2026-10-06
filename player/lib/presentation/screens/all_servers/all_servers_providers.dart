@@ -43,6 +43,17 @@ final allServersRecentlyAddedProvider =
     FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
         (ref) => ref.watch(allServersReaderProvider).recentlyAdded());
 
+final allServersFavoritesRowProvider =
+    FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>((ref) =>
+        ref.watch(allServersReaderProvider).favorites(perSourceCap: 20));
+
+final allServersFavoritesProvider =
+    FutureProvider.autoDispose<MergedResult<List<ItemSummary>>>(
+        (ref) => ref.watch(allServersReaderProvider).favorites());
+
+/// Recently Added splits on this: movies in one rail, TV in the other.
+bool isMovieRow(ItemSummary i) => i.ref.kind == ItemKind.movie;
+
 @immutable
 class AllServersGridState {
   const AllServersGridState({
