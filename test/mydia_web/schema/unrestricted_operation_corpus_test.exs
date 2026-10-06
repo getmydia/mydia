@@ -59,16 +59,26 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "TvShowsList" => %{"first" => 5},
       "MoviesList" => %{"first" => 5},
       "GuestInstanceIdentity" => %{},
-      "GuestMovies" => %{
-        "first" => 10,
-        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
-      },
-      "GuestTvShows" => %{
-        "first" => 10,
-        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
-      },
       "GuestContinueWatching" => %{"first" => 10},
-      "GuestRecentlyAdded" => %{"first" => 10},
+      "Calendar" => %{"start" => "2000-01-01", "end" => "2100-01-01"},
+      "Collections" => %{"first" => 10},
+      "CollectionItems" => %{"collectionId" => s.collection.id, "first" => 10},
+      "ContinueWatchingFull" => %{"first" => 10},
+      "ContinueWatchingFullLegacy" => %{"first" => 10},
+      "HomeRows" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
+      "HomeRowsLegacy" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
+      "MoviesFiltered" => %{
+        "first" => 10,
+        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
+      },
+      "TvShowsFiltered" => %{
+        "first" => 10,
+        "sort" => %{"field" => "TITLE", "direction" => "ASC"}
+      },
+      "UnwatchedListing" => %{"first" => 10},
+      "FavoritesListing" => %{"first" => 10},
+      "RecentlyAddedFull" => %{"first" => 10},
+      "RecentlyAddedFullLegacy" => %{"first" => 10},
       "SeasonEpisodes" => %{"showId" => s.show.id, "seasonNumber" => 1},
       "MovieDetail" => %{"id" => s.movie.id},
       "MovieMediaInfo" => %{"id" => s.movie.id},
@@ -113,8 +123,11 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     show = media_item_fixture(%{type: "tv_show", title: "Crawl Show Beta"})
     episode = episode_fixture(%{media_item_id: show.id, season_number: 1, episode_number: 1})
 
+    user = user_fixture()
+
     %{
-      user: user_fixture(),
+      user: user,
+      collection: Mydia.CollectionsFixtures.collection_fixture(%{user: user}),
       movie: movie,
       movie_file: media_file_fixture(%{media_item_id: movie.id}),
       show: show,
