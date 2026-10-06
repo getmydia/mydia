@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import '../../domain/detail/detail_target.dart';
 import '../../domain/sources/item.dart';
 import '../../presentation/screens/detail/detail_links.dart';
+import '../sources/mydia/mydia_instance_id.dart';
 import '../sources/source.dart';
 import 'remote_control_intent.dart';
 
@@ -123,7 +124,10 @@ Future<void> pushLoadContentDestination(
 /// Carries out an [intent] that arrived from [peerNodeId].
 ///
 /// A `LoadContent` names an item by an id only its sending instance can
-/// resolve, so it is stamped with the first instance that lists the peer, or
+/// resolve. When the sender names its server ([LoadContentIntent
+/// .serverInstanceId]) the command is stamped with that local instance, if the
+/// instance also lists the peer, and dropped otherwise. An older sender names
+/// none, so the first instance that lists the peer is used, or the command is
 /// dropped when none does. Everything else goes through untouched.
 Future<void> routeRemoteIntent(
   RemoteControlIntent intent,
@@ -136,10 +140,19 @@ Future<void> routeRemoteIntent(
     return;
   }
 
-  final via = (await instancesOf(peerNodeId)).firstOrNull;
+  final candidates = await instancesOf(peerNodeId);
+  final wanted = intent.serverInstanceId;
+  final via = wanted == null
+      ? candidates.firstOrNull
+      : candidates
+          .where((id) => mydiaInstanceIdOfSource(id) == wanted)
+          .firstOrNull;
   if (via == null) {
-    debugPrint('[LoadContentNavigation] No instance lists $peerNodeId, '
-        'dropping LoadContent');
+    debugPrint(wanted == null
+        ? '[LoadContentNavigation] No instance lists $peerNodeId, '
+            'dropping LoadContent'
+        : '[LoadContentNavigation] No local instance $wanted lists '
+            '$peerNodeId, dropping LoadContent');
     return;
   }
   submit(intent.withVia(via));

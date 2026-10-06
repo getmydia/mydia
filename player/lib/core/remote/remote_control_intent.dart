@@ -53,6 +53,7 @@ sealed class RemoteControlIntent {
           audioTrack: field0.audioTrack,
           subtitleTrack: field0.subtitleTrack,
           autoplay: field0.autoplay,
+          serverInstanceId: field0.serverInstanceId,
         ),
       FlutterRemoteControlRequest_Hello() => null,
       FlutterRemoteControlRequest_GetState() => null,
@@ -107,6 +108,10 @@ class LoadContentIntent extends RemoteControlIntent {
   final String? subtitleTrack;
   final bool autoplay;
 
+  /// The Mydia server instance id the sender says the item belongs to, or
+  /// null from an older sender. When set, [via] must be that instance.
+  final String? serverInstanceId;
+
   /// The Mydia instance the command arrived through, the only one its item
   /// id means anything on. Null until the app resolves the sender; a command
   /// whose sender no instance lists is dropped, never tried elsewhere.
@@ -119,6 +124,7 @@ class LoadContentIntent extends RemoteControlIntent {
     required this.audioTrack,
     required this.subtitleTrack,
     required this.autoplay,
+    this.serverInstanceId,
     this.via,
   });
 
@@ -129,6 +135,7 @@ class LoadContentIntent extends RemoteControlIntent {
         audioTrack: audioTrack,
         subtitleTrack: subtitleTrack,
         autoplay: autoplay,
+        serverInstanceId: serverInstanceId,
         via: via,
       );
 }

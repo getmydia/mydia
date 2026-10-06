@@ -34,12 +34,14 @@ void main() {
             audioTrack: null,
             subtitleTrack: null,
             autoplay: true,
+            serverInstanceId: 'inst-b',
           ),
         ),
       );
 
       expect(intent, isA<LoadContentIntent>());
       final load = intent! as LoadContentIntent;
+      expect(load.serverInstanceId, 'inst-b');
       expect(load.mediaItemId, 'item-1');
       expect(load.episodeId, 'ep-3');
       expect(load.startAt, const Duration(minutes: 1));

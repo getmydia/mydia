@@ -14,6 +14,7 @@ import '../player/progress_service.dart';
 import '../remote/ambient_targets.dart';
 import '../remote/merged_roster.dart';
 import '../sources/mydia/bound_mydia.dart';
+import '../sources/mydia/mydia_instance_id.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 import 'cast_route_resolver.dart';
@@ -103,6 +104,10 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   final backend = MydiaCastBackend(
     roster: roster,
     instancesOf: roster.instancesOf,
+    // The cast manager plays the bound instance's items, so that is the
+    // server a target must resolve them on.
+    serverInstanceId:
+        mydiaInstanceIdOfAccount(ref.watch(boundAccountIdProvider)),
     transport: P2pControlTransport(host),
     selfNodeId: selfNodeId,
   );

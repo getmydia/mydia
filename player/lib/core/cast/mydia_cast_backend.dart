@@ -157,6 +157,11 @@ class MydiaCastBackend
   /// device's `metadata['sources']` (see [sourceIdsOfCastDevice]).
   final Future<List<SourceId>> Function(String nodeId)? instancesOf;
 
+  /// The Mydia instance the items this backend loads belong to, sent with
+  /// every `LoadContent` so a target signed into several servers resolves the
+  /// item on the right one. Null when unknown; the target then guesses.
+  final String? serverInstanceId;
+
   /// Budget covering dial, `Hello` and `GetState` together for one
   /// discovery candidate. Three seconds is generous for a p2p round trip
   /// and short enough that one dead target does not stall the whole sweep
@@ -170,6 +175,7 @@ class MydiaCastBackend
     required this.transport,
     required this.selfNodeId,
     this.instancesOf,
+    this.serverInstanceId,
     this.probeBudget = const Duration(seconds: 3),
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
@@ -469,6 +475,7 @@ class MydiaCastBackend
         audioTrack: ref.audioTrack,
         subtitleTrack: ref.subtitleTrack,
         autoplay: true,
+        serverInstanceId: serverInstanceId,
       ),
     ));
   }
