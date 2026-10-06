@@ -113,8 +113,8 @@ A guest has its own transport, `MydiaGqlTransport`: an HTTP POST to
 `/api/graphql`, or `P2pService.sendGraphQLRequest` for a paired guest. It
 sends the generated `documentNode...` constants from
 `lib/graphql/queries/guest_mydia.graphql`, so the schema guard still checks
-them, and reads the `data` map by hand. Guest code never touches the home
-GraphQL client, `AuthService` or `MediaTokenService`.
+them, and reads the `data` map by hand. Guest code never touches the bound
+instance's `MydiaClient`, the legacy GraphQL client or `AuthService`.
 
 Guest HLS uses `playlistMode: FULL` and `SimplePlaybackTransport`, with the
 bearer token on the stream. Over p2p the local proxy serves a guest at

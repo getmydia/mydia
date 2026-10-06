@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import '../auth/auth_service.dart';
 import '../auth/auth_status.dart';
-import '../auth/media_token_service.dart';
 import '../auth/session_teardown.dart';
 import '../config/web_config.dart';
 import '../player/device_profile.dart';
@@ -326,30 +325,4 @@ final asyncGraphqlClientProvider = FutureProvider<GraphQLClient>((ref) async {
   final client = ref.watch(graphqlClientProvider);
   if (client == null) throw StateError('No Mydia server');
   return client;
-});
-
-/// Provider for the media token service.
-///
-/// Provides media token management for authenticated direct media requests.
-/// Requires GraphQL client to be available for token refresh.
-final mediaTokenServiceProvider = Provider<MediaTokenService?>((ref) {
-  final client = ref.watch(graphqlClientProvider);
-  if (client == null) return null;
-
-  return MediaTokenService(client);
-});
-
-/// Async provider for the media token service.
-///
-/// Use this in async contexts where you need to wait for the service to be ready.
-final asyncMediaTokenServiceProvider =
-    FutureProvider<MediaTokenService>((ref) async {
-  final client = await ref.watch(asyncGraphqlClientProvider.future);
-  return MediaTokenService(client);
-});
-
-/// Provider for the current media token (if available).
-final mediaTokenProvider = FutureProvider<String?>((ref) async {
-  final service = await ref.watch(asyncMediaTokenServiceProvider.future);
-  return await service.getToken();
 });

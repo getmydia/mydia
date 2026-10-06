@@ -298,10 +298,9 @@ void main() {
     }
 
     test('the very first cast carries a media token', () async {
-      // `mediaTokenProvider` is read nowhere else in the app, so sampling it
-      // synchronously here always saw AsyncLoading: the receiver got a URL
-      // with no `token=` and no way to send an Authorization header, i.e. a
-      // guaranteed 401.
+      // A media token sampled synchronously on the first cast was not there
+      // yet: the receiver got a URL with no `token=` and no way to send an
+      // Authorization header, i.e. a guaranteed 401.
       final container = buildFullContainer();
       final manager = await readyManager(container);
 

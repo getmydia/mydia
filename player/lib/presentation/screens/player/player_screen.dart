@@ -1092,12 +1092,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             authToken: () => ref.read(authTokenProvider.future),
             connection: () => ref.read(conn.connectionProvider),
             mediaProxy: () => ref.read(mediaProxyProvider),
-            mediaToken: () async {
-              final service =
-                  await ref.read(asyncMediaTokenServiceProvider.future);
-              await service.ensureValidToken();
-              return service.getToken();
-            },
+            mediaToken: () async =>
+                ref.read(boundMydiaClientProvider)?.ensureValidMediaToken(),
             serverFeatures: () => ref.read(serverFeaturesProvider),
             adoptClient: (client) => _graphqlClient = client,
             boundClient: () => ref.read(boundMydiaClientProvider),
