@@ -1,6 +1,6 @@
 # Downloads: one pipeline for every source
 
-Home Mydia, guest Mydia, Plex, Jellyfin and Stash all download through the same
+Mydia, Plex, Jellyfin and Stash all download through the same
 service (`lib/core/downloads/download_service_native.dart`). What differs per
 source is a plan, not a code path. Web has no downloads (`isDownloadSupported`
 is false there).
@@ -15,10 +15,10 @@ There are two kinds of plan:
 - `DirectFile` is a URL, the headers that carry the credential, a file
   extension and an optional expected size. Plex, Jellyfin and Stash return one
   for their single `original` option (`core/sources/original_download.dart`).
-  The credential goes in the headers, never in the URL, except for home
-  Mydia's existing `?token=` media URL.
+  The credential goes in the headers, never in the URL, except for Mydia's
+  existing `?token=` media URL.
 - `TranscodeJob` is a server-side job the pipeline prepares, polls and then
-  fetches from. `MydiaTranscodeJob` implements it for home and guest Mydia.
+  fetches from. `MydiaTranscodeJob` implements it for every Mydia instance.
   There "original" is just one of the server's options beside the quality
   rungs, and the option id is the `DownloadOption.resolution` string.
 
@@ -68,13 +68,13 @@ Rules that are easy to break:
   save. HTTP error statuses keep their own
   handling. Dio does not wrap an error from a streamed body, so `fetchRange`
   converts one into a `connectionError` `DioException` whose message is only
-  the error's type name: the platform's text names the URL, and home Mydia's
+  the error's type name: the platform's text names the URL, and Mydia's
   carries a token. Transport drops still count as recovery attempts.
 - The transcode job calls (`prepare` and `status`) go through `_guardJobCall`,
-  which maps a dropped connection the same way. The home HTTP job service
+  which maps a dropped connection the same way. The HTTP job service
   throws `http` `ClientException`, `SocketException` or `HttpException`, and a
   timeout is a `TimeoutException`; those park the task as a counted attempt. A
-  guest or p2p `SourceException` of kind `unreachable` parks it uncounted, as
+  p2p `SourceException` of kind `unreachable` parks it uncounted, as
   `_resolve` does. `DeadJobException`, `_TaskFailure` and every other error
   propagate unchanged, so a long remote transcode is resumed by the sweep
   with its `transcodeJobId` kept instead of failing.
@@ -137,10 +137,9 @@ local file is still preferred.
 ## Progress
 
 Positions recorded while a source is out of reach go to the local progress
-store, keyed by `progressKey`: bare ids for home Mydia, `<sourceId>|<id>` for
-everything else. Home keeps `flushUnsyncedProgress` and `progressFlushProvider`.
+store, keyed by `progressKey`, which is `<sourceId>|<id>` for every source.
 
-`flushSourceProgress` (`playback_progress_store.dart`) handles the rest. The
+`flushSourceProgress` (`playback_progress_store.dart`) flushes it. The
 `sourceProgressFlushProvider` runs it at startup, when the app resumes and
 whenever a source comes back into reach. It pushes every unsynced record
 through the source's `ProgressSync` without comparing against the server;
@@ -175,7 +174,7 @@ after an error, when the known accounts are not known), it calls
 after the download manager is ready. Runs never overlap: a change during a run
 triggers one more run afterwards. That deletes the tasks, media rows and files of every account
 that is not stored, matched on the source id's account prefix, and never
-touches home Mydia. It is a separate provider so the keep-alive
+touches pre-account records (no `sourceId`, not yet migrated). It is a separate provider so the keep-alive
 `downloadManagerProvider` still never watches the source providers. Downloads from another Plex Home user stay on disk but are not listed
 while a different user is active.
 

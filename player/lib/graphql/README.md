@@ -15,6 +15,15 @@ lib/graphql/
 
 **Note:** The schema is a symlink to the server's exported schema in `priv/graphql/`. This ensures both client and server always use the same schema definition.
 
+The Mydia browse documents (`home_rows`, `continue_watching_full`,
+`recently_added_full`, `library_filtered`, `listings`, `calendar`,
+`collections`) are checked `.graphql` files, so codegen and the schema guard
+validate them. `queries/mydia_queries.dart` re-exports the generated document
+nodes that `MydiaSource` sends, and the `...Legacy` operations beside some of
+them are fallbacks for servers older than the field they drop. Each Mydia
+instance sends them through its own `MydiaClient`; see
+`lib/core/sources/README.md`.
+
 ## Setup
 
 ### 1. Dependencies
