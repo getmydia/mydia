@@ -141,8 +141,7 @@ void main() {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
 
@@ -162,8 +161,7 @@ void main() {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
 
@@ -188,8 +186,7 @@ void main() {
 
     final first = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
     await first.read(compatibilityProvider.future);
@@ -200,7 +197,7 @@ void main() {
     final second = harness(
       playerVersion: '0.8.0',
       response:
-          okResponse(version: '0.10.0', min: '0.7.0', recommended: '0.10.0'),
+          okResponse(version: '99.0.0', min: '0.7.0', recommended: '99.0.0'),
       box: box,
     );
     final state = await second.read(compatibilityProvider.future);
@@ -262,7 +259,7 @@ void main() {
       retry: (retryCount, error) => null,
       overrides: [
         ...activeServer(serverAnswering(
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+          okResponse(min: '0.7.0'),
         )),
         playerVersionProvider.overrideWith((ref) async => '0.8.0'),
         compatibilityDismissalBoxProvider
@@ -281,7 +278,7 @@ void main() {
       () async {
     final box = await memoryBox();
     const playerVersion = '0.8.0';
-    const serverVersion = '0.9.0';
+    const serverVersion = Compatibility.recommendedServerVersion;
 
     // Same pre-seeding mechanism as the required-verdict test above, but here
     // the verdict is dismissible, so the seeded key should take effect. This

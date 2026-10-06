@@ -33,11 +33,17 @@
 ///   rather than the required one. `VersionComparator.compareCore` ignores a
 ///   prerelease suffix, so a 0.15.0-beta build reads as exactly 0.15.0; 0.16.0
 ///   is the first core version that certainly carries the field.
+/// - 0.15.0: required. The player sends `maxHeight` and `playlistMode` when it
+///   starts a stream and selects `watchStatus` and per-stream media info, and
+///   no longer carries the older documents that left them out. `playlistMode`
+///   reached 0.14.0 only at 0.14.0-beta.5, and a prerelease suffix compares
+///   equal to its core version, so 0.15.0 is the first floor every build at
+///   or above it clears.
 class Compatibility {
   const Compatibility._();
 
   /// The oldest server version this player works with.
-  static const minServerVersion = '0.9.0';
+  static const minServerVersion = '0.15.0';
 
   /// The oldest server version this player would rather talk to.
   static const recommendedServerVersion = '0.16.0';
