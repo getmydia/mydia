@@ -18,9 +18,9 @@ import '../../widgets/media_context_menu.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../home/home_loading_skeleton.dart';
+import '../sources/home_header.dart';
 import '../sources/source_continue_watching_row.dart'
     show continueWatchingCaption;
-import '../sources/home_header.dart';
 import '../sources/source_error_view.dart';
 import '../sources/source_poster_row.dart';
 import 'all_servers_banner.dart';
@@ -52,6 +52,10 @@ class AllServersHomeScreen extends ConsumerWidget {
           appBar: homeHeader(
             context,
             mobileTitle: const HomeMydiaLockup(),
+            desktopTitle: const HomeDesktopTitle(
+              icon: Icons.dns_rounded,
+              label: 'All servers',
+            ),
             onSearch: () => context.go(allServersSearchLocation),
           ),
           body: _body(context, ref, chromeTop),
@@ -64,7 +68,7 @@ class AllServersHomeScreen extends ConsumerWidget {
     final resuming = ref.watch(allServersContinueWatchingProvider);
     final recent = ref.watch(allServersRecentlyAddedProvider);
     if (!resuming.hasValue || !recent.hasValue) {
-      return const HomeLoadingSkeleton();
+      return HomeLoadingSkeleton(showHero: false, topInset: chromeTop + 16);
     }
     final r = resuming.requireValue, n = recent.requireValue;
     final included = ref.watch(allServersNamesProvider);

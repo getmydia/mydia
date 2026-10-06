@@ -64,8 +64,10 @@ class AllServersSearchScreen extends ConsumerWidget {
       ),
       body: (context, scrollTopPadding) => switch (results) {
         null => const SizedBox.shrink(),
-        AsyncData(:final value) when value.value.isEmpty =>
-          const Center(child: Text('Nothing found.')),
+        AsyncData(:final value) when value.value.isEmpty => Padding(
+            padding: EdgeInsets.only(top: scrollTopPadding),
+            child: const Center(child: Text('Nothing found.')),
+          ),
         AsyncData(:final value) => ListView(
             padding: EdgeInsets.only(
                 top: scrollTopPadding, bottom: DockInsets.bottomOf(context)),
@@ -86,7 +88,10 @@ class AllServersSearchScreen extends ConsumerWidget {
             padding: EdgeInsets.only(top: scrollTopPadding),
             child: SourceErrorView(error: error, onRetry: notifier.retry),
           ),
-        _ => const Center(child: CircularProgressIndicator()),
+        _ => Padding(
+            padding: EdgeInsets.only(top: scrollTopPadding),
+            child: const Center(child: CircularProgressIndicator()),
+          ),
       },
     );
   }

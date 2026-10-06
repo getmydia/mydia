@@ -22,11 +22,12 @@ const Key homeSearchKey = Key('home-search');
 PreferredSizeWidget homeHeader(
   BuildContext context, {
   Widget? mobileTitle,
+  Widget? desktopTitle,
   VoidCallback? onSearch,
 }) {
   final height = WindowTitleRow.heightOf(context);
   if (Breakpoints.isDesktop(context)) {
-    return WindowTitleBar(height: height);
+    return WindowTitleBar(height: height, title: desktopTitle);
   }
   return WindowTitleBar(
     height: height,
@@ -52,6 +53,39 @@ PreferredSizeWidget homeHeader(
     ],
     decorate: (row) => GlassSurface.appBar(child: row),
   );
+}
+
+/// The All servers home's desktop bar title, styled like `BrowseScaffold`'s so
+/// the merged screens read as one family. A source home has a hero to name it;
+/// the merged home has none, so without this the bar would be blank.
+class HomeDesktopTitle extends StatelessWidget {
+  const HomeDesktopTitle({super.key, required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(left: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: AppColors.primary, size: 22),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.3,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 /// A source's name as the phone bar title.

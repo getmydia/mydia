@@ -1,5 +1,4 @@
-// The loading state's own geometry, as distinct from the rails inside it
-// (which `rail_parity.dart` covers).
+// The loading state's own geometry, as distinct from the rails inside it.
 //
 // Both assertions here pin a real defect fixed on 2026-09-01. The skeleton
 // list carried a top padding of `safeAreaTop + kToolbarHeight` while the
@@ -40,6 +39,37 @@ void main() {
 
       expect(heroTop, listTop,
           reason: 'the loaded CustomScrollView has no top padding either');
+    });
+
+    testWidgets('the hero sits at y=0 under a transparent app bar',
+        (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: PreferredSize(
+              preferredSize: Size.fromHeight(56),
+              // Sized: an empty SizedBox shrinks to zero under the Scaffold's
+              // loose constraints and the bar would claim no height.
+              child: SizedBox(height: 56),
+            ),
+            body: HomeLoadingSkeleton(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Inside extendBodyBehindAppBar a ListView with null padding inherits
+      // the bar's height as top padding, which pushed the hero under the bar.
+      expect(
+        tester.getTopLeft(find.byKey(HomeLoadingSkeleton.heroKey)).dy,
+        0,
+      );
     });
 
     testWidgets('no spacer sits between the rails', (tester) async {

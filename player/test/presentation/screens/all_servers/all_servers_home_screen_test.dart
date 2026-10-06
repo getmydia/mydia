@@ -73,6 +73,22 @@ void main() {
     expect(find.textContaining('Server b'), findsWidgets);
   });
 
+  testWidgets('the desktop bar is titled All servers', (t) async {
+    // The helper's setSurfaceSize leaves the view at 800 logical px, which is
+    // the phone layout; the view itself has to be widened.
+    t.view.physicalSize = const Size(1280, 900);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    await pump(t, [serverWith('a')]);
+    expect(
+      find.descendant(
+        of: find.byType(WindowTitleBar),
+        matching: find.text('All servers'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a failed server shows the banner; retry reloads', (t) async {
     final a = serverWith('a');
     final down = FakeMergedSource(fakeServer('d'))

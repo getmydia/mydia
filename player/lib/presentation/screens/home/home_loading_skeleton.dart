@@ -15,7 +15,17 @@ import '../sources/source_poster_row.dart';
 /// this geometry meant holding a code-generated Riverpod `StreamNotifier` in
 /// `AsyncLoading`, which is a lot of scaffolding to assert a padding value.
 class HomeLoadingSkeleton extends StatelessWidget {
-  const HomeLoadingSkeleton({super.key});
+  const HomeLoadingSkeleton(
+      {super.key, this.showHero = true, this.topInset = 0});
+
+  /// False for a home with no hero (All servers), whose loaded list opens
+  /// with a rail.
+  final bool showHero;
+
+  /// Space above the first child. A source home's hero starts at y=0 behind
+  /// the bar, so it needs none; a heroless home passes where its loaded list
+  /// starts.
+  final double topInset;
 
   /// Test handle for the hero block.
   static const heroKey = ValueKey<String>('home-skeleton-hero');
@@ -26,20 +36,21 @@ class HomeLoadingSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // No top padding, and no spacers between the rails.
+    // Explicit padding, and no spacers between the rails.
     //
     // The `data` branch is a `CustomScrollView` with neither, under a Scaffold
     // with `extendBodyBehindAppBar: true`, so its hero starts at y=0 and
-    // renders under the glass app bar. A top padding here pushed the
-    // placeholder hero below the app bar and cost roughly 80 to 100px of jump
-    // on load. Rails are separated by `RailMetrics.headerTopPadding` alone,
-    // exactly as the loaded rows are.
+    // renders under the glass app bar. A ListView with null padding inherits
+    // the bar's bottom edge from MediaQuery there and would push the
+    // placeholder hero below the bar. Rails are separated by their own
+    // heading padding alone, as `SourcePosterRow` lays them out.
     return ListView(
-      children: const [
-        _ShimmerHero(key: HomeLoadingSkeleton.heroKey),
-        _ShimmerRail(key: HomeLoadingSkeleton.railKey),
-        _ShimmerRail(key: HomeLoadingSkeleton.railKey),
-        _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+      padding: EdgeInsets.only(top: topInset),
+      children: [
+        if (showHero) const _ShimmerHero(key: HomeLoadingSkeleton.heroKey),
+        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
+        const _ShimmerRail(key: HomeLoadingSkeleton.railKey),
       ],
     );
   }

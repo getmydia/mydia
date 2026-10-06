@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
-import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
@@ -17,13 +16,14 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../detail/detail_links.dart';
 import '../home/home_loading_skeleton.dart';
 import 'home_header.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
-import 'source_home_hero.dart';
 import 'source_error_view.dart';
+import 'source_home_hero.dart';
 import 'source_poster_row.dart';
 
 class SourceHomeScreen extends ConsumerWidget {
