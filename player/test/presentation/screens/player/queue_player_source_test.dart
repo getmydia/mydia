@@ -12,7 +12,11 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/queue_player_screen.dart';
 
+import 'package:player/core/sources/store/source_records.dart'
+    show mydiaSourceIdOf;
+
 import '../../../core/sources/mydia/fake_mydia_transport.dart';
+import '../../../core/sources/mydia/mydia_account_harness.dart';
 import '../../../core/sources/mydia/mydia_source_test.dart' show guest, sid;
 
 MydiaSource _mydiaSource() => MydiaSource(
@@ -67,6 +71,41 @@ void main() {
     final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
     expect(screen.session.item.sourceId, sid);
     expect(screen.session.item.externalId, 'm1');
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+      'with one Mydia instance and no migrated sign-in the queue '
+      'plays from it', (tester) async {
+    final id = mydiaSourceIdOf(mydiaRecord('inst-1'));
+    final h = await mydiaAccountHarness(
+      {
+        'inst-1': const MydiaCredentials(
+          instanceId: 'inst-1',
+          accessToken: 'access',
+          serverUrl: 'https://lake.example',
+        ),
+      },
+      overrides: [
+        localProxyServiceProvider
+            .overrideWithValue(LocalProxyService.forTesting()),
+        mediaSourceProvider(id).overrideWithValue(
+            MydiaSource(source: guest, client: _mydiaSource().client)),
+      ],
+    );
+    addTearDown(h.container.dispose);
+    await h.container.read(sourceRecordsProvider.future);
+    await h.container.read(legacyInstanceIdProvider.future);
+    expect(await h.store.legacyInstanceId(), isNull);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: h.container,
+      child: MaterialApp(home: QueuePlayerScreen(itemsParam: _queueParam())),
+    ));
+
+    final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
+    expect(screen.session.item.sourceId, id);
 
     await tester.pumpWidget(const SizedBox());
   });

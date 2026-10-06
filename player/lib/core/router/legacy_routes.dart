@@ -85,17 +85,22 @@ final legacyInstanceIdProvider = FutureProvider<String?>((ref) async {
   return store.legacyInstanceId();
 });
 
-/// The migrated instance's source, while its account exists.
+/// The source an unprefixed pre-instance link or entry belongs to: the
+/// migrated legacy instance while its Mydia account exists, else the only
+/// Mydia instance when there is exactly one (a web install, or any install
+/// that never migrated a legacy sign-in, records no legacy id), else null.
 final legacyMydiaSourceIdProvider = Provider<SourceId?>((ref) {
   final snapshot = ref.watch(sourceRecordsProvider).value;
+  if (snapshot == null) return null;
   final legacy = ref.watch(legacyInstanceIdProvider).value;
-  if (snapshot == null || legacy == null) return null;
-  for (final r in snapshot.accounts) {
-    if (r.account.kind == SourceKind.mydia && r.account.id == legacy) {
-      return mydiaSourceIdOf(r);
-    }
+  final mydia = [
+    for (final r in snapshot.accounts)
+      if (r.account.kind == SourceKind.mydia) r,
+  ];
+  for (final r in mydia) {
+    if (r.account.id == legacy) return mydiaSourceIdOf(r);
   }
-  return null;
+  return mydia.length == 1 ? mydiaSourceIdOf(mydia.single) : null;
 });
 
 /// The ids as one string, so a record write that changes no id compares equal

@@ -30,8 +30,7 @@ void main() {
     expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
   });
 
-  test('a removed legacy account resolves to nothing, even with one other',
-      () async {
+  test('a removed legacy account resolves to the only instance left', () async {
     final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
     addTearDown(h.container.dispose);
     await h.store.setLegacyInstanceId('ma');
@@ -40,10 +39,10 @@ void main() {
     expect(h.container.read(legacyMydiaSourceIdProvider), idOf('a'));
 
     await h.container.read(sourceRecordsProvider.notifier).removeAccount('ma');
-    expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
+    expect(h.container.read(legacyMydiaSourceIdProvider), idOf('b'));
   });
 
-  test('a removed legacy account with two others left resolves to nothing',
+  test('an unusable legacy id with two accounts left resolves to nothing',
       () async {
     final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
     addTearDown(h.container.dispose);
@@ -52,11 +51,11 @@ void main() {
     expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
   });
 
-  test('no legacy id: nothing, with one Mydia account', () async {
+  test('no legacy id: the only Mydia instance', () async {
     final h = await mydiaAccountHarness({'a': _ma});
     addTearDown(h.container.dispose);
     await settle(h.container);
-    expect(h.container.read(legacyMydiaSourceIdProvider), isNull);
+    expect(h.container.read(legacyMydiaSourceIdProvider), idOf('a'));
   });
 
   test('no legacy id: nothing, with several Mydia accounts', () async {
@@ -67,7 +66,7 @@ void main() {
   });
 
   test('a non-Mydia account with the legacy id is not picked', () async {
-    final h = await mydiaAccountHarness({'a': _ma});
+    final h = await mydiaAccountHarness({'a': _ma, 'b': _mb});
     addTearDown(h.container.dispose);
     await h.store.putAccount(atticRecord);
     await h.store.setLegacyInstanceId(atticRecord.account.id);
