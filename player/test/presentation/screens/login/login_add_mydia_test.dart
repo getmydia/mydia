@@ -17,6 +17,8 @@ import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
 
+import 'package:player/domain/sources/source_error.dart';
+
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/scripted_mydia_transport.dart';
@@ -336,24 +338,109 @@ void main() {
     expect(authStorage.keys, isEmpty);
   });
 
-  test('a server error on a URL login shows the server message', () async {
-    final server = ScriptedMydiaTransport.responses(
-        [graphqlError('Invalid username or password')]);
-    final auth = AuthService(
-      storage: authStorage,
-      deviceInfo: _FakeDeviceInfo(),
-      transportFactory: (_) => server,
-    );
-    final c = await listening(containerFor(auth: auth));
+  group('password failures are mapped by error kind', () {
+    Future<LoginState> loginFailing(Object failure) async {
+      final auth = AuthService(
+        storage: authStorage,
+        deviceInfo: _FakeDeviceInfo(),
+        transportFactory: (_) => ScriptedMydiaTransport.responses([failure]),
+      );
+      final c = await listening(containerFor(auth: auth));
+      await c.read(loginControllerProvider.notifier).login(
+            'https://friend.example',
+            'maya',
+            'wrong',
+          );
+      final state = c.read(loginControllerProvider);
+      expect(state.success, isFalse);
+      return state;
+    }
 
-    await c.read(loginControllerProvider.notifier).login(
-          'https://friend.example',
-          'maya',
-          'wrong',
-        );
+    test('unreachable', () async {
+      expect((await loginFailing(const SourceException.unreachable())).error,
+          'Cannot connect to server. Check the URL and your network.');
+    });
 
-    final state = c.read(loginControllerProvider);
-    expect(state.success, isFalse);
-    expect(state.error, 'Invalid username or password');
+    test('not found', () async {
+      expect((await loginFailing(const SourceException.notFound())).error,
+          'Server not found. Check the URL.');
+    });
+
+    test('unauthorized', () async {
+      expect((await loginFailing(const SourceException.unauthorized())).error,
+          'Invalid username or password');
+    });
+
+    test('the server says the credentials are wrong', () async {
+      expect(
+          (await loginFailing(graphqlError('Invalid username or password')))
+              .error,
+          'Invalid username or password');
+    });
+
+    test('the server has local login turned off', () async {
+      expect(
+          (await loginFailing(graphqlError('Local authentication is disabled')))
+              .error,
+          'Local authentication is disabled');
+    });
+
+    test('any other server error', () async {
+      expect((await loginFailing(graphqlError('Something broke'))).error,
+          'Login failed. Please check your credentials.');
+    });
+  });
+
+  group('verification code failures are mapped by error kind', () {
+    Map<String, dynamic> challenge() => {
+          'login': {
+            '__typename': 'LoginPayload',
+            'token': null,
+            'user': null,
+            'expiresIn': 0,
+            'totpRequired': true,
+            'challengeToken': 'challenge',
+          },
+        };
+
+    Future<LoginState> submitFailing(Object failure) async {
+      final auth = AuthService(
+        storage: authStorage,
+        deviceInfo: _FakeDeviceInfo(),
+        transportFactory: (_) => ScriptedMydiaTransport((request, _) =>
+            request.operation == 'VerifyTotp' ? failure : challenge()),
+      );
+      final c = await listening(containerFor(auth: auth));
+      final controller = c.read(loginControllerProvider.notifier);
+      await controller.login('https://friend.example', 'maya', 'pw');
+      expect(c.read(loginControllerProvider).totpChallenge, isNotNull);
+      await controller.submitTotpCode('123456');
+      return c.read(loginControllerProvider);
+    }
+
+    test('unreachable', () async {
+      expect((await submitFailing(const SourceException.unreachable())).error,
+          'Cannot connect to server. Check the URL and your network.');
+    });
+
+    test('too many attempts keeps the challenge', () async {
+      final state = await submitFailing(
+          graphqlError('Too many login attempts. Please try again later.'));
+      expect(state.error, 'Too many login attempts. Please try again later.');
+      expect(state.totpChallenge, isNotNull);
+    });
+
+    test('an expired sign-in drops the challenge', () async {
+      final state = await submitFailing(
+          graphqlError('Sign-in expired, please try again'));
+      expect(state.error, 'Sign-in expired, please try again');
+      expect(state.totpChallenge, isNull);
+    });
+
+    test('a wrong code', () async {
+      final state = await submitFailing(graphqlError('Invalid code'));
+      expect(state.error, 'Invalid code');
+      expect(state.totpChallenge, isNotNull);
+    });
   });
 }

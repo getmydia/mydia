@@ -6,6 +6,7 @@ import 'device_info_service.dart';
 import '../sources/mydia/mydia_gql_transport.dart';
 import '../sources/mydia/root_typename.dart';
 import '../sources/source_http.dart';
+import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/login.graphql.dart';
 import '../../graphql/mutations/verify_totp.graphql.dart';
 
@@ -146,6 +147,9 @@ class AuthService {
         userId: loginData.user?.id,
         username: loginData.user?.username ?? username,
       );
+    } on SourceException {
+      // Transport and server errors keep their kind for the caller to map.
+      rethrow;
     } catch (e) {
       throw Exception('Login error: $e');
     }
@@ -177,6 +181,8 @@ class AuthService {
         userId: payload.user?.id,
         username: payload.user?.username ?? challenge.username,
       );
+    } on SourceException {
+      rethrow;
     } catch (e) {
       throw Exception('Verification error: $e');
     }
