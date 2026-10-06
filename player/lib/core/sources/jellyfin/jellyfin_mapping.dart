@@ -54,6 +54,20 @@ const jellyfinFilterOptions = [
 /// The `Fields` a merged grid or row needs on top of the defaults.
 const jellyfinSortFields = 'SortName,DateCreated';
 
+/// The `Fields` value that makes Jellyfin include catalogue ids.
+const jellyfinIdFields = 'ProviderIds';
+
+/// Catalogue ids from an item's `ProviderIds`; blank values count as absent.
+ExternalIds jellyfinExternalIds(Object? providerIds) {
+  final ids = providerIds is Map ? providerIds : const <String, Object?>{};
+  String? read(String key) => switch (ids[key]) {
+        final String v when v.isNotEmpty => v,
+        _ => null,
+      };
+  return ExternalIds(
+      tmdb: read('Tmdb'), tvdb: read('Tvdb'), imdb: read('Imdb'));
+}
+
 /// `IncludeItemTypes` for browsing a library of [kind].
 String jellyfinItemTypes(LibraryKind kind) => switch (kind) {
       LibraryKind.movies => 'Movie',
@@ -123,6 +137,7 @@ ItemSummary? jellyfinSummary(SourceId sourceId, Map<String, dynamic> json) {
       progressSeconds: position == 0 ? null : position,
     ),
     childCount: json['ChildCount'] as int?,
+    externalIds: jellyfinExternalIds(json['ProviderIds']),
     index: index,
     parentIndex: parentIndex,
     overview: json['Overview'] as String?,

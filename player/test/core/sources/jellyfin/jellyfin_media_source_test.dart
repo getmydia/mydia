@@ -228,6 +228,7 @@ void main() {
         'userId': FakeJellyfinServer.userId,
         'MediaTypes': 'Video',
         'Limit': '20',
+        'Fields': 'ProviderIds',
         'EnableImageTypes': 'Primary,Backdrop,Thumb',
       });
       expect(byPath['/Shows/NextUp'], {
@@ -235,6 +236,7 @@ void main() {
         'Limit': '20',
         'enableResumable': 'false',
         'enableRewatching': 'false',
+        'Fields': 'ProviderIds',
         'EnableImageTypes': 'Primary,Backdrop,Thumb',
       });
     });
@@ -331,7 +333,8 @@ void main() {
     final b = build();
     await b.source.children(const ItemRef(
         sourceId: jellyfinSid, kind: ItemKind.season, externalId: 'season1'));
-    expect(b.server.requests.last.url.queryParameters['Fields'], 'Overview');
+    expect(b.server.requests.last.url.queryParameters['Fields'],
+        'Overview,ProviderIds');
   });
 
   test('recently added reads the bare array from /Items/Latest', () async {
@@ -358,7 +361,7 @@ void main() {
         .lastWhere((r) => r.url.path == '/Items')
         .url
         .queryParameters;
-    expect(q['Fields'], 'ChildCount,SortName,DateCreated');
+    expect(q['Fields'], 'ChildCount,SortName,DateCreated,ProviderIds');
   });
 
   const jfEpisode =
