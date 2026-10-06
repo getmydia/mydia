@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
-import 'package:player/core/p2p/media_proxy.dart';
 
 /// The call site these tests hold the proxy as. Each test builds its own
 /// service, so one shared identity is enough to stand for "somebody needs
@@ -28,10 +27,11 @@ void main() {
 
     test('buildHlsUrl uses loopback with no token prefix by default', () async {
       final service = LocalProxyService.forTesting();
-      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
       addTearDown(service.shutdown);
 
-      final url = service.buildHlsUrl('sess-1', target: MediaProxy.homeTarget);
+      final url = service.buildHlsUrl('sess-1', target: 'macct');
 
       expect(url, startsWith('http://127.0.0.1:'));
       expect(url, endsWith('/hls/sess-1/index.m3u8'));
@@ -41,7 +41,8 @@ void main() {
     test('enabling LAN access exposes a token-prefixed non-loopback URL',
         () async {
       final service = LocalProxyService.forTesting();
-      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
       addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
@@ -55,14 +56,14 @@ void main() {
       expect(base, isNotNull);
       expect(base, isNot(contains('127.0.0.1')));
       expect(base, contains('/g/'));
-      expect(service.buildHlsUrl('sess-1', target: MediaProxy.homeTarget),
-          startsWith(base!));
+      expect(service.buildHlsUrl('sess-1', target: 'macct'), startsWith(base!));
     });
 
     test('requests without the token prefix are rejected when LAN-exposed',
         () async {
       final service = LocalProxyService.forTesting();
-      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
       addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
@@ -121,7 +122,8 @@ void main() {
 
     test('disabling LAN access returns the proxy to loopback', () async {
       final service = LocalProxyService.forTesting();
-      await service.start(owner: testOwner, targetPeer: 'peer-1');
+      await service.start(
+          owner: testOwner, targetPeer: 'peer-1', target: 'macct');
       addTearDown(service.shutdown);
 
       await service.setLanAccess(true);
@@ -130,10 +132,7 @@ void main() {
       expect(service.isLanAccessible, isFalse);
       expect(service.lanBaseUrl, isNull);
       expect(
-          service
-              .buildHlsUrl('s', target: MediaProxy.homeTarget)
-              .contains('/g/'),
-          isFalse);
+          service.buildHlsUrl('s', target: 'macct').contains('/g/'), isFalse);
     });
   });
 }

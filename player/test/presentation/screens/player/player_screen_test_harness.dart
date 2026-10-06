@@ -237,7 +237,7 @@ class TrackingLocalProxyService extends Fake
     required Object owner,
     required String targetPeer,
     String? authToken,
-    String target = MediaProxy.homeTarget,
+    required String target,
   }) async {
     acquireLease(owner);
     startCalled = true;
@@ -258,15 +258,14 @@ class TrackingLocalProxyService extends Fake
   }
 
   @override
-  Future<void> stop(Object owner,
-      {String target = MediaProxy.homeTarget}) async {
+  Future<void> stop(Object owner, {required String target}) => release(owner);
+
+  @override
+  Future<void> release(Object owner) async {
     if (!releaseLease(owner)) return;
     stopped = true;
     _running = false;
   }
-
-  @override
-  Future<void> release(Object owner) => stop(owner);
 
   @override
   Future<void> shutdown() async {

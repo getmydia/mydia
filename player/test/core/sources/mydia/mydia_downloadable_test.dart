@@ -88,7 +88,7 @@ void main() {
       () async {
     final source = guestSource(_p2p);
     final other = Object();
-    await proxy.start(owner: other, targetPeer: 'peer');
+    await proxy.start(owner: other, targetPeer: 'peer', target: 'macct');
     source.dispose();
     await pumpEventQueue();
     expect(proxy.isRunning, isTrue);

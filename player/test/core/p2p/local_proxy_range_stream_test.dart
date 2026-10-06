@@ -67,6 +67,7 @@ void main() {
       owner: owner,
       targetPeer: 'peer-1',
       authToken: 'token-1',
+      target: 'macct',
     );
   });
 
@@ -93,7 +94,7 @@ void main() {
     );
   }
 
-  String url(String path) => '${proxy.baseUrl}$path';
+  String url(String path) => '${proxy.targetBaseUrl('macct')}$path';
 
   test('serves the upstream bytes and forwards the range', () async {
     const total = 300 * 1000 + 7;
@@ -165,7 +166,7 @@ void main() {
     final upstream = endless(pace: const Duration(milliseconds: 2));
     final client = await RawRangeClient.open(
       proxy.port,
-      '/direct/file-1/stream',
+      '/t/macct/direct/file-1/stream',
     );
     await client.waitForBytes(64 * 1024);
     expect(spoolFiles(), hasLength(1));
@@ -183,7 +184,7 @@ void main() {
     final upstream = endless();
     final client = await RawRangeClient.open(
       proxy.port,
-      '/download/job-1/file',
+      '/t/macct/download/job-1/file',
     );
     await client.waitForBytes(64 * 1024);
 
@@ -203,7 +204,7 @@ void main() {
     final upstream = endless(pace: const Duration(milliseconds: 2));
     final client = await RawRangeClient.open(
       proxy.port,
-      '/direct/file-1/stream',
+      '/t/macct/direct/file-1/stream',
     );
     await client.waitForBytes(64 * 1024);
 
@@ -226,7 +227,7 @@ void main() {
       );
       final client = await RawRangeClient.open(
         proxy.port,
-        '/direct/file-1/stream',
+        '/t/macct/direct/file-1/stream',
       );
       await client.waitForBytes(64 * 1024);
 
@@ -245,7 +246,7 @@ void main() {
       final upstream = endless();
       final client = await RawRangeClient.open(
         proxy.port,
-        '/direct/file-1/stream',
+        '/t/macct/direct/file-1/stream',
       );
       await client.waitForBytes(64 * 1024);
 
@@ -289,7 +290,7 @@ void main() {
           },
         ),
       );
-      await opening.start(owner: owner, targetPeer: 'peer-1');
+      await opening.start(owner: owner, targetPeer: 'peer-1', target: 'macct');
       addTearDown(opening.shutdown);
       addTearDown(() {
         if (!release.isCompleted) release.complete();
@@ -297,7 +298,7 @@ void main() {
       final upstream = endless(pace: const Duration(milliseconds: 2));
       final client = await RawRangeClient.open(
         opening.port,
-        '/direct/file-1/stream',
+        '/t/macct/direct/file-1/stream',
       );
 
       await probing.future.timeout(const Duration(seconds: 5));

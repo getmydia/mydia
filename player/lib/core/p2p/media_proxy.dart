@@ -10,10 +10,6 @@ import 'dart:collection';
 /// downloads alike — so it is started and stopped against an *owner* rather
 /// than outright. See [start] and [stop].
 abstract class MediaProxy {
-  /// Key of the default target, the bound Mydia
-  /// instance's. Its URLs carry no target prefix, so every URL built before targets existed is still valid.
-  static const homeTarget = 'home';
-
   /// Begin serving [target] for [owner], sending its requests to
   /// [targetPeer] with [authToken].
   ///
@@ -23,14 +19,14 @@ abstract class MediaProxy {
   /// still leave it held exactly once, which is what makes this safe to call
   /// from a path that re-runs (a session restart, a cast rebind).
   ///
-  /// Each Mydia instance in use is its own target, so a guest instance's
-  /// stream never re-targets a download still running against home. Repeat
-  /// calls for the same target re-target that target only.
+  /// Each Mydia instance in use is its own target (its account id), so one
+  /// instance's stream never re-targets a download running against another.
+  /// Repeat calls for the same target re-target that target only.
   Future<void> start({
     required Object owner,
     required String targetPeer,
     String? authToken,
-    String target = homeTarget,
+    required String target,
   });
 
   /// Release [owner]'s hold on [target]. Serving stops once no target has
@@ -46,19 +42,19 @@ abstract class MediaProxy {
   ///
   /// Safe to call more than once, and safe to call from something that never
   /// started the proxy: both are no-ops.
-  Future<void> stop(Object owner, {String target = homeTarget});
+  Future<void> stop(Object owner, {required String target});
 
   /// Release every target [owner] holds. Serving stops once no target has
   /// an owner left.
   ///
   /// For a call site that may have taken any number of targets and cannot
-  /// know which, such as a player screen that can play from home or from a
-  /// guest instance. The ownership rules of [stop] apply to each target.
+  /// know which, such as a player screen that can play from any instance.
+  /// The ownership rules of [stop] apply to each target.
   Future<void> release(Object owner);
 
   /// Origin and prefix to build [target]'s media URLs against, with no
-  /// trailing slash: [baseUrl] for [homeTarget], `<baseUrl>/t/<target>`
-  /// for any other.
+  /// trailing slash: `<baseUrl>/t/<target>` natively, and [baseUrl] itself on
+  /// web, where the one served target lives at the root.
   String targetBaseUrl(String target);
 
   /// Stop serving outright, whoever still holds it.

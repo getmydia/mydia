@@ -78,7 +78,8 @@ void main() {
     // built its stream URL against it by the time the outgoing screen is
     // disposed.
     final incoming = Object();
-    await proxyService.start(owner: incoming, targetPeer: 'node-addr');
+    await proxyService.start(
+        owner: incoming, targetPeer: 'node-addr', target: 'macct');
     addTearDown(proxyService.shutdown);
 
     await tester.pumpWidget(const SizedBox.shrink());

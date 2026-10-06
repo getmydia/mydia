@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/media_proxy_web.dart';
 
 import 'media_proxy_conformance.dart';
+import 'test_p2p_service.dart';
 
 void main() {
   // The same suite the loopback proxy runs, against a real Service Worker in
@@ -24,4 +25,18 @@ void main() {
     'ServiceWorkerMediaProxy',
     ServiceWorkerMediaProxy.new,
   );
+
+  // A browser serves one instance at its root, under whatever name it has.
+  test('serves its one target at the root and refuses a second', () async {
+    final proxy = ServiceWorkerMediaProxy(TestP2pService());
+    final owner = Object();
+    await proxy.start(owner: owner, targetPeer: 'peer', target: 'macct');
+    addTearDown(proxy.shutdown);
+
+    expect(proxy.targetBaseUrl('macct'), proxy.baseUrl);
+    expect(
+      () => proxy.start(owner: owner, targetPeer: 'peer', target: 'other'),
+      throwsStateError,
+    );
+  });
 }

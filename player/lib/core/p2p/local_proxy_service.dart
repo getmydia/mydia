@@ -32,13 +32,13 @@ final localProxyServiceProvider = Provider<LocalProxyService>((ref) {
 /// Direct stream: /direct/{file_id}/stream
 /// Download: /download/{job_id}/file
 ///
-/// A guest instance's target prefixes any of these with `/t/{target}`.
+/// Every instance's target prefixes any of these with `/t/{target}`; a path
+/// without that prefix is a 404.
 class LocalProxyService with MediaProxyLeases implements MediaProxy {
   final P2pService _p2p;
   HttpServer? _server;
 
-  /// Where each target's requests go, keyed by target. Home is
-  /// [MediaProxy.homeTarget].
+  /// Where each target's requests go, keyed by target (the account id).
   final Map<String, _ProxyTarget> _targets = {};
 
   static final _targetKey = RegExp(r'^[A-Za-z0-9_-]+$');
@@ -120,7 +120,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
     required Object owner,
     required String targetPeer,
     String? authToken,
-    String target = MediaProxy.homeTarget,
+    required String target,
   }) async {
     if (!_targetKey.hasMatch(target)) {
       throw ArgumentError.value(target, 'target', 'must match [A-Za-z0-9_-]+');
@@ -183,7 +183,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   /// that joined then would build a URL for port 0. Unlike
   /// [start] this never changes the target's peer or token, for callers whose
   /// own copy of either may be stale.
-  bool joinTarget(Object owner, {String target = MediaProxy.homeTarget}) {
+  bool joinTarget(Object owner, {required String target}) {
     final entry = _targets[target];
     if (_server == null || entry == null) return false;
     entry.owners.add(owner);
@@ -192,7 +192,7 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  Future<void> stop(Object owner, {String target = MediaProxy.homeTarget}) =>
+  Future<void> stop(Object owner, {required String target}) =>
       _drop(owner, [target]);
 
   @override
@@ -385,13 +385,12 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
       MediaRoutes.hls(targetBaseUrl(target), sessionId);
 
   @override
-  String targetBaseUrl(String target) =>
-      target == MediaProxy.homeTarget ? _urlBase : '$_urlBase/t/$target';
+  String targetBaseUrl(String target) => '$_urlBase/t/$target';
 
   /// Build the base URL for HLS content. Manifests use relative segment URLs,
   /// which resolve against this base — including the LAN token prefix.
-  String buildBaseUrl(String sessionId) =>
-      MediaRoutes.hlsBase(_urlBase, sessionId);
+  String buildBaseUrl(String sessionId, {required String target}) =>
+      MediaRoutes.hlsBase(targetBaseUrl(target), sessionId);
 
   /// Build a direct stream URL for a media file.
   ///
@@ -400,13 +399,6 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   @override
   String buildDirectStreamUrl(String fileId, {required String target}) =>
       MediaRoutes.directStream(targetBaseUrl(target), fileId);
-
-  /// Build a download URL for a completed transcode job.
-  ///
-  /// Uses the P2P HLS protocol with a "download:" session ID prefix
-  /// to proxy the transcoded file download.
-  String buildDownloadUrl(String jobId) =>
-      MediaRoutes.download(_urlBase, jobId);
 
   // Handle incoming HTTP requests
   Future<void> _handleRequest(HttpRequest request) async {
@@ -424,7 +416,15 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
 
     final path = status.path;
     debugPrint('[LocalProxy] ${request.method} $path');
-    final (targetKey, routePath) = _splitTarget(path);
+    final split = _splitTarget(path);
+    if (split == null) {
+      request.response.statusCode = HttpStatus.notFound;
+      _setCorsHeaders(request.response);
+      request.response.write('Not Found');
+      await request.response.close();
+      return;
+    }
+    final (targetKey, routePath) = split;
     final target = _targets[targetKey];
 
     // The routing table is shared with the browser's Service Worker rather
@@ -475,13 +475,13 @@ class LocalProxyService with MediaProxyLeases implements MediaProxy {
   Future<int> debugHandlePath(String path) async =>
       _authorizeAndStripPrefix(path).statusCode;
 
-  /// Splits `/t/<key>/rest` into its target and `/rest`. Any other path is
-  /// home's.
-  static (String, String) _splitTarget(String path) {
-    if (!path.startsWith('/t/')) return (MediaProxy.homeTarget, path);
+  /// Splits `/t/<key>/rest` into its target and `/rest`, or null for any
+  /// other path: every instance is served under its own target.
+  static (String, String)? _splitTarget(String path) {
+    if (!path.startsWith('/t/')) return null;
     final rest = path.substring('/t/'.length);
     final slash = rest.indexOf('/');
-    if (slash <= 0) return ('', path);
+    if (slash <= 0) return null;
     return (rest.substring(0, slash), rest.substring(slash));
   }
 
