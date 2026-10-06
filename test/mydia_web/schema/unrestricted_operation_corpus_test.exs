@@ -29,7 +29,6 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
     "SubtitleSearch" => "calls an external subtitle provider",
     "DownloadSubtitle" => "calls an external subtitle provider",
     "StartStreamingSession" => "starts ffmpeg; covered by streaming_access_test.exs",
-    "StartStreamingSessionLegacy" => "starts ffmpeg; covered by streaming_access_test.exs",
     "EndStreamingSession" => "needs a live streaming session",
     "PrepareDownload" => "starts a transcode job",
     "DownloadJobStatus" => "needs a transcode job",

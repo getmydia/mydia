@@ -98,10 +98,6 @@ class MydiaClient {
 
   final Set<String> _downgradedOps = {};
 
-  /// Whether this server has answered [document] with its fallback.
-  bool isDowngraded(DocumentNode document) =>
-      _downgradedOps.contains(_operationName(document));
-
   Future<Map<String, dynamic>> query(
     DocumentNode document, {
     DocumentNode? fallback,

@@ -9,8 +9,6 @@ import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/core/sources/mydia/root_typename.dart';
-import 'package:player/graphql/mutations/start_streaming_session.graphql.dart';
-import 'package:player/graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import 'package:player/graphql/queries/mydia_queries.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 
@@ -705,41 +703,33 @@ void main() {
   });
 
   test('the fallback gets its own variables and is remembered', () async {
+    final current = parseString(r'mutation StartThing($id: ID!, $cap: Int) '
+        r'{ startThing(id: $id, cap: $cap) { id } }');
+    final fallback = parseString(
+        r'mutation StartThingFallback($id: ID!) { startThing(id: $id) { id } }');
     final server = FakeMydiaTransport()
-      ..handlers['StartStreamingSession'] = (_) {
+      ..handlers['StartThing'] = (_) {
         throw const SourceException.server(
-            'Unknown argument "maxHeight" on field "startStreamingSession".');
+            'Unknown argument "cap" on field "startThing".');
       }
-      ..handlers['StartStreamingSessionLegacy'] = (vars) => {
-            'startStreamingSession': {'sessionId': 's1'}
+      ..handlers['StartThingFallback'] = (vars) => {
+            'startThing': {'id': vars['id']}
           };
     final client = fakeMydiaClient(server);
 
-    await client.query(
-      documentNodeMutationStartStreamingSession,
-      fallback: documentNodeMutationStartStreamingSessionLegacy,
-      variables: {'fileId': 'f', 'strategy': 'HLS_COPY', 'maxHeight': 720},
-      fallbackVariables: {'fileId': 'f', 'strategy': 'HLS_COPY'},
-    );
+    await client.query(current,
+        fallback: fallback,
+        variables: {'id': 'f', 'cap': 720},
+        fallbackVariables: {'id': 'f'});
+    expect(server.calls.last.vars.containsKey('cap'), isFalse);
 
-    expect(server.calls.last.vars.containsKey('maxHeight'), isFalse);
-    expect(
-        client.isDowngraded(documentNodeMutationStartStreamingSession), isTrue);
-
-    await client.query(
-      documentNodeMutationStartStreamingSession,
-      fallback: documentNodeMutationStartStreamingSessionLegacy,
-      variables: {'fileId': 'g', 'strategy': 'HLS_COPY', 'maxHeight': 720},
-      fallbackVariables: {'fileId': 'g', 'strategy': 'HLS_COPY'},
-    );
-    expect(
-      server.calls.map((c) => c.operation),
-      [
-        'StartStreamingSession',
-        'StartStreamingSessionLegacy',
-        'StartStreamingSessionLegacy'
-      ],
-    );
+    await client.query(current,
+        fallback: fallback,
+        variables: {'id': 'g', 'cap': 720},
+        fallbackVariables: {'id': 'g'});
+    expect(server.calls.map((c) => c.operation),
+        ['StartThing', 'StartThingFallback', 'StartThingFallback']);
+    expect(server.calls.last.vars, {'id': 'g'});
   });
 
   test('rootQuery lets a generated parser read the bare data', () {
