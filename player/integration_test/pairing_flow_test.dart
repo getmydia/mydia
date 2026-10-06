@@ -38,6 +38,7 @@ void main() {
     bool sawError = false;
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
+      await dismissStorageWarningIfShown(tester);
       final loginTitle = find.text('Connect to Server');
       if (loginTitle.evaluate().isEmpty) {
         debugPrint('[Test] Navigated away from login screen after $i seconds');

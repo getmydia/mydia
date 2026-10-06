@@ -326,6 +326,7 @@ Future<void> _pairPlayerA(
 
   for (var i = 0; i < maxSeconds; i++) {
     await tester.pump(const Duration(seconds: 1));
+    await dismissStorageWarningIfShown(tester);
     if (find.text('Connect to Server').evaluate().isEmpty) return;
   }
   fail('Player A pairing did not complete after $maxSeconds seconds');

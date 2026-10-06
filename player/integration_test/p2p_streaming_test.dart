@@ -70,6 +70,7 @@ void main() {
     debugPrint('[P2P Streaming Test] Waiting for pairing to complete...');
     for (var i = 0; i < maxSeconds; i++) {
       await tester.pump(const Duration(seconds: 1));
+      await dismissStorageWarningIfShown(tester, tag: '[P2P Streaming Test]');
       final loginTitle = find.text('Connect to Server');
       if (loginTitle.evaluate().isEmpty) {
         debugPrint('[P2P Streaming Test] Paired successfully after $i seconds');

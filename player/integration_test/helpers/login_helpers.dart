@@ -7,6 +7,7 @@ import 'package:player/app.dart';
 import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_store.dart';
+import 'package:player/presentation/widgets/storage_unavailable_dialog.dart';
 
 /// Where a mounted [MyApp] came to rest.
 enum AppLanding {
@@ -79,6 +80,26 @@ Future<void> waitForLoginScreen(
   if (landing != AppLanding.login) {
     throw StateError('Expected a fresh install but a Mydia account is stored');
   }
+}
+
+/// Taps Continue on the storage-unavailable warning if it is showing.
+///
+/// A successful pairing or sign-in shows it when secure storage rejects the
+/// writes, which is always the case on a CI box with no keyring. The login
+/// screen stays mounted under the dialog until it is dismissed, so a test that
+/// waits for navigation away from login must call this on every tick.
+Future<bool> dismissStorageWarningIfShown(
+  WidgetTester tester, {
+  String tag = '[Test]',
+}) async {
+  if (find.byType(StorageUnavailableDialog).evaluate().isEmpty) return false;
+  debugPrint('$tag Storage warning shown, tapping Continue');
+  await tester.tap(find.descendant(
+    of: find.byType(StorageUnavailableDialog),
+    matching: find.text('Continue'),
+  ));
+  await tester.pump(const Duration(milliseconds: 500));
+  return true;
 }
 
 /// Forgets every stored source and its secrets, so the next mounted app is a
