@@ -15,6 +15,8 @@ import 'core/downloads/download_service.dart';
 import 'core/migration/hive_legacy_data_rewriter.dart';
 import 'core/migration/legacy_mydia_migration.dart';
 import 'core/playback/playback_progress_store.dart';
+import 'core/config/web_config.dart';
+import 'core/sources/mydia/web_config_account.dart';
 import 'core/sources/store/source_secrets.dart';
 import 'core/sources/store/source_store.dart';
 import 'core/crash_reporting/crash_report.dart';
@@ -144,6 +146,12 @@ Future<void> _migrateLegacyMydia(
       castSession: HiveCastSessionStore(castBox),
     ),
   ));
+  // The serving instance re-injects a fresh token on every load.
+  final webConfig = kIsWeb ? getWebConfig() : null;
+  if (webConfig != null) {
+    await upsertWebConfigAccount(
+        store, SourceSecrets(getAuthStorage()), webConfig);
+  }
 }
 
 /// Hands `runApp` a [StartupGate] immediately, so the first frame is a

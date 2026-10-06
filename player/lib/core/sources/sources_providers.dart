@@ -33,15 +33,42 @@ final sourceStoreProvider = FutureProvider<SourceStore>(
 final sourceSecretsProvider =
     Provider<SourceSecrets>((ref) => SourceSecrets(getAuthStorage()));
 
+/// Overridable so tests can exercise the web rules in the VM.
+final isWebProvider = Provider<bool>((_) => kIsWeb);
+
+/// Plex, Jellyfin and Stash send no CORS headers for a foreign origin, and
+/// the web player is served by Mydia itself. Web keeps Mydia only.
+bool sourceKindAllowedOnWeb(SourceKind k) => k == SourceKind.mydia;
+
 /// Every stored third-party account, plus the remembered active source.
 class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   @override
   Future<SourceSnapshot> build() async {
-    // Plex and Stash send no CORS headers for a foreign origin, and the web
-    // player is served by Mydia itself. Web keeps Mydia only.
-    if (kIsWeb) return SourceSnapshot.empty;
+    final isWeb = ref.watch(isWebProvider);
     final store = await ref.watch(sourceStoreProvider.future);
-    return store.load();
+    final snapshot = await store.load();
+    return isWeb ? _webOnly(snapshot) : snapshot;
+  }
+
+  /// What web can use of [snapshot]: Mydia accounts and their choices.
+  static SourceSnapshot _webOnly(SourceSnapshot snapshot) {
+    final accounts = [
+      for (final a in snapshot.accounts)
+        if (sourceKindAllowedOnWeb(a.account.kind)) a,
+    ];
+    if (accounts.length == snapshot.accounts.length) return snapshot;
+    bool kept(SourceId id) =>
+        accounts.any((a) => id.value.startsWith('${a.account.id}:'));
+    return SourceSnapshot(
+      accounts: accounts,
+      activeId: snapshot.activeId != null && kept(snapshot.activeId!)
+          ? snapshot.activeId
+          : null,
+      allServers: {
+        for (final e in snapshot.allServers.entries)
+          if (kept(e.key)) e.key: e.value,
+      },
+    );
   }
 
   SourceSnapshot? get _current => switch (state) {
@@ -64,6 +91,12 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// record's locks for servers the new record still lists, so signing in
   /// again never unhides a server.
   Future<void> putAccount(SourceAccountRecord record) => _serialise(() {
+        if (ref.read(isWebProvider) &&
+            !sourceKindAllowedOnWeb(record.account.kind)) {
+          debugPrint(
+              '[Sources] ${record.account.kind} accounts cannot run on web.');
+          return Future<void>.value();
+        }
         final stored = _record(record.account.id);
         final ids = {for (final s in record.servers) s.id};
         final kept = {
@@ -151,7 +184,6 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   /// Never throws: a selection that cannot be remembered still applies for
   /// this launch.
   Future<void> setActive(SourceId? id) async {
-    if (kIsWeb) return;
     try {
       await _serialise(() => _write((store) => store.setActive(id)));
     } catch (e) {
@@ -246,12 +278,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       _current?.accounts.where((a) => a.account.id == accountId).firstOrNull;
 
   Future<void> _write(Future<void> Function(SourceStore store) write) async {
-    if (kIsWeb) return;
     final store = await ref.read(sourceStoreProvider.future);
     await write(store);
     final next = await store.load();
     if (!ref.mounted) return;
-    state = AsyncData(next);
+    state = AsyncData(ref.read(isWebProvider) ? _webOnly(next) : next);
   }
 }
 
