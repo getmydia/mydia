@@ -8,6 +8,7 @@ import 'package:player/domain/sources/source_error.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../test_utils/toast_harness.dart';
 import 'fake_media_source.dart';
@@ -51,6 +52,12 @@ class _NoWatchedSource extends FakeMediaSource {
 class _FailingWatchedSource extends FakeMediaSource {
   @override
   Future<void> setWatched(ItemRef ref, bool watched) async =>
+      throw const SourceException.unreachable();
+}
+
+class _FailingItemSource extends FakeMediaSource {
+  @override
+  Future<ItemDetail> item(ItemRef ref) async =>
       throw const SourceException.unreachable();
 }
 
@@ -109,5 +116,18 @@ void main() {
     await tester.tap(find.byKey(const Key('source-item-watched')));
     await tester.pumpAndSettle();
     expect(fake.watchedCalls.single, (movie, true));
+  });
+
+  testWidgets('an item that fails to load keeps the cast button',
+      (tester) async {
+    await pumpItem(tester, _FailingItemSource(), movie);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+  });
+
+  testWidgets('a loaded item keeps the cast button over its backdrop',
+      (tester) async {
+    await pumpItem(tester, FakeMediaSource(), movie);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
   });
 }

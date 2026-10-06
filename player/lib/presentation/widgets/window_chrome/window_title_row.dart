@@ -199,6 +199,18 @@ class WindowTitleBar extends StatelessWidget implements PreferredSizeWidget {
   /// Wraps the row in a background (for example `GlassSurface.appBar`).
   final Widget Function(Widget row)? decorate;
 
+  /// A transparent bar with only a back button and the cast button, for a
+  /// pushed page with no title of its own (an item, an error, a not-found).
+  ///
+  /// The caller's `Scaffold` must sit under [WindowChromeInsets.removeBand],
+  /// as for any [WindowTitleBar].
+  static WindowTitleBar back(BuildContext context, {bool showCast = true}) =>
+      WindowTitleBar(
+        height: WindowTitleRow.heightOf(context),
+        leading: const BackButton(),
+        showCast: showCast,
+      );
+
   @override
   Size get preferredSize => Size.fromHeight(height);
 

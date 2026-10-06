@@ -226,12 +226,17 @@ void main() {
         reason: 'the other instance keeps its sign-in');
   });
 
-  testWidgets('draws into the macOS title band with no cast button',
+  testWidgets('the server page carries the cast button', (tester) async {
+    await pump(tester);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+  });
+
+  testWidgets('draws into the macOS title band with the cast button',
       (tester) async {
     await pump(tester,
         insets: const WindowChromeInsets(height: 40, leading: 80, trailing: 0));
 
-    expect(find.byKey(WindowTitleRow.castKey), findsNothing);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
     expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
   });
 

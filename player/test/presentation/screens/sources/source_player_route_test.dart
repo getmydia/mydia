@@ -12,6 +12,7 @@ import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/plex_playback_session.dart';
 import 'package:player/presentation/screens/player/session/source_playback_sessions.dart';
 import 'package:player/presentation/screens/sources/source_player_route.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../core/sources/plex/plex_media_source_test.dart' as plex;
 import 'fake_media_source.dart';
@@ -136,6 +137,8 @@ void main() {
       ),
     ));
     expect(find.byKey(const Key('source-player-unavailable')), findsOneWidget);
+    expect(find.byType(BackButton), findsOneWidget);
+    expect(find.byKey(WindowTitleRow.castKey), findsNothing);
   });
 
   testWidgets('an empty file id is unavailable rather than a blank stream',
