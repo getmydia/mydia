@@ -191,7 +191,16 @@ class _AccountCard extends ConsumerWidget {
               ],
             Wrap(
               spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                if (account.kind == SourceKind.mydia)
+                  IconButton(
+                    key: Key('manage-settings-${account.id}'),
+                    tooltip: 'Settings',
+                    icon: const Icon(Icons.settings_rounded),
+                    onPressed: () => context.push(
+                        '/sources/manage/${mydiaSourceIdOf(record).value}'),
+                  ),
                 if (account.kind == SourceKind.plex &&
                     record.profiles.length > 1)
                   OutlinedButton(

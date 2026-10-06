@@ -85,24 +85,6 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   UpdateState build() => _state;
 }
 
-/// Reports a fixed download footprint; nothing else is used by the dialog.
-class _FakeDownloads implements DownloadService {
-  _FakeDownloads({required this.count, required this.bytes});
-
-  final int count;
-  final int bytes;
-
-  @override
-  ({int count, int bytes}) accountDownloads(String accountId) =>
-      (count: count, bytes: bytes);
-
-  @override
-  Future<int> deleteAccountDownloads(String accountId) async => 0;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// Serves a fixed settings value, or fails, without touching secure storage.
 class _FakeSettingsController extends SettingsController {
   _FakeSettingsController({this.value, this.fail = false});
@@ -272,11 +254,6 @@ Future<void> _pump(
                   : const SettingsScreen(),
             ),
             GoRoute(
-              path: '/settings/devices',
-              builder: (context, state) =>
-                  const Scaffold(body: Text('devices stub')),
-            ),
-            GoRoute(
               path: '/settings/diagnostics',
               builder: (context, state) =>
                   const Scaffold(body: Text('diagnostics stub')),
@@ -326,79 +303,13 @@ void main() {
     expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
   });
 
-  testWidgets('sign out is a danger row in an account section', (tester) async {
-    await _pump(tester);
-
-    expect(find.text('Account'), findsOneWidget);
-    expect(find.byKey(const Key('settings-sign-out')), findsOneWidget);
-
-    final context = tester.element(find.text('Sign out'));
-    final title = tester.widget<Text>(find.text('Sign out'));
-
-    expect(title.style?.color, Theme.of(context).colorScheme.error);
-  });
-
-  testWidgets('confirming sign out removes the bound server only',
-      (tester) async {
-    final mydia = await _twoMydiaServers();
-    final store = mydia.store;
-    await _pump(tester, mydia: mydia);
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.descendant(
-      of: find.byType(AlertDialog),
-      matching: find.widgetWithText(TextButton, 'Remove server'),
-    ));
-    await tester.pumpAndSettle();
-
-    final left = (await store.load()).accounts.map((r) => r.account.id);
-    expect(left, ['mb']);
-  });
-
-  testWidgets('the sign out dialog says how many downloads it deletes',
-      (tester) async {
-    await _pump(tester, downloads: _FakeDownloads(count: 3, bytes: 2048));
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    final dialog = find.byType(AlertDialog);
-    expect(
-        find.descendant(
-            of: dialog,
-            matching: find.textContaining('also deletes 3 downloads')),
-        findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Remove server'), findsOneWidget);
-  });
-
-  testWidgets('the sign out dialog has no download line without downloads',
+  testWidgets('sign out and paired devices live on each server, not here',
       (tester) async {
     await _pump(tester);
 
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('also deletes'), findsNothing);
-  });
-
-  testWidgets('cancelling sign out leaves the server in place', (tester) async {
-    final mydia = await _twoMydiaServers();
-    final store = mydia.store;
-    await _pump(tester, mydia: mydia);
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
-    await tester.pumpAndSettle();
-
-    expect((await store.load()).accounts, hasLength(2));
+    expect(find.byKey(const Key('settings-sign-out')), findsNothing);
+    expect(find.text('Sign out'), findsNothing);
+    expect(find.text('Paired devices'), findsNothing);
   });
 
   testWidgets('the footer names the running version', (tester) async {
@@ -591,15 +502,6 @@ void main() {
             'value is still the original one');
   });
 
-  testWidgets('paired devices navigates to the devices route', (tester) async {
-    await _pump(tester);
-
-    await tester.tap(find.text('Paired devices'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('devices stub'), findsOneWidget);
-  });
-
   testWidgets('connection details navigates to diagnostics', (tester) async {
     await _pump(tester);
 
@@ -655,17 +557,12 @@ void main() {
   });
 
   group('when preferences fail to load', () {
-    testWidgets('sign out stays reachable', (tester) async {
-      await _pump(tester, settings: null, fail: true);
-
-      expect(find.byKey(const Key('settings-sign-out')), findsOneWidget);
-    });
-
     testWidgets('the screen is not replaced by a full-page error',
         (tester) async {
       await _pump(tester, settings: null, fail: true);
 
-      expect(find.text('Paired devices'), findsOneWidget);
+      expect(find.text('Diagnostics'), findsOneWidget);
+      expect(find.byKey(const Key('settings-retry-row')), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
     });
 

@@ -5,8 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../core/build_channel.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
-import '../../../core/sources/sources_providers.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
@@ -24,9 +22,7 @@ import '../../../domain/models/user_settings.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
-import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
-import '../sources/confirm_remove_account.dart';
 import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
 import 'widgets/settings_identity.dart';
@@ -123,10 +119,6 @@ class SettingsScreen extends ConsumerWidget {
                       _ManageSection(connection: summary),
                       const SizedBox(height: 18),
                       const SourcesSettingsSection(),
-                      const SizedBox(height: 18),
-                      _AccountSection(
-                        onSignOut: () => _handleSignOut(context, ref),
-                      ),
                       _VersionFooter(version: currentVersion),
                     ],
                   ),
@@ -137,30 +129,6 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _handleSignOut(BuildContext context, WidgetRef ref) async {
-    final toaster = Toaster.of(context);
-    try {
-      // The binding is only known once the stored sources have loaded.
-      await ref.read(sourceRecordsProvider.future);
-      await ref.read(legacyInstanceIdProvider.future);
-      final account = ref.read(boundMydiaProvider)?.source.account;
-      if (account == null || !context.mounted) return;
-      final confirmed = await confirmRemoveAccount(
-        context,
-        ref,
-        account,
-        title: 'Remove this server?',
-        confirmLabel: 'Remove server',
-      );
-      if (!confirmed) return;
-      // Removing the bound account sends the router on: to another server, or
-      // to add-a-server when none is left.
-      await removeMydiaInstance(ref, account);
-    } catch (_) {
-      toaster.show('Could not remove this server.', kind: ToastKind.error);
-    }
   }
 }
 
@@ -273,12 +241,6 @@ class _ManageSection extends ConsumerWidget {
     return SettingsSection(
       label: 'Manage',
       children: [
-        SettingsRow.navigation(
-          icon: Icons.devices,
-          title: 'Paired devices',
-          subtitle: 'Revoke access for a phone or browser',
-          onTap: () => context.push('/settings/devices'),
-        ),
         SettingsRow.navigation(
           icon: Icons.lan_outlined,
           title: 'Diagnostics',
@@ -415,34 +377,6 @@ String updateCheckSubtitle({
   return behaviour == ManualCheckBehaviour.checksAndInstalls
       ? 'Checks and installs the newest build'
       : "You're up to date";
-}
-
-/// Sign out, kept away from the read-only facts above it.
-///
-/// `SettingsRow.action` already tints a danger row's title and icon tile with
-/// the scheme's error colour, so this needs no styling of its own. The
-/// `settings-sign-out` key moves here from the hero's outlined button.
-class _AccountSection extends StatelessWidget {
-  const _AccountSection({required this.onSignOut});
-
-  final VoidCallback onSignOut;
-
-  @override
-  Widget build(BuildContext context) {
-    return SettingsSection(
-      label: 'Account',
-      children: [
-        SettingsRow.action(
-          key: const Key('settings-sign-out'),
-          icon: Icons.logout,
-          title: 'Sign out',
-          subtitle: 'Signs out of this server on this device',
-          danger: true,
-          onTap: onSignOut,
-        ),
-      ],
-    );
-  }
 }
 
 /// The running version, stated once, quietly, at the bottom.

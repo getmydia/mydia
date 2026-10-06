@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -80,7 +81,58 @@ Future<InMemorySourceStore> _removeGuest(
   return store;
 }
 
+Future<void> _pumpRouted(
+  WidgetTester tester,
+  SourceAccountRecord record,
+) async {
+  final store = InMemorySourceStore();
+  await store.putAccount(record);
+  await tester.pumpWidget(ProviderScope(
+    overrides: [
+      noDownloadsOverride,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
+    ],
+    child: MaterialApp.router(
+      builder: toastLayerBuilder,
+      routerConfig: GoRouter(
+        initialLocation: '/sources/manage',
+        routes: [
+          GoRoute(
+              path: '/sources/manage',
+              builder: (_, __) => const ManageSourcesScreen(),
+              routes: [
+                GoRoute(
+                    path: ':sourceId',
+                    builder: (_, state) => Text(
+                        'settings for ${state.pathParameters['sourceId']}')),
+              ]),
+        ],
+      ),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('a Mydia card opens that instance\'s settings', (tester) async {
+    final record = testMydiaRecord();
+    await _pumpRouted(tester, record);
+
+    await tester.tap(find.byKey(Key('manage-settings-${record.account.id}')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('settings for ${testMydiaSourceId.value}'), findsOneWidget);
+  });
+
+  testWidgets('a Plex card has no settings button', (tester) async {
+    await _pumpRouted(tester, plexRecord());
+
+    expect(find.byKey(const Key('manage-remove-acc1')), findsOneWidget);
+    expect(find.byKey(const Key('manage-settings-acc1')), findsNothing);
+  });
+
   testWidgets('removes an account after confirming', (tester) async {
     final store = InMemorySourceStore();
     final storage = MockAuthStorage();

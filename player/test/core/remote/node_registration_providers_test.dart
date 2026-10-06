@@ -197,6 +197,21 @@ void main() {
     expect(sent['b']!.length, greaterThan(before));
   });
 
+  test('retry retries one instance and leaves the others alone', () async {
+    result = false;
+    await start();
+    p2p.publish('n' * 64);
+    await pumpEventQueue();
+    final beforeA = sent['a']!.length;
+    final beforeB = sent['b']!.length;
+
+    container.read(nodeRegistrationsProvider.notifier).retry(idOf('a'));
+    await pumpEventQueue();
+
+    expect(sent['a']!.length, greaterThan(beforeA));
+    expect(sent['b']!.length, beforeB);
+  });
+
   test('waits for the node id, then registers', () async {
     await start();
     expect(container.read(nodeRegistrationsProvider).values,

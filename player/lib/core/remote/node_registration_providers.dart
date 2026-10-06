@@ -163,4 +163,14 @@ class NodeRegistrations extends Notifier<Map<SourceId, RegistrationStatus>> {
       if (e.service.status is! RegistrationSucceeded) e.service.retryNow();
     }
   }
+
+  /// [retryAll] for one instance.
+  void retry(SourceId sourceId) {
+    for (final e in _entries.values) {
+      if (e.sourceId == sourceId &&
+          e.service.status is! RegistrationSucceeded) {
+        e.service.retryNow();
+      }
+    }
+  }
 }

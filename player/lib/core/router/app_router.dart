@@ -32,6 +32,7 @@ import '../../presentation/screens/unwatched/unwatched_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
+import '../../presentation/screens/sources/mydia_instance_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
 import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
 import '../../presentation/screens/sources/stash_connect_screen.dart';
@@ -360,12 +361,14 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const ManageSourcesScreen(),
       ),
-      // Where `/settings/devices` lands; the screen is the same list.
+      // One Mydia instance's settings; also where `/settings/devices` lands.
       GoRoute(
         path: '/sources/manage/:sourceId',
         name: 'manage_source',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const ManageSourcesScreen(),
+        builder: (context, state) => MydiaInstanceScreen(
+          sourceId: SourceId(state.pathParameters['sourceId']!),
+        ),
       ),
 
       // Shell route for main app with bottom navigation

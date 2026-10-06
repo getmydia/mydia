@@ -40,7 +40,6 @@ import 'package:player/presentation/screens/library/library_sort.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/screens/login_screen.dart';
-import 'package:player/presentation/screens/settings/devices_screen.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
@@ -370,25 +369,6 @@ void main() {
         );
       });
     }
-  });
-
-  group('DevicesScreen title row', () {
-    // Devices is a full-window route (pushed outside the shell), so it owns
-    // `Scaffold.appBar` itself rather than going through a seam: nothing here
-    // reads a GraphQL stream during the build that constructs the row.
-    testWidgets(
-        'draws into the band on macOS, with no cast button (there never was '
-        'one)', (tester) async {
-      await pumpWithInsets(
-        tester,
-        _cases['macOS']!,
-        width: _kWidth,
-        child: const DevicesScreen(),
-      );
-
-      expect(find.byKey(WindowTitleRow.castKey), findsNothing);
-      expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
-    });
   });
 
   group('DiagnosticsScreen title row', () {
