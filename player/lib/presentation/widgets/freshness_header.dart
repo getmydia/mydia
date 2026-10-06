@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/sources/current_source_status.dart';
 import '../../core/format/relative_time.dart';
@@ -50,7 +51,13 @@ class FreshnessHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final offline = isOffline(ref.watch(currentSourceStatusProvider));
+    // The shell's OfflineBanner reports the source of the current route, so
+    // this header must read the same one. Outside a router, the active source.
+    final location =
+        GoRouter.maybeOf(context)?.routeInformationProvider.value.uri.path;
+    final offline = isOffline(ref.watch(location == null
+        ? currentSourceStatusProvider
+        : routeSourceStatusProvider(location)));
     // OfflineBanner already owns this message. Two stacked warning banners
     // saying overlapping things is how banners get ignored.
     if (offline) return const SizedBox.shrink();
