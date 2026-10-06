@@ -5,6 +5,7 @@ import 'cache_watcher.dart';
 import 'fetch_log.dart';
 import 'invalidation_target.dart';
 import 'query_key.dart';
+import 'source_group.dart';
 
 /// The watchers that are alive right now, by key.
 ///
@@ -156,6 +157,9 @@ class Invalidator {
   /// Used on app resume: every dormant screen becomes cold, every live one
   /// refetches now.
   ///
+  /// Watchers are grouped by source (see `cacheGroupOf`): groups refetch
+  /// concurrently, watchers within a group one after another.
+  ///
   /// Same per-watcher isolation as [invalidate], and for the same reason:
   /// one watcher's refetch failing must not stop the rest from refreshing.
   /// The clear itself gets the same treatment: a transient storage error
@@ -171,7 +175,19 @@ class Invalidator {
         '$stackTrace',
       );
     }
+    final groups = <String, List<CacheWatcher>>{};
     for (final watcher in _registry.watchers) {
+      groups.putIfAbsent(cacheGroupOf(watcher.key), () => []).add(watcher);
+    }
+    // Concurrent across sources so one slow server cannot hold up another,
+    // sequential within one so a p2p relay never sees a burst.
+    await Future.wait([
+      for (final group in groups.values) _refetchInTurn(group),
+    ]);
+  }
+
+  Future<void> _refetchInTurn(List<CacheWatcher> watchers) async {
+    for (final watcher in watchers) {
       try {
         final refetched = await watcher.refetchAutomatically();
         if (!refetched) {
