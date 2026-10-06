@@ -27,8 +27,19 @@ Future<SourceId> saveMydiaServer(
   String? reauthAccountId,
   MydiaGqlTransport? transport,
 }) async {
-  final instanceId =
-      await _resolveInstanceId(ref, partial, transport: transport);
+  final reported = await _resolveInstanceId(ref, partial, transport: transport);
+
+  // A server that is already stored keeps its account id, whatever id it
+  // reports now: a migrated URL install is named by a URL hash.
+  final snapshot = await ref.read(sourceRecordsProvider.future);
+  final match = await findMatchingMydiaAccount(
+    snapshot,
+    ref.read(sourceSecretsProvider),
+    instanceId: reported,
+    nodeId: partial.nodeId,
+    url: partial.serverUrl,
+  );
+  final instanceId = match == null ? reported : match.id.substring(1);
 
   if (!isValidSourceIdComponent(instanceId)) {
     throw const SourceException.server(

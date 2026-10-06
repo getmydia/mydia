@@ -87,11 +87,11 @@ Future<String?> migrateLegacyMydia(LegacyMydiaMigrationDeps deps) async {
         instanceId: kept?.instanceId ?? existing.id.substring(1),
         accessToken: creds.accessToken,
         instanceName: kept?.instanceName,
-        mediaToken: creds.mediaToken,
-        mediaTokenExpiry: creds.mediaTokenExpiry,
-        deviceToken: creds.deviceToken,
-        serverUrl: kept?.serverUrl,
-        nodeAddr: kept?.nodeAddr,
+        mediaToken: creds.mediaToken ?? kept?.mediaToken,
+        mediaTokenExpiry: creds.mediaTokenExpiry ?? kept?.mediaTokenExpiry,
+        deviceToken: creds.deviceToken ?? kept?.deviceToken,
+        serverUrl: kept?.serverUrl ?? creds.serverUrl,
+        nodeAddr: kept?.nodeAddr ?? creds.nodeAddr,
         username: kept?.username,
       ),
     );
@@ -165,23 +165,18 @@ Future<({String accountId, ProviderAccount? existing})?> resolveLegacyAccount(
   final nodeId = creds.nodeId;
   final url = creds.serverUrl;
 
-  for (final record in snapshot.accounts) {
-    final account = record.account;
-    if (account.kind != SourceKind.mydia) continue;
-    final theirs = await readMydiaCredentials(secrets, account);
-    if (theirs == null) continue;
-    final theirUrl = theirs.serverUrl;
-    final sameUrl =
-        url != null && theirUrl != null && normalizeMydiaUrl(theirUrl) == url;
-    if ((instanceId.isNotEmpty && theirs.instanceId == instanceId) ||
-        (nodeId != null && theirs.nodeId == nodeId) ||
-        sameUrl) {
-      return (accountId: account.id, existing: account);
-    }
-  }
+  final match = await findMatchingMydiaAccount(
+    snapshot,
+    secrets,
+    instanceId: instanceId,
+    nodeId: nodeId,
+    url: url,
+  );
+  if (match != null) return (accountId: match.id, existing: match);
 
+  // An unusable legacy id is skipped, so the node or URL can still name it.
   final String newId;
-  if (instanceId.isNotEmpty) {
+  if (instanceId.isNotEmpty && isValidSourceIdComponent(instanceId)) {
     newId = instanceId;
   } else if (nodeId != null) {
     newId = nodeInstanceId(nodeId);
