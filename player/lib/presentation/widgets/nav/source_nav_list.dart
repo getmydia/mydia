@@ -8,8 +8,6 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/auth/auth_status.dart';
-import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
@@ -65,12 +63,9 @@ class SourceNavList extends ConsumerWidget {
     };
     final searchable =
         ref.watch(mediaSourceProvider(sourceId))?.as<Searchable>() != null;
-    // Without a Mydia sign-in the router sends `/settings` back to the
+    // Without a Mydia account the router sends `/settings` back to the
     // source's home, so the row would be a dead end.
-    final mydiaSignedIn = switch (ref.watch(authStateProvider)) {
-      AsyncData(value: AuthStatus.authenticated) => true,
-      _ => false,
-    };
+    final mydiaSignedIn = ref.watch(hasMydiaProvider);
     final libraryTargets = [
       for (final library in libraries)
         '$root/library/${Uri.encodeComponent(library.ref.id)}',

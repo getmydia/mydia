@@ -1,7 +1,7 @@
-// `app.dart` builds three different MaterialApps depending on auth state. All
-// three must carry AppScrollBehavior: only the router one has scrollables
-// today, but a loading or error screen that grows one later must not silently
-// fall back to the stock behavior.
+// `app.dart` builds two different MaterialApps depending on whether the stored
+// sources have loaded. Both must carry AppScrollBehavior: only the router one
+// has scrollables today, but a loading screen that grows one later must not
+// silently fall back to the stock behavior.
 
 import 'dart:async';
 
@@ -10,33 +10,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/app.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/scroll/app_scroll_behavior.dart';
-
-/// Auth notifier whose state the test drives directly.
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 void main() {
   Future<void> pumpApp(
-    WidgetTester tester,
-    AsyncValue<AuthStatus> auth,
-  ) async {
+    WidgetTester tester, {
+    required bool sourcesLoading,
+  }) async {
     final container = ProviderContainer(overrides: [
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      authStateProvider.overrideWith(() => _FakeAuthNotifier(auth)),
+      sourcesLoadingProvider.overrideWithValue(sourcesLoading),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),
       asyncBoundMydiaClientProvider
@@ -60,20 +50,12 @@ void main() {
   }
 
   testWidgets('the loading app carries AppScrollBehavior', (tester) async {
-    await pumpApp(tester, const AsyncValue.loading());
-    expectBehavior(tester);
-  });
-
-  testWidgets('the error app carries AppScrollBehavior', (tester) async {
-    await pumpApp(
-      tester,
-      AsyncValue.error(Exception('nope'), StackTrace.empty),
-    );
+    await pumpApp(tester, sourcesLoading: true);
     expectBehavior(tester);
   });
 
   testWidgets('the router app carries AppScrollBehavior', (tester) async {
-    await pumpApp(tester, const AsyncValue.data(AuthStatus.authenticated));
+    await pumpApp(tester, sourcesLoading: false);
     expectBehavior(tester);
   });
 }

@@ -9,7 +9,6 @@ import 'core/app_menu/now_playing.dart';
 import 'core/sources/lock/source_lock_controller.dart';
 import 'core/sources/lock/window_privacy.dart';
 import 'core/sources/sources_providers.dart';
-import 'core/auth/auth_status.dart';
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/sources/connection/connection_refresh_bus.dart';
 import 'core/layout/tv_canvas.dart';
@@ -21,7 +20,6 @@ import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
-import 'core/graphql/graphql_provider.dart';
 import 'core/sources/mydia/bound_mydia.dart';
 import 'core/graphql/watch/resume_gate.dart';
 import 'core/graphql/watch/watcher_registry.dart';
@@ -95,10 +93,10 @@ Future<void> handleControlRequest({
 /// Deliberately not "have we ever attempted" — an opt-out or a transient
 /// startup failure (no reachable server yet, a registration error) must stay
 /// retryable for the rest of the launch, not just for the first
-/// `authStateProvider` emission. What actually latches this closed is a
+/// bound-instance change. What actually latches this closed is a
 /// receiver successfully wired ([succeed]): from then on every further call
-/// is a no-op, whether the setting flips off and back on or auth re-emits
-/// `authenticated` again.
+/// is a no-op, whether the setting flips off and back on or the bound
+/// instance re-emits.
 ///
 /// Extracted as its own class — like [handleControlRequest] above — because
 /// `_initRemoteControlIfEnabled` itself cannot be exercised by a widget test
@@ -221,9 +219,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Reattach to a cast session left running by a previous app launch, on
     // builds that can actually cast.
     //
-    // Deliberately gated on authentication rather than fired at startup. The
+    // Deliberately gated on a bound server rather than fired at startup. The
     // cast stack awaits `asyncGraphqlClientProvider`, which stays in the
-    // loading state until the user is authenticated. Kicking it off before
+    // loading state until a Mydia server is bound. Kicking it off before
     // then leaves that chain in flight indefinitely, and if the container is
     // disposed while it is still loading — app teardown, or an integration
     // test finishing on the pairing screen — Riverpod completes the pending
@@ -235,10 +233,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Starting remote control shares the same gate for the same reason:
     // `NodeRegistration` and `RemoteRoster` both need a signed-in GraphQL
     // client too.
-    ref.listenManual<AsyncValue<AuthStatus>>(
-      authStateProvider,
+    ref.listenManual<String?>(
+      boundAccountIdProvider,
       (previous, next) {
-        if (next.value != AuthStatus.authenticated) return;
+        if (next == null) return;
         _restoreCastSession();
         unawaited(_initRemoteControlIfEnabled());
       },
@@ -254,15 +252,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // the rest of this launch instead of only the next one. Gated on auth
     // the same way `_initRemoteControlIfEnabled` itself is — see that
     // method's own dartdoc for why reading `asyncGraphqlClientProvider`
-    // before authentication is not merely pointless but actively harmful in
+    // before a server is bound is not merely pointless but actively harmful in
     // tests.
     ref.listenManual<AsyncValue<bool>>(
       remoteControlEnabledProvider,
       (previous, next) {
         if (next.value != true) return;
-        if (ref.read(authStateProvider).value != AuthStatus.authenticated) {
-          return;
-        }
+        if (ref.read(boundMydiaProvider) == null) return;
         unawaited(_initRemoteControlIfEnabled());
       },
     );
@@ -288,8 +284,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     unawaited(_windowFrame.load());
   }
 
-  /// Whether a restore has already been attempted this launch. Auth state can
-  /// re-emit `authenticated` (a token refresh, a reconnect) and restoring is a
+  /// Whether a restore has already been attempted this launch. The bound
+  /// instance can re-emit (a token refresh, a reconnect) and restoring is a
   /// once-per-launch action.
   bool _castRestoreAttempted = false;
 
@@ -308,7 +304,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   /// Whether the controllable-device startup path still needs to run. Not a
-  /// once-per-launch flag: `authStateProvider` can re-emit `authenticated`
+  /// once-per-launch flag: the bound instance can re-emit
   /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
   /// and either must be able to retry an opt-out or a transient failure.
   /// What actually stops wiring a second receiver onto
@@ -512,12 +508,8 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authStateProvider);
-
-    debugPrint('[MyApp] authState=$authState');
-
-    // Show loading screen while auth state is initializing
-    if (authState.isLoading) {
+    // Show loading screen while the stored sources are loading
+    if (ref.watch(sourcesLoadingProvider)) {
       debugPrint('[MyApp] Showing loading screen');
       return MaterialApp(
         title: BuildChannel.current.appName,
@@ -539,31 +531,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       );
     }
 
-    // Show error state
-    if (authState.hasError) {
-      debugPrint('[MyApp] Auth error: ${authState.error}');
-      return MaterialApp(
-        title: BuildChannel.current.appName,
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: const AppScrollBehavior(),
-        theme: AppTheme.darkTheme,
-        home: Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                const SizedBox(height: 16),
-                Text('Error: ${authState.error}',
-                    style: const TextStyle(color: Colors.white)),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    debugPrint('[MyApp] Auth ready, showing router');
+    debugPrint('[MyApp] Sources ready, showing router');
 
     final router = ref.watch(appRouterProvider);
 

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -13,11 +11,6 @@ import 'package:player/presentation/widgets/nav/source_picker.dart';
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../screens/sources/fake_media_source.dart';
 import '../../../test_utils/mydia_test_source.dart';
-
-class _Authenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
 
 Source _source(
   String account,
@@ -63,7 +56,6 @@ Future<List<PickerChoice?>> _open(
   final results = <PickerChoice?>[];
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      authStateProvider.overrideWith(_Authenticated.new),
       thirdPartySourcesProvider
           .overrideWithValue([testMydiaSource, ...sources]),
       allServersSourcesProvider.overrideWithValue(included),

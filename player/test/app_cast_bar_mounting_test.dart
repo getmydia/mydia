@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'test_utils/bound_mydia_override.dart';
 import 'package:player/app.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -14,16 +14,6 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/cast_device.dart';
-
-/// Auth notifier whose state the test drives directly.
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 const _device = CastDevice(
   id: 'd1',
@@ -55,9 +45,8 @@ void main() {
     CastSession? session,
   }) async {
     final container = ProviderContainer(overrides: [
+      ...boundMydiaOverrides(),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      authStateProvider.overrideWith(() =>
-          _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),
       asyncBoundMydiaClientProvider

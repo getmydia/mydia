@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/connection/connection_refresh_bus.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_identity.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_media_source.dart';
@@ -32,11 +30,6 @@ import 'plex/fake_plex_server.dart';
 import 'plex/plex_tv_client_test.dart' show resourcesJson;
 import 'stash/fake_stash_server.dart';
 import 'stash/stash_media_source_test.dart' show stashRecord;
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 final atticRecord = SourceAccountRecord(
   account: const ProviderAccount(
@@ -82,7 +75,6 @@ Future<ProviderContainer> containerFor({
     await storage.write(e.key, e.value);
   }
   final container = ProviderContainer(overrides: [
-    authStateProvider.overrideWith(_Unauthenticated.new),
     noDownloadsOverride,
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -188,7 +180,6 @@ void main() {
     final storage = _FlakyStorage('source/st1/account_token');
     await storage.write('source/st1/account_token', FakeStashServer.apiKey);
     final c = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),

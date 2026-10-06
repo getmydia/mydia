@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/connection/connection_provider.dart'
     show storedRelayUrlProvider;
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/source.dart';
@@ -14,11 +12,6 @@ import 'package:player/core/sources/store/source_store.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// A Mydia account record, owner profile and one server, as login stores it.
 SourceAccountRecord mydiaRecord(String instanceId, {int addedAtMs = 0}) {
@@ -68,7 +61,6 @@ Future<
     await writeMydiaCredentials(secrets, record.account, creds);
   }
   final container = ProviderContainer(overrides: [
-    authStateProvider.overrideWith(_Unauthenticated.new),
     noDownloadsOverride,
     storedRelayUrlProvider.overrideWith((ref) async => null),
     sourceStoreProvider.overrideWith((ref) async => store),

@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
@@ -17,6 +16,7 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/remote/ambient_dismissals.dart';
 import 'package:player/core/remote/ambient_targets.dart';
@@ -36,13 +36,6 @@ import '../../test_utils/fake_streaming_session_service.dart';
 import '../../core/sources/mydia/fake_mydia_client.dart';
 import '../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../test_utils/toast_harness.dart';
-
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-  final AsyncValue<AuthStatus> _initial;
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 const _device = CastDevice(
   id: 'd1',
@@ -106,8 +99,7 @@ Future<ProviderContainer> _pump(
 
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    authStateProvider.overrideWith(() =>
-        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    hasMydiaProvider.overrideWithValue(true),
     asyncGraphqlClientProvider
         .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(session)),
@@ -247,8 +239,7 @@ Future<ProviderContainer> _pumpWithManager(
 }) async {
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    authStateProvider.overrideWith(() =>
-        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    hasMydiaProvider.overrideWithValue(true),
     asyncGraphqlClientProvider
         .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionManagerProvider.overrideWith((ref) async {
@@ -288,8 +279,7 @@ Future<bool Function()> _pumpLayer(
 
   final container = ProviderContainer(overrides: [
     castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-    authStateProvider.overrideWith(() =>
-        _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+    hasMydiaProvider.overrideWithValue(true),
     asyncGraphqlClientProvider
         .overrideWith((ref) => Completer<GraphQLClient>().future),
     castSessionProvider.overrideWith((ref) => Stream.value(null)),
@@ -1510,8 +1500,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.web()),
-        authStateProvider.overrideWith(() =>
-            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        hasMydiaProvider.overrideWithValue(true),
         asyncGraphqlClientProvider
             .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
@@ -1530,6 +1519,28 @@ void main() {
       expect(tester.getSize(find.byType(CastMiniController)), Size.zero,
           reason: 'with no capability and no Mydia backend, it renders '
               'nothing — the pre-fix baseline this test pins');
+    });
+
+    testWidgets('renders nothing without a stored Mydia account',
+        (tester) async {
+      final container = ProviderContainer(overrides: [
+        castCapabilitiesProvider
+            .overrideWithValue(const CastCapabilities.full()),
+        hasMydiaProvider.overrideWithValue(false),
+        asyncGraphqlClientProvider
+            .overrideWith((ref) => Completer<GraphQLClient>().future),
+        castSessionProvider.overrideWith((ref) => Stream.value(null)),
+        ambientPlayingProvider.overrideWith((ref) => Stream.value(const [])),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: CastMiniController())),
+      ));
+      await tester.pump();
+
+      expect(tester.getSize(find.byType(CastMiniController)), Size.zero);
     });
 
     testWidgets(
@@ -1551,8 +1562,7 @@ void main() {
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.web()),
         mydiaCastBackendProvider.overrideWithValue(FakeMydiaCastBackend()),
-        authStateProvider.overrideWith(() =>
-            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        hasMydiaProvider.overrideWithValue(true),
         asyncGraphqlClientProvider
             .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
@@ -1583,8 +1593,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
-        authStateProvider.overrideWith(() =>
-            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        hasMydiaProvider.overrideWithValue(true),
         asyncGraphqlClientProvider
             .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
@@ -1616,8 +1625,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
-        authStateProvider.overrideWith(() =>
-            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        hasMydiaProvider.overrideWithValue(true),
         asyncGraphqlClientProvider
             .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),
@@ -1944,8 +1952,7 @@ void main() {
       final container = ProviderContainer(overrides: [
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
-        authStateProvider.overrideWith(() =>
-            _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
+        hasMydiaProvider.overrideWithValue(true),
         asyncGraphqlClientProvider
             .overrideWith((ref) => Completer<GraphQLClient>().future),
         castSessionProvider.overrideWith((ref) => Stream.value(null)),

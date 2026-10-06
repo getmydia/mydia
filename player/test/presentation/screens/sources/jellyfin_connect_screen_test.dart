@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_identity.dart';
 import 'package:player/core/sources/source_factories.dart';
 import 'package:player/core/sources/source_http.dart';
@@ -18,11 +16,6 @@ import '../../../core/sources/jellyfin/fake_jellyfin_server.dart';
 import '../../../core/sources/jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord;
 import '../../../test_utils/mock_auth_storage.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 Future<FakeJellyfinServer> pumpScreen(WidgetTester tester,
     {bool quickConnect = true, String? reauthAccountId}) async {
@@ -43,7 +36,6 @@ Future<FakeJellyfinServer> pumpScreen(WidgetTester tester,
   );
   final container = ProviderContainer(
     overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),

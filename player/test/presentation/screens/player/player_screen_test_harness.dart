@@ -20,7 +20,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/sources/media_source.dart'
+    show SourceConnectionStatus;
+import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
@@ -50,17 +52,6 @@ import '../../../test_utils/stub_link_transport.dart';
 import '../../../core/sources/mydia/fake_mydia_client.dart';
 import '../../../test_utils/toast_harness.dart';
 import '../../../test_utils/mydia_test_source.dart';
-
-/// Reports whatever [AsyncValue] it is built with — the auth status this
-/// screen sees is fixed for the lifetime of the test.
-class FakeAuthNotifier extends AuthStateNotifier {
-  FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 /// Reports a fixed [conn.ConnectionState] and skips `ConnectionNotifier`'s
 /// real `_loadStoredState`, which reads platform secure storage — not
@@ -710,7 +701,8 @@ ProviderContainer buildPlayerScreenContainer({
   // Overrides [downloaded] when a test needs a lookup that depends on the
   // item asked for.
   DownloadService? downloadService,
-  AuthStatus authStatus = AuthStatus.authenticated,
+  // The bound Mydia instance reports itself unreachable.
+  bool offline = false,
   PlaybackProgressStore? progressStore,
   SettingsService? settingsService,
   // Deliberately not defaulted the way [settingsService] is:
@@ -743,9 +735,13 @@ ProviderContainer buildPlayerScreenContainer({
         .overrideWithValue(settingsService ?? FakeSettingsService()),
     if (coreSettingsService != null)
       coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
-    authStateProvider.overrideWith(
-      () => FakeAuthNotifier(AsyncValue.data(authStatus)),
-    ),
+    boundMydiaProvider.overrideWithValue(offline
+        ? MydiaSource(
+            source: testMydiaSource,
+            client: fakeMydiaClient(StubLinkTransport(link)),
+            status: ValueNotifier(SourceConnectionStatus.unreachable),
+          )
+        : null),
     downloadManagerProvider.overrideWith((ref) async =>
         downloadService ?? FakeDownloadService(downloaded: downloaded)),
     asyncGraphqlClientProvider

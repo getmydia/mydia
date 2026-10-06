@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/auth/auth_status.dart';
+import '../../core/sources/current_source_status.dart';
 import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
@@ -12,7 +12,6 @@ import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
-import '../../core/graphql/graphql_provider.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
 import '../../core/router/root_routes.dart';
@@ -302,11 +301,7 @@ class _AppShellState extends ConsumerState<AppShell>
 
   /// Check if the app is currently in offline mode
   bool _isOfflineMode() {
-    final authState = ref.watch(authStateProvider);
-    return authState.maybeWhen(
-      data: (status) => status == AuthStatus.offlineMode,
-      orElse: () => false,
-    );
+    return isOffline(ref.watch(currentSourceStatusProvider));
   }
 
   /// Show a toast when a disabled nav item is tapped in offline mode

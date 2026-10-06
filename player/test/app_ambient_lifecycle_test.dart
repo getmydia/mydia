@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'test_utils/bound_mydia_override.dart';
 import 'package:player/app.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -15,19 +15,6 @@ import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/remote/ambient_targets.dart';
 
 import 'core/remote/ambient_targets_test.dart' hide main;
-
-/// Auth notifier whose state the test drives directly — copied from
-/// `app_cast_bar_mounting_test.dart`'s own fake rather than shared, to keep
-/// this file's only dependency on that one confined to the `pumpApp`
-/// pattern it establishes for mounting the real `MyApp`.
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 /// Proves the wiring gap this file exists to close: that a real OS
 /// background/foreground transition — not a Riverpod listener count
@@ -55,9 +42,8 @@ void main() {
     required AmbientTargets targets,
   }) async {
     final container = ProviderContainer(overrides: [
+      ...boundMydiaOverrides(),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      authStateProvider.overrideWith(() =>
-          _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),
       asyncBoundMydiaClientProvider

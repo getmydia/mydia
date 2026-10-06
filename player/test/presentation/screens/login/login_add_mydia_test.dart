@@ -7,12 +7,10 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/auth/device_info_service.dart';
 import 'package:player/core/channels/pairing_service.dart';
 import 'package:player/core/connection/connection_provider.dart'
     show storedRelayUrlProvider;
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
@@ -22,11 +20,6 @@ import 'package:player/presentation/screens/login/login_controller.dart';
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/stub_graphql_client.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 class _FakePairing extends PairingService {
   _FakePairing(this.credentials);
@@ -143,7 +136,6 @@ void main() {
     AuthService? auth,
   }) {
     final c = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       noDownloadsOverride,
       storedRelayUrlProvider.overrideWith((ref) async => null),
       sourceStoreProvider.overrideWith((ref) async => store),

@@ -472,8 +472,8 @@ void main() {
     // default one, so without this it boots ALREADY AUTHENTICATED, routes
     // straight past the login screen, and `_waitForLoginScreen` times out
     // looking for text that will never render. Verified exactly that way in
-    // CI run 32455230401: `[MyApp] authState=...AuthStatus.authenticated`
-    // immediately after mount, then `Login screen not found after 30 seconds`.
+    // CI run 32455230401: the app signed in immediately after mount,
+    // then `Login screen not found after 30 seconds`.
     //
     // Deliberately not in `setUpAll`: player B pairs above and stores its
     // credentials in its own injected store, but clearing here rather than

@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/auth/auth_status.dart';
+import '../../core/sources/current_source_status.dart';
 import '../../core/compatibility/compatibility_provider.dart';
-import '../../core/graphql/graphql_provider.dart';
 import '../../core/player/platform_features.dart';
 import '../../core/theme/colors.dart';
 import '../../core/update/update_dismissal_provider.dart';
@@ -108,7 +107,7 @@ class UpdateBanner extends ConsumerWidget {
           compatibility.showBanner &&
           compatibility.verdict.isPlayerBehind,
       compatibilityUnresolved: compatibilityUnresolved,
-      isOffline: ref.watch(authStateProvider).value == AuthStatus.offlineMode,
+      isOffline: isOffline(ref.watch(currentSourceStatusProvider)),
     );
 
     // The null check is redundant with `visible`, and present so the compiler

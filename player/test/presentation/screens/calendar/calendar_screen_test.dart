@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/domain/models/calendar_entry.dart';
 import 'package:player/presentation/screens/calendar/calendar_controller.dart';
@@ -13,14 +11,6 @@ import 'package:player/presentation/screens/calendar/calendar_screen.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
-
-/// The real notifier reaches for secure storage on build, which a widget
-/// test has no business doing. Mirrors `browse_scaffold_test.dart`.
-class _StubAuthState extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() =>
-      const AsyncValue.data(AuthStatus.authenticated);
-}
 
 class _StubCalendar extends CalendarController {
   _StubCalendar(this.entries);
@@ -57,7 +47,6 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_StubAuthState.new),
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
         settingsServiceProvider

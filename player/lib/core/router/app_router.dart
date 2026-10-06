@@ -49,7 +49,6 @@ import '../../presentation/screens/collections/collection_detail_screen.dart';
 import '../../presentation/screens/search/search_screen.dart';
 import '../../domain/models/search_result.dart';
 import '../../presentation/widgets/app_shell.dart';
-import '../auth/auth_status.dart';
 import '../graphql/graphql_provider.dart';
 import 'navigator_keys.dart';
 
@@ -150,20 +149,14 @@ String? addMydiaRouteRedirect({
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
 String? appRedirect({
-  required AsyncValue<AuthStatus> auth,
   required String location,
   required bool sourcesLoading,
   required List<Source> thirdParty,
+  SourceId? boundId,
   SourceId? activeId,
   Set<SourceId> gated = const {},
   String? fullLocation,
 }) {
-  final authStatus = auth.maybeWhen(
-    data: (status) => status,
-    orElse: () => AuthStatus.unauthenticated,
-  );
-  if (auth.isLoading) return null;
-
   // A locked or hidden source opens only after unlocking. Same screen for
   // both, so a deep link never confirms that a hidden source exists.
   final target = _sourceIdIn(location);
@@ -173,8 +166,6 @@ String? appRedirect({
   final isUnlockRoute = location == '/unlock';
 
   final isLoginRoute = location == '/login';
-  final isDownloadsRoute = location == '/downloads';
-  final isPlayerRoute = location.startsWith('/player');
   // Reached from the login screen's "Connect another server instead" and
   // "Show hidden servers" (Manage servers, after the unlock screen).
   final isSignedOutSourcesRoute = location == '/sources/add' ||
@@ -184,11 +175,11 @@ String? appRedirect({
   final isSourceRoute =
       location.startsWith('/s/') || location.startsWith('/sources');
 
-  if (authStatus == AuthStatus.unauthenticated &&
+  if (boundId == null &&
       !isLoginRoute &&
       !isUnlockRoute &&
       !isSignedOutSourcesRoute) {
-    // Usable with a Plex, Jellyfin or Stash server alone: land there, not on login.
+    // Usable with any one server alone: land there, not on add-a-server.
     if (sourcesLoading) return null;
     if (thirdParty.isNotEmpty) {
       if (isSourceRoute) return null;
@@ -201,16 +192,8 @@ String? appRedirect({
       }
       return '/s/${landing.id.value}';
     }
-    return '/login';
+    return '/sources/add';
   }
-  if (authStatus == AuthStatus.offlineMode &&
-      !isDownloadsRoute &&
-      !isUnlockRoute &&
-      !isPlayerRoute &&
-      !isSourceRoute) {
-    return '/downloads';
-  }
-  if (authStatus == AuthStatus.authenticated && isLoginRoute) return '/';
   return null;
 }
 
@@ -221,11 +204,8 @@ GoRouter appRouter(Ref ref) {
   // Simple notifier just to trigger GoRouter refreshes
   final refreshNotifier = _AuthRefreshNotifier();
 
-  // Listen to auth state changes and trigger router refresh
-  ref.listen<AsyncValue<AuthStatus>>(authStateProvider, (previous, next) {
-    debugPrint('[AppRouter] Auth state changed: $previous -> $next');
-    refreshNotifier.refresh();
-  });
+  // Binding or removing the Mydia instance changes where the router lands.
+  ref.listen(boundMydiaProvider, (_, __) => refreshNotifier.refresh());
 
   // A first third-party source (Plex, Jellyfin or Stash) makes the app usable without Mydia.
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
@@ -252,10 +232,10 @@ GoRouter appRouter(Ref ref) {
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final target = appRedirect(
-        auth: ref.read(authStateProvider),
         location: state.matchedLocation,
         sourcesLoading: ref.read(sourcesLoadingProvider),
         thirdParty: ref.read(thirdPartySourcesProvider),
+        boundId: ref.read(boundMydiaProvider)?.source.id,
         activeId: ref.read(selectedSourceIdProvider),
         gated: ref.read(gatedSourceIdsProvider),
         fullLocation: state.uri.toString(),

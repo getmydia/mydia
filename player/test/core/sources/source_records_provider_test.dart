@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/graphql/watch/query_key.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
@@ -17,11 +15,6 @@ import 'package:player/core/sources/store/source_store.dart';
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/no_downloads.dart';
 import 'store/source_json_test.dart' show plexRecord;
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// Holds All servers choices but refuses to save new ones.
 class _ChoicesFailStore extends InMemorySourceStore {
@@ -61,7 +54,6 @@ void main() {
     cache = InMemorySourceCache();
     container = ProviderContainer(overrides: [
       sourceCacheProvider.overrideWithValue(cache),
-      authStateProvider.overrideWith(_Unauthenticated.new),
       noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -108,7 +100,6 @@ void main() {
     downloadLookupTimeout = const Duration(milliseconds: 50);
     addTearDown(() => downloadLookupTimeout = saved);
     final stuck = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       downloadManagerProvider
           .overrideWith((ref) => Completer<DownloadService>().future),
       sourceStoreProvider.overrideWith((ref) async => store),
@@ -126,7 +117,6 @@ void main() {
         heldManager() async {
       final gate = Completer<DownloadService>();
       final c = ProviderContainer(overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider.overrideWith((ref) => gate.future),
         sourceStoreProvider.overrideWith((ref) async => store),
@@ -166,7 +156,6 @@ void main() {
       downloadLookupTimeout = timeout;
       addTearDown(() => downloadLookupTimeout = saved);
       final c = ProviderContainer(overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         sourceCacheProvider.overrideWithValue(cache),
         downloadManagerProvider
             .overrideWith((ref) => Completer<DownloadService>().future),
@@ -272,7 +261,6 @@ void main() {
       () async {
     final failing = _ChoicesFailStore();
     final c = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => failing),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       noDownloadsOverride,
@@ -296,7 +284,6 @@ void main() {
     expect((await store.load()).activeId, id);
 
     final restarted = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
@@ -319,7 +306,6 @@ void main() {
   test('a store that cannot open leaves no sources and does not throw',
       () async {
     final broken = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => throw Exception('disk')),
     ]);
     addTearDown(broken.dispose);

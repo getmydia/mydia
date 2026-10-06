@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/lock/device_auth.dart';
 import 'package:player/core/sources/lock/pin_store.dart';
 import 'package:player/core/sources/lock/source_lock_controller.dart';
@@ -32,11 +30,6 @@ class _Auth implements DeviceAuth {
     calls++;
     return result;
   }
-}
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
 }
 
 late GoRouter _router;
@@ -173,7 +166,6 @@ void main() {
       _Auth(DeviceAuthResult.unavailable),
       pins,
       overrides: [
-        authStateProvider.overrideWith(_Unauthenticated.new),
         noDownloadsOverride,
         sourceStoreProvider.overrideWith((ref) async => store),
         sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),

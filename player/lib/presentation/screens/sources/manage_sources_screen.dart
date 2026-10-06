@@ -22,9 +22,9 @@ import '../settings/widgets/settings_section.dart';
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
 
-/// A guest Mydia reached over p2p stops being watched. Unreadable credentials
+/// A Mydia reached over p2p stops being watched. Unreadable credentials
 /// must not block the removal.
-Future<void> unwatchGuestPeer(
+Future<void> unwatchMydiaPeer(
   SourceSecrets secrets,
   P2pService p2p,
   ProviderAccount account,
@@ -34,8 +34,17 @@ Future<void> unwatchGuestPeer(
     final nodeAddr = (await readMydiaCredentials(secrets, account))?.nodeAddr;
     if (nodeAddr != null) p2p.unwatchPeer(nodeAddr);
   } catch (e) {
-    debugPrint('[Sources] Could not stop watching the guest peer: $e');
+    debugPrint('[Sources] Could not stop watching the peer: $e');
   }
+}
+
+/// Removes a Mydia instance from this device: stops watching its peer, then
+/// drops the account and everything stored for it. Nothing changes on the
+/// server.
+Future<void> removeMydiaInstance(WidgetRef ref, ProviderAccount account) async {
+  await unwatchMydiaPeer(
+      ref.read(sourceSecretsProvider), ref.read(p2pServiceProvider), account);
+  await ref.read(sourceRecordsProvider.notifier).removeAccount(account.id);
 }
 
 class ManageSourcesScreen extends ConsumerWidget {
@@ -157,12 +166,8 @@ class _AccountCard extends ConsumerWidget {
     );
     if (confirmed != true || !context.mounted) return;
     final toaster = Toaster.of(context);
-    await unwatchGuestPeer(ref.read(sourceSecretsProvider),
-        ref.read(p2pServiceProvider), record.account);
     try {
-      await ref
-          .read(sourceRecordsProvider.notifier)
-          .removeAccount(record.account.id);
+      await removeMydiaInstance(ref, record.account);
     } catch (_) {
       toaster.show('Could not remove this account.', kind: ToastKind.error);
     }
