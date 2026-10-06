@@ -105,20 +105,32 @@ class Person {
 
 @immutable
 class UserState {
-  const UserState({this.watched = false, this.progressSeconds});
+  const UserState({
+    this.watched = false,
+    this.progressSeconds,
+    this.unwatchedCount,
+  });
 
   final bool watched;
 
   /// Saved resume position. Null or zero means none.
   final int? progressSeconds;
 
+  /// Unwatched episodes of a show or season. Null for anything else, or when
+  /// the server does not say.
+  final int? unwatchedCount;
+
   factory UserState.fromJson(Map<String, Object?> json) => UserState(
         watched: json['watched'] as bool? ?? false,
         progressSeconds: json['progressSeconds'] as int?,
+        unwatchedCount: json['unwatchedCount'] as int?,
       );
 
-  Map<String, Object?> toJson() =>
-      {'watched': watched, 'progressSeconds': progressSeconds};
+  Map<String, Object?> toJson() => {
+        'watched': watched,
+        'progressSeconds': progressSeconds,
+        'unwatchedCount': unwatchedCount,
+      };
 }
 
 @immutable

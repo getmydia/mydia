@@ -5,8 +5,14 @@ library;
 import '../../domain/models/download_option.dart';
 import '../../domain/models/download_plan.dart';
 import '../../domain/models/media_segment.dart';
+import '../../domain/models/media_stream.dart';
+import '../../domain/models/remote_device.dart';
+import '../../domain/navigation/media_filter.dart';
+import '../../domain/sources/collection.dart';
 import '../../domain/sources/hub.dart';
 import '../../domain/sources/item.dart';
+import '../../domain/sources/library.dart';
+import '../remote/remote_roster.dart';
 
 abstract interface class WatchedState {
   Future<void> setWatched(ItemRef ref, bool watched);
@@ -93,4 +99,65 @@ abstract interface class ProgressSync {
     required int durationSeconds,
     required bool watched,
   });
+}
+
+typedef SavedFilterQuery = ({LibraryRef library, BrowseQuery query});
+
+/// A source implementing this also lists [SourceCapability.collections].
+abstract interface class Collections {
+  /// Every collection the viewer can see, in the server's order.
+  Future<List<SourceCollection>> collections();
+
+  /// [collectionId] is a `SourceCollection.id` of this source.
+  Future<Page<ItemSummary>> collectionItems(
+    String collectionId, {
+    Cursor? cursor,
+  });
+}
+
+/// A source implementing this also lists [SourceCapability.calendar].
+abstract interface class Calendar {
+  /// Episodes and movies airing or released from [start] to [end]
+  /// inclusive, ordered by `ItemSummary.airDate`. Both are local dates.
+  Future<List<ItemSummary>> calendar(DateTime start, DateTime end);
+}
+
+/// Saved filters live on the device (`FilterDestination`). A source
+/// implementing this also lists [SourceCapability.savedFilters].
+abstract interface class SavedFilters {
+  /// The library and query that browse [filter]'s results, or null when
+  /// this source has no library for its kind.
+  SavedFilterQuery? filterQuery(MediaFilter filter);
+}
+
+/// A source implementing this also lists [SourceCapability.unwatchedListing].
+abstract interface class UnwatchedListing {
+  Future<Page<ItemSummary>> unwatched({Cursor? cursor});
+}
+
+/// A source implementing this also lists [SourceCapability.favoritesListing].
+abstract interface class FavoritesListing {
+  Future<Page<ItemSummary>> favorites({Cursor? cursor});
+}
+
+/// A source implementing this also lists [SourceCapability.mediaInfo].
+abstract interface class MediaInfo {
+  /// One entry per file of a movie or episode. Empty when it has none.
+  Future<List<MediaFileInfo>> mediaInfo(ItemRef ref);
+}
+
+/// Other players signed into the same server, and this device's entry in
+/// its device list. A source implementing this also lists
+/// [SourceCapability.remoteTargets].
+abstract interface class RemoteTargets {
+  /// Built once per source object.
+  DeviceRoster get roster;
+
+  /// Registers this device's p2p node. Never throws.
+  Future<bool> registerNode(String nodeId);
+
+  /// The server's device list, revoked ones included, for its settings.
+  Future<List<RemoteDevice>> devices();
+
+  Future<bool> revokeDevice(String deviceId);
 }

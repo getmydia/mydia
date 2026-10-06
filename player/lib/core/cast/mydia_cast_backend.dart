@@ -139,7 +139,7 @@ class P2pControlTransport implements MydiaControlTransport {
 /// receiver is a peer that can describe itself.
 class MydiaCastBackend
     implements CastBackend, MydiaSnapshotSource, MydiaSyncSource {
-  final RemoteRoster roster;
+  final DeviceRoster roster;
   final MydiaControlTransport transport;
   final String selfNodeId;
 

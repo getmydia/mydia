@@ -19,7 +19,7 @@ typedef PlaybackSnapshotSource = FlutterPlaybackSnapshot? Function();
 /// tracking the difference would break taking over a locally started session,
 /// which is the main point of the feature.
 class RemoteControlReceiver {
-  final RemoteRoster _roster;
+  final DeviceRoster _roster;
   final String _targetName;
   final PlaybackSnapshotSource _snapshotSource;
   final void Function(RemoteControlIntent) _onIntent;
@@ -27,7 +27,7 @@ class RemoteControlReceiver {
       _respond;
 
   RemoteControlReceiver({
-    required RemoteRoster roster,
+    required DeviceRoster roster,
     required String targetName,
     required PlaybackSnapshotSource snapshotSource,
     required void Function(RemoteControlIntent) onIntent,

@@ -34,7 +34,19 @@ class RemoteDeviceEntry {
 /// One source for both questions on purpose. The controller reads it as a
 /// picker list and the target reads it as an access control list, so the two
 /// cannot drift apart.
-class RemoteRoster {
+abstract interface class DeviceRoster {
+  /// Devices that can be dialed, revoked ones omitted.
+  Future<List<RemoteDeviceEntry>> entries();
+
+  /// Devices the server saw recently. Never throws.
+  Future<List<RemoteDeviceEntry>> onlineEntries();
+
+  /// Whether a dialing peer is one of this account's devices.
+  Future<bool> allows(String peerNodeId);
+}
+
+/// The Mydia server's [DeviceRoster], fetched over GraphQL and cached.
+class RemoteRoster implements DeviceRoster {
   final MydiaClient _client;
   final DateTime Function() _now;
 
@@ -54,6 +66,7 @@ class RemoteRoster {
   /// reported one, so it is omitted rather than listed as permanently
   /// offline, and a revoked device is omitted because revoking is documented
   /// as preventing future access.
+  @override
   Future<List<RemoteDeviceEntry>> entries() async {
     await _ensureFresh();
     return _entries;
@@ -71,6 +84,7 @@ class RemoteRoster {
   /// rest of this roster's life. Any other failure answers the last list that
   /// arrived, empty before the first, and never throws: the ambient resweep
   /// timer calls this with nobody to report an error to.
+  @override
   Future<List<RemoteDeviceEntry>> onlineEntries() async {
     if (_onlineUnsupported) return entries();
 
@@ -101,6 +115,7 @@ class RemoteRoster {
   ///
   /// The peer node ID is authenticated by iroh during the QUIC handshake, so
   /// this is a membership test rather than a credential check.
+  @override
   Future<bool> allows(String peerNodeId) async {
     final justFetched = await _ensureFresh();
     if (_entries.any((e) => e.nodeId == peerNodeId)) return true;
