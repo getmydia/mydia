@@ -1,0 +1,27 @@
+query Collections($first: Int) {
+  collections(first: $first) {
+    id
+    name
+    description
+    type
+    visibility
+    itemCount
+    posterPaths
+  }
+}
+
+query CollectionItems($collectionId: ID!, $first: Int) {
+  collectionItems(collectionId: $collectionId, first: $first) {
+    id
+    type
+    title
+    year
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
