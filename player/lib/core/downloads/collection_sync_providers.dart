@@ -97,6 +97,29 @@ Future<Map<String, Map<String, String>>> allSyncedCollections(Ref ref) async {
   return result;
 }
 
+/// Deletes every entry that belongs to one of [sourceIds]: the current
+/// `<sourceId>:<collectionId>` keys, and legacy bare-id entries whose recorded
+/// `sourceId` matches. A legacy entry that recorded none is read as the bound
+/// instance's and is left alone: resolving the bound instance here would make
+/// the account store depend on itself. Runs when an account is removed, so its
+/// entries cannot outlive it.
+Future<void> deleteCollectionSyncFor(Ref ref, Set<String> sourceIds) async {
+  if (sourceIds.isEmpty) return;
+  final box = await ref.read(collectionSyncBoxProvider.future);
+  final doomed = <dynamic>[];
+  for (final key in box.keys) {
+    final raw = box.get(key);
+    if (raw == null) continue;
+    final owner = raw['sourceId'] as String?;
+    final keyed = sourceIds.any((id) => '$key'.startsWith('$id:'));
+    if (keyed || (owner != null && sourceIds.contains(owner))) {
+      doomed.add(key);
+    }
+  }
+  await box.deleteAll(doomed);
+  ref.invalidate(allSyncedCollectionsProvider);
+}
+
 void _invalidate(Ref ref, String sourceId, String collectionId) {
   ref.invalidate(isCollectionSyncedProvider(sourceId, collectionId));
   ref.invalidate(collectionSyncConfigProvider(sourceId, collectionId));

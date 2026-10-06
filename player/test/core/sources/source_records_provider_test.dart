@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:hive_ce/hive.dart';
+import 'package:player/core/downloads/collection_sync_providers.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/downloads/download_providers.dart';
@@ -76,6 +80,36 @@ void main() {
     await container.read(sourceRecordsProvider.future);
     await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(cache.read(key), isNull);
+  });
+
+  test('removing an account drops its collection sync entries only', () async {
+    Hive.init('./.dart_tool/source_records_sync_test');
+    final box = await Hive.openBox<Map<dynamic, dynamic>>('sync-removal-test',
+        bytes: Uint8List(0));
+    addTearDown(box.close);
+    const mine = 'acc1:owner:abc123';
+    const theirs = 'acc2:owner:zzz999';
+    await box.put('$mine:1', {'sourceId': mine, 'collectionId': '1'});
+    await box.put('$theirs:1', {'sourceId': theirs, 'collectionId': '1'});
+    // Legacy bare-id entries: one recorded for the removed source, one for
+    // the other, and one with no recorded owner, which is left alone.
+    await box.put('2', {'sourceId': mine});
+    await box.put('3', {'sourceId': theirs});
+    await box.put('4', {'name': 'orphan'});
+
+    final c = ProviderContainer(overrides: [
+      sourceCacheProvider.overrideWithValue(cache),
+      noDownloadsOverride,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      collectionSyncBoxProvider.overrideWith((ref) async => box),
+    ]);
+    addTearDown(c.dispose);
+    await store.putAccount(plexRecord());
+    await c.read(sourceRecordsProvider.future);
+    await c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+
+    expect(box.keys.toSet(), {'$theirs:1', '3', '4'});
   });
 
   test('adding an account shows up without a reload', () async {

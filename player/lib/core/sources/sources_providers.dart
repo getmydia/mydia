@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
+import '../downloads/collection_sync_providers.dart';
 import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
@@ -137,6 +138,16 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
+  /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
+  /// like [_dropCache]: leftovers are inert without the account.
+  Future<void> _dropCollectionSync(Set<String> sourceIds) async {
+    try {
+      await deleteCollectionSyncFor(ref, sourceIds);
+    } catch (e) {
+      debugPrint('[Sources] Could not clear collection sync entries: $e');
+    }
+  }
+
   Future<void> removeAccount(String accountId) async {
     await _serialise(() async {
       final record = _record(accountId);
@@ -149,6 +160,9 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      await _dropCollectionSync({
+        for (final s in record?.sources ?? const <Source>[]) s.id.value,
+      });
     });
     await _deleteDownloads([accountId]);
   }
