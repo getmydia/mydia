@@ -554,6 +554,76 @@ void main() {
       expect(token, isNull);
     });
 
+    test('stores null expiry when refreshed expiresAt is unparseable',
+        () async {
+      final oldExpiry = DateTime.now().add(const Duration(minutes: 10));
+      transport.handlers['RefreshMediaToken'] = (_) => {
+            'refreshMediaToken': {
+              'token': 'fresh-token',
+              'expiresAt': 'not-a-valid-date',
+              'permissions': ['stream'],
+              '__typename': 'MediaToken',
+            },
+          };
+
+      final client = build(
+        mediaToken: 'old-token',
+        mediaTokenExpiry: oldExpiry,
+      );
+
+      final token = await client.ensureValidMediaToken();
+      expect(token, 'fresh-token');
+      expect(saved.last.mediaToken, 'fresh-token');
+      expect(saved.last.mediaTokenExpiry, isNull);
+      expect((await client.credentials()).mediaTokenExpiry, isNull);
+    });
+
+    test('refresh retains mediaToken fields updated concurrently', () async {
+      transport.validTokens = {'access', 'fresh-access'};
+      final refreshCompleter = Completer<Map<String, dynamic>>();
+      transport.handlers['RefreshAccessToken'] = (_) => refreshCompleter.future;
+
+      var rejectedOnce = false;
+      transport.handlers['GuestInstanceIdentity'] = (_) {
+        if (!rejectedOnce) {
+          rejectedOnce = true;
+          throw const SourceException.unauthorized();
+        }
+        return {
+          'serverCompatibility': {'instanceId': 'inst-2'}
+        };
+      };
+
+      final client = build(mediaToken: 'initial-media');
+      final requestFuture =
+          client.request(documentNodeQueryMydiaInstanceIdentity);
+
+      await Future<void>.delayed(Duration.zero);
+
+      // Concurrently update media token during the RefreshAccessToken await
+      transport.handlers['RefreshMediaToken'] = (_) => {
+            'refreshMediaToken': {
+              'token': 'newer-media',
+              'expiresAt': DateTime.now()
+                  .add(const Duration(hours: 1))
+                  .toIso8601String(),
+              'permissions': ['stream'],
+              '__typename': 'MediaToken',
+            },
+          };
+      await client.ensureValidMediaToken();
+
+      refreshCompleter.complete({
+        'refreshAccessToken': {'token': 'fresh-access', 'expiresAt': null},
+      });
+
+      await requestFuture;
+
+      final current = await client.credentials();
+      expect(current.accessToken, 'fresh-access');
+      expect(current.mediaToken, 'newer-media');
+    });
+
     test('returns null when no media token exists', () async {
       final client = build(mediaToken: null);
       final token = await client.ensureValidMediaToken();

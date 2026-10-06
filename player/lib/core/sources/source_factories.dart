@@ -310,15 +310,16 @@ MydiaClient buildMydiaClient(
   required Future<void> Function(MydiaCredentials) save,
   required void Function() onUnauthorized,
   GetDeviceProfile? getDeviceProfile,
-}) =>
-    MydiaClient(
-      transport: transport,
-      load: load,
-      save: save,
-      onUnauthorized: onUnauthorized,
-      getDeviceProfile: getDeviceProfile ??
-          () => ref.read(deviceProfileHolderProvider).profile,
-    );
+}) {
+  final holder = ref.read(deviceProfileHolderProvider);
+  return MydiaClient(
+    transport: transport,
+    load: load,
+    save: save,
+    onUnauthorized: onUnauthorized,
+    getDeviceProfile: getDeviceProfile ?? () => holder.profile,
+  );
+}
 
 /// A Mydia server's source. Its credentials are read on first use, so
 /// the source builds synchronously.

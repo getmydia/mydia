@@ -243,7 +243,7 @@ class MydiaClient {
       _onUnauthorized();
       return null;
     }
-    final next = current.copyWith(accessToken: token);
+    final next = (_credentials ?? current).copyWith(accessToken: token);
     _credentials = next;
     await _save(next);
     return token;
@@ -267,9 +267,16 @@ class MydiaClient {
       if (refreshed != null) {
         final expiresAt = DateTime.tryParse(refreshed.expiresAt);
         final latest = _credentials ?? await credentials();
-        final next = latest.copyWith(
+        final next = MydiaCredentials(
+          instanceId: latest.instanceId,
+          accessToken: latest.accessToken,
+          instanceName: latest.instanceName,
           mediaToken: refreshed.token,
           mediaTokenExpiry: expiresAt,
+          deviceToken: latest.deviceToken,
+          serverUrl: latest.serverUrl,
+          nodeAddr: latest.nodeAddr,
+          username: latest.username,
         );
         _credentials = next;
         await _save(next);
