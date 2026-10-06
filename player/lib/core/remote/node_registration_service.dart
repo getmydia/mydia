@@ -59,14 +59,13 @@ class NodeRegistrationService {
 
   /// The identity [update] most recently attached to [_registeredNodeId].
   ///
-  /// The driver watches `graphqlClientProvider` and calls [update] with the
-  /// current client on every rebuild, so a plain client change already flows
-  /// through as ordinary input. But a client change caused by signing out
-  /// into a *different* account or server, on the same device with the same
+  /// The driver calls [update] with the bound account's id on every rebuild.
+  /// Binding a *different* account or server, on the same device with the same
   /// iroh node ID, would otherwise leave `_registeredNodeId == nodeId` still
   /// true and skip registration entirely -- the cached value is only true of
-  /// the client that produced it. Opaque on purpose: this never inspects the
-  /// scope, only compares its identity to the previous one.
+  /// the account that produced it. Opaque on purpose: this never inspects the
+  /// scope, only compares it to the previous one. Compared by value, so a
+  /// token refresh on the same account is not a new scope.
   Object? _clientScope;
 
   /// Bumped by every [update] and [retryNow]. The loop compares it against the
@@ -123,8 +122,8 @@ class NodeRegistrationService {
   /// Feeds the loop the latest view of its inputs. Safe to call on every
   /// rebuild: identical inputs that are already satisfied do no work.
   ///
-  /// [clientScope] identifies which client [nodeId] would be registered
-  /// with, typically the `GraphQLClient` instance itself. Omitted (`null`)
+  /// [clientScope] identifies which account [nodeId] would be registered
+  /// with, typically the bound account's id. Omitted (`null`)
   /// by callers that never change scope, such as the existing tests below.
   /// A scope change clears [_registeredNodeId] so a node ID that was already
   /// confirmed against the previous scope is re-registered against the new
@@ -144,11 +143,11 @@ class NodeRegistrationService {
     if (controllable == _controllable &&
         nodeId == _desiredNodeId &&
         clientReady == _clientReady &&
-        identical(clientScope, _clientScope)) {
+        clientScope == _clientScope) {
       return;
     }
 
-    if (!identical(clientScope, _clientScope)) {
+    if (clientScope != _clientScope) {
       _clientScope = clientScope;
       _registeredNodeId = null;
     }
@@ -250,7 +249,7 @@ class NodeRegistrationService {
       // when it doesn't match, same as a failure would.
       if (confirmed &&
           nodeId == _desiredNodeId &&
-          identical(scope, _clientScope) &&
+          scope == _clientScope &&
           _controllable &&
           _clientReady) {
         _registeredNodeId = nodeId;

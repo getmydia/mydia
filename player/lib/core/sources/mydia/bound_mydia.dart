@@ -37,6 +37,11 @@ final boundMydiaProvider = Provider<MydiaSource?>((ref) {
 final boundMydiaClientProvider =
     Provider<MydiaClient?>((ref) => ref.watch(boundMydiaProvider)?.client);
 
+/// The id of the bound account, which stays the same across its token
+/// refreshes. Null with none bound.
+final boundAccountIdProvider = Provider<String?>(
+    (ref) => ref.watch(boundMydiaProvider.select((m) => m?.source.account.id)));
+
 /// The bound instance's credentials, or null with none bound or readable.
 final boundMydiaCredentialsProvider =
     FutureProvider<MydiaCredentials?>((ref) async {

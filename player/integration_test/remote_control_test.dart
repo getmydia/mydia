@@ -89,6 +89,10 @@ import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_control_receiver.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_gql_transport.dart';
+import 'package:player/core/sources/source_http.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -414,8 +418,17 @@ void main() {
     final bNodeId = bP2p.nodeId;
     expect(bNodeId, isNotNull, reason: 'Player B has no node ID after pairing');
 
-    final bClient = createGraphQLClient(
-        adminApi.mydiaUrl, bResult.credentials!.accessToken);
+    final bCredentials = MydiaCredentials(
+      instanceId: 'player-b',
+      accessToken: bResult.credentials!.accessToken,
+    );
+    final bClient = MydiaClient(
+      transport:
+          HttpMydiaTransport(serverUrl: adminApi.mydiaUrl, http: SourceHttp()),
+      load: () async => bCredentials,
+      save: (_) async {},
+      onUnauthorized: () {},
+    );
 
     final bRegistered = await NodeRegistration(
       client: bClient,
@@ -425,7 +438,9 @@ void main() {
 
     final targetController = RemoteTargetController();
     final receiver = RemoteControlReceiver(
-      roster: RemoteRoster(client: bClient),
+      roster: RemoteRoster(
+          client: createGraphQLClient(
+              adminApi.mydiaUrl, bResult.credentials!.accessToken)),
       targetName: 'Player B (E2E target)',
       snapshotSource: targetController.snapshot,
       onIntent: targetController.submit,
