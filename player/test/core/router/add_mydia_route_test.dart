@@ -86,10 +86,13 @@ void main() {
   testWidgets(
       'with no Mydia server, the Mydia tile opens login with a way back',
       (tester) async {
-    await _pump(tester, '/sources/add', signedIn: false);
+    final router = await _pump(tester, '/sources/add', signedIn: false);
     await tester.tap(find.byKey(const Key('add-source-mydia')));
     await tester.pumpAndSettle();
 
+    // A pushed route is the last match; `uri` still names the page below it.
+    expect(router.routerDelegate.currentConfiguration.last.matchedLocation,
+        '/sources/add/mydia');
     final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
     expect(screen.reauthAccountId, isNull);
 
