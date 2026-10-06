@@ -7,7 +7,6 @@ import '../../../core/channels/pairing_service.dart';
 import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/auth/auth_storage.dart';
-import '../../../core/connection/connection_provider.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/mydia/mydia_saver.dart';
 import '../../../core/sources/mydia/mydia_credentials.dart';
@@ -26,7 +25,7 @@ part 'login_controller.g.dart';
 
 /// Drops the cached reads of everything [AuthService.setSession] just wrote.
 ///
-/// `serverUrlProvider`, `authTokenProvider` and `isAuthenticatedProvider` each
+/// `serverUrlProvider` and `authTokenProvider` each
 /// read storage once and cache the result. Pairing writes that storage, so
 /// without this they keep serving the values from before the user paired.
 ///
@@ -43,7 +42,6 @@ part 'login_controller.g.dart';
 void _invalidateStoredSessionProviders(Ref ref) {
   ref.invalidate(serverUrlProvider);
   ref.invalidate(authTokenProvider);
-  ref.invalidate(isAuthenticatedProvider);
   ref.invalidate(graphqlClientProvider);
   ref.invalidate(asyncGraphqlClientProvider);
 }
@@ -324,17 +322,9 @@ class LoginController extends _$LoginController {
 
       // Set connection mode
       if (result.isP2PMode && credentials.serverNodeAddr != null) {
-        debugPrint('[LoginController] Setting P2P mode in connection provider');
-        await ref.read(connectionProvider.notifier).setP2PMode(
-              serverNodeAddr: credentials.serverNodeAddr!,
-            );
         // Invalidate GraphQL providers to force rebuild
         ref.invalidate(graphqlClientProvider);
         ref.invalidate(asyncGraphqlClientProvider);
-      } else {
-        debugPrint(
-            '[LoginController] Direct mode, ensuring connection provider is in direct mode');
-        await ref.read(connectionProvider.notifier).setDirectMode();
       }
 
       debugPrint('[LoginController] Refreshing auth state...');
@@ -680,15 +670,9 @@ class LoginController extends _$LoginController {
 
       // Set connection mode
       if (result.isP2PMode && credentials.serverNodeAddr != null) {
-        debugPrint('[LoginController] Setting P2P mode from QR pairing');
-        await ref.read(connectionProvider.notifier).setP2PMode(
-              serverNodeAddr: credentials.serverNodeAddr!,
-            );
         // Invalidate GraphQL providers to force rebuild
         ref.invalidate(graphqlClientProvider);
         ref.invalidate(asyncGraphqlClientProvider);
-      } else {
-        await ref.read(connectionProvider.notifier).setDirectMode();
       }
 
       if (!ref.mounted) return;

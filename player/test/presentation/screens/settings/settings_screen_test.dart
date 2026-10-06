@@ -56,11 +56,6 @@ class _FakeConnectionNotifier extends ConnectionNotifier {
 
   @override
   ConnectionState build() => _state;
-
-  /// Sign-out used to call this before ending the session, so a throw here
-  /// left the user signed in. Nothing else on this screen calls it.
-  @override
-  Future<void> clear() async => throw Exception('keyring unavailable');
 }
 
 /// Reports a signed-in session and records logout calls, without touching

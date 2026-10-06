@@ -9,7 +9,6 @@ import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/auth/auth_storage.dart';
 import 'core/auth/device_info_service.dart';
-import 'core/connection/connection_provider.dart';
 import 'core/crash_reporting/crash_app_context.dart';
 import 'core/cast/cast_session_store.dart';
 import 'core/downloads/download_service.dart';
@@ -206,7 +205,6 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           container.dispose();
         }
       },
-      connection: () => loadStoredConnectionState(getAuthStorage()),
     ),
     timeline: timeline,
   ).then((outcome) async {
@@ -224,8 +222,6 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           sourceCacheProvider.overrideWithValue(ready.sourceCache),
           sidebarLayoutStoreProvider
               .overrideWithValue(ready.sidebarLayoutStore),
-          initialConnectionStateProvider
-              .overrideWithValue(ready.initialConnection),
           logUploaderProvider.overrideWithValue(
             _buildLogUploader(logSink, logStore),
           ),

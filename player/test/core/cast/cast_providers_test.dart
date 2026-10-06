@@ -16,6 +16,8 @@ import 'package:player/core/cast/multicast_lock.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/remote/ambient_targets.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/cast_device.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
@@ -45,6 +47,7 @@ void main() {
       castBackendProvider.overrideWithValue(backend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -151,6 +154,7 @@ void main() {
       mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
 
@@ -183,6 +187,7 @@ void main() {
       mydiaCastBackendProvider.overrideWithValue(mydiaBackend),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.web()),
       multicastLockProvider.overrideWithValue(lock),
+      sourceStoreProvider.overrideWith((ref) async => InMemorySourceStore()),
     ]);
     addTearDown(container.dispose);
 

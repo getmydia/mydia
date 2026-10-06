@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
-
+import '../sources/mydia/bound_mydia.dart';
 
 /// Result of a reconnection operation.
 class ReconnectionResult {
@@ -75,7 +75,6 @@ class ReconnectionSession {
   });
 }
 
-
 /// Default relay URL for fallback connections.
 const _defaultRelayUrl = String.fromEnvironment(
   'RELAY_URL',
@@ -87,11 +86,16 @@ class ReconnectionService {
   ReconnectionService({
     AuthStorage? authStorage,
     String? relayUrl,
+    String? instanceId,
   })  : _authStorage = authStorage ?? getAuthStorage(),
-        _relayUrl = relayUrl ?? _defaultRelayUrl;
+        _relayUrl = relayUrl ?? _defaultRelayUrl,
+        _instanceId = instanceId;
 
   final AuthStorage _authStorage;
   final String _relayUrl;
+
+  /// The bound Mydia instance's id, for p2p reconnection.
+  final String? _instanceId;
 
   /// Reconnects to the paired instance using stored credentials.
   Future<ReconnectionResult> reconnect({bool forceDirectOnly = false}) async {
@@ -151,7 +155,6 @@ class ReconnectionService {
     final deviceToken = await _authStorage.read('pairing_device_token');
     final directUrlsJson = await _authStorage.read('pairing_direct_urls');
     final certFingerprint = await _authStorage.read('pairing_cert_fingerprint');
-    final instanceId = await _authStorage.read('instance_id');
 
     if (directUrlsJson == null) {
       return null;
@@ -180,7 +183,7 @@ class ReconnectionService {
       deviceToken: deviceToken,
       directUrls: directUrls,
       certFingerprint: certFingerprint,
-      instanceId: instanceId,
+      instanceId: _instanceId,
     );
   }
 }
@@ -210,5 +213,7 @@ class _StoredCredentials {
 
 /// Provider for the reconnection service.
 final reconnectionServiceProvider = Provider<ReconnectionService>((ref) {
-  return ReconnectionService();
+  final instanceId = ref
+      .watch(boundMydiaCredentialsProvider.select((c) => c.value?.instanceId));
+  return ReconnectionService(instanceId: instanceId);
 });

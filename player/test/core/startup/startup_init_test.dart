@@ -51,7 +51,6 @@ StartupSteps _steps({
     sourceCache: sourceCache ?? () async => InMemorySourceCache(),
     downloadDb: downloadDb ?? track('downloads'),
     sidebarLayoutStore: sidebar ?? () async => InMemorySidebarLayoutStore(),
-    connection: () async => null,
     legacyMigration: legacyMigration,
   );
 }
@@ -174,7 +173,6 @@ void main() {
         'input_caps',
         'hive',
         'download_db',
-        'connection',
         'sidebar',
         'init_done'
       ]),

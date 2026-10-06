@@ -9,11 +9,11 @@ import '../auth/auth_status.dart';
 import '../auth/media_token_service.dart';
 import '../auth/session_teardown.dart';
 import '../config/web_config.dart';
-import '../connection/connection_provider.dart';
-import '../p2p/p2p_service.dart';
 import '../player/device_profile.dart';
-import 'client.dart';
-import 'p2p_link.dart';
+import '../sources/mydia/bound_mydia.dart';
+import '../sources/mydia/mydia_client.dart';
+import '../sources/sources_providers.dart';
+import 'transport_link.dart';
 import 'watch/fetch_log.dart';
 
 /// This device's decode-capability profile, probed once per app session and
@@ -120,13 +120,16 @@ Future<void> applyDetectedProfile(
 /// that injects `window.mydiaConfig`, so its presence is the signal.
 bool get isInstanceHostedWeb => kIsWeb && getWebConfig() != null;
 
+/// Clears the GraphQL response cache. A provider so a test can observe it.
+final graphqlCacheResetProvider =
+    Provider<void Function()>((ref) => () => HiveStore().reset());
+
 /// Provider for the server URL.
 ///
 /// On the instance-hosted web build, always uses window.location.origin to
 /// ensure correct browser-accessible URL (not internal Docker hostnames like
-/// 'storage:4000'). On native platforms, and on the public web build (which
-/// has no origin to fall back to), uses the stored server URL from secure
-/// storage instead.
+/// 'storage:4000'). Everywhere else it is the bound instance's URL, null for
+/// an instance reached over p2p.
 final serverUrlProvider = FutureProvider<String?>((ref) async {
   if (isInstanceHostedWeb) {
     final origin = getOriginUrl();
@@ -136,116 +139,34 @@ final serverUrlProvider = FutureProvider<String?>((ref) async {
     }
   }
 
-  // Fall back to stored URL (native platforms, public web, or if origin
-  // detection fails on the instance-hosted build)
-  final authService = ref.watch(authServiceProvider);
-  final storedUrl = await authService.getServerUrl();
-  debugPrint('[serverUrlProvider] storedUrl=$storedUrl');
-  return storedUrl;
+  final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
+  return credentials?.serverUrl;
 });
 
-/// Provider for the auth token from secure storage.
-///
-/// This is an async provider that loads the auth token when the app starts.
+/// Provider for the bound instance's access token.
 final authTokenProvider = FutureProvider<String?>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.getToken();
+  final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
+  return credentials?.accessToken;
 });
 
-/// Provider for checking if user is authenticated.
-final isAuthenticatedProvider = FutureProvider<bool>((ref) async {
-  final authService = ref.watch(authServiceProvider);
-  return await authService.isAuthenticated();
-});
-
-/// Provider for the GraphQL client.
+/// Provider for the GraphQL client: every operation goes through the bound
+/// instance's [MydiaClient], which owns its token, refresh and transport.
+/// Null while no Mydia instance is bound.
 final graphqlClientProvider = Provider<GraphQLClient?>((ref) {
-  final connectionState = ref.watch(connectionProvider);
-  final serverUrlAsync = ref.watch(serverUrlProvider);
-  final authTokenAsync = ref.watch(authTokenProvider);
-  final authService = ref.watch(authServiceProvider);
-  // `ref.read`, not `ref.watch`: this client must never rebuild because the
-  // probe resolved. The holder instance itself is stable for the
-  // container's life; only its `profile` field changes, and
-  // `getDeviceProfile` below reads that field fresh on every request rather
-  // than through Riverpod. See `deviceProfileHolderProvider`.
-  final deviceProfileHolder = ref.read(deviceProfileHolderProvider);
+  final client = ref.watch(boundMydiaClientProvider);
 
-  debugPrint(
-      '[graphqlClientProvider] Building: isP2PMode=${connectionState.isP2PMode}');
+  // The cache is keyed by operation, not by server: another instance's
+  // answers must never be served for this one.
+  ref.listen(boundMydiaProvider.select((s) => s?.source.account.id),
+      (prev, next) {
+    if (prev != null && prev != next) ref.read(graphqlCacheResetProvider)();
+  });
 
-  // Check if we're in P2P mode
-  if (connectionState.isP2PMode) {
-    final p2pService = ref.watch(p2pServiceProvider);
-    final serverNodeAddr = connectionState.serverNodeAddr;
-
-    if (serverNodeAddr == null) {
-      debugPrint('[graphqlClientProvider] P2P mode but serverNodeAddr is null');
-      return null;
-    }
-
-    debugPrint(
-        '[graphqlClientProvider] Using P2P mode (service will auto-initialize on first request)');
-
-    // Create P2P GraphQL client - use the full EndpointAddr JSON for reconnection
-    // The P2P service will auto-initialize when ensureConnected is called
-    return createP2pGraphQLClient(
-      p2pService: p2pService,
-      serverNodeId: serverNodeAddr,
-      getAuthToken: () async => await authService.getToken(),
-      // Sent without an auth token on purpose: the pairing device token is the
-      // credential, and going through p2pService directly keeps the refresh from
-      // recursing back through this link.
-      refreshAuthToken: () => authService.refreshTokenVia(
-        (query, variables) => p2pService.sendGraphQLRequest(
-          peer: serverNodeAddr,
-          query: query,
-          variables: variables,
-        ),
-      ),
-    );
-  }
-
-  // Direct mode - wait for both async providers to complete
-  return serverUrlAsync.when(
-    data: (serverUrl) {
-      if (serverUrl == null) return null;
-
-      return authTokenAsync.when(
-        data: (authToken) {
-          debugPrint('[graphqlClientProvider] Using direct mode');
-          // Create client with 401 error handling
-          return createGraphQLClient(
-            serverUrl,
-            authToken,
-            getDeviceProfile: () => deviceProfileHolder.profile,
-            onAuthError: () async {
-              // Try to refresh token (currently not supported, returns null)
-              final newToken = await authService.refreshToken();
-              if (newToken == null) {
-                // Token refresh not supported or failed, logout
-                await authService.clearSession();
-                // Invalidate the auth state to trigger UI update
-                ref.invalidate(authStateProvider);
-              }
-              return newToken;
-            },
-          );
-        },
-        loading: () => null,
-        error: (error, stackTrace) {
-          debugPrint(
-              '[graphqlClientProvider] Auth token error in direct mode: $error\n$stackTrace');
-          return null;
-        },
-      );
-    },
-    loading: () => null,
-    error: (error, stackTrace) {
-      debugPrint(
-          '[graphqlClientProvider] Server URL error: $error\n$stackTrace');
-      return null;
-    },
+  if (client == null) return null;
+  return GraphQLClient(
+    link: TransportLink(() async => client),
+    cache: GraphQLCache(store: HiveStore()),
+    queryRequestTimeout: null,
   );
 });
 
@@ -368,15 +289,6 @@ class AuthStateNotifier extends Notifier<AsyncValue<AuthStatus>> {
   Future<void> logout() async {
     await SessionTeardown().run();
 
-    // Read through the provider rather than the teardown: clear() also resets
-    // the in-memory connection state, which wiping storage alone would not.
-    // The read happens inside the closure, not while building the argument
-    // list, so a throw from it is caught by bestEffort too.
-    await bestEffort(
-      'connection',
-      () => ref.read(connectionProvider.notifier).clear(),
-    );
-
     // Last, because this is what redirects the router to /login. Guarded
     // because the two awaits above are storage work: this notifier outlives
     // the screen that calls it, but not a teardown of the whole container.
@@ -406,35 +318,13 @@ final authStateProvider =
 /// Async provider for the GraphQL client.
 ///
 /// Use this provider in async controllers that need to wait for the client
-/// to be available. This properly handles the async loading of auth state.
+/// to be available: it waits for the stored sources and the migrated
+/// instance id to load first.
 final asyncGraphqlClientProvider = FutureProvider<GraphQLClient>((ref) async {
-  debugPrint('[asyncGraphqlClientProvider] Starting...');
-
-  // Wait for auth check to complete (isAuthenticatedProvider is a FutureProvider)
-  final isAuthenticated = await ref.watch(isAuthenticatedProvider.future);
-  debugPrint('[asyncGraphqlClientProvider] isAuthenticated=$isAuthenticated');
-  if (!isAuthenticated) {
-    throw Exception('Not authenticated');
-  }
-
-  // Wait for server URL and token to be available
-  final serverUrl = await ref.watch(serverUrlProvider.future);
-  debugPrint('[asyncGraphqlClientProvider] serverUrl=$serverUrl');
-  await ref.watch(authTokenProvider.future); // Wait for token to be ready
-
-  if (serverUrl == null) {
-    throw Exception('Server URL not available');
-  }
-
-  // Watch the sync provider to get updates when connection mode changes
-  debugPrint('[asyncGraphqlClientProvider] Getting graphqlClientProvider...');
+  await ref.watch(sourceRecordsProvider.future);
+  await ref.watch(legacyInstanceIdProvider.future);
   final client = ref.watch(graphqlClientProvider);
-  debugPrint(
-      '[asyncGraphqlClientProvider] client=${client != null ? "available" : "null"}');
-  if (client == null) {
-    // This shouldn't happen if auth is ready, but handle it gracefully
-    throw Exception('GraphQL client not available');
-  }
+  if (client == null) throw StateError('No Mydia server');
   return client;
 });
 
