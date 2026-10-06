@@ -206,6 +206,64 @@ void main() {
     expect(store.puts, 0);
   });
 
+  group('a migrated URL account', () {
+    final urlId = urlInstanceId('https://home.example');
+    final accountId = 'm$urlId';
+
+    Future<void> seedMigrated() async {
+      await save(MydiaCredentials(
+        instanceId: urlId,
+        accessToken: 'old',
+        serverUrl: 'https://home.example',
+      ));
+      await container
+          .read(sourceRecordsProvider.notifier)
+          .markNeedsReauth(accountId, true);
+    }
+
+    const login = MydiaCredentials(
+      instanceId: '',
+      accessToken: 'fresh',
+      serverUrl: 'https://Home.example/',
+    );
+
+    setUp(() {
+      transport.handlers['GuestInstanceIdentity'] = (_) => {
+            'serverCompatibility': {'instanceId': 'reported-uuid'},
+          };
+      transport.validTokens = {'fresh'};
+    });
+
+    test('is signed in again when the server reports another id', () async {
+      await seedMigrated();
+      final id = await save(login);
+
+      expect(id.value, startsWith('$accountId:'));
+      final records = (await store.load()).accounts;
+      expect(records, hasLength(1));
+      expect(records.single.account.needsReauth, isFalse);
+      expect((await storedCredentials(accountId)).accessToken, 'fresh');
+    });
+
+    test('is reauthed under its own id', () async {
+      await seedMigrated();
+      await save(login, reauth: accountId);
+      expect((await store.load()).accounts, hasLength(1));
+      expect((await storedCredentials(accountId)).accessToken, 'fresh');
+    });
+
+    test('does not absorb a genuinely different server', () async {
+      await seedMigrated();
+      final id = await save(const MydiaCredentials(
+        instanceId: '',
+        accessToken: 'fresh',
+        serverUrl: 'https://elsewhere.example',
+      ));
+      expect(id.value, startsWith('mreported-uuid:'));
+      expect((await store.load()).accounts, hasLength(2));
+    });
+  });
+
   test('a re-auth for the same instance is accepted', () async {
     await save(_paired(), reauth: 'minst-2');
     expect(store.puts, 1);

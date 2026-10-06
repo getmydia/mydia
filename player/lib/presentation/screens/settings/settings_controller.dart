@@ -1,5 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../core/auth/auth_service.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/settings/settings_providers.dart';
 import '../../../core/settings/settings_service.dart';
 import '../../../domain/models/user_settings.dart';
@@ -24,16 +24,19 @@ class SettingsController extends _$SettingsController {
 
   /// Load settings from storage and auth service.
   Future<UserSettings> _loadSettings() async {
-    final authService = AuthService();
     final settingsService = ref.read(settingsServiceProvider);
 
-    final session = await authService.getSession();
+    // The bound server's own credentials, not the legacy sign-in keys.
+    // Watched before any await, so a switch of server reloads this.
+    final accountName =
+        ref.watch(boundMydiaProvider)?.source.account.displayName;
+    final credentials = await ref.watch(boundMydiaCredentialsProvider.future);
     final defaultQuality = await settingsService.getDefaultQuality();
     final autoSkipSegments = await settingsService.getAutoSkipSegments();
 
     return UserSettings(
-      serverUrl: session['serverUrl'] ?? '',
-      username: session['username'] ?? '',
+      serverUrl: credentials?.serverUrl ?? accountName ?? '',
+      username: credentials?.username ?? '',
       defaultQuality: defaultQuality,
       autoSkipSegments: autoSkipSegments,
     );

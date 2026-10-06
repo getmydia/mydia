@@ -172,6 +172,57 @@ void main() {
       expect((await credsFor('minst9')).accessToken, 'new');
     });
 
+    test('merging keeps the guest tokens the legacy install lacks', () async {
+      await seedAccount(
+          'mserverid',
+          MydiaCredentials(
+              instanceId: 'serverid',
+              accessToken: 'old',
+              deviceToken: 'guest-device',
+              mediaToken: 'guest-media',
+              mediaTokenExpiry: DateTime.utc(2026, 11, 1),
+              serverUrl: 'https://media.example.test'));
+      final legacy = legacyWith({
+        'auth_token': 'new',
+        'server_url': 'https://media.example.test',
+      });
+      expect(await migrateLegacyMydia(deps(legacy)), 'mserverid');
+      final creds = await credsFor('mserverid');
+      expect(creds.accessToken, 'new');
+      expect(creds.deviceToken, 'guest-device');
+      expect(creds.mediaToken, 'guest-media');
+      expect(creds.mediaTokenExpiry, DateTime.utc(2026, 11, 1));
+    });
+
+    test('an unusable legacy instance_id falls back to the URL id', () async {
+      final legacy = legacyWith({
+        'auth_token': 'tok',
+        'server_url': 'https://media.example.test',
+        'instance_id': 'bad:id',
+      });
+      final expected = 'm${urlInstanceId('https://media.example.test')}';
+      expect(await migrateLegacyMydia(deps(legacy)), expected);
+      expect((await credsFor(expected)).accessToken, 'tok');
+    });
+
+    test('a corrupt stored account URL does not abort the migration', () async {
+      await seedAccount('mother',
+          const MydiaCredentials(instanceId: 'other', accessToken: 'old'));
+      final other = await recordOf('mother');
+      await writeMydiaCredentials(
+          secrets,
+          other.account,
+          const MydiaCredentials(
+              instanceId: 'other', accessToken: 'old', serverUrl: 'http://['));
+      final legacy = legacyWith({
+        'auth_token': 'tok',
+        'server_url': 'https://media.example.test',
+      });
+      final expected = 'm${urlInstanceId('https://media.example.test')}';
+      expect(await migrateLegacyMydia(deps(legacy)), expected);
+      expect((await store.load()).accounts, hasLength(2));
+    });
+
     test('no legacy sign-in: nothing written, returns null', () async {
       expect(await migrateLegacyMydia(deps(MockAuthStorage())), isNull);
       expect((await store.load()).accounts, isEmpty);

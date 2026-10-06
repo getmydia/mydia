@@ -4,6 +4,7 @@ library;
 import 'dart:convert';
 
 import '../source.dart';
+import '../store/source_records.dart';
 import '../store/source_secrets.dart';
 import 'mydia_credentials.dart';
 
@@ -31,3 +32,42 @@ Future<void> writeMydiaCredentials(
   MydiaCredentials c,
 ) =>
     secrets.writeAccountToken(account, jsonEncode(c.toJson()));
+
+/// The stored Mydia account for the server named by any of [instanceId],
+/// [nodeId] or [url], or null. A stored URL that cannot be normalized counts
+/// as no match rather than failing the lookup.
+Future<ProviderAccount?> findMatchingMydiaAccount(
+  SourceSnapshot snapshot,
+  SourceSecrets secrets, {
+  String? instanceId,
+  String? nodeId,
+  String? url,
+}) async {
+  final wantedUrl = url == null ? null : _normalizedOrNull(url);
+  for (final record in snapshot.accounts) {
+    final account = record.account;
+    if (account.kind != SourceKind.mydia) continue;
+    final theirs = await readMydiaCredentials(secrets, account);
+    if (theirs == null) continue;
+    final theirUrl = theirs.serverUrl;
+    final sameUrl = wantedUrl != null &&
+        theirUrl != null &&
+        _normalizedOrNull(theirUrl) == wantedUrl;
+    if ((instanceId != null &&
+            instanceId.isNotEmpty &&
+            theirs.instanceId == instanceId) ||
+        (nodeId != null && theirs.nodeId == nodeId) ||
+        sameUrl) {
+      return account;
+    }
+  }
+  return null;
+}
+
+String? _normalizedOrNull(String url) {
+  try {
+    return normalizeMydiaUrl(url);
+  } on FormatException {
+    return null;
+  }
+}
