@@ -250,4 +250,54 @@ void main() {
         s, {'id': '2', 'title': 'Invented Harbour', 'tvdbId': 9001});
     expect(sh.externalIds, const ExternalIds(tvdb: '9001'));
   });
+
+  group('rail and search items carry catalogue ids', () {
+    test('a recently added movie', () {
+      final m = listingSummary(s, {
+        'id': 'm-7',
+        'type': 'MOVIE',
+        'title': 'The Invented Voyage',
+        'tmdbId': 42,
+        'tvdbId': null,
+        'imdbId': 'tt0000042',
+      });
+      expect(m!.externalIds, const ExternalIds(tmdb: '42', imdb: 'tt0000042'));
+    });
+
+    test('a continue watching movie', () {
+      final m = continueWatchingSummary(s, {
+        'id': 'm-8',
+        'type': 'MOVIE',
+        'title': 'Harbour Lights',
+        'tmdbId': 77,
+        'progress': <String, dynamic>{},
+      });
+      expect(m!.externalIds, const ExternalIds(tmdb: '77'));
+    });
+
+    test('a search show', () {
+      final sh = searchResultSummary(s, {
+        'id': 's-3',
+        'type': 'TV_SHOW',
+        'title': 'Invented Harbour',
+        'tvdbId': 9001,
+        'imdbId': 'tt0009001',
+      });
+      expect(
+          sh!.externalIds, const ExternalIds(tvdb: '9001', imdb: 'tt0009001'));
+    });
+
+    test('a continue watching episode ignores them', () {
+      final ep = continueWatchingSummary(s, {
+        'id': 'e-9',
+        'type': 'EPISODE',
+        'title': 'Low Tide',
+        'showId': 's-3',
+        'tmdbId': 5,
+        'imdbId': 'tt0000005',
+        'progress': <String, dynamic>{},
+      });
+      expect(ep!.externalIds, ExternalIds.none);
+    });
+  });
 }

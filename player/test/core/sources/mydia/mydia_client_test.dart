@@ -742,6 +742,95 @@ void main() {
     );
   });
 
+  group('a chain of fallbacks', () {
+    const unknown = SourceException.server('Cannot query field "tmdbId"');
+    Map<String, dynamic> reject(Map<String, dynamic> _) => throw unknown;
+    final main = documentNodeQueryHomeRows;
+    final noIds = documentNodeQueryHomeRowsNoIds;
+    final legacy = documentNodeQueryHomeRowsLegacy;
+
+    Future<Map<String, dynamic>> run(MydiaClient c) =>
+        c.query(main, fallbacks: [noIds, legacy], variables: const {'n': 1});
+
+    test('the first fallback answers when the main document is rejected',
+        () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = reject
+        ..handlers['HomeRowsNoIds'] = (_) => {'ok': 'noids'};
+      final client = fakeMydiaClient(server);
+
+      expect(await run(client), {'ok': 'noids'});
+      expect(
+          server.calls.map((c) => c.operation), ['HomeRows', 'HomeRowsNoIds']);
+      expect(client.isDowngraded(main), isTrue);
+    });
+
+    test('the second answers when the first is also rejected', () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = reject
+        ..handlers['HomeRowsNoIds'] = reject
+        ..handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
+      final client = fakeMydiaClient(server);
+
+      expect(await run(client), {'ok': 'legacy'});
+      expect(server.calls.map((c) => c.operation),
+          ['HomeRows', 'HomeRowsNoIds', 'HomeRowsLegacy']);
+    });
+
+    test('the deepest level that worked is remembered', () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = reject
+        ..handlers['HomeRowsNoIds'] = reject
+        ..handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
+      final client = fakeMydiaClient(server);
+
+      await run(client);
+      server.calls.clear();
+      await run(client);
+
+      expect(server.calls.map((c) => c.operation), ['HomeRowsLegacy']);
+    });
+
+    test('a remembered level still falls further on a later rejection',
+        () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = reject
+        ..handlers['HomeRowsNoIds'] = (_) => {'ok': 'noids'};
+      final client = fakeMydiaClient(server);
+      await run(client);
+
+      server.handlers['HomeRowsNoIds'] = reject;
+      server.handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
+      server.calls.clear();
+
+      expect(await run(client), {'ok': 'legacy'});
+      expect(server.calls.map((c) => c.operation),
+          ['HomeRowsNoIds', 'HomeRowsLegacy']);
+    });
+
+    test('any other error is rethrown without falling back', () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = (_) {
+          throw const SourceException.server('boom');
+        };
+      final client = fakeMydiaClient(server);
+
+      await expectLater(run(client), throwsA(isA<SourceException>()));
+      expect(server.calls.map((c) => c.operation), ['HomeRows']);
+      expect(client.isDowngraded(main), isFalse);
+    });
+
+    test('an unknown field on the last fallback is rethrown', () async {
+      final server = FakeMydiaTransport()
+        ..handlers['HomeRows'] = reject
+        ..handlers['HomeRowsNoIds'] = reject
+        ..handlers['HomeRowsLegacy'] = reject;
+      final client = fakeMydiaClient(server);
+
+      await expectLater(run(client), throwsA(isA<SourceException>()));
+    });
+  });
+
   test('rootQuery lets a generated parser read the bare data', () {
     final parsed = Query$SubtitleTrackSettings.fromJson(
         rootQuery({'subtitleTrackSettings': <Object>[]}));

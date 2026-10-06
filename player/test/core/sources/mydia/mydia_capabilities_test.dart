@@ -130,6 +130,8 @@ void main() {
     final b = fx.build();
     b.t.handlers['HomeRows'] = (_) => throw const SourceException.server(
         'Cannot query field "newEpisodeCount"');
+    b.t.handlers['HomeRowsNoIds'] = (_) => throw const SourceException.server(
+        'Cannot query field "newEpisodeCount"');
     b.t.handlers['HomeRowsLegacy'] = (_) => {
           'recentlyAdded': [fx.listing('m-4')],
           'favorites': [fx.listing('s-1', type: 'TV_SHOW')],
@@ -139,6 +141,22 @@ void main() {
     b.t.calls.clear();
     await b.source.hubs();
     expect(b.t.calls.map((c) => c.operation), ['HomeRowsLegacy']);
+  });
+
+  test('a server without catalogue ids keeps its rails', () async {
+    final b = fx.build();
+    b.t.handlers['HomeRows'] = (_) => throw const SourceException.server(
+        'Cannot query field "tmdbId" on type "RecentlyAddedItem".');
+    b.t.handlers['HomeRowsNoIds'] = (_) => {
+          'recentlyAdded': [fx.listing('m-4')],
+          'favorites': [fx.listing('s-1', type: 'TV_SHOW')],
+        };
+    final hubs = await b.source.hubs();
+    expect(hubs.length, 2);
+    expect(hubs.first.items.single.externalIds, ExternalIds.none);
+    b.t.calls.clear();
+    await b.source.hubs();
+    expect(b.t.calls.map((c) => c.operation), ['HomeRowsNoIds']);
   });
 
   test('media info falls back', () async {

@@ -4,6 +4,29 @@ query RecentlyAddedFull($first: Int) {
     type
     title
     year
+    tmdbId
+    tvdbId
+    imdbId
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    addedAt
+    newEpisodeCount
+    latestSeasonNumber
+    latestEpisodeNumber
+    watchStatus { watched percentage unwatchedEpisodeCount }
+  }
+}
+
+# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+query RecentlyAddedFullNoIds($first: Int) {
+  recentlyAdded(first: $first) {
+    id
+    type
+    title
+    year
     artwork {
       posterUrl
       backdropUrl

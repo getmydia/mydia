@@ -86,9 +86,15 @@ SavedFilterQuery? mydiaFilterQuery(SourceId sid, MediaFilter filter) {
 }
 
 /// Which document to run, which field of its result holds the items, and the
-/// variables. The flat listings (`unwatched`, `favorites`) hold a bare list,
-/// the filtered browse queries a connection.
-({DocumentNode doc, String field, Map<String, dynamic> vars}) mydiaBrowsePlan({
+/// variables. The flat listings (`unwatched`, `favorites`) hold a bare list
+/// and carry the `noIds` document older servers need, the filtered browse
+/// queries a connection.
+({
+  DocumentNode doc,
+  DocumentNode? noIds,
+  String field,
+  Map<String, dynamic> vars,
+}) mydiaBrowsePlan({
   required bool movies,
   required BrowseQuery query,
   Cursor? cursor,
@@ -111,6 +117,7 @@ SavedFilterQuery? mydiaFilterQuery(SourceId sid, MediaFilter filter) {
   if (query.filterIds.contains(_unwatchedId)) {
     return (
       doc: documentNodeQueryUnwatchedListing,
+      noIds: documentNodeQueryUnwatchedListingNoIds,
       field: 'unwatched',
       vars: {...vars, 'types': types},
     );
@@ -118,6 +125,7 @@ SavedFilterQuery? mydiaFilterQuery(SourceId sid, MediaFilter filter) {
   if (query.filterIds.contains(_favoritesId)) {
     return (
       doc: documentNodeQueryFavoritesListing,
+      noIds: documentNodeQueryFavoritesListingNoIds,
       field: 'favorites',
       vars: {...vars, 'types': types},
     );
@@ -125,11 +133,13 @@ SavedFilterQuery? mydiaFilterQuery(SourceId sid, MediaFilter filter) {
   return movies
       ? (
           doc: documentNodeQueryMoviesFiltered,
+          noIds: null,
           field: 'movies',
           vars: vars,
         )
       : (
           doc: documentNodeQueryTvShowsFiltered,
+          noIds: null,
           field: 'tvShows',
           vars: vars,
         );

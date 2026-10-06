@@ -11,6 +11,34 @@ query Search($query: String!, $types: [SearchResultType], $first: Int) {
         type
         title
         year
+        tmdbId
+        tvdbId
+        imdbId
+        subtitle
+        seasonNumber
+        episodeNumber
+        parentId
+        score
+        artwork {
+          ...ArtworkFragment
+        }
+      }
+    }
+  }
+}
+
+# Before the catalogue ids (tmdbId, tvdbId, imdbId) on SearchResult.
+query SearchNoIds($query: String!, $types: [SearchResultType], $first: Int) {
+  search(query: $query, types: $types, first: $first) {
+    totalCount
+    sections {
+      type
+      totalCount
+      results {
+        id
+        type
+        title
+        year
         subtitle
         seasonNumber
         episodeNumber

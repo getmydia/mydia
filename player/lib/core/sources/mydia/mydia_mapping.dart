@@ -185,6 +185,7 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
     lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
+    externalIds: kind == ItemKind.movie ? _ids(c) : ExternalIds.none,
     showRef: kind == ItemKind.episode && c['showId'] != null
         ? _ref(sid, ItemKind.show, c['showId'].toString())
         : null,
@@ -205,6 +206,7 @@ ItemSummary? searchResultSummary(SourceId sid, Map<String, dynamic> r) {
     year: r['year'] as int?,
     poster: _art(artwork['posterUrl']),
     backdrop: _art(artwork['backdropUrl']),
+    externalIds: _ids(r),
   );
 }
 
@@ -240,6 +242,7 @@ ItemSummary? listingSummary(SourceId sid, Map<String, dynamic> m) {
     backdrop: _art(artwork['backdropUrl']),
     userState: _watchState(m['watchStatus']),
     addedAt: _instant(m['addedAt']),
+    externalIds: _ids(m),
   );
 }
 

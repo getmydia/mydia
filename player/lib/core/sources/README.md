@@ -364,7 +364,9 @@ Over p2p its streams go through `/t/<accountId>/` on the local proxy, and a
 bare path gets a 404; the web proxy serves its one target at its root. The
 `StartStreamingSession` downgrade for older servers is
 `MydiaClient.query(fallback:, fallbackVariables:)`, remembered per instance
-(`isDowngraded`). GraphQL errors arrive as `MydiaGraphqlError`, carrying the
+(`isDowngraded`). `fallbacks: [...]` is the ordered chain for operations with
+more than one older shape (the rails and search try `<Op>NoIds`, without the
+catalogue ids, before any `Legacy`), remembering the deepest level that worked. GraphQL errors arrive as `MydiaGraphqlError`, carrying the
 partial `data` when the server sent some over HTTP. `subtitleContent` has its
 own 45 second timeout. The screen claims the `PlayingSource` holder
 (`core/media_session/playing_source.dart`) so the OS now-playing bridge knows

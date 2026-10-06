@@ -56,7 +56,10 @@ version that dropped the need for it. Send the pair with
 `MydiaClient.query(document, fallback: legacyDocument)`: an unknown-field error
 retries the fallback, and the client remembers the downgrade for that instance
 (`isDowngraded`). Pass `fallbackVariables` when the fallback takes different
-variables.
+variables. When a document has several older shapes (a `<Op>NoIds` that only
+drops newer fields, then `<Op>Legacy`), pass them newest first as
+`fallbacks: [...]`: each unknown-field error tries the next, and the deepest
+level that worked is remembered per operation.
 
 ## Guards
 
