@@ -1,6 +1,12 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/media_session/media_session_state.dart';
 import 'package:player/core/media_session/now_playing_metadata_resolver.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
+
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 void main() {
   group('NowPlayingMetadataResolver', () {
@@ -126,6 +132,65 @@ void main() {
       expect(calls, hasLength(1));
       await resolver.resolve(mediaItemId: 'movie-2');
       expect(calls, hasLength(2));
+    });
+  });
+
+  group('nowPlayingMetadataResolverProvider', () {
+    test('asks the bound server', () async {
+      final server = FakeMydiaTransport();
+      server.handlers['NowPlayingMovie'] = (_) => {
+            'movie': {
+              'year': 2031,
+              'artwork': {'posterUrl': 'https://img.example/orchard.jpg'},
+            },
+          };
+      final container = ProviderContainer(overrides: [
+        boundMydiaClientProvider.overrideWithValue(fakeMydiaClient(server)),
+      ]);
+      addTearDown(container.dispose);
+
+      final metadata = await container
+          .read(nowPlayingMetadataResolverProvider)
+          .resolve(mediaItemId: 'movie-1');
+
+      expect(metadata?.subtitle, '2031');
+      expect(server.calls.single.vars, {'id': 'movie-1'});
+    });
+
+    test('with no bound server it is unavailable, so the next try asks again',
+        () async {
+      final server = FakeMydiaTransport();
+      server.handlers['NowPlayingMovie'] = (_) => {
+            'movie': {'year': 2031, 'artwork': null},
+          };
+      MydiaClient? bound;
+      final container = ProviderContainer(overrides: [
+        boundMydiaClientProvider.overrideWith((ref) => bound),
+      ]);
+      addTearDown(container.dispose);
+      final resolver = container.read(nowPlayingMetadataResolverProvider);
+
+      expect(await resolver.resolve(mediaItemId: 'movie-1'), isNull);
+
+      bound = fakeMydiaClient(server);
+      container.invalidate(boundMydiaClientProvider);
+      expect(
+          (await resolver.resolve(mediaItemId: 'movie-1'))?.subtitle, '2031');
+    });
+
+    test('a refused query resolves to null', () async {
+      final server = FakeMydiaTransport();
+      server.unreachable = true;
+      final container = ProviderContainer(overrides: [
+        boundMydiaClientProvider.overrideWithValue(fakeMydiaClient(server)),
+      ]);
+      addTearDown(container.dispose);
+
+      expect(
+          await container
+              .read(nowPlayingMetadataResolverProvider)
+              .resolve(mediaItemId: 'movie-1'),
+          isNull);
     });
   });
 }
