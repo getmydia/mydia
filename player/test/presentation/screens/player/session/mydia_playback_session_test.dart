@@ -134,6 +134,26 @@ void main() {
       expect(fetch.serverRejected, isTrue);
     });
 
+    test('a refused sign-in is not a server rejection', () async {
+      final server = _answering(const SourceException.unauthorized());
+      final fetch = await _session(server).candidates(CandidateScope.file);
+      expect(fetch.offer, isNull);
+      expect(fetch.serverRejected, isFalse);
+    });
+
+    test('an HTTP 5xx is not a server rejection', () async {
+      final server = _answering(
+          const SourceException.server('The server answered HTTP 500.'));
+      final fetch = await _session(server).candidates(CandidateScope.file);
+      expect(fetch.serverRejected, isFalse);
+    });
+
+    test('a missing file is a server rejection', () async {
+      final server = _answering(const SourceException.notFound());
+      final fetch = await _session(server).candidates(CandidateScope.file);
+      expect(fetch.serverRejected, isTrue);
+    });
+
     test('a transport failure is not a server rejection', () async {
       final server = _answering(const SourceException.unreachable());
       final fetch = await _session(server).candidates(CandidateScope.file);
@@ -167,6 +187,22 @@ void main() {
 
     test('is null when the server cannot be reached', () async {
       final server = _answering(const SourceException.unreachable());
+      expect(await _session(server).detail(), isNull);
+    });
+
+    test('a partial answer with an error still yields the saved position',
+        () async {
+      final server = _answering(graphqlError(
+        'A field failed',
+        data: movieDetailResponse(positionSeconds: 120, durationSeconds: 5400),
+      ));
+      final detail = (await _session(server).detail())!;
+      expect(detail.savedPositionSeconds, 120);
+      expect(detail.savedDurationSeconds, 5400);
+    });
+
+    test('an error with no data at all is null', () async {
+      final server = _answering(graphqlError('boom'));
       expect(await _session(server).detail(), isNull);
     });
   });
@@ -290,6 +326,20 @@ void main() {
       expect(episodes[1].fileIds, isNull);
     });
 
+    test('a partial answer with an error still yields the episodes', () async {
+      final server = _answering(graphqlError('A field failed', data: {
+        'seasonEpisodes': [
+          episode(1, files: [
+            {'__typename': 'MediaFile', 'id': 'f-1'},
+          ]),
+        ],
+      }));
+      final episodes = (await _session(server,
+              item: _episode, showId: 'show-1', seasonNumber: 2)
+          .seasonEpisodes(2))!;
+      expect(episodes.single.id, 'ep-1');
+    });
+
     test('is null without a show id', () async {
       final server = _answering(<String, dynamic>{});
       expect(await _session(server).seasonEpisodes(1), isNull);
@@ -339,11 +389,10 @@ void main() {
           {'mediaFileId': 'file-1', 'trackId': '3'});
     });
 
-    test('waits out a slow extraction, with no client-side timeout', () async {
-      final server = ScriptedMydiaTransport((_, __) => Future.delayed(
-          const Duration(milliseconds: 300),
-          () => {'subtitleContent': 'WEBVTT\n'}));
+    test('asks the transport to outwait the server\'s 30 s limit', () async {
+      final server = _answering({'subtitleContent': 'WEBVTT\n'});
       expect(await _session(server).subtitleContent('4'), 'WEBVTT\n');
+      expect(server.requests.single.timeout, const Duration(seconds: 45));
     });
 
     test('is null for an empty body', () async {
@@ -570,6 +619,14 @@ void main() {
       expect(proxy.isRunning, isTrue);
       await proxy.release(owner);
       expect(proxy.isRunning, isFalse);
+    });
+
+    test('an account id the proxy rejects is reported, not thrown', () async {
+      final session = _session(_answering(<String, dynamic>{}),
+          creds: _p2pCreds('node-a'), proxy: proxy, accountId: 'bad id');
+      final prep = await session.prepareStreaming(
+          owner: Object(), onProgress: (_) {}, isCurrent: () => true);
+      expect(prep, isA<StreamingUnavailable>());
     });
 
     test('an instance with neither a URL nor a node cannot stream', () async {

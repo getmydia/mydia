@@ -9,6 +9,7 @@ typedef ScriptedRequest = ({
   String operation,
   Map<String, dynamic> variables,
   String? token,
+  Duration? timeout,
 });
 
 /// Answers a request. Return a data map, a [SourceException] or other
@@ -45,11 +46,13 @@ class ScriptedMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     final request = (
       operation: operationOf(query),
       variables: Map<String, dynamic>.of(variables),
       token: token,
+      timeout: timeout,
     );
     final index = requests.length;
     requests.add(request);
@@ -62,4 +65,5 @@ class ScriptedMydiaTransport implements MydiaGqlTransport {
 }
 
 /// A server-side GraphQL error, as `MydiaClient` surfaces one.
-SourceException graphqlError(String message) => SourceException.server(message);
+SourceException graphqlError(String message, {Map<String, dynamic>? data}) =>
+    MydiaGraphqlError(message, data: data);

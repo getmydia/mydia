@@ -341,7 +341,8 @@ class _LazyMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async =>
-      (await _resolve())
-          .send(query, variables, token: token, deviceProfile: deviceProfile);
+      (await _resolve()).send(query, variables,
+          token: token, deviceProfile: deviceProfile, timeout: timeout);
 }

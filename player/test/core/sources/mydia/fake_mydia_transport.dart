@@ -33,6 +33,7 @@ class FakeMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     final op = operationOf(query);
     calls.add((

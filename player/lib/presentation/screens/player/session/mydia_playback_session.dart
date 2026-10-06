@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:gql/ast.dart' show DocumentNode;
 
 import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/playback/candidates_from_graphql.dart';
@@ -15,6 +16,7 @@ import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/player/progress_service.dart';
 import '../../../../core/sources/current_source_status.dart';
 import '../../../../core/sources/mydia/mydia_credentials.dart';
+import '../../../../core/sources/mydia/mydia_gql_transport.dart';
 import '../../../../core/sources/mydia/mydia_proxy.dart';
 import '../../../../core/sources/mydia/mydia_source.dart';
 import '../../../../core/sources/mydia/root_typename.dart';
@@ -127,7 +129,13 @@ class MydiaPlaybackSession implements PlaybackSession {
       onProgress('Connecting via P2P...');
       // Held against the screen's State, released at its dispose. A re-run
       // re-targets the proxy without stacking holds.
-      await mydiaProxyBase(_proxy(), credentials, owner: owner, target: target);
+      try {
+        await mydiaProxyBase(_proxy(), credentials,
+            owner: owner, target: target);
+      } on ArgumentError catch (e) {
+        return StreamingUnavailable(
+            '${e.message ?? 'This server cannot be played over p2p.'}');
+      }
       if (!isCurrent()) return const StreamingSuperseded();
       urls = ProxyStreamUrls(_proxy(), target: target);
     } else if (serverUrl == null) {
@@ -240,9 +248,9 @@ class MydiaPlaybackSession implements PlaybackSession {
   /// `serverRejected` says *why* a call failed, so the caller knows whether
   /// it is safe to retry against a different id. The server answers an
   /// unknown id with a GraphQL error (e.g. "file not found"), which surfaces
-  /// as a [SourceException] that is not `unreachable`. A transport failure is
-  /// `unreachable`. Only the former means "this id doesn't exist"; the latter
-  /// means "we don't know".
+  /// as a [MydiaGraphqlError] (or `notFound`). Only those mean "this id
+  /// doesn't exist". Unauthorized, a 5xx, an unreadable response and an
+  /// unreachable server all mean "we don't know".
   @override
   Future<CandidatesFetch> candidates(CandidateScope scope) async {
     final (contentType, id) = switch (scope) {
@@ -278,7 +286,8 @@ class MydiaPlaybackSession implements PlaybackSession {
       debugPrint('[PlayerScreen] Failed to fetch candidates: $e');
       return (
         offer: null,
-        serverRejected: e.kind != SourceErrorKind.unreachable,
+        serverRejected:
+            e is MydiaGraphqlError || e.kind == SourceErrorKind.notFound,
       );
     } catch (e) {
       debugPrint('[PlayerScreen] Error fetching streaming candidates: $e');
@@ -288,13 +297,32 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   String get _root => _isEpisode ? 'episode' : 'movie';
 
+  /// A request whose GraphQL errors still carried data returns that data.
+  /// Used by the reads that never checked for errors: a partial answer still
+  /// carries progress, and dropping it would lose the resume position.
+  Future<Map<String, dynamic>> _requestKeepingPartial(
+    DocumentNode document,
+    Map<String, dynamic> variables,
+  ) async {
+    try {
+      return await source.client.request(document, variables);
+    } on MydiaGraphqlError catch (e) {
+      final partial = e.data;
+      if (partial == null) rethrow;
+      debugPrint('[PlayerScreen] Using a partial answer: $e');
+      return partial;
+    }
+  }
+
   /// Fetches saved progress, runtime and the picked file's subtitle list.
+  /// There is deliberately no error check beyond a missing answer: a partial
+  /// answer still carries progress.
   @override
   Future<PlaybackDetail?> detail() async {
     try {
       if (!_isEpisode) {
         final data = Query$MovieDetail.fromJson(rootQuery(
-          await source.client.request(
+          await _requestKeepingPartial(
             documentNodeQueryMovieDetail,
             Variables$Query$MovieDetail(id: item.externalId).toJson(),
           ),
@@ -310,7 +338,7 @@ class MydiaPlaybackSession implements PlaybackSession {
         );
       }
       final data = Query$EpisodeDetail.fromJson(rootQuery(
-        await source.client.request(
+        await _requestKeepingPartial(
           documentNodeQueryEpisodeDetail,
           Variables$Query$EpisodeDetail(id: item.externalId).toJson(),
         ),
@@ -450,8 +478,9 @@ class MydiaPlaybackSession implements PlaybackSession {
     final showId = this.showId;
     if (showId == null) return null;
     try {
+      // Like [detail], a partial answer still carries the episodes.
       final episodes = Query$SeasonEpisodes.fromJson(rootQuery(
-        await source.client.request(
+        await _requestKeepingPartial(
           documentNodeQuerySeasonEpisodes,
           Variables$Query$SeasonEpisodes(
             showId: showId,
@@ -579,10 +608,11 @@ class MydiaPlaybackSession implements PlaybackSession {
     );
   }
 
-  /// No client-side timeout: an embedded track has no body until the server
-  /// extracts it with ffmpeg, which reads through the whole container (7.5 s
-  /// and 10.7 s for two 2.4 GB 4K episodes). `MydiaClient.request` sets none.
-  /// Over p2p the server stops waiting at 30 s and answers with an error.
+  /// An embedded track has no body until the server extracts it with ffmpeg,
+  /// which reads through the whole container (7.5 s and 10.7 s for two 2.4 GB
+  /// 4K episodes). Over p2p the server stops waiting at 30 s and answers with
+  /// an error, so the client has to outwait the server rather than use the
+  /// transport's 15 s default.
   @override
   Future<String?> subtitleContent(String trackId) async {
     try {
@@ -593,6 +623,9 @@ class MydiaPlaybackSession implements PlaybackSession {
             mediaFileId: fileId,
             trackId: trackId,
           ).toJson(),
+          // Measured at almost 11 s on a large file; the server gives up at
+          // 30 s, so 45 s lets the server's own answer arrive first.
+          const Duration(seconds: 45),
         ),
       )).subtitleContent;
       if (content == null || content.isEmpty) {

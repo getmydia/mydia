@@ -7,15 +7,29 @@ import '../../player/device_profile.dart';
 import '../media_source.dart';
 import '../source_http.dart';
 
+/// The server answered with GraphQL errors. [data] is whatever it still
+/// resolved, when it sent any.
+class MydiaGraphqlError extends SourceException {
+  const MydiaGraphqlError(String message, {this.data})
+      : super(SourceErrorKind.server, message);
+
+  final Map<String, dynamic>? data;
+}
+
 abstract interface class MydiaGqlTransport {
   /// The response's `data`. Throws [SourceException]: `unauthorized` when
   /// the server refused the token, `unreachable` when it could not be
-  /// reached, `server` for any other GraphQL error.
+  /// reached, [MydiaGraphqlError] for any other GraphQL error.
+  ///
+  /// [timeout] bounds one request over HTTP and defaults to
+  /// [SourceHttp.defaultTimeout]. A p2p transport ignores it: its request
+  /// deadline is the server's own, not the client's.
   Future<Map<String, dynamic>> send(
     String query,
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   });
 
   /// The status a successful request reports.
@@ -47,10 +61,12 @@ class HttpMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     final body = await _http.json(
       'POST',
       _url,
+      timeout: timeout ?? SourceHttp.defaultTimeout,
       headers: {
         if (token != null) 'Authorization': 'Bearer $token',
         if (deviceProfile != null) DeviceProfile.headerName: deviceProfile,
@@ -67,7 +83,9 @@ class HttpMydiaTransport implements MydiaGqlTransport {
       final message =
           first is Map ? (first['message'] as String? ?? '') : '$first';
       if (isMydiaAuthError(message)) throw const SourceException.unauthorized();
-      throw SourceException.server(message);
+      final partial = body['data'];
+      throw MydiaGraphqlError(message,
+          data: partial is Map<String, dynamic> ? partial : null);
     }
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
@@ -94,6 +112,7 @@ class P2pMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     try {
       return await _p2p.sendGraphQLRequest(
@@ -107,7 +126,8 @@ class P2pMydiaTransport implements MydiaGqlTransport {
       if (isMydiaAuthError(e.message)) {
         throw const SourceException.unauthorized();
       }
-      throw SourceException.server(e.message);
+      // `P2pGraphQLError` carries no partial data, so none is attached.
+      throw MydiaGraphqlError(e.message);
     } catch (_) {
       // Dial, connect and timeout failures never come from the server's
       // answer, so they all mean it could not be reached.

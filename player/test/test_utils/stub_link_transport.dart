@@ -21,6 +21,7 @@ class StubLinkTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     final request = Request(
       operation: Operation(document: parseString(query)),
@@ -34,7 +35,7 @@ class StubLinkTransport implements MydiaGqlTransport {
     }
     final errors = response.errors;
     if (errors != null && errors.isNotEmpty) {
-      throw SourceException.server(errors.first.message);
+      throw MydiaGraphqlError(errors.first.message, data: response.data);
     }
     return response.data ?? const {};
   }

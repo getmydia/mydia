@@ -28,13 +28,14 @@ class _GatedTransport extends FakeMydiaTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     if (_first) {
       _first = false;
       await gate.future;
     }
-    return super
-        .send(query, variables, token: token, deviceProfile: deviceProfile);
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
   }
 }
 

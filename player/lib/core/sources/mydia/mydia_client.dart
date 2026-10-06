@@ -63,6 +63,7 @@ class MydiaClient {
   Future<Map<String, dynamic>> request(
     DocumentNode document, [
     Map<String, dynamic> variables = const {},
+    Duration? timeout,
   ]) async {
     final query = printNode(document);
     final sentWith = (await credentials()).accessToken;
@@ -70,7 +71,7 @@ class MydiaClient {
     final headerValue = profile?.toHeaderValue();
     try {
       return await _send(query, variables, sentWith,
-          deviceProfile: headerValue);
+          deviceProfile: headerValue, timeout: timeout);
     } on SourceException catch (e) {
       if (e.kind != SourceErrorKind.unauthorized) rethrow;
       // A refresh may have finished while this request was in flight.
@@ -86,7 +87,8 @@ class MydiaClient {
         rethrow;
       }
       try {
-        return await _send(query, variables, fresh, deviceProfile: headerValue);
+        return await _send(query, variables, fresh,
+            deviceProfile: headerValue, timeout: timeout);
       } on SourceException catch (retry) {
         if (retry.kind == SourceErrorKind.unauthorized) _onUnauthorized();
         rethrow;
@@ -204,10 +206,11 @@ class MydiaClient {
     Map<String, dynamic> variables,
     String? token, {
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     try {
       final data = await _transport.send(query, variables,
-          token: token, deviceProfile: deviceProfile);
+          token: token, deviceProfile: deviceProfile, timeout: timeout);
       _status.value = _transport.reachedVia;
       return data;
     } on SourceException catch (e) {
