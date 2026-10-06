@@ -1,15 +1,15 @@
 #import '../fragments/artwork_fragment.graphql'
 #import '../fragments/progress_fragment.graphql'
 
-# Documents only a guest Mydia source sends.
+# Documents only the Mydia source sends.
 
-query GuestInstanceIdentity {
+query MydiaInstanceIdentity {
   serverCompatibility {
     instanceId
   }
 }
 
-query GuestContinueWatching($first: Int) {
+query MydiaContinueWatching($first: Int) {
   continueWatching(first: $first) {
     id
     type

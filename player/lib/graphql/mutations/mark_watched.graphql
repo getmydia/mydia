@@ -39,10 +39,3 @@ mutation MarkSeasonUnwatched($showId: ID!, $seasonNumber: Int!) {
     title
   }
 }
-
-mutation MarkEpisodesUpToWatched($episodeId: ID!) {
-  markEpisodesUpToWatched(episodeId: $episodeId) {
-    id
-    title
-  }
-}

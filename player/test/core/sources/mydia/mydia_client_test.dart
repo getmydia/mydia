@@ -72,7 +72,7 @@ void main() {
 
   setUp(() {
     transport = FakeMydiaTransport();
-    transport.handlers['GuestInstanceIdentity'] = (_) => {
+    transport.handlers['MydiaInstanceIdentity'] = (_) => {
           'serverCompatibility': {'instanceId': 'inst-2'},
         };
     transport.handlers['RefreshAccessToken'] = (_) => {
@@ -106,9 +106,9 @@ void main() {
     final client = build();
     await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect(transport.calls.map((c) => c.operation), [
-      'GuestInstanceIdentity',
+      'MydiaInstanceIdentity',
       'RefreshAccessToken',
-      'GuestInstanceIdentity',
+      'MydiaInstanceIdentity',
     ]);
     expect(transport.calls[1].vars, {'deviceToken': 'device'});
     expect(transport.calls[1].token, isNull);
@@ -590,7 +590,7 @@ void main() {
       transport.handlers['RefreshAccessToken'] = (_) => refreshCompleter.future;
 
       var rejectedOnce = false;
-      transport.handlers['GuestInstanceIdentity'] = (_) {
+      transport.handlers['MydiaInstanceIdentity'] = (_) {
         if (!rejectedOnce) {
           rejectedOnce = true;
           throw const SourceException.unauthorized();

@@ -15,7 +15,7 @@ lib/graphql/
 
 **Note:** The schema is a symlink to the server's exported schema in `priv/graphql/`. This ensures both client and server always use the same schema definition.
 
-The Mydia browse documents (`home_rows`, `continue_watching_full`,
+The Mydia browse documents (`home_rows`, `mydia_documents`,
 `recently_added_full`, `library_filtered`, `listings`, `calendar`,
 `collections`) are checked `.graphql` files, so codegen and the schema guard
 validate them. `queries/mydia_queries.dart` re-exports the generated document
@@ -90,8 +90,6 @@ the server through the sources screens (`removeMydiaInstance` signs out).
 
 ### Browse Queries
 
-- `MoviesList` - List movies with pagination
-- `TvShowsList` - List TV shows with pagination
 - `MovieDetail` - Get detailed movie information
 - `TvShowDetail` - Get detailed TV show information
 - `SeasonEpisodes` - Get episodes for a specific season
