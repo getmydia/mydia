@@ -16,7 +16,7 @@ typedef ScriptedRequest = ({
 /// [Exception] to throw, or a [Future] of either to control timing.
 typedef ScriptHandler = Object Function(ScriptedRequest request, int callIndex);
 
-/// A [MydiaGqlTransport] scripted per request, for tests that used `StubLink`.
+/// A [MydiaGqlTransport] scripted per request.
 class ScriptedMydiaTransport implements MydiaGqlTransport {
   ScriptedMydiaTransport(this.handler);
 

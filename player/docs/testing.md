@@ -1,50 +1,53 @@
-# Player testing: StubLink and the codegen gap
+# Player testing: scripted transports and the codegen gap
 
-## Three ways a StubLink stub silently mis-scripts a screen test
+## Scripting a Mydia server in a test
 
-`player_screen_test_harness.dart`'s `StubLink` fails silently in three
-independent ways. All surface as unrelated assertions breaking, never as a clear
-stub error.
+A Mydia instance's requests all go through a `MydiaGqlTransport`, so a test
+stands in for the server by handing a fake transport to `fakeMydiaClient`
+(`test/core/sources/mydia/fake_mydia_client.dart`). There are two fakes.
 
-**Ordering.** `responses` is index-based and repeats its last entry. Adding a new
-query to a screen shifts every subsequent index, so existing tests start answering
-the wrong operation, and because the last entry repeats, a mis-scripted test does
-not necessarily go red. It can keep passing while asserting against a response
-meant for a different query. Measured 2026-08-03 when a `MovieSegments` query was
-added to `PlayerScreen`: seven tests affected, three failed outright, and four
-kept passing while silently mis-scripted. When adding a query to a player screen,
-re-check every `StubLink.responses` script for that screen rather than only fixing
-the tests that go red, and prefer the named per-operation helpers over raw
-positional lists where they exist.
+**`ScriptedMydiaTransport`** (`test/test_utils/scripted_mydia_transport.dart`)
+answers per request. It is the one to reach for in screen tests, where the
+requests a screen sends are numerous and their order is not the point.
 
-**Completeness.** A stub must carry every field the query selects. When a query
-gains a field, every hand-written response feeding that screen must gain the key
-too, even as an explicit `null`. Omitting it does not raise: graphql_flutter's
-normalized cache treats the response as incomplete and hands the widget partial
-data, so the screen renders degraded and the failure surfaces as unrelated layout
-assertions elsewhere. Observed 2026-08-13 extracting `tvShowDetailQuery` into
-`player/lib/graphql/queries/show_detail.graphql` and adding `watchStatus`. Two
-pre-existing tests in `show_detail_screen_test.dart` began failing, "hero play
-control lives in the hero, not the body" (`play.bottom` was 410, asserted `< 380`)
-and "tapping a rail card carries the viewport back to the hero" (`Bad state: No
-element` inside `scrollUntilVisible`). Neither test mentions watch state. The fix
+- **Script by operation.** The handler receives a `ScriptedRequest` with the
+  operation name, variables, token and timeout, so branch on `request.operation`.
+  It returns a data map, or throws by returning a `SourceException` or other
+  `Exception`. `ScriptedMydiaTransport.operationOf` and `.of(operation)` read
+  back what was sent.
+- **Sequence with `.responses`.** `ScriptedMydiaTransport.responses([...])`
+  answers in order and repeats the last entry once the list runs out. That
+  repeat means a mis-scripted test does not necessarily go red, so use it only
+  where a single operation is sent, and prefer the per-operation handler as soon
+  as a screen sends a second one. Adding a query to a screen shifts every later
+  index.
+- **Gate with a future.** A handler may return a `Future`, so a test can hold a
+  request open and release it when the scenario calls for it (a disposal while a
+  request is in flight, a late answer after a seek).
+- **Fail with `graphqlError`.** `graphqlError('message', data: {...})` is the
+  `MydiaGraphqlError` a client raises for a server-side GraphQL error, with
+  optional partial `data`. Use it for failure paths rather than a bare
+  `Exception`, so the code under test sees the type it sees in production.
+
+**`FakeMydiaTransport`** (`test/core/sources/mydia/fake_mydia_transport.dart`)
+is handler-per-operation: `handlers['MovieDetail'] = (vars) => {...}`, with a
+`calls` list, an `unreachable` switch, and `validTokens` so a token refresh can
+be exercised (any other token answers unauthorized). An operation with no
+handler answers a server error, which fails loudly rather than returning
+somebody else's payload. Use it for client, source and service tests.
+
+**Completeness.** A canned response must carry every field the query selects.
+When a query gains a field, every hand-written response feeding that screen must
+gain the key too, even as an explicit `null`, so the stub keeps matching what the
+server sends. A stub that falls behind its query degrades the screen quietly and
+the failure surfaces somewhere unrelated, often as a layout assertion far from
+the stub. (The case below predates the removal of the GraphQL cache that
+caused it, but the symptom is the one to watch for.) Observed 2026-08-13 extracting
+`tvShowDetailQuery` into `player/lib/graphql/queries/show_detail.graphql` and
+adding `watchStatus`: two tests in `show_detail_screen_test.dart` began failing
+on layout (`play.bottom` was 410, asserted `< 380`) and on a `Bad state: No
+element` inside `scrollUntilVisible`, and neither mentions watch state. The fix
 was adding `'watchStatus': null` to the `TvShow` and `Season` maps.
-
-**Routing.** `request.operation.operationName` is `null`, so never branch a
-handler on it. A `StubLink` that must answer more than one operation, a screen
-query plus a mutation say, cannot discriminate on the operation name, so every
-comparison falls to the `else` branch and one operation is answered with the
-other's payload. That surfaces as `OperationException(PartialDataException)` on
-the success path and, worse, as vacuously passing failure-path tests: a test
-asserting `throwsA(isA<OperationException>())` passes because of the misrouting
-rather than the failure it meant to script. Measured 2026-08-19 adding
-`removeFromContinueWatching`, where four success tests failed and two failure
-tests passed for the wrong reason. Discriminate on `request.variables` keys
-instead (the mutation's `mediaItemId` versus the home query's
-`continueWatchingLimit`), which is stable and explicit.
-
-The first bites when a screen issues an extra query, the second when an existing
-query grows, and the third the moment one stub has to serve two operations.
 
 When diagnosing this class of failure, bisect by component rather than by reading.
 For the completeness case the suspected change was a season-chip badge, and
@@ -70,16 +73,17 @@ never had; the real one has always been `toggleFavorite(mediaItemId:)`. Player
 favoriting was dead for movies and shows for the entire life of the Flutter
 client, fixed in PR #396.
 
-`StubLink` compounds it, returning canned responses by index without ever checking
-the request document against the schema, so a test can exercise a mutation the
-server would reject and still pass.
+A scripted transport compounds it: it answers whatever the test scripted without
+ever checking the request document against the schema, so a test can exercise a
+mutation the server would reject and still pass.
 
 Put new player operations in `player/lib/graphql/**/*.graphql` and use the
 generated `documentNodeMutationX` and `Variables$Mutation$X` rather than an inline
-string. `player/test/graphql/schema_conformance_test.dart` now parses every
+string. `player/test/graphql/schema_conformance_test.dart` parses every
 document the player ships, inline strings included, and asserts each root field
 exists in the schema, so a regression fails there. That guard is root-fields-only,
-and codegen is still the real validator.
+and codegen is still the real validator. `no_orphan_documents_test.dart` fails
+on a document nothing sends.
 
 ## E2E harness layout
 

@@ -8,7 +8,9 @@ void main() {
     final sources = [
       for (final f
           in Directory('lib').listSync(recursive: true).whereType<File>())
-        if (f.path.endsWith('.dart') && !f.path.startsWith('lib/graphql/'))
+        if (f.path.endsWith('.dart') &&
+            !f.path.endsWith('.graphql.dart') &&
+            !f.path.startsWith('lib/graphql/'))
           f.readAsStringSync(),
     ].join('\n');
     final orphans = [
@@ -17,8 +19,14 @@ void main() {
           .whereType<File>())
         if (f.path.endsWith('.graphql') && !f.path.endsWith('schema.graphql'))
           for (final m in op.allMatches(f.readAsStringSync()))
-            if (!sources.contains(m.group(2)!)) '${f.path}: ${m.group(2)}',
+            // The generated constant is what a caller sends, so a bare mention
+            // of the name (a comment, a class like Query$Name) is not a use.
+            if (!RegExp('documentNode${_kind(m.group(1)!)}${m.group(2)!}\\b')
+                .hasMatch(sources))
+              '${f.path}: ${m.group(2)}',
     ];
     expect(orphans, isEmpty);
   });
 }
+
+String _kind(String keyword) => keyword == 'query' ? 'Query' : 'Mutation';

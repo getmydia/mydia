@@ -25,7 +25,7 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // The pre-play queries now fire concurrently (see `runIsolated`), so an
-    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // ordered `ScriptedMydiaTransport.responses` list can no longer script them -- dispatch
     // on the operation instead. `startStreamingSession` and
     // `endStreamingSession` still fire well after those, so they are told
     // apart by the variables only they carry.

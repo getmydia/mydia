@@ -115,7 +115,7 @@ List<SubtitleTrack> resolveSubtitleTracks({
 /// checks (which is what let the third check point in that function go
 /// missing entirely in an earlier revision — see the Task 14 fix report).
 ///
-/// Pure and independent of `Player`/`GraphQLClient`/`State` on purpose: the
+/// Pure and independent of `Player`/`MydiaClient`/`State` on purpose: the
 /// race itself is fully described by these four values, so testing it
 /// needs none of the infrastructure the surrounding async code does.
 ///

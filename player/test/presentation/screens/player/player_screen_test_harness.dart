@@ -1,6 +1,6 @@
 // Shared scaffolding for tests that fully mount `PlayerScreen` — building a
 // live `Player`/`ConsumerStatefulWidget` with real Riverpod providers and a
-// real (stubbed-transport) `GraphQLClient`. Not itself a test file (no
+// real `MydiaClient` over a scripted transport. Not itself a test file (no
 // `_test.dart` suffix), so `flutter test` does not try to run it directly.
 //
 // No such harness existed before the fix landed for the dispose()-time
@@ -481,8 +481,9 @@ Map<String, dynamic> preferredSubtitleObject({
 /// `MediaFileFragment` -- see `subtitle_preference.graphql` for why. It fires
 /// chained after the detail query but concurrently with segments and subtitle
 /// offsets (see `_fetchProgressAndEpisodes`'s dartdoc), so an ordered
-/// `StubLink.responses` script can no longer carry it in a fixed slot --
-/// dispatch on the operation instead (see [movieSegmentsResponse]'s dartdoc).
+/// `ScriptedMydiaTransport.responses` script can no longer carry it in a fixed
+/// slot -- dispatch on the operation instead (see [movieSegmentsResponse]'s
+/// dartdoc).
 /// The defaults are the movie all those scripts open on, with no stored
 /// choice on its one file, which is what every test that is not about the
 /// preference wants.
@@ -515,9 +516,9 @@ Map<String, dynamic> subtitlePreferenceResponse({
 ///
 /// `_fetchProgressAndEpisodes` fires this concurrently with the detail query,
 /// the subtitle offsets query, and (via `runIsolated`) streaming candidates,
-/// so an ordered `StubLink.responses` script can no longer carry it in a
-/// fixed slot -- dispatch a `StubLink((request, _) => ...)` on the operation
-/// instead (see `player/docs/testing.md`). Segments travel in their own
+/// so an ordered `ScriptedMydiaTransport.responses` script can no longer carry
+/// it in a fixed slot -- dispatch a `ScriptedMydiaTransport((request, _) => ...)`
+/// on the operation instead (see `player/docs/testing.md`). Segments travel in their own
 /// document on purpose, not inside `MediaFileFragment` — see
 /// `player_screen_segments_isolation_test.dart` for why. The default is
 /// "detection found nothing", which is what every test that is not about
@@ -547,8 +548,8 @@ Map<String, dynamic> movieSegmentsResponse({
 ///
 /// `_fetchProgressAndEpisodes` fires this concurrently with the other
 /// pre-play queries -- see `movieSegmentsResponse`'s dartdoc for why an
-/// ordered `StubLink.responses` script can no longer carry it in a fixed
-/// slot. An empty list here leaves the controller's loaded flag true and
+/// ordered `ScriptedMydiaTransport.responses` script can no longer carry it in
+/// a fixed slot. An empty list here leaves the controller's loaded flag true and
 /// its stored offsets empty, so nothing downstream (mpv's sub-delay, the
 /// sheet's delay row) departs from zero.
 Map<String, dynamic> subtitleTrackSettingsResponse({

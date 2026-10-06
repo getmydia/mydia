@@ -7,9 +7,9 @@ Deeper reference lives alongside this file in `player/docs/`:
 - [workflow.md](docs/workflow.md) - codegen, running the suite, analyze, and the
   format hook that drops your file out of its own commit. **Run
   `./dev player setup` first in any new worktree.**
-- [testing.md](docs/testing.md) - the three ways a `StubLink` stub silently
-  mis-scripts a screen test, and why inline Dart GraphQL strings skip schema
-  validation.
+- [testing.md](docs/testing.md) - scripting a Mydia server with
+  `ScriptedMydiaTransport` and `FakeMydiaTransport`, and why inline Dart
+  GraphQL strings skip schema validation.
 - [riverpod.md](docs/riverpod.md) - writes from `dispose`, post-await `ref`, and
   testing a throwing notifier.
 - [packaging.md](docs/packaging.md) - Windows, iOS and fastlane.
@@ -22,11 +22,10 @@ Deeper reference lives alongside this file in `player/docs/`:
 - **Platform**: Flutter Web (served through Phoenix at `/player`)
 - **State Management**: Riverpod with code generation
 - **Routing**: go_router with hash-based URLs
-- **Data Layer**: GraphQL via graphql_flutter with codegen
+- **Data Layer**: GraphQL documents with codegen, sent through each instance's `MydiaClient`
 - **Storage**: flutter_secure_storage (credentials), Hive (cache). Open Hive
   through `initAppHive()` in `core/storage/app_hive.dart`, never
-  `Hive.initFlutter()` or `initHiveForFlutter()` -- those put boxes in the
-  user's Documents folder. A new box also needs adding to `kMydiaHiveBoxes`.
+  `Hive.initFlutter()` -- it puts boxes in the user's Documents folder. A new box also needs adding to `kMydiaHiveBoxes`.
 
 ## Development Commands
 
@@ -239,7 +238,8 @@ Widget build(BuildContext context, WidgetRef ref) {
 
 ### Query Organization
 
-Store queries in `priv/graphql/` and use codegen:
+Write documents as `.graphql` files under `lib/graphql/` (see
+`lib/graphql/README.md`) and use codegen:
 
 ```bash
 ./dev flutter pub run build_runner build
@@ -250,15 +250,16 @@ Store queries in `priv/graphql/` and use codegen:
 **Always** handle GraphQL errors gracefully:
 
 ```dart
-// GOOD
-final result = await client.query(options);
-if (result.hasException) {
-  return Result.error(result.exception.toString());
+// GOOD: failures are a SourceException (MydiaGraphqlError for server errors)
+try {
+  final data = await client.request(documentNodeQueryMovieDetail, vars);
+  return Result.success(Query$MovieDetail.fromJson(rootQuery(data)));
+} on SourceException catch (e) {
+  return Result.error(e.message);
 }
-return Result.success(result.data);
 
-// BAD - crashes on error
-final data = result.data!['movies'];
+// BAD - ignores the failure
+final data = await client.request(documentNodeQueryMovieDetail, vars);
 ```
 
 ## Widget Guidelines

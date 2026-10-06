@@ -107,7 +107,7 @@ Future<PairingResult> pairWithClaimCodeOnly({
 
 ## HTTP Client Integration
 
-For direct HTTP/HTTPS requests (e.g., GraphQL API calls), use the `PinnedHttpClient`:
+For direct HTTP/HTTPS requests, use the `PinnedHttpClient`:
 
 ```dart
 import 'package:http/http.dart' as http;
@@ -129,45 +129,6 @@ Future<http.Response> makeAuthenticatedRequest(
   } finally {
     httpClient.close();
   }
-}
-```
-
-## GraphQL Client Integration
-
-To integrate with the GraphQL client in `lib/core/graphql/client.dart`:
-
-```dart
-import 'package:http/io_client.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/network/pinned_http_client.dart';
-
-Future<GraphQLClient> createPinnedGraphQLClient(
-  String serverUrl,
-  String instanceId,
-  String? authToken,
-) async {
-  // Create pinned HTTP client
-  final pinnedHttpClient = PinnedHttpClient();
-  final httpClient = await pinnedHttpClient.createClient(instanceId);
-
-  // Wrap in IOClient for use with GraphQL
-  final ioClient = IOClient(httpClient);
-
-  final httpLink = HttpLink(
-    '$serverUrl/api',
-    httpClient: ioClient,
-  );
-
-  final authLink = AuthLink(
-    getToken: () async => authToken != null ? 'Bearer $authToken' : null,
-  );
-
-  final link = authLink.concat(httpLink);
-
-  return GraphQLClient(
-    cache: GraphQLCache(),
-    link: link,
-  );
 }
 ```
 
@@ -205,7 +166,7 @@ Future<void> connectToNewServer(
   // WebSocket connection (already verified in step 2)
   await ChannelService().connect(serverUrl);
 
-  // HTTP/GraphQL requests
+  // HTTP requests
   final ioClient = IOClient(httpClient);
   // ... use ioClient for requests
 }
@@ -227,7 +188,6 @@ As of this implementation:
 - ✅ `PinnedHttpClient` - HTTP client factory with pinning
 - ✅ `CertTrustDialog` - TOFU user interface
 - ⚠️ WebSocket integration - Requires pre-flight HTTP check (documented above)
-- ⚠️ GraphQL integration - Can wrap in IOClient (documented above)
 
 ## Testing
 

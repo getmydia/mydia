@@ -20,7 +20,7 @@ const kLegacyMydiaKeys = <String>[
   'server_node_addr',
 ];
 
-/// graphql_flutter's cache box, which nothing opens any more.
+/// The old GraphQL cache's box, which nothing opens any more.
 const kLegacyGraphqlBox = 'graphqlClientStore';
 
 /// Deletes the legacy sign-in once the migration has recorded its account, or

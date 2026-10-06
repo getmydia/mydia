@@ -1,4 +1,4 @@
-/// A Mydia server's transcode job, over HTTP, home p2p or a guest.
+/// A Mydia server's transcode job, over HTTP or p2p.
 library;
 
 import '../../../domain/models/download_option.dart';

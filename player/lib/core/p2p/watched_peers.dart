@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 /// Servers this device redials when their connection drops.
 ///
 /// One entry per Mydia instance in use. Each keeps its own attempt budget
-/// and timer, so a guest server dropping cannot spend the home server's
+/// and timer, so one server dropping cannot spend another's
 /// retries, and dialing one never stops the other being watched. Peers that
 /// are not watched, such as another player connecting for remote control,
 /// are ignored.

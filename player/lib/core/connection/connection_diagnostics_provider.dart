@@ -1,7 +1,7 @@
 /// Connection diagnostics provider for displaying connection status in settings.
 ///
 /// This provider aggregates connection information from various sources:
-/// - The bound server's URL
+/// - The source's server URL
 /// - Connection attempt results and errors
 /// - Last probe timestamps
 ///

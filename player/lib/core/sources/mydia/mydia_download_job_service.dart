@@ -1,4 +1,4 @@
-/// Mydia's download mutations, sent to a guest server.
+/// Mydia's download mutations, sent to one instance.
 library;
 
 import 'package:gql/ast.dart';
@@ -11,14 +11,14 @@ import '../../../graphql/mutations/prepare_download.graphql.dart';
 import '../../downloads/download_job_parsing.dart';
 import '../../downloads/download_job_service.dart';
 
-/// `MydiaGuestClient.request`, which refreshes the guest's token on a 401.
-typedef GuestRequest = Future<Map<String, dynamic>> Function(
+/// `MydiaClient.request`, which refreshes the instance's token on a 401.
+typedef MydiaRequest = Future<Map<String, dynamic>> Function(
     DocumentNode document, Map<String, dynamic> variables);
 
-class GuestDownloadJobService implements DownloadJobService {
-  GuestDownloadJobService({required this.request});
+class MydiaDownloadJobService implements DownloadJobService {
+  MydiaDownloadJobService({required this.request});
 
-  final GuestRequest request;
+  final MydiaRequest request;
 
   @override
   Future<DownloadOptionsResponse> getOptions(
@@ -44,9 +44,9 @@ class GuestDownloadJobService implements DownloadJobService {
   Future<void> cancelJob(String jobId) async => parseCancelDownloadJob(
       await request(documentNodeMutationCancelDownloadJob, {'jobId': jobId}));
 
-  /// A guest's file URL depends on its transport and needs headers, so
-  /// `MydiaGuestSource.resolve` builds it rather than this.
+  /// An instance's file URL depends on its transport and needs headers, so
+  /// `MydiaSource.resolve` builds it rather than this.
   @override
   Future<String> getDownloadUrl(String jobId) async =>
-      throw UnsupportedError('guest file URLs come from MydiaGuestSource');
+      throw UnsupportedError('file URLs come from MydiaSource');
 }

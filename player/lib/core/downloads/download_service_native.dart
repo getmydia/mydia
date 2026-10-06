@@ -1537,9 +1537,9 @@ bool _isTransportError(DioException e) =>
     };
 
 /// Runs a transcode job call (prepare, status), turning a dropped connection
-/// into a park so the sweep resumes the task instead of failing it. The home
-/// HTTP job service throws `http` errors and sockets errors, the p2p and
-/// guest services throw [SourceException]. [DeadJobException] and everything
+/// into a park so the sweep resumes the task instead of failing it. Mydia's
+/// job service throws [SourceException]; a stray `http` or socket error is
+/// parked the same way. [DeadJobException] and everything
 /// else pass through. Only the error's type is kept: its text may name a URL.
 Future<T> _guardJobCall<T>(Future<T> Function() call) async {
   try {

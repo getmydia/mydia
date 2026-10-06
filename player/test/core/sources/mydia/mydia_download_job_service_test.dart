@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_job_service.dart';
-import 'package:player/core/sources/mydia/guest_download_job_service.dart';
+import 'package:player/core/sources/mydia/mydia_download_job_service.dart';
 
 void main() {
   test('sends the download mutations and parses the answers', () async {
     final sent = <Map<String, dynamic>>[];
-    final service = GuestDownloadJobService(
+    final service = MydiaDownloadJobService(
       request: (document, variables) async {
         sent.add(variables);
         if (variables.containsKey('resolution')) {
@@ -37,7 +37,7 @@ void main() {
   });
 
   test('a missing job is a 404', () async {
-    final service = GuestDownloadJobService(
+    final service = MydiaDownloadJobService(
         request: (_, __) async => {'downloadJobStatus': null});
     expect(
       () => service.getJobStatus('gone'),
@@ -47,7 +47,7 @@ void main() {
   });
 
   test('a cancel the server refuses throws', () async {
-    final service = GuestDownloadJobService(
+    final service = MydiaDownloadJobService(
         request: (_, __) async => {
               'cancelDownloadJob': {'success': false}
             });

@@ -83,7 +83,7 @@ void main() {
       await pumpUntil(tester, () => find.text('Resume').evaluate().isNotEmpty);
     },
     'downloaded, offline': (tester) async {
-      // The bound instance reports `unreachable`, which is what the player
+      // The instance under test reports `unreachable`, which is what the player
       // reads as offline.
       final tempDir =
           Directory.systemTemp.createTempSync('mydia_resume_coverage_test_');
