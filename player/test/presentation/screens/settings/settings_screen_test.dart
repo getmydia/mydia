@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/build_channel.dart';
 import 'package:player/core/connection/connection_provider.dart';
+import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -80,6 +82,24 @@ class _FakeUpdateNotifier extends UpdateNotifier {
 
   @override
   UpdateState build() => _state;
+}
+
+/// Reports a fixed download footprint; nothing else is used by the dialog.
+class _FakeDownloads implements DownloadService {
+  _FakeDownloads({required this.count, required this.bytes});
+
+  final int count;
+  final int bytes;
+
+  @override
+  ({int count, int bytes}) accountDownloads(String accountId) =>
+      (count: count, bytes: bytes);
+
+  @override
+  Future<int> deleteAccountDownloads(String accountId) async => 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Serves a fixed settings value, or fails, without touching secure storage.
@@ -179,6 +199,7 @@ Future<void> _pump(
   SettingsService? coreSettingsService,
   bool inShell = false,
   ({InMemorySourceStore store, SourceSecrets secrets})? mydia,
+  DownloadService? downloads,
 }) async {
   final stored = mydia ?? await _twoMydiaServers();
   final sources = stored.store;
@@ -213,7 +234,10 @@ Future<void> _pump(
                 ),
           ),
         ),
-        noDownloadsOverride,
+        if (downloads == null)
+          noDownloadsOverride
+        else
+          downloadManagerProvider.overrideWith((ref) async => downloads),
         sourceStoreProvider.overrideWith((ref) async => sources),
         sourceSecretsProvider.overrideWithValue(secrets),
         remoteControlSettingsProvider.overrideWith(
@@ -324,12 +348,40 @@ void main() {
 
     await tester.tap(find.descendant(
       of: find.byType(AlertDialog),
-      matching: find.widgetWithText(TextButton, 'Sign out'),
+      matching: find.widgetWithText(TextButton, 'Remove server'),
     ));
     await tester.pumpAndSettle();
 
     final left = (await store.load()).accounts.map((r) => r.account.id);
     expect(left, ['mb']);
+  });
+
+  testWidgets('the sign out dialog says how many downloads it deletes',
+      (tester) async {
+    await _pump(tester, downloads: _FakeDownloads(count: 3, bytes: 2048));
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    final dialog = find.byType(AlertDialog);
+    expect(
+        find.descendant(
+            of: dialog,
+            matching: find.textContaining('also deletes 3 downloads')),
+        findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Remove server'), findsOneWidget);
+  });
+
+  testWidgets('the sign out dialog has no download line without downloads',
+      (tester) async {
+    await _pump(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
+    await tester.tap(find.byKey(const Key('settings-sign-out')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('also deletes'), findsNothing);
   });
 
   testWidgets('cancelling sign out leaves the server in place', (tester) async {

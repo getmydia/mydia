@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/downloads/download_providers.dart';
-import '../../../core/downloads/download_service.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
@@ -15,10 +13,10 @@ import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
-import '../../../domain/models/download.dart';
 import '../../widgets/toast/toaster.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
+import 'confirm_remove_account.dart';
 import 'plex_home_sheet.dart';
 import 'source_lock_sheet.dart';
 
@@ -130,41 +128,8 @@ class _AccountCard extends ConsumerWidget {
   final bool unlocked;
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    var footprint = (count: 0, bytes: 0);
-    if (isDownloadSupported) {
-      try {
-        footprint = (await ref
-                .read(downloadManagerProvider.future)
-                .timeout(downloadLookupTimeout))
-            .accountDownloads(record.account.id);
-      } catch (_) {
-        // The dialog still works without the count.
-      }
-    }
-    if (!context.mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Remove this account?'),
-        content: Text('${record.account.displayName} and its servers are '
-            'removed from this device. Nothing changes on the server.'
-            '${footprint.count == 0 ? '' : '\n\nThis also deletes ${footprint.count} '
-                'download${footprint.count == 1 ? '' : 's'} '
-                '(${DownloadTask.formatBytes(footprint.bytes)}).'}'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            key: const Key('manage-remove-confirm'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
+    final confirmed = await confirmRemoveAccount(context, ref, record.account);
+    if (!confirmed || !context.mounted) return;
     final toaster = Toaster.of(context);
     try {
       await removeMydiaInstance(ref, record.account);
