@@ -113,7 +113,7 @@ class _FakeDeviceInfo extends DeviceInfoService {
 }
 
 PairingCredentials _credentials(String instanceId) => PairingCredentials(
-      serverUrl: 'p2p://node-abc',
+      serverUrl: 'p2p://node-$instanceId',
       deviceId: 'dev-12345678',
       mediaToken: 'media',
       accessToken: 'access',
@@ -122,7 +122,8 @@ PairingCredentials _credentials(String instanceId) => PairingCredentials(
       directUrls: const [],
       instanceName: 'Friends',
       instanceId: instanceId,
-      serverNodeAddr: '{"id":"node-abc","addrs":[]}',
+      // One node per server: the saver treats a shared node id as one server.
+      serverNodeAddr: '{"id":"node-$instanceId","addrs":[]}',
     );
 
 void main() {
