@@ -9,8 +9,7 @@ import '../../widgets/horizontal_wheel_scroll.dart';
 import '../../widgets/toast/toaster.dart';
 import '../../widgets/watch_indicator.dart';
 import '../detail/detail_providers.dart';
-import 'show_bulk_download_button.dart';
-import 'show_detail_controller.dart';
+import 'show_selection_providers.dart';
 import 'source_season_download_button.dart';
 
 /// Resolves which episode the hero describes: the one matching
@@ -40,7 +39,7 @@ class ShowSeasonSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final key = show.target.key;
+    final key = show.target.ref;
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
     // Only show seasons that have files available
     final availableSeasons = show.seasons.where((s) => s.hasFiles).toList();
@@ -62,7 +61,6 @@ class ShowSeasonSection extends ConsumerWidget {
       });
     }
 
-    final mydia = show.mydia;
     final seasonKey = (show: show.target, seasonNumber: selectedSeason);
 
     return Column(
@@ -90,19 +88,15 @@ class ShowSeasonSection extends ConsumerWidget {
               const Spacer(),
               if (isDownloadSupported &&
                   show.features.contains(DetailFeature.seasonDownload))
-                if (mydia != null)
-                  ShowBulkDownloadButton(
-                    showId: mydia.id,
-                    show: mydia,
-                    selectedSeason: selectedSeason,
-                    availableSeasons:
-                        mydia.seasons.where((s) => s.hasFiles).toList(),
-                  )
-                else if (availableSeasons
+                if (availableSeasons
                         .where((s) => s.number == selectedSeason)
                         .firstOrNull
                     case final season?)
-                  SourceSeasonDownloadButton(show: show, season: season),
+                  SourceSeasonDownloadButton(
+                    show: show,
+                    season: season,
+                    seasons: availableSeasons,
+                  ),
               // Season watched actions render on web too, where downloads are
               // unsupported, so they live outside the isDownloadSupported gate.
               if (show.features.contains(DetailFeature.watched))
@@ -165,7 +159,7 @@ class ShowEpisodeList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final key = show.target.key;
+    final key = show.target.ref;
     final selectedSeason = ref.watch(selectedSeasonProvider(key));
 
     final episodesAsync = ref.watch(

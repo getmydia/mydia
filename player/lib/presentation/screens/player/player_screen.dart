@@ -14,8 +14,8 @@ import '../../../core/app_menu/now_playing.dart';
 import '../../../core/sources/current_source_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
-import '../../../core/graphql/watch/invalidation_rules.dart';
-import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/sources/cache/source_rules.dart';
+import '../../../core/cache/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
 import '../../../core/player/codec_support.dart';
 import '../../../core/player/hls_engine.dart';
@@ -3734,13 +3734,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// times per movie over what may be a p2p relay.
   void _invalidateAfterPlayback() {
     if (!_session.features.contains(PlaybackFeature.libraryRefresh)) return;
-    _invalidator.invalidate(
-      InvalidationRules.playbackFinished(
-        mediaType: widget.mediaType,
-        mediaId: widget.mediaId,
-        showId: widget.showId,
-      ),
-    );
+    _invalidator.invalidate(SourceRules.watchedChanged(_session.item.sourceId));
   }
 
   /// Runs only when the screen really goes away (`dispose`, tab close). A

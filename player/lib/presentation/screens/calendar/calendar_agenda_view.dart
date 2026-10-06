@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/calendar_entry.dart';
+import '../../../domain/sources/item.dart';
 import 'calendar_dates.dart';
 import 'calendar_day_header.dart';
 import 'calendar_row.dart';
@@ -38,7 +38,7 @@ class CalendarAgendaView extends StatefulWidget {
   });
 
   /// Never empty: the screen shows its own empty state instead.
-  final List<CalendarEntry> entries;
+  final List<ItemSummary> entries;
 
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
@@ -160,7 +160,7 @@ class _CalendarAgendaViewState extends State<CalendarAgendaView> {
                 itemBuilder: (context, itemIndex) {
                   final entry = group.value[itemIndex];
                   return CalendarRow(
-                    key: ValueKey('calendar-entry-${entry.id}'),
+                    key: ValueKey('calendar-entry-${entry.ref.externalId}'),
                     entry: entry,
                     today: today,
                   );

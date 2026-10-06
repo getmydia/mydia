@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/freshness.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/freshness.dart';
+import '../../test_utils/query_keys.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';

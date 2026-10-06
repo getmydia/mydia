@@ -9,15 +9,24 @@ import 'package:gql/ast.dart' show DocumentNode;
 import '../../../domain/models/download_option.dart';
 import '../../../domain/models/download_plan.dart';
 import '../../../domain/models/media_segment.dart';
+import '../../../domain/models/media_stream.dart';
+import '../../../domain/models/remote_device.dart';
+import '../../../domain/navigation/media_filter.dart';
+import '../../../domain/sources/collection.dart';
+import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../../../graphql/mutations/mark_watched.graphql.dart';
+import '../../../graphql/mutations/register_device_node.graphql.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
+import '../../../graphql/mutations/revoke_device.graphql.dart';
 import '../../../graphql/mutations/toggle_favorite.graphql.dart';
 import '../../../graphql/mutations/update_episode_progress.graphql.dart';
 import '../../../graphql/mutations/update_movie_progress.graphql.dart';
+import '../../../graphql/queries/devices_list.graphql.dart';
 import '../../../graphql/queries/episode_detail.graphql.dart';
+import '../../../graphql/queries/media_info.graphql.dart';
 import '../../../graphql/queries/media_segments.graphql.dart';
 import '../../../graphql/queries/movie_detail.graphql.dart';
 import '../../../graphql/queries/mydia_queries.dart';
@@ -26,29 +35,24 @@ import '../../../graphql/queries/season_episodes.graphql.dart';
 import '../../../graphql/queries/show_detail.graphql.dart';
 import '../../p2p/local_proxy_service.dart';
 import '../../p2p/media_route.dart';
+import '../../remote/remote_roster.dart';
+import '../../util/iso_date.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
 import 'guest_download_job_service.dart';
 import 'guest_proxy.dart';
 import 'mydia_client.dart';
+import 'mydia_filters.dart';
 import 'mydia_mapping.dart';
+import 'mydia_media_info.dart';
 import 'mydia_transcode_job.dart';
 
-const _sorts = [
-  SortOption(id: 'TITLE', label: 'Title', shared: SharedSort.title),
-  SortOption(
-      id: 'ADDED_AT',
-      label: 'Date added',
-      descendingByDefault: true,
-      shared: SharedSort.added),
-  SortOption(id: 'YEAR', label: 'Year', descendingByDefault: true),
-];
-
-const _moviesLibrary = 'movies';
-const _showsLibrary = 'shows';
+const _moviesLibrary = mydiaMoviesLibrary;
+const _showsLibrary = mydiaShowsLibrary;
 const _searchLimit = 40;
 const _rowLimit = 20;
+const _collectionLimit = 50;
 
 /// Mydia sends artwork as absolute URLs that need no credentials.
 ArtworkRequest? absoluteArtworkRequest(SourceId id, ArtworkRef art, int width) {
@@ -77,7 +81,15 @@ class MydiaSource extends MediaSource
         Similar,
         SkipSegments,
         Downloadable,
-        ProgressSync {
+        ProgressSync,
+        Collections,
+        Calendar,
+        SavedFilters,
+        UnwatchedListing,
+        FavoritesListing,
+        MediaInfo,
+        HomeHubs,
+        RemoteTargets {
   MydiaSource({
     required this.source,
     required this.client,
@@ -112,6 +124,14 @@ class MydiaSource extends MediaSource
         SourceCapability.similar,
         SourceCapability.skipSegments,
         SourceCapability.progressSync,
+        SourceCapability.collections,
+        SourceCapability.calendar,
+        SourceCapability.savedFilters,
+        SourceCapability.unwatchedListing,
+        SourceCapability.favoritesListing,
+        SourceCapability.mediaInfo,
+        SourceCapability.hubs,
+        SourceCapability.remoteTargets,
       };
 
   /// `request` throws a `SourceException` on a transport failure, an auth
@@ -186,13 +206,15 @@ class MydiaSource extends MediaSource
           ref: LibraryRef(sourceId: id, id: _moviesLibrary),
           title: 'Movies',
           kind: LibraryKind.movies,
-          sortOptions: _sorts,
+          sortOptions: mydiaSortOptions,
+          filterOptions: mydiaFilterOptions(LibraryKind.movies),
         ),
         Library(
           ref: LibraryRef(sourceId: id, id: _showsLibrary),
           title: 'TV Shows',
           kind: LibraryKind.shows,
-          sortOptions: _sorts,
+          sortOptions: mydiaSortOptions,
+          filterOptions: mydiaFilterOptions(LibraryKind.shows),
         ),
       ];
 
@@ -207,21 +229,14 @@ class MydiaSource extends MediaSource
       _showsLibrary => false,
       _ => throw const SourceException.notFound(),
     };
-    final sort =
-        _sorts.where((o) => o.id == query.sortId).firstOrNull ?? _sorts.first;
-    final descending = query.descending ?? sort.descendingByDefault;
-    final data = await _q(
-      isMovies ? documentNodeQueryMydiaMovies : documentNodeQueryMydiaTvShows,
-      {
-        'first': query.pageSize,
-        'after': cursor?.value,
-        'sort': {
-          'field': sort.id,
-          'direction': descending ? 'DESC' : 'ASC',
-        },
-      },
-    );
-    final conn = data[isMovies ? 'movies' : 'tvShows'];
+    final plan =
+        mydiaBrowsePlan(movies: isMovies, query: query, cursor: cursor);
+    if (plan.field == 'unwatched' || plan.field == 'favorites') {
+      return _flatPage(plan.doc, plan.field, plan.vars, cursor,
+          pageSize: query.pageSize);
+    }
+    final data = await _q(plan.doc, plan.vars);
+    final conn = data[plan.field];
     final map = conn is Map<String, dynamic> ? conn : const <String, dynamic>{};
     final items = [
       for (final edge in _maps(map['edges']))
@@ -239,6 +254,32 @@ class MydiaSource extends MediaSource
       total: map['totalCount'] as int?,
       nextCursor:
           pageInfo['hasNextPage'] == true && end is String ? Cursor(end) : null,
+    );
+  }
+
+  /// The flat listings carry no connection, so a full page means there may be
+  /// more, and the server's offset cursor names the last item already seen.
+  Future<Page<ItemSummary>> _flatPage(
+    DocumentNode doc,
+    String field,
+    Map<String, dynamic> vars,
+    Cursor? cursor, {
+    int pageSize = _rowLimit,
+  }) async {
+    final data = await _q(doc, {
+      ...vars,
+      'first': pageSize,
+      'after': cursor?.value,
+    });
+    final raw = _maps(data[field]);
+    return Page(
+      items: [
+        for (final m in raw)
+          if (listingSummary(id, m) case final s?) s,
+      ],
+      nextCursor: raw.length == pageSize
+          ? Cursor(offsetCursor(offsetOf(cursor) + pageSize))
+          : null,
     );
   }
 
@@ -433,18 +474,152 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<ItemSummary>> recentlyAdded() async {
-    final data =
-        await _q(documentNodeQueryMydiaRecentlyAdded, {'first': _rowLimit});
+    final data = await client.query(
+      documentNodeQueryRecentlyAddedFull,
+      fallback: documentNodeQueryRecentlyAddedFullLegacy,
+      variables: const {'first': _rowLimit},
+    );
     return [
-      for (final r in _maps(data['recentlyAdded'])) recentlyAddedSummary(id, r),
+      for (final r in _maps(data['recentlyAdded'])) listingSummary(id, r),
     ].whereType<ItemSummary>().take(_rowLimit).toList();
   }
 
   @override
-  bool canRemoveFromContinueWatching(ItemSummary item) => true;
+  Future<List<SourceCollection>> collections() async {
+    final data = await _q(documentNodeQueryCollections, {
+      'first': _collectionLimit,
+    });
+    return [for (final c in _maps(data['collections'])) collectionOf(id, c)];
+  }
+
+  /// The server's `collectionItems` takes no `after`, so a collection is one
+  /// page of up to 50 items, as the legacy screen showed.
+  @override
+  Future<Page<ItemSummary>> collectionItems(String collectionId,
+      {Cursor? cursor}) async {
+    if (cursor != null) return const Page(items: []);
+    final data = await _q(documentNodeQueryCollectionItems,
+        {'collectionId': collectionId, 'first': _collectionLimit});
+    return Page(items: [
+      for (final m in _maps(data['collectionItems']))
+        if (listingSummary(id, m) case final s?) s,
+    ]);
+  }
 
   @override
+  Future<List<ItemSummary>> calendar(DateTime start, DateTime end) async {
+    final data = await _q(documentNodeQueryCalendar,
+        {'start': isoDate(start), 'end': isoDate(end)});
+    return [for (final e in _maps(data['calendar'])) calendarSummary(id, e)]
+      ..sort((a, b) => (a.airDate ?? '').compareTo(b.airDate ?? ''));
+  }
+
+  @override
+  SavedFilterQuery? filterQuery(MediaFilter filter) =>
+      mydiaFilterQuery(id, filter);
+
+  @override
+  Future<Page<ItemSummary>> unwatched({Cursor? cursor}) => _flatPage(
+      documentNodeQueryUnwatchedListing, 'unwatched', const {}, cursor);
+
+  @override
+  Future<Page<ItemSummary>> favorites({Cursor? cursor}) => _flatPage(
+      documentNodeQueryFavoritesListing, 'favorites', const {}, cursor);
+
+  @override
+  Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
+    final movie = ref.kind == ItemKind.movie;
+    final data = await client.query(
+      movie
+          ? documentNodeQueryMovieMediaInfo
+          : documentNodeQueryEpisodeMediaInfo,
+      fallback: movie
+          ? documentNodeQueryMovieMediaInfoLegacy
+          : documentNodeQueryEpisodeMediaInfoLegacy,
+      variables: {'id': ref.externalId},
+    );
+    final node = data[movie ? 'movie' : 'episode'];
+    final files = node is Map<String, dynamic> ? node['files'] : null;
+    return [for (final f in _maps(files)) mediaFileInfoFromJson(f)];
+  }
+
+  @override
+  Future<List<Hub>> hubs() async {
+    final data = await client.query(documentNodeQueryHomeRows,
+        fallback: documentNodeQueryHomeRowsLegacy,
+        variables: const {
+          'recentlyAddedLimit': _rowLimit,
+          'favoritesLimit': 10,
+        });
+    Hub row(String hubId, String title, Object? list) => Hub(
+          id: hubId,
+          title: title,
+          items: [
+            for (final m in _maps(list))
+              if (listingSummary(id, m) case final s?) s,
+          ],
+        );
+    return [
+      row('recently-added', 'Recently Added', data['recentlyAdded']),
+      row('favorites', 'Favorites', data['favorites']),
+    ].where((h) => h.items.isNotEmpty).toList();
+  }
+
+  @override
+  late final DeviceRoster roster = RemoteRoster(client: client);
+
+  @override
+  Future<bool> registerNode(String nodeId) async {
+    try {
+      if (nodeId.isEmpty) return false;
+      final data = await client.request(
+        documentNodeMutationRegisterDeviceNode,
+        {'nodeId': nodeId},
+      );
+      final registered = data['registerDeviceNode'];
+      return registered is Map && registered['nodeId'] == nodeId;
+    } catch (error) {
+      debugPrint('[MydiaSource] node registration failed: $error');
+      return false;
+    }
+  }
+
+  @override
+  Future<List<RemoteDevice>> devices() async {
+    final data = await _q(documentNodeQueryDevicesList);
+    return [
+      for (final d in _maps(data['devices']))
+        RemoteDevice(
+          id: d['id'] as String,
+          deviceName: d['deviceName'] as String,
+          platform: d['platform'] as String,
+          lastSeenAt: d['lastSeenAt'] is String
+              ? DateTime.tryParse(d['lastSeenAt'] as String)
+              : null,
+          isRevoked: d['isRevoked'] as bool? ?? false,
+          createdAt: DateTime.parse(d['createdAt'] as String),
+        ),
+    ];
+  }
+
+  @override
+  Future<bool> revokeDevice(String deviceId) async {
+    final data = await _q(documentNodeMutationRevokeDevice, {'id': deviceId});
+    final result = data['revokeDevice'];
+    return result is Map && result['success'] == true;
+  }
+
+  @override
+  bool canRemoveFromContinueWatching(ItemSummary item) =>
+      item.ref.kind != ItemKind.episode || item.showRef != null;
+
+  /// [ref] is `ItemSummary.dismissRef`: the movie, or for an episode its
+  /// show. The server refuses an episode id.
+  @override
   Future<void> removeFromContinueWatching(ItemRef ref) async {
+    if (ref.kind == ItemKind.episode) {
+      throw const SourceException.unsupported();
+    }
     await _q(documentNodeMutationRemoveFromContinueWatching,
         {'mediaItemId': ref.externalId});
   }

@@ -1,0 +1,86 @@
+query MoviesFiltered($first: Int, $after: String, $sort: SortInput, $category: MediaCategory) {
+  movies(first: $first, after: $after, sort: $sort, category: $category) {
+    edges {
+      node {
+        id
+        title
+        year
+        overview
+        runtime
+        genres
+        contentRating
+        rating
+        artwork {
+          posterUrl
+          backdropUrl
+          thumbnailUrl
+        }
+        progress {
+          positionSeconds
+          durationSeconds
+          percentage
+          watched
+          lastWatchedAt
+        }
+        watchStatus {
+          watched
+          percentage
+          unwatchedEpisodeCount
+        }
+        isFavorite
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}
+
+query TvShowsFiltered($first: Int, $after: String, $sort: SortInput, $category: MediaCategory) {
+  tvShows(first: $first, after: $after, sort: $sort, category: $category) {
+    edges {
+      node {
+        id
+        title
+        year
+        overview
+        status
+        genres
+        contentRating
+        rating
+        seasonCount
+        episodeCount
+        artwork {
+          posterUrl
+          backdropUrl
+          thumbnailUrl
+        }
+        watchStatus {
+          watched
+          percentage
+          unwatchedEpisodeCount
+        }
+        isFavorite
+        nextEpisode {
+          id
+          seasonNumber
+          episodeNumber
+          title
+        }
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    totalCount
+  }
+}

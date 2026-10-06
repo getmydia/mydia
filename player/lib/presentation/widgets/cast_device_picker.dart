@@ -6,6 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_capabilities.dart';
 import '../../core/cast/cast_providers.dart';
+import '../../core/cast/mydia_cast_backend.dart' show sourceIdsOfCastDevice;
+import '../../core/sources/source.dart' show SourceKind;
+import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
 import 'local_network_settings_button.dart';
@@ -244,7 +247,7 @@ class _DeviceListState extends State<_DeviceList> {
   }
 }
 
-class _ProtocolGroup extends StatelessWidget {
+class _ProtocolGroup extends ConsumerWidget {
   final String label;
   final List<CastDevice> devices;
   final String? currentDeviceId;
@@ -259,7 +262,10 @@ class _ProtocolGroup extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sources = ref.watch(sourcesProvider);
+    final manyMydia =
+        sources.where((s) => s.account.kind == SourceKind.mydia).length > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -295,6 +301,15 @@ class _ProtocolGroup extends StatelessWidget {
                       ? 'Status unavailable'
                       : 'Nothing playing'))
               : device.model;
+          // The Mydia servers that list this device, by their own names.
+          // Only worth saying when there is more than one to tell apart.
+          final listing = sourceIdsOfCastDevice(device);
+          final servers = [
+            if (manyMydia || listing.length > 1)
+              for (final id in listing)
+                for (final source in sources)
+                  if (source.id == id) source.displayName,
+          ];
           return ListTile(
             key: Key('cast-device-${device.id}'),
             leading: Icon(
@@ -302,7 +317,15 @@ class _ProtocolGroup extends StatelessWidget {
               color: isChosen ? AppColors.primary : AppColors.textSecondary,
             ),
             title: Text(device.name),
-            subtitle: subtitle != null ? Text(subtitle) : null,
+            subtitle: servers.isEmpty
+                ? (subtitle != null ? Text(subtitle) : null)
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (subtitle != null) Text(subtitle),
+                      Text(servers.join(', ')),
+                    ],
+                  ),
             trailing: isConnected
                 ? const Icon(Icons.check, color: AppColors.primary)
                 : null,

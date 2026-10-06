@@ -1,85 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/domain/detail/detail_target.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
 
-import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../detail/detail_harness.dart';
+import '../sources/fake_media_source.dart';
 
-Map<String, dynamic> _episodeJson({bool withFile = false}) {
-  return {
-    '__typename': 'Episode',
-    'id': 'e-1',
-    'seasonNumber': 1,
-    'episodeNumber': 3,
-    'title': 'Copper Weather',
-    'overview': 'The crew waits out a storm of metal dust.',
-    'airDate': '2024-03-02',
-    'runtime': 47,
-    'monitored': true,
-    'thumbnailUrl': null,
-    'hasFile': true,
-    'progress': null,
-    'files': withFile
-        ? [
-            {'__typename': 'MediaFile', 'id': 'f-1', 'resolution': '1080p'},
-          ]
-        : <dynamic>[],
-    'show': {
-      '__typename': 'Show',
-      'id': 's-1',
-      'title': 'Invented Series',
-      'artwork': {
-        '__typename': 'Artwork',
-        'posterUrl': null,
-        'backdropUrl': null,
-        'thumbnailUrl': null,
-      },
-    },
-  };
-}
+const _ref =
+    ItemRef(sourceId: fakeSourceId, kind: ItemKind.episode, externalId: 'e-1');
+const _show =
+    ItemRef(sourceId: fakeSourceId, kind: ItemKind.show, externalId: 's-1');
 
-Future<void> _pumpScreen(WidgetTester tester, {bool withFile = false}) async {
-  await tester.binding.setSurfaceSize(const Size(400, 900));
-  addTearDown(() => tester.binding.setSurfaceSize(null));
-
-  final link = StubLink((request, _) {
-    return {
-      '__typename': 'Query',
-      'episode': _episodeJson(withFile: withFile),
-    };
-  });
-
-  await mockNetworkImages(() async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          asyncGraphqlClientProvider
-              .overrideWith((ref) async => stubClient(link)),
-        ],
-        child: MaterialApp.router(
-          routerConfig: GoRouter(
-            initialLocation: '/episode/e-1',
-            routes: [
-              GoRoute(
-                path: '/episode/:id',
-                builder: (context, state) =>
-                    EpisodeDetailScreen(id: state.pathParameters['id']!),
-              ),
-              GoRoute(
-                path: '/show/:id',
-                builder: (context, state) => const Text('show page'),
-              ),
-            ],
-          ),
-        ),
+ItemDetail _episode(ItemRef ref, {required bool withFile}) => ItemDetail(
+      summary: ItemSummary(
+        ref: ref,
+        title: 'Copper Weather',
+        showTitle: 'Invented Series',
+        index: 3,
+        parentIndex: 1,
+        durationSeconds: 2820,
+        airDate: '2024-03-02',
+        defaultVersionId: withFile ? 'f-1' : null,
       ),
+      overview: 'The crew waits out a storm of metal dust.',
+      show: _show,
+      versions: [
+        if (withFile)
+          const MediaVersion(id: 'f-1', container: 'mkv', height: 1080),
+      ],
     );
-    await tester.pump();
-    await tester.pump();
-  });
+
+Future<void> _pumpScreen(WidgetTester tester, {bool withFile = false}) {
+  final source = ScriptedDetailSource(
+    detailOf: (ref) => _episode(ref, withFile: withFile),
+  );
+  return pumpDetailScreen(
+    tester,
+    const EpisodeDetailScreen.target(target: SourceTarget(_ref)),
+    [source],
+    size: const Size(400, 900),
+    routes: [
+      GoRoute(
+        path: '/s/:sourceId/show/:id',
+        builder: (context, state) => const Text('show page'),
+      ),
+    ],
+  );
 }
 
 void main() {
@@ -90,7 +58,7 @@ void main() {
     expect(find.text('show page'), findsOneWidget);
   });
 
-  // The download branch (shown disabled for a file-less Mydia episode) needs
+  // The download branch (shown disabled for a file-less episode) needs
   // `isDownloadSupported`, which is false on the test platform, so it cannot
   // be exercised here. Media info is the file-dependent control we can check.
   testWidgets('media info shows only for an episode with files',

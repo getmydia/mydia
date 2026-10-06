@@ -138,6 +138,20 @@ void runMediaSourceContract(
           caps.contains(SourceCapability.nextUp));
       expect(f.source.as<SkipSegments>() != null,
           caps.contains(SourceCapability.skipSegments));
+      expect(f.source.as<Collections>() != null,
+          caps.contains(SourceCapability.collections));
+      expect(f.source.as<Calendar>() != null,
+          caps.contains(SourceCapability.calendar));
+      expect(f.source.as<SavedFilters>() != null,
+          caps.contains(SourceCapability.savedFilters));
+      expect(f.source.as<UnwatchedListing>() != null,
+          caps.contains(SourceCapability.unwatchedListing));
+      expect(f.source.as<FavoritesListing>() != null,
+          caps.contains(SourceCapability.favoritesListing));
+      expect(f.source.as<MediaInfo>() != null,
+          caps.contains(SourceCapability.mediaInfo));
+      expect(f.source.as<RemoteTargets>() != null,
+          caps.contains(SourceCapability.remoteTargets));
     });
 
     test('similar never answers the item itself', () async {

@@ -10,8 +10,8 @@ const _flushEvery = 4 * 1024 * 1024;
 
 final _urlQuery = RegExp(r'''(https?://[^\s?'")>]*)\?[^\s'")>]*''');
 
-/// [text] with the query string removed from every URL in it. Home Mydia puts
-/// its media token in the query, and an error saved on a task is shown in the
+/// [text] with the query string removed from every URL in it. A media URL may
+/// carry its token in the query, and an error saved on a task is shown in the
 /// UI and kept in Hive.
 String stripUrlQueries(String text) =>
     text.replaceAllMapped(_urlQuery, (m) => m.group(1)!);
@@ -86,8 +86,8 @@ Future<RangeFetchResult> fetchRange(
       if (e is DioException) rethrow;
       // Dio does not wrap an error from a streamed body, so a dropped
       // connection arrives as an HttpException, SocketException or the like.
-      // Its text names the URL, and home Mydia's carries a token, so only the
-      // type survives.
+      // Its text names the URL, and a URL can carry a token in its query, so
+      // only the type survives.
       throw DioException(
         requestOptions: response.requestOptions,
         type: DioExceptionType.connectionError,

@@ -55,6 +55,11 @@ pub struct LoadContentRequest {
     pub audio_track: Option<String>,
     pub subtitle_track: Option<String>,
     pub autoplay: bool,
+    /// The Mydia server instance the item belongs to, for a target signed into
+    /// several servers. Optional on the wire: an older sender omits it (decodes
+    /// as `None`) and an older receiver ignores the unknown key.
+    #[serde(default)]
+    pub server_instance_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -184,9 +189,93 @@ mod tests {
             audio_track: None,
             subtitle_track: None,
             autoplay: true,
+            server_instance_id: None,
         });
         let bytes = serde_cbor::to_vec(&request).unwrap();
         let decoded: RemoteControlRequest = serde_cbor::from_slice(&bytes).unwrap();
         assert_eq!(decoded, request);
+    }
+
+    #[test]
+    fn load_content_round_trips_with_a_server_instance_id() {
+        let request = RemoteControlRequest::LoadContent(LoadContentRequest {
+            media_item_id: "item-1".into(),
+            episode_id: None,
+            position_ms: 5,
+            audio_track: None,
+            subtitle_track: None,
+            autoplay: false,
+            server_instance_id: Some("inst-b".into()),
+        });
+        let bytes = serde_cbor::to_vec(&request).unwrap();
+        let decoded: RemoteControlRequest = serde_cbor::from_slice(&bytes).unwrap();
+        assert_eq!(decoded, request);
+    }
+
+    /// The payload an older sender produces: the same request type before
+    /// `server_instance_id` existed.
+    #[derive(serde::Serialize)]
+    enum OldRequest {
+        LoadContent(OldLoadContent),
+    }
+
+    #[derive(serde::Serialize)]
+    struct OldLoadContent {
+        media_item_id: String,
+        episode_id: Option<String>,
+        position_ms: u64,
+        audio_track: Option<String>,
+        subtitle_track: Option<String>,
+        autoplay: bool,
+    }
+
+    #[derive(serde::Deserialize)]
+    enum OldRequestReader {
+        LoadContent(OldLoadContentReader),
+    }
+
+    #[derive(serde::Deserialize, Debug, PartialEq)]
+    struct OldLoadContentReader {
+        media_item_id: String,
+        episode_id: Option<String>,
+        position_ms: u64,
+        audio_track: Option<String>,
+        subtitle_track: Option<String>,
+        autoplay: bool,
+    }
+
+    #[test]
+    fn an_old_payload_without_the_server_instance_id_decodes_as_none() {
+        let old = OldRequest::LoadContent(OldLoadContent {
+            media_item_id: "item-1".into(),
+            episode_id: None,
+            position_ms: 0,
+            audio_track: None,
+            subtitle_track: None,
+            autoplay: true,
+        });
+        let bytes = serde_cbor::to_vec(&old).unwrap();
+        let decoded: RemoteControlRequest = serde_cbor::from_slice(&bytes).unwrap();
+        match decoded {
+            RemoteControlRequest::LoadContent(r) => assert_eq!(r.server_instance_id, None),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn an_old_receiver_ignores_the_server_instance_id() {
+        let request = RemoteControlRequest::LoadContent(LoadContentRequest {
+            media_item_id: "item-1".into(),
+            episode_id: None,
+            position_ms: 0,
+            audio_track: None,
+            subtitle_track: None,
+            autoplay: true,
+            server_instance_id: Some("inst-b".into()),
+        });
+        let bytes = serde_cbor::to_vec(&request).unwrap();
+        let decoded: OldRequestReader = serde_cbor::from_slice(&bytes).unwrap();
+        let OldRequestReader::LoadContent(r) = decoded;
+        assert_eq!(r.media_item_id, "item-1");
     }
 }

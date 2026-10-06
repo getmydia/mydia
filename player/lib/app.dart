@@ -21,8 +21,8 @@ import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
 import 'core/sources/mydia/bound_mydia.dart';
-import 'core/graphql/watch/resume_gate.dart';
-import 'core/graphql/watch/watcher_registry.dart';
+import 'core/cache/resume_gate.dart';
+import 'core/cache/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
 import 'core/downloads/download_providers.dart';
 import 'core/downloads/download_service.dart';
@@ -31,15 +31,15 @@ import 'core/remote/ambient_lifecycle.dart';
 import 'core/remote/load_content_navigation.dart';
 import 'core/remote/node_registration_providers.dart';
 import 'core/remote/registration_status.dart';
+import 'core/sources/source.dart' show SourceId;
 import 'core/remote/remote_control_intent.dart';
 import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
-import 'core/remote/remote_roster.dart';
+import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
-import 'presentation/screens/episode/episode_detail_controller.dart';
-import 'presentation/screens/movie/movie_detail_controller.dart';
+import 'presentation/screens/detail/load_content_fetchers.dart';
 import 'presentation/widgets/cast_mini_controller.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/native/lib.dart';
@@ -268,10 +268,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // proof that both are now present, so it is the right moment to try again.
     // `_initRemoteControlIfEnabled` no-ops once a receiver is wired, so this
     // costs nothing in the common case where the first attempt worked.
-    ref.listenManual<RegistrationStatus>(
-      nodeRegistrationProvider,
+    ref.listenManual<Map<SourceId, RegistrationStatus>>(
+      nodeRegistrationsProvider,
       (previous, next) {
-        if (next is! RegistrationSucceeded) return;
+        if (!next.values.any((s) => s is RegistrationSucceeded)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
       fireImmediately: true,
@@ -341,18 +341,23 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       await p2pService.initialize();
 
       // Registration deliberately does not happen here any more. It is an
-      // invariant maintained by `nodeRegistrationProvider`, not a startup
+      // invariant maintained by `nodeRegistrationsProvider`, not a startup
       // step: doing it inline meant a node id or GraphQL client that had not
       // arrived yet left this device unregistered, and therefore invisible to
       // every other device, for the rest of the session.
-      final client = await ref.read(asyncBoundMydiaClientProvider.future);
-
       final targetController = ref.read(remoteTargetControllerProvider);
       final receiver = RemoteControlReceiver(
-        roster: RemoteRoster(client: client),
+        // Any instance's device may drive this one. Read per request, so an
+        // instance added later is covered without rewiring.
+        roster: CurrentDeviceRoster(() => ref.read(mergedRosterProvider)),
         targetName: await DeviceInfoService().getDeviceName(),
         snapshotSource: targetController.snapshot,
-        onIntent: targetController.submit,
+        onIntent: (intent, peer) => unawaited(routeRemoteIntent(
+          intent,
+          peer,
+          instancesOf: ref.read(mergedRosterProvider).instancesOf,
+          submit: targetController.submit,
+        )),
         respond: p2pService.respondToControl,
       );
 
@@ -411,9 +416,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// Resolves [intent] to a playable file and pushes the player already
   /// playing it, falling back to the detail screen — the same "no file
   /// chosen yet" fallback every other entry point in this app takes (see
-  /// `home_screen.dart`'s `_handlePlay`) — when nothing resolves.
+  /// a Continue Watching tap) — when nothing resolves.
   ///
-  /// `router` and `screenWidth` are read from [context] before the only
+  /// The item is read from the instance the command arrived through
+  /// ([LoadContentIntent.via]); one with no such instance pushes nothing.
+  ///
+  /// `router` is read from [context] before the only
   /// `await` in this method, never after: this device could navigate away
   /// or tear down while [pushLoadContentDestination] runs, and neither
   /// `context` nor anything derived from it would be safe to touch once
@@ -427,32 +435,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   ) async {
     try {
       final router = GoRouter.of(context);
-      final screenWidth = MediaQuery.sizeOf(context).width;
 
       await pushLoadContentDestination(
         intent,
-        screenWidth,
-        fetchMovieTarget: (id) async {
-          final movie = await readDetailKeepingAlive(
-            ref,
-            provider: movieDetailControllerProvider(id),
-            future: movieDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(files: movie.files, title: movie.title);
-        },
-        fetchEpisodeTarget: (id) async {
-          final episode = await readDetailKeepingAlive(
-            ref,
-            provider: episodeDetailControllerProvider(id),
-            future: episodeDetailControllerProvider(id).future,
-          );
-          return LoadContentTarget(
-            files: episode.files,
-            title: episode.title,
-            showId: episode.show.id,
-            seasonNumber: episode.seasonNumber,
-          );
-        },
+        fetch: (itemRef) => fetchLoadContentItem(ref, itemRef),
         push: (path) {
           if (!mounted) return;
           router.push(path);

@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
+import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
+import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/source.dart';
@@ -101,6 +103,27 @@ void main() {
     expect(plex.pushed, [('1', 95, true)]);
     expect(jelly.pushed, isEmpty);
     expect(store.unsynced().map((r) => r.key).toSet(), {'acc2:u1:bb22|2'});
+  });
+
+  test('invalidates once per source with an accepted push, not failures',
+      () async {
+    final store = InMemoryPlaybackProgressStore();
+    await store.save(_p(_plex.value, '1', 10));
+    await store.save(_p(_plex.value, '2', 20));
+    await store.save(_p(_jelly.value, '3', 30));
+    final plex = _Sync();
+    final jelly = _Sync()..fail = true;
+    final invalidated = <Set<InvalidationTarget>>[];
+
+    await flushSourceProgress(
+      store: store,
+      syncFor: (id) => id == _plex ? plex : jelly,
+      reachable: (_) => true,
+      now: DateTime(2026),
+      invalidate: (targets) async => invalidated.add(targets.toSet()),
+    );
+
+    expect(invalidated, [SourceRules.offlineProgressSynced(_plex)]);
   });
 
   test('a failed push stays unsynced', () async {

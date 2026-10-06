@@ -3,33 +3,28 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/domain/detail/detail_views.dart';
-import 'package:player/domain/models/episode.dart';
-import 'package:player/domain/sources/item.dart';
-import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
 
+import '../../test_utils/episode_views.dart';
 import '../../test_utils/mock_network_images.dart';
-import '../../test_utils/mydia_test_source.dart';
 
-Episode _episode(int n, {bool hasFile = true}) {
-  return Episode(
+EpisodeView _episode(int n, {bool hasFile = true}) {
+  return testEpisodeView(
     id: 'ep-$n',
-    seasonNumber: 1,
     episodeNumber: n,
     title: 'Episode $n',
-    monitored: true,
     hasFile: hasFile,
     thumbnailUrl: 'https://example.test/$n.jpg',
   );
 }
 
-List<Episode> _episodes(int count, {bool hasFile = true}) =>
+List<EpisodeView> _episodes(int count, {bool hasFile = true}) =>
     List.generate(count, (i) => _episode(i, hasFile: hasFile));
 
 Future<void> _pump(
   WidgetTester tester,
-  List<Episode> episodes, {
+  List<EpisodeView> episodes, {
   ValueChanged<EpisodeView>? onEpisodeTap,
 }) async {
   await mockNetworkImages(() async {
@@ -37,15 +32,12 @@ Future<void> _pump(
       ProviderScope(
         overrides: [
           for (final e in episodes)
-            isItemDownloadedProvider(testMydiaRef(ItemKind.episode, e.id))
-                .overrideWith((ref) => false),
+            isItemDownloadedProvider(e.target.ref).overrideWith((ref) => false),
         ],
         child: MaterialApp(
           home: Scaffold(
             body: EpisodeRail(
-              episodes: [
-                for (final e in episodes) episodeViewFromMydia(e, show: null),
-              ],
+              episodes: episodes,
               onEpisodeTap: onEpisodeTap,
             ),
           ),

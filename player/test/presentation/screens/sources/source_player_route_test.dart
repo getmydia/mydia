@@ -58,6 +58,41 @@ void main() {
     expect(bare.resumeSeconds, isNull);
   });
 
+  test('reads the tracks and autoplay a remote load content carries', () {
+    final params = SourcePlayerParams.fromUri(Uri.parse(
+        '/s/x/player/m1?kind=movie&fileId=p9&audioTrack=a1&subtitleTrack=s2'
+        '&autoplay=false'));
+    expect(params.audioTrack, 'a1');
+    expect(params.subtitleTrack, 's2');
+    expect(params.autoplay, isFalse);
+    final bare = SourcePlayerParams.fromUri(Uri.parse('/s/x/player/m1'));
+    expect(bare.audioTrack, isNull);
+    expect(bare.subtitleTrack, isNull);
+    expect(bare.autoplay, isTrue);
+  });
+
+  testWidgets('hands the tracks and autoplay to the player screen',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(plex.build().source)
+      ],
+      child: MaterialApp(
+        home: SourcePlayerRoute(
+          sourceId: fakeSourceId,
+          itemId: 'm1',
+          uri: Uri.parse('/s/x/player/m1?kind=movie&fileId=p9&audioTrack=a1'
+              '&subtitleTrack=s2&autoplay=false'),
+        ),
+      ),
+    ));
+    final screen = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
+    expect(screen.audioTrack, 'a1');
+    expect(screen.subtitleTrack, 's2');
+    expect(screen.autoplay, isFalse);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('hands the show, season and resume point to the player screen',
       (tester) async {
     await tester.pumpWidget(ProviderScope(

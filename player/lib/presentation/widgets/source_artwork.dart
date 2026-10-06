@@ -26,6 +26,10 @@ final sourceArtworkProvider = FutureProvider.autoDispose
 /// Null when there is nothing to show: unwatched with no progress.
 WatchStatus? watchStatusFor(UserState state, int? durationSeconds) {
   if (state.watched) return const WatchStatus(watched: true);
+  final unwatched = state.unwatchedCount ?? 0;
+  if (unwatched > 0) {
+    return WatchStatus(watched: false, unwatchedEpisodeCount: unwatched);
+  }
   final progress = state.progressSeconds ?? 0;
   if (progress <= 0 || durationSeconds == null || durationSeconds <= 0) {
     return null;
@@ -57,6 +61,7 @@ class SourcePoster extends ConsumerWidget {
     this.onTap,
     this.subtitle,
     this.onContextMenu,
+    this.showMenuButton = false,
   });
 
   /// One width for every poster, so one cache entry serves the grid, the
@@ -71,6 +76,10 @@ class SourcePoster extends ConsumerWidget {
 
   /// Long-press on touch, secondary tap on desktop.
   final void Function(BuildContext posterContext)? onContextMenu;
+
+  /// A visible kebab that opens the same menu, for a grid whose menu carries
+  /// an action people would not find by long-pressing.
+  final bool showMenuButton;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -90,7 +99,39 @@ class SourcePoster extends ConsumerWidget {
         watchStatus: watchStatusFor(item.userState, item.durationSeconds),
         onTap: onTap,
         onContextMenu: onContextMenu,
+        showMenuButton: showMenuButton,
       ),
+    );
+  }
+}
+
+/// One poster-sized picture, for a tile that is not a poster card, such as
+/// a collection's mosaic. [fallback] shows until the request resolves and
+/// when the picture fails.
+class SourceArtworkImage extends ConsumerWidget {
+  const SourceArtworkImage({
+    super.key,
+    required this.sourceId,
+    required this.art,
+    required this.fallback,
+  });
+
+  final SourceId sourceId;
+  final ArtworkRef art;
+  final Widget fallback;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final request = _resolved(ref, sourceId, art, SourcePoster.artworkWidth);
+    if (request == null) return fallback;
+    return ArtworkImage(
+      imageUrl: request.url,
+      headers: request.headers,
+      cacheKey: request.cacheKey,
+      cacheManager: PosterCacheManager(),
+      fit: BoxFit.cover,
+      placeholder: (_) => fallback,
+      errorWidget: (_) => fallback,
     );
   }
 }

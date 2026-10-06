@@ -4,28 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/downloads/download_providers.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
-import '../../../domain/models/download_option.dart';
 import '../../../domain/models/download_request.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/quality_download_dialog.dart';
 import '../../widgets/toast/toaster.dart';
-
-/// What the bound Mydia instance offers for the [kind] item [id], for the
-/// bulk flows that pick one option for many items and probe a single
-/// representative.
-Future<List<DownloadOption>> boundMydiaDownloadOptions(
-  WidgetRef ref,
-  ItemKind kind,
-  String id,
-) {
-  final bound = ref.read(boundMydiaProvider);
-  if (bound == null) {
-    return Future.error(StateError('Download service not available'));
-  }
-  return bound.downloadOptions(
-      ItemRef(sourceId: bound.source.id, kind: kind, externalId: id));
-}
 
 /// Ask which option, then queue the download. The same for every source:
 /// the source says what it offers and the service does the rest.

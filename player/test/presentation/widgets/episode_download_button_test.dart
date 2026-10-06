@@ -3,32 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/download_option.dart';
-import 'package:player/domain/models/episode.dart';
-import 'package:player/domain/sources/item.dart';
-import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/widgets/episode_download_button.dart';
 
 import '../screens/detail/download_fakes.dart';
+import '../../test_utils/episode_views.dart';
 import '../../test_utils/mydia_test_source.dart';
-
-Episode _episode({
-  bool hasFile = true,
-  List<MediaFile> files = const [],
-}) {
-  return Episode(
-    id: 'ep-1',
-    seasonNumber: 1,
-    episodeNumber: 1,
-    title: 'Pilot',
-    monitored: true,
-    hasFile: hasFile,
-    files: files,
-  );
-}
 
 void main() {
   // Each test constructs the button inline so it can vary the episode. The
@@ -36,14 +19,13 @@ void main() {
   // future, keeping it in its loading state without touching the network.
   Future<void> pumpButton(
     WidgetTester tester, {
-    required Episode episode,
+    required EpisodeView episode,
     required bool downloaded,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
-          isItemDownloadedProvider(testMydiaRef(ItemKind.episode, episode.id))
+          isItemDownloadedProvider(episode.target.ref)
               .overrideWith((ref) => downloaded),
           downloadManagerProvider
               .overrideWith((ref) async => EmptyDownloadService()),
@@ -52,13 +34,7 @@ void main() {
                   options: Completer<List<DownloadOption>>().future)),
         ],
         child: MaterialApp(
-          home: Scaffold(
-            body: EpisodeDownloadButton(
-              episode: episode,
-              showTitle: 'Test Show',
-              showId: 'show-1',
-            ),
-          ),
+          home: Scaffold(body: EpisodeDownloadButton(episode: episode)),
         ),
       ),
     );
@@ -67,7 +43,7 @@ void main() {
 
   testWidgets('renders the download icon when not downloaded and has a file',
       (tester) async {
-    await pumpButton(tester, episode: _episode(), downloaded: false);
+    await pumpButton(tester, episode: testEpisodeView(), downloaded: false);
 
     expect(find.byIcon(Icons.download_rounded), findsOneWidget);
     expect(find.byIcon(Icons.download_done_rounded), findsNothing);
@@ -75,7 +51,7 @@ void main() {
 
   testWidgets('renders the downloaded icon when the provider resolves true',
       (tester) async {
-    await pumpButton(tester, episode: _episode(), downloaded: true);
+    await pumpButton(tester, episode: testEpisodeView(), downloaded: true);
 
     expect(find.byIcon(Icons.download_done_rounded), findsOneWidget);
     expect(find.byIcon(Icons.download_rounded), findsNothing);
@@ -84,7 +60,7 @@ void main() {
   testWidgets('renders nothing when the episode has no file', (tester) async {
     await pumpButton(
       tester,
-      episode: _episode(hasFile: false),
+      episode: testEpisodeView(hasFile: false),
       downloaded: false,
     );
 
@@ -94,13 +70,7 @@ void main() {
 
   testWidgets('tapping the button (not downloaded) opens the quality dialog',
       (tester) async {
-    await pumpButton(
-      tester,
-      episode: _episode(
-        files: const [MediaFile(id: 'f-1', directPlaySupported: true)],
-      ),
-      downloaded: false,
-    );
+    await pumpButton(tester, episode: testEpisodeView(), downloaded: false);
 
     await tester.tap(find.byIcon(Icons.download_rounded));
     await tester.pump();

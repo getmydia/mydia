@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
+
+import 'package:hive_ce/hive.dart';
+import 'package:player/core/downloads/collection_sync_providers.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -14,6 +18,7 @@ import 'package:player/core/sources/store/source_store.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/no_downloads.dart';
+import 'mydia/bound_mydia_harness.dart' show mydiaRecord;
 import 'store/source_json_test.dart' show plexRecord;
 
 /// Holds All servers choices but refuses to save new ones.
@@ -76,6 +81,79 @@ void main() {
     await container.read(sourceRecordsProvider.future);
     await container.read(sourceRecordsProvider.notifier).removeAccount('acc1');
     expect(cache.read(key), isNull);
+  });
+
+  test('removing an account drops its collection sync entries only', () async {
+    Hive.init('./.dart_tool/source_records_sync_test');
+    final box = await Hive.openBox<Map<dynamic, dynamic>>('sync-removal-test',
+        bytes: Uint8List(0));
+    addTearDown(box.close);
+    const mine = 'acc1:owner:abc123';
+    const theirs = 'acc2:owner:zzz999';
+    await box.put('$mine:1', {'sourceId': mine, 'collectionId': '1'});
+    await box.put('$theirs:1', {'sourceId': theirs, 'collectionId': '1'});
+    // Legacy bare-id entries: one recorded for the removed source, one for
+    // the other, and one with no recorded owner, which is left alone.
+    await box.put('2', {'sourceId': mine});
+    await box.put('3', {'sourceId': theirs});
+    await box.put('4', {'name': 'orphan'});
+
+    final c = ProviderContainer(overrides: [
+      sourceCacheProvider.overrideWithValue(cache),
+      noDownloadsOverride,
+      sourceStoreProvider.overrideWith((ref) async => store),
+      sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+      collectionSyncBoxProvider.overrideWith((ref) async => box),
+    ]);
+    addTearDown(c.dispose);
+    await store.putAccount(plexRecord());
+    await c.read(sourceRecordsProvider.future);
+    await c.read(sourceRecordsProvider.notifier).removeAccount('acc1');
+
+    expect(box.keys.toSet(), {'$theirs:1', '3', '4'});
+  });
+
+  group('legacy bare-id collection sync entries', () {
+    Future<(ProviderContainer, Box<Map<dynamic, dynamic>>)> setUpMydia(
+        String boxName) async {
+      Hive.init('./.dart_tool/source_records_sync_test');
+      final box = await Hive.openBox<Map<dynamic, dynamic>>(boxName,
+          bytes: Uint8List(0));
+      addTearDown(box.close);
+      await box.put('1', {'name': 'legacy'});
+      await box.put('2', {'sourceId': 'ma:owner:a'});
+      final c = ProviderContainer(overrides: [
+        sourceCacheProvider.overrideWithValue(cache),
+        noDownloadsOverride,
+        sourceStoreProvider.overrideWith((ref) async => store),
+        sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
+        collectionSyncBoxProvider.overrideWith((ref) async => box),
+      ]);
+      addTearDown(c.dispose);
+      await store.putAccount(mydiaRecord('a', addedAtMs: 0));
+      await store.putAccount(mydiaRecord('b', addedAtMs: 1));
+      await c.read(sourceRecordsProvider.future);
+      return (c, box);
+    }
+
+    test('go with the bound instance', () async {
+      final (c, box) = await setUpMydia('sync-bound-removal-test');
+      await c.read(sourceRecordsProvider.notifier).removeAccount('ma');
+      expect(box.keys, isEmpty);
+    });
+
+    test('stay when another instance is removed', () async {
+      final (c, box) = await setUpMydia('sync-unbound-removal-test');
+      await c.read(sourceRecordsProvider.notifier).removeAccount('mb');
+      expect(box.keys.toSet(), {'1', '2'});
+    });
+
+    test('follow the migrated legacy instance, not the earliest', () async {
+      final (c, box) = await setUpMydia('sync-legacy-removal-test');
+      await store.setLegacyInstanceId('mb');
+      await c.read(sourceRecordsProvider.notifier).removeAccount('ma');
+      expect(box.keys.toSet(), {'1'});
+    });
   });
 
   test('adding an account shows up without a reload', () async {

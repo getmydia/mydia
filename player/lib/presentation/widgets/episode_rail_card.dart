@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/theme/colors.dart';
-import '../../domain/detail/detail_art.dart';
 import '../../domain/detail/detail_views.dart';
 import '../../domain/models/watch_status.dart';
 import '../screens/detail/detail_actions.dart';
@@ -269,21 +268,11 @@ class _EpisodeRailCardState extends State<EpisodeRailCard> {
   }
 
   Widget _buildActions(BuildContext context) {
-    // The download button needs the Mydia episode; other servers have none.
-    // The watched menu renders independently of it, whenever the screen
-    // supplied a callback.
-    final mydia = _episode.mydia;
+    // The watched menu renders independently of the download button,
+    // whenever the screen supplied a callback.
     final actions = <Widget>[
-      if (mydia != null && _episode.features.contains(DetailFeature.download))
-        EpisodeDownloadButton(
-          episode: mydia,
-          showTitle: _episode.showTitle,
-          showId: _episode.showTarget?.id,
-          showPosterUrl: switch (_episode.showPoster) {
-            UrlArt(:final url) => url,
-            _ => null,
-          },
-        ),
+      if (_episode.features.contains(DetailFeature.download))
+        EpisodeDownloadButton(episode: _episode),
       if (widget.onWatchedAction != null) _buildWatchedMenu(context),
     ];
     if (actions.isEmpty) return const SizedBox.shrink();

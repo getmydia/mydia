@@ -8,7 +8,7 @@ import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/migration/hive_legacy_data_rewriter.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/store/source_store.dart';

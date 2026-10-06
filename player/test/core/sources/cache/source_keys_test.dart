@@ -33,6 +33,19 @@ void main() {
     );
   });
 
+  test('calendar keys carry the date range', () {
+    expect(
+      SourceKeys.calendar(_a, DateTime(2026, 10, 1), DateTime(2026, 10, 31))
+          .canonical,
+      'acc1:owner:srv1/calendar({"end":"2026-10-31","start":"2026-10-01"})',
+    );
+  });
+
+  test('collection items differ per collection', () {
+    expect(SourceKeys.collectionItems(_a, 'c1'),
+        isNot(SourceKeys.collectionItems(_a, 'c2')));
+  });
+
   test('a family matches the operation name of its keys', () {
     final key = SourceKeys.children(
         const ItemRef(sourceId: _a, kind: ItemKind.show, externalId: 's1'));

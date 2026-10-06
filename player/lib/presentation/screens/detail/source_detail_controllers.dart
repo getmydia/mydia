@@ -11,7 +11,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/cache/watcher_registry.dart';
 import '../../../core/sources/cache/create_source_watcher.dart';
 import '../../../core/sources/cache/source_codecs.dart';
 import '../../../core/sources/cache/source_keys.dart';

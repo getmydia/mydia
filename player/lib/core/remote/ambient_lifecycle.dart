@@ -72,7 +72,7 @@ AmbientLifecycleAction ambientLifecycleAction(AppLifecycleState state) {
 /// currently live, so `_MyAppState.didChangeAppLifecycleState`
 /// (`app.dart`) has one small, independently testable thing to delegate to
 /// instead of hand-rolling this inline — the same split `ResumeGate` /
-/// `applyAppLifecycleState` (`core/graphql/watch/resume_gate.dart`) already
+/// `applyAppLifecycleState` (`core/cache/resume_gate.dart`) already
 /// uses for the unrelated resume-refetch decision.
 class AmbientLifecycleBinding {
   AmbientLifecycleBinding(this.targets);

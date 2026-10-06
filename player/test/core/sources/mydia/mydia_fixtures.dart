@@ -1,3 +1,10 @@
+import 'package:player/core/sources/mydia/mydia_client.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/source.dart';
+
+import 'fake_mydia_transport.dart';
+
 const sid = 'mguest:owner:inst-2';
 
 Map<String, dynamic> art(String name) => {
@@ -172,3 +179,205 @@ Map<String, dynamic> episode(String id, {int season = 2, int number = 1}) => {
         'artwork': art('s-1')
       },
     };
+
+Map<String, dynamic> collection(String id, {String type = 'manual'}) => {
+      'id': id,
+      'name': 'Invented Shelf $id',
+      'description': 'Picked by hand.',
+      'type': type,
+      'visibility': 'private',
+      'itemCount': 23,
+      'posterPaths': ['https://img.example/$id-1.jpg'],
+    };
+
+/// A listing-shaped map, as the listing documents select it.
+Map<String, dynamic> listing(String id,
+        {String type = 'MOVIE',
+        bool watched = false,
+        int? unwatched,
+        int? newEpisodes,
+        int? latestSeason,
+        int? latestEpisode}) =>
+    {
+      'id': id,
+      'type': type,
+      'title': 'Invented Listing $id',
+      'year': 2023,
+      'artwork': art('l-$id'),
+      'addedAt': '2024-05-01T00:00:00Z',
+      if (newEpisodes != null) 'newEpisodeCount': newEpisodes,
+      if (latestSeason != null) 'latestSeasonNumber': latestSeason,
+      if (latestEpisode != null) 'latestEpisodeNumber': latestEpisode,
+      'watchStatus': {
+        'watched': watched,
+        'percentage': 0.0,
+        if (unwatched != null) 'unwatchedEpisodeCount': unwatched,
+      },
+    };
+
+Map<String, dynamic> calendarEntry(String id,
+        {String kind = 'episode', required String airDate}) =>
+    {
+      'id': id,
+      'kind': kind,
+      'airDate': airDate,
+      'title': 'Invented Entry $id',
+      'seasonNumber': kind == 'episode' ? 2 : null,
+      'episodeNumber': kind == 'episode' ? 5 : null,
+      'mediaItemId': 'item-$id',
+      'mediaItemTitle': 'Lantern Street',
+      'artwork': art('c-$id'),
+      'files': [
+        {'id': 'cf-1', 'directPlaySupported': false},
+        {'id': 'cf-2', 'directPlaySupported': true},
+      ],
+    };
+
+const guest = Source(
+  account: ProviderAccount(
+    id: 'mguest',
+    kind: SourceKind.mydia,
+    displayName: 'Lakeside',
+    storageNamespace: 'source/mguest',
+    activeProfileId: 'owner',
+  ),
+  profile: SourceProfile(
+      id: 'owner', accountId: 'mguest', name: 'Owner', isOwner: true),
+  server: SourceServer(
+      id: 'inst-2', accountId: 'mguest', profileId: 'owner', name: 'Lakeside'),
+);
+
+({MydiaSource source, FakeMydiaTransport t}) build(
+    {void Function()? onDispose}) {
+  final t = FakeMydiaTransport();
+  final movies = [for (var i = 1; i <= 5; i++) movie('m-$i')];
+  t.handlers['MoviesFiltered'] = (v) {
+    final first = v['first'] as int;
+    final start = v['after'] == null ? 0 : int.parse(v['after'] as String);
+    final page = movies.skip(start).take(first).toList();
+    final end = start + page.length;
+    return {
+      'movies': {
+        'edges': [
+          for (final m in page) {'node': m}
+        ],
+        'pageInfo': {'hasNextPage': end < movies.length, 'endCursor': '$end'},
+        'totalCount': movies.length,
+      }
+    };
+  };
+  t.handlers['TvShowsFiltered'] = (_) => {
+        'tvShows': {
+          'edges': [
+            {'node': show('s-1')}
+          ],
+          'pageInfo': {'hasNextPage': false, 'endCursor': null},
+          'totalCount': 1,
+        }
+      };
+  t.handlers['MovieDetail'] = (v) => {'movie': movie(v['id'] as String)};
+  t.handlers['TvShowDetail'] = (v) => {'tvShow': show(v['id'] as String)};
+  t.handlers['EpisodeDetail'] = (v) => {'episode': episode(v['id'] as String)};
+  t.handlers['SeasonEpisodes'] = (v) => {
+        'seasonEpisodes': [
+          episode('e-21', number: 1),
+          episode('e-22', number: 2)
+        ]
+      };
+  t.handlers['Search'] = (_) => {
+        'search': {
+          'totalCount': 2,
+          'sections': [
+            {
+              'type': 'MOVIE',
+              'totalCount': 1,
+              'results': [
+                {
+                  'id': 'm-1',
+                  'type': 'MOVIE',
+                  'title': 'A',
+                  'year': 2020,
+                  'artwork': null
+                }
+              ]
+            },
+            {
+              'type': 'EPISODE',
+              'totalCount': 1,
+              'results': [
+                {'id': 'e-1', 'type': 'EPISODE', 'title': 'B', 'parentId': null}
+              ]
+            },
+          ]
+        }
+      };
+  t.handlers['GuestContinueWatching'] = (_) => {'continueWatching': <Object>[]};
+  t.handlers['RecentlyAddedFull'] = (_) => {
+        'recentlyAdded': [
+          recentlyAdded('m-4', addedAt: '2024-05-03T00:00:00Z'),
+          recentlyAdded('s-1',
+              type: 'TV_SHOW', addedAt: '2024-05-02T00:00:00Z'),
+          recentlyAdded('m-1', addedAt: '2024-05-01T00:00:00Z'),
+        ],
+      };
+  t.handlers['HomeRows'] = (_) => {
+        'recentlyAdded': [listing('m-4')],
+        'favorites': [listing('s-1', type: 'TV_SHOW')],
+      };
+  t.handlers['Collections'] = (_) => {
+        'collections': [collection('c1'), collection('c2', type: 'smart')],
+      };
+  t.handlers['Calendar'] = (_) => {'calendar': <Object>[]};
+  t.handlers['UnwatchedListing'] = (_) => {'unwatched': <Object>[]};
+  t.handlers['FavoritesListing'] = (_) => {'favorites': <Object>[]};
+  t.handlers['MovieMediaInfo'] = (v) => {
+        'movie': {
+          'id': v['id'],
+          'files': [
+            {'id': 'f1'}
+          ]
+        }
+      };
+  t.handlers['EpisodeMediaInfo'] = (v) => {
+        'episode': {
+          'id': v['id'],
+          'files': [
+            {'id': 'f1'}
+          ]
+        }
+      };
+  t.handlers['DevicesList'] = (_) => {'devices': <Object>[]};
+  t.handlers['RegisterDeviceNode'] = (v) => {
+        'registerDeviceNode': {'id': 'd1', 'nodeId': v['nodeId']}
+      };
+  t.handlers['RevokeDevice'] = (_) => {
+        'revokeDevice': {'success': true}
+      };
+  for (final op in [
+    'MarkMovieWatched',
+    'MarkMovieUnwatched',
+    'MarkEpisodeWatched',
+    'MarkEpisodeUnwatched',
+    'MarkSeasonWatched',
+    'MarkSeasonUnwatched',
+    'ToggleFavorite',
+    'RemoveFromContinueWatching'
+  ]) {
+    t.handlers[op] = (_) => <String, dynamic>{};
+  }
+  final client = MydiaClient(
+    transport: t,
+    load: () async =>
+        const MydiaCredentials(instanceId: 'inst-2', accessToken: 'access'),
+    save: (_) async {},
+    onUnauthorized: () {},
+  );
+  return (
+    source: MydiaSource(
+        source: guest,
+        client: client,
+        proxy: () => throw StateError('no proxy in this test'),
+        onDispose: onDispose),
+    t: t
+  );
+}

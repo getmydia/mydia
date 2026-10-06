@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/router/app_router.dart';
+import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
 
@@ -21,13 +22,12 @@ void main() {
         allServersRouteRedirect(sourcesLoading: false, included: two), isNull);
   });
 
-  const bound = SourceId('macct:owner:inst-1');
+  const mydiaId = SourceId('macct:owner:inst-1');
 
-  String? go(String location, {SourceId? boundId}) => appRedirect(
+  String? go(String location) => appRedirect(
         location: location,
         sourcesLoading: false,
         sources: const [],
-        boundId: boundId,
       );
 
   test('no sources at all: add a server', () {
@@ -58,15 +58,64 @@ void main() {
         isNull);
   });
 
-  test('one Mydia: home stays home', () {
-    expect(go('/', boundId: bound), isNull);
-    expect(go('/movies', boundId: bound), isNull);
-  });
+  group('legacy locations', () {
+    String? legacy(Uri u) => legacyLocation(u,
+        legacy: mydiaId, mydia: const [mydiaId], active: mydiaId);
 
-  test('removing one of two Mydia: still bound, no redirect', () {
-    // The binding falls to the remaining instance; the router only sees that
-    // one is still bound.
-    expect(go('/', boundId: const SourceId('mother:owner:inst-2')), isNull);
+    String? goLegacy(String location,
+            {Set<SourceId> gated = const {},
+            List<Source> sources = const []}) =>
+        appRedirect(
+          location: location,
+          fullLocation: location,
+          sourcesLoading: false,
+          sources: sources,
+          gated: gated,
+          legacy: legacy,
+        );
+
+    test('an old Mydia page moves under its source', () {
+      expect(goLegacy('/movie/1'), '/s/macct:owner:inst-1/movie/1');
+    });
+
+    test('a Mydia-only install lands on its source from /', () {
+      expect(goLegacy('/'), '/s/macct:owner:inst-1');
+    });
+
+    test('a gated target moves first and is gated on the next pass', () {
+      final gated = {mydiaId};
+      expect(
+          goLegacy('/movie/1', gated: gated), '/s/macct:owner:inst-1/movie/1');
+      expect(
+        goLegacy('/s/macct:owner:inst-1/movie/1', gated: gated),
+        unlockLocation('/s/macct:owner:inst-1/movie/1'),
+      );
+    });
+
+    test('nothing moves while the stored sources load', () {
+      expect(
+        appRedirect(
+          location: '/movie/1',
+          sourcesLoading: true,
+          sources: const [],
+          legacy: legacy,
+        ),
+        isNull,
+      );
+    });
+
+    test('with no sources, / still goes to add-a-server', () {
+      expect(
+        appRedirect(
+          location: '/',
+          sourcesLoading: false,
+          sources: const [],
+          legacy: (u) =>
+              legacyLocation(u, legacy: null, mydia: const [], active: null),
+        ),
+        '/sources/add',
+      );
+    });
   });
 
   group('with Plex or Stash and no Mydia', () {
@@ -76,34 +125,22 @@ void main() {
           sources: const [fakeSource],
         );
 
-    test('lands on the source instead of add-a-server', () {
-      expect(go('/'), '/s/acc1:owner:aa11');
-      expect(go('/movies'), '/s/acc1:owner:aa11');
+    test('lands on the active source instead of add-a-server', () {
+      String? landing(String l) => appRedirect(
+            location: l,
+            sourcesLoading: false,
+            sources: const [fakeSource],
+            legacy: (u) => legacyLocation(u,
+                legacy: null, mydia: const [], active: fakeSource.id),
+          );
+      expect(landing('/'), '/s/acc1:owner:aa11');
+      expect(landing('/search?q=x'), '/s/acc1:owner:aa11/search?q=x');
     });
 
-    test('lands on the remembered source, not always the first', () {
-      const second = Source(
-        account: ProviderAccount(
-          id: 'acc2',
-          kind: SourceKind.stash,
-          displayName: 'stash',
-          storageNamespace: 'source/acc2',
-          activeProfileId: 'owner',
-        ),
-        profile: SourceProfile(
-            id: 'owner', accountId: 'acc2', name: 'Owner', isOwner: true),
-        server: SourceServer(
-            id: 'main', accountId: 'acc2', profileId: 'owner', name: 'Den'),
-      );
-      String? landing(SourceId? active) => appRedirect(
-            location: '/',
-            sourcesLoading: false,
-            sources: const [fakeSource, second],
-            activeId: active,
-          );
-      expect(landing(second.id), '/s/acc2:owner:main');
-      expect(landing(const SourceId('gone:owner:x')), '/s/acc1:owner:aa11');
-      expect(landing(null), '/s/acc1:owner:aa11');
+    test('app pages that are not legacy stay put', () {
+      expect(go('/downloads'), isNull);
+      expect(go('/settings'), isNull);
+      expect(go('/all'), isNull);
     });
 
     test('leaves source, management and login routes alone', () {
@@ -134,10 +171,8 @@ void main() {
               id: server, accountId: account, profileId: 'owner', name: server),
         );
 
-    String? goGated(String location,
-            {List<Source> sources = const [], SourceId? boundId}) =>
+    String? goGated(String location, {List<Source> sources = const []}) =>
         appRedirect(
-          boundId: boundId,
           location: location,
           fullLocation: location,
           sourcesLoading: false,
@@ -148,7 +183,6 @@ void main() {
     test('a gated source route goes to unlock with the whole location', () {
       expect(
         appRedirect(
-          boundId: bound,
           location: '/s/acc1:owner:srv9/player/42',
           fullLocation: '/s/acc1:owner:srv9/player/42?fileId=7',
           sourcesLoading: false,
@@ -163,7 +197,6 @@ void main() {
       const location = '/s/acc1%3Aowner%3Asrv9/item/movie/1';
       expect(
         appRedirect(
-          boundId: bound,
           location: location,
           fullLocation: location,
           sourcesLoading: false,
@@ -174,20 +207,18 @@ void main() {
       );
     });
 
-    test('other sources and Mydia routes are untouched', () {
-      expect(goGated('/s/acc2:owner:x', boundId: bound), isNull);
-      expect(goGated('/movies', boundId: bound), isNull);
+    test('other source routes are untouched', () {
+      expect(
+          goGated('/s/acc2:owner:x', sources: [sourceOf('acc2', 'x')]), isNull);
     });
 
     test('unlock is reachable with no Mydia server', () {
       expect(goGated('/unlock'), isNull);
     });
 
-    test('with no Mydia, the landing skips a gated source', () {
+    test('with only gated sources, a pass over the landing unlocks it', () {
       final locked = sourceOf('acc1', 'srv9');
-      final open = sourceOf('acc2', 'srv1');
-      expect(goGated('/', sources: [locked, open]), '/s/acc2:owner:srv1');
-      expect(goGated('/', sources: [locked]),
+      expect(goGated('/s/acc1:owner:srv9', sources: [locked]),
           unlockLocation('/s/acc1:owner:srv9'));
     });
 

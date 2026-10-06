@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/horizontal_rail.dart';
 import '../../widgets/source_artwork.dart';
-import 'source_browse_providers.dart';
+import '../detail/detail_links.dart';
 
 class SourcePosterRow extends StatelessWidget {
   const SourcePosterRow({
@@ -19,7 +19,11 @@ class SourcePosterRow extends StatelessWidget {
     this.titleKey,
     this.onTitleTap,
     this.posterFor,
+    this.showHeading = true,
   });
+
+  /// False when the caller draws its own heading above the row.
+  final bool showHeading;
 
   static const posterWidth = 140.0;
   static const rowHeight = 250.0;
@@ -51,7 +55,9 @@ class SourcePosterRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (onTitleTap case final onTap?)
+        if (!showHeading)
+          const SizedBox.shrink()
+        else if (onTitleTap case final onTap?)
           InkWell(key: titleKey, onTap: onTap, child: heading)
         else
           KeyedSubtree(key: titleKey, child: heading),

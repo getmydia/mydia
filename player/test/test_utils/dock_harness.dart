@@ -8,11 +8,35 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/domain/navigation/source_nav.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
 /// Key on the harness's dock, so tests can measure it.
 const Key kDockKey = Key('dock-harness-nav');
+
+/// A realistic full bar, so the dock measures as it does in the app.
+const List<SourceNavEntry> kDockNavEntries = [
+  SourceNavEntry(
+      id: 'home',
+      label: 'Home',
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
+      route: '/s/dock:owner:aa'),
+  SourceNavEntry(
+      id: 'movies',
+      label: 'Movies',
+      icon: Icons.movie_outlined,
+      selectedIcon: Icons.movie_rounded,
+      route: '/s/dock:owner:aa/library/movies'),
+  SourceNavEntry(
+      id: 'settings',
+      label: 'Settings',
+      icon: Icons.settings_outlined,
+      selectedIcon: Icons.settings_rounded,
+      route: '/settings',
+      anchored: true),
+];
 
 /// Wraps [child] in the same shape `AppShell`'s mobile branch builds:
 /// `Scaffold(extendBody: true)` with a real `BottomNav`, and the shell's
@@ -28,7 +52,8 @@ Widget shellScaffold({required Widget child}) => Scaffold(
       extendBody: true,
       bottomNavigationBar: KeyedSubtree(
         key: kDockKey,
-        child: BottomNav(location: '/', onNavigate: (_) {}),
+        child: BottomNav(
+            location: '/', onNavigate: (_) {}, entries: kDockNavEntries),
       ),
       body: AppShell.contentGutter(child: child),
     );

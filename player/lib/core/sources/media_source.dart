@@ -24,6 +24,13 @@ enum SourceCapability {
   favorites,
   nextUp,
   recentlyAdded,
+  collections,
+  calendar,
+  savedFilters,
+  unwatchedListing,
+  favoritesListing,
+  mediaInfo,
+  remoteTargets,
 }
 
 /// How the player currently reaches a source.

@@ -62,9 +62,14 @@ ItemSummary fakeEpisode(int n) => ItemSummary(
     );
 
 class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
-  FakeMediaSource({this.movieCount = 7, this.failWith});
+  FakeMediaSource({this.movieCount = 7, this.failWith, this.id = fakeSourceId});
 
   final int movieCount;
+
+  /// The id [source] reports. Items and libraries it serves still carry
+  /// [fakeSourceId].
+  @override
+  final SourceId id;
 
   /// When set, every browse call throws it.
   SourceException? failWith;
@@ -79,7 +84,18 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
   static const shows = LibraryRef(sourceId: fakeSourceId, id: 'shows');
 
   @override
-  Source get source => fakeSource;
+  Source get source => id == fakeSourceId
+      ? fakeSource
+      : Source(
+          account: fakeSource.account,
+          profile: fakeSource.profile,
+          server: SourceServer(
+            id: id.value.split(':').last,
+            accountId: fakeSource.account.id,
+            profileId: fakeSource.profile.id,
+            name: 'Attic',
+          ),
+        );
 
   @override
   Set<SourceCapability> get capabilities => const {

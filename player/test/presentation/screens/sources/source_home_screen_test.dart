@@ -1,18 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/cache/watcher_registry.dart';
+import 'package:player/core/sources/cache/source_cache.dart';
+import 'package:player/core/sources/cache/source_codecs.dart';
+import 'package:player/core/sources/cache/source_keys.dart';
+import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/domain/sources/hub.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/presentation/screens/sources/source_home_hero.dart';
 import 'package:player/presentation/screens/sources/source_home_screen.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../../../test_utils/toast_harness.dart';
 import 'fake_media_source.dart';
 
+class _RecordingInvalidator implements Invalidator {
+  final targets = <InvalidationTarget>[];
+
+  @override
+  Future<void> invalidate(Iterable<InvalidationTarget> targets) async {
+    this.targets.addAll(targets);
+  }
+
+  @override
+  Future<void> invalidateAll() async {}
+}
+
 late GoRouter homeRouter;
 
-Future<List<String>> pumpHome(WidgetTester tester, FakeMediaSource fake) async {
+Future<List<String>> pumpHome(
+  WidgetTester tester,
+  FakeMediaSource fake, {
+  List<Override> overrides = const [],
+  bool settle = true,
+}) async {
   final pushed = <String>[];
   final router = homeRouter = GoRouter(routes: [
     GoRoute(
@@ -21,6 +50,13 @@ Future<List<String>> pumpHome(WidgetTester tester, FakeMediaSource fake) async {
     ),
     GoRoute(
       path: '/s/:id/library/:lib',
+      builder: (_, s) {
+        pushed.add(s.uri.toString());
+        return const SizedBox();
+      },
+    ),
+    GoRoute(
+      path: '/s/:id/movie/:item',
       builder: (_, s) {
         pushed.add(s.uri.toString());
         return const SizedBox();
@@ -56,10 +92,11 @@ Future<List<String>> pumpHome(WidgetTester tester, FakeMediaSource fake) async {
       // No artwork requests: a poster with a URL spins until the blocked
       // test HTTP client answers, which pumpAndSettle never outlasts.
       sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ...overrides,
     ],
     child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
   ));
-  await tester.pumpAndSettle();
+  if (settle) await tester.pumpAndSettle();
   return pushed;
 }
 
@@ -222,12 +259,18 @@ void main() {
     testWidgets('a hub title opens its library; a mixed hub has no link',
         (tester) async {
       final pushed = await pumpHome(tester, FakeHubSource());
-      await tester
-          .tap(find.byKey(const Key('source-hub-row-home.mixed.released')));
+      // The hero pushes the rows below the fold.
+      final mixed = find.byKey(const Key('source-hub-row-home.mixed.released'));
+      await tester.ensureVisible(mixed);
+      await tester.pumpAndSettle();
+      // The title is plain text with no handler, so the tap hits nothing.
+      await tester.tap(mixed, warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(pushed, isEmpty);
-      await tester
-          .tap(find.byKey(const Key('source-hub-row-home.movies.recent')));
+      final recent = find.byKey(const Key('source-hub-row-home.movies.recent'));
+      await tester.ensureVisible(recent);
+      await tester.pumpAndSettle();
+      await tester.tap(recent);
       await tester.pumpAndSettle();
       expect(pushed.last, '/s/acc1:owner:aa11/library/movies');
     });
@@ -247,6 +290,98 @@ void main() {
       expect(
           find.byKey(const Key('source-library-row-movies')), findsOneWidget);
       expect(find.byKey(const Key('source-continue-watching')), findsOneWidget);
+    });
+  });
+
+  group('a Mydia-shaped home', () {
+    final cw1 = fakeMovie(1, progress: 300);
+    final r1 = fakeMovie(2);
+    final f1 = fakeMovie(3);
+
+    FakeHubSource source() => FakeHubSource(resuming: [cw1])
+      ..hubList = [
+        Hub(id: 'recent', title: 'Recently Added', items: [r1]),
+        Hub(id: 'favorites', title: 'Favorites', items: [f1]),
+      ];
+
+    testWidgets('rows run Continue Watching, Recently Added, Favorites',
+        (tester) async {
+      await pumpHome(tester, source());
+      double top(String title) => tester.getTopLeft(find.text(title)).dy;
+      expect(top('Continue Watching'), lessThan(top('Recently Added')));
+      expect(top('Recently Added'), lessThan(top('Favorites')));
+    });
+
+    testWidgets('the hero features the first Continue Watching item',
+        (tester) async {
+      await pumpHome(tester, source());
+      expect(find.byType(SourceHomeHero), findsOneWidget);
+      expect(
+        find.descendant(
+            of: find.byType(SourceHomeHero), matching: find.text(cw1.title)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('without Continue Watching the hero takes the first hub item',
+        (tester) async {
+      await pumpHome(tester, source()..resuming = []);
+      expect(
+        find.descendant(
+            of: find.byType(SourceHomeHero), matching: find.text(r1.title)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('no hero when there is nothing to feature', (tester) async {
+      await pumpHome(tester, FakeMediaSource());
+      expect(find.byType(SourceHomeHero), findsNothing);
+    });
+
+    testWidgets('the hero play button opens the item', (tester) async {
+      final pushed = await pumpHome(tester, source());
+      await tester.tap(find.byKey(const Key('source-home-hero-play')));
+      await tester.pumpAndSettle();
+      expect(pushed.last, '/s/acc1:owner:aa11/movie/m1');
+    });
+
+    testWidgets('removing a card invalidates the Continue Watching rules',
+        (tester) async {
+      final fake = source();
+      final invalidator = _RecordingInvalidator();
+      await pumpHome(tester, fake, overrides: [
+        invalidatorProvider.overrideWithValue(invalidator),
+      ]);
+      await tester.longPress(find.byKey(const ValueKey('source-continue-m1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('source-continue-remove')));
+      await tester.pumpAndSettle();
+      expect(fake.removed, [cw1.ref]);
+      expect(invalidator.targets,
+          containsAll(SourceRules.continueWatchingRemoved(fakeSourceId)));
+    });
+
+    testWidgets('a stored answer paints at once while the fetch is pending',
+        (tester) async {
+      final cache = InMemorySourceCache();
+      final now = DateTime.now();
+      await cache.write(SourceKeys.continueWatching(fakeSourceId),
+          encodeSummaries([cw1]), now);
+      await cache.write(SourceKeys.libraries(fakeSourceId),
+          encodeLibraries(await FakeMediaSource().libraries()), now);
+      // The fetch log is what makes a stored answer trusted on mount.
+      final log = InMemoryFetchLog({
+        SourceKeys.continueWatching(fakeSourceId): now,
+        SourceKeys.libraries(fakeSourceId): now,
+      });
+      final fake = source()..hold = Completer<void>();
+      await pumpHome(tester, fake, settle: false, overrides: [
+        sourceCacheProvider.overrideWithValue(cache),
+        fetchLogProvider.overrideWithValue(log),
+      ]);
+      await tester.pump();
+      expect(find.byKey(const Key('source-continue-watching')), findsOneWidget);
+      expect(find.text(cw1.title), findsWidgets);
     });
   });
 }

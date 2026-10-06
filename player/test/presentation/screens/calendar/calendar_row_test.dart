@@ -1,34 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/calendar_entry.dart';
-import 'package:player/domain/models/media_file.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_row.dart';
+import 'package:player/presentation/widgets/source_artwork.dart';
 
-CalendarEntry _entry({
+import 'calendar_test_items.dart';
+
+ItemSummary _entry({
   required String id,
   required DateTime airDate,
   bool playable = false,
-  CalendarEntryKind kind = CalendarEntryKind.episode,
-}) {
-  return CalendarEntry(
-    id: id,
-    kind: kind,
-    airDate: airDate,
-    title: 'An Episode',
-    mediaItemId: '7',
-    mediaItemTitle: 'A Show',
-    seasonNumber: kind == CalendarEntryKind.episode ? 3 : null,
-    episodeNumber: kind == CalendarEntryKind.episode ? 4 : null,
-    files: playable
-        ? const [MediaFile(id: 'file-1', directPlaySupported: true)]
-        : const [],
-  );
-}
+  ItemKind kind = ItemKind.episode,
+}) =>
+    calendarEntry(id, airDate,
+        playable: playable, kind: kind, season: 3, episode: 4);
 
-Future<void> _pump(WidgetTester tester, CalendarEntry entry) {
+Future<void> _pump(WidgetTester tester, ItemSummary entry) {
   return tester.pumpWidget(
     ProviderScope(
+      overrides: [
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
       child: MaterialApp(
         home: Scaffold(
           body: CalendarRow(entry: entry, today: DateTime(2026, 8, 27)),
@@ -103,7 +96,7 @@ void main() {
         id: '6',
         airDate: DateTime(2026, 8, 20),
         playable: true,
-        kind: CalendarEntryKind.movie,
+        kind: ItemKind.movie,
       ),
     );
 

@@ -2,21 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
-import 'package:player/domain/models/episode.dart';
-import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/progress.dart';
-import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
-import '../../test_utils/mydia_test_source.dart';
+import '../../test_utils/episode_views.dart';
 
-Episode _episode({required bool? watched}) {
-  return Episode(
-    id: 'ep-1',
-    seasonNumber: 1,
-    episodeNumber: 1,
-    title: 'Pilot',
-    monitored: true,
-    hasFile: true,
+EpisodeView _episode({required bool? watched}) {
+  return testEpisodeView(
     // No thumbnail URL → placeholder, so the card needs no network mocking.
     progress: watched == null
         ? null
@@ -24,18 +16,18 @@ Episode _episode({required bool? watched}) {
   );
 }
 
-Future<void> _pumpCard(WidgetTester tester, Episode episode) async {
+Future<void> _pumpCard(WidgetTester tester, EpisodeView episode) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         // Keep the card hermetic — no real download-state lookups.
-        isItemDownloadedProvider(testMydiaRef(ItemKind.episode, episode.id))
+        isItemDownloadedProvider(episode.target.ref)
             .overrideWith((ref) => false),
       ],
       child: MaterialApp(
         home: Scaffold(
           body: EpisodeRailCard(
-            episode: episodeViewFromMydia(episode, show: null),
+            episode: episode,
             onWatchedAction: (_) async {},
           ),
         ),

@@ -17,29 +17,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/downloads/download_providers.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/domain/models/download.dart';
-import 'package:player/domain/models/recently_added_item.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/navigation/media_filter.dart';
 import 'package:player/domain/navigation/nav_destination.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/screens/filter/filter_screen.dart';
-import 'package:player/presentation/screens/home_screen.dart';
-import 'package:player/presentation/screens/library/library_controller.dart'
-    show LibraryType;
-import 'package:player/presentation/screens/library/library_screen.dart';
+import 'package:player/presentation/screens/sources/source_home_screen.dart';
+import 'package:player/core/settings/settings_providers.dart';
+import 'package:player/core/settings/settings_service.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/library/library_sort.dart';
+import 'package:player/presentation/screens/sources/source_library_screen.dart';
+import 'package:player/presentation/widgets/source_artwork.dart';
 import 'package:player/presentation/screens/login_screen.dart';
-import 'package:player/presentation/screens/settings/devices_screen.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/settings_screen.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
@@ -47,9 +47,9 @@ import 'package:player/presentation/widgets/detail_hero_app_bar.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../helpers/cast_test_overrides.dart';
+import '../../screens/sources/fake_capable_source.dart';
+import '../../screens/sources/fake_media_source.dart';
 import '../../../test_utils/mock_auth_storage.dart';
-import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/stub_graphql_client.dart';
 
 /// A desktop width, wide enough that every screen shows its desktop chrome
 /// (search rows expanded, sidebar-covered leading reserve, etc). At this
@@ -106,51 +106,6 @@ Future<void> pumpWithInsets(
   );
 }
 
-/// A single-movie library page. Every object needs `__typename`, the root
-/// included: `gql()` injects a `__typename` selection into every selection
-/// set, and the normalized cache refuses to write data that lacks a matching
-/// one. Mirrors `library_screen_layout_test.dart`/`filter_screen_test.dart`.
-Map<String, dynamic> _moviesPage(List<String> ids) => {
-      '__typename': 'Query',
-      'movies': {
-        '__typename': 'MovieConnection',
-        'edges': [
-          for (final id in ids)
-            {
-              '__typename': 'MovieEdge',
-              'cursor': 'c-$id',
-              'node': {
-                '__typename': 'Movie',
-                'id': id,
-                'title': 'Movie $id',
-                'year': 2026,
-                'overview': null,
-                'runtime': null,
-                'genres': <String>[],
-                'contentRating': null,
-                'rating': null,
-                'artwork': {
-                  '__typename': 'Artwork',
-                  'posterUrl': null,
-                  'backdropUrl': null,
-                  'thumbnailUrl': null,
-                },
-                'progress': null,
-                'isFavorite': false,
-              },
-            }
-        ],
-        'pageInfo': {
-          '__typename': 'PageInfo',
-          'hasNextPage': false,
-          'hasPreviousPage': false,
-          'startCursor': 'c-${ids.first}',
-          'endCursor': 'c-${ids.last}',
-        },
-        'totalCount': ids.length,
-      },
-    };
-
 const _testFilter = FilterDestination(
   id: 'f_alignment',
   label: 'Alignment Filter',
@@ -163,12 +118,6 @@ const _testFilter = FilterDestination(
 );
 
 void main() {
-  setUp(() {
-    // LibraryScreen awaits LibrarySortController, which reads
-    // flutter_secure_storage before the screen can query at all.
-    FlutterSecureStorage.setMockInitialValues({});
-  });
-
   group('BrowseScaffold cast alignment', () {
     for (final MapEntry(key: name, value: insets) in _cases.entries) {
       testWidgets('aligns on $name', (tester) async {
@@ -211,25 +160,23 @@ void main() {
     });
   });
 
-  group('LibraryScreen cast alignment', () {
+  group('SourceLibraryScreen cast alignment', () {
     for (final MapEntry(key: name, value: insets) in _cases.entries) {
       testWidgets('aligns on $name', (tester) async {
-        await mockNetworkImages(() async {
-          await pumpWithInsets(
-            tester,
-            insets,
-            width: _kWidth,
-            extraOverrides: [
-              asyncGraphqlClientProvider.overrideWith(
-                (ref) async => stubClient(StubLink.responses([
-                  _moviesPage(['1'])
-                ])),
-              ),
-            ],
-            child: const LibraryScreen(libraryType: LibraryType.movies),
-          );
-          await tester.pumpAndSettle();
-        });
+        await pumpWithInsets(
+          tester,
+          insets,
+          width: _kWidth,
+          extraOverrides: [
+            mediaSourceProvider(fakeSourceId)
+                .overrideWithValue(FakeMediaSource()),
+            coreSettingsServiceProvider
+                .overrideWithValue(SettingsService(storage: MockAuthStorage())),
+            sourceArtworkProvider.overrideWith((ref, key) async => null),
+          ],
+          child: const SourceLibraryScreen(library: FakeMediaSource.movies),
+        );
+        await tester.pumpAndSettle();
 
         expect(
           tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
@@ -245,23 +192,27 @@ void main() {
         final store = InMemorySidebarLayoutStore();
         await store.save(SidebarLayout.defaults.withFilter(_testFilter));
 
-        await mockNetworkImages(() async {
-          await pumpWithInsets(
-            tester,
-            insets,
-            width: _kWidth,
-            extraOverrides: [
-              asyncGraphqlClientProvider.overrideWith(
-                (ref) async => stubClient(StubLink.responses([
-                  _moviesPage(['1'])
-                ])),
-              ),
-              sidebarLayoutStoreProvider.overrideWithValue(store),
-            ],
-            child: const FilterScreen(filterId: 'f_alignment'),
-          );
-          await tester.pumpAndSettle();
-        });
+        await pumpWithInsets(
+          tester,
+          insets,
+          width: _kWidth,
+          extraOverrides: [
+            mediaSourceProvider(fakeSourceId).overrideWithValue(
+              FakeCapableSource()
+                ..filterQueryResult = (
+                  library: FakeMediaSource.movies,
+                  query: const BrowseQuery(),
+                ),
+            ),
+            sourceArtworkProvider.overrideWith((ref, key) async => null),
+            sidebarLayoutStoreProvider.overrideWithValue(store),
+          ],
+          child: const FilterScreen(
+            sourceId: fakeSourceId,
+            filterId: 'f_alignment',
+          ),
+        );
+        await tester.pumpAndSettle();
 
         expect(
           tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
@@ -302,24 +253,17 @@ void main() {
     }
   });
 
-  group('HomeScreen cast alignment', () {
-    // HomeScreen.build wires up homeControllerProvider, a GraphQL-backed
-    // stream. `HomeScreen.header` is the exact widget `build` puts in
-    // `Scaffold.appBar`, extracted as a `@visibleForTesting static` seam that
-    // needs no providers at all: the cast button is `WindowTitleRow`'s own.
+  group('SourceHomeScreen cast alignment', () {
+    // `SourceHomeScreen.header` is the exact widget `build` puts in
+    // `Scaffold.appBar`, a `@visibleForTesting static` seam that needs no
+    // providers: the cast button is `WindowTitleRow`'s own.
     for (final MapEntry(key: name, value: insets) in _cases.entries) {
       testWidgets('aligns on $name', (tester) async {
         await pumpWithInsets(
           tester,
           insets,
           width: _kWidth,
-          child: Builder(
-            builder: (context) => HomeScreen.header(
-              context,
-              isDesktop: true,
-              barHeight: WindowTitleRow.heightOf(context),
-            ),
-          ),
+          child: const Builder(builder: SourceHomeScreen.header),
         );
 
         expect(
@@ -328,38 +272,6 @@ void main() {
         );
       });
     }
-
-    testWidgets(
-        'on mobile, the search action is present and the cast button is '
-        'the last control', (tester) async {
-      const width = 400.0;
-      await pumpWithInsets(
-        tester,
-        WindowChromeInsets.zero,
-        width: width,
-        child: Builder(
-          builder: (context) => Scaffold(
-            appBar: HomeScreen.header(
-              context,
-              isDesktop: false,
-              barHeight: WindowTitleRow.heightOf(context),
-            ),
-            body: const SizedBox.shrink(),
-          ),
-        ),
-      );
-
-      expect(find.byTooltip('Search'), findsOneWidget);
-      expect(
-        tester.getRect(find.byTooltip('Search')).right,
-        lessThanOrEqualTo(
-            tester.getRect(find.byKey(WindowTitleRow.castKey)).left),
-      );
-      expect(
-        tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
-        width - 8,
-      );
-    });
   });
 
   group('SettingsScreen cast alignment', () {
@@ -387,8 +299,7 @@ void main() {
   });
 
   group('CollectionDetailScreen cast alignment', () {
-    // CollectionDetailScreen.build watches
-    // collectionDetailControllerProvider(id), a GraphQL-backed stream.
+    // CollectionDetailScreen.build watches the collection's paged provider.
     // `CollectionDetailScreen.header` is the exact widget `build` puts in
     // `Scaffold.appBar`, extracted as a `@visibleForTesting static` seam that
     // takes the already-resolved items rather than watching the provider
@@ -403,8 +314,9 @@ void main() {
           child: Builder(
             builder: (context) => CollectionDetailScreen.header(
               context,
-              id: 'c1',
-              itemsData: const AsyncValue.data(<RecentlyAddedItem>[]),
+              sourceId: fakeSourceId,
+              collectionId: 'c1',
+              itemsData: const AsyncValue.data(<ItemSummary>[]),
             ),
           ),
         );
@@ -457,25 +369,6 @@ void main() {
         );
       });
     }
-  });
-
-  group('DevicesScreen title row', () {
-    // Devices is a full-window route (pushed outside the shell), so it owns
-    // `Scaffold.appBar` itself rather than going through a seam: nothing here
-    // reads a GraphQL stream during the build that constructs the row.
-    testWidgets(
-        'draws into the band on macOS, with no cast button (there never was '
-        'one)', (tester) async {
-      await pumpWithInsets(
-        tester,
-        _cases['macOS']!,
-        width: _kWidth,
-        child: const DevicesScreen(),
-      );
-
-      expect(find.byKey(WindowTitleRow.castKey), findsNothing);
-      expect(tester.getRect(find.byType(WindowTitleRow)).top, 0);
-    });
   });
 
   group('DiagnosticsScreen title row', () {

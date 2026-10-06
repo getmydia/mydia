@@ -1,6 +1,7 @@
 /// Mydia GraphQL `data` to the neutral source models.
 library;
 
+import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/item.dart';
 import '../source.dart';
 
@@ -38,6 +39,14 @@ UserState _progress(Object? progress, {bool? watched}) {
   return UserState(
     watched: watched ?? (p['watched'] as bool? ?? false),
     progressSeconds: position is int && position > 0 ? position : null,
+  );
+}
+
+UserState _watchState(Object? watchStatus) {
+  final w = _map(watchStatus);
+  return UserState(
+    watched: w['watched'] as bool? ?? false,
+    unwatchedCount: w['unwatchedEpisodeCount'] as int?,
   );
 }
 
@@ -103,8 +112,7 @@ ItemSummary showSummary(SourceId sid, Map<String, dynamic> s) {
     year: s['year'] as int?,
     poster: _art(artwork['posterUrl']),
     backdrop: _art(artwork['backdropUrl']),
-    userState:
-        UserState(watched: _map(s['watchStatus'])['watched'] as bool? ?? false),
+    userState: _watchState(s['watchStatus']),
     childCount: s['seasonCount'] as int?,
     overview: s['overview'] as String?,
     addedAt: _instant(s['addedAt']),
@@ -169,6 +177,9 @@ ItemSummary? continueWatchingSummary(SourceId sid, Map<String, dynamic> c) {
     parentIndex: c['seasonNumber'] as int?,
     defaultVersionId: _firstFileId(c['files']),
     lastPlayedAt: _instant(_map(c['progress'])['lastWatchedAt']),
+    showRef: kind == ItemKind.episode && c['showId'] != null
+        ? _ref(sid, ItemKind.show, c['showId'].toString())
+        : null,
   );
 }
 
@@ -189,18 +200,74 @@ ItemSummary? searchResultSummary(SourceId sid, Map<String, dynamic> r) {
   );
 }
 
-ItemSummary? recentlyAddedSummary(SourceId sid, Map<String, dynamic> r) {
-  final base = searchResultSummary(sid, r);
-  if (base == null) return null;
+/// The "what arrived" label the listings have always drawn under a show.
+String? _newContentLabel(Map<String, dynamic> m) {
+  final count = m['newEpisodeCount'];
+  if (count is! int || count == 0) return null;
+  final season = m['latestSeasonNumber'];
+  final episode = m['latestEpisodeNumber'];
+  if (count == 1 && season is int && episode is int) {
+    return 'S${season.toString().padLeft(2, '0')}'
+        'E${episode.toString().padLeft(2, '0')}';
+  }
+  return count == 1 ? '1 new episode' : '$count new episodes';
+}
+
+/// A listing-shaped map: collection items, unwatched, favorites,
+/// recently added and the home rows.
+ItemSummary? listingSummary(SourceId sid, Map<String, dynamic> m) {
+  final kind = switch (m['type']) {
+    'MOVIE' => ItemKind.movie,
+    'TV_SHOW' => ItemKind.show,
+    _ => null,
+  };
+  if (kind == null) return null;
+  final artwork = _map(m['artwork']);
   return ItemSummary(
-    ref: base.ref,
-    title: base.title,
-    year: base.year,
-    poster: base.poster,
-    backdrop: base.backdrop,
-    addedAt: _instant(r['addedAt']),
+    ref: _ref(sid, kind, m['id'] as String),
+    title: m['title'] as String? ?? '',
+    subtitle: kind == ItemKind.show ? _newContentLabel(m) : null,
+    year: m['year'] as int?,
+    poster: _art(artwork['posterUrl']),
+    backdrop: _art(artwork['backdropUrl']),
+    userState: _watchState(m['watchStatus']),
+    addedAt: _instant(m['addedAt']),
   );
 }
+
+ItemSummary calendarSummary(SourceId sid, Map<String, dynamic> e) {
+  final episode = e['kind'] == 'episode';
+  final files = _list(e['files']);
+  final playable =
+      files.where((f) => f['directPlaySupported'] == true).firstOrNull ??
+          files.firstOrNull;
+  return ItemSummary(
+    ref: episode
+        ? _ref(sid, ItemKind.episode, e['id'] as String)
+        : _ref(sid, ItemKind.movie, e['mediaItemId'] as String),
+    title: e['title'] as String? ?? '',
+    showTitle: episode ? e['mediaItemTitle'] as String? : null,
+    poster: _art(_map(e['artwork'])['posterUrl']),
+    parentIndex: e['seasonNumber'] as int?,
+    index: e['episodeNumber'] as int?,
+    airDate: e['airDate'] as String?,
+    defaultVersionId: playable?['id'] as String?,
+  );
+}
+
+SourceCollection collectionOf(SourceId sid, Map<String, dynamic> c) =>
+    SourceCollection(
+      sourceId: sid,
+      id: c['id'] as String,
+      name: c['name'] as String? ?? '',
+      description: c['description'] as String?,
+      smart: c['type'] == 'smart',
+      itemCount: c['itemCount'] as int? ?? 0,
+      posters: [
+        for (final p in (c['posterPaths'] as List?) ?? const [])
+          if (p is String && p.isNotEmpty) ArtworkRef(p),
+      ],
+    );
 
 List<String> _genres(Object? genres) => [
       if (genres is List)

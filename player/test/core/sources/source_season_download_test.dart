@@ -29,6 +29,7 @@ class _ScriptedService extends Fake implements DownloadService {
   final List<DownloadTask> active;
   final Set<String> failing;
   final started = <String>[];
+  final options = <String>[];
 
   @override
   List<DownloadTask> getActiveDownloads() => active;
@@ -40,6 +41,7 @@ class _ScriptedService extends Fake implements DownloadService {
   Future<DownloadTask> start(DownloadRequest request) async {
     if (failing.contains(request.ref.externalId)) throw StateError('nope');
     started.add(request.ref.externalId);
+    options.add(request.optionId);
     return DownloadTask(
         id: request.ref.externalId,
         mediaId: request.ref.externalId,
@@ -66,6 +68,18 @@ void main() {
     expect((result.queued, result.skipped, result.failed), (2, 0, 1));
     expect(service.started,
         [fakeEpisode(1).ref.externalId, fakeEpisode(3).ref.externalId]);
+  });
+
+  test('queues every episode at the option it was given', () async {
+    final service = _ScriptedService();
+    await queueSourceSeason(
+      source: _Season(),
+      season: fakeSeason.ref,
+      manager: service,
+      metadataFor: _metadata,
+      optionId: '720p',
+    );
+    expect(service.options, ['720p', '720p', '720p']);
   });
 
   test('skips an episode that is already in the queue', () async {

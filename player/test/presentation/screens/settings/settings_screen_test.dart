@@ -16,6 +16,7 @@ import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -84,24 +85,6 @@ class _FakeUpdateNotifier extends UpdateNotifier {
   UpdateState build() => _state;
 }
 
-/// Reports a fixed download footprint; nothing else is used by the dialog.
-class _FakeDownloads implements DownloadService {
-  _FakeDownloads({required this.count, required this.bytes});
-
-  final int count;
-  final int bytes;
-
-  @override
-  ({int count, int bytes}) accountDownloads(String accountId) =>
-      (count: count, bytes: bytes);
-
-  @override
-  Future<int> deleteAccountDownloads(String accountId) async => 0;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// Serves a fixed settings value, or fails, without touching secure storage.
 class _FakeSettingsController extends SettingsController {
   _FakeSettingsController({this.value, this.fail = false});
@@ -146,16 +129,17 @@ const _status = P2pStatus(
 
 /// Publishes a fixed registration status so a widget test can drive the row
 /// without a p2p host or a server.
-class _StubRegistration extends NodeRegistrationDriver {
+class _StubRegistration extends NodeRegistrations {
   _StubRegistration(this._status);
 
   final RegistrationStatus _status;
 
   @override
-  RegistrationStatus build() => _status;
+  Map<SourceId, RegistrationStatus> build() =>
+      {const SourceId('acct:owner:inst'): _status};
 
   @override
-  void retry() {}
+  void retryAll() {}
 }
 
 /// Resolves and reads normally, but fails the write itself — for proving
@@ -245,7 +229,7 @@ Future<void> _pump(
               ? _ThrowingRemoteControlSettings(box: _remoteControlBox)
               : RemoteControlSettings(box: _remoteControlBox),
         ),
-        nodeRegistrationProvider.overrideWith(
+        nodeRegistrationsProvider.overrideWith(
           () => _StubRegistration(registration),
         ),
         if (crashReporter != null)
@@ -268,11 +252,6 @@ Future<void> _pump(
               builder: (context, state) => inShell
                   ? shellScaffold(child: const SettingsScreen())
                   : const SettingsScreen(),
-            ),
-            GoRoute(
-              path: '/settings/devices',
-              builder: (context, state) =>
-                  const Scaffold(body: Text('devices stub')),
             ),
             GoRoute(
               path: '/settings/diagnostics',
@@ -308,11 +287,25 @@ void main() {
 
   testWidgets('renders the identity band with the account and server',
       (tester) async {
-    await _pump(tester);
+    final store = InMemorySourceStore();
+    final secrets = SourceSecrets(MockAuthStorage());
+    final record = mydiaRecord('a', addedAtMs: 0);
+    await store.putAccount(record);
+    await writeMydiaCredentials(secrets, record.account,
+        const MydiaCredentials(instanceId: 'a', accessToken: 'access-a'));
+    await _pump(tester, mydia: (store: store, secrets: secrets));
 
     expect(find.byType(SettingsIdentity), findsOneWidget);
     expect(find.text('admin'), findsOneWidget);
     expect(find.text('mydia.local:4000'), findsOneWidget);
+  });
+
+  testWidgets(
+      'with several Mydia accounts the identity band is left to the '
+      'instance screens', (tester) async {
+    await _pump(tester);
+
+    expect(find.byType(SettingsIdentity), findsNothing);
   });
 
   testWidgets('connection state reads as the subtitle of the details row',
@@ -324,79 +317,13 @@ void main() {
     expect(find.byKey(const Key('settings-row-status-dot')), findsOneWidget);
   });
 
-  testWidgets('sign out is a danger row in an account section', (tester) async {
-    await _pump(tester);
-
-    expect(find.text('Account'), findsOneWidget);
-    expect(find.byKey(const Key('settings-sign-out')), findsOneWidget);
-
-    final context = tester.element(find.text('Sign out'));
-    final title = tester.widget<Text>(find.text('Sign out'));
-
-    expect(title.style?.color, Theme.of(context).colorScheme.error);
-  });
-
-  testWidgets('confirming sign out removes the bound server only',
-      (tester) async {
-    final mydia = await _twoMydiaServers();
-    final store = mydia.store;
-    await _pump(tester, mydia: mydia);
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.descendant(
-      of: find.byType(AlertDialog),
-      matching: find.widgetWithText(TextButton, 'Remove server'),
-    ));
-    await tester.pumpAndSettle();
-
-    final left = (await store.load()).accounts.map((r) => r.account.id);
-    expect(left, ['mb']);
-  });
-
-  testWidgets('the sign out dialog says how many downloads it deletes',
-      (tester) async {
-    await _pump(tester, downloads: _FakeDownloads(count: 3, bytes: 2048));
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    final dialog = find.byType(AlertDialog);
-    expect(
-        find.descendant(
-            of: dialog,
-            matching: find.textContaining('also deletes 3 downloads')),
-        findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'Remove server'), findsOneWidget);
-  });
-
-  testWidgets('the sign out dialog has no download line without downloads',
+  testWidgets('sign out and paired devices live on each server, not here',
       (tester) async {
     await _pump(tester);
 
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('also deletes'), findsNothing);
-  });
-
-  testWidgets('cancelling sign out leaves the server in place', (tester) async {
-    final mydia = await _twoMydiaServers();
-    final store = mydia.store;
-    await _pump(tester, mydia: mydia);
-
-    await tester.ensureVisible(find.byKey(const Key('settings-sign-out')));
-    await tester.tap(find.byKey(const Key('settings-sign-out')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
-    await tester.pumpAndSettle();
-
-    expect((await store.load()).accounts, hasLength(2));
+    expect(find.byKey(const Key('settings-sign-out')), findsNothing);
+    expect(find.text('Sign out'), findsNothing);
+    expect(find.text('Paired devices'), findsNothing);
   });
 
   testWidgets('the footer names the running version', (tester) async {
@@ -589,15 +516,6 @@ void main() {
             'value is still the original one');
   });
 
-  testWidgets('paired devices navigates to the devices route', (tester) async {
-    await _pump(tester);
-
-    await tester.tap(find.text('Paired devices'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('devices stub'), findsOneWidget);
-  });
-
   testWidgets('connection details navigates to diagnostics', (tester) async {
     await _pump(tester);
 
@@ -653,17 +571,11 @@ void main() {
   });
 
   group('when preferences fail to load', () {
-    testWidgets('sign out stays reachable', (tester) async {
-      await _pump(tester, settings: null, fail: true);
-
-      expect(find.byKey(const Key('settings-sign-out')), findsOneWidget);
-    });
-
     testWidgets('the screen is not replaced by a full-page error',
         (tester) async {
       await _pump(tester, settings: null, fail: true);
 
-      expect(find.text('Paired devices'), findsOneWidget);
+      expect(find.byKey(const Key('settings-retry-row')), findsOneWidget);
       expect(find.text('Diagnostics'), findsOneWidget);
     });
 

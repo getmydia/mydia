@@ -8,10 +8,27 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
 void main() {
   group('loadContentIntentForPulledSession', () {
+    test('stamps the instance the session was on', () {
+      const pulled = PulledSession(
+        mediaItemId: 'movie-42',
+        episodeId: null,
+        position: Duration.zero,
+        selectedAudioTrackId: null,
+        selectedSubtitleTrackId: null,
+      );
+
+      final intent =
+          loadContentIntentForPulledSession(pulled, via: const SourceId('b'));
+
+      expect(intent!.via, const SourceId('b'));
+      expect(loadContentIntentForPulledSession(pulled)!.via, isNull);
+    });
+
     test('carries every field straight across for a movie', () {
       const pulled = PulledSession(
         mediaItemId: 'movie-42',

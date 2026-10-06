@@ -13,6 +13,7 @@ import '../../../core/sources/stash/stash_client.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../../domain/sources/source_error.dart';
+import '../detail/detail_links.dart';
 import 'server_url.dart';
 
 /// What the viewer typed, as a Stash server root.
@@ -140,7 +141,7 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
       final record = await saveStashSource(ref,
           uri: uri, apiKey: key, reauthAccountId: widget.reauthAccountId);
       if (!mounted) return;
-      context.go('/s/${record.sources.first.id.value}');
+      context.go(sourceHomeLocation(record.sources.first.id));
     } on SourceException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.kind == SourceErrorKind.unauthorized

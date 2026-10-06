@@ -14,6 +14,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../core/sources/store/source_records.dart';
 import '../../../core/sources/store/source_secrets.dart';
 import '../../widgets/toast/toaster.dart';
+import '../detail/detail_links.dart';
 import '../settings/widgets/settings_row.dart';
 import '../settings/widgets/settings_section.dart';
 import 'confirm_remove_account.dart';
@@ -190,7 +191,16 @@ class _AccountCard extends ConsumerWidget {
               ],
             Wrap(
               spacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                if (account.kind == SourceKind.mydia)
+                  IconButton(
+                    key: Key('manage-settings-${account.id}'),
+                    tooltip: 'Settings',
+                    icon: const Icon(Icons.settings_rounded),
+                    onPressed: () => context.push(
+                        '/sources/manage/${mydiaSourceIdOf(record).value}'),
+                  ),
                 if (account.kind == SourceKind.plex &&
                     record.profiles.length > 1)
                   OutlinedButton(
@@ -198,7 +208,7 @@ class _AccountCard extends ConsumerWidget {
                     onPressed: () => showPlexHomeSheet(
                       context,
                       account: account,
-                      onSwitched: (id) => context.go('/s/${id.value}'),
+                      onSwitched: (id) => context.go(sourceHomeLocation(id)),
                     ),
                     child: const Text('Switch user'),
                   ),

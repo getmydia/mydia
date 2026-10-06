@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
+import '../downloads/collection_sync_providers.dart';
 import '../downloads/download_providers.dart';
 import '../downloads/download_service.dart';
 import 'all_servers_inclusion.dart';
@@ -137,9 +138,43 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
+  /// Deletes the collection auto-sync entries of [sourceIds]. Best effort,
+  /// like [_dropCache]: leftovers are inert without the account.
+  Future<void> _dropCollectionSync(Set<String> sourceIds,
+      {bool dropUnowned = false}) async {
+    try {
+      await deleteCollectionSyncFor(ref, sourceIds, dropUnowned: dropUnowned);
+    } catch (e) {
+      debugPrint('[Sources] Could not clear collection sync entries: $e');
+    }
+  }
+
+  /// Whether [accountId] is the Mydia account the legacy rule binds: the
+  /// migrated legacy instance while it exists, else the earliest added. Read
+  /// from the records and the store, not [boundSourceIdProvider], which
+  /// depends on this notifier.
+  Future<bool> _isBoundMydiaAccount(String accountId) async {
+    try {
+      final mydia = [
+        for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+          if (r.account.kind == SourceKind.mydia) r,
+      ]..sort((a, b) => a.addedAtMs.compareTo(b.addedAtMs));
+      if (mydia.isEmpty) return false;
+      final store = await ref.read(sourceStoreProvider.future);
+      final legacy = await store.legacyInstanceId();
+      final bound =
+          mydia.where((r) => r.account.id == legacy).firstOrNull ?? mydia.first;
+      return bound.account.id == accountId;
+    } catch (e) {
+      debugPrint('[Sources] Could not resolve the bound account: $e');
+      return false;
+    }
+  }
+
   Future<void> removeAccount(String accountId) async {
     await _serialise(() async {
       final record = _record(accountId);
+      final wasBound = await _isBoundMydiaAccount(accountId);
       await _write((store) async {
         await store.removeAccount(accountId);
         await _dropAllServersChoices(store, accountId);
@@ -149,6 +184,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
+      // Legacy bare-id entries record no owner and read as the bound
+      // instance's, so they go with the account the bound rule picked.
+      await _dropCollectionSync({
+        for (final s in record?.sources ?? const <Source>[]) s.id.value,
+      }, dropUnowned: wasBound);
     });
     await _deleteDownloads([accountId]);
   }
@@ -375,6 +415,14 @@ final hasMydiaProvider = Provider<bool>((ref) {
       snapshot.accounts.any((a) => a.account.kind == SourceKind.mydia);
 });
 
+/// How many Mydia accounts are stored.
+final mydiaAccountCountProvider = Provider<int>((ref) =>
+    _snapshotOf(ref)
+        ?.accounts
+        .where((a) => a.account.kind == SourceKind.mydia)
+        .length ??
+    0);
+
 /// The sources the switcher shows: empty unless there is a choice to make.
 final switchableSourcesProvider = Provider<List<Source>>((ref) {
   final all = ref.watch(sourcesProvider);
@@ -481,15 +529,7 @@ final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
   ];
 });
 
-/// Where `/s/:sourceId` lands before its screen builds: the bound Mydia
-/// instance keeps its unprefixed routes, so its root is `/`; an unknown id
-/// goes home; any other source stays (null).
-String? sourceRootRedirect(
-  String sourceId,
-  List<Source> sources, {
-  SourceId? bound,
-}) {
-  final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
-  if (source == null || source.id == bound) return '/';
-  return null;
-}
+/// Where `/s/:sourceId` lands before its screen builds: an unknown id goes
+/// home; any known source stays (null).
+String? sourceRootRedirect(String sourceId, List<Source> sources) =>
+    sources.any((s) => s.id.value == sourceId) ? null : '/';

@@ -1,28 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/calendar_entry.dart';
-import 'package:player/domain/models/media_file.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_today_requests.dart';
 import 'package:player/presentation/screens/calendar/calendar_week_view.dart';
+
+import 'calendar_test_items.dart';
 
 /// Wed Sep 16 2026. Its window is Aug 17 to Dec 15.
 final _today = DateTime(2026, 9, 16);
 
-CalendarEntry _entry(String id, DateTime airDate, {bool playable = false}) =>
-    CalendarEntry(
-      id: id,
-      kind: CalendarEntryKind.episode,
-      airDate: airDate,
-      title: 'Episode $id',
-      seasonNumber: 1,
-      episodeNumber: 1,
-      mediaItemId: '7',
-      mediaItemTitle: 'A Show',
-      files: playable
-          ? [MediaFile(id: 'file-$id', directPlaySupported: true)]
-          : const [],
-    );
+ItemSummary _entry(String id, DateTime airDate, {bool playable = false}) =>
+    calendarEntry(id, airDate, playable: playable, title: 'Episode $id');
 
 final _entries = [
   _entry('1', DateTime(2026, 9, 16), playable: true),
@@ -32,7 +21,7 @@ final _entries = [
 
 Future<CalendarTodayRequests> _pump(
   WidgetTester tester,
-  List<CalendarEntry> entries, {
+  List<ItemSummary> entries, {
   CalendarTodayRequests? requests,
 }) async {
   final todayRequests = requests ?? CalendarTodayRequests();

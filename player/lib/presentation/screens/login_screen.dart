@@ -20,6 +20,7 @@ import '../widgets/toast/toaster.dart';
 import '../widgets/tv_keypad.dart';
 import '../widgets/window_chrome/window_title_row.dart';
 import '../widgets/channel_badge.dart';
+import 'detail/detail_links.dart';
 import 'login/login_controller.dart';
 import 'sources/add_source_screen.dart';
 
@@ -264,7 +265,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     final added = state.addedSource;
     // The instance the legacy screens serve opens on `/`; any other server
     // opens on its own page.
-    context.go(added == null || state.addedIsBound ? '/' : '/s/${added.value}');
+    context.go(
+        added == null || state.addedIsBound ? '/' : sourceHomeLocation(added));
   }
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/colors.dart';
+import '../../domain/detail/detail_target.dart';
+import '../../domain/sources/item.dart';
+import '../screens/detail/detail_links.dart';
 
 /// What a card's long-press menu can offer.
 enum MediaContextAction {
@@ -15,18 +18,15 @@ enum MediaContextAction {
 /// The subject of a long-press menu, flattened out of whichever rail item the
 /// card was built from.
 ///
-/// The menu deliberately knows nothing about `ContinueWatchingItem`,
-/// `UpNextItem` or `RecentlyAddedItem`. Each converts itself into one of these
-/// where the card is built, so a new rail item type needs no change here.
+/// The menu deliberately knows nothing about the item type a card was built
+/// from. Each card converts its item into one of these where it is built, so
+/// a new item type needs no change here.
 class MediaContextTarget {
-  /// What the card depicts: a movie id or an episode id.
-  final String id;
-
-  /// 'movie', 'tv_show', or 'episode'.
-  final String type;
+  /// What the card depicts: a movie, a show or an episode.
+  final ItemRef item;
 
   /// The owning series, when the target is an episode that knows it.
-  final String? showId;
+  final ItemRef? show;
 
   /// Whether the target has a playable file.
   final bool hasFile;
@@ -39,22 +39,21 @@ class MediaContextTarget {
   /// The media item to hide when the card sits on a Continue Watching surface,
   /// or null when it does not.
   ///
-  /// For a movie this is [id]. For an episode it is the *show*: the rail shows
-  /// one card per series and that card stands for the series, so hiding only
-  /// the episode would hand the show straight back with the next one.
-  final String? continueWatchingId;
+  /// For a movie this is [item]. For an episode it is the *show*: the rail
+  /// shows one card per series and that card stands for the series, so hiding
+  /// only the episode would hand the show straight back with the next one.
+  final ItemRef? continueWatching;
 
   const MediaContextTarget({
-    required this.id,
-    required this.type,
-    this.showId,
+    required this.item,
+    this.show,
     this.hasFile = false,
     this.tapPlays = false,
-    this.continueWatchingId,
+    this.continueWatching,
   });
 
-  bool get isEpisode => type.toLowerCase() == 'episode';
-  bool get isMovie => type.toLowerCase() == 'movie';
+  bool get isEpisode => item.kind == ItemKind.episode;
+  bool get isMovie => item.kind == ItemKind.movie;
 }
 
 /// The entries [target] earns, in display order.
@@ -76,7 +75,7 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
   final navigation = target.tapPlays
       ? [
           if (target.hasFile) MediaContextAction.play,
-          if (target.showId != null) MediaContextAction.goToShow,
+          if (target.show != null) MediaContextAction.goToShow,
           if (target.isEpisode) MediaContextAction.episodeDetails,
           if (target.isMovie) MediaContextAction.movieDetails,
         ]
@@ -84,7 +83,7 @@ List<MediaContextAction> mediaContextActionsFor(MediaContextTarget target) {
 
   return [
     ...navigation,
-    if (target.continueWatchingId != null)
+    if (target.continueWatching != null)
       MediaContextAction.removeFromContinueWatching,
   ];
 }
@@ -181,12 +180,13 @@ Future<void> showMediaContextMenu(
     case MediaContextAction.play:
       onPlay();
     case MediaContextAction.goToShow:
-      final showId = target.showId;
-      if (showId != null) await context.push<void>('/show/$showId');
+      final show = target.show;
+      if (show != null) {
+        await context.push<void>(detailLocation(SourceTarget(show)));
+      }
     case MediaContextAction.episodeDetails:
-      await context.push<void>('/episode/${target.id}');
     case MediaContextAction.movieDetails:
-      await context.push<void>('/movie/${target.id}');
+      await context.push<void>(detailLocation(SourceTarget(target.item)));
     case MediaContextAction.removeFromContinueWatching:
       onRemoveFromContinueWatching?.call();
   }

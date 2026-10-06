@@ -4,9 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/widgets/nav/sidebar_content.dart';
 import 'package:player/presentation/widgets/nav/sidebar_row.dart';
+
+import '../../screens/sources/fake_capable_source.dart';
+import '../../screens/sources/fake_media_source.dart';
+
+class _MydiaLike extends FakeCapableSource {
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.continueWatching};
+}
 
 class _StubConnectionNotifier extends ConnectionNotifier {
   @override
@@ -33,6 +44,11 @@ Future<void> _pump(
         connectionProvider.overrideWith(_StubConnectionNotifier.new),
         sidebarLayoutStoreProvider
             .overrideWithValue(store ?? InMemorySidebarLayoutStore()),
+        // A Mydia-like source is the active one, so every location without a
+        // source of its own (`/`, `/settings`) resolves against it.
+        thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
+        hasMydiaProvider.overrideWithValue(true),
+        mediaSourceProvider(fakeSourceId).overrideWithValue(_MydiaLike()),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -98,7 +114,7 @@ void main() {
 
   testWidgets('the most specific destination wins the selection',
       (tester) async {
-    await _pump(tester, location: '/favorites');
+    await _pump(tester, location: '/s/${fakeSourceId.value}/favorites');
 
     final favorites = tester.widget<SidebarRow>(
       find.widgetWithText(SidebarRow, 'Favorites'),
@@ -118,7 +134,7 @@ void main() {
     await tester.tap(find.text('Movies'));
     await tester.pumpAndSettle();
 
-    expect(routes, ['/movies']);
+    expect(routes, ['/s/${fakeSourceId.value}/library/movies']);
   });
 
   testWidgets('anchored rows offer no hide action', (tester) async {

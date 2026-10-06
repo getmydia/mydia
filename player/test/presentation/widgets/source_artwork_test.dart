@@ -30,6 +30,17 @@ void main() {
     expect(watchStatusFor(const UserState(), 100), isNull);
   });
 
+  test('a show with unwatched episodes carries the count', () {
+    final status = watchStatusFor(const UserState(unwatchedCount: 6), null)!;
+    expect(status.unwatchedEpisodeCount, 6);
+    expect(status.isUnwatchedContainer, isTrue);
+    expect(watchStatusFor(const UserState(unwatchedCount: 0), null), isNull);
+    expect(
+        watchStatusFor(const UserState(watched: true, unwatchedCount: 3), null)!
+            .watched,
+        isTrue);
+  });
+
   testWidgets('SourcePoster resolves artwork through the source',
       (tester) async {
     final fake = FakeMediaSource();

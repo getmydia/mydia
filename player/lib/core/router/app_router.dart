@@ -19,38 +19,31 @@ import '../../presentation/screens/all_servers/all_servers_cards.dart';
 import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
-import '../../presentation/screens/sources/source_library_screen.dart';
-import '../../presentation/screens/home_screen.dart';
-import '../../presentation/screens/login_screen.dart';
-import '../../presentation/screens/sources/add_source_screen.dart';
-import '../../presentation/screens/sources/manage_sources_screen.dart';
-import '../../presentation/screens/sources/plex_sign_in_screen.dart';
-import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
-import '../../presentation/screens/sources/stash_connect_screen.dart';
-import '../../presentation/screens/movie/movie_detail_screen.dart';
-import '../../presentation/screens/show/show_detail_screen.dart';
-import '../../presentation/screens/episode/episode_detail_screen.dart';
 import '../../presentation/screens/filter/filter_screen.dart';
-import '../../presentation/screens/library/library_screen.dart';
-import '../../presentation/screens/library/library_controller.dart';
-import '../../presentation/screens/settings/settings_screen.dart';
-import '../../presentation/screens/settings/devices_screen.dart';
-import '../../presentation/screens/settings/diagnostics_screen.dart';
-import '../../presentation/screens/player/player_screen.dart';
-import '../../presentation/screens/player/queue_player_screen.dart';
-import '../../presentation/screens/downloads/downloads_screen.dart';
+import '../../presentation/screens/sources/source_library_screen.dart';
+import '../../presentation/screens/detail/detail_links.dart' show SourceListing;
+import '../../presentation/screens/calendar/calendar_screen.dart';
+import '../../presentation/screens/collections/collection_detail_screen.dart';
+import '../../presentation/screens/collections/collections_screen.dart';
+import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
 import '../../presentation/screens/favorites/favorites_screen.dart';
 import '../../presentation/screens/recently_added/recently_added_screen.dart';
 import '../../presentation/screens/unwatched/unwatched_screen.dart';
-import '../../presentation/screens/continue_watching/continue_watching_screen.dart';
-import '../../presentation/screens/calendar/calendar_screen.dart';
-import '../../presentation/screens/collections/collections_screen.dart';
-import '../../presentation/screens/collections/collection_detail_screen.dart';
-import '../../presentation/screens/search/search_screen.dart';
-import '../../domain/models/search_result.dart';
+import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/sources/add_source_screen.dart';
+import '../../presentation/screens/sources/manage_sources_screen.dart';
+import '../../presentation/screens/sources/mydia_instance_screen.dart';
+import '../../presentation/screens/sources/plex_sign_in_screen.dart';
+import '../../presentation/screens/sources/jellyfin_connect_screen.dart';
+import '../../presentation/screens/sources/stash_connect_screen.dart';
+import '../../presentation/screens/settings/settings_screen.dart';
+import '../../presentation/screens/settings/diagnostics_screen.dart';
+import '../../presentation/screens/player/queue_player_screen.dart';
+import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../presentation/widgets/app_shell.dart';
 import '../graphql/graphql_provider.dart';
 import 'navigator_keys.dart';
+import 'legacy_routes.dart';
 
 part 'app_router.g.dart';
 
@@ -129,6 +122,57 @@ SourceId? _sourceIdIn(String location) {
   }
 }
 
+/// Builder for the unprefixed pre-instance routes. They stay registered so
+/// go_router matches them, but `appRedirect` always moves them first.
+/// A source's search; `?q=` fills the box, which is where the legacy
+/// `/search?q=` redirect lands.
+GoRoute sourceSearchRoute() => GoRoute(
+      path: '/s/:sourceId/search',
+      name: 'source_search',
+      builder: (context, state) => SourceSearchScreen(
+        sourceId: SourceId(state.pathParameters['sourceId']!),
+        initialQuery: state.uri.queryParameters['q'],
+      ),
+    );
+
+Widget _legacyStub(BuildContext context, GoRouterState state) =>
+    const SizedBox.shrink();
+
+/// The listings every Mydia source shows: path, route name, screen. The paths
+/// are `SourceListing.segment`.
+final List<(String, String, Widget Function(SourceId))> _sourceListings = [
+  (
+    SourceListing.collections.segment,
+    'source_collections',
+    (id) => CollectionsScreen(sourceId: id)
+  ),
+  (
+    SourceListing.calendar.segment,
+    'source_calendar',
+    (id) => CalendarScreen(sourceId: id)
+  ),
+  (
+    SourceListing.favorites.segment,
+    'source_favorites',
+    (id) => FavoritesScreen(sourceId: id)
+  ),
+  (
+    SourceListing.unwatched.segment,
+    'source_unwatched',
+    (id) => UnwatchedScreen(sourceId: id)
+  ),
+  (
+    SourceListing.recentlyAdded.segment,
+    'source_recently_added',
+    (id) => RecentlyAddedScreen(sourceId: id)
+  ),
+  (
+    SourceListing.continueWatching.segment,
+    'source_continue_watching',
+    (id) => ContinueWatchingScreen(sourceId: id)
+  ),
+];
+
 /// The `/all*` redirect, held while saved sources are still loading so a
 /// cold start does not read an empty set and bounce to `/`. The router
 /// refreshes when loading ends.
@@ -153,10 +197,9 @@ String? appRedirect({
   required String location,
   required bool sourcesLoading,
   required List<Source> sources,
-  SourceId? boundId,
-  SourceId? activeId,
   Set<SourceId> gated = const {},
   String? fullLocation,
+  String? Function(Uri uri)? legacy,
 }) {
   // A locked or hidden source opens only after unlocking. Same screen for
   // both, so a deep link never confirms that a hidden source exists.
@@ -164,6 +207,14 @@ String? appRedirect({
   if (target != null && gated.contains(target)) {
     return unlockLocation(fullLocation ?? location);
   }
+  // Held while loading: the instance ids a legacy location maps to are not
+  // known yet. The router refreshes when loading ends.
+  if (sourcesLoading) return null;
+  // Where the unprefixed pre-instance locations live now. A gated result
+  // is gated on the next pass.
+  final moved = legacy?.call(Uri.parse(fullLocation ?? location));
+  if (moved != null) return moved;
+
   final isUnlockRoute = location == '/unlock';
 
   final isLoginRoute = location == '/login';
@@ -172,27 +223,13 @@ String? appRedirect({
   final isSignedOutSourcesRoute = location == '/sources/add' ||
       location.startsWith('/sources/add/') ||
       location == '/sources/manage';
-  // Third-party server screens, and the screens that manage them.
-  final isSourceRoute =
-      location.startsWith('/s/') || location.startsWith('/sources');
 
-  if (boundId == null &&
+  // With any one source the app is usable; `/` has already moved to the
+  // active one. With none, the only place to go is add-a-server.
+  if (sources.isEmpty &&
       !isLoginRoute &&
       !isUnlockRoute &&
       !isSignedOutSourcesRoute) {
-    // Usable with any one server alone: land there, not on add-a-server.
-    if (sourcesLoading) return null;
-    if (sources.isNotEmpty) {
-      if (isSourceRoute) return null;
-      // The remembered source when it still exists, else the first.
-      final open = sources.where((s) => !gated.contains(s.id));
-      final landing =
-          open.where((s) => s.id == activeId).firstOrNull ?? open.firstOrNull;
-      if (landing == null) {
-        return unlockLocation('/s/${sources.first.id.value}');
-      }
-      return '/s/${landing.id.value}';
-    }
     return '/sources/add';
   }
   return null;
@@ -212,6 +249,9 @@ GoRouter appRouter(Ref ref) {
   ref.listen(thirdPartySourcesProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(sourcesLoadingProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(selectedSourceIdProvider, (_, __) => refreshNotifier.refresh());
+  // Where an old unprefixed location lands depends on which instances exist.
+  ref.listen(legacyMydiaSourceIdProvider, (_, __) => refreshNotifier.refresh());
+  ref.listen(mydiaSourceIdsProvider, (_, __) => refreshNotifier.refresh());
   // A relock while a gated screen is open sends it to /unlock.
   ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
@@ -236,10 +276,14 @@ GoRouter appRouter(Ref ref) {
         location: state.matchedLocation,
         sourcesLoading: ref.read(sourcesLoadingProvider),
         sources: ref.read(thirdPartySourcesProvider),
-        boundId: ref.read(boundMydiaProvider)?.source.id,
-        activeId: ref.read(selectedSourceIdProvider),
         gated: ref.read(gatedSourceIdsProvider),
         fullLocation: state.uri.toString(),
+        legacy: (uri) => legacyLocation(
+          uri,
+          legacy: ref.read(legacyMydiaSourceIdProvider),
+          mydia: ref.read(mydiaSourceIdsProvider),
+          active: ref.read(activeSourceIdProvider),
+        ),
       );
       if (target != null) {
         debugPrint('[AppRouter] Redirecting ${state.matchedLocation} '
@@ -317,6 +361,15 @@ GoRouter appRouter(Ref ref) {
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const ManageSourcesScreen(),
       ),
+      // One Mydia instance's settings; also where `/settings/devices` lands.
+      GoRoute(
+        path: '/sources/manage/:sourceId',
+        name: 'manage_source',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => MydiaInstanceScreen(
+          sourceId: SourceId(state.pathParameters['sourceId']!),
+        ),
+      ),
 
       // Shell route for main app with bottom navigation
       ShellRoute(
@@ -329,57 +382,52 @@ GoRouter appRouter(Ref ref) {
           GoRoute(
             path: '/',
             name: 'home',
-            builder: (context, state) => const HomeScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/movies',
             name: 'movies_library',
-            builder: (context, state) => const LibraryScreen(
-              libraryType: LibraryType.movies,
-            ),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/shows',
             name: 'shows_library',
-            builder: (context, state) => const LibraryScreen(
-              libraryType: LibraryType.tvShows,
-            ),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/filter/:id',
             name: 'filter',
-            builder: (context, state) =>
-                FilterScreen(filterId: state.pathParameters['id']!),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/favorites',
             name: 'favorites',
-            builder: (context, state) => const FavoritesScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/recently-added',
             name: 'recently_added',
-            builder: (context, state) => const RecentlyAddedScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/continue-watching',
             name: 'continue_watching',
-            builder: (context, state) => const ContinueWatchingScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/unwatched',
             name: 'unwatched',
-            builder: (context, state) => const UnwatchedScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/calendar',
             name: 'calendar',
-            builder: (context, state) => const CalendarScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/collections',
             name: 'collections',
-            builder: (context, state) => const CollectionsScreen(),
+            builder: _legacyStub,
           ),
           GoRoute(
             path: '/downloads',
@@ -435,7 +483,6 @@ GoRouter appRouter(Ref ref) {
             redirect: (context, state) => sourceRootRedirect(
               state.pathParameters['sourceId']!,
               ref.read(sourcesProvider),
-              bound: ref.read(boundSourceIdProvider),
             ),
             builder: (context, state) => SourceHomeScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),
@@ -452,22 +499,26 @@ GoRouter appRouter(Ref ref) {
             ),
           ),
           sourceItemRoute(),
+          sourceSearchRoute(),
+          for (final (path, name, build) in _sourceListings)
+            GoRoute(
+              path: '/s/:sourceId/$path',
+              name: name,
+              builder: (context, state) =>
+                  build(SourceId(state.pathParameters['sourceId']!)),
+            ),
           GoRoute(
-            path: '/s/:sourceId/search',
-            name: 'source_search',
-            builder: (context, state) => SourceSearchScreen(
+            path: '/s/:sourceId/filter/:filterId',
+            name: 'source_filter',
+            builder: (context, state) => FilterScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),
+              filterId: state.pathParameters['filterId']!,
             ),
           ),
           GoRoute(
             path: '/search',
             name: 'search',
-            builder: (context, state) => SearchScreen(
-              initialQuery: state.uri.queryParameters['q'],
-              initialType: SearchResultType.fromQueryValue(
-                state.uri.queryParameters['type'],
-              ),
-            ),
+            builder: _legacyStub,
           ),
         ],
       ),
@@ -477,7 +528,7 @@ GoRouter appRouter(Ref ref) {
         path: '/settings/devices',
         name: 'devices',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const DevicesScreen(),
+        builder: _legacyStub,
       ),
       GoRoute(
         path: '/settings/diagnostics',
@@ -489,37 +540,36 @@ GoRouter appRouter(Ref ref) {
         path: '/collection/:id',
         name: 'collection_detail',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return CollectionDetailScreen(id: id);
-        },
+        builder: _legacyStub,
+      ),
+      // Full window, like the item detail routes: the screen owns the
+      // title-bar band.
+      GoRoute(
+        path: '/s/:sourceId/collection/:collectionId',
+        name: 'source_collection',
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => CollectionDetailScreen(
+          sourceId: SourceId(state.pathParameters['sourceId']!),
+          collectionId: state.pathParameters['collectionId']!,
+        ),
       ),
       GoRoute(
         path: '/movie/:id',
         name: 'movie_detail',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return MovieDetailScreen(id: id);
-        },
+        builder: _legacyStub,
       ),
       GoRoute(
         path: '/show/:id',
         name: 'show_detail',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return ShowDetailScreen(id: id);
-        },
+        builder: _legacyStub,
       ),
       GoRoute(
         path: '/episode/:id',
         name: 'episode_detail',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final id = state.pathParameters['id']!;
-          return EpisodeDetailScreen(id: id);
-        },
+        builder: _legacyStub,
       ),
       ...sourceDetailRoutes(),
       GoRoute(
@@ -566,58 +616,12 @@ GoRouter appRouter(Ref ref) {
           return QueuePlayerScreen(itemsParam: itemsParam);
         },
       ),
-      // Player route
+      // The pre-instance player route; `appRedirect` moves it under its source.
       GoRoute(
         path: '/player/:type/:id',
         name: 'player',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final type = state.pathParameters['type']!;
-          final id = state.pathParameters['id']!;
-          final params = PlayerRouteParams.fromUri(state.uri);
-          final fileId = params.fileId;
-
-          if (fileId == null) {
-            // If no fileId provided, show error
-            return Scaffold(
-              body: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline,
-                        size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    const Text('No file selected for playback'),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/');
-                        }
-                      },
-                      child: const Text('Go Back'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return PlayerScreen(
-            mediaType: type,
-            mediaId: id,
-            fileId: fileId,
-            title: params.title,
-            showId: params.showId,
-            seasonNumber: params.seasonNumber,
-            resumeSeconds: params.resumeSeconds,
-            audioTrack: params.audioTrack,
-            subtitleTrack: params.subtitleTrack,
-            autoplay: params.autoplay,
-          );
-        },
+        builder: _legacyStub,
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

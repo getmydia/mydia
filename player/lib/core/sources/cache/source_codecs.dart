@@ -1,6 +1,7 @@
 /// Encode and decode functions for what the source providers cache.
 library;
 
+import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
@@ -18,6 +19,12 @@ Object? encodeLibraries(List<Library> libraries) =>
 
 List<Library> decodeLibraries(Object? json) =>
     [for (final e in json! as List) Library.fromJson(_map(e))];
+
+Object? encodeCollections(List<SourceCollection> collections) =>
+    [for (final c in collections) c.toJson()];
+
+List<SourceCollection> decodeCollections(Object? json) =>
+    [for (final e in json! as List) SourceCollection.fromJson(_map(e))];
 
 /// Null means the source has no hubs, which is a value worth caching.
 Object? encodeHubs(List<Hub>? hubs) =>

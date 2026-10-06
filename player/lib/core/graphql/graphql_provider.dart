@@ -10,7 +10,7 @@ import '../sources/mydia/bound_mydia.dart';
 import '../sources/mydia/mydia_client.dart';
 import '../sources/sources_providers.dart';
 import 'transport_link.dart';
-import 'watch/fetch_log.dart';
+import '../cache/fetch_log.dart';
 
 /// This device's decode-capability profile, probed once per app session and
 /// held in memory for as long as the app runs.

@@ -1,26 +1,20 @@
-// Resume: the player never trusts route absence as "no progress". Every
-// entry point into `PlayerScreen` independently queries `progress {
-// positionSeconds durationSeconds lastWatchedAt }` off `MovieDetail` /
-// `EpisodeDetail` in `_fetchProgressAndEpisodes`, and `resolveResumePlan`
-// (`core/player/resume_plan.dart`) offers a resume dialog through
-// `shouldOfferResume` whenever that saved position clears the existing
-// thresholds. The route's `resume` query parameter only lets a caller that
-// already asked the question (Continue Watching) skip that dialog and jump
-// straight to the saved position; its absence does not mean "start from
-// zero", it means "let the player ask". The calendar carries no progress, so
-// the consequence is simply that every calendar-initiated playback goes
-// through the normal resume prompt instead of bypassing it, exactly like
-// opening the same episode from its own detail screen would.
+// Resume: the player never trusts route absence as "no progress". The source
+// player route asks the source for the saved position of the item it plays,
+// and offers the resume dialog when that position clears the existing
+// thresholds. The calendar carries no progress, so every calendar-initiated
+// playback goes through the normal resume prompt, exactly like opening the
+// same episode from its own detail screen would.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/cache/poster_cache_manager.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/calendar_entry.dart';
-import '../../widgets/artwork_image.dart';
-import '../../widgets/smart_play_button.dart';
+import '../../../domain/detail/detail_target.dart';
+import '../../../domain/sources/item.dart';
+import '../../widgets/play_button.dart';
+import '../../widgets/source_artwork.dart';
+import '../detail/detail_links.dart';
 import 'calendar_dates.dart';
 
 /// One dated entry on the calendar, rendered as a single row.
@@ -37,29 +31,28 @@ class CalendarRow extends ConsumerWidget {
     required this.today,
   });
 
-  final CalendarEntry entry;
+  final ItemSummary entry;
 
   /// Injected rather than read from the clock so tests are deterministic.
   final DateTime today;
 
-  bool get _isFuture => entry.day.isAfter(truncateToDay(today));
+  String get _id => entry.ref.externalId;
+
+  bool get _isMovie => entry.ref.kind == ItemKind.movie;
+
+  bool get _isFuture {
+    final day = entry.day;
+    return day != null && day.isAfter(truncateToDay(today));
+  }
 
   String get _subtitle {
-    if (entry.kind == CalendarEntryKind.movie) return 'Movie';
+    if (_isMovie) return 'Movie';
 
-    final season = (entry.seasonNumber ?? 0).toString().padLeft(2, '0');
-    final episode = (entry.episodeNumber ?? 0).toString().padLeft(2, '0');
+    final season = (entry.parentIndex ?? 0).toString().padLeft(2, '0');
+    final episode = (entry.index ?? 0).toString().padLeft(2, '0');
     final numbering = 'S${season}E$episode';
 
     return entry.title.isEmpty ? numbering : '$numbering · ${entry.title}';
-  }
-
-  void _openDetail(BuildContext context) {
-    if (entry.kind == CalendarEntryKind.movie) {
-      context.push('/movie/${entry.mediaItemId}');
-    } else {
-      context.push('/episode/${entry.id}');
-    }
   }
 
   @override
@@ -67,8 +60,8 @@ class CalendarRow extends ConsumerWidget {
     final dimmed = !entry.isPlayable;
 
     return InkWell(
-      key: ValueKey('calendar-row-${entry.id}'),
-      onTap: () => _openDetail(context),
+      key: ValueKey('calendar-row-$_id'),
+      onTap: () => context.push(detailLocation(SourceTarget(entry.ref))),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
@@ -81,9 +74,7 @@ class CalendarRow extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    entry.kind == CalendarEntryKind.movie
-                        ? entry.title
-                        : entry.mediaItemTitle,
+                    _isMovie ? entry.title : entry.showTitle ?? '',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -117,66 +108,40 @@ class CalendarRow extends ConsumerWidget {
 
   Widget _trailing(BuildContext context) {
     if (entry.isPlayable) {
-      return SmartPlayButton(
-        key: ValueKey('calendar-play-${entry.id}'),
-        files: entry.files,
-        onFileSelected: (file) => context.push(
-          playerRouteForCalendar(entry, fileId: file.id),
-        ),
+      return PlayButton(
+        key: ValueKey('calendar-play-$_id'),
+        onPressed: () => context.push(sourcePlayerLocation(
+          entry.ref,
+          fileId: entry.defaultVersionId,
+          title: entry.title,
+        )),
       );
     }
 
     if (_isFuture) {
       return _StatusChip(
-        key: ValueKey('calendar-upcoming-${entry.id}'),
+        key: ValueKey('calendar-upcoming-$_id'),
         label: 'Upcoming',
       );
     }
 
     return _StatusChip(
-      key: ValueKey('calendar-absent-${entry.id}'),
+      key: ValueKey('calendar-absent-$_id'),
       label: 'Not in library',
     );
   }
 }
 
-/// The player route for one calendar entry.
-///
-/// Kept beside the row rather than inlined so the shape stays in one place
-/// if the player screen ever reads another query parameter. Mirrors
-/// `playerRouteForContinueWatching` in `home_screen.dart`, minus the resume
-/// suffix: the calendar has no saved progress of its own to pass, so the
-/// player is left to discover it (see the resume note at the top of this
-/// file). `fileId` is required because the player route renders an error
-/// screen without one.
-String playerRouteForCalendar(CalendarEntry entry, {required String fileId}) {
-  final title = Uri.encodeComponent(
-    entry.kind == CalendarEntryKind.movie ? entry.title : entry.mediaItemTitle,
-  );
-
-  if (entry.kind == CalendarEntryKind.movie) {
-    return '/player/movie/${entry.mediaItemId}?fileId=$fileId&title=$title';
-  }
-
-  final showId = entry.mediaItemId;
-  final seasonNumber = entry.seasonNumber;
-
-  return '/player/episode/${entry.id}'
-      '?fileId=$fileId'
-      '&title=$title'
-      '&showId=$showId'
-      '${seasonNumber != null ? '&seasonNumber=$seasonNumber' : ''}';
-}
-
 class _Poster extends StatelessWidget {
   const _Poster({required this.entry, required this.dimmed});
 
-  final CalendarEntry entry;
+  final ItemSummary entry;
   final bool dimmed;
 
   @override
   Widget build(BuildContext context) {
-    final url = entry.artwork?.posterUrl;
+    const fallback = ColoredBox(color: AppColors.surfaceVariant);
+    final poster = entry.poster;
 
     return Opacity(
       opacity: dimmed ? 0.45 : 1,
@@ -185,16 +150,12 @@ class _Poster extends StatelessWidget {
         child: SizedBox(
           width: 38,
           height: 56,
-          child: url == null
-              ? const ColoredBox(color: AppColors.surfaceVariant)
-              : ArtworkImage(
-                  imageUrl: url,
-                  fit: BoxFit.cover,
-                  cacheManager: PosterCacheManager(),
-                  placeholder: (_) =>
-                      const ColoredBox(color: AppColors.surfaceVariant),
-                  errorWidget: (_) =>
-                      const ColoredBox(color: AppColors.surfaceVariant),
+          child: poster == null
+              ? fallback
+              : SourceArtworkImage(
+                  sourceId: entry.ref.sourceId,
+                  art: poster,
+                  fallback: fallback,
                 ),
         ),
       ),

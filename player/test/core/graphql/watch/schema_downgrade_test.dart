@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import '../../../test_utils/query_keys.dart';
 import 'package:player/core/graphql/watch/query_watcher.dart';
 import 'package:player/core/graphql/watch/schema_downgrade.dart';
 

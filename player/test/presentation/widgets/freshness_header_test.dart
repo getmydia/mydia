@@ -6,12 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/current_source_status.dart';
+import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
-import 'package:player/core/graphql/watch/freshness.dart';
-import 'package:player/core/graphql/watch/invalidation_target.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
-import 'package:player/core/graphql/watch/watcher_registry.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/cache/freshness.dart';
+import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/core/cache/query_key.dart';
+import 'package:player/core/cache/watcher_registry.dart';
+import '../../test_utils/query_keys.dart';
 import 'package:player/presentation/widgets/freshness_header.dart';
 
 class _StubFreshnessRegistry extends FreshnessRegistry {
@@ -246,5 +251,45 @@ void main() {
       recorder.invalidatedTargets,
       equals(keys.map((key) => key.target)),
     );
+  });
+
+  testWidgets(
+      'follows the source on screen: active A offline, viewing B shows the '
+      'warning', (tester) async {
+    const idA = SourceId('acc1:owner:aa11');
+    const idB = SourceId('acc2:owner:bb22');
+    final router = GoRouter(
+      initialLocation: '/s/${idB.value}',
+      routes: [
+        GoRoute(
+          path: '/s/:id',
+          builder: (_, __) => Scaffold(
+            body: FreshnessHeader(queryKeys: [QueryKeys.home]),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        freshnessRegistryProvider.overrideWith(() => _StubFreshnessRegistry({
+              QueryKeys.home: Freshness(
+                fetchedAt: now.subtract(const Duration(hours: 2)),
+                refreshFailed: true,
+                isStale: true,
+                hasData: true,
+              ),
+            })),
+        boundSourceIdProvider.overrideWithValue(null),
+        activeSourceIdProvider.overrideWithValue(idA),
+        sourceStatusProvider(idA)
+            .overrideWithValue(SourceConnectionStatus.unreachable),
+        sourceStatusProvider(idB)
+            .overrideWithValue(SourceConnectionStatus.remote),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('freshness-banner')), findsOneWidget);
   });
 }

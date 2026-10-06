@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/models/episode.dart';
+import '../../domain/detail/detail_views.dart';
 import '../../domain/sources/item.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
 import '../../core/downloads/download_providers.dart';
-import '../../core/sources/mydia/bound_mydia.dart';
 import '../../core/theme/colors.dart';
-import '../../core/downloads/mydia_download_metadata.dart';
+import '../screens/detail/download_metadata.dart';
 import '../screens/detail/start_download.dart';
 
 /// Standalone progressive-download action for an episode.
@@ -16,18 +15,9 @@ import '../screens/detail/start_download.dart';
 /// without duplicating it. Renders nothing when the episode has no file or the
 /// platform does not support downloads (e.g. Flutter web).
 class EpisodeDownloadButton extends ConsumerWidget {
-  final Episode episode;
-  final String showTitle;
-  final String? showId;
-  final String? showPosterUrl;
+  final EpisodeView episode;
 
-  const EpisodeDownloadButton({
-    super.key,
-    required this.episode,
-    required this.showTitle,
-    this.showId,
-    this.showPosterUrl,
-  });
+  const EpisodeDownloadButton({super.key, required this.episode});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,10 +25,7 @@ class EpisodeDownloadButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final sourceId = ref.watch(boundSourceIdProvider);
-    if (sourceId == null) return const SizedBox.shrink();
-    final item = ItemRef(
-        sourceId: sourceId, kind: ItemKind.episode, externalId: episode.id);
+    final item = episode.target.ref;
 
     final isDownloadedAsync = ref.watch(isItemDownloadedProvider(item));
     final isDownloaded = isDownloadedAsync.value ?? false;
@@ -57,12 +44,7 @@ class EpisodeDownloadButton extends ConsumerWidget {
       context,
       ref,
       item: item,
-      metadata: mydiaEpisodeMetadata(
-        episode,
-        showId: showId,
-        showTitle: showTitle,
-        showPosterUrl: showPosterUrl,
-      ),
+      metadata: episodeDownloadMetadata(episode),
     );
   }
 }

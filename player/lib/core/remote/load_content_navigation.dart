@@ -1,12 +1,14 @@
 import 'package:flutter/foundation.dart' show debugPrint, debugPrintStack;
-import 'package:flutter/widgets.dart' show immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `ProviderListenable` is not part of the main entrypoint's exports, the same
 // reason `test_utils` reaches here for `Override`.
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
-import '../../domain/models/media_file.dart';
-import '../player/best_file.dart';
+import '../../domain/detail/detail_target.dart';
+import '../../domain/sources/item.dart';
+import '../../presentation/screens/detail/detail_links.dart';
+import '../sources/mydia/mydia_instance_id.dart';
+import '../sources/source.dart';
 import 'remote_control_intent.dart';
 
 /// Awaits an autoDispose provider's first value while holding it open.
@@ -34,102 +36,64 @@ Future<T> readDetailKeepingAlive<T>(
   }
 }
 
-/// Everything `resolveLoadContentRoute` needs beyond the file list itself.
+/// The item a `LoadContentIntent` names, on the instance it arrived through.
 ///
-/// `title` backs `describe()`'s reporting back to controllers (it falls back
-/// to 'Untitled' with nothing supplied); `showId`/`seasonNumber` are what
-/// `UpNextController.hasNext`/`hasPrevious` gate on: null either one and a
-/// remotely-started episode's next/previous-episode capability is silently
-/// dead, even though the exact same fetch this type is built from already has
-/// both fields on hand. Both are null for a movie, which has neither concept.
-@immutable
-class LoadContentTarget {
-  final List<MediaFile> files;
-  final String title;
-  final String? showId;
-  final int? seasonNumber;
-
-  const LoadContentTarget({
-    required this.files,
-    required this.title,
-    this.showId,
-    this.seasonNumber,
-  });
+/// An episode id wins over the media item id. Null when no instance sent it:
+/// its id means nothing on any other source, so it is never looked up there.
+ItemRef? loadContentItemRef(LoadContentIntent intent) {
+  final via = intent.via;
+  if (via == null) return null;
+  final episodeId = intent.episodeId;
+  return episodeId != null
+      ? ItemRef(sourceId: via, kind: ItemKind.episode, externalId: episodeId)
+      : ItemRef(
+          sourceId: via, kind: ItemKind.movie, externalId: intent.mediaItemId);
 }
 
-/// Fetches [LoadContentTarget] for whichever half of a `LoadContentIntent`
-/// identifies content — an episode's own files/title/show context, or a
-/// movie's. Kept as a function type rather than folded into
-/// [resolveLoadContentRoute] directly, so a test can substitute a fake
-/// fetcher and assert the resolution *decision* without a GraphQL client at
-/// all.
+/// The source player route a `LoadContentIntent` should land on, or null when
+/// nothing here resolves to a playable file.
 ///
-/// Deliberately not implemented in this file: a real fetcher reads
-/// `movieDetailControllerProvider`/`episodeDetailControllerProvider`, both
-/// `presentation/` code, and `core/remote/` never imports `presentation/` —
-/// see `RemotePlayerBinding`'s dartdoc in `remote_target_controller.dart` for
-/// the same rule applied to the receiver side. `app.dart`'s
-/// `_pushLoadContent` and `CastMiniController._pullToLocal`
-/// (`presentation/widgets/cast_mini_controller.dart`) each build their own
-/// closures against those providers instead.
-typedef LoadContentTargetFetcher = Future<LoadContentTarget> Function(
-    String id);
-
-/// The `/player/...` route a `LoadContentIntent` should actually land on, or
-/// null when nothing here resolves to a playable file.
+/// A controller on another device said "play this", and this device turns
+/// that reference into a stream on the instance the command came through.
+/// Runs off an inbound network command (or a local pull) with no user-facing
+/// error path of its own, so every failure is caught and turned into null:
+/// the caller falls back to the detail screen.
 ///
-/// This is the target side of the feature's primary use case: a controller
-/// on another device said "play this", and this device has to turn that
-/// reference into an actual stream against the server it is already paired
-/// to. Resolving means fetching the right target — the episode's own,
-/// never the show's, when [LoadContentIntent.episodeId] is set — then
-/// running the same [pickBestFile] every local Play button uses, so a
-/// remote play and a local tap never disagree about which version plays.
-/// `title`/`showId`/`seasonNumber` ride along in the returned route's query
-/// string exactly as `playerRouteForContinueWatching`
-/// (`home_screen.dart:42-68`) already carries them for a local tap, so a
-/// remotely-started episode keeps its next/previous-episode capability
-/// instead of losing it.
-///
-/// Runs off an inbound network command (or a local pull — see
-/// `CastMiniController._pullToLocal`) with no user-facing error path of its
-/// own, so every failure here — a fetch that throws, [pickBestFile]'s own
-/// device/network probe throwing — is caught and turned into null rather
-/// than left to propagate. The caller's job is only to fall back to the
-/// detail screen when this returns null.
+/// `showId` and `seasonNumber` ride along for an episode exactly as a local
+/// episode tap carries them, so a remotely started episode keeps its
+/// next/previous-episode capability.
 Future<String?> resolveLoadContentRoute(
-  LoadContentIntent intent,
-  double screenWidth, {
-  required LoadContentTargetFetcher fetchMovieTarget,
-  required LoadContentTargetFetcher fetchEpisodeTarget,
+  LoadContentIntent intent, {
+  required Future<ItemDetail> Function(ItemRef) fetch,
 }) async {
-  final episodeId = intent.episodeId;
+  final ref = loadContentItemRef(intent);
+  if (ref == null) return null;
 
   try {
-    final target = episodeId != null
-        ? await fetchEpisodeTarget(episodeId)
-        : await fetchMovieTarget(intent.mediaItemId);
+    final detail = await fetch(ref);
+    final fileId =
+        detail.summary.defaultVersionId ?? detail.versions.firstOrNull?.id;
+    if (fileId == null) return null;
 
-    final file = await pickBestFile(target.files, screenWidth);
-    if (file == null) return null;
+    final isEpisode = ref.kind == ItemKind.episode;
+    final showId = isEpisode ? detail.show?.externalId : null;
+    final seasonNumber = isEpisode ? detail.summary.parentIndex : null;
 
-    final type = episodeId != null ? 'episode' : 'movie';
-    final id = episodeId ?? intent.mediaItemId;
-
-    final query = <String, String>{
-      'fileId': file.id,
-      'title': target.title,
-      'resume': intent.startAt.inSeconds.toString(),
-      if (target.showId != null) 'showId': target.showId!,
-      if (target.seasonNumber != null)
-        'seasonNumber': target.seasonNumber.toString(),
-      if (intent.audioTrack != null) 'audioTrack': intent.audioTrack!,
-      if (intent.subtitleTrack != null) 'subtitleTrack': intent.subtitleTrack!,
-      // Absent means the player's own default (true, i.e. play).
-      if (!intent.autoplay) 'autoplay': 'false',
-    };
-
-    return Uri(path: '/player/$type/$id', queryParameters: query).toString();
+    return sourcePlayerLocation(
+      ref,
+      fileId: fileId,
+      title: detail.summary.title,
+      extra: {
+        'resume': intent.startAt.inSeconds.toString(),
+        if (showId != null) 'showId': showId,
+        if (seasonNumber != null) 'seasonNumber': '$seasonNumber',
+        if (intent.audioTrack != null) 'audioTrack': intent.audioTrack!,
+        if (intent.subtitleTrack != null)
+          'subtitleTrack': intent.subtitleTrack!,
+        // Absent means the player's own default (true, i.e. play).
+        if (!intent.autoplay) 'autoplay': 'false',
+      },
+    );
   } catch (error, stackTrace) {
     debugPrint('[LoadContentNavigation] Resolution failed: $error');
     debugPrintStack(stackTrace: stackTrace);
@@ -137,37 +101,64 @@ Future<String?> resolveLoadContentRoute(
   }
 }
 
-/// The detail-screen fallback for [intent] — the same "no file chosen yet"
-/// destination every other entry point in this app takes (see
-/// `home_screen.dart`'s `_handlePlay`) when nothing resolves to a playable
-/// file.
+/// The detail-screen fallback for [intent], on the instance that sent it.
+/// Only meaningful for an intent with a sending instance.
 String loadContentDetailFallback(LoadContentIntent intent) =>
-    intent.episodeId != null
-        ? '/episode/${intent.episodeId}'
-        : '/movie/${intent.mediaItemId}';
+    detailLocation(SourceTarget(loadContentItemRef(intent)!));
 
 /// Resolves [intent] and hands [push] the destination: the resolved player
-/// route, or [loadContentDetailFallback] when nothing resolves. [push] is
-/// the one side effect in this function, kept as an injected callback so a
-/// test can assert what gets pushed — including the fallback case, which
-/// [resolveLoadContentRoute] alone cannot exercise, since returning `null`
-/// from that function is the input to this decision, not the decision
-/// itself — without mounting a router at all. Real callers wire [push] to
-/// `GoRouter.push` (`app.dart`'s `_pushLoadContent`,
-/// `CastMiniController._pullToLocal`).
+/// route, or [loadContentDetailFallback] when nothing resolves. An intent
+/// with no sending instance pushes nothing. [push] is injected so a test can
+/// assert what gets pushed without mounting a router.
 Future<void> pushLoadContentDestination(
-  LoadContentIntent intent,
-  double screenWidth, {
-  required LoadContentTargetFetcher fetchMovieTarget,
-  required LoadContentTargetFetcher fetchEpisodeTarget,
+  LoadContentIntent intent, {
+  required Future<ItemDetail> Function(ItemRef) fetch,
   required void Function(String path) push,
 }) async {
-  final path = await resolveLoadContentRoute(
-    intent,
-    screenWidth,
-    fetchMovieTarget: fetchMovieTarget,
-    fetchEpisodeTarget: fetchEpisodeTarget,
-  );
+  if (intent.via == null) return;
 
+  final path = await resolveLoadContentRoute(intent, fetch: fetch);
   push(path ?? loadContentDetailFallback(intent));
+}
+
+/// Carries out an [intent] that arrived from [peerNodeId].
+///
+/// A `LoadContent` names an item by an id only its sending instance can
+/// resolve. When the sender names its server ([LoadContentIntent
+/// .serverInstanceId]) and a local instance with that id lists the peer, the
+/// command is stamped with it. Otherwise (no name, or a name no listing
+/// instance matches) it is stamped with the first instance that lists the
+/// peer, and dropped when none does. Everything else goes through untouched.
+Future<void> routeRemoteIntent(
+  RemoteControlIntent intent,
+  String peerNodeId, {
+  required Future<List<SourceId>> Function(String nodeId) instancesOf,
+  required void Function(RemoteControlIntent) submit,
+}) async {
+  if (intent is! LoadContentIntent) {
+    submit(intent);
+    return;
+  }
+
+  final candidates = await instancesOf(peerNodeId);
+  final wanted = intent.serverInstanceId;
+  final named = wanted == null
+      ? null
+      : candidates
+          .where((id) => mydiaInstanceIdOfSource(id) == wanted)
+          .firstOrNull;
+  // The id can take a different form on each device (a real instance id on
+  // one, `n<nodeId>` or a URL hash on another), so a name nobody matches
+  // falls back to the first instance that lists the sender.
+  final via = named ?? candidates.firstOrNull;
+  if (via == null) {
+    debugPrint('[LoadContentNavigation] No instance lists $peerNodeId, '
+        'dropping LoadContent');
+    return;
+  }
+  if (wanted != null && named == null) {
+    debugPrint('[LoadContentNavigation] No local instance matches the named '
+        'server $wanted, using $via');
+  }
+  submit(intent.withVia(via));
 }

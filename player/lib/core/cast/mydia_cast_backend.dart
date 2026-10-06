@@ -4,8 +4,18 @@ import '../../domain/models/cast_device.dart';
 import '../../native/lib.dart';
 import '../remote/remote_control_protocol.dart';
 import '../remote/remote_roster.dart';
+import '../sources/source.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
+
+/// The Mydia instances that list [device], in roster order, from the
+/// `metadata['sources']` discovery recorded. Empty for a device that is not a
+/// Mydia target or that no instance listed.
+List<SourceId> sourceIdsOfCastDevice(CastDevice device) {
+  final joined = device.metadata['sources'];
+  if (joined == null || joined.isEmpty) return const [];
+  return [for (final id in joined.split(',')) SourceId(id)];
+}
 
 /// The controller-facing name this app hands a Mydia target on `Hello`.
 const _controllerName = 'Mydia Player';
@@ -139,9 +149,18 @@ class P2pControlTransport implements MydiaControlTransport {
 /// receiver is a peer that can describe itself.
 class MydiaCastBackend
     implements CastBackend, MydiaSnapshotSource, MydiaSyncSource {
-  final RemoteRoster roster;
+  final DeviceRoster roster;
   final MydiaControlTransport transport;
   final String selfNodeId;
+
+  /// The Mydia instances that list a node, recorded in each discovered
+  /// device's `metadata['sources']` (see [sourceIdsOfCastDevice]).
+  final Future<List<SourceId>> Function(String nodeId)? instancesOf;
+
+  /// The Mydia instance the items this backend loads belong to, sent with
+  /// every `LoadContent` so a target signed into several servers resolves the
+  /// item on the right one. Null when unknown; the target then guesses.
+  final String? serverInstanceId;
 
   /// Budget covering dial, `Hello` and `GetState` together for one
   /// discovery candidate. Three seconds is generous for a p2p round trip
@@ -155,6 +174,8 @@ class MydiaCastBackend
     required this.roster,
     required this.transport,
     required this.selfNodeId,
+    this.instancesOf,
+    this.serverInstanceId,
     this.probeBudget = const Duration(seconds: 3),
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
@@ -272,6 +293,14 @@ class MydiaCastBackend
     if (hello.protocolVersion != remoteControlProtocolVersion) return null;
 
     var metadata = {'nodeId': entry.nodeId};
+
+    final sources = await instancesOf?.call(entry.nodeId);
+    if (sources != null && sources.isNotEmpty) {
+      metadata = {
+        ...metadata,
+        'sources': sources.map((s) => s.value).join(',')
+      };
+    }
 
     try {
       final state = await transport.send(
@@ -446,6 +475,7 @@ class MydiaCastBackend
         audioTrack: ref.audioTrack,
         subtitleTrack: ref.subtitleTrack,
         autoplay: true,
+        serverInstanceId: serverInstanceId,
       ),
     ));
   }

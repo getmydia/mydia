@@ -63,6 +63,7 @@ RemoteRoster rosterAllowing(List<String> nodeIds) => RemoteRoster(
 void main() {
   group('RemoteControlReceiver', () {
     late List<RemoteControlIntent> intents;
+    late List<String> peers;
     late List<FlutterRemoteControlResponse> responses;
 
     RemoteControlReceiver build({
@@ -70,12 +71,16 @@ void main() {
       FlutterPlaybackSnapshot? snapshot,
     }) {
       intents = [];
+      peers = [];
       responses = [];
       return RemoteControlReceiver(
         roster: rosterAllowing(allowed),
         targetName: 'Living Room',
         snapshotSource: () => snapshot,
-        onIntent: intents.add,
+        onIntent: (intent, peer) {
+          intents.add(intent);
+          peers.add(peer);
+        },
         respond: (_, response) async => responses.add(response),
       );
     }
@@ -208,6 +213,8 @@ void main() {
 
       expect(responses.single, isA<FlutterRemoteControlResponse_Accepted>());
       expect(intents.single, isA<LoadContentIntent>());
+      expect(peers.single, 'node-controller',
+          reason: 'the listener needs the sender to find its instance');
     });
   });
 }

@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/format/relative_time.dart';
-import '../../../core/layout/window_chrome_inset.dart';
+import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../../widgets/toast/toaster.dart';
-import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../domain/models/remote_device.dart';
 import 'devices_controller.dart';
 
-class DevicesScreen extends ConsumerWidget {
-  const DevicesScreen({super.key});
+/// One Mydia instance's devices, embedded in its settings screen.
+class DevicesSection extends ConsumerWidget {
+  const DevicesSection({super.key, required this.sourceId});
+
+  final SourceId sourceId;
 
   Future<void> _handleRevoke(
     BuildContext context,
@@ -49,7 +51,7 @@ class DevicesScreen extends ConsumerWidget {
     if (confirmed == true && context.mounted) {
       try {
         final success = await ref
-            .read(devicesControllerProvider.notifier)
+            .read(devicesControllerProvider(sourceId).notifier)
             .revokeDevice(device.id);
 
         if (context.mounted) {
@@ -69,72 +71,52 @@ class DevicesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final devicesAsync = ref.watch(devicesControllerProvider);
+    final devicesAsync = ref.watch(devicesControllerProvider(sourceId));
 
-    // This is a full-window route (pushed outside the shell), so it is the
-    // sole owner of the title-bar band here and has to sit under
-    // `removeBand` itself: otherwise the ambient `MediaQuery.padding.top`
-    // still carries the band on top of the app bar's own reserved height.
-    return WindowChromeInsets.removeBand(
-      child: Builder(
-        builder: (context) => Scaffold(
-          appBar: WindowTitleBar(
-            height: WindowTitleRow.heightOf(context),
-            leading: const BackButton(),
-            title: Text(
-              'Devices',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh_rounded),
-                onPressed: () {
-                  ref.read(devicesControllerProvider.notifier).refresh();
-                },
-                tooltip: 'Refresh',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Devices',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            ],
-            // No devices to cast anything to from this screen. Kept as close
-            // to the old plain `AppBar` look as the row allows: a flat fill
-            // in the theme's app-bar colour, since that AppBar had no
-            // transparency or blur of its own.
-            showCast: false,
-            decorate: (row) => ColoredBox(
-              color: Theme.of(context).appBarTheme.backgroundColor ??
-                  AppColors.background,
-              child: row,
             ),
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async {
-              await ref.read(devicesControllerProvider.notifier).refresh();
-            },
-            child: devicesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stack) => _ErrorView(error: error.toString()),
-              data: (devices) {
-                if (devices.isEmpty) {
-                  return const _EmptyView();
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: devices.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final device = devices[index];
-                    return DeviceCard(
-                      device: device,
-                      onRevoke: () => _handleRevoke(context, ref, device),
-                    );
-                  },
-                );
-              },
+            IconButton(
+              key: const Key('devices-refresh'),
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: () => ref
+                  .read(devicesControllerProvider(sourceId).notifier)
+                  .refresh(),
+              tooltip: 'Refresh',
             ),
-          ),
+          ],
         ),
-      ),
+        devicesAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, stack) => _ErrorView(error: error.toString()),
+          data: (devices) {
+            if (devices.isEmpty) return const _EmptyView();
+            return Column(
+              children: [
+                for (final device in devices) ...[
+                  DeviceCard(
+                    key: ValueKey(device.id),
+                    device: device,
+                    onRevoke: () => _handleRevoke(context, ref, device),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

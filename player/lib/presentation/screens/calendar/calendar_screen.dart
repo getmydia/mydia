@@ -1,32 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 
-import '../../../core/graphql/watch/query_key.dart';
-import '../../../core/graphql/watch/schema_downgrade.dart';
+import '../../../core/cache/invalidation_target.dart';
+import '../../../core/cache/watcher_registry.dart';
+import '../../../core/sources/cache/source_keys.dart';
+import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/models/calendar_entry.dart';
+import '../../../domain/sources/item.dart';
+import '../../../domain/sources/source_error.dart';
 import '../../widgets/browse_scaffold.dart';
+import '../sources/source_browse_providers.dart';
 import 'calendar_agenda_view.dart';
-import 'calendar_controller.dart';
 import 'calendar_today_requests.dart';
 import 'calendar_view_mode.dart';
 import 'calendar_week_view.dart';
+import 'calendar_window.dart';
 
-/// Whether [error] is this server saying it has no calendar query.
-///
-/// A player installed from an app store can be newer than the server it talks
-/// to. There is no capability probe to ask in advance: `serverCompatibility`
-/// reports version strings and no feature list, and a brand new root field has
-/// no older shape for `QueryWatcher` to fall back to. So the rejection itself
-/// is the signal.
-bool isCalendarUnsupported(Object error) {
-  if (error is! OperationException) return false;
-  return isUnknownFieldError(error);
-}
+/// Whether [error] is this server saying it has no calendar. A player
+/// installed from an app store can be newer than the server it talks to, and
+/// the source reports the rejection as an unsupported feature.
+bool isCalendarUnsupported(Object error) =>
+    error is SourceException && error.kind == SourceErrorKind.unsupported;
 
 class CalendarScreen extends ConsumerStatefulWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({super.key, required this.sourceId});
+
+  final SourceId sourceId;
 
   @override
   ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
@@ -45,7 +44,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final today = DateTime.now();
-    final data = ref.watch(calendarControllerProvider);
+    final data = ref.watch(sourceCalendarProvider(widget.sourceId));
+    final window = calendarWindow(today);
+    final key = SourceKeys.calendar(widget.sourceId, window.start, window.end);
     // Null until storage answers. The body waits for it rather than mounting
     // the default view and swapping, which would flash.
     final mode = ref.watch(calendarViewModeControllerProvider).value;
@@ -53,8 +54,8 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     return BrowseScaffold(
       icon: Icons.calendar_month_outlined,
       title: 'Calendar',
-      queryKeys: [QueryKeys.calendar],
-      onRefresh: () => ref.read(calendarControllerProvider.notifier).refresh(),
+      queryKeys: [key],
+      onRefresh: () => ref.read(invalidatorProvider).invalidate([key.target]),
       actions: [
         if (mode != null) _viewToggle(mode),
         TextButton(
@@ -89,7 +90,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   }
 
   Widget _body(
-    List<CalendarEntry> entries,
+    List<ItemSummary> entries,
     CalendarViewMode mode,
     DateTime today,
     double scrollTopPadding,
@@ -177,7 +178,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
           const SizedBox(height: 8),
           TextButton(
             onPressed: () =>
-                ref.read(calendarControllerProvider.notifier).refresh(),
+                ref.invalidate(sourceCalendarProvider(widget.sourceId)),
             child: const Text('Try again'),
           ),
         ],

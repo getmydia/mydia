@@ -19,11 +19,10 @@ refuses anything else.
 The Mydia login that predates this layer is migrated at startup into an
 ordinary account (`core/migration/`), and its stored data moves to that
 account's `SourceId`. There is no fixed source id: every Mydia server is a
-stored account with a `MydiaSource`. The legacy screens and the legacy
-GraphQL client still serve one of them, the bound instance
-(`boundMydiaProvider` in `mydia/bound_mydia.dart`): the migrated account while
-it exists, else the first Mydia added. That instance keeps the unprefixed
-routes, so its `/s/<id>` root redirects to `/`.
+stored account with a `MydiaSource`, and its screens are the same `/s/<id>/...`
+screens every other source uses. Playback still goes through one of them, the
+bound instance (`boundMydiaProvider` in `mydia/bound_mydia.dart`): the
+migrated account while it exists, else the first Mydia added.
 
 The source switcher groups servers by account, with a caption per account.
 
@@ -150,15 +149,16 @@ downgrade working.
 
 ### The bound instance
 
-Until the legacy screens and services move to sources, one instance serves
-them. `boundMydiaProvider` (`mydia/bound_mydia.dart`) is the account named by
-`legacy_instance_id` while that account exists, else the first Mydia account
-added. The legacy GraphQL client is a `TransportLink` over its `MydiaClient`,
-so those screens share its token and refresh. Cast, remote control, device
-registration and the Mydia settings serve the bound instance only; the other
-instances share the device's single p2p identity and `device_id`. Signing out
-removes the bound instance, and the first Mydia left becomes bound. The
-shell's offline state follows the route's source.
+Browsing, search, details, the Mydia settings, the device list and node
+registration read the instance that owns the item or the route (see Screens
+and Cast). Playback does not yet: the player screen, `MydiaPlaybackSession`,
+`castSessionManagerProvider`, `ProgressService`, the download job services and
+`graphqlClientProvider` ride one instance. `boundMydiaProvider`
+(`mydia/bound_mydia.dart`) is the account named by `legacy_instance_id` while
+that account exists, else the first Mydia account added. The GraphQL client is
+a `TransportLink` over its `MydiaClient`, so those services share its token and
+refresh. Signing out removes the bound instance, and the first Mydia left
+becomes bound. The shell's offline state follows the route's source.
 
 ### Web
 
@@ -227,6 +227,36 @@ Subtitles:
 Progress goes to the source's own reporter from the receiver's position. The
 persisted cast record keeps no stream URL, because it carries the credential.
 
+### Mydia players
+
+Every Mydia instance lists the player devices paired to it, and a device
+paired to several instances is one entry.
+
+- `MergedRoster` (`core/remote/merged_roster.dart`) joins the instances'
+  rosters and dedupes by p2p node id, the identity a device shares across
+  instances. An instance whose roster throws contributes nothing. A sender
+  is allowed when any instance allows it.
+- Commands answer against the instance that listed the sender.
+  `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
+  content command resolves the item on the server it names
+  (`serverInstanceId`) when a local instance with that id lists the sender,
+  else on the first instance that lists the sender, never the bound one. The
+  fallback exists because the instance id can take a different form on each
+  device (see above).
+- Registration is `NodeRegistrations` (`core/remote/node_registration_providers.dart`):
+  one `NodeRegistrationService` per Mydia account, each registering this
+  device's node id with its own server. An account's registration restarts
+  when the account changes or a re-sign-in clears `needsReauth`
+  (`clientScope` is `<accountId>:<needsReauth>`). A token refresh never
+  re-registers. `nodeRegistrationSummaryProvider` reports the worst status
+  for the one global settings row.
+- Each instance's device list and registration retry live on its own
+  settings screen, `/sources/manage/:sourceId` (`MydiaInstanceScreen`).
+  `/settings/devices` redirects there.
+
+The cast session itself (`castSessionManagerProvider`) still runs on the
+bound instance.
+
 ## HTTP and errors
 
 `SourceHttp` turns non-2xx answers into typed source errors. It has an
@@ -237,18 +267,31 @@ client needs the error body.
 
 ## Caching
 
-Every leaf provider in `source_browse_providers.dart` and
-`sourceSimilarProvider` is a `SourceWatcher` (`cache/`). It shows the last
-answer while the fetch log still has a time for its key, always fetches,
-and stores what comes back as JSON in the `source_cache` Hive box. Keys
-are ordinary `QueryKey`s named `<sourceId>/<op>` (`SourceKeys`), so the
-fetch log, `FreshnessHeader`, `WatcherRegistry` and `Invalidator` that
-Mydia's own screens use serve sources too, and the resume sweep covers
-both.
+Every source, Mydia included, reads through a `SourceWatcher` (`cache/`):
+each leaf provider in `source_browse_providers.dart` and
+`sourceSimilarProvider`. It shows the last answer while the fetch log still
+has a time for its key, always fetches, and stores what comes back as JSON
+in the `source_cache` Hive box. Keys are `QueryKey`s named
+`<sourceId>/<op>` (`SourceKeys`), where `op` is one of `SourceOps.all`
+(libraries, browse, item, children, continueWatching, hubs, similar,
+collections, collectionItems, calendar, unwatched, favorites,
+recentlyAdded). The fetch log, `FreshnessHeader`, `WatcherRegistry` and
+`Invalidator` all work on these keys. `Invalidator.invalidateAll`, the
+resume sweep, groups watchers by source (`cacheGroupOf`, the part of the
+operation name before the slash): sources refetch concurrently, so one slow
+server does not hold up another, and the watchers of one source refetch in
+turn, so a p2p relay never sees a burst.
 
-Writes invalidate through `SourceRules`, one family per operation on the
-written item's source: live watchers refetch, the rest lose their
-fetch-log entry and mount cold. With no fetch-log time but a stored entry,
+Writes invalidate only through `SourceRules`, one family per operation on
+the written item's source (`watchedChanged`, `favoriteChanged`,
+`continueWatchingRemoved` and the rest). Call sites name a rule, never a
+key. `source_rules_replay_test.dart` replays the screens' write scenarios
+against the Mydia ops, and `source_rules_test.dart` checks that
+`watchedChanged` covers every op that selects watch state. Live watchers
+refetch, the rest lose their fetch-log entry and mount cold.
+
+Media info (`sourceMediaInfoProvider`) is not cached: the panel reads it on
+demand. With no fetch-log time but a stored entry,
 a failed fetch still shows the entry with the failed-refresh banner. A
 refetch that arrives while a fetch is in flight queues exactly one
 follow-up fetch rather than joining it, so a write mid-fetch cannot leave
@@ -317,8 +360,35 @@ Every source implements `Downloadable`; see `player/docs/downloads.md`.
 
 ## Screens
 
-Plex and Jellyfin movies, shows, seasons and episodes open on the same
-detail screens as Mydia (`/s/:sourceId/movie|show|season|episode/:id`,
+Every location is under `/s/:sourceId/`, Mydia's included: home, `library/:libraryId`,
+the listings (`collections`, `calendar`, `favorites`, `unwatched`,
+`recently-added`, `continue-watching`), `filter/:filterId`,
+`collection/:collectionId`, `search`, `player/:itemId` and the detail routes
+below. Only `presentation/screens/detail/detail_links.dart` builds these
+strings (`sourceHomeLocation`, `sourceLibraryLocation`, `sourceItemLocation`,
+`sourcePlayerLocation` and the rest), so a screen never concatenates a path
+and every route names the source that owns the item. Mydia instance
+settings are the exception: `/sources/manage/:sourceId`.
+
+The pre-instance unprefixed locations (`/movie/:id`, `/show/:id`,
+`/episode/:id`, `/movies`, `/shows`, the listings, `/filter/:id`,
+`/collection/:id`, `/player/:type/:id`, `/settings/devices`) are redirects
+only, from the table in `core/router/legacy_routes.dart` (`legacyLocation`).
+The target is the migrated instance (`legacy_instance_id`) while its account
+exists, else the only Mydia instance, else `/sources/manage`. `/` and
+`/search` go to the active source's home and search.
+
+Sidebar and bottom bar entries come from `resolveSourceNav`
+(`domain/navigation/source_nav.dart`): the viewer's layout resolved against
+one source's capabilities and libraries, so an entry the source cannot serve
+is absent and libraries the layout does not name follow the Shows entry.
+Library, unwatched, favorites and collection lists are one paged list per
+`SourcePages` value (`presentation/screens/sources/source_pages.dart`:
+`LibraryPages`, `UnwatchedPages`, `FavoritePages`, `CollectionPages`), cached
+by `sourcePagesProvider`.
+
+Plex, Jellyfin and Mydia movies, shows, seasons and episodes open on the same
+detail screens (`/s/:sourceId/movie|show|season|episode/:id`,
 `source_detail_routes.dart`), fed by `detail_providers.dart`.
 `SourceItemScreen` serves Stash videos and folders; the generic item route
 redirects the other kinds to their detail route. Actions only Mydia has
@@ -382,8 +452,8 @@ including on a cold start before the saved servers load, as `/s/<id>` does.
 
 Each server's "Include in All servers" switch (Manage servers) is stored by
 `SourceId` beside the accounts; Stash defaults to off. Every Mydia joins
-through `mediaSourceProvider` like any other server, and the bound
-instance's items open Mydia's own detail screens.
+through `mediaSourceProvider` like any other server, and every item opens
+`/s/<sourceId>/...` for its own source, whatever the kind.
 
 ## Tests
 

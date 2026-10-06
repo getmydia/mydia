@@ -83,7 +83,6 @@ import 'package:player/core/auth/auth_storage.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/channels/pairing_service.dart';
 import 'package:player/core/p2p/p2p_service.dart';
-import 'package:player/core/remote/node_registration.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_control_receiver.dart';
 import 'package:player/core/remote/remote_roster.dart';
@@ -93,6 +92,7 @@ import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_gql_transport.dart';
 import 'package:player/core/sources/source_http.dart';
 import 'package:player/domain/models/cast_device.dart';
+import 'package:player/graphql/mutations/register_device_node.graphql.dart';
 import 'package:player/native/lib.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
@@ -419,18 +419,19 @@ void main() {
       onUnauthorized: () {},
     );
 
-    final bRegistered = await NodeRegistration(
-      client: bClient,
-      nodeId: () async => bP2p.nodeId,
-    ).register();
-    expect(bRegistered, isTrue, reason: 'Player B node registration failed');
+    final bRegistration = await bClient.request(
+      documentNodeMutationRegisterDeviceNode,
+      Variables$Mutation$RegisterDeviceNode(nodeId: bNodeId!).toJson(),
+    );
+    expect((bRegistration['registerDeviceNode'] as Map?)?['nodeId'], bNodeId,
+        reason: 'Player B node registration failed');
 
     final targetController = RemoteTargetController();
     final receiver = RemoteControlReceiver(
       roster: RemoteRoster(client: bClient),
       targetName: 'Player B (E2E target)',
       snapshotSource: targetController.snapshot,
-      onIntent: targetController.submit,
+      onIntent: (intent, _) => targetController.submit(intent),
       respond: bP2p.respondToControl,
     );
     final controlSub = bP2p.onControlRequest
@@ -529,7 +530,7 @@ void main() {
 
     // --- Step 3: open the picker on A, assert B appears with what it's
     // playing ---
-    await _openPickerAndWaitForDevice(tester, bNodeId!);
+    await _openPickerAndWaitForDevice(tester, bNodeId);
 
     final deviceTile =
         tester.widget<ListTile>(find.byKey(Key('cast-device-$bNodeId')));

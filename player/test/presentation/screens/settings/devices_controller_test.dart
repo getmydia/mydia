@@ -1,125 +1,125 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
-import 'package:player/domain/sources/source_error.dart';
+import 'package:player/core/remote/remote_roster.dart' show DeviceRoster;
+import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/models/remote_device.dart';
 import 'package:player/presentation/screens/settings/devices_controller.dart';
 
-import '../../../core/sources/mydia/fake_mydia_client.dart';
-import '../../../core/sources/mydia/fake_mydia_transport.dart';
+import '../sources/fake_media_source.dart';
 
-Map<String, dynamic> _device(String id, String name,
-        {bool isRevoked = false}) =>
-    {
-      '__typename': 'RemoteDevice',
-      'id': id,
-      'deviceName': name,
-      'platform': 'linux',
-      'lastSeenAt': '2026-08-20T12:00:00Z',
-      'isRevoked': isRevoked,
-      'createdAt': '2026-08-01T12:00:00Z',
-    };
+RemoteDevice _device(String id, String name, {bool isRevoked = false}) =>
+    RemoteDevice(
+      id: id,
+      deviceName: name,
+      platform: 'linux',
+      lastSeenAt: DateTime.utc(2026, 8, 20),
+      isRevoked: isRevoked,
+      createdAt: DateTime.utc(2026, 8, 1),
+    );
 
-Map<String, dynamic> _list(List<Map<String, dynamic>> devices) =>
-    {'__typename': 'RootQueryType', 'devices': devices};
+/// One instance's device list, recording what is revoked on it.
+class _Targets extends FakeMediaSource implements RemoteTargets {
+  _Targets(SourceId id, this.name, {this.result = true}) : super(id: id);
 
-Map<String, dynamic> _revoked({required bool success}) => {
-      '__typename': 'RootMutationType',
-      'revokeDevice': {
-        '__typename': 'RevokeDeviceResult',
-        'success': success,
-        'device': _device('d1', 'Hall Screen', isRevoked: success),
-      },
-    };
+  final String name;
+  final bool result;
+  final revoked = <String>[];
+  var listCalls = 0;
 
-void main() {
-  late FakeMydiaTransport server;
-  late ProviderContainer container;
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.remoteTargets};
 
-  ProviderContainer containerFor(FakeMydiaTransport transport) {
-    final c = ProviderContainer(retry: (_, __) => null, overrides: [
-      boundMydiaClientProvider.overrideWithValue(fakeMydiaClient(transport)),
-    ]);
-    addTearDown(c.dispose);
-    return c;
+  @override
+  Future<List<RemoteDevice>> devices() async {
+    listCalls += 1;
+    return [_device('d1', name, isRevoked: revoked.contains('d1'))];
   }
 
+  @override
+  Future<bool> revokeDevice(String deviceId) async {
+    if (result) revoked.add(deviceId);
+    return result;
+  }
+
+  @override
+  DeviceRoster get roster => throw UnimplementedError();
+
+  @override
+  Future<bool> registerNode(String nodeId) async => true;
+}
+
+void main() {
+  const idA = SourceId('a:owner:inst');
+  const idB = SourceId('b:owner:inst');
+  late _Targets a;
+  late _Targets b;
+  late ProviderContainer container;
+
   setUp(() {
-    server = FakeMydiaTransport();
-    container = containerFor(server);
-  });
-
-  test('lists the devices the server reports', () async {
-    server.handlers['DevicesList'] = (_) => _list([
-          _device('d1', 'Hall Screen'),
-          _device('d2', 'Attic Tablet'),
-        ]);
-
-    final devices = await container.read(devicesControllerProvider.future);
-
-    expect(devices.map((d) => d.id), ['d1', 'd2']);
-    expect(devices.first.deviceName, 'Hall Screen');
-  });
-
-  test('fails with the server\'s words when the list is refused', () async {
-    server.handlers['DevicesList'] =
-        (_) => throw const SourceException.server('boom');
-
-    await expectLater(
-      container.read(devicesControllerProvider.future),
-      throwsA(isA<SourceException>()),
-    );
-  });
-
-  test('fails when no server is bound', () async {
-    final unbound = ProviderContainer(retry: (_, __) => null, overrides: [
-      boundMydiaClientProvider.overrideWithValue(null),
+    a = _Targets(idA, 'Hall Screen');
+    b = _Targets(idB, 'Attic Tablet');
+    container = ProviderContainer(retry: (_, __) => null, overrides: [
+      mediaSourceProvider.overrideWith((ref, id) => switch (id) {
+            idA => a,
+            idB => b,
+            _ => null,
+          }),
     ]);
-    addTearDown(unbound.dispose);
+    addTearDown(container.dispose);
+  });
 
+  test('lists the devices of the instance it is asked about', () async {
+    final devices = await container.read(devicesControllerProvider(idA).future);
+
+    expect(devices.single.deviceName, 'Hall Screen');
+    expect(
+        (await container.read(devicesControllerProvider(idB).future))
+            .single
+            .deviceName,
+        'Attic Tablet');
+  });
+
+  test('fails when the instance has no source', () async {
     await expectLater(
-      unbound.read(devicesControllerProvider.future),
+      container.read(devicesControllerProvider(const SourceId('x')).future),
       throwsA(isA<Exception>()),
     );
   });
 
-  test('revoking sends the id, then reloads the list', () async {
-    var revoked = false;
-    server.handlers['DevicesList'] = (_) => _list([
-          _device('d1', 'Hall Screen', isRevoked: revoked),
-        ]);
-    server.handlers['RevokeDevice'] = (_) {
-      revoked = true;
-      return _revoked(success: true);
-    };
-    await container.read(devicesControllerProvider.future);
-
-    final ok =
-        await container.read(devicesControllerProvider.notifier).revokeDevice(
-              'd1',
-            );
-
-    expect(ok, isTrue);
-    final revoke =
-        server.calls.singleWhere((c) => c.operation == 'RevokeDevice');
-    expect(revoke.vars, {'id': 'd1'});
-    expect(
-        server.calls.where((c) => c.operation == 'DevicesList'), hasLength(2),
-        reason: 'a successful revoke refreshes the list');
-    expect(container.read(devicesControllerProvider).value!.single.isRevoked,
-        isTrue);
-  });
-
-  test('a refused revoke reports false and leaves the list alone', () async {
-    server.handlers['DevicesList'] = (_) => _list([_device('d1', 'Hall')]);
-    server.handlers['RevokeDevice'] = (_) => _revoked(success: false);
-    await container.read(devicesControllerProvider.future);
+  test('revoking on A calls only A and leaves B\'s list alone', () async {
+    await container.read(devicesControllerProvider(idA).future);
+    await container.read(devicesControllerProvider(idB).future);
 
     final ok = await container
-        .read(devicesControllerProvider.notifier)
+        .read(devicesControllerProvider(idA).notifier)
+        .revokeDevice('d1');
+
+    expect(ok, isTrue);
+    expect(a.revoked, ['d1']);
+    expect(b.revoked, isEmpty);
+    expect(a.listCalls, 2, reason: 'a successful revoke refreshes A');
+    expect(b.listCalls, 1);
+    expect(
+        container.read(devicesControllerProvider(idA)).value!.single.isRevoked,
+        isTrue);
+    expect(
+        container.read(devicesControllerProvider(idB)).value!.single.isRevoked,
+        isFalse);
+  });
+
+  test('a refused revoke reports false and does not reload', () async {
+    a = _Targets(idA, 'Hall Screen', result: false);
+    await container.read(devicesControllerProvider(idA).future);
+
+    final ok = await container
+        .read(devicesControllerProvider(idA).notifier)
         .revokeDevice('d1');
 
     expect(ok, isFalse);
-    expect(
-        server.calls.where((c) => c.operation == 'DevicesList'), hasLength(1));
+    expect(a.listCalls, 1);
   });
 }

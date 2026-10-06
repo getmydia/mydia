@@ -21,7 +21,6 @@ import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/movie_watched_controls.dart';
 import '../../widgets/hero_play_control.dart';
 import '../../widgets/toast/toaster.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 
 /// Below this width the hero's action column and tag column stack instead
 /// of sitting side by side. Matches the wide-layout mockup's tablet/desktop
@@ -29,9 +28,6 @@ import '../../../core/sources/mydia/bound_mydia.dart';
 const double _kHeroBreakpoint = 700;
 
 class MovieDetailScreen extends ConsumerWidget {
-  MovieDetailScreen({super.key, required String id})
-      : target = MydiaTarget(DetailKind.movie, id);
-
   const MovieDetailScreen.target({super.key, required this.target});
 
   final DetailTarget target;
@@ -89,16 +85,16 @@ class MovieDetailScreen extends ConsumerWidget {
   /// Exposes [_buildLoadingState] for
   /// `detail_screen_inset_test.dart`: that test proves the back button
   /// clears the window chrome in this transient state too, not only in the
-  /// loaded hero, without needing `movieDetailControllerProvider`'s GraphQL
-  /// stream to reach the loading branch.
+  /// loaded hero, without needing the source's item stream to reach the
+  /// loading branch.
   @visibleForTesting
   Widget loadingStateForTest(BuildContext context) =>
       _buildLoadingState(context);
 
   /// Exposes [_buildErrorState] for the same reason as
   /// [loadingStateForTest]. Needs a real [WidgetRef] because the "Try Again"
-  /// button reads `movieDetailControllerProvider(id).notifier` from it, even
-  /// though nothing is watched during build.
+  /// button reads `movieActionsProvider(target)` from it, even though nothing
+  /// is watched during build.
   @visibleForTesting
   Widget errorStateForTest(BuildContext context, WidgetRef ref, Object error) =>
       _buildErrorState(context, ref, error);
@@ -287,8 +283,7 @@ class MovieDetailScreen extends ConsumerWidget {
     MovieView movie, {
     required bool compact,
   }) {
-    final mydia = movie.mydia;
-    final item = itemRefOf(movie.target, ref.watch(boundSourceIdProvider));
+    final item = movie.target.ref;
     final canDownload = isDownloadSupported &&
         movie.features.contains(DetailFeature.download) &&
         movie.files.isNotEmpty;
@@ -309,15 +304,10 @@ class MovieDetailScreen extends ConsumerWidget {
       showDownload: canDownload,
       isDownloaded: canDownload &&
           (ref.watch(isItemDownloadedProvider(item)).value ?? false),
-      onShowMediaInfo: mydia == null ||
-              !movie.features.contains(DetailFeature.mediaInfo) ||
+      onShowMediaInfo: !movie.features.contains(DetailFeature.mediaInfo) ||
               movie.files.isEmpty
           ? null
-          : () => showMediaInfo(
-                context: context,
-                id: mydia.id,
-                target: MediaInfoTarget.movie,
-              ),
+          : () => showMediaInfo(context: context, item: item),
     );
   }
 

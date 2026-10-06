@@ -7,8 +7,8 @@ import 'download.dart';
 /// What the Downloads screen shows for an item, captured when the download
 /// starts so it is there offline.
 ///
-/// The art fields hold a URL for home Mydia and an `ArtworkRef.path` for
-/// every other source; the pipeline turns them into local files at the end.
+/// The art fields hold a URL for art that is one (`UrlArt`) and an
+/// `ArtworkRef.path` otherwise; the pipeline turns them into local files at the end.
 class DownloadMetadata {
   const DownloadMetadata({
     required this.title,
@@ -47,6 +47,35 @@ class DownloadMetadata {
   final String? showTitle;
   final String? showPosterUrl;
   final String? airDate;
+
+  /// This metadata with the series it belongs to filled in where it has none.
+  /// A title that did not name the series now leads with it.
+  DownloadMetadata withShow({
+    String? showId,
+    String? showTitle,
+    String? showPosterUrl,
+  }) =>
+      DownloadMetadata(
+        title: this.showTitle == null && showTitle != null
+            ? '$showTitle - $title'
+            : title,
+        mediaType: mediaType,
+        posterUrl: posterUrl,
+        backdropUrl: backdropUrl,
+        thumbnailUrl: thumbnailUrl,
+        overview: overview,
+        runtime: runtime,
+        genres: genres,
+        rating: rating,
+        year: year,
+        contentRating: contentRating,
+        seasonNumber: seasonNumber,
+        episodeNumber: episodeNumber,
+        showId: this.showId ?? showId,
+        showTitle: this.showTitle ?? showTitle,
+        showPosterUrl: this.showPosterUrl ?? showPosterUrl,
+        airDate: airDate,
+      );
 }
 
 class DownloadRequest {

@@ -16,6 +16,8 @@ Set<DetailFeature> sourceFeatures(MediaSource source) => {
         DetailFeature.watched,
       if (source.capabilities.contains(SourceCapability.favorites))
         DetailFeature.favorite,
+      if (source.capabilities.contains(SourceCapability.mediaInfo))
+        DetailFeature.mediaInfo,
       if (source.capabilities.contains(SourceCapability.downloadable)) ...[
         DetailFeature.download,
         DetailFeature.seasonDownload,

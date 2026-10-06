@@ -5,10 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/theme/colors.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_device_picker.dart';
 import 'package:player/presentation/widgets/osd_dialog.dart';
+
+import '../screens/sources/fake_media_source.dart' show fakeSource;
 
 const _chromecast = CastDevice(
   id: 'cc-1',
@@ -95,6 +98,51 @@ void main() {
     expect(find.byKey(const Key('cast-group-dlna')), findsOneWidget);
     expect(find.byKey(const Key('cast-device-c1')), findsOneWidget);
     expect(find.byKey(const Key('cast-device-d1')), findsOneWidget);
+  });
+
+  testWidgets('names the Mydia servers that know a target', (tester) async {
+    await pumpPicker(
+      tester,
+      overrides: [
+        sourcesProvider.overrideWithValue(const [fakeSource]),
+      ],
+      devices: AsyncValue.data([
+        CastDevice(
+          id: 'node-a',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {
+            'nodeId': 'node-a',
+            'sources': '${fakeSource.id.value},gone',
+          },
+        ),
+      ]),
+    );
+
+    expect(find.text('Nothing playing'), findsOneWidget);
+    expect(find.text(fakeSource.displayName), findsOneWidget,
+        reason: 'a source that no longer exists is skipped');
+  });
+
+  testWidgets('says nothing about servers when only one knows the target',
+      (tester) async {
+    await pumpPicker(
+      tester,
+      overrides: [
+        sourcesProvider.overrideWithValue(const [fakeSource]),
+      ],
+      devices: AsyncValue.data([
+        CastDevice(
+          id: 'node-a',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-a', 'sources': fakeSource.id.value},
+        ),
+      ]),
+    );
+
+    expect(find.text('Nothing playing'), findsOneWidget);
+    expect(find.text(fakeSource.displayName), findsNothing);
   });
 
   testWidgets('shows a Mydia group with what the target is playing',

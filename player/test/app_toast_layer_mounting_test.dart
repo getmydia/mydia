@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'test_utils/bound_mydia_override.dart';
+import 'test_utils/mydia_test_source.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/app.dart';
 import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
@@ -46,6 +48,9 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       ...boundMydiaOverrides(),
+      // The router sends `/` to the active source, and to /sources/add when
+      // there is none, so the shell only mounts with a source stored.
+      thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),

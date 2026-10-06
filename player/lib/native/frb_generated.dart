@@ -1038,8 +1038,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return FlutterLoadContentRequest(
       mediaItemId: dco_decode_String(arr[0]),
       episodeId: dco_decode_opt_String(arr[1]),
@@ -1047,6 +1047,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       audioTrack: dco_decode_opt_String(arr[3]),
       subtitleTrack: dco_decode_opt_String(arr[4]),
       autoplay: dco_decode_bool(arr[5]),
+      serverInstanceId: dco_decode_opt_String(arr[6]),
     );
   }
 
@@ -1636,13 +1637,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_audioTrack = sse_decode_opt_String(deserializer);
     var var_subtitleTrack = sse_decode_opt_String(deserializer);
     var var_autoplay = sse_decode_bool(deserializer);
+    var var_serverInstanceId = sse_decode_opt_String(deserializer);
     return FlutterLoadContentRequest(
         mediaItemId: var_mediaItemId,
         episodeId: var_episodeId,
         positionMs: var_positionMs,
         audioTrack: var_audioTrack,
         subtitleTrack: var_subtitleTrack,
-        autoplay: var_autoplay);
+        autoplay: var_autoplay,
+        serverInstanceId: var_serverInstanceId);
   }
 
   @protected
@@ -2262,6 +2265,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.audioTrack, serializer);
     sse_encode_opt_String(self.subtitleTrack, serializer);
     sse_encode_bool(self.autoplay, serializer);
+    sse_encode_opt_String(self.serverInstanceId, serializer);
   }
 
   @protected

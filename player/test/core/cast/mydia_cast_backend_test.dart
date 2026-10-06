@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/mydia_cast_backend.dart';
+import 'package:player/core/remote/merged_roster.dart';
 import 'package:player/core/remote/remote_control_protocol.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
@@ -195,6 +197,33 @@ void main() {
           reason: 'the name comes from the target itself, not the roster row');
       expect(devices.single.metadata['nowPlayingTitle'], 'Dune',
           reason: 'the discovery GetState follow-up succeeded while playing');
+    });
+
+    test('lists the instances that know a device in metadata sources',
+        () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [_welcome, const FlutterRemoteControlResponse_NotPlaying()],
+      });
+      final merged = MergedRoster({
+        const SourceId('mydia-a'): rosterOf([('d1', 'node-tv')]),
+        const SourceId('mydia-b'): rosterOf([('d7', 'NODE-TV')]),
+      });
+
+      final backend = MydiaCastBackend(
+        roster: merged,
+        instancesOf: merged.instancesOf,
+        transport: transport,
+        selfNodeId: 'node-self',
+      );
+
+      final devices = await backend
+          .startDiscovery(capabilities: const CastCapabilities.full())
+          .first;
+
+      expect(devices, hasLength(1));
+      expect(devices.single.metadata['sources'], 'mydia-a,mydia-b');
+      expect(sourceIdsOfCastDevice(devices.single),
+          [const SourceId('mydia-a'), const SourceId('mydia-b')]);
     });
 
     test(
@@ -552,6 +581,44 @@ void main() {
       expect(payload.subtitleTrack, 'sub-fre');
       expect(payload.positionMs, BigInt.from(30000));
       expect(payload.autoplay, isTrue);
+      expect(payload.serverInstanceId, isNull);
+    });
+
+    test('LoadContent names the Mydia server the backend plays from', () async {
+      final transport = FakeTransport(scripted: {
+        'node-tv': [_welcome]
+      });
+      final backend = MydiaCastBackend(
+        roster: rosterOf([('d1', 'node-tv')]),
+        transport: transport,
+        selfNodeId: 'node-self',
+        serverInstanceId: 'inst-b',
+      );
+
+      await backend.connect(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv'},
+      ));
+
+      await backend.loadMedia(const CastMediaRequest(
+        url: '',
+        kind: CastMediaKind.hls,
+        title: 'Copper Weather',
+        contentRef: MydiaContentRef(
+          mediaItemId: 'item-1',
+          episodeId: null,
+          audioTrack: null,
+          subtitleTrack: null,
+        ),
+      ));
+
+      final load = transport.requests
+          .whereType<FlutterRemoteControlRequest_LoadContent>()
+          .single
+          .field0;
+      expect(load.serverInstanceId, 'inst-b');
     });
 
     test(

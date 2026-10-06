@@ -15,6 +15,7 @@ import '../../../../domain/models/subtitle_track.dart';
 import '../../../../domain/sources/item.dart';
 import '../../../../domain/sources/library.dart' show Cursor;
 import '../../../../domain/sources/source_error.dart';
+import '../../detail/detail_links.dart';
 import 'playback_session.dart';
 import 'playback_session_types.dart';
 
@@ -307,16 +308,16 @@ abstract class SourcePlaybackSession implements PlaybackSession {
     required int seasonNumber,
     required String? showId,
   }) =>
-      Uri(
-        path: '/s/${source.id.value}/player/$episodeId',
-        queryParameters: {
-          'kind': 'episode',
-          'fileId': fileId,
-          'title': title,
+      sourcePlayerLocation(
+        ItemRef(
+            sourceId: source.id, kind: ItemKind.episode, externalId: episodeId),
+        fileId: fileId,
+        title: title,
+        extra: {
           if (showId != null) 'showId': showId,
           'seasonNumber': '$seasonNumber',
         },
-      ).toString();
+      );
 
   @override
   Future<void> writeSubtitlePreference({

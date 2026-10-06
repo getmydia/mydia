@@ -8,7 +8,23 @@
 /// same reason: a week is seven of those days, starting on a Monday.
 library;
 
-import '../../../domain/models/calendar_entry.dart';
+import '../../../domain/sources/item.dart';
+
+export '../../../core/util/iso_date.dart';
+
+/// What the calendar reads off a listing entry.
+extension CalendarItem on ItemSummary {
+  /// The day it airs, with no time component, for grouping. Null for an
+  /// entry the server gave no date, which has no place on a calendar.
+  DateTime? get day {
+    final date = airDate == null ? null : DateTime.tryParse(airDate!);
+    return date == null ? null : DateTime(date.year, date.month, date.day);
+  }
+
+  /// Playability is having a version to play and nothing else. The server
+  /// sends no separate flag, so the two cannot drift apart.
+  bool get isPlayable => defaultVersionId != null;
+}
 
 /// Short weekday names, indexed by `DateTime.weekday - 1` (Monday first).
 ///
@@ -41,12 +57,6 @@ const List<String> _monthNames = [
   'December',
 ];
 
-/// Zero-padded `yyyy-MM-dd`, the format the calendar's GraphQL query takes
-/// for its `start`/`end` date arguments.
-String isoDate(DateTime date) => '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
-
 /// [date] with its time-of-day dropped, at local midnight.
 DateTime truncateToDay(DateTime date) =>
     DateTime(date.year, date.month, date.day);
@@ -65,13 +75,14 @@ String weekdayAbbreviation(DateTime day) =>
 /// so this preserves order rather than re-sorting. Days with no entries never
 /// appear, which is the whole reason an agenda beats a grid on a small
 /// library.
-List<MapEntry<DateTime, List<CalendarEntry>>> groupByDay(
-  List<CalendarEntry> entries,
+List<MapEntry<DateTime, List<ItemSummary>>> groupByDay(
+  List<ItemSummary> entries,
 ) {
-  final groups = <DateTime, List<CalendarEntry>>{};
+  final groups = <DateTime, List<ItemSummary>>{};
 
   for (final entry in entries) {
-    groups.putIfAbsent(entry.day, () => []).add(entry);
+    final day = entry.day;
+    if (day != null) groups.putIfAbsent(day, () => []).add(entry);
   }
 
   return groups.entries.toList();
@@ -94,7 +105,7 @@ String formatDayHeader(DateTime day, DateTime today) {
 
 /// The Monday on or before [day], at local midnight.
 ///
-/// Built by overflowing the day field, as `CalendarController.windowFor`
+/// Built by overflowing the day field, as `calendarWindow`
 /// does, rather than subtracting a `Duration`. `DateTime`'s constructor
 /// normalizes an out-of-range day by calendar arithmetic, so a week that
 /// contains a daylight-saving change still starts at midnight.

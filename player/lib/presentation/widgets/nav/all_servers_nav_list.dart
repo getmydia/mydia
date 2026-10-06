@@ -27,7 +27,7 @@ class AllServersNavList extends StatelessWidget {
   final ValueChanged<String> onNavigate;
 
   /// Node for the row matching [location], falling back to Home when no row
-  /// matches, for the reason `SourceNavList` documents.
+  /// matches, for the reason `SidebarContent` documents.
   final FocusNode? selectedRowFocusNode;
 
   static const _rows = [

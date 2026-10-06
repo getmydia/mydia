@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/player/input_capabilities.dart';
 import '../../../core/sources/plex/plex_tv_client.dart';
+import '../detail/detail_links.dart';
 import 'plex_sign_in_controller.dart';
 
 class PlexSignInScreen extends ConsumerStatefulWidget {
@@ -32,7 +33,7 @@ class _PlexSignInScreenState extends ConsumerState<PlexSignInScreen> {
     ref.listen(provider, (_, next) {
       if (next is PlexSignInDone) {
         final first = next.firstSource;
-        context.go(first == null ? '/' : '/s/${first.value}');
+        context.go(first == null ? '/' : sourceHomeLocation(first));
       }
     });
     final state = ref.watch(provider);

@@ -5,8 +5,7 @@
 // there is no next widget to focus, so nothing happens and the list never
 // scrolls.
 //
-// These tests pump the real product widgets (ContentRail, HorizontalRail,
-// BrowseGrid) and read `.scrollCacheExtent` off the ListView/GridView each
+// These tests pump the real product widgets (HorizontalRail, BrowseGrid) and read `.scrollCacheExtent` off the ListView/GridView each
 // one actually builds (this Flutter SDK deprecated the plain double
 // `cacheExtent` in favour of `scrollCacheExtent: ScrollCacheExtent`, so the
 // product code passes the new one), so a regression that removed the gate
@@ -29,9 +28,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/recently_added_item.dart';
 import 'package:player/presentation/widgets/browse_grid.dart';
-import 'package:player/presentation/widgets/content_rail.dart';
 import 'package:player/presentation/widgets/horizontal_rail.dart';
 
 Widget _host(Widget child) => ProviderScope(
@@ -40,26 +37,7 @@ Widget _host(Widget child) => ProviderScope(
       ),
     );
 
-List<RecentlyAddedItem> _items(int n) => List.generate(
-      n,
-      (i) => RecentlyAddedItem(id: '$i', type: 'movie', title: 'Title $i'),
-    );
-
 void main() {
-  group('ContentRail cacheExtent gating (product code)', () {
-    testWidgets(
-        'the ListView ContentRail actually builds carries no cacheExtent '
-        'outside the directional tier', (tester) async {
-      await tester.pumpWidget(
-        _host(ContentRail(title: 'Recently Added', items: _items(20))),
-      );
-      await tester.pump();
-
-      final list = tester.widget<ListView>(find.byType(ListView));
-      expect(list.scrollCacheExtent, isNull);
-    });
-  });
-
   group('HorizontalRail cacheExtent gating (product code)', () {
     // EpisodeRail and DownloadedEpisodeRail both delegate their scrolling
     // list to HorizontalRail rather than building their own ListView, so

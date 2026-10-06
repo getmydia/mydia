@@ -154,7 +154,7 @@ class DownloadTask {
   final int recoveryAttempts;
 
   /// The source this came from. Null on records written before downloads
-  /// came from more than one server, which are all home Mydia.
+  /// came from more than one server, which are all pre-account Mydia.
   @HiveField(35)
   final String? sourceId;
 
@@ -516,7 +516,7 @@ class DownloadedMedia {
   final String? airDate;
 
   /// The source this came from. Null on records written before downloads
-  /// came from more than one server, which are all home Mydia.
+  /// came from more than one server, which are all pre-account Mydia.
   @HiveField(23)
   final String? sourceId;
 

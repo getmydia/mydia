@@ -307,7 +307,7 @@ For widgets with more than 2 parameters:
 MediaCard(
   title: movie.title,
   imageUrl: movie.posterUrl,
-  onTap: () => context.go('/movie/${movie.id}'),
+  onTap: () => context.go(sourceItemLocation(movie.ref)),
 )
 
 // BAD - positional parameters are hard to read
@@ -319,27 +319,24 @@ MediaCard(movie.title, movie.posterUrl, () => context.go(...))
 ### Route Paths
 
 There is no `Routes` helper class anywhere in `lib/`, and the established
-convention is raw string interpolation at the call site. Route paths in
-`app_router.dart` are **singular**: `/movie/:id`, `/show/:id`, `/episode/:id`.
+convention is raw string interpolation at the call site for app-level routes
+(`/login`, `/sources/manage`). Every source location is `/s/:sourceId/...`
+and is built only by the functions in
+`presentation/screens/detail/detail_links.dart`; never concatenate one in a
+screen. Detail routes are **singular**: `/s/:sourceId/movie/:id`,
+`/s/:sourceId/show/:id`, `/s/:sourceId/episode/:id`. The unprefixed
+`/movie/:id` family only redirects (`core/router/legacy_routes.dart`).
 
 ```dart
 // Navigate to new screen
-context.go('/movie/${movie.id}');
+context.go(sourceItemLocation(ref));
 
 // Push onto stack (keeps back button)
-context.push('/movie/${movie.id}');
-context.push('/show/${show.id}');
+context.push(sourceItemLocation(ref));
 
 // Replace current screen
 context.replace('/login');
 ```
-
-This is repeated verbatim in `home_screen.dart`, `library_screen.dart`,
-`recently_added_screen.dart`, `favorites_screen.dart`, `unwatched_screen.dart`,
-`collection_detail_screen.dart`, `episode_detail_screen.dart` and
-`search_result.dart`, dispatched off `RecentlyAddedItem.isMovie` / `.isShow` (or
-the raw `type` string). Do not introduce a `Routes` helper expecting it already
-exists.
 
 ## Testing Guidelines
 

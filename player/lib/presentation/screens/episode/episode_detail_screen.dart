@@ -17,12 +17,8 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../core/theme/colors.dart';
 import '../../widgets/media_info/media_info_sheet.dart';
 import '../../widgets/smart_play_button.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 
 class EpisodeDetailScreen extends ConsumerWidget {
-  EpisodeDetailScreen({super.key, required String id})
-      : target = MydiaTarget(DetailKind.episode, id);
-
   const EpisodeDetailScreen.target({super.key, required this.target});
 
   final DetailTarget target;
@@ -60,8 +56,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
   /// Exposes [_buildLoadingState] for
   /// `detail_screen_inset_test.dart`: that test proves the back button
   /// clears the window chrome in this transient state too, not only in the
-  /// loaded hero, without needing the episode view's GraphQL stream to
-  /// reach the loading branch.
+  /// loaded hero, without needing the source's item to reach the loading
+  /// branch.
   @visibleForTesting
   Widget loadingStateForTest(BuildContext context) =>
       _buildLoadingState(context);
@@ -270,7 +266,6 @@ class EpisodeDetailScreen extends ConsumerWidget {
       isDownloadSupported && episode.features.contains(DetailFeature.download);
 
   bool _canShowMediaInfo(EpisodeView episode) =>
-      episode.mydiaDetail != null &&
       episode.features.contains(DetailFeature.mediaInfo) &&
       episode.files.isNotEmpty;
 
@@ -451,11 +446,8 @@ class EpisodeDetailScreen extends ConsumerWidget {
       ),
       child: IconButton(
         key: const Key('episode-media-info'),
-        onPressed: () => showMediaInfo(
-          context: context,
-          id: episode.mydiaDetail!.id,
-          target: MediaInfoTarget.episode,
-        ),
+        onPressed: () =>
+            showMediaInfo(context: context, item: episode.target.ref),
         icon: const Icon(Icons.info_outline_rounded, color: Colors.white),
         tooltip: 'Media Info',
       ),
@@ -464,7 +456,7 @@ class EpisodeDetailScreen extends ConsumerWidget {
 
   Widget _buildDownloadButton(
       BuildContext context, WidgetRef ref, EpisodeView episode) {
-    final item = itemRefOf(episode.target, ref.watch(boundSourceIdProvider));
+    final item = episode.target.ref;
     final isDownloadedAsync = ref.watch(isItemDownloadedProvider(item));
     final isDownloaded = isDownloadedAsync.value ?? false;
     final hasFiles = episode.hasFile;

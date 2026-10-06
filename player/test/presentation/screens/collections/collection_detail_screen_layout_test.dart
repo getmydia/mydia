@@ -10,8 +10,8 @@
 // Uses `CollectionDetailScreen.header` and `CollectionDetailScreen.
 // gridTopPadding` directly, in the same `Scaffold`/`GridView` shape `build`
 // uses, rather than mounting the full screen: `CollectionDetailScreen.build`
-// watches `collectionDetailControllerProvider(id)`, a GraphQL-backed stream,
-// expensive to satisfy just to check where the first grid row lands.
+// watches the collection's paged provider, expensive to satisfy just to
+// check where the first grid row lands.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,9 +19,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/layout/window_chrome_inset.dart';
-import 'package:player/domain/models/recently_added_item.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
+
+import '../sources/fake_media_source.dart';
 
 const _markerKey = Key('first-grid-item');
 
@@ -56,8 +58,9 @@ Future<void> _pumpHarness(
                   extendBodyBehindAppBar: true,
                   appBar: CollectionDetailScreen.header(
                     context,
-                    id: 'c1',
-                    itemsData: const AsyncValue.data(<RecentlyAddedItem>[]),
+                    sourceId: fakeSourceId,
+                    collectionId: 'c1',
+                    itemsData: const AsyncValue.data(<ItemSummary>[]),
                   ),
                   body: GridView.builder(
                     padding: EdgeInsets.only(

@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/domain/models/show_detail.dart';
 import 'package:player/domain/models/show_next_up.dart';
 
 void main() {
@@ -57,35 +56,6 @@ void main() {
       expect(nextUp.episode.files, isEmpty);
       expect(nextUp.episode.progress, isNull);
       expect(nextUp.episode.runtimeMinutes, isNull);
-    });
-  });
-
-  group('ShowDetail.nextUp', () {
-    Map<String, dynamic> baseShow() => {
-          'id': 's1',
-          'title': 'Severance',
-          'monitored': true,
-          'seasonCount': 2,
-          'episodeCount': 19,
-          'isFavorite': false,
-        };
-
-    test('is null for a finished show, so the hero renders nothing', () {
-      final show = ShowDetail.fromJson(baseShow());
-      expect(show.nextUp, isNull);
-    });
-
-    test('parses when present', () {
-      final show = ShowDetail.fromJson({
-        ...baseShow(),
-        'nextUp': {
-          'progressState': 'next',
-          'episode': {'id': '3', 'seasonNumber': 1, 'episodeNumber': 2},
-        },
-      });
-
-      expect(show.nextUp?.state, NextUpState.next);
-      expect(show.nextUp?.episode.episodeCode, 'S01E02');
     });
   });
 }

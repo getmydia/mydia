@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
+import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';

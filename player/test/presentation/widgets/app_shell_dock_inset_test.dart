@@ -13,6 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/presentation/widgets/app_shell.dart';
 import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
+import '../../test_utils/dock_harness.dart' show kDockNavEntries;
+
 /// An iPhone-style home indicator inset.
 const double kHomeIndicator = 34;
 
@@ -122,7 +124,10 @@ void main() {
                 extendBody: true,
                 bottomNavigationBar: KeyedSubtree(
                   key: navKey,
-                  child: BottomNav(location: '/', onNavigate: (_) {}),
+                  child: BottomNav(
+                      location: '/',
+                      onNavigate: (_) {},
+                      entries: kDockNavEntries),
                 ),
                 body: const SizedBox.expand(),
               ),
@@ -149,7 +154,10 @@ void main() {
                 extendBody: true,
                 bottomNavigationBar: KeyedSubtree(
                   key: navKey,
-                  child: BottomNav(location: '/', onNavigate: (_) {}),
+                  child: BottomNav(
+                      location: '/',
+                      onNavigate: (_) {},
+                      entries: kDockNavEntries),
                 ),
                 body: const SizedBox.expand(),
               ),

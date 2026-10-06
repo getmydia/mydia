@@ -3,56 +3,47 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/dock_insets.dart';
-import 'package:player/domain/models/calendar_entry.dart';
-import 'package:player/presentation/screens/calendar/calendar_controller.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/calendar/calendar_screen.dart';
 import 'package:player/presentation/screens/calendar/calendar_view_mode.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
+import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../test_utils/dock_harness.dart';
-import 'screens/library/library_screen_layout_test.dart' show pumpLibrary;
+import 'screens/calendar/calendar_test_items.dart';
+import 'screens/sources/fake_capable_source.dart';
+import 'screens/sources/fake_media_source.dart';
+import 'screens/sources/source_library_layout_test.dart' show pumpLibrary;
 
 /// Thirty episodes over ten days from today: far more than 800px of rows, so
 /// the footer starts well below the fold.
-class _FixedCalendarController extends CalendarController {
-  @override
-  Stream<List<CalendarEntry>> build() {
-    final today = DateTime.now();
-    return Stream.value([
-      for (var i = 0; i < 30; i++)
-        CalendarEntry(
-          id: 'e$i',
-          kind: CalendarEntryKind.episode,
-          airDate: DateTime(today.year, today.month, today.day + i ~/ 3),
-          title: 'Episode $i',
-          mediaItemId: '7',
-          mediaItemTitle: 'The Lantern Keepers',
-        ),
-    ]);
-  }
+List<ItemSummary> _tenDays() {
+  final today = DateTime.now();
+  return [
+    for (var i = 0; i < 30; i++)
+      calendarEntry(
+        'e$i',
+        DateTime(today.year, today.month, today.day + i ~/ 3),
+        title: 'Episode $i',
+      ),
+  ];
 }
 
 /// Twenty episodes all airing today, so the week view's single day overflows
 /// the viewport on its own.
-class _BusyDayCalendarController extends CalendarController {
-  @override
-  Stream<List<CalendarEntry>> build() {
-    final today = DateTime.now();
-    return Stream.value([
-      for (var i = 0; i < 20; i++)
-        CalendarEntry(
-          id: 'busy$i',
-          kind: CalendarEntryKind.episode,
-          airDate: DateTime(today.year, today.month, today.day),
-          title: 'Episode $i',
-          mediaItemId: '7',
-          mediaItemTitle: 'The Lantern Keepers',
-        ),
-    ]);
-  }
+List<ItemSummary> _busyDay() {
+  final today = DateTime.now();
+  return [
+    for (var i = 0; i < 20; i++)
+      calendarEntry(
+        'busy$i',
+        DateTime(today.year, today.month, today.day),
+        title: 'Episode $i',
+      ),
+  ];
 }
 
 /// Pins the calendar layout without touching settings storage.
@@ -67,7 +58,7 @@ class _FixedViewMode extends CalendarViewModeController {
 
 Future<void> _pumpCalendar(
   WidgetTester tester, {
-  required CalendarController Function() controller,
+  required List<ItemSummary> entries,
   required CalendarViewMode mode,
 }) async {
   // Same 600-wide mobile layout and 34px home indicator as the library cases.
@@ -79,11 +70,13 @@ Future<void> _pumpCalendar(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        calendarControllerProvider.overrideWith(controller),
+        mediaSourceProvider(fakeSourceId)
+            .overrideWithValue(FakeCapableSource()..calendarResult = entries),
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
         calendarViewModeControllerProvider
             .overrideWith(() => _FixedViewMode(mode)),
       ],
-      child: shellHarness(child: const CalendarScreen()),
+      child: shellHarness(child: const CalendarScreen(sourceId: fakeSourceId)),
     ),
   );
   await tester.pumpAndSettle();
@@ -93,18 +86,6 @@ Future<void> _pumpCalendar(
 }
 
 void main() {
-  // LibraryScreen awaits LibrarySortController before it queries, and that
-  // controller reads flutter_secure_storage. Without the mock the read never
-  // completes, the sort spinner spins forever, and pumpAndSettle times out.
-  //
-  // `show pumpLibrary` imports the function but NOT the library test file's
-  // own setUp, which is where this mock normally lives (see the comment at
-  // library_screen_layout_test.dart:238). Borrowing a pump helper across test
-  // files means borrowing its fixtures explicitly.
-  setUp(() {
-    FlutterSecureStorage.setMockInitialValues({});
-  });
-
   group('DockInsets under a real BottomNav', () {
     testWidgets('reserves more than the 100.0 screens used to hardcode',
         (tester) async {
@@ -172,7 +153,7 @@ void main() {
     testWidgets('scrolls the agenda footer clear of the dock', (tester) async {
       await _pumpCalendar(
         tester,
-        controller: _FixedCalendarController.new,
+        entries: _tenDays(),
         mode: CalendarViewMode.agenda,
       );
 
@@ -186,7 +167,7 @@ void main() {
         (tester) async {
       await _pumpCalendar(
         tester,
-        controller: _BusyDayCalendarController.new,
+        entries: _busyDay(),
         mode: CalendarViewMode.week,
       );
 

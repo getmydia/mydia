@@ -1,0 +1,24 @@
+query Calendar($start: Date!, $end: Date!) {
+  calendar(start: $start, end: $end) {
+    id
+    kind
+    airDate
+    title
+    seasonNumber
+    episodeNumber
+    mediaItemId
+    mediaItemTitle
+    artwork {
+      posterUrl
+      backdropUrl
+      thumbnailUrl
+    }
+    files {
+      id
+      resolution
+      directPlaySupported
+      hdrFormat
+      bitrate
+    }
+  }
+}

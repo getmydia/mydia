@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 
-import '../graphql/watch/fetch_log.dart';
+import '../cache/fetch_log.dart';
 import '../navigation/sidebar_layout_store.dart';
 import '../sources/cache/source_cache.dart';
 import 'startup_lock.dart';
