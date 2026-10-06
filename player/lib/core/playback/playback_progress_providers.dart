@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../cache/watcher_registry.dart' show invalidatorProvider;
 import '../sources/capabilities.dart';
 import '../sources/media_source.dart';
 import '../sources/sources_providers.dart';
@@ -30,6 +31,7 @@ final sourceProgressFlushProvider = Provider<void>((ref) {
     if (inFlight) return;
     inFlight = true;
     try {
+      final invalidator = ref.read(invalidatorProvider);
       final store = await ref.read(playbackProgressStoreProvider.future);
       final synced = await flushSourceProgress(
         store: store,
@@ -41,6 +43,7 @@ final sourceProgressFlushProvider = Provider<void>((ref) {
               status != SourceConnectionStatus.connecting;
         },
         now: DateTime.now(),
+        invalidate: invalidator.invalidate,
       );
       if (synced > 0) {
         debugPrint('[sourceProgressFlush] Synced $synced offline position(s)');

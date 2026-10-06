@@ -21,6 +21,10 @@ abstract final class SourceRules {
           SourceOps.continueWatching,
           SourceOps.hubs,
           SourceOps.similar,
+          SourceOps.collectionItems,
+          SourceOps.unwatched,
+          SourceOps.favorites,
+          SourceOps.recentlyAdded,
         ])
           SourceKeys.family(id, op),
       };
@@ -30,6 +34,7 @@ abstract final class SourceRules {
           SourceOps.item,
           SourceOps.browse,
           SourceOps.hubs,
+          SourceOps.favorites,
         ])
           SourceKeys.family(id, op),
       };
@@ -39,6 +44,11 @@ abstract final class SourceRules {
         SourceKeys.family(id, SourceOps.continueWatching),
         SourceKeys.family(id, SourceOps.hubs),
       };
+
+  /// Offline positions reached the server; the rail and every watch badge
+  /// may move.
+  static Set<InvalidationTarget> offlineProgressSynced(SourceId id) =>
+      watchedChanged(id);
 
   /// The periodic progress report refreshes nothing; playback finishing
   /// does, through [watchedChanged].

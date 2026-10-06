@@ -13,10 +13,16 @@ Set<String> _ops(Set<InvalidationTarget> targets) => {
 
 void main() {
   test('every operation that carries watch state is in watchedChanged', () {
-    // Only `libraries` returns no items. Adding a new operation to
-    // SourceOps.all without deciding its rule fails here.
-    expect(_ops(SourceRules.watchedChanged(_a)),
-        SourceOps.all.difference({SourceOps.libraries}));
+    // `libraries`, `collections` and `calendar` select no watch state.
+    // Adding a new operation to SourceOps.all without deciding its rule
+    // fails here.
+    expect(
+        _ops(SourceRules.watchedChanged(_a)),
+        SourceOps.all.difference({
+          SourceOps.libraries,
+          SourceOps.collections,
+          SourceOps.calendar,
+        }));
   });
 
   test('rules stay on their own source', () {
@@ -31,10 +37,19 @@ void main() {
   });
 
   test('favorite and continue watching rules are narrow', () {
-    expect(_ops(SourceRules.favoriteChanged(_a)),
-        {SourceOps.item, SourceOps.browse, SourceOps.hubs});
+    expect(_ops(SourceRules.favoriteChanged(_a)), {
+      SourceOps.item,
+      SourceOps.browse,
+      SourceOps.hubs,
+      SourceOps.favorites
+    });
     expect(_ops(SourceRules.continueWatchingRemoved(_a)),
         {SourceOps.continueWatching, SourceOps.hubs});
     expect(SourceRules.progressSynced, isEmpty);
+  });
+
+  test('offline progress sync invalidates like a watched change', () {
+    expect(
+        SourceRules.offlineProgressSynced(_a), SourceRules.watchedChanged(_a));
   });
 }

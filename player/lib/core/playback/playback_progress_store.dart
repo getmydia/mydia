@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_ce/hive.dart';
 
 import '../../domain/sources/item.dart';
+import '../cache/invalidation_target.dart';
 import '../player/progress_service.dart';
+import '../sources/cache/source_rules.dart';
 import '../sources/capabilities.dart';
 import '../sources/source.dart';
 import 'local_playback_progress.dart';
@@ -262,13 +264,18 @@ Future<void> saveDownloadedProgress({
 /// unconditionally: newer-wins is decided at play time by
 /// [pickNewerProgress]. Records of sources that are gone, out of
 /// reach, or refuse the push stay unsynced for the next run.
+///
+/// [invalidate] receives [SourceRules.offlineProgressSynced] once per source
+/// that had at least one record accepted, after the loop.
 Future<int> flushSourceProgress({
   required PlaybackProgressStore store,
   required ProgressSync? Function(SourceId id) syncFor,
   required bool Function(SourceId id) reachable,
   required DateTime now,
+  Future<void> Function(Iterable<InvalidationTarget> targets)? invalidate,
 }) async {
   var synced = 0;
+  final syncedSources = <SourceId>{};
   for (final record in store.unsynced()) {
     final id = SourceId(record.sourceId);
     final sync = syncFor(id);
@@ -289,8 +296,14 @@ Future<int> flushSourceProgress({
       );
       await store.markSynced(record.key, now);
       synced++;
+      syncedSources.add(id);
     } catch (e) {
       debugPrint('[PlaybackProgressStore] Deferring ${record.key}: $e');
+    }
+  }
+  if (invalidate != null) {
+    for (final id in syncedSources) {
+      await invalidate(SourceRules.offlineProgressSynced(id));
     }
   }
   return synced;
