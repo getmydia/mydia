@@ -1,6 +1,7 @@
 /// Where the unprefixed pre-instance locations live now.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../sources/source.dart';
@@ -84,6 +85,18 @@ final legacyInstanceIdProvider = FutureProvider<String?>((ref) async {
   final store = await ref.watch(sourceStoreProvider.future);
   return store.legacyInstanceId();
 });
+
+/// Resolves once [legacyInstanceIdProvider] has, so a reader of
+/// [legacyMydiaSourceIdProvider] sees the migrated id rather than the
+/// single-instance fallback. A failed read is swallowed: it only costs that
+/// id, and the caller proceeds either way.
+Future<void> legacyInstanceIdResolved(WidgetRef ref) async {
+  try {
+    await ref.read(legacyInstanceIdProvider.future);
+  } catch (e) {
+    debugPrint('[LegacyRoutes] Legacy instance id unavailable: $e');
+  }
+}
 
 /// The source an unprefixed pre-instance link or entry belongs to: the
 /// migrated legacy instance while its Mydia account exists, else the only

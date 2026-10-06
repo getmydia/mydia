@@ -4,6 +4,8 @@ import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session_compat.dart';
+import '../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
+import '../sources/mydia/root_typename.dart';
 import '../../graphql/schema.graphql.dart';
 import '../sources/mydia/mydia_client.dart';
 import 'cast_backend.dart';
@@ -56,16 +58,22 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
   }) async {
     final Map<String, dynamic> data;
     try {
-      data = await _client.request(
+      // The cast path sends no caps or playlist mode, so both documents take
+      // the same variables. A server that rejects the full document's fields
+      // is downgraded once per instance, as local playback does.
+      final variables = Variables$Mutation$StartStreamingSessionLegacy(
+        fileId: fileId,
+        strategy: transcode
+            ? Enum$StreamingStrategy.TRANSCODE
+            : Enum$StreamingStrategy.HLS_COPY,
+        startPosition:
+            startPosition > Duration.zero ? startPosition.inSeconds : null,
+      ).toJson();
+      data = await _client.query(
         documentNodeMutationStartStreamingSession,
-        Variables$Mutation$StartStreamingSession(
-          fileId: fileId,
-          strategy: transcode
-              ? Enum$StreamingStrategy.TRANSCODE
-              : Enum$StreamingStrategy.HLS_COPY,
-          startPosition:
-              startPosition > Duration.zero ? startPosition.inSeconds : null,
-        ).toJson(),
+        fallback: documentNodeMutationStartStreamingSessionLegacy,
+        variables: variables,
+        fallbackVariables: variables,
       );
     } on SourceException catch (e) {
       throw CastBackendException(
@@ -74,9 +82,9 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
       );
     }
 
-    final session =
-        Mutation$StartStreamingSession.fromJson(withPlaylistModeDefault(data))
-            .startStreamingSession;
+    final session = Mutation$StartStreamingSession.fromJson(
+      rootMutation(withPlaylistModeDefault(data)),
+    ).startStreamingSession;
 
     if (session == null) {
       throw const CastBackendException(

@@ -9,10 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/auth/device_info_service.dart';
 import 'package:player/core/channels/pairing_service.dart';
-import 'package:player/core/sources/mydia/source_link.dart'
-    show storedRelayUrlProvider;
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
@@ -105,6 +104,31 @@ class _TotpAuth extends AuthService {
       );
 }
 
+/// Answers a password with a grant, so the login itself succeeds.
+class _GrantedAuth extends AuthService {
+  _GrantedAuth(MockAuthStorage storage) : super(storage: storage);
+
+  @override
+  Future<LoginOutcome> requestLogin({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async =>
+      LoginGranted(
+        serverUrl: serverUrl,
+        token: 'tok',
+        userId: 'u1',
+        username: username,
+      );
+}
+
+/// A store whose writes fail the way an unreadable disk does.
+class _FailingWriteStore extends InMemorySourceStore {
+  @override
+  Future<void> putAccount(SourceAccountRecord record) async =>
+      throw const SourceException.unreachable();
+}
+
 class _FakeDeviceInfo extends DeviceInfoService {
   @override
   Future<String> getDeviceId() async => 'device-1';
@@ -140,7 +164,6 @@ void main() {
   }) {
     final c = ProviderContainer(overrides: [
       noDownloadsOverride,
-      storedRelayUrlProvider.overrideWith((ref) async => null),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secrets)),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
@@ -280,6 +303,25 @@ void main() {
     await c.read(loginControllerProvider.notifier).pairWithClaimCode('ABC123');
 
     expect(c.read(loginControllerProvider).credentialsNotPersisted, isTrue);
+  });
+
+  test(
+      'a failure saving the credentials after a good login shows the save '
+      'message', () async {
+    store = _FailingWriteStore();
+    final c = await listening(containerFor(auth: _GrantedAuth(authStorage)));
+
+    await c.read(loginControllerProvider.notifier).login(
+          'https://friend.example',
+          'maya',
+          'pw',
+        );
+
+    final state = c.read(loginControllerProvider);
+    expect(state.success, isFalse);
+    expect(state.isLoading, isFalse);
+    // The save's own wording, not the login mapping's "Cannot connect".
+    expect(state.error, const SourceException.unreachable().viewerMessage);
   });
 
   test('an unexpected stored-session outcome ends loading with an error',

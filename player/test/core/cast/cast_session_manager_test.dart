@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -33,6 +35,31 @@ List<({String operation, Map<String, dynamic> vars})> _progressCalls(
         if (c.operation.startsWith('Update'))
           (operation: c.operation, vars: c.vars),
     ];
+
+/// A store whose next save can be held open, to interleave a progress tick
+/// with a cast change.
+class _GatedSaveStore extends InMemoryCastSessionStore {
+  Completer<void>? _gate;
+  bool _armed = false;
+  bool blocked = false;
+
+  void blockNextSave() {
+    _gate = Completer<void>();
+    _armed = true;
+  }
+
+  void unblock() => _gate?.complete();
+
+  @override
+  Future<void> save(PersistedCastSession session) async {
+    if (_armed) {
+      _armed = false;
+      blocked = true;
+      await _gate!.future;
+    }
+    await super.save(session);
+  }
+}
 
 /// Minimal [CastBackend] double for the registry/dispatch tests in the
 /// 'multi-protocol routing' group below.
@@ -3365,6 +3392,53 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       expect(released, {_src: 1});
+    });
+
+    test('adopting a receiver session releases the previous cast deps',
+        () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      expect(released, isEmpty);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(released, {_src: 1});
+    });
+
+    test('a tick that began for one cast syncs through that cast', () async {
+      final gated = _GatedSaveStore();
+      store = gated;
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      backend.emitDuration(const Duration(seconds: 200));
+      await Future<void>.delayed(Duration.zero);
+
+      // The tick for cast A stops at its persisted-position save.
+      gated.blockNextSave();
+      backend.emitPosition(const Duration(seconds: 100));
+      await Future<void>.delayed(Duration.zero);
+      expect(gated.blocked, isTrue);
+
+      // Cast B adopts its own deps while that tick is still in flight.
+      await manager.startCast(device: device, request: launchFrom(instanceB));
+      // B's start resets the manager's duration; the receiver reports it again.
+      backend.emitDuration(const Duration(seconds: 200));
+      await Future<void>.delayed(Duration.zero);
+      gated.unblock();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(_progressCalls(servers[_src]!), hasLength(1));
+      expect(_progressCalls(servers[instanceB]!), isEmpty);
     });
 
     test('a cast that fails to load releases what it resolved', () async {

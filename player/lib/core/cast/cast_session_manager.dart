@@ -1137,6 +1137,10 @@ class CastSessionManager {
     _cancelSubscriptions();
     _listenForSync();
 
+    // An adopted receiver session has no deps of its own, so the previous
+    // cast's (and the proxy hold they carry) are let go here.
+    _adoptDeps(null);
+
     _persisted = null;
     _lastRequest = null;
     _lastDuration = Duration.zero;
@@ -1835,6 +1839,11 @@ class CastSessionManager {
     // dividing by it.
     if (_lastDuration <= Duration.zero) return;
 
+    // Read before any await: a tick that starts for one cast must report
+    // through that cast's progress service even if another cast adopts its
+    // deps while the save below is in flight.
+    final progress = _activeDeps?.progress;
+
     final now = _clock();
     final last = _lastProgressSync;
     if (last != null && now.difference(last) < _progressInterval) return;
@@ -1863,7 +1872,6 @@ class CastSessionManager {
     }
 
     if (request.content case final MydiaCastContent mydia) {
-      final progress = _activeDeps?.progress;
       if (progress == null) return;
       if (mydia.isEpisode) {
         await progress.syncEpisodePosition(

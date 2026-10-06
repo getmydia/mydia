@@ -73,6 +73,22 @@ void main() {
       expect(await storage.read('user_id'), isNull);
     });
 
+    test('degraded storage deletes nothing, even when the sign-in reads absent',
+        () async {
+      // The keyring cannot be read, so auth_token looks absent although an
+      // unmigrated sign-in is there.
+      final storage = MockAuthStorage()
+        ..seedData({'server_url': 'http://a', 'relay_url': 'r'})
+        ..degradedValue = true;
+      final store = await storeWithLegacyInstanceId(null);
+      await purgeLegacyMydiaStorage(
+          storage: storage,
+          store: store,
+          deleteBox: (_) async => fail('must not delete'));
+      expect(await storage.read('server_url'), 'http://a');
+      expect(await storage.read('relay_url'), 'r');
+    });
+
     test('a failing store read is swallowed and deletes nothing', () async {
       final storage = MockAuthStorage()..seedData({'auth_token': 't'});
       await purgeLegacyMydiaStorage(

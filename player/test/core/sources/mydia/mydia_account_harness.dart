@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
-import 'package:player/core/sources/mydia/source_link.dart'
-    show storedRelayUrlProvider;
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_secrets.dart';
 import 'package:player/core/sources/source.dart';
@@ -62,7 +60,6 @@ Future<
   }
   final container = ProviderContainer(overrides: [
     noDownloadsOverride,
-    storedRelayUrlProvider.overrideWith((ref) async => null),
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(secrets),
     ...overrides,

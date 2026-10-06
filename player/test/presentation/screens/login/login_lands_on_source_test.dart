@@ -9,8 +9,6 @@ import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/auth/device_info_service.dart';
 import 'package:player/core/channels/pairing_service.dart';
-import 'package:player/core/sources/mydia/source_link.dart'
-    show storedRelayUrlProvider;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
@@ -62,7 +60,6 @@ void main() {
     final store = InMemorySourceStore();
     final container = ProviderContainer(overrides: [
       noDownloadsOverride,
-      storedRelayUrlProvider.overrideWith((ref) async => null),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),

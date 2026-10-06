@@ -5,6 +5,7 @@ import 'package:player/app.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
+import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 
@@ -19,9 +20,15 @@ void main() {
   group('MyApp cast session restore', () {
     late bool managerBuilt;
 
-    buildOverrides({required bool bound}) => [
+    buildOverrides({
+      required bool bound,
+      Future<String?> Function()? legacyId,
+    }) =>
+        [
           sourcesLoadingProvider.overrideWithValue(false),
           hasMydiaProvider.overrideWithValue(bound),
+          legacyInstanceIdProvider
+              .overrideWith((ref) => (legacyId ?? () async => null)()),
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           castSessionManagerProvider.overrideWith((ref) async {
@@ -35,9 +42,10 @@ void main() {
     Future<void> pumpApp(
       WidgetTester tester, {
       required bool bound,
+      Future<String?> Function()? legacyId,
     }) async {
       await tester.pumpWidget(ProviderScope(
-        overrides: buildOverrides(bound: bound),
+        overrides: buildOverrides(bound: bound, legacyId: legacyId),
         child: const MyApp(),
       ));
       await tester.pump();
@@ -50,6 +58,36 @@ void main() {
       expect(managerBuilt, isFalse,
           reason: 'the cast stack must not be built before a Mydia account '
               'exists');
+    });
+
+    // The manager is also built by the mini controller, so what pins the
+    // restore's wait is that it asks for the id, not when the manager builds.
+    testWidgets('reads the legacy instance id before restoring',
+        (tester) async {
+      var legacyRead = false;
+      await pumpApp(
+        tester,
+        bound: true,
+        legacyId: () async {
+          legacyRead = true;
+          return 'macct';
+        },
+      );
+
+      expect(legacyRead, isTrue,
+          reason: 'a pre-upgrade record needs the legacy id to decode');
+      expect(managerBuilt, isTrue);
+    });
+
+    testWidgets('still restores when the legacy instance id cannot be read',
+        (tester) async {
+      await pumpApp(
+        tester,
+        bound: true,
+        legacyId: () async => throw StateError('store unreadable'),
+      );
+
+      expect(managerBuilt, isTrue);
     });
 
     testWidgets('restores once a Mydia account exists', (tester) async {

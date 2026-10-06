@@ -324,6 +324,20 @@ void main() {
       });
     }
 
+    test('an unreachable start error carries the viewer message, not "null"',
+        () async {
+      final server = _server(starts: [const SourceException.unreachable()]);
+      await expectLater(
+        _controller(server)
+            .open(_copy, fileId: 'file-1', startAt: Duration.zero),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('Could not reach this server'),
+                isNot(contains('null'))))),
+      );
+    });
+
     for (final failure in <Object>[
       graphqlError('Unauthorized to set maxHeight or playlistMode'),
       const SourceException.unreachable(),

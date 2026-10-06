@@ -36,6 +36,7 @@ import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
 import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
+import 'core/router/legacy_routes.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
@@ -284,6 +285,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     _castRestoreAttempted = true;
 
     try {
+      // The persisted record's decode reads `legacyMydiaSourceIdProvider`,
+      // which needs this id. Restoring before it resolves would drop a
+      // pre-upgrade record on first launch. A failed read must not block the
+      // restore: it only costs that migration fallback.
+      await legacyInstanceIdResolved(ref);
+      if (!mounted) return;
       final manager = await ref.read(castSessionManagerProvider.future);
       if (!mounted) return;
       await manager.restoreSession();

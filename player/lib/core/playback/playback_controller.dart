@@ -331,7 +331,8 @@ class PlaybackController implements PlaybackTransport {
         fallbackVariables: base,
       );
     } on SourceException catch (e) {
-      throw Exception('Failed to start streaming session: ${e.message}');
+      throw Exception('Failed to start streaming session: '
+          '${e.message ?? e.viewerMessage}');
     }
     final data = Mutation$StartStreamingSession.fromJson(
       rootMutation(withPlaylistModeDefault(response)),

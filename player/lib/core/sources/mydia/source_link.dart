@@ -4,18 +4,10 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/sources/source_error.dart';
-import '../../auth/auth_storage.dart';
 import '../source.dart';
 import '../sources_providers.dart';
 import 'mydia_credentials.dart';
 import 'mydia_source.dart';
-
-/// Storage key of the relay URL kept for p2p reconnection.
-const _relayUrlKey = 'relay_url';
-
-/// The relay URL stored for p2p reconnection, if any.
-final storedRelayUrlProvider =
-    FutureProvider<String?>((ref) => getAuthStorage().read(_relayUrlKey));
 
 /// The credentials of Mydia source [id], or null for a third-party source, a
 /// missing one, or credentials that cannot be read.

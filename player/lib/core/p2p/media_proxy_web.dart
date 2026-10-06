@@ -96,8 +96,11 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }) async {
     final current = _target;
     if (current != null && current != target) {
-      // A web build is served by one instance and only ever talks to it.
-      throw StateError('The web media proxy already serves $current');
+      // A browser streams from one instance at a time, and Flutter mounts the
+      // incoming player route before disposing the old one, so the next
+      // instance's start lands while the previous is still held. Re-point the
+      // worker; each holder's lease is released by its own stop.
+      debugPrint('[SwProxy] Re-pointing from $current to $target');
     }
     _target = target;
     acquireLease(owner);
@@ -125,7 +128,9 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
 
   @override
   Future<void> stop(Object owner, {required String target}) async {
-    if (target != _target) return;
+    // Not gated on [target]: the owner may hold a lease taken for a target the
+    // proxy has since been re-pointed away from. The last lease going, for
+    // whichever target, is what tears down.
     if (!releaseLease(owner)) return;
     await _tearDown();
   }

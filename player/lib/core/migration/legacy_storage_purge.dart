@@ -30,6 +30,12 @@ Future<void> purgeLegacyMydiaStorage({
   required SourceStore store,
   required Future<void> Function(String box) deleteBox,
 }) async {
+  // A degraded store may not return what is really there, so an unmigrated
+  // sign-in could read as absent. Keep everything and try again next launch.
+  if (storage.degraded) {
+    debugPrint('[LegacyPurge] storage is degraded, keeping legacy data');
+    return;
+  }
   try {
     final migrated = await store.legacyInstanceId() != null;
     if (!migrated && await storage.read('auth_token') != null) return;
