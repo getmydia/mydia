@@ -144,7 +144,7 @@ class CalendarRow extends ConsumerWidget {
 ///
 /// Kept beside the row rather than inlined so the shape stays in one place
 /// if the player screen ever reads another query parameter. Mirrors
-/// `playerRouteForContinueWatching` in `home_screen.dart`, minus the resume
+/// the Continue Watching player route, minus the resume
 /// suffix: the calendar has no saved progress of its own to pass, so the
 /// player is left to discover it (see the resume note at the top of this
 /// file). `fileId` is required because the player route renders an error

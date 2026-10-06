@@ -411,7 +411,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   /// Resolves [intent] to a playable file and pushes the player already
   /// playing it, falling back to the detail screen — the same "no file
   /// chosen yet" fallback every other entry point in this app takes (see
-  /// `home_screen.dart`'s `_handlePlay`) — when nothing resolves.
+  /// a Continue Watching tap) — when nothing resolves.
   ///
   /// `router` and `screenWidth` are read from [context] before the only
   /// `await` in this method, never after: this device could navigate away

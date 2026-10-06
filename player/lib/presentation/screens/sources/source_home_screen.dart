@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
+import '../../../core/layout/window_chrome_inset.dart';
+import '../../widgets/window_chrome/window_title_row.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
@@ -54,7 +56,6 @@ class SourceHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final source = ref.watch(mediaSourceProvider(sourceId));
     final libraries = ref.watch(sourceLibrariesProvider(sourceId));
     final hero = _heroItem(ref);
     if (libraries.hasValue) {
@@ -66,9 +67,32 @@ class SourceHomeScreen extends ConsumerWidget {
     if (hero == null || !libraries.hasValue) {
       publishBackdropSource(ref, BackdropSource.none);
     }
+    // The title row draws into the window band on every platform, so the body
+    // sits under `removeBand` or the band is counted twice.
+    return WindowChromeInsets.removeBand(
+      child: Builder(builder: (context) => _scaffold(context, ref, libraries)),
+    );
+  }
+
+  /// The title bar that hosts the cast button and the window drag band.
+  /// A `@visibleForTesting` seam so the cast alignment test needs no
+  /// providers: this is the exact widget the screen puts in `appBar`.
+  @visibleForTesting
+  static PreferredSizeWidget header(BuildContext context) =>
+      WindowTitleBar(height: WindowTitleRow.heightOf(context));
+
+  Widget _scaffold(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<List<Library>> libraries,
+  ) {
+    final source = ref.watch(mediaSourceProvider(sourceId));
+    final hero = _heroItem(ref);
     return Scaffold(
       backgroundColor: Colors.transparent,
+      appBar: header(context),
       body: SafeArea(
+        top: false,
         child: switch (libraries) {
           AsyncData(:final value) => Column(
               children: [

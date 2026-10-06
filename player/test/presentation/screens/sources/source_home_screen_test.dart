@@ -263,7 +263,8 @@ void main() {
       final mixed = find.byKey(const Key('source-hub-row-home.mixed.released'));
       await tester.ensureVisible(mixed);
       await tester.pumpAndSettle();
-      await tester.tap(mixed);
+      // The title is plain text with no handler, so the tap hits nothing.
+      await tester.tap(mixed, warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(pushed, isEmpty);
       final recent = find.byKey(const Key('source-hub-row-home.movies.recent'));

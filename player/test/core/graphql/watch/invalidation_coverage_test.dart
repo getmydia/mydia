@@ -47,8 +47,8 @@ Iterable<File> _sourceFiles(Directory root) =>
 /// A name can legitimately declare more than once: `RecentlyAddedFull` in
 /// `recently_added_controller.dart` has a primary shape and a
 /// `...Legacy` fallback for a server older than this build, and only the
-/// primary selects `watchStatus`. `HomeScreen` and `ContinueWatchingList`
-/// have the same primary-plus-legacy shape. Collapsing to a single body per
+/// primary selects `watchStatus`. `ContinueWatchingList`
+/// has the same primary-plus-legacy shape. Collapsing to a single body per
 /// name (whichever declaration a map write happens to see last) can
 /// silently lose the one declaration that actually renders watch state —
 /// which is exactly what happened here before this fixed it: keying by name

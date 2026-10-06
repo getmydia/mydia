@@ -86,8 +86,7 @@ typedef LoadContentTargetFetcher = Future<LoadContentTarget> Function(
 /// running the same [pickBestFile] every local Play button uses, so a
 /// remote play and a local tap never disagree about which version plays.
 /// `title`/`showId`/`seasonNumber` ride along in the returned route's query
-/// string exactly as `playerRouteForContinueWatching`
-/// (`home_screen.dart:42-68`) already carries them for a local tap, so a
+/// string exactly as a local Mydia episode tap carries them, so a
 /// remotely-started episode keeps its next/previous-episode capability
 /// instead of losing it.
 ///
@@ -139,7 +138,7 @@ Future<String?> resolveLoadContentRoute(
 
 /// The detail-screen fallback for [intent] — the same "no file chosen yet"
 /// destination every other entry point in this app takes (see
-/// `home_screen.dart`'s `_handlePlay`) when nothing resolves to a playable
+/// a Continue Watching tap) when nothing resolves to a playable
 /// file.
 String loadContentDetailFallback(LoadContentIntent intent) =>
     intent.episodeId != null

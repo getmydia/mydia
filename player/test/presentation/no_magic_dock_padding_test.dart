@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Deliberately requires the assigned variable's name to contain "bottom".
 /// A bare `isDesktop ? N : M` is far too broad: the codebase has nine
 /// legitimate ones for title padding, section gaps and rail headers
-/// (`filter_screen.dart`, `library_screen.dart`, `home_screen.dart`,
+/// (`filter_screen.dart`, `library_screen.dart`, `source_home_hero.dart`,
 /// `content_rail.dart`). A guard that cries wolf on those is a guard someone
 /// deletes.
 final RegExp _hardcodedBottomTernary = RegExp(

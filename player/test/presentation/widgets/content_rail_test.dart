@@ -261,8 +261,8 @@ void main() {
     });
 
     // A rail card with nothing playable behind it must not promise playback:
-    // home_screen.dart:128 falls back to the detail screen for exactly this
-    // case, so the badge would be advertising a tap that navigates.
+    // The Continue Watching tap falls back to the detail screen for exactly
+    // this case, so the badge would be advertising a tap that navigates.
     testWidgets('an unplayable Continue Watching card promises navigation',
         (tester) async {
       await tester.pumpWidget(
