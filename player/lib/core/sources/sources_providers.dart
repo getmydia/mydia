@@ -375,6 +375,14 @@ final hasMydiaProvider = Provider<bool>((ref) {
       snapshot.accounts.any((a) => a.account.kind == SourceKind.mydia);
 });
 
+/// How many Mydia accounts are stored.
+final mydiaAccountCountProvider = Provider<int>((ref) =>
+    _snapshotOf(ref)
+        ?.accounts
+        .where((a) => a.account.kind == SourceKind.mydia)
+        .length ??
+    0);
+
 /// The sources the switcher shows: empty unless there is a choice to make.
 final switchableSourcesProvider = Provider<List<Source>>((ref) {
   final all = ref.watch(sourcesProvider);

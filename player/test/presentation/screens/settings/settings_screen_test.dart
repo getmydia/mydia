@@ -287,11 +287,25 @@ void main() {
 
   testWidgets('renders the identity band with the account and server',
       (tester) async {
-    await _pump(tester);
+    final store = InMemorySourceStore();
+    final secrets = SourceSecrets(MockAuthStorage());
+    final record = mydiaRecord('a', addedAtMs: 0);
+    await store.putAccount(record);
+    await writeMydiaCredentials(secrets, record.account,
+        const MydiaCredentials(instanceId: 'a', accessToken: 'access-a'));
+    await _pump(tester, mydia: (store: store, secrets: secrets));
 
     expect(find.byType(SettingsIdentity), findsOneWidget);
     expect(find.text('admin'), findsOneWidget);
     expect(find.text('mydia.local:4000'), findsOneWidget);
+  });
+
+  testWidgets(
+      'with several Mydia accounts the identity band is left to the '
+      'instance screens', (tester) async {
+    await _pump(tester);
+
+    expect(find.byType(SettingsIdentity), findsNothing);
   });
 
   testWidgets('connection state reads as the subtitle of the details row',

@@ -25,6 +25,8 @@ import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
+import '../../../core/sources/sources_providers.dart'
+    show mydiaAccountCountProvider;
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -65,6 +67,7 @@ class SettingsScreen extends ConsumerWidget {
     final isP2P = ref.watch(connectionProvider).isP2PMode;
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
     final currentVersion = ref.watch(updateProvider).currentVersion;
+    final manyMydiaAccounts = ref.watch(mydiaAccountCountProvider) > 1;
 
     // Settings shows the calm static backdrop, never a stale title image
     // (plan U5 / AE3).
@@ -106,10 +109,13 @@ class SettingsScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SettingsIdentity(
-                        username: settings?.username ?? '',
-                        serverUrl: settings?.serverUrl ?? '',
-                      ),
+                      // With several Mydia accounts this would name only the
+                      // bound one; each instance's own screen carries it.
+                      if (!manyMydiaAccounts)
+                        SettingsIdentity(
+                          username: settings?.username ?? '',
+                          serverUrl: settings?.serverUrl ?? '',
+                        ),
                       const UpdateCard(),
                       _PlaybackSection(
                         settings: settings,
