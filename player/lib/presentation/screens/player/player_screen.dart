@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/app_menu/now_playing.dart';
+import '../../../core/media_session/playing_source.dart';
 import '../../../core/graphql/graphql_provider.dart' show isInstanceHostedWeb;
 import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/cache/watcher_registry.dart';
@@ -1012,6 +1013,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Tracks local playback activity so global cast bars are suppressed
   /// during active on-device playback.
   LocalPlaybackNotifier? _localPlaybackNotifier;
+  late final PlayingSource _playingSource;
   bool _acquiredPlayback = false;
 
   @override
@@ -1038,6 +1040,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _resumeOverrideSeconds = widget.resumeSeconds;
 
     _session = widget.session;
+    _playingSource = ref.read(playingSourceProvider)
+      ..claim(this, _session.item.sourceId);
 
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
@@ -1103,6 +1107,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // The session is bound to one file, so a new file brings a new session.
     if (!identical(widget.session, oldWidget.session)) {
       _session = widget.session;
+      _playingSource.claim(this, _session.item.sourceId);
     }
     unawaited(_switchToFile(oldWidget));
   }
@@ -4743,6 +4748,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // (see [didUpdateWidget]).
     _remoteTargetController.detachPlayer(this);
     _nowPlaying.clear(this);
+    _playingSource.release(this);
     final playbackNotifier = _localPlaybackNotifier;
     final acquired = _acquiredPlayback;
     if (playbackNotifier != null && acquired) {

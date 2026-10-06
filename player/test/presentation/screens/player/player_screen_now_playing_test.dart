@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/app_menu/now_playing.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/media_session/playing_source.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 
@@ -114,6 +115,9 @@ void main() {
           'has no next episode',
     );
 
+    expect(container.read(playingSourceProvider).current, isNotNull,
+        reason: 'the screen names the instance that owns what it plays');
+
     container.read(remoteTargetControllerProvider).submit(
           const TransportIntent(TransportAction.pause),
         );
@@ -122,6 +126,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    expect(container.read(playingSourceProvider).current, isNull);
     expect(publisher.current, isNull,
         reason: 'a disposed player must leave the Dock with no controls');
   });

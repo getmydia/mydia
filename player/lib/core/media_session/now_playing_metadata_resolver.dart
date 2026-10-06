@@ -6,16 +6,19 @@ import 'package:gql/ast.dart' show DocumentNode;
 
 import '../../domain/sources/source_error.dart';
 import '../../graphql/queries/now_playing.graphql.dart';
-import '../sources/mydia/bound_mydia.dart';
+import '../sources/mydia/mydia_source.dart';
+import '../sources/source.dart';
+import '../sources/sources_providers.dart';
 import 'media_session_state.dart';
 
-/// Runs one GraphQL query and returns its `data`, or null.
+/// Runs one GraphQL query against the instance [id] and returns its `data`,
+/// or null.
 typedef NowPlayingFetch = Future<Map<String, dynamic>?> Function(
-    DocumentNode document, Map<String, dynamic> variables);
+    SourceId id, DocumentNode document, Map<String, dynamic> variables);
 
 /// Thrown by a [NowPlayingFetch] when there is currently no way to reach the
-/// server (no GraphQL client yet, e.g. playback started during startup or a
-/// reconnect) rather than a real, terminal failure. The resolver treats this
+/// server (the instance is not loaded yet, e.g. playback started during
+/// startup or a reconnect) rather than a real, terminal failure. The resolver treats this
 /// as unmemoisable so the next [NowPlayingMetadataResolver.resolve] call for
 /// the same ids fetches again instead of returning a permanently cached null.
 class NowPlayingFetchUnavailable implements Exception {}
@@ -32,17 +35,19 @@ class NowPlayingMetadataResolver {
   final _cache = <String, Future<NowPlayingMetadata?>>{};
 
   Future<NowPlayingMetadata?> resolve(
-      {String? mediaItemId, String? episodeId}) {
+      {required SourceId sourceId, String? mediaItemId, String? episodeId}) {
     if (mediaItemId == null && episodeId == null) return Future.value(null);
-    final key = '$mediaItemId|$episodeId';
-    return _cache.putIfAbsent(key, () => _load(mediaItemId, episodeId, key));
+    final key = '${sourceId.value}|$mediaItemId|$episodeId';
+    return _cache.putIfAbsent(
+        key, () => _load(sourceId, mediaItemId, episodeId, key));
   }
 
-  Future<NowPlayingMetadata?> _load(
-      String? mediaItemId, String? episodeId, String key) async {
+  Future<NowPlayingMetadata?> _load(SourceId sourceId, String? mediaItemId,
+      String? episodeId, String key) async {
     try {
       if (episodeId != null) {
         final data = await _fetch(
+          sourceId,
           documentNodeQueryNowPlayingEpisode,
           Variables$Query$NowPlayingEpisode(id: episodeId).toJson(),
         );
@@ -50,6 +55,7 @@ class NowPlayingMetadataResolver {
         return episode is Map<String, dynamic> ? _episode(episode) : null;
       }
       final data = await _fetch(
+        sourceId,
         documentNodeQueryNowPlayingMovie,
         Variables$Query$NowPlayingMovie(id: mediaItemId!).toJson(),
       );
@@ -93,13 +99,13 @@ class NowPlayingMetadataResolver {
 
 final nowPlayingMetadataResolverProvider =
     Provider<NowPlayingMetadataResolver>((ref) {
-  return NowPlayingMetadataResolver((document, variables) async {
+  return NowPlayingMetadataResolver((id, document, variables) async {
     // Read per call, not captured: the client is rebuilt on reconnect and
     // token refresh.
-    final client = ref.read(boundMydiaClientProvider);
-    if (client == null) throw NowPlayingFetchUnavailable();
+    final source = ref.read(mediaSourceProvider(id));
+    if (source is! MydiaSource) throw NowPlayingFetchUnavailable();
     try {
-      return await client.request(document, variables);
+      return await source.client.request(document, variables);
     } on SourceException {
       return null;
     }
