@@ -192,7 +192,10 @@ defmodule Mydia.LibrarySearch do
       year: item.year,
       score: rank / 1,
       poster_path: MetadataAccess.get_field(item, :poster_path),
-      backdrop_path: MetadataAccess.get_field(item, :backdrop_path)
+      backdrop_path: MetadataAccess.get_field(item, :backdrop_path),
+      tmdb_id: item.tmdb_id,
+      tvdb_id: item.tvdb_id,
+      imdb_id: item.imdb_id
     }
   end
 

@@ -16,6 +16,9 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
       showTitle
       seasonNumber
       episodeNumber
+      tmdbId
+      tvdbId
+      imdbId
       progress {
         positionSeconds
         percentage
@@ -62,6 +65,9 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     assert item["showTitle"] == "Test Show"
     assert item["seasonNumber"] == 1
     assert item["episodeNumber"] == 2
+    assert item["tmdbId"] == nil
+    assert item["tvdbId"] == nil
+    assert item["imdbId"] == nil
     assert item["progress"]["positionSeconds"] == 0
     assert item["progress"]["percentage"] == 0.0
     assert item["progress"]["watched"] == false
@@ -96,7 +102,15 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     # build_on_deck_item/1. The upNext movie test does not: that resolver
     # filters to episodes, so it never builds a movie item. Without this, the
     # movie clause and its String.to_existing_atom/1 call ship unexecuted.
-    movie = MediaFixtures.media_item_fixture(%{type: "movie", title: "Some Movie"})
+    movie =
+      MediaFixtures.media_item_fixture(%{
+        type: "movie",
+        title: "Some Movie",
+        tmdb_id: 424_242,
+        tvdb_id: 515_151,
+        imdb_id: "tt0424242"
+      })
+
     MediaFixtures.media_file_fixture(%{media_item_id: movie.id})
 
     {:ok, _} =
@@ -116,6 +130,9 @@ defmodule MydiaWeb.Schema.ContinueWatchingTest do
     assert item["showId"] == nil
     assert item["seasonNumber"] == nil
     assert item["episodeNumber"] == nil
+    assert item["tmdbId"] == 424_242
+    assert item["tvdbId"] == 515_151
+    assert item["imdbId"] == "tt0424242"
     assert item["progress"]["positionSeconds"] == 900
     assert length(item["files"]) == 1
   end

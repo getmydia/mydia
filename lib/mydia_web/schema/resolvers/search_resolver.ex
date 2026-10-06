@@ -68,6 +68,9 @@ defmodule MydiaWeb.Schema.Resolvers.SearchResolver do
       season_number: result.season_number,
       episode_number: result.episode_number,
       parent_id: result.parent_id,
+      tmdb_id: result.tmdb_id,
+      tvdb_id: result.tvdb_id,
+      imdb_id: result.imdb_id,
       artwork: build_artwork(result)
     }
   end

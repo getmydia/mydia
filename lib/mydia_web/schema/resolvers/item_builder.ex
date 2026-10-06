@@ -36,7 +36,10 @@ defmodule MydiaWeb.Schema.Resolvers.ItemBuilder do
       added_at: Keyword.get(opts, :added_at) || media_item.inserted_at,
       new_episode_count: Keyword.get(opts, :new_episode_count),
       latest_season_number: latest_episode && latest_episode.season_number,
-      latest_episode_number: latest_episode && latest_episode.episode_number
+      latest_episode_number: latest_episode && latest_episode.episode_number,
+      tmdb_id: media_item.tmdb_id,
+      tvdb_id: media_item.tvdb_id,
+      imdb_id: media_item.imdb_id
     }
   end
 

@@ -12,6 +12,9 @@ defmodule Mydia.LibrarySearch.Result do
   | `:movie`, `:tv_show` | `nil` | `nil` | `nil` | poster, backdrop |
   | `:episode` | parent show title | set | parent show id | still, plus parent poster/backdrop |
   | `:collection` | `"4 items"` | `nil` | `nil` | poster |
+
+  `tmdb_id`, `tvdb_id` and `imdb_id` are set for `:movie` and `:tv_show` hits and
+  `nil` for episodes and collections.
   """
 
   @enforce_keys [:id, :type, :title, :score]
@@ -27,7 +30,10 @@ defmodule Mydia.LibrarySearch.Result do
     :parent_id,
     :poster_path,
     :backdrop_path,
-    :still_path
+    :still_path,
+    :tmdb_id,
+    :tvdb_id,
+    :imdb_id
   ]
 
   @type result_type :: :movie | :tv_show | :episode | :collection
@@ -44,6 +50,9 @@ defmodule Mydia.LibrarySearch.Result do
           parent_id: binary() | nil,
           poster_path: String.t() | nil,
           backdrop_path: String.t() | nil,
-          still_path: String.t() | nil
+          still_path: String.t() | nil,
+          tmdb_id: integer() | nil,
+          tvdb_id: integer() | nil,
+          imdb_id: String.t() | nil
         }
 end

@@ -28,6 +28,12 @@ pub struct ContinueWatchingItem {
     /// Why this item is on the rail: continue for a resume point, next for the
     /// successor of a finished episode.
     pub state: Option<String>,
+    /// TMDB id of the movie or show. Null for episodes and collections.
+    pub tmdb_id: Option<i32>,
+    /// TVDB id of the movie or show. Null for episodes and collections.
+    pub tvdb_id: Option<i32>,
+    /// IMDb id of the movie or show. Null for episodes and collections.
+    pub imdb_id: Option<String>,
 }
 
 #[derive(SimpleObject)]
@@ -68,6 +74,12 @@ pub struct SearchResult {
     pub season_number: Option<i32>,
     pub episode_number: Option<i32>,
     pub parent_id: Option<ID>,
+    /// TMDB id of the movie or show. Null for episodes and collections.
+    pub tmdb_id: Option<i32>,
+    /// TVDB id of the movie or show. Null for episodes and collections.
+    pub tvdb_id: Option<i32>,
+    /// IMDb id of the movie or show. Null for episodes and collections.
+    pub imdb_id: Option<String>,
 }
 
 #[derive(SimpleObject)]

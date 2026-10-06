@@ -308,6 +308,15 @@ type ContinueWatchingItem {
   seasonNumber: Int
 
   episodeNumber: Int
+
+  "TMDB id of the movie or show. Null for episodes and collections."
+  tmdbId: Int
+
+  "TVDB id of the movie or show. Null for episodes and collections."
+  tvdbId: Int
+
+  "IMDb id of the movie or show. Null for episodes and collections."
+  imdbId: String
 }
 
 "An item in the recently added rail"
@@ -332,6 +341,15 @@ type RecentlyAddedItem {
 
   "Number of the newest arrived episode. Null for movies and for unmatched files."
   latestEpisodeNumber: Int
+
+  "TMDB id of the movie or show. Null for episodes and collections."
+  tmdbId: Int
+
+  "TVDB id of the movie or show. Null for episodes and collections."
+  tvdbId: Int
+
+  "IMDb id of the movie or show. Null for episodes and collections."
+  imdbId: String
 
   "Rolled-up watch state"
   watchStatus: WatchStatus
@@ -900,6 +918,15 @@ type SearchResult {
 
   "Owning show ID, episodes only"
   parentId: ID
+
+  "TMDB id of the movie or show. Null for episodes and collections."
+  tmdbId: Int
+
+  "TVDB id of the movie or show. Null for episodes and collections."
+  tvdbId: Int
+
+  "IMDb id of the movie or show. Null for episodes and collections."
+  imdbId: String
 }
 
 "One grouped section of search results"
