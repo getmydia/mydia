@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:player/core/downloads/download_job_providers.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_queue_providers.dart';
 import 'package:player/domain/models/download.dart';
@@ -58,10 +57,6 @@ void main() {
   ProviderContainer makeContainer() {
     final container = ProviderContainer(overrides: [
       downloadDatabaseProvider.overrideWith((ref) async => database),
-      // Cut the graph down to the question under test. Left real, this pulls
-      // in the connection and GraphQL providers, whose async initialisation
-      // outlives container teardown and errors out on a disposed Ref.
-      unifiedDownloadJobServiceProvider.overrideWith((ref) => null),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -157,7 +152,6 @@ void main() {
       ));
       final container = ProviderContainer(overrides: [
         downloadDatabaseProvider.overrideWith((ref) async => database),
-        unifiedDownloadJobServiceProvider.overrideWith((ref) => null),
         sourceRecordsProvider.overrideWith(() => _Records(records)),
         // Hidden while the app is locked: no source is built.
         mediaSourceProvider(source).overrideWithValue(null),

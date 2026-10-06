@@ -10,8 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gql/ast.dart' show OperationDefinitionNode;
 // `DocumentNode` has no `toString()` override (it prints as `Instance of
 // 'DocumentNode'`), so getting the request's query text back out requires
-// the AST printer. Same pattern as `lib/core/graphql/p2p_link.dart` and
-// `lib/core/downloads/p2p_download_job_service.dart`.
+// the AST printer. Same pattern as `lib/core/graphql/p2p_link.dart`.
 // ignore: depend_on_referenced_packages
 import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
