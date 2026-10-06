@@ -27,7 +27,11 @@ Set<DetailFeature> sourceFeatures(MediaSource source) => {
 DetailArt? _art(SourceId sourceId, ArtworkRef? ref) =>
     ref == null ? null : SourceArt(sourceId, ref);
 
-Progress? progressFromUserState(UserState state, int? durationSeconds) {
+Progress? progressFromUserState(
+  UserState state,
+  int? durationSeconds, {
+  DateTime? lastPlayedAt,
+}) {
   final position = state.progressSeconds ?? 0;
   if (!state.watched && position <= 0) return null;
   final percentage = durationSeconds == null || durationSeconds <= 0
@@ -38,6 +42,7 @@ Progress? progressFromUserState(UserState state, int? durationSeconds) {
     durationSeconds: durationSeconds,
     percentage: state.watched ? 100 : percentage,
     watched: state.watched,
+    lastWatchedAt: lastPlayedAt?.toUtc().toIso8601String(),
   );
 }
 
@@ -81,7 +86,11 @@ MovieView movieViewFromSource(
     rating: d.rating,
     backdrop: _art(id, s.backdrop),
     poster: _art(id, s.poster),
-    progress: progressFromUserState(s.userState, s.durationSeconds),
+    progress: progressFromUserState(
+      s.userState,
+      s.durationSeconds,
+      lastPlayedAt: s.lastPlayedAt,
+    ),
     files: filesFromVersions(d.versions),
     isFavorite: d.isFavorite,
     trailerUrl: d.trailerUrl,
@@ -148,7 +157,11 @@ EpisodeView episodeViewFromSource(
       runtime: _minutes(e.durationSeconds),
       still: _art(e.ref.sourceId, e.backdrop),
       showPoster: _art(e.ref.sourceId, showPoster),
-      progress: progressFromUserState(e.userState, e.durationSeconds),
+      progress: progressFromUserState(
+        e.userState,
+        e.durationSeconds,
+        lastPlayedAt: e.lastPlayedAt,
+      ),
       files: [
         if (e.defaultVersionId case final v?)
           MediaFile(id: v, directPlaySupported: true),
@@ -174,7 +187,11 @@ EpisodeView episodeViewFromSourceDetail(
     airDate: s.airDate,
     runtime: _minutes(s.durationSeconds),
     still: _art(s.ref.sourceId, s.backdrop),
-    progress: progressFromUserState(s.userState, s.durationSeconds),
+    progress: progressFromUserState(
+      s.userState,
+      s.durationSeconds,
+      lastPlayedAt: s.lastPlayedAt,
+    ),
     files: filesFromVersions(d.versions),
     hasFile: d.versions.isNotEmpty,
     features: features,

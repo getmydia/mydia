@@ -79,6 +79,25 @@ void main() {
         isTrue);
   });
 
+  test('a watched movie keeps the date it was watched', () {
+    final p = progressFromUserState(const UserState(watched: true), 100,
+        lastPlayedAt: DateTime.utc(2026, 3, 4, 20));
+    expect(p?.lastWatchedAt, '2026-03-04T20:00:00.000Z');
+  });
+
+  test('the movie view carries the watched date to its badge', () {
+    final d = ItemDetail(
+      summary: ItemSummary(
+        ref: fakeMovie(1).ref,
+        title: 'Copper Weather',
+        userState: const UserState(watched: true),
+        lastPlayedAt: DateTime.utc(2026, 3, 4),
+      ),
+    );
+    final v = movieViewFromSource(d, features: features);
+    expect(v.progress?.lastWatchedAt, isNotNull);
+  });
+
   test('a target names its item, and only some kinds have a detail screen', () {
     expect(SourceTarget(fakeMovie(1).ref).ref, fakeMovie(1).ref);
     expect(detailKindOf(ItemKind.video), isNull);
