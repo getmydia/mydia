@@ -9,11 +9,13 @@ import '../../core/compatibility/compatibility_provider.dart';
 import '../../core/config/web_config.dart';
 import '../../core/downloads/collection_auto_sync.dart';
 import '../../core/downloads/download_service.dart' show isDownloadSupported;
+import '../../core/downloads/orphan_download_sweep.dart';
 import '../../core/focus/region_traversal_policy.dart';
 import '../../core/focus/sidebar_focus_boundary.dart';
 import '../../core/graphql/graphql_provider.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/navigation/sidebar_layout_providers.dart';
+import '../../core/router/root_routes.dart';
 import '../../core/player/input_capabilities.dart';
 import '../../core/playback/playback_progress_providers.dart';
 import '../../core/layout/breakpoints.dart';
@@ -317,7 +319,11 @@ class _AppShellState extends ConsumerState<AppShell>
       _showOfflineToast();
       return;
     }
-    context.go(route);
+    if (opensOverShell(route)) {
+      context.push(route);
+    } else {
+      context.go(route);
+    }
   }
 
   /// Wraps [child] in a focus region, or returns it untouched off the
@@ -367,6 +373,8 @@ class _AppShellState extends ConsumerState<AppShell>
     // so watching it once here is enough for the underlying provider —
     // not autoDispose — to keep listening for the rest of the session.
     ref.watch(progressFlushProvider);
+    ref.watch(sourceProgressFlushProvider);
+    ref.watch(orphanDownloadSweepProvider);
     // Use MediaQuery instead of LayoutBuilder to determine layout.
     // LayoutBuilder defers building to the layout phase, which can prevent
     // proper repaint propagation on mobile when combined with GlobalKey

@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -13,8 +14,11 @@ import 'package:hive_ce/hive.dart';
 import 'package:player/core/downloads/download_job_service.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/downloads/download_service_native.dart';
+import 'package:player/core/sources/mydia/mydia_transcode_job.dart';
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/models/download_option.dart';
+import 'package:player/domain/models/download_plan.dart';
+import 'package:player/domain/sources/item.dart';
 
 /// A complete [DownloadDatabase] over two Hive boxes.
 class HiveDownloadDatabase implements DownloadDatabase {
@@ -84,16 +88,16 @@ class HiveDownloadDatabase implements DownloadDatabase {
   DownloadedMedia? getMedia(String id) => _open ? mediaBox.get(id) : null;
 
   @override
-  DownloadedMedia? getMediaByMediaId(String mediaId) {
+  DownloadedMedia? getMediaFor(ItemRef ref) {
     if (!_open) return null;
     for (final m in mediaBox.values) {
-      if (m.mediaId == mediaId) return m;
+      if (m.matches(ref)) return m;
     }
     return null;
   }
 
   @override
-  bool isMediaDownloaded(String mediaId) => getMediaByMediaId(mediaId) != null;
+  bool isDownloaded(ItemRef ref) => getMediaFor(ref) != null;
 
   @override
   List<DownloadedMedia> getAllMedia() => _open ? mediaBox.values.toList() : [];
@@ -176,7 +180,22 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   Uint8List body;
   DioException? failWith;
 
-  RecordingHttpAdapter({required this.body, this.failWith});
+  /// When set, the body stream errors with this after [bodyErrorAfter] bytes.
+  Exception? bodyError;
+  int bodyErrorAfter = 0;
+
+  /// Answers a ranged request with 200 and the whole body, like a server that
+  /// does not support `Range`.
+  bool ignoreRange;
+
+  /// When set, the body arrives in chunks of this many bytes rather than one.
+  int? chunkSize;
+
+  RecordingHttpAdapter({
+    required this.body,
+    this.failWith,
+    this.ignoreRange = false,
+  });
 
   /// The `Range` header of the most recent request, or null if there was none.
   String? get lastRange =>
@@ -196,7 +215,7 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     var start = 0;
     var statusCode = 200;
     final range = options.headers['Range'] as String?;
-    if (range != null) {
+    if (range != null && !ignoreRange) {
       final match = RegExp(r'bytes=(\d+)-').firstMatch(range);
       if (match != null) {
         start = int.parse(match.group(1)!);
@@ -207,6 +226,34 @@ class RecordingHttpAdapter implements HttpClientAdapter {
     final slice = start >= body.length
         ? Uint8List(0)
         : Uint8List.sublistView(body, start);
+
+    // A connection that dies mid-body: some bytes arrive, then the stream
+    // errors with whatever the platform throws, which Dio does not wrap.
+    final error = bodyError;
+    if (error != null && slice.length > bodyErrorAfter) {
+      return ResponseBody(
+        _dyingBody(
+            Uint8List.sublistView(slice, 0, bodyErrorAfter), error, chunkSize),
+        statusCode,
+        headers: {
+          Headers.contentLengthHeader: [slice.length.toString()],
+        },
+      );
+    }
+
+    final size = chunkSize;
+    if (size != null) {
+      return ResponseBody(
+        Stream.fromIterable([
+          for (var i = 0; i < slice.length; i += size)
+            Uint8List.sublistView(slice, i, math.min(i + size, slice.length)),
+        ]),
+        statusCode,
+        headers: {
+          Headers.contentLengthHeader: [slice.length.toString()],
+        },
+      );
+    }
 
     return ResponseBody.fromBytes(
       slice,
@@ -220,6 +267,39 @@ class RecordingHttpAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+Stream<Uint8List> _dyingBody(
+    Uint8List first, Exception error, int? chunkSize) async* {
+  final size = chunkSize ?? math.max(first.length, 1);
+  for (var i = 0; i < first.length; i += size) {
+    yield Uint8List.sublistView(first, i, math.min(i + size, first.length));
+  }
+  throw error;
+}
+
+/// Stands in for the sources: answers every resolve with [plan], counting
+/// calls, or throws [error] when set.
+class FakeResolver {
+  FakeResolver(this.plan);
+
+  DownloadPlan Function(DownloadTask task) plan;
+  Exception? error;
+  int calls = 0;
+
+  /// When set, every resolve waits for it, like a slow server.
+  Completer<void>? gate;
+
+  Future<DownloadPlan> call(DownloadTask task) async {
+    calls++;
+    final pending = gate;
+    if (pending != null) await pending.future;
+    final failure = error;
+    if (failure != null) throw failure;
+    return plan(task);
+  }
+}
+
+const testFileUrl = 'https://test.invalid/file.mp4';
 
 /// A clock the test moves by hand.
 class TestClock {
@@ -236,6 +316,7 @@ class DownloadHarness {
   final HiveDownloadDatabase database;
   final RecordingHttpAdapter adapter;
   final FakeDownloadJobService jobService;
+  final FakeResolver resolver;
   final TestClock clock;
   final Directory downloadDir;
   final Directory hiveDir;
@@ -245,6 +326,7 @@ class DownloadHarness {
     required this.database,
     required this.adapter,
     required this.jobService,
+    required this.resolver,
     required this.clock,
     required this.downloadDir,
     required this.hiveDir,
@@ -281,12 +363,12 @@ var _boxCounter = 0;
 
 /// Build a real native service wired to test doubles.
 ///
-/// [attachJobService] controls whether the fake job service is injected, which
-/// also decides whether the service runs its recovery sweep on injection.
+/// [attachResolver] controls whether the fake resolver is installed, which
+/// also decides whether the service runs its recovery sweep on installation.
 Future<DownloadHarness> makeHarness({
   required Uint8List body,
   DownloadJobStatus? jobStatus,
-  bool attachJobService = true,
+  bool attachResolver = true,
   List<DownloadTask> seedTasks = const [],
 }) async {
   final hiveDir = await Directory.systemTemp.createTemp('mydia_hive_');
@@ -317,7 +399,24 @@ Future<DownloadHarness> makeHarness({
     clock: clock.call,
   );
   service.setDatabase(database);
-  if (attachJobService) service.setJobService(jobService);
+  final resolver = FakeResolver((task) {
+    // Tasks seeded as transcodes keep exercising the job path.
+    final transcode = task.isProgressive ||
+        task.transcodeJobId != null ||
+        task.status == 'transcoding';
+    if (!transcode) {
+      return const DirectFile(url: testFileUrl, extension: 'mp4');
+    }
+    return MydiaTranscodeJob(
+      jobs: jobService,
+      contentType: task.mediaType,
+      id: task.mediaId,
+      resolution: task.quality,
+      fileFor: (jobId) async => DirectFile(
+          url: await jobService.getDownloadUrl(jobId), extension: 'mp4'),
+    );
+  });
+  if (attachResolver) service.setPlanResolver(resolver.call);
 
   // setDatabase schedules cleanupOrphanedFiles via Future.microtask. That
   // async work yields across the caller's first awaits and will delete any
@@ -330,6 +429,7 @@ Future<DownloadHarness> makeHarness({
     database: database,
     adapter: adapter,
     jobService: jobService,
+    resolver: resolver,
     clock: clock,
     downloadDir: downloadDir,
     hiveDir: hiveDir,

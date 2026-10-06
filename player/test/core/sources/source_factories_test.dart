@@ -27,6 +27,7 @@ import '../../test_utils/mock_auth_storage.dart';
 import 'jellyfin/fake_jellyfin_server.dart';
 import 'jellyfin/jellyfin_media_source_test.dart'
     show jellyfinRecord, jellyfinSid;
+import '../../test_utils/no_downloads.dart';
 import 'plex/fake_plex_server.dart';
 import 'plex/plex_tv_client_test.dart' show resourcesJson;
 import 'stash/fake_stash_server.dart';
@@ -82,6 +83,7 @@ Future<ProviderContainer> containerFor({
   }
   final container = ProviderContainer(overrides: [
     authStateProvider.overrideWith(_Unauthenticated.new),
+    noDownloadsOverride,
     sourceStoreProvider.overrideWith((ref) async => store),
     sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
     sourceHttpProvider.overrideWithValue(http),
@@ -187,6 +189,7 @@ void main() {
     await storage.write('source/st1/account_token', FakeStashServer.apiKey);
     final c = ProviderContainer(overrides: [
       authStateProvider.overrideWith(_Unauthenticated.new),
+      noDownloadsOverride,
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: stash.client)),

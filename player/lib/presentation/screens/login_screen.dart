@@ -469,6 +469,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   right: 0,
                   child: WindowTitleRow(showCast: false),
                 ),
+                // Pushed (Add a server > Mydia), this screen has no app bar to
+                // carry a back button, and iOS has no system back. The D-pad
+                // tier has a hardware back key, and the button would only be
+                // one more stop for focus.
+                if (!InputCapabilities.directionalPrimary &&
+                    Navigator.canPop(context))
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    child: ExcludeFocus(
+                      excluding: _showAdvancedSettings || _showQrScanner,
+                      child: const SafeArea(
+                        child: Padding(
+                          padding: EdgeInsets.all(8),
+                          child: BackButton(
+                            key: Key('login-back'),
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_showQrScanner) _buildQrScannerOverlay(),
                 if (_showAdvancedSettings) _buildAdvancedSettingsOverlay(),
               ],

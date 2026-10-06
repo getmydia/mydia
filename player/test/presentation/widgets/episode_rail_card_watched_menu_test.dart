@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/downloads/download_providers.dart';
+import 'package:player/domain/models/download_request.dart';
 import 'package:player/domain/models/episode.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/models/progress.dart';
 import 'package:player/presentation/screens/detail/mydia_detail_mapping.dart';
 import 'package:player/presentation/widgets/episode_rail_card.dart';
@@ -27,7 +29,8 @@ Future<void> _pumpCard(WidgetTester tester, Episode episode) async {
     ProviderScope(
       overrides: [
         // Keep the card hermetic — no real download-state lookups.
-        isMediaDownloadedProvider(episode.id).overrideWith((ref) => false),
+        isItemDownloadedProvider(homeMydiaRef(ItemKind.episode, episode.id))
+            .overrideWith((ref) => false),
       ],
       child: MaterialApp(
         home: Scaffold(

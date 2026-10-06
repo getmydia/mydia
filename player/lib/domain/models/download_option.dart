@@ -19,6 +19,9 @@ class DownloadOption {
   /// Actual file size in bytes when transcoded
   final int? actualSize;
 
+  /// Container of the file this option downloads, when the server says.
+  final String? container;
+
   const DownloadOption({
     required this.resolution,
     String? label,
@@ -26,6 +29,7 @@ class DownloadOption {
     this.transcodeStatus,
     this.transcodeProgress,
     this.actualSize,
+    this.container,
   }) : _label = label;
 
   /// Display label - uses server-provided label or falls back to resolution
@@ -49,6 +53,7 @@ class DownloadOption {
       transcodeStatus: json['transcode_status'] as String?,
       transcodeProgress: (json['transcode_progress'] as num?)?.toDouble(),
       actualSize: json['actual_size'] as int?,
+      container: json['container'] as String?,
     );
   }
 
@@ -60,6 +65,7 @@ class DownloadOption {
       if (transcodeStatus != null) 'transcode_status': transcodeStatus,
       if (transcodeProgress != null) 'transcode_progress': transcodeProgress,
       if (actualSize != null) 'actual_size': actualSize,
+      if (container != null) 'container': container,
     };
   }
 

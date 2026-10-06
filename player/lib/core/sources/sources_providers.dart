@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_status.dart';
 import '../auth/auth_storage.dart';
+import '../downloads/download_providers.dart';
+import '../downloads/download_service.dart';
 import '../graphql/graphql_provider.dart';
 import 'all_servers_inclusion.dart';
 import 'cache/source_cache.dart';
@@ -19,6 +21,11 @@ import 'source_factories.dart';
 import 'store/source_records.dart';
 import 'store/source_secrets.dart';
 import 'store/source_store.dart';
+
+/// How long removing an account waits for the download manager. A manager
+/// that never builds must not stall the write queue.
+/// Mutable so a test can shorten it.
+Duration downloadLookupTimeout = const Duration(seconds: 5);
 
 final sourceStoreProvider = FutureProvider<SourceStore>(
   (ref) => HiveSourceStore.open(),
@@ -99,18 +106,49 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
-  Future<void> removeAccount(String accountId) => _serialise(() async {
-        final record = _record(accountId);
-        await _write((store) async {
-          await store.removeAccount(accountId);
-          await _dropAllServersChoices(store, accountId);
-        });
-        if (record != null) {
-          await ref.read(sourceSecretsProvider).deleteAll(record);
-        }
-        // Keyed by id, so it needs no record.
-        await _dropCache(accountId);
+  Future<void> removeAccount(String accountId) async {
+    await _serialise(() async {
+      final record = _record(accountId);
+      await _write((store) async {
+        await store.removeAccount(accountId);
+        await _dropAllServersChoices(store, accountId);
       });
+      if (record != null) {
+        await ref.read(sourceSecretsProvider).deleteAll(record);
+      }
+      // Keyed by id, so it needs no record.
+      await _dropCache(accountId);
+    });
+    await _deleteDownloads([accountId]);
+  }
+
+  /// Downloads go with the accounts: their credentials are gone, so they
+  /// could never sync or be re-fetched. Runs after the write queue has
+  /// released, so a slow or missing download manager never delays other
+  /// writes. The manager is resolved once, bounded by
+  /// [downloadLookupTimeout]. Best effort: the orphan download sweep
+  /// (orphan_download_sweep.dart) retries whatever is left over.
+  Future<void> _deleteDownloads(List<String> accountIds) async {
+    if (!isDownloadSupported || accountIds.isEmpty) return;
+    final DownloadService manager;
+    try {
+      manager = await ref
+          .read(downloadManagerProvider.future)
+          .timeout(downloadLookupTimeout);
+    } catch (e) {
+      debugPrint('[sources] Download manager unavailable: $e');
+      return;
+    }
+    for (final id in accountIds) {
+      // Re-added during the wait: same server, so the account owns them again.
+      if (_record(id) != null) continue;
+      try {
+        await manager.deleteAccountDownloads(id);
+      } catch (e) {
+        debugPrint('[sources] Could not delete downloads of $id: $e');
+      }
+    }
+  }
 
   /// Never throws: a selection that cannot be remembered still applies for
   /// this launch.
@@ -155,21 +193,27 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   ///
   /// Runs as one queued write, so a lock still queued ahead of it is in the
   /// snapshot it reads.
-  Future<void> removeLockedAccounts() => _serialise(() async {
-        final locked = [
-          for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
-            if (r.serverLocks.isNotEmpty) r,
-        ];
-        for (final record in locked) {
-          final id = record.account.id;
-          await _write((store) async {
-            await store.removeAccount(id);
-            await _dropAllServersChoices(store, id);
-          });
-          await ref.read(sourceSecretsProvider).deleteAll(record);
-          await _dropCache(id);
-        }
-      });
+  Future<void> removeLockedAccounts() async {
+    final removed = await _serialise(() async {
+      final locked = [
+        for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
+          if (r.serverLocks.isNotEmpty) r,
+      ];
+      final ids = <String>[];
+      for (final record in locked) {
+        final id = record.account.id;
+        await _write((store) async {
+          await store.removeAccount(id);
+          await _dropAllServersChoices(store, id);
+        });
+        await ref.read(sourceSecretsProvider).deleteAll(record);
+        await _dropCache(id);
+        ids.add(id);
+      }
+      return ids;
+    });
+    await _deleteDownloads(removed);
+  }
 
   Future<void> updateServers(
     String accountId,

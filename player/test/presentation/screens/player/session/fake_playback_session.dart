@@ -9,6 +9,8 @@ import 'package:player/domain/models/media_segment.dart';
 import 'package:player/domain/models/subtitle_candidate.dart';
 import 'package:player/domain/models/subtitle_search_outcome.dart';
 import 'package:player/domain/models/subtitle_track.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/session/playback_session.dart';
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 
@@ -78,6 +80,20 @@ class FakeProgress implements ProgressReporter {
 }
 
 class FakePlaybackSession implements PlaybackSession {
+  FakePlaybackSession({
+    this.item = const ItemRef(
+      sourceId: SourceId('fake'),
+      kind: ItemKind.movie,
+      externalId: 'movie-1',
+    ),
+    this.reachable = true,
+  });
+
+  @override
+  final ItemRef item;
+  @override
+  final bool reachable;
+
   final transport = FakeTransport();
   final progress = FakeProgress();
   int prepared = 0;

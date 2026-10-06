@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/sources/source_error.dart';
 import '../auth/auth_status.dart';
+import '../downloads/download_job_providers.dart';
 import '../graphql/graphql_provider.dart';
+import '../p2p/local_proxy_service.dart';
 import '../p2p/p2p_service.dart';
 import 'connection/connection_refresh_bus.dart';
 import 'connection/racing_connection.dart';
@@ -74,7 +76,13 @@ MediaSource buildHomeMydiaSource(Ref ref, Source source) {
     save: (_) async {},
     onUnauthorized: () {},
   );
-  return MydiaSource(source: source, client: client, status: status);
+  return MydiaSource(
+    source: source,
+    client: client,
+    status: status,
+    // Home downloads go through home's own job service, not the guest path.
+    homeJobs: () => ref.read(unifiedDownloadJobServiceProvider),
+  );
 }
 
 /// A credential read once from secure storage and held until the server
@@ -326,7 +334,11 @@ MydiaSource buildMydiaSource(Ref ref, Source source) {
     save: (c) => writeMydiaCredentials(secrets, source.account, c),
     onUnauthorized: () => _flagReauth(ref, source),
   );
-  return MydiaSource(source: source, client: client);
+  return MydiaSource(
+    source: source,
+    client: client,
+    proxy: () => ref.read(localProxyServiceProvider),
+  );
 }
 
 @Deprecated('Use buildMydiaSource instead')

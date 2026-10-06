@@ -166,7 +166,7 @@ class StorageCleanupService {
     for (final download in sorted) {
       if (freedBytes >= targetBytes) break;
 
-      await _downloadService.deleteDownload(download.mediaId);
+      await _downloadService.deleteDownload(download.itemRef);
       freedBytes += download.fileSize;
     }
 

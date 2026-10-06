@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../widgets/artwork_image.dart';
+import '../download_locations.dart';
+import 'download_artwork.dart';
 import '../../../../core/cache/poster_cache_manager.dart';
 import '../../../../core/layout/breakpoints.dart';
+import '../../../../core/playback/local_playback_progress.dart';
 import '../../../../core/playback/playback_progress_providers.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../domain/models/download.dart';
@@ -93,16 +95,12 @@ class DownloadedEpisodeCard extends ConsumerWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: thumbnailUrl != null && thumbnailUrl.isNotEmpty
-                  ? ArtworkImage(
-                      imageUrl: thumbnailUrl,
-                      fit: BoxFit.cover,
-                      cacheManager: EpisodeThumbnailCacheManager(),
-                      placeholder: (context) =>
-                          Container(color: AppColors.surfaceVariant),
-                      errorWidget: (context) => _buildPlaceholder(),
-                    )
-                  : _buildPlaceholder(),
+              child: DownloadArtwork(
+                localPath: media.thumbnailPath,
+                fallbackUrl: thumbnailUrl,
+                cacheManager: EpisodeThumbnailCacheManager(),
+                placeholder: (context) => _buildPlaceholder(),
+              ),
             ),
             if (media.quality.isNotEmpty)
               Positioned(
@@ -129,7 +127,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     final store = ref.watch(playbackProgressStoreProvider).value;
     if (store == null) return const SizedBox.shrink();
 
-    final progress = store.get(media.mediaId);
+    final progress = store.get(progressKey(media.itemRef));
     if (progress == null || progress.durationSeconds <= 0) {
       return const SizedBox.shrink();
     }
@@ -239,16 +237,7 @@ class DownloadedEpisodeCard extends ConsumerWidget {
     );
   }
 
-  /// `fileId=offline` is what tells the player screen to resolve the local
-  /// file instead of asking the server for a stream.
   void _play(BuildContext context) {
-    final season = media.seasonNumber;
-    context.push(
-      '/player/episode/${media.mediaId}'
-      '?fileId=offline'
-      '&title=${Uri.encodeComponent(media.title)}'
-      '&showId=$showId'
-      '${season != null ? '&seasonNumber=$season' : ''}',
-    );
+    context.push<void>(downloadedPlayLocation(media));
   }
 }

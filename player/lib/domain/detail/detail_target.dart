@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../../core/sources/source.dart';
 import '../sources/item.dart';
 
 enum DetailKind { movie, show, season, episode }
@@ -78,3 +79,18 @@ final class SourceTarget extends DetailTarget {
   @override
   String toString() => 'SourceTarget($key)';
 }
+
+/// The item [target] names, home Mydia's under its legacy source id.
+ItemRef itemRefOf(DetailTarget target) => switch (target) {
+      SourceTarget(:final ref) => ref,
+      MydiaTarget(:final kind, :final id) => ItemRef(
+          sourceId: SourceId.legacyMydia,
+          kind: switch (kind) {
+            DetailKind.movie => ItemKind.movie,
+            DetailKind.show => ItemKind.show,
+            DetailKind.season => ItemKind.season,
+            DetailKind.episode => ItemKind.episode,
+          },
+          externalId: id,
+        ),
+    };

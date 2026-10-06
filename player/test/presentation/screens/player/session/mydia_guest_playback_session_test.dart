@@ -101,7 +101,7 @@ void main() {
       onUnauthorized: () {},
     );
     return MydiaSourcePlaybackSession(
-      source: MydiaSource(source: guest, client: client),
+      source: MydiaSource(source: guest, client: client, proxy: () => proxy),
       item: item,
       fileId: item.kind == ItemKind.movie ? 'f-m-1' : 'f-e-1',
       proxy: () => proxy,
@@ -330,7 +330,8 @@ void main() {
       save: (_) async {},
       onUnauthorized: () {},
     );
-    final source = MydiaSource(source: guest, client: client);
+    final source =
+        MydiaSource(source: guest, client: client, proxy: () => proxy);
     expect(playbackSessionFor(source, _movie, 'f-m-1', proxy: () => proxy),
         isA<MydiaSourcePlaybackSession>());
     expect(playbackSessionFor(source, _movie, 'f-m-1'), isNull);

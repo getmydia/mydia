@@ -2,10 +2,14 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../domain/models/download.dart';
 import '../../domain/models/download_settings.dart';
+import '../../domain/sources/item.dart';
+import '../../domain/sources/source_error.dart';
+import '../sources/capabilities.dart';
+import '../sources/source.dart';
+import '../sources/sources_providers.dart';
 import 'download_service.dart';
 import 'download_speed_tracker.dart';
 
-import 'download_job_providers.dart';
 import 'download_queue_providers.dart';
 
 part 'download_providers.g.dart';
@@ -74,17 +78,64 @@ Future<DownloadService> downloadManager(Ref ref) async {
     if (settings != null) pushSettings(settings);
   });
 
-  // Inject unified job service (works for both HTTP and P2P modes)
-  final jobService = ref.watch(unifiedDownloadJobServiceProvider);
-  if (jobService != null) {
-    service.setJobService(jobService);
-  }
+  // ref.read inside the closure is deliberate. Watching sources would rebuild
+  // this keep-alive provider and dispose the service, cancelling every download.
+  service.setPlanResolver((task) async {
+    final source = ref.read(mediaSourceProvider(task.source));
+    final downloadable = source?.as<Downloadable>();
+    if (downloadable == null) {
+      throw source == null && _sourceMayReturn(ref, task.source)
+          ? const SourceException.unreachable()
+          : const SourceException.unsupported(
+              'This server is no longer on this device.');
+    }
+    return downloadable.resolve(task.itemRef, task.quality);
+  });
+
+  // The lock screen shows the foreground notification, so a locked or hidden
+  // source never names its downloads there.
+  service.setDiscreetSources(
+      (source) => ref.read(sourceLocksProvider).containsKey(source));
+
+  service.setArtworkFetcher((task, art) async {
+    if (task.source == SourceId.legacyMydia) {
+      return (url: art, headers: const <String, String>{});
+    }
+    final request = await ref
+        .read(mediaSourceProvider(task.source))
+        ?.artwork(ArtworkRef(art), width: 600);
+    return request == null
+        ? null
+        : (url: request.url, headers: request.headers);
+  });
 
   ref.onDispose(() {
     service.dispose();
   });
   return service;
 }
+
+/// Whether a source with no [MediaSource] right now may have one later: it is
+/// hidden while the app is locked, its records have not loaded yet, or home
+/// Mydia is signed out. Only a third-party account that is gone from the
+/// records is gone for good.
+bool _sourceMayReturn(Ref ref, SourceId source) {
+  if (source == SourceId.legacyMydia) return true;
+  final records = ref.read(sourceRecordsProvider);
+  final snapshot = records.value;
+  if (snapshot == null) return true;
+  return snapshot.accounts
+      .any((record) => source.value.startsWith('${record.account.id}:'));
+}
+
+/// Sources whose downloads may be listed: home, plus every source the
+/// switcher shows. A hidden source drops out while the app is locked, and
+/// its downloads with it.
+@riverpod
+Set<SourceId> visibleDownloadSources(Ref ref) => {
+      SourceId.legacyMydia,
+      for (final source in ref.watch(thirdPartySourcesProvider)) source.id,
+    };
 
 @riverpod
 Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
@@ -95,15 +146,24 @@ Stream<List<DownloadTask>> downloadQueue(Ref ref) async* {
 
   final database = await ref.watch(downloadDatabaseProvider.future);
   await ref.watch(downloadManagerProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial active/queued tasks (exclude failed and completed)
-  yield _getActiveTasks(database);
+  yield _visibleOnly(_getActiveTasks(database), visible, (t) => t.source);
 
   // Listen to database changes and emit latest tasks
   await for (final _ in database.watchTasks()) {
-    yield _getActiveTasks(database);
+    yield _visibleOnly(_getActiveTasks(database), visible, (t) => t.source);
   }
 }
+
+/// Keeps the rows whose source may be listed.
+List<T> _visibleOnly<T>(
+  Iterable<T> rows,
+  Set<SourceId> visible,
+  SourceId Function(T) sourceOf,
+) =>
+    rows.where((row) => visible.contains(sourceOf(row))).toList();
 
 /// Returns only active tasks (not failed, completed, or cancelled).
 List<DownloadTask> _getActiveTasks(DownloadDatabase database) {
@@ -125,13 +185,14 @@ Stream<List<DownloadedMedia>> downloadedMedia(Ref ref) async* {
 
   final database = await ref.watch(downloadDatabaseProvider.future);
   final manager = await ref.watch(downloadManagerProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit current downloaded media
-  yield manager.getDownloadedMedia();
+  yield _visibleOnly(manager.getDownloadedMedia(), visible, (m) => m.source);
 
   // Listen to database changes and emit downloaded media
   await for (final _ in database.watchMedia()) {
-    yield manager.getDownloadedMedia();
+    yield _visibleOnly(manager.getDownloadedMedia(), visible, (m) => m.source);
   }
 }
 
@@ -170,13 +231,14 @@ Stream<List<DownloadTask>> failedDownloads(Ref ref) async* {
   }
 
   final database = await ref.watch(downloadDatabaseProvider.future);
+  final visible = ref.watch(visibleDownloadSourcesProvider);
 
   // Emit initial failed tasks
-  yield _getFailedTasks(database);
+  yield _visibleOnly(_getFailedTasks(database), visible, (t) => t.source);
 
   // Listen to database changes and emit failed tasks
   await for (final _ in database.watchTasks()) {
-    yield _getFailedTasks(database);
+    yield _visibleOnly(_getFailedTasks(database), visible, (t) => t.source);
   }
 }
 
@@ -186,23 +248,23 @@ List<DownloadTask> _getFailedTasks(DownloadDatabase database) {
 }
 
 @riverpod
-Future<bool> isMediaDownloaded(Ref ref, String mediaId) async {
+Future<bool> isItemDownloaded(Ref ref, ItemRef item) async {
   if (!isDownloadSupported) {
     return false;
   }
 
   final manager = await ref.watch(downloadManagerProvider.future);
-  return manager.isMediaDownloaded(mediaId);
+  return manager.isDownloaded(item);
 }
 
 @riverpod
-Future<DownloadedMedia?> getDownloadedMediaById(Ref ref, String mediaId) async {
+Future<DownloadedMedia?> downloadedItem(Ref ref, ItemRef item) async {
   if (!isDownloadSupported) {
     return null;
   }
 
   final manager = await ref.watch(downloadManagerProvider.future);
-  return manager.getDownloadedMediaById(mediaId);
+  return manager.getDownloaded(item);
 }
 
 /// Provides speed info for all active downloads, updated on each progress event.

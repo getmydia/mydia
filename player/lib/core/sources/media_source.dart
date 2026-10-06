@@ -12,6 +12,7 @@ import 'source.dart';
 /// [MediaSource].
 enum SourceCapability {
   progressReporting,
+  progressSync,
   watchedState,
   searchable,
   continueWatching,

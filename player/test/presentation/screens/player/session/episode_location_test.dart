@@ -9,6 +9,7 @@ void main() {
       awaitClient: () => throw UnimplementedError(),
       target: () => const PlaybackTarget(
           mediaType: 'episode', mediaId: 'e1', fileId: 'f1'),
+      offline: () => false,
     );
     expect(
       session.episodeLocation(

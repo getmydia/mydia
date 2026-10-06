@@ -12,6 +12,8 @@ import '../../../../core/playback/playback_controller.dart';
 import '../../../../core/playback/stream_urls.dart';
 import '../../../../core/player/progress_reporter.dart';
 import '../../../../core/player/progress_service.dart';
+import '../../../../core/sources/source.dart';
+import '../../../../domain/sources/item.dart';
 import '../../../../domain/models/media_segment.dart';
 import '../../../../domain/models/subtitle_candidate.dart';
 import '../../../../domain/models/subtitle_track.dart';
@@ -42,11 +44,15 @@ class MydiaPlaybackSession implements PlaybackSession {
     required GraphQLClient? Function() client,
     required Future<GraphQLClient> Function() awaitClient,
     required PlaybackTarget Function() target,
+    required this.offline,
     MydiaStreamingDeps? streaming,
   })  : _client = client,
         _awaitClient = awaitClient,
         _target = target,
         _streaming = streaming;
+
+  /// True while the app is in offline mode.
+  final bool Function() offline;
 
   final MydiaStreamingDeps? _streaming;
 
@@ -62,6 +68,18 @@ class MydiaPlaybackSession implements PlaybackSession {
 
   @override
   Set<PlaybackFeature> get features => PlaybackFeature.values.toSet();
+
+  @override
+  ItemRef get item => ItemRef(
+        sourceId: SourceId.legacyMydia,
+        kind: _target().mediaType == 'episode'
+            ? ItemKind.episode
+            : ItemKind.movie,
+        externalId: _target().mediaId,
+      );
+
+  @override
+  bool get reachable => !offline();
 
   @override
   String episodeLocation({
