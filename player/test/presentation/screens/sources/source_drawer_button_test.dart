@@ -17,6 +17,10 @@ Future<void> _pumpInShell(
   Widget screen, {
   bool pushed = false,
 }) async {
+  // Narrow, but not so narrow the title bar overflows.
+  tester.view.physicalSize = const Size(600, 900);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(ProviderScope(
     overrides: [
       mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
@@ -45,18 +49,18 @@ Future<void> _pumpInShell(
   }
 }
 
-const _drawerButton = Key('source-open-drawer');
+// The tooltip is the button's accessible name.
+final _menu = find.byTooltip('Menu');
+final _back = find.byTooltip('Back');
 
 void main() {
   testWidgets('a library opened from the drawer offers the drawer',
       (tester) async {
     await _pumpInShell(
         tester, const SourceLibraryScreen(library: FakeMediaSource.movies));
-    expect(find.byKey(_drawerButton), findsOneWidget);
-    // The tooltip is the button's accessible name.
-    expect(find.byTooltip('Menu'), findsOneWidget);
+    expect(_menu, findsOneWidget);
 
-    await tester.tap(find.byKey(_drawerButton));
+    await tester.tap(_menu);
     await tester.pumpAndSettle();
     expect(find.text('drawer-body'), findsOneWidget);
   });
@@ -65,7 +69,7 @@ void main() {
       (tester) async {
     await _pumpInShell(
         tester, const SourceSearchScreen(sourceId: fakeSourceId));
-    expect(find.byKey(_drawerButton), findsOneWidget);
+    expect(_menu, findsOneWidget);
   });
 
   testWidgets('a pushed library shows back, not the drawer', (tester) async {
@@ -74,11 +78,14 @@ void main() {
       const SourceLibraryScreen(library: FakeMediaSource.movies),
       pushed: true,
     );
-    expect(find.byKey(_drawerButton), findsNothing);
-    expect(find.byType(BackButton), findsOneWidget);
+    expect(_menu, findsNothing);
+    expect(_back, findsOneWidget);
   });
 
-  testWidgets('no drawer button outside the narrow shell', (tester) async {
+  testWidgets('no drawer button on the wide layout', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(ProviderScope(
       overrides: [
         mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
@@ -89,6 +96,6 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.byKey(_drawerButton), findsNothing);
+    expect(_menu, findsNothing);
   });
 }

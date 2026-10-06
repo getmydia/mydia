@@ -2,169 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/layout/breakpoints.dart';
-import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/navigation/sidebar_layout_providers.dart';
+import '../../../core/sources/capabilities.dart';
+import '../../../core/sources/source.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/navigation/media_filter.dart';
-import '../../../domain/navigation/nav_destination.dart';
-import '../../widgets/ambient_backdrop_provider.dart';
 import '../filter/filter_editor_sheet.dart';
-import '../../widgets/app_shell.dart';
-import '../../widgets/freshness_header.dart';
-import '../../widgets/glass_surface.dart';
-import '../../widgets/window_chrome/window_title_row.dart';
-import '../library/library_grid_body.dart';
+import '../sources/source_library_screen.dart';
 
-class FilterScreen extends ConsumerStatefulWidget {
-  final String filterId;
-
+/// A saved filter, run on the source it is opened under. The filter lives on
+/// the device; the source turns it into a library and a query.
+class FilterScreen extends ConsumerWidget {
   const FilterScreen({
     super.key,
+    required this.sourceId,
     required this.filterId,
   });
 
-  @override
-  ConsumerState<FilterScreen> createState() => _FilterScreenState();
-}
-
-class _FilterScreenState extends ConsumerState<FilterScreen> {
-  final ScrollController _scrollController = ScrollController();
-  LibraryViewMode _viewMode = LibraryViewMode.grid;
-
-  double _barHeight(BuildContext context) => WindowTitleRow.heightOf(context);
+  final SourceId sourceId;
+  final String filterId;
 
   @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _toggleViewMode() {
-    setState(() {
-      _viewMode = _viewMode == LibraryViewMode.grid
-          ? LibraryViewMode.list
-          : LibraryViewMode.grid;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final layoutAsync = ref.watch(sidebarLayoutProvider);
 
-    publishBackdropSource(ref, BackdropSource.none);
-
-    // This screen's own `WindowTitleRow` (built by `_buildAppBar`) draws into
-    // the title-bar band, so the body has to sit under `removeBand`:
-    // otherwise the ambient `MediaQuery.padding.top` still carries the band
-    // and every inset below double-counts it.
-    return WindowChromeInsets.removeBand(
-      child: Builder(
-        builder: (context) {
-          final isDesktop = Breakpoints.isDesktop(context);
-          final barHeight = _barHeight(context);
-          final chromeTop = freshnessTopInset(context, appBarHeight: barHeight);
-          final scrollTopPadding = chromeTop + 8;
-
-          return layoutAsync.when(
-            loading: () => const Scaffold(
-              backgroundColor: Colors.transparent,
-              body: Center(child: CircularProgressIndicator()),
-            ),
-            error: (error, _) => Scaffold(
-              backgroundColor: Colors.transparent,
-              body: Center(child: Text(error.toString())),
-            ),
-            data: (layout) {
-              final destination = layout.filters[widget.filterId];
-              if (destination == null) {
-                return const Scaffold(
-                  backgroundColor: Colors.transparent,
-                  body: _FilterNotFoundBody(),
-                );
-              }
-
-              final filter = destination.filter;
-              final emptyCopy = _emptyCopyFor(filter);
-
-              return Scaffold(
-                backgroundColor: Colors.transparent,
-                extendBodyBehindAppBar: true,
-                appBar: _buildAppBar(
-                  context,
-                  destination,
-                  isDesktop,
-                  barHeight,
-                ),
-                body: LibraryMediaBody(
-                  filter: filter,
-                  scrollController: _scrollController,
-                  chromeTop: chromeTop,
-                  scrollTopPadding: scrollTopPadding,
-                  viewMode: _viewMode,
-                  emptyTitle: emptyCopy.title,
-                  emptySubtitle: emptyCopy.subtitle,
-                  emptyIcon: emptyCopy.icon,
-                ),
-              );
-            },
-          );
-        },
+    return layoutAsync.when(
+      loading: () => const Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(child: CircularProgressIndicator()),
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(
-    BuildContext context,
-    FilterDestination destination,
-    bool isDesktop,
-    double barHeight,
-  ) {
-    final title = destination.label;
-
-    return PreferredSize(
-      preferredSize: Size.fromHeight(barHeight),
-      child: GlassSurface.appBar(
-        opacity: 0.85,
-        child: WindowTitleRow(
-          leading: isDesktop
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.menu_rounded),
-                  onPressed: () {
-                    AppShell.scaffoldKey.currentState?.openDrawer();
-                  },
-                  tooltip: 'Menu',
-                ),
-          title: Padding(
-            padding: EdgeInsets.only(left: isDesktop ? 8 : 0),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.filter_alt_rounded,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: -0.3,
-                      ),
-                ),
-              ],
-            ),
-          ),
+      error: (error, _) => Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(child: Text(error.toString())),
+      ),
+      data: (layout) {
+        final destination = layout.filters[filterId];
+        final saved =
+            ref.watch(mediaSourceProvider(sourceId))?.as<SavedFilters>();
+        final query =
+            destination == null ? null : saved?.filterQuery(destination.filter);
+        if (destination == null || query == null) {
+          return const Scaffold(
+            backgroundColor: Colors.transparent,
+            body: _FilterNotFoundBody(),
+          );
+        }
+        return SourceLibraryScreen(
+          // One screen per filter, so switching filters never reuses the
+          // previous one's seeded query.
+          key: ValueKey('filter-$filterId'),
+          library: query.library,
+          initialQuery: query.query,
+          title: destination.label,
+          icon: Icons.filter_alt_rounded,
           actions: [
-            _FilterActionButton(
-              icon: _viewMode == LibraryViewMode.grid
-                  ? Icons.view_list_rounded
-                  : Icons.grid_view_rounded,
-              onPressed: _toggleViewMode,
-              tooltip: 'Toggle view',
-            ),
-            const SizedBox(width: 4),
             PopupMenuButton<String>(
               icon: const Icon(
                 Icons.more_vert_rounded,
@@ -172,10 +63,7 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
                 size: 22,
               ),
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 40,
-                minHeight: 40,
-              ),
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               color: AppColors.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -196,27 +84,9 @@ class _FilterScreenState extends ConsumerState<FilterScreen> {
                 ),
               ],
             ),
-            const SizedBox(width: 4),
           ],
-        ),
-      ),
-    );
-  }
-
-  ({String title, String subtitle, IconData icon}) _emptyCopyFor(
-    MediaFilter filter,
-  ) {
-    if (filter.kind == MediaKind.movies) {
-      return (
-        title: 'No movies yet',
-        subtitle: 'Add content to your library to see it here',
-        icon: Icons.movie_filter_rounded,
-      );
-    }
-    return (
-      title: 'No TV shows yet',
-      subtitle: 'Add content to your library to see it here',
-      icon: Icons.live_tv_rounded,
+        );
+      },
     );
   }
 }
@@ -245,43 +115,6 @@ class _FilterNotFoundBody extends StatelessWidget {
               child: const Text('Go home'),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterActionButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final String tooltip;
-
-  const _FilterActionButton({
-    required this.icon,
-    required this.onPressed,
-    required this.tooltip,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: onPressed,
-          child: Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            child: Icon(
-              icon,
-              size: 20,
-              color: AppColors.textSecondary,
-            ),
-          ),
         ),
       ),
     );

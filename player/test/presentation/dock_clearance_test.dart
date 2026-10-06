@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/layout/dock_insets.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -15,9 +14,9 @@ import 'package:player/presentation/widgets/source_artwork.dart';
 
 import '../test_utils/dock_harness.dart';
 import 'screens/calendar/calendar_test_items.dart';
-import 'screens/library/library_screen_layout_test.dart' show pumpLibrary;
 import 'screens/sources/fake_capable_source.dart';
 import 'screens/sources/fake_media_source.dart';
+import 'screens/sources/source_library_layout_test.dart' show pumpLibrary;
 
 /// Thirty episodes over ten days from today: far more than 800px of rows, so
 /// the footer starts well below the fold.
@@ -87,18 +86,6 @@ Future<void> _pumpCalendar(
 }
 
 void main() {
-  // LibraryScreen awaits LibrarySortController before it queries, and that
-  // controller reads flutter_secure_storage. Without the mock the read never
-  // completes, the sort spinner spins forever, and pumpAndSettle times out.
-  //
-  // `show pumpLibrary` imports the function but NOT the library test file's
-  // own setUp, which is where this mock normally lives (see the comment at
-  // library_screen_layout_test.dart:238). Borrowing a pump helper across test
-  // files means borrowing its fixtures explicitly.
-  setUp(() {
-    FlutterSecureStorage.setMockInitialValues({});
-  });
-
   group('DockInsets under a real BottomNav', () {
     testWidgets('reserves more than the 100.0 screens used to hardcode',
         (tester) async {

@@ -3,30 +3,74 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/library.dart';
 import 'package:player/presentation/screens/sources/source_library_screen.dart';
 import 'package:player/presentation/widgets/media_poster.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
 
 import 'fake_media_source.dart';
 
-Future<void> pumpLibrary(WidgetTester tester, FakeMediaSource fake) async {
+Widget _libraryApp(FakeMediaSource fake, {BrowseQuery? initialQuery}) =>
+    ProviderScope(
+      overrides: [
+        mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
+        // No artwork requests: a poster with a URL spins until the blocked
+        // test HTTP client answers, which pumpAndSettle never outlasts.
+        sourceArtworkProvider.overrideWith((ref, key) async => null),
+      ],
+      child: MaterialApp(
+        home: SourceLibraryScreen(
+          library: FakeMediaSource.movies,
+          initialQuery: initialQuery,
+        ),
+      ),
+    );
+
+Future<void> pumpLibrary(WidgetTester tester, FakeMediaSource fake,
+    {BrowseQuery? initialQuery}) async {
   await tester.binding.setSurfaceSize(const Size(1280, 900));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
-      // No artwork requests: a poster with a URL spins until the blocked
-      // test HTTP client answers, which pumpAndSettle never outlasts.
-      sourceArtworkProvider.overrideWith((ref, key) async => null),
-    ],
-    child: const MaterialApp(
-      home: SourceLibraryScreen(library: FakeMediaSource.movies),
-    ),
-  ));
+  await tester.pumpWidget(_libraryApp(fake, initialQuery: initialQuery));
   await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('initialQuery applies on first build only', (tester) async {
+    final fake = FakeMediaSource();
+    const initial = BrowseQuery(sortId: 'added', filterIds: {'unwatched'});
+    await pumpLibrary(tester, fake, initialQuery: initial);
+    expect(fake.browseCalls.first.$1, initial);
+    expect(
+        tester
+            .widget<FilterChip>(
+                find.byKey(const Key('source-filter-unwatched')))
+            .selected,
+        isTrue);
+
+    await tester.tap(find.byKey(const Key('source-sort-title')));
+    await tester.pumpAndSettle();
+    expect(fake.browseCalls.last.$1.sortId, 'title');
+
+    // The same screen pumped again keeps the chip the viewer chose.
+    await tester.pumpWidget(_libraryApp(fake, initialQuery: initial));
+    await tester.pumpAndSettle();
+    expect(fake.browseCalls.last.$1.sortId, 'title');
+  });
+
+  testWidgets('the view toggle swaps the grid for a list', (tester) async {
+    await pumpLibrary(tester, FakeMediaSource());
+    expect(find.byType(GridView), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('source-view-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byType(GridView), findsNothing);
+    expect(find.byKey(const ValueKey('source-list-m1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('source-view-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byType(GridView), findsOneWidget);
+  });
+
   testWidgets('loads the next page as the grid nears its end', (tester) async {
     final fake = FakeMediaSource(movieCount: 130);
     await pumpLibrary(tester, fake);

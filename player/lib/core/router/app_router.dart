@@ -19,6 +19,7 @@ import '../../presentation/screens/all_servers/all_servers_cards.dart';
 import '../../presentation/screens/all_servers/all_servers_grid_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_home_screen.dart';
 import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
+import '../../presentation/screens/filter/filter_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/detail/detail_links.dart' show SourceListing;
 import '../../presentation/screens/calendar/calendar_screen.dart';
@@ -489,6 +490,7 @@ GoRouter appRouter(Ref ref) {
             name: 'source_search',
             builder: (context, state) => SourceSearchScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),
+              initialQuery: state.uri.queryParameters['q'],
             ),
           ),
           for (final (path, name, build) in _sourceListings)
@@ -501,9 +503,9 @@ GoRouter appRouter(Ref ref) {
           GoRoute(
             path: '/s/:sourceId/filter/:filterId',
             name: 'source_filter',
-            builder: (context, state) => SourceRouteStub(
+            builder: (context, state) => FilterScreen(
               sourceId: SourceId(state.pathParameters['sourceId']!),
-              name: 'Filter',
+              filterId: state.pathParameters['filterId']!,
             ),
           ),
           GoRoute(
