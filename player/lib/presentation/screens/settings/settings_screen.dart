@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/build_channel.dart';
-import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
@@ -25,8 +24,9 @@ import '../../widgets/hls_quality_selector.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
+import '../../../core/sources/mydia/source_link.dart';
 import '../../../core/sources/sources_providers.dart'
-    show mydiaAccountCountProvider;
+    show activeSourceIdProvider, mydiaAccountCountProvider;
 import 'widgets/settings_identity.dart';
 import 'widgets/settings_row.dart';
 import 'widgets/settings_section.dart';
@@ -48,7 +48,7 @@ class SettingsScreen extends ConsumerWidget {
   /// Builds Settings' title-bar header.
   ///
   /// A static, `@visibleForTesting` seam rather than inlined in [build]:
-  /// `build` also wires up `settingsControllerProvider`, `connectionProvider`,
+  /// `build` also wires up `settingsControllerProvider`, `sourceViaP2pProvider`,
   /// `p2pStatusNotifierProvider` (which starts a real native P2P node) and
   /// `updateProvider`, all far too expensive to satisfy in a widget test that
   /// only wants to check where the cast button lands. This is the exact
@@ -64,7 +64,9 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(settingsControllerProvider);
-    final isP2P = ref.watch(connectionProvider).isP2PMode;
+    final activeId = ref.watch(activeSourceIdProvider);
+    final isP2P = activeId != null &&
+        (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
     final p2pStatus = ref.watch(p2pStatusNotifierProvider);
     final currentVersion = ref.watch(updateProvider).currentVersion;
     final manyMydiaAccounts = ref.watch(mydiaAccountCountProvider) > 1;

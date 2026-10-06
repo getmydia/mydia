@@ -3,10 +3,9 @@
 // arranges the layout itself, so it stays available at a source's location
 // and is hidden only for All servers.
 
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -25,11 +24,6 @@ class _NotSearchable extends FakeMediaSource {
   T? as<T extends Object>() => null;
 }
 
-class _StubConnectionNotifier extends ConnectionNotifier {
-  @override
-  ConnectionState build() => ConnectionState.direct();
-}
-
 Future<List<String>> _pump(
   WidgetTester tester,
   String location, {
@@ -45,7 +39,6 @@ Future<List<String>> _pump(
 
   final navigations = <String>[];
   final container = ProviderContainer(overrides: [
-    connectionProvider.overrideWith(_StubConnectionNotifier.new),
     sidebarLayoutStoreProvider.overrideWithValue(InMemorySidebarLayoutStore()),
     thirdPartySourcesProvider.overrideWithValue(const [fakeSource]),
     hasMydiaProvider.overrideWithValue(hasMydia),

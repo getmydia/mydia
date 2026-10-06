@@ -6,7 +6,6 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/window/player_window_sizer.dart';
 
 import '../../../test_utils/mock_network_images.dart';
@@ -74,7 +73,7 @@ void main() {
     final proxyService = TrackingLocalProxyService();
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );

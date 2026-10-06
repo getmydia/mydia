@@ -23,7 +23,6 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
 
@@ -189,7 +188,7 @@ Future<void> _mount(
 ) async {
   final container = buildPlayerScreenContainer(
     server: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -306,7 +305,7 @@ Future<void> _pump(
 }) async {
   final container = buildPlayerScreenContainer(
     server: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );

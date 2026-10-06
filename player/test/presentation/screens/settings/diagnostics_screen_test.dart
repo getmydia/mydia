@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report.dart';
@@ -11,16 +12,9 @@ import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
 import 'package:player/presentation/screens/settings/diagnostics_screen.dart';
 import 'package:player/presentation/screens/settings/widgets/diagnostics_sharing_section.dart';
 
+import '../../../core/sources/mydia/fake_mydia_transport.dart';
+import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/toast_harness.dart';
-
-class _FakeConnectionNotifier extends ConnectionNotifier {
-  _FakeConnectionNotifier(this._state);
-
-  final ConnectionState _state;
-
-  @override
-  ConnectionState build() => _state;
-}
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   _FakeP2pStatusNotifier(this._status);
@@ -33,15 +27,19 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 
 Future<void> _pump(
   WidgetTester tester, {
-  ConnectionType connection = ConnectionType.p2p,
   required P2pStatus status,
 }) async {
+  // The active source is a Mydia instance paired over p2p.
+  final source = testMydiaSourceOver(
+    FakeMydiaTransport(),
+    creds: const MydiaCredentials(
+        instanceId: 'i', accessToken: 'a', nodeAddr: 'node-1'),
+  );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        connectionProvider.overrideWith(
-          () => _FakeConnectionNotifier(ConnectionState(type: connection)),
-        ),
+        activeSourceIdProvider.overrideWithValue(testMydiaSourceId),
+        mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
         p2pStatusNotifierProvider.overrideWith(
           () => _FakeP2pStatusNotifier(status),
         ),

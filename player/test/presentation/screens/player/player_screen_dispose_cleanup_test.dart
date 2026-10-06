@@ -12,7 +12,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 
 import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
@@ -47,7 +46,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'peer-1'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'peer-1'),
       castManager: castManager,
       proxyService: proxyService,
     );

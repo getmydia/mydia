@@ -12,7 +12,6 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/scripted_mydia_transport.dart';
@@ -50,7 +49,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );

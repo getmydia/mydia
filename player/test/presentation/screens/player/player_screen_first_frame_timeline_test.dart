@@ -11,7 +11,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 import '../../../test_utils/probed_tracks.dart';
@@ -154,7 +153,7 @@ void main() {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -202,7 +201,7 @@ void main() {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -248,7 +247,7 @@ void main() {
     final fake = _ThrowingOpenPlayer();
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );

@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
 import '../../../core/crash_reporting/crash_reporter_provider.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/player/fullscreen/fullscreen_report.dart';
 import '../../../core/player/fullscreen/fullscreen_report_signal.dart';
+import '../../../core/sources/mydia/source_link.dart';
+import '../../../core/sources/sources_providers.dart'
+    show activeSourceIdProvider;
 import '../../../core/theme/colors.dart';
 import '../../../core/update/update_provider.dart';
 import '../../widgets/connection_tone_color.dart';
@@ -35,7 +37,9 @@ class DiagnosticsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isP2P = ref.watch(connectionProvider).isP2PMode;
+    final activeId = ref.watch(activeSourceIdProvider);
+    final isP2P = activeId != null &&
+        (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
     final status = ref.watch(p2pStatusNotifierProvider);
     final version = ref.watch(updateProvider).currentVersion;
 

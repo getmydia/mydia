@@ -28,7 +28,6 @@ import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
@@ -52,20 +51,32 @@ import '../../../test_utils/scripted_mydia_transport.dart';
 import '../../../test_utils/toast_harness.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
-/// The credentials a harness source carries for [state]: a paired instance
-/// when it says p2p, a URL login otherwise.
-MydiaCredentials harnessCredentials(conn.ConnectionState state) =>
-    state.isP2PMode
-        ? MydiaCredentials(
-            instanceId: 'inst-1',
-            accessToken: 'access',
-            nodeAddr: state.serverNodeAddr ?? 'test-node',
-          )
-        : const MydiaCredentials(
-            instanceId: 'inst-1',
-            accessToken: 'access',
-            serverUrl: 'http://test.local',
-          );
+/// How a harness source is reached: [HarnessLink.p2p] gives it a paired
+/// instance's credentials, [HarnessLink.direct] a URL login.
+class HarnessLink {
+  // Not const, so the many call sites do not each need a `const` to satisfy
+  // `prefer_const_constructors`.
+  HarnessLink.direct()
+      : isP2p = false,
+        serverNodeAddr = null;
+  HarnessLink.p2p({this.serverNodeAddr}) : isP2p = true;
+
+  final bool isP2p;
+  final String? serverNodeAddr;
+}
+
+/// The credentials a harness source carries for [link].
+MydiaCredentials harnessCredentials(HarnessLink link) => link.isP2p
+    ? MydiaCredentials(
+        instanceId: 'inst-1',
+        accessToken: 'access',
+        nodeAddr: link.serverNodeAddr ?? 'test-node',
+      )
+    : const MydiaCredentials(
+        instanceId: 'inst-1',
+        accessToken: 'access',
+        serverUrl: 'http://test.local',
+      );
 
 class FakeDownloadService extends Fake implements DownloadService {
   FakeDownloadService({this.downloaded});
@@ -686,7 +697,7 @@ Map<String, dynamic> endStreamingSessionResponse({bool ok = true}) {
 /// spell its return type by constructing the container itself.
 ProviderContainer buildPlayerScreenContainer({
   required ScriptedMydiaTransport server,
-  required conn.ConnectionState connectionState,
+  required HarnessLink connectionState,
   required CapturingCastSessionManager castManager,
   required TrackingLocalProxyService proxyService,
   DownloadedMedia? downloaded,

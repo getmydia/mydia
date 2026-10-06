@@ -8,7 +8,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/app_menu/now_playing.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/media_session/playing_source.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
@@ -90,7 +89,7 @@ void main() {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );

@@ -15,7 +15,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -285,7 +284,7 @@ Future<void> _mount(
   final firstMount = _container == null;
   _container ??= buildPlayerScreenContainer(
     server: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -326,7 +325,7 @@ Future<void> _mountWithFactory(
 }) async {
   _container ??= buildPlayerScreenContainer(
     server: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -811,7 +810,7 @@ void main() {
     // can be threaded onto `castSessionManagerProvider`.
     _container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: TrackingLocalProxyService(),
       castManagerGate: castManagerGate,

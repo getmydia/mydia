@@ -22,7 +22,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/player/fullscreen/fullscreen_backend.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
@@ -78,8 +77,7 @@ void main() {
         }
         return streamingCandidatesResponse(duration: 5400);
       }),
-      connectionState:
-          const conn.ConnectionState(type: conn.ConnectionType.direct),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: TrackingLocalProxyService(),
     );

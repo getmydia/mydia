@@ -500,6 +500,7 @@ class SidebarContent extends ConsumerWidget {
 
     if (destination.id == 'settings') {
       return SettingsSidebarRow(
+        location: location,
         focusNode: carriesFocusNode ? selectedRowFocusNode : null,
         isSelected: isSelected,
         isDisabled: isDisabled,

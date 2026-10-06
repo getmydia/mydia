@@ -47,7 +47,7 @@ class P2pStatusNotifier extends Notifier<P2pStatus> {
       // does not retract an event already queued for delivery, so one can
       // still arrive here after the provider is gone. Writing `state` then
       // throws UnmountedRefException from a stream callback, where nothing
-      // catches it. Same guard, same reason, as `connection_provider.dart`.
+      // catches it. Same guard, same reason, as `compatibility_provider.dart`.
       if (!ref.mounted) return;
       state = status;
     });

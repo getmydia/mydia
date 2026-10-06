@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
 
 import '../../../test_utils/scripted_mydia_transport.dart';
@@ -40,7 +39,7 @@ void main() {
       // responses to play back and throws if a request ever reaches it.
       server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -102,7 +101,7 @@ void main() {
     final container = buildPlayerScreenContainer(
       server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       offline: true,
@@ -137,7 +136,7 @@ void main() {
     final container = buildPlayerScreenContainer(
       server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -187,7 +186,7 @@ void main() {
     final container = buildPlayerScreenContainer(
       server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -250,7 +249,7 @@ void main() {
         }
         return subtitlePreferenceResponse();
       }),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),

@@ -14,8 +14,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_storage.dart';
 import '../format/relative_time.dart';
-import '../sources/mydia/bound_mydia.dart';
-import 'connection_provider.dart';
+import '../sources/mydia/source_link.dart';
+import '../sources/sources_providers.dart' show activeSourceIdProvider;
 
 /// Storage keys for diagnostics.
 abstract class _DiagnosticsKeys {
@@ -135,14 +135,16 @@ class ConnectionDiagnosticsNotifier
     extends Notifier<ConnectionDiagnosticsState> {
   @override
   ConnectionDiagnosticsState build() {
-    // Watch the connection provider for real-time updates
-    final connectionState = ref.watch(connectionProvider);
+    // Watch the active source's link for real-time updates
+    final activeId = ref.watch(activeSourceIdProvider);
+    final isP2P = activeId != null &&
+        (ref.watch(sourceViaP2pProvider(activeId)).value ?? false);
 
     // Schedule async load
     Future.microtask(_loadDiagnostics);
 
     return ConnectionDiagnosticsState(
-      isP2PMode: connectionState.isP2PMode,
+      isP2PMode: isP2P,
       isLoading: true,
     );
   }
@@ -152,9 +154,11 @@ class ConnectionDiagnosticsNotifier
   /// Loads diagnostics from storage and credentials.
   Future<void> _loadDiagnostics() async {
     try {
-      // The bound server's address, when it has one (a p2p server has none).
-      final credentials = await ref.read(boundMydiaCredentialsProvider.future);
-      final serverUrl = credentials?.serverUrl;
+      // The active server's address, when it has one (a p2p server has none).
+      final activeId = ref.read(activeSourceIdProvider);
+      final serverUrl = activeId == null
+          ? null
+          : await ref.read(sourceServerUrlProvider(activeId).future);
       final directUrls = [if (serverUrl != null) serverUrl];
 
       // Load last direct attempt timestamp
@@ -187,17 +191,18 @@ class ConnectionDiagnosticsNotifier
       // The container can be disposed while the reads above are in flight —
       // `build` fires this off with an unawaited `Future.microtask`, so
       // nothing holds the provider open for it. Same guard, same reason, as
-      // `connection_provider.dart` and `compatibility_provider.dart`.
+      // `compatibility_provider.dart`.
       if (!ref.mounted) return;
 
-      // Get current connection state
-      final connectionState = ref.read(connectionProvider);
+      final isP2P = activeId != null &&
+          await ref.read(sourceViaP2pProvider(activeId).future);
+      if (!ref.mounted) return;
 
       state = ConnectionDiagnosticsState(
         directUrls: directUrls,
         urlAttempts: urlAttempts,
         lastDirectAttempt: lastDirectAttempt,
-        isP2PMode: connectionState.isP2PMode,
+        isP2PMode: isP2P,
         isLoading: false,
       );
     } catch (e) {

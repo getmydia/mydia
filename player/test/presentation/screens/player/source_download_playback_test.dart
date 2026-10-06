@@ -7,7 +7,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
@@ -91,7 +90,7 @@ void main() {
     final container = buildPlayerScreenContainer(
       server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('an unreachable source must not issue GraphQL')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloadService: service,

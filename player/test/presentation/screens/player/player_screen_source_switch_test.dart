@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -343,7 +342,7 @@ void main() {
     final sessions = StreamController<CastSession?>.broadcast();
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       castSessionStream: sessions.stream,
@@ -392,7 +391,7 @@ void main() {
     final decoder = _Decoder(throwFirstOpen: true);
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -418,7 +417,7 @@ void main() {
     final settings = FakeSettingsService(defaultQuality: 'original');
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: settings,
@@ -488,7 +487,7 @@ void main() {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -509,7 +508,7 @@ void main() {
     final decoder = _Decoder(failFirstOpen: true);
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true, playlistMode: 'FULL'),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -538,7 +537,7 @@ void main() {
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -596,7 +595,7 @@ void main() {
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -646,7 +645,7 @@ void main() {
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -709,7 +708,7 @@ void main() {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -751,7 +750,7 @@ void main() {
     final link = _server(directPlay: true);
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: 'original'),
@@ -791,7 +790,7 @@ void main() {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -834,7 +833,7 @@ void main() {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
       server: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -899,7 +898,7 @@ void main() {
       );
       final container = buildPlayerScreenContainer(
         server: link,
-        connectionState: conn.ConnectionState.direct(),
+        connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
       );

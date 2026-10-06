@@ -3,9 +3,9 @@ import 'package:hive_ce/hive.dart' show Hive;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart'
     show GraphQLClient, HiveStore;
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/mydia/source_link.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -159,21 +159,18 @@ void main() {
       expect(await container.read(authTokenProvider.future), 'tok-a');
     });
 
-    test('connectionProvider is direct for a URL account', () async {
+    test('the bound source is not via p2p for a URL account', () async {
       final container = await containerWith({'a': urlAccount});
-      container.listen(connectionProvider, (_, __) {});
       await container.read(boundMydiaCredentialsProvider.future);
-      expect(container.read(connectionProvider).isP2PMode, isFalse);
+      final id = container.read(boundSourceIdProvider)!;
+      expect(await container.read(sourceViaP2pProvider(id).future), isFalse);
     });
 
-    test('connectionProvider is p2p with the node address for a p2p account',
-        () async {
+    test('the bound source is via p2p for a p2p account', () async {
       final container = await containerWith({'b': p2pAccount});
-      container.listen(connectionProvider, (_, __) {});
       await container.read(boundMydiaCredentialsProvider.future);
-      final state = container.read(connectionProvider);
-      expect(state.isP2PMode, isTrue);
-      expect(state.serverNodeAddr, '{"id":"node-b"}');
+      final id = container.read(boundSourceIdProvider)!;
+      expect(await container.read(sourceViaP2pProvider(id).future), isTrue);
     });
   });
 }

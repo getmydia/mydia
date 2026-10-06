@@ -23,7 +23,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/item.dart';
@@ -62,7 +61,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );
@@ -105,7 +104,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );
@@ -165,7 +164,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );

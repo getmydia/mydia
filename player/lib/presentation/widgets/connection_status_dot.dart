@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/connection/connection_provider.dart';
 import '../../core/connection/connection_summary.dart';
 import '../../core/p2p/p2p_service.dart';
+import '../../core/sources/mydia/source_link.dart';
 import '../../core/theme/colors.dart';
 import 'connection_tone_color.dart';
+import 'nav/current_source.dart';
 
 /// A small status dot describing the current connection, with the summary
 /// label as its tooltip.
@@ -19,11 +20,20 @@ class ConnectionStatusDot extends ConsumerWidget {
   /// connection tone here and two meanings on one channel is one meaning.
   final bool updatePending;
 
-  const ConnectionStatusDot({super.key, this.updatePending = false});
+  /// The shell location the dot sits in, which says which source it describes.
+  final String location;
+
+  const ConnectionStatusDot({
+    super.key,
+    required this.location,
+    this.updatePending = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isP2P = ref.watch(connectionProvider).isP2PMode;
+    final id = ref.watch(currentSourceIdProvider(location));
+    final isP2P =
+        id != null && (ref.watch(sourceViaP2pProvider(id)).value ?? false);
     final status = ref.watch(p2pStatusNotifierProvider);
 
     final summary = ConnectionSummary.from(

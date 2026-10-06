@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/presentation/screens/player/session/playback_session_types.dart';
 import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
@@ -99,7 +98,7 @@ void main() {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
       server: _recordingServer(operations),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -124,7 +123,7 @@ void main() {
       (tester) async {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       server: _recordingServer(operations),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -167,7 +166,7 @@ void main() {
   testWidgets('a session with a season offers the next episode by its route',
       (tester) async {
     final container = buildPlayerScreenContainer(
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       server: _recordingServer(<String>[]),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -236,7 +235,7 @@ Future<void> _pumpWithSession(
   FakePlaybackSession session,
 ) async {
   final container = buildPlayerScreenContainer(
-    connectionState: conn.ConnectionState.direct(),
+    connectionState: HarnessLink.direct(),
     server: _recordingServer(<String>[]),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),

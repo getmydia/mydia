@@ -20,7 +20,6 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/video_controls/skip_segment_button.dart';
 
@@ -116,7 +115,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -157,7 +156,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -186,7 +185,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -224,7 +223,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -252,7 +251,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: _server(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,

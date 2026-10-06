@@ -38,7 +38,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
@@ -260,7 +259,7 @@ Future<ProviderContainer> _mount(
 ) async {
   final container = buildPlayerScreenContainer(
     server: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );

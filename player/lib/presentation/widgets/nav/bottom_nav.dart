@@ -85,6 +85,7 @@ class BottomNav extends StatelessWidget {
                     for (final entry in entries)
                       if (entry.id == 'settings')
                         SettingsNavItem(
+                          location: location,
                           isSelected: entry.matches(location),
                           isDisabled: isOffline,
                           onTap: () => onNavigate(entry.route),

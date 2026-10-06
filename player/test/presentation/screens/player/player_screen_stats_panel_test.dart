@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/settings/stats_overlay_setting.dart';
 import 'package:player/domain/models/cast_device.dart';
@@ -139,7 +138,7 @@ Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
         'updateMovieProgress': null,
       };
     }),
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
     coreSettingsService: settings,

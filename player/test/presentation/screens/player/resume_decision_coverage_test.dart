@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
 
 import '../../../test_utils/scripted_mydia_transport.dart';
@@ -51,7 +50,7 @@ void main() {
     'streaming, HLS': (tester) async {
       final container = buildPlayerScreenContainer(
         server: serverFor(streamingCandidatesResponse(duration: 5400)),
-        connectionState: conn.ConnectionState.direct(),
+        connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
       );
@@ -63,7 +62,7 @@ void main() {
       final container = buildPlayerScreenContainer(
         server: serverFor(
             streamingCandidatesResponse(duration: 5400, directPlay: true)),
-        connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+        connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
       );
@@ -74,7 +73,7 @@ void main() {
     'cast target chosen before playback': (tester) async {
       final container = buildPlayerScreenContainer(
         server: serverFor(streamingCandidatesResponse(duration: 5400)),
-        connectionState: conn.ConnectionState.direct(),
+        connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
       );
@@ -97,7 +96,7 @@ void main() {
         // Offline mode issues no GraphQL at all.
         server: ScriptedMydiaTransport((request, callIndex) =>
             throw StateError('offline mode must not issue GraphQL requests')),
-        connectionState: conn.ConnectionState.direct(),
+        connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
         downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),

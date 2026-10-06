@@ -9,7 +9,6 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/link_path.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
@@ -94,7 +93,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: '720p'),
@@ -123,7 +122,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: '1080p'),
@@ -154,7 +153,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: '480p'),
@@ -187,7 +186,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: '720p'),
@@ -260,7 +259,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: settings,
@@ -297,7 +296,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(
@@ -326,7 +325,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: '720p'),
@@ -357,7 +356,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -410,7 +409,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -447,7 +446,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: 'original'),
@@ -490,7 +489,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: 'original'),
@@ -536,7 +535,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: link,
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );

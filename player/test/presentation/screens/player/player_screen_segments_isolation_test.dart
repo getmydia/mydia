@@ -21,7 +21,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/domain/sources/source_error.dart';
 
 import '../../../test_utils/scripted_mydia_transport.dart';
@@ -63,7 +62,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -102,7 +101,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -146,7 +145,7 @@ void main() {
 
     final container = buildPlayerScreenContainer(
       server: server,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );

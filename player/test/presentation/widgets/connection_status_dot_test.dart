@@ -1,18 +1,18 @@
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/p2p/p2p_service.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/connection_status_dot.dart';
 
-class _FakeConnectionNotifier extends ConnectionNotifier {
-  _FakeConnectionNotifier(this._state);
+import '../../core/sources/mydia/fake_mydia_transport.dart';
+import '../../test_utils/mydia_test_source.dart';
 
-  final ConnectionState _state;
-
-  @override
-  ConnectionState build() => _state;
-}
+const _p2p =
+    MydiaCredentials(instanceId: 'i', accessToken: 'a', nodeAddr: 'node-1');
+const _direct = MydiaCredentials(
+    instanceId: 'i', accessToken: 'a', serverUrl: 'http://box.test');
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   _FakeP2pStatusNotifier(this._status);
@@ -25,21 +25,26 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 
 Future<void> _pump(
   WidgetTester tester, {
-  required ConnectionType connection,
+  required MydiaCredentials connection,
   required P2pStatus status,
 }) async {
+  final source = testMydiaSourceOver(FakeMydiaTransport(), creds: connection);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        connectionProvider.overrideWith(
-          () => _FakeConnectionNotifier(ConnectionState(type: connection)),
-        ),
+        mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
         p2pStatusNotifierProvider.overrideWith(
           () => _FakeP2pStatusNotifier(status),
         ),
       ],
-      child: const MaterialApp(
-        home: Scaffold(body: Center(child: ConnectionStatusDot())),
+      child: MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: ConnectionStatusDot(
+              location: '/s/${testMydiaSourceId.value}/home',
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -57,7 +62,7 @@ void main() {
       (tester) async {
     await _pump(
       tester,
-      connection: ConnectionType.direct,
+      connection: _direct,
       status: _idle,
     );
 
@@ -67,7 +72,7 @@ void main() {
   testWidgets('a relayed peer link says so in the tooltip', (tester) async {
     await _pump(
       tester,
-      connection: ConnectionType.p2p,
+      connection: _p2p,
       status: _idle.copyWith(peerConnectionType: P2pConnectionType.relay),
     );
 
@@ -77,7 +82,7 @@ void main() {
   testWidgets('reconnecting pulses rather than sitting still', (tester) async {
     await _pump(
       tester,
-      connection: ConnectionType.p2p,
+      connection: _p2p,
       status: _idle.copyWith(peerConnectionType: P2pConnectionType.none),
     );
 
@@ -92,7 +97,7 @@ void main() {
       (tester) async {
     await _pump(
       tester,
-      connection: ConnectionType.p2p,
+      connection: _p2p,
       status: const P2pStatus(
         isInitialized: false,
         isRelayConnected: false,

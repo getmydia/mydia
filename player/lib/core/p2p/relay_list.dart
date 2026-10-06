@@ -19,8 +19,8 @@ const String buildTimeIrohRelayUrl = String.fromEnvironment('IROH_RELAY_URL');
 /// AuthStorage rather than a file so the web build works unchanged: a browser
 /// has no filesystem, and AuthStorage already abstracts that split.
 ///
-/// Not to be confused with `_ConnectionStorageKeys.relayUrl` in
-/// `core/connection/connection_provider.dart`, which records the relay a
+/// Not to be confused with `_relayUrlKey` in
+/// `core/sources/mydia/source_link.dart`, which records the relay a
 /// paired server was reachable through. That key is a different thing and is
 /// left alone.
 const String relayListStorageKey = 'p2p_relays';

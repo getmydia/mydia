@@ -158,7 +158,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
       // The container can be disposed while that read is in flight, since
       // build fires this off with an unawaited Future.microtask and nothing
       // holds the provider open for it. Same guard, same reason, as
-      // connection_provider.dart and compatibility_provider.dart.
+      // compatibility_provider.dart.
       if (!ref.mounted) return;
 
       state = state.copyWith(currentVersion: info.version);
