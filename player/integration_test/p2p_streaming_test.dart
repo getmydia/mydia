@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 
 import 'package:player/app.dart';
 import 'helpers/e2e_api_client.dart';
+import 'helpers/login_helpers.dart';
 import 'helpers/streaming_helpers.dart';
 import 'helpers/test_bootstrap.dart';
 
@@ -63,22 +64,6 @@ void main() {
     throw StateError('Unable to generate a claim code');
   }
 
-  /// Wait for the login screen to appear
-  Future<void> waitForLoginScreen(WidgetTester tester,
-      {int maxSeconds = 30}) async {
-    debugPrint('[P2P Streaming Test] Waiting for login screen...');
-    for (var i = 0; i < maxSeconds; i++) {
-      await tester.pump(const Duration(seconds: 1));
-      final loginTitle = find.text('Connect to Server');
-      if (loginTitle.evaluate().isNotEmpty) {
-        debugPrint('[P2P Streaming Test] Login screen found after $i seconds');
-        await tester.pump(const Duration(milliseconds: 500));
-        return;
-      }
-    }
-    throw Exception('Login screen not found after $maxSeconds seconds');
-  }
-
   /// Wait for pairing to complete and home screen to appear
   Future<bool> waitForPairingComplete(WidgetTester tester,
       {int maxSeconds = 120}) async {
@@ -96,16 +81,15 @@ void main() {
 
   /// Perform device pairing
   Future<void> performPairing(WidgetTester tester) async {
-    try {
-      await waitForLoginScreen(tester, maxSeconds: 15);
-    } catch (_) {
-      if (find.text('Connect to Server').evaluate().isEmpty) {
-        debugPrint(
-            '[P2P Streaming Test] App already authenticated, skipping pairing');
-        return;
-      }
-
-      rethrow;
+    final landing = await waitForLoginOrSignedIn(
+      tester,
+      maxSeconds: 15,
+      tag: '[P2P Streaming Test]',
+    );
+    if (landing == AppLanding.signedIn) {
+      debugPrint(
+          '[P2P Streaming Test] A Mydia account is already stored, skipping pairing');
+      return;
     }
 
     final claimCode = await generateFreshClaimCode();
