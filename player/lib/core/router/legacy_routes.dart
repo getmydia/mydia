@@ -96,15 +96,25 @@ final legacyMydiaSourceIdProvider = Provider<SourceId?>((ref) {
   return null;
 });
 
-/// Every Mydia instance's source, in the order added.
-final mydiaSourceIdsProvider = Provider<List<SourceId>>((ref) {
+/// The ids as one string, so a record write that changes no id compares equal
+/// and does not notify. Ids hold no newline.
+final _mydiaSourceIdKeyProvider = Provider<String>((ref) {
   final snapshot = ref.watch(sourceRecordsProvider).value;
-  if (snapshot == null) return const [];
+  if (snapshot == null) return '';
   final mydia = [
     for (final r in snapshot.accounts)
       if (r.account.kind == SourceKind.mydia) r,
   ]..sort((a, b) => a.addedAtMs.compareTo(b.addedAtMs));
-  return [for (final r in mydia) mydiaSourceIdOf(r)];
+  return [for (final r in mydia) mydiaSourceIdOf(r).value].join('\n');
+});
+
+/// Every Mydia instance's source, in the order added. Notifies only when the
+/// ids change, not on every source-records write (a picker switch, a reauth
+/// flag), so what is built per instance is not torn down for nothing.
+final mydiaSourceIdsProvider = Provider<List<SourceId>>((ref) {
+  final key = ref.watch(_mydiaSourceIdKeyProvider);
+  if (key.isEmpty) return const [];
+  return [for (final id in key.split('\n')) SourceId(id)];
 });
 
 /// Placeholder for a Mydia listing until its screen is source-scoped.

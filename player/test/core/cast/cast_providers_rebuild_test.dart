@@ -5,11 +5,17 @@ import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/p2p/p2p_service.dart';
 import 'package:player/core/remote/merged_roster.dart';
 import 'package:player/core/remote/remote_roster.dart';
+import 'package:player/core/sources/capabilities.dart';
+import 'package:player/core/sources/media_source.dart' show SourceCapability;
 import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
+import 'package:player/domain/models/remote_device.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/stub_graphql_client.dart';
 import '../../test_utils/stub_link_transport.dart';
+import '../../presentation/screens/sources/fake_media_source.dart';
 import '../sources/mydia/fake_mydia_client.dart';
 
 /// A P2PHost-typed value for tests. None of its methods are called: the
@@ -294,4 +300,124 @@ void main() {
           reason: 'the provider never reads nodeAddr');
     });
   });
+
+  group('source records writes', () {
+    late _Records records;
+    late _FakeP2pStatusNotifier status;
+    late ProviderContainer container;
+    final rosters = <String, DeviceRoster>{};
+
+    setUp(() async {
+      records = _Records([_record('a'), _record('b')]);
+      status = _FakeP2pStatusNotifier();
+      rosters.clear();
+      container = ProviderContainer(overrides: [
+        p2pServiceProvider.overrideWithValue(_FakeP2pServiceWithHost()),
+        p2pStatusNotifierProvider.overrideWith(() => status),
+        sourceRecordsProvider.overrideWith(() => records),
+        mediaSourceProvider.overrideWith((ref, id) {
+          for (final a in ['a', 'b', 'c']) {
+            if (id == mydiaSourceIdOf(_record(a))) {
+              return _RosterSource(
+                  id, rosters.putIfAbsent(a, _EmptyRoster.new));
+            }
+          }
+          return null;
+        }),
+      ]);
+      addTearDown(container.dispose);
+      await container.read(sourceRecordsProvider.future);
+      container.read(p2pStatusNotifierProvider);
+      status.publish('a' * 64);
+    });
+
+    test('a write that changes no instance keeps the same backend', () async {
+      final backend = container.read(mydiaCastBackendProvider);
+      final targets = container.read(ambientTargetsProvider);
+      final roster = container.read(mergedRosterProvider);
+      expect(backend, isNotNull);
+
+      records.emit([_record('a', needsReauth: true), _record('b')]);
+      await pumpEventQueue();
+
+      expect(
+          identical(container.read(mydiaCastBackendProvider), backend), isTrue);
+      expect(
+          identical(container.read(ambientTargetsProvider), targets), isTrue);
+      expect(identical(container.read(mergedRosterProvider), roster), isTrue);
+    });
+
+    test('adding a Mydia account produces a new roster', () async {
+      final backend = container.read(mydiaCastBackendProvider);
+      final roster = container.read(mergedRosterProvider);
+
+      records.emit([_record('a'), _record('b'), _record('c')]);
+      await pumpEventQueue();
+
+      expect(identical(container.read(mergedRosterProvider), roster), isFalse);
+      expect(identical(container.read(mydiaCastBackendProvider), backend),
+          isFalse);
+    });
+  });
 }
+
+class _EmptyRoster implements DeviceRoster {
+  @override
+  Future<List<RemoteDeviceEntry>> entries() async => const [];
+  @override
+  Future<List<RemoteDeviceEntry>> onlineEntries() async => const [];
+  @override
+  Future<bool> allows(String peerNodeId) async => false;
+}
+
+class _RosterSource extends FakeMediaSource implements RemoteTargets {
+  _RosterSource(SourceId id, this.roster) : super(id: id);
+
+  @override
+  final DeviceRoster roster;
+
+  @override
+  Set<SourceCapability> get capabilities =>
+      {...super.capabilities, SourceCapability.remoteTargets};
+
+  @override
+  Future<bool> registerNode(String nodeId) async => true;
+
+  @override
+  Future<List<RemoteDevice>> devices() async => const [];
+
+  @override
+  Future<bool> revokeDevice(String deviceId) async => true;
+}
+
+class _Records extends SourceRecordsNotifier {
+  _Records(this._initial);
+  final List<SourceAccountRecord> _initial;
+
+  @override
+  Future<SourceSnapshot> build() async => SourceSnapshot(accounts: _initial);
+
+  void emit(List<SourceAccountRecord> next) =>
+      state = AsyncData(SourceSnapshot(accounts: next));
+}
+
+SourceAccountRecord _record(String account, {bool needsReauth = false}) =>
+    SourceAccountRecord(
+      account: ProviderAccount(
+        id: account,
+        kind: SourceKind.mydia,
+        displayName: 'Instance $account',
+        storageNamespace: 'source/$account',
+        activeProfileId: 'owner',
+        needsReauth: needsReauth,
+      ),
+      profiles: [
+        SourceProfile(
+            id: 'owner', accountId: account, name: 'Owner', isOwner: true),
+      ],
+      servers: [
+        SourceServer(
+            id: 'inst', accountId: account, profileId: 'owner', name: account),
+      ],
+      addedAtMs: account.codeUnitAt(0),
+    );

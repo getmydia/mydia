@@ -124,6 +124,27 @@ void main() {
         reason: 'a source that no longer exists is skipped');
   });
 
+  testWidgets('says nothing about servers when only one knows the target',
+      (tester) async {
+    await pumpPicker(
+      tester,
+      overrides: [
+        sourcesProvider.overrideWithValue(const [fakeSource]),
+      ],
+      devices: AsyncValue.data([
+        CastDevice(
+          id: 'node-a',
+          name: 'Living Room',
+          protocol: CastProtocolKind.mydia,
+          metadata: {'nodeId': 'node-a', 'sources': fakeSource.id.value},
+        ),
+      ]),
+    );
+
+    expect(find.text('Nothing playing'), findsOneWidget);
+    expect(find.text(fakeSource.displayName), findsNothing);
+  });
+
   testWidgets('shows a Mydia group with what the target is playing',
       (tester) async {
     await pumpPicker(tester,

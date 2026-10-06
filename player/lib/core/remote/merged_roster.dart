@@ -15,6 +15,29 @@ class MergedRoster implements DeviceRoster {
 
   final Map<SourceId, DeviceRoster> _rosters;
 
+  /// Equal when it holds the same instances in the same order with the very
+  /// same roster objects, so a rebuild that changes nothing does not notify
+  /// (and tear down) what depends on it.
+  @override
+  bool operator ==(Object other) {
+    if (other is! MergedRoster) return false;
+    final mine = _rosters.entries.toList();
+    final theirs = other._rosters.entries.toList();
+    if (mine.length != theirs.length) return false;
+    for (var i = 0; i < mine.length; i++) {
+      if (mine[i].key != theirs[i].key ||
+          !identical(mine[i].value, theirs[i].value)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        for (final e in _rosters.entries) ...[e.key, identityHashCode(e.value)],
+      ]);
+
   @override
   Future<List<RemoteDeviceEntry>> entries() =>
       _merged((roster) => roster.entries());

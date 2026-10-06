@@ -7,6 +7,7 @@ import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_capabilities.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/mydia_cast_backend.dart' show sourceIdsOfCastDevice;
+import '../../core/sources/source.dart' show SourceKind;
 import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/models/cast_device.dart';
@@ -263,6 +264,8 @@ class _ProtocolGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(sourcesProvider);
+    final manyMydia =
+        sources.where((s) => s.account.kind == SourceKind.mydia).length > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -299,10 +302,13 @@ class _ProtocolGroup extends ConsumerWidget {
                       : 'Nothing playing'))
               : device.model;
           // The Mydia servers that list this device, by their own names.
+          // Only worth saying when there is more than one to tell apart.
+          final listing = sourceIdsOfCastDevice(device);
           final servers = [
-            for (final id in sourceIdsOfCastDevice(device))
-              for (final source in sources)
-                if (source.id == id) source.displayName,
+            if (manyMydia || listing.length > 1)
+              for (final id in listing)
+                for (final source in sources)
+                  if (source.id == id) source.displayName,
           ];
           return ListTile(
             key: Key('cast-device-${device.id}'),
