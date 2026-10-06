@@ -59,6 +59,23 @@ void main() {
     expect(view.nextUpSeasonNumber, 1);
   });
 
+  test('season chips know how many episodes are unwatched', () {
+    const season = ItemSummary(
+      ref: ItemRef(
+          sourceId: fakeSourceId, kind: ItemKind.season, externalId: 'se-1'),
+      title: 'Season 1',
+      index: 1,
+      userState: UserState(unwatchedCount: 3),
+    );
+    final v = showViewFromSource(
+      const ItemDetail(summary: fakeShow),
+      const [season],
+      features: features,
+    );
+    expect(v.seasons.single.watchStatus?.unwatchedEpisodeCount, 3);
+    expect(v.seasons.single.watchStatus?.watched, isFalse);
+  });
+
   test('a source episode in a list plays its default version', () {
     final e = ItemSummary(
       ref: fakeEpisode(1).ref,

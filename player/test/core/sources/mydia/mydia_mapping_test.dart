@@ -105,6 +105,14 @@ void main() {
     expect(season.userState.watched, isTrue);
   });
 
+  test('a season carries its unwatched episode count', () {
+    final season = seasonSummary(s, 'sh1', {
+      'seasonNumber': 2,
+      'watchStatus': {'watched': false, 'unwatchedEpisodeCount': 3},
+    });
+    expect(season.userState.unwatchedCount, 3);
+  });
+
   test('season detail links back to its show', () {
     final d = seasonDetail(s, fx.show('s-1'), 2);
     expect(d.summary.ref.externalId, 's-1.s2');

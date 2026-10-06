@@ -99,6 +99,15 @@ MovieView movieViewFromSource(
   );
 }
 
+/// Null when the server says nothing, so the chip shows no indicator.
+WatchStatus? _seasonWatchStatus(UserState state) =>
+    state.watched || state.unwatchedCount != null
+        ? WatchStatus(
+            watched: state.watched,
+            unwatchedEpisodeCount: state.unwatchedCount,
+          )
+        : null;
+
 ShowView showViewFromSource(
   ItemDetail d,
   List<ItemSummary> seasons, {
@@ -123,9 +132,7 @@ ShowView showViewFromSource(
           SeasonView(
             number: number,
             target: SourceTarget(season.ref),
-            watchStatus: season.userState.watched
-                ? const WatchStatus(watched: true)
-                : null,
+            watchStatus: _seasonWatchStatus(season.userState),
           ),
     ],
     nextUpEpisodeId: nextUp?.ref.externalId,

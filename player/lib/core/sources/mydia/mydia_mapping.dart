@@ -132,8 +132,7 @@ ItemSummary seasonSummary(
     ref: _ref(sid, ItemKind.season, seasonExternalId(showId, number)),
     title: number == 0 ? 'Specials' : 'Season $number',
     poster: poster,
-    userState: UserState(
-        watched: _map(season['watchStatus'])['watched'] as bool? ?? false),
+    userState: _watchState(season['watchStatus']),
     childCount: season['episodeCount'] as int?,
     index: number,
   );
