@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/layout/breakpoints.dart';
+import '../../core/layout/dock_insets.dart';
 import '../../core/theme/colors.dart';
 import '../../domain/sources/collection.dart';
+import '../screens/detail/detail_links.dart';
 import 'source_artwork.dart';
 
 class CollectionCard extends StatefulWidget {
@@ -172,6 +176,64 @@ class _CollectionCardState extends State<CollectionCard> {
           size: 24,
           color: AppColors.textSecondary,
         ),
+      ),
+    );
+  }
+}
+
+/// The collections grid, shared by the per-server and All servers screens.
+class CollectionsGrid extends StatelessWidget {
+  const CollectionsGrid({
+    super.key,
+    required this.collections,
+    required this.scrollTopPadding,
+    this.captionFor,
+  });
+
+  final List<SourceCollection> collections;
+  final double scrollTopPadding;
+
+  /// The caption under each card, e.g. its server's name.
+  final String? Function(SourceCollection collection)? captionFor;
+
+  static int _crossAxisCount(double width) {
+    if (width > 1400) return 6;
+    if (width > 1200) return 5;
+    if (width > 1000) return 4;
+    if (width > 800) return 3;
+    return 2;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
+    final cardSpacing = Breakpoints.getCardSpacing(context);
+    final bottomPadding = DockInsets.bottomOf(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) => GridView.builder(
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          scrollTopPadding,
+          horizontalPadding,
+          bottomPadding,
+        ),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: _crossAxisCount(constraints.maxWidth),
+          childAspectRatio: 0.85,
+          crossAxisSpacing: cardSpacing,
+          mainAxisSpacing: cardSpacing,
+        ),
+        itemCount: collections.length,
+        itemBuilder: (context, index) {
+          final c = collections[index];
+          return CollectionCard(
+            key: ValueKey('${c.sourceId.value}-${c.id}'),
+            collection: c,
+            caption: captionFor?.call(c),
+            onTap: () => context.push(collectionLocation(c.sourceId, c.id)),
+          );
+        },
       ),
     );
   }

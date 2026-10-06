@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/cache/invalidation_target.dart';
 import '../../../core/cache/watcher_registry.dart';
-import '../../../core/layout/breakpoints.dart';
-import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/theme/colors.dart';
-import '../../../domain/sources/collection.dart';
 import '../../widgets/browse_scaffold.dart';
 import '../../widgets/collection_card.dart';
-import '../detail/detail_links.dart';
 import '../sources/source_browse_providers.dart';
 import '../sources/source_listing_screen.dart';
 
@@ -41,7 +36,10 @@ class CollectionsScreen extends ConsumerWidget {
           if (collections.isEmpty) {
             return _buildEmptyState(context);
           }
-          return _buildGridView(context, collections, scrollTopPadding);
+          return CollectionsGrid(
+            collections: collections,
+            scrollTopPadding: scrollTopPadding,
+          );
         },
       ),
     );
@@ -138,55 +136,5 @@ class CollectionsScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Widget _buildGridView(
-    BuildContext context,
-    List<SourceCollection> collections,
-    double scrollTopPadding,
-  ) {
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = DockInsets.bottomOf(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = _calculateCrossAxisCount(constraints.maxWidth);
-
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            scrollTopPadding,
-            horizontalPadding,
-            bottomPadding,
-          ),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.85,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing,
-          ),
-          itemCount: collections.length,
-          itemBuilder: (context, index) {
-            final collection = collections[index];
-            return CollectionCard(
-              key: ValueKey(collection.id),
-              collection: collection,
-              onTap: () =>
-                  context.push(collectionLocation(sourceId, collection.id)),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  int _calculateCrossAxisCount(double width) {
-    if (width > 1400) return 6;
-    if (width > 1200) return 5;
-    if (width > 1000) return 4;
-    if (width > 800) return 3;
-    if (width > 500) return 2;
-    return 2;
   }
 }

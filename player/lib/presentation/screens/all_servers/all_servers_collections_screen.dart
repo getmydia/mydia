@@ -3,14 +3,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/layout/breakpoints.dart';
-import '../../../core/layout/dock_insets.dart';
-import '../../../core/sources/source.dart';
 import '../../../domain/sources/collection.dart';
 import '../../widgets/collection_card.dart';
-import '../detail/detail_links.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
 import 'all_servers_banner.dart';
@@ -50,54 +45,16 @@ class AllServersCollectionsScreen extends ConsumerWidget {
                     ref.invalidate(allServersCollectionsProvider);
                     await ref.read(allServersCollectionsProvider.future);
                   },
-                  child: _grid(context, collections, names),
+                  child: CollectionsGrid(
+                    collections: collections,
+                    scrollTopPadding: 8,
+                    captionFor: (c) => names[c.sourceId],
+                  ),
                 ),
             },
           ),
         ],
       ),
-    );
-  }
-
-  Widget _grid(BuildContext context, List<SourceCollection> collections,
-      Map<SourceId, String> names) {
-    final horizontalPadding = Breakpoints.getHorizontalPadding(context);
-    final cardSpacing = Breakpoints.getCardSpacing(context);
-    final bottomPadding = DockInsets.bottomOf(context);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final crossAxisCount = width > 1400
-            ? 6
-            : width > 1200
-                ? 5
-                : width > 1000
-                    ? 4
-                    : width > 800
-                        ? 3
-                        : 2;
-        return GridView.builder(
-          padding: EdgeInsets.fromLTRB(
-              horizontalPadding, 8, horizontalPadding, bottomPadding),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.85,
-            crossAxisSpacing: cardSpacing,
-            mainAxisSpacing: cardSpacing,
-          ),
-          itemCount: collections.length,
-          itemBuilder: (context, index) {
-            final c = collections[index];
-            return CollectionCard(
-              key: ValueKey('${c.sourceId.value}-${c.id}'),
-              collection: c,
-              caption: names[c.sourceId],
-              onTap: () => context.push(collectionLocation(c.sourceId, c.id)),
-            );
-          },
-        );
-      },
     );
   }
 }
