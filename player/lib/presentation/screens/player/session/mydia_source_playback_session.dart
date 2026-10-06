@@ -52,6 +52,13 @@ class MydiaSourcePlaybackSession extends SourcePlaybackSession {
 
   MydiaClient get _client => _source.client;
 
+  /// Library refresh only: invalidation is per source, so it refreshes just
+  /// this instance. Cast and the Mydia connection stay off. The cast manager
+  /// and the connection state the screen reads for the link path are bound to
+  /// one instance, so offering them here would describe the wrong server.
+  @override
+  Set<PlaybackFeature> get features => const {PlaybackFeature.libraryRefresh};
+
   Future<List<CandidateStrategy>>? _streaming;
   List<CandidateStrategy>? _offered;
 

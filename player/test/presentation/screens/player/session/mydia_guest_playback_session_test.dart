@@ -337,7 +337,8 @@ void main() {
     expect(playbackSessionFor(source, _movie, 'f-m-1'), isNull);
   });
 
-  test('a guest session cannot cast', () {
+  test('a non-bound session refreshes the library but cannot cast', () {
+    expect(open(_direct).features, {PlaybackFeature.libraryRefresh});
     expect(open(_direct).features, isNot(contains(PlaybackFeature.cast)));
   });
 }
