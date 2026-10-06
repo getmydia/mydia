@@ -6,11 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/auth/auth_service.dart';
-import 'package:player/core/router/app_router.dart'
-    show guestMydiaRouteRedirect;
+import 'package:player/core/router/app_router.dart' show addMydiaRouteRedirect;
 import 'package:player/core/sources/sources_providers.dart';
-import 'package:player/presentation/screens/login/login_controller.dart'
-    show GuestTarget;
 import 'package:player/presentation/screens/login_screen.dart';
 import 'package:player/presentation/screens/sources/add_source_screen.dart';
 
@@ -127,13 +124,13 @@ void main() {
     expect(find.text('Sign in to a Mydia server'), findsOneWidget);
   });
 
-  test('the guest add route redirects home on web only', () {
-    expect(guestMydiaRouteRedirect(isWeb: true), '/');
-    expect(guestMydiaRouteRedirect(isWeb: false), isNull);
+  test('the add Mydia route redirects home on an instance-hosted web only', () {
+    expect(addMydiaRouteRedirect(instanceHostedWeb: true), '/');
+    expect(addMydiaRouteRedirect(instanceHostedWeb: false), isNull);
   });
 
   testWidgets(
-      'guest mode retitles the login screen and hides the other-server link',
+      'a re-auth retitles the login screen and hides the other-server link',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -142,7 +139,7 @@ void main() {
         authServiceProvider
             .overrideWithValue(AuthService(storage: MockAuthStorage())),
       ],
-      child: const MaterialApp(home: LoginScreen(guest: GuestTarget())),
+      child: const MaterialApp(home: LoginScreen(reauthAccountId: 'mabc')),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Add a Mydia server'), findsOneWidget);

@@ -62,8 +62,7 @@ class AddSourceScreen extends ConsumerWidget {
                   (true, false) => "Add a friend's or family member's server",
                   _ => 'Sign in to a Mydia server',
                 }),
-                onTap: () =>
-                    context.push(hasMydia ? '/sources/add/mydia' : '/login'),
+                onTap: () => context.push('/sources/add/mydia'),
               ),
             ],
           ),

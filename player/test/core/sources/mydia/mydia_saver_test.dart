@@ -55,14 +55,12 @@ MydiaCredentials _paired({String instanceId = 'inst-2'}) => MydiaCredentials(
 
 void main() {
   late MockAuthStorage secretStorage;
-  late MockAuthStorage homeStorage;
   late _OrderingStore store;
   late ProviderContainer container;
   late FakeMydiaTransport transport;
 
   setUp(() {
     secretStorage = MockAuthStorage();
-    homeStorage = MockAuthStorage();
     store = _OrderingStore(secretStorage);
     transport = FakeMydiaTransport();
     container = ProviderContainer(overrides: [
@@ -87,7 +85,6 @@ void main() {
       container.read(_refProvider),
       c,
       reauthAccountId: reauth,
-      homeStorage: homeStorage,
       transport: transport,
     );
   }
@@ -152,33 +149,30 @@ void main() {
     expect(id.value, startsWith('mnnode-abc:'));
   });
 
-  test("home's instance id is refused and nothing is written", () async {
-    await homeStorage.write('instance_id', 'inst-2');
-    await expectLater(save(_paired()), throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 0);
-    expect(secretStorage.keys, isEmpty);
+  test('the first server on a fresh install is saved and selected', () async {
+    expect((await store.load()).accounts, isEmpty);
+    final id = await save(_paired());
+    expect((await store.load()).accounts, hasLength(1));
+    expect(container.read(selectedSourceIdProvider), id);
   });
 
-  test("home's node id is refused", () async {
-    await homeStorage.write('server_node_addr', _nodeAddr);
-    await expectLater(save(_paired(instanceId: 'other')),
-        throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 0);
-  });
-
-  test("home's URL is refused, a p2p home URL is skipped", () async {
-    await homeStorage.write('server_url', 'p2p://abc');
-    final c = const MydiaCredentials(
+  test('the migrated instance can be re-added', () async {
+    await save(const MydiaCredentials(
       instanceId: 'inst-9',
-      accessToken: 't',
-      serverUrl: 'https://Home.example/',
-    );
-    await save(c);
-    expect(store.puts, 1);
+      accessToken: 'old',
+      serverUrl: 'https://home.example',
+    ));
+    await store.setLegacyInstanceId('minst-9');
 
-    await homeStorage.write('server_url', 'https://home.example');
-    await expectLater(save(c), throwsA(isA<ServerIsHomeException>()));
-    expect(store.puts, 1);
+    final id = await save(const MydiaCredentials(
+      instanceId: 'inst-9',
+      accessToken: 'fresh',
+      serverUrl: 'https://Home.example/',
+    ));
+
+    expect(id.value, startsWith('minst-9:'));
+    expect((await store.load()).accounts, hasLength(1));
+    expect((await storedCredentials('minst-9')).accessToken, 'fresh');
   });
 
   test('an id this app cannot use is refused', () async {

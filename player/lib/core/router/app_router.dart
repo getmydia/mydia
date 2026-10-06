@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -22,8 +21,6 @@ import '../../presentation/screens/all_servers/all_servers_search_screen.dart';
 import '../../presentation/screens/sources/source_library_screen.dart';
 import '../../presentation/screens/home_screen.dart';
 import '../../presentation/screens/login_screen.dart';
-import '../../presentation/screens/login/login_controller.dart'
-    show GuestTarget;
 import '../../presentation/screens/sources/add_source_screen.dart';
 import '../../presentation/screens/sources/manage_sources_screen.dart';
 import '../../presentation/screens/sources/plex_sign_in_screen.dart';
@@ -131,8 +128,6 @@ SourceId? _sourceIdIn(String location) {
   }
 }
 
-/// Where `/sources/add/mydia` redirects: third-party sources do not exist on
-/// web, so a guest added there would vanish.
 /// The `/all*` redirect, held while saved sources are still loading so a
 /// cold start does not read an empty set and bounce to `/`. The router
 /// refreshes when loading ends.
@@ -142,7 +137,10 @@ String? allServersRouteRedirect({
 }) =>
     sourcesLoading ? null : allServersRedirect(included);
 
-String? guestMydiaRouteRedirect({bool isWeb = kIsWeb}) => isWeb ? '/' : null;
+/// Where `/sources/add/mydia` redirects: only a Mydia instance hosts the web
+/// player, and it cannot add servers of its own.
+String? addMydiaRouteRedirect({bool? instanceHostedWeb}) =>
+    (instanceHostedWeb ?? isInstanceHostedWeb) ? '/' : null;
 
 /// Where the router sends [location], or null to stay. Pure, so the rules
 /// are testable without a router.
@@ -269,7 +267,11 @@ GoRouter appRouter(Ref ref) {
         path: '/login',
         name: 'login',
         parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        redirect: (context, state) => Uri(
+          path: '/sources/add/mydia',
+          query: state.uri.hasQuery ? state.uri.query : null,
+        ).toString(),
+        builder: (context, state) => const SizedBox.shrink(),
       ),
       GoRoute(
         path: '/unlock',
@@ -312,11 +314,9 @@ GoRouter appRouter(Ref ref) {
         path: '/sources/add/mydia',
         name: 'add_source_mydia',
         parentNavigatorKey: rootNavigatorKey,
-        redirect: (context, state) => guestMydiaRouteRedirect(),
+        redirect: (context, state) => addMydiaRouteRedirect(),
         builder: (context, state) => LoginScreen(
-          guest: GuestTarget(
-            reauthAccountId: state.uri.queryParameters['account'],
-          ),
+          reauthAccountId: state.uri.queryParameters['account'],
         ),
       ),
 

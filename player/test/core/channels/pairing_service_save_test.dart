@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/channels/pairing_service.dart';
 import 'package:player/core/p2p/p2p_service.dart';
@@ -95,45 +93,6 @@ void main() {
       expect(result.success, isTrue);
       expect(result.credentials!.instanceId, 'inst-2');
       expect(storage.keys, isEmpty);
-    });
-  });
-
-  group('saveHomeCredentials', () {
-    PairingCredentials creds({String? instanceId, String? deviceToken}) =>
-        PairingCredentials(
-          serverUrl: 'p2p://mydia',
-          deviceId: 'paired-device',
-          mediaToken: 'media-tok',
-          accessToken: 'access-tok',
-          deviceToken: deviceToken,
-          serverPublicKey: Uint8List(0),
-          directUrls: const [],
-          instanceId: instanceId,
-          serverNodeAddr: _nodeAddr,
-        );
-
-    test('writes the legacy keys pairing used to write', () async {
-      final service = PairingService(authStorage: storage);
-
-      await service.saveHomeCredentials(
-          creds(instanceId: 'inst-1', deviceToken: 'device-tok'));
-
-      expect(await storage.read('pairing_access_token'), 'access-tok');
-      expect(await storage.read('pairing_media_token'), 'media-tok');
-      expect(await storage.read('server_node_addr'), _nodeAddr);
-      expect(await storage.read('instance_id'), 'inst-1');
-      expect(await storage.read('pairing_device_token'), 'device-tok');
-    });
-
-    test('deletes stale optional keys when absent', () async {
-      final service = PairingService(authStorage: storage);
-      await storage.write('instance_id', 'old-inst');
-      await storage.write('pairing_device_token', 'old-device-tok');
-
-      await service.saveHomeCredentials(creds());
-
-      expect(await storage.read('instance_id'), isNull);
-      expect(await storage.read('pairing_device_token'), isNull);
     });
   });
 }

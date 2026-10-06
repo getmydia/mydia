@@ -1,4 +1,4 @@
-// The add-server screen's Mydia tile reaches the login screen in guest mode,
+// The add-server screen's Mydia tile reaches the login screen,
 // and a re-auth link carries the account it is for.
 
 import 'dart:async';
@@ -59,20 +59,19 @@ Future<GoRouter> _pump(
 }
 
 void main() {
-  testWidgets('a signed-in user reaches the guest login for an account',
+  testWidgets('a signed-in user reaches the login for an account',
       (tester) async {
     await _pump(tester, '/sources/add/mydia?account=mabc');
 
     final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
-    expect(screen.guest, isNotNull);
-    expect(screen.guest!.reauthAccountId, 'mabc');
+    expect(screen.reauthAccountId, 'mabc');
     expect(find.text('Add a Mydia server'), findsOneWidget);
     // Nothing underneath to go back to.
     expect(find.byKey(const Key('login-back')), findsNothing);
   });
 
   // The login screen has no app bar, and iOS has no system back.
-  testWidgets('pushed from Add a server, the guest login has a way back',
+  testWidgets('pushed from Add a server, the login has a way back',
       (tester) async {
     final router = await _pump(tester, '/sources/add');
     unawaited(router.push('/sources/add/mydia'));
@@ -92,11 +91,19 @@ void main() {
     await tester.pumpAndSettle();
 
     final screen = tester.widget<LoginScreen>(find.byType(LoginScreen));
-    expect(screen.guest, isNull);
+    expect(screen.reauthAccountId, isNull);
 
     await tester.tap(find.byKey(const Key('login-back')));
     await tester.pumpAndSettle();
     expect(find.byType(LoginScreen), findsNothing);
     expect(find.byType(AddSourceScreen), findsOneWidget);
+  });
+
+  testWidgets('/login redirects to /sources/add/mydia and keeps its query',
+      (tester) async {
+    final router = await _pump(tester, '/login?x=1', signedIn: false);
+
+    expect(router.state.uri.toString(), '/sources/add/mydia?x=1');
+    expect(find.byType(LoginScreen), findsOneWidget);
   });
 }

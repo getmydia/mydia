@@ -1,14 +1,11 @@
 /// Saves a Mydia server paired or signed in from the add-server screen.
 library;
 
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gql/language.dart' show printNode;
 
 import '../../../domain/sources/source_error.dart';
 import '../../../graphql/queries/mydia_queries.dart';
-import '../../auth/auth_storage.dart';
 import '../source.dart';
 import '../source_factories.dart';
 import '../sources_providers.dart';
@@ -18,35 +15,20 @@ import 'mydia_gql_transport.dart';
 import 'mydia_credentials.dart';
 import 'mydia_secrets.dart';
 
-/// The server being added is the one this device already signs in to as home.
-class ServerIsHomeException implements Exception {
-  const ServerIsHomeException();
-
-  @override
-  String toString() => 'This is already your home server.';
-}
-
-// Home's own storage keys, written by `PairingService.saveHomeCredentials`
-// and `AuthService.setServerUrl`.
-const _homeInstanceIdKey = 'instance_id';
-const _homeNodeAddrKey = 'server_node_addr';
-const _homeServerUrlKey = 'server_url';
-
 /// Stores [partial] as a Mydia account and selects it. [partial] may
-/// carry an empty `instanceId`, which is resolved here.
+/// carry an empty `instanceId`, which is resolved here. Adding a server that
+/// is already stored replaces its credentials.
 ///
 /// With [reauthAccountId], the server must be the one that account holds.
-/// [homeStorage] and [transport] are injectable for tests.
+/// [transport] is injectable for tests.
 Future<SourceId> saveMydiaServer(
   Ref ref,
   MydiaCredentials partial, {
   String? reauthAccountId,
-  AuthStorage? homeStorage,
   MydiaGqlTransport? transport,
 }) async {
   final instanceId =
       await _resolveInstanceId(ref, partial, transport: transport);
-  await _refuseHome(partial, instanceId, homeStorage ?? getAuthStorage());
 
   if (!isValidSourceIdComponent(instanceId)) {
     throw const SourceException.server(
@@ -163,41 +145,6 @@ Future<String?> _askInstanceId(
     final compat = data['serverCompatibility'];
     return compat is Map ? compat['instanceId'] as String? : null;
   } on SourceException {
-    return null;
-  }
-}
-
-Future<void> _refuseHome(
-  MydiaCredentials partial,
-  String instanceId,
-  AuthStorage home,
-) async {
-  final homeInstance = await home.read(_homeInstanceIdKey);
-  if (homeInstance != null && homeInstance == instanceId) {
-    throw const ServerIsHomeException();
-  }
-
-  final nodeId = partial.nodeId;
-  final homeAddr = await home.read(_homeNodeAddrKey);
-  if (nodeId != null && homeAddr != null && _nodeIdOf(homeAddr) == nodeId) {
-    throw const ServerIsHomeException();
-  }
-
-  final url = partial.serverUrl;
-  final homeUrl = await home.read(_homeServerUrlKey);
-  if (url != null &&
-      homeUrl != null &&
-      !homeUrl.startsWith('p2p://') &&
-      normalizeMydiaUrl(url) == normalizeMydiaUrl(homeUrl)) {
-    throw const ServerIsHomeException();
-  }
-}
-
-String? _nodeIdOf(String addr) {
-  try {
-    final decoded = jsonDecode(addr);
-    return decoded is Map ? decoded['id'] as String? : null;
-  } on FormatException {
     return null;
   }
 }
