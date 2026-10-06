@@ -4,6 +4,8 @@
 /// page load, so startup upserts its account from that config.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../../config/web_config.dart';
 import '../../migration/legacy_mydia_migration.dart';
 import '../store/source_secrets.dart';
@@ -34,7 +36,13 @@ Future<void> upsertWebConfigAccount(
   final resolved = await resolveLegacyAccount(fresh, snapshot, secrets);
   if (resolved == null) return;
 
-  final existing = resolved.existing;
+  // An account that holds this id but whose credentials are unreadable is
+  // still that account: refresh its secret and leave its record alone.
+  final existing = resolved.existing ??
+      snapshot.accounts
+          .map((r) => r.account)
+          .where((a) => a.id == resolved.accountId)
+          .firstOrNull;
   if (existing != null) {
     final kept = await readMydiaCredentials(secrets, existing);
     await writeMydiaCredentials(
@@ -73,4 +81,18 @@ Future<void> upsertWebConfigAccount(
     ),
   );
   await store.putAccount(record);
+}
+
+/// Runs [migrate], then [seed]. A migration that fails must not leave the
+/// instance-hosted player without its account, so [seed] runs regardless.
+Future<void> migrateThenSeed(
+  Future<void> Function() migrate,
+  Future<void> Function() seed,
+) async {
+  try {
+    await migrate();
+  } catch (e) {
+    debugPrint('[Migration] Legacy migration failed: $e');
+  }
+  await seed();
 }

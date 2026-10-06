@@ -134,24 +134,28 @@ Future<void> _migrateLegacyMydia(
       HivePlaybackProgressStore.boxName);
   final castBox =
       await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
-  await migrateLegacyMydia(LegacyMydiaMigrationDeps(
-    legacy: getAuthStorage(),
-    store: store,
-    secrets: SourceSecrets(getAuthStorage()),
-    rewrite: HiveLegacyDataRewriter(
-      downloads: downloads,
-      progress: HivePlaybackProgressStore(progressBox),
-      store: store,
-      cache: cache,
-      castSession: HiveCastSessionStore(castBox),
-    ),
-  ));
   // The serving instance re-injects a fresh token on every load.
   final webConfig = kIsWeb ? getWebConfig() : null;
-  if (webConfig != null) {
-    await upsertWebConfigAccount(
-        store, SourceSecrets(getAuthStorage()), webConfig);
+  Future<void> migrate() => migrateLegacyMydia(LegacyMydiaMigrationDeps(
+        legacy: getAuthStorage(),
+        store: store,
+        secrets: SourceSecrets(getAuthStorage()),
+        rewrite: HiveLegacyDataRewriter(
+          downloads: downloads,
+          progress: HivePlaybackProgressStore(progressBox),
+          store: store,
+          cache: cache,
+          castSession: HiveCastSessionStore(castBox),
+        ),
+      ));
+  if (webConfig == null) {
+    await migrate();
+    return;
   }
+  await migrateThenSeed(
+      migrate,
+      () => upsertWebConfigAccount(
+          store, SourceSecrets(getAuthStorage()), webConfig));
 }
 
 /// Hands `runApp` a [StartupGate] immediately, so the first frame is a

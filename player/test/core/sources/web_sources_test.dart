@@ -21,7 +21,7 @@ import 'store/source_json_test.dart' show plexRecord;
 
 MydiaWebConfig _config({
   String token = 't1',
-  String url = 'https://home.example.test',
+  String url = 'https://hosted.example.test',
   String? username = 'ada',
   bool authenticated = true,
 }) =>
@@ -38,7 +38,7 @@ const _basement = MydiaCredentials(
   accessToken: 'old',
   instanceName: 'Basement',
   deviceToken: 'dev',
-  serverUrl: 'https://home.example.test',
+  serverUrl: 'https://hosted.example.test',
   username: 'ada',
 );
 
@@ -135,7 +135,7 @@ void main() {
       expect((await store.load()).accounts, hasLength(1));
       final creds = (await _creds(store, secrets))!;
       expect(creds.accessToken, 't2');
-      expect(creds.serverUrl, 'https://home.example.test');
+      expect(creds.serverUrl, 'https://hosted.example.test');
       expect(creds.username, 'ada');
     });
 
@@ -146,7 +146,7 @@ void main() {
       await store.putAccount(existing);
 
       await upsertWebConfigAccount(store, secrets,
-          _config(token: 'fresh', url: 'https://HOME.example.test/'));
+          _config(token: 'fresh', url: 'https://HOSTED.example.test/'));
 
       expect((await store.load()).accounts, hasLength(1));
       final creds = (await _creds(store, secrets))!;
@@ -156,6 +156,26 @@ void main() {
       expect(creds.instanceId, 'srv1');
     });
 
+    test('refreshes the secret of an account whose credentials are unreadable',
+        () async {
+      final record = buildMydiaAccountRecord(
+          const MydiaCredentials(
+              instanceId: 'x',
+              accessToken: 'y',
+              serverUrl: 'https://hosted.example.test'),
+          instanceId: urlInstanceId('https://hosted.example.test'),
+          now: DateTime(2026));
+      await secrets.writeAccountToken(record.account, 'not json');
+      await store.putAccount(record);
+
+      await upsertWebConfigAccount(store, secrets, _config(token: 'fresh'));
+
+      final accounts = (await store.load()).accounts;
+      expect(accounts, hasLength(1));
+      expect(accounts.single.addedAtMs, record.addedAtMs);
+      expect((await _creds(store, secrets))!.accessToken, 'fresh');
+    });
+
     test('does nothing without valid auth', () async {
       await upsertWebConfigAccount(
           store, secrets, _config(authenticated: false));
@@ -163,6 +183,13 @@ void main() {
       expect((await store.load()).accounts, isEmpty);
       expect(storage.keys, isEmpty);
     });
+  });
+
+  test('a failing migration does not stop the account seed', () async {
+    var seeded = false;
+    await migrateThenSeed(
+        () async => throw StateError('idb'), () async => seeded = true);
+    expect(seeded, isTrue);
   });
 
   test('instance-hosted web hides add Mydia; public web allows it', () {
