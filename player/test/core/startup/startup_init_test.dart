@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
+import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/startup/startup_init.dart';

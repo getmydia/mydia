@@ -7,10 +7,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../graphql/watch/fetch_log.dart';
-import '../../graphql/watch/freshness.dart';
-import '../../graphql/watch/query_key.dart';
-import '../../graphql/watch/watcher_registry.dart';
+import '../../cache/fetch_log.dart';
+import '../../cache/freshness.dart';
+import '../../cache/query_key.dart';
+import '../../cache/watcher_registry.dart';
 import 'source_cache.dart';
 import 'source_watcher.dart';
 

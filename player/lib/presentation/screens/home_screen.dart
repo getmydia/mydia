@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../widgets/artwork_image.dart';
 import '../../core/cache/poster_cache_manager.dart';
 import '../../core/focus/focus_reveal_section.dart';
-import '../../core/graphql/watch/query_key.dart';
+import '../../core/graphql/watch/query_keys.dart';
 import '../../core/player/best_file.dart';
 import '../../core/player/resume_plan.dart';
 import '../../domain/models/continue_watching_item.dart';

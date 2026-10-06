@@ -7,7 +7,7 @@
 /// navigation stack, and the rest only lose their fetch-log entry.
 library;
 
-import '../../graphql/watch/invalidation_target.dart';
+import '../../cache/invalidation_target.dart';
 import '../source.dart';
 import 'source_keys.dart';
 

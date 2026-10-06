@@ -6,7 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/cache/query_key.dart';
+import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/sources/cache/source_keys.dart';
 import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';

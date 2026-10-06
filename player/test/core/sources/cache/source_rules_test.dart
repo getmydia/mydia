@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/invalidation_target.dart';
+import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/cache/source_rules.dart';
 import 'package:player/core/sources/source.dart';

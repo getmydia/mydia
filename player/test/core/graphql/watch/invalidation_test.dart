@@ -1,12 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/core/cache/query_key.dart';
+import 'package:player/core/cache/watcher_registry.dart';
 import 'package:player/core/graphql/watch/invalidation_rules.dart';
-import 'package:player/core/graphql/watch/invalidation_target.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/graphql/watch/query_keys.dart';
 import 'package:player/core/graphql/watch/query_watcher.dart';
-import 'package:player/core/graphql/watch/watcher_registry.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
 

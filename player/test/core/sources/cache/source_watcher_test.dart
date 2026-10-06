@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
-import 'package:player/core/graphql/watch/freshness.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/cache/freshness.dart';
+import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 import 'package:player/core/sources/cache/source_watcher.dart';
 

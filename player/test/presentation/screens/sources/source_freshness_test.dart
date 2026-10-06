@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/freshness.dart';
+import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/detail/detail_target.dart';

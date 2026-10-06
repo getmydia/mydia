@@ -6,8 +6,8 @@ library;
 
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
-import '../../graphql/watch/invalidation_target.dart';
-import '../../graphql/watch/query_key.dart';
+import '../../cache/invalidation_target.dart';
+import '../../cache/query_key.dart';
 import '../source.dart';
 
 abstract final class SourceOps {

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 
 import 'query_key.dart';
 
@@ -40,31 +39,6 @@ class Freshness {
   /// anything for it. This is what tells it apart from a screen that really
   /// is showing old data.
   final bool hasData;
-
-  static Freshness from({
-    required QueryResult<dynamic> result,
-    required DateTime? fetchedAt,
-    required Duration maxAge,
-    required DateTime now,
-    // The watcher alone knows whether this particular emission is the
-    // cache-sourced half of a still-pending `cacheAndNetwork` start (see
-    // `QueryWatcher._awaitingInitialNetworkResult`). That case has no
-    // `QueryResultSource.loading` result to key off, so `result.isLoading`
-    // never fires for it; the watcher passes what it knows instead of this
-    // method trying to infer fetch-policy history from a bare `QueryResult`.
-    bool awaitingNetworkResult = false,
-  }) {
-    final hasData = result.data != null;
-    return Freshness(
-      fetchedAt: fetchedAt,
-      isRefreshing: (result.isLoading || awaitingNetworkResult) && hasData,
-      // carryForwardDataOnException defaults to true, so a failed refresh
-      // arrives as "exception plus the previous data".
-      refreshFailed: result.hasException && hasData,
-      isStale: fetchedAt == null || now.difference(fetchedAt) > maxAge,
-      hasData: hasData,
-    );
-  }
 
   /// Merges the freshness of several keys shown on one screen.
   ///

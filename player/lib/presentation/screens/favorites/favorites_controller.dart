@@ -1,7 +1,7 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/graphql/watch/controller_watcher.dart';
-import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/recently_added_item.dart';
 import '../library/library_sort.dart';

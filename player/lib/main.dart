@@ -24,7 +24,7 @@ import 'package:flutter/services.dart';
 
 import 'core/diagnostics/diagnostics_provider.dart';
 import 'core/diagnostics/diagnostics_settings.dart';
-import 'core/graphql/watch/fetch_log.dart';
+import 'core/cache/fetch_log.dart';
 import 'core/logging/log_platform.dart';
 import 'core/logging/log_sink.dart';
 import 'core/logging/log_store.dart';

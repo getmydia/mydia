@@ -10,11 +10,38 @@ import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:gql/ast.dart' show DocumentNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 
-import 'cache_watcher.dart';
-import 'fetch_log.dart';
-import 'freshness.dart';
-import 'query_key.dart';
+import '../../cache/cache_watcher.dart';
+import '../../cache/fetch_log.dart';
+import '../../cache/freshness.dart';
+import '../../cache/query_key.dart';
 import 'schema_downgrade.dart';
+
+/// What a screen can honestly say about one GraphQL result.
+///
+/// The watcher alone knows whether an emission is the cache-sourced half of a
+/// still-pending `cacheAndNetwork` start (see
+/// `QueryWatcher._awaitingInitialNetworkResult`). That case has no
+/// `QueryResultSource.loading` result to key off, so `result.isLoading` never
+/// fires for it; the watcher passes [awaitingNetworkResult] instead of this
+/// function trying to infer fetch-policy history from a bare `QueryResult`.
+Freshness freshnessOfResult({
+  required QueryResult<dynamic> result,
+  required DateTime? fetchedAt,
+  required Duration maxAge,
+  required DateTime now,
+  bool awaitingNetworkResult = false,
+}) {
+  final hasData = result.data != null;
+  return Freshness(
+    fetchedAt: fetchedAt,
+    isRefreshing: (result.isLoading || awaitingNetworkResult) && hasData,
+    // carryForwardDataOnException defaults to true, so a failed refresh
+    // arrives as "exception plus the previous data".
+    refreshFailed: result.hasException && hasData,
+    isStale: fetchedAt == null || now.difference(fetchedAt) > maxAge,
+    hasData: hasData,
+  );
+}
 
 /// The age gate: which fetch policy a watcher starts with.
 ///
@@ -309,7 +336,7 @@ class QueryWatcher<T> implements CacheWatcher {
     }
 
     try {
-      onFreshness?.call(Freshness.from(
+      onFreshness?.call(freshnessOfResult(
         result: result,
         fetchedAt: fetchedAt,
         maxAge: maxAge,

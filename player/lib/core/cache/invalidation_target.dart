@@ -53,12 +53,3 @@ extension QueryKeyTarget on QueryKey {
   /// This key as an exact invalidation target.
   KeyTarget get target => KeyTarget(this);
 }
-
-/// The operation families the rules refer to.
-///
-/// Lives here rather than beside `QueryKeys` so the dependency stays one-way:
-/// this library already imports `query_key.dart` for [KeyTarget], and putting
-/// the catalog in `query_key.dart` would point an import back the other way.
-abstract final class Families {
-  static const FamilyTarget collectionItems = FamilyTarget('CollectionItems');
-}

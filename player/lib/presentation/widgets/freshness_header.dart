@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_status.dart';
 import '../../core/format/relative_time.dart';
 import '../../core/graphql/graphql_provider.dart';
-import '../../core/graphql/watch/freshness.dart';
-import '../../core/graphql/watch/invalidation_target.dart';
-import '../../core/graphql/watch/query_key.dart';
-import '../../core/graphql/watch/watcher_registry.dart';
+import '../../core/cache/freshness.dart';
+import '../../core/cache/invalidation_target.dart';
+import '../../core/cache/query_key.dart';
+import '../../core/cache/watcher_registry.dart';
 import '../../core/theme/colors.dart';
 
 /// The space a screen must reserve above the header so it lands below

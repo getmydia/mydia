@@ -12,10 +12,10 @@ import 'dart:async';
 import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:flutter/foundation.dart' show debugPrint;
 
-import '../../graphql/watch/cache_watcher.dart';
-import '../../graphql/watch/fetch_log.dart';
-import '../../graphql/watch/freshness.dart';
-import '../../graphql/watch/query_key.dart';
+import '../../cache/cache_watcher.dart';
+import '../../cache/fetch_log.dart';
+import '../../cache/freshness.dart';
+import '../../cache/query_key.dart';
 import 'source_cache.dart';
 
 class SourceWatcher<T> implements CacheWatcher {

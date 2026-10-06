@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/sources/cache/source_cache.dart';
 
 final _a1 = QueryKey('acc1:owner:srv1/item', const {'id': '1'});

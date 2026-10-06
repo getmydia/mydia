@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
-import '../../storage/app_hive.dart';
+import '../storage/app_hive.dart';
 import 'query_key.dart';
 
 /// When each query last reached the network.

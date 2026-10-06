@@ -1,5 +1,5 @@
-import 'invalidation_target.dart';
-import 'query_key.dart';
+import '../../cache/invalidation_target.dart';
+import 'query_keys.dart';
 
 /// The single mapping from a mutation to the query keys it affects.
 ///

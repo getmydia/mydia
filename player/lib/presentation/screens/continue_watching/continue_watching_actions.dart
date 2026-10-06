@@ -4,7 +4,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
-import '../../../core/graphql/watch/watcher_registry.dart';
+import '../../../core/cache/watcher_registry.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
 import '../../widgets/toast/toaster.dart';
 

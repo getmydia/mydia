@@ -13,7 +13,7 @@ import 'package:flutter/foundation.dart' show debugPrint, immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 
-import '../../graphql/watch/query_key.dart';
+import '../../cache/query_key.dart';
 import '../../storage/app_hive.dart';
 
 @immutable

@@ -9,11 +9,11 @@ import 'package:gql/ast.dart' show DocumentNode;
 
 import '../graphql_provider.dart';
 import 'early_cache.dart';
-import 'fetch_log.dart';
-import 'freshness.dart';
-import 'query_key.dart';
+import '../../cache/fetch_log.dart';
+import '../../cache/freshness.dart';
+import '../../cache/query_key.dart';
 import 'query_watcher.dart';
-import 'watcher_registry.dart';
+import '../../cache/watcher_registry.dart';
 
 /// Builds a [QueryWatcher] wired to a Riverpod notifier: registered for
 /// invalidation, publishing freshness, and torn down with the provider.

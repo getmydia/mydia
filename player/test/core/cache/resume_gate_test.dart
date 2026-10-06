@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/resume_gate.dart';
+import 'package:player/core/cache/resume_gate.dart';
 
 void main() {
   final base = DateTime(2026, 7, 28, 12, 0);

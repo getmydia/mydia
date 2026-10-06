@@ -5,7 +5,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/graphql/watch/controller_watcher.dart';
-import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/graphql/watch/query_watcher.dart';
 import '../../../domain/models/continue_watching_item.dart';
 import 'continue_watching_actions.dart' as actions;

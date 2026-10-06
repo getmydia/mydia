@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 
-import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/graphql/watch/schema_downgrade.dart';
 import '../../../core/theme/colors.dart';
 import '../../../domain/models/calendar_entry.dart';

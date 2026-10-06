@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/invalidation_rules.dart';
-import 'package:player/core/graphql/watch/invalidation_target.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/invalidation_target.dart';
+import 'package:player/core/graphql/watch/query_keys.dart';
 
 void main() {
   group('watchedChanged', () {

@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/graphql/watch/query_keys.dart';
 
 void main() {
   test('an unrecorded key has no timestamp (infinitely stale)', () {

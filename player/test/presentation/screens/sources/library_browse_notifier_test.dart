@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/watch/watcher_registry.dart';
+import 'package:player/core/cache/watcher_registry.dart';
 import 'package:player/core/sources/cache/source_keys.dart';
 import 'package:player/core/sources/cache/source_watcher.dart';
 import 'package:player/core/sources/sources_providers.dart';

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/invalidation_rules.dart';
-import 'package:player/core/graphql/watch/invalidation_target.dart';
+import 'package:player/core/cache/invalidation_target.dart';
 
 /// Operations that render watch state and are deliberately not invalidated
 /// when it changes. Empty on purpose: there is no such operation today, and
@@ -28,7 +28,7 @@ final RegExp _fragmentSpread = RegExp(r'\.\.\.([A-Za-z0-9_]+)');
 /// all, so holding a rule responsible for it would be a false positive.
 Set<String> _declaredOperations() {
   final source =
-      File('lib/core/graphql/watch/query_key.dart').readAsStringSync();
+      File('lib/core/graphql/watch/query_keys.dart').readAsStringSync();
 
   return _queryKeyDeclaration
       .allMatches(source)

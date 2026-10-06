@@ -1,8 +1,7 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/graphql/watch/freshness.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/freshness.dart';
+import 'package:player/core/graphql/watch/query_watcher.dart';
 
 QueryResult<dynamic> _result({
   Map<String, dynamic>? data,
@@ -25,9 +24,9 @@ QueryResult<dynamic> _result({
 void main() {
   final now = DateTime(2026, 7, 28, 12, 0);
 
-  group('Freshness.from', () {
+  group('freshnessOfResult', () {
     test('a loading result with data on screen is refreshing', () {
-      final freshness = Freshness.from(
+      final freshness = freshnessOfResult(
         result: _result(data: const {'x': 1}, loading: true),
         fetchedAt: now.subtract(const Duration(minutes: 1)),
         maxAge: kFreshnessThreshold,
@@ -39,7 +38,7 @@ void main() {
     });
 
     test('a loading result with no data yet is not refreshing', () {
-      final freshness = Freshness.from(
+      final freshness = freshnessOfResult(
         result: _result(loading: true),
         fetchedAt: null,
         maxAge: kFreshnessThreshold,
@@ -50,7 +49,7 @@ void main() {
     });
 
     test('an exception carrying data forward is a failed refresh', () {
-      final freshness = Freshness.from(
+      final freshness = freshnessOfResult(
         result: _result(data: const {'x': 1}, failed: true),
         fetchedAt: now.subtract(const Duration(minutes: 1)),
         maxAge: kFreshnessThreshold,
@@ -62,7 +61,7 @@ void main() {
 
     test('an exception with no data is not a failed refresh (it is an error)',
         () {
-      final freshness = Freshness.from(
+      final freshness = freshnessOfResult(
         result: _result(failed: true),
         fetchedAt: null,
         maxAge: kFreshnessThreshold,
@@ -73,7 +72,7 @@ void main() {
     });
 
     test('age past the threshold is stale, under it is fresh', () {
-      Freshness at(Duration age) => Freshness.from(
+      Freshness at(Duration age) => freshnessOfResult(
             result: _result(data: const {'x': 1}),
             fetchedAt: now.subtract(age),
             maxAge: kFreshnessThreshold,
@@ -85,7 +84,7 @@ void main() {
     });
 
     test('a missing fetch timestamp is infinitely stale', () {
-      final freshness = Freshness.from(
+      final freshness = freshnessOfResult(
         result: _result(data: const {'x': 1}),
         fetchedAt: null,
         maxAge: kFreshnessThreshold,
@@ -94,40 +93,6 @@ void main() {
 
       expect(freshness.isStale, isTrue);
       expect(freshness.fetchedAt, isNull);
-    });
-  });
-
-  group('Freshness.combine', () {
-    test('combining is optimistic about time and pessimistic about state', () {
-      final older = now.subtract(const Duration(hours: 2));
-      final combined = Freshness.combine([
-        Freshness(fetchedAt: now, isStale: false),
-        Freshness(fetchedAt: older, isStale: true, refreshFailed: true),
-      ]);
-
-      expect(combined.fetchedAt, older, reason: 'oldest wins');
-      expect(combined.isStale, isTrue);
-      expect(combined.refreshFailed, isTrue);
-    });
-
-    test('combining nothing yields an empty freshness', () {
-      expect(Freshness.combine(const []), const Freshness());
-    });
-  });
-
-  group('FreshnessRegistry', () {
-    test('publish exposes state per key and clear removes it', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
-
-      final registry = container.read(freshnessRegistryProvider.notifier);
-      const state = Freshness(isRefreshing: true);
-
-      registry.publish(QueryKeys.home, state);
-      expect(container.read(freshnessRegistryProvider)[QueryKeys.home], state);
-
-      registry.clear(QueryKeys.home);
-      expect(container.read(freshnessRegistryProvider)[QueryKeys.home], isNull);
     });
   });
 }

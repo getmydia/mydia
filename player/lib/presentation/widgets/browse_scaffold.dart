@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/graphql/watch/query_key.dart';
+import '../../core/cache/query_key.dart';
 import '../../core/layout/breakpoints.dart';
 import '../../core/layout/window_chrome_inset.dart';
 import '../../core/theme/colors.dart';

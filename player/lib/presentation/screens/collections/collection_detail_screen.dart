@@ -13,7 +13,7 @@ import '../../widgets/toast/toaster.dart';
 import '../../../core/downloads/collection_sync_providers.dart';
 import '../../../core/downloads/collection_sync_service.dart';
 import '../../../core/downloads/download_service.dart' show isDownloadSupported;
-import '../../../core/graphql/watch/query_key.dart';
+import '../../../core/graphql/watch/query_keys.dart';
 import '../../../core/layout/breakpoints.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';

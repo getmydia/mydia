@@ -16,8 +16,8 @@ import 'package:gql/ast.dart' show OperationDefinitionNode;
 import 'package:gql/language.dart' show printNode;
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
-import 'package:player/core/graphql/watch/fetch_log.dart';
-import 'package:player/core/graphql/watch/query_key.dart';
+import 'package:player/core/cache/fetch_log.dart';
+import 'package:player/core/graphql/watch/query_keys.dart';
 import 'package:player/presentation/screens/show/show_detail_controller.dart';
 
 import '../../../test_utils/riverpod_helpers.dart';
