@@ -450,15 +450,7 @@ final allServersNeedSignInProvider = Provider<List<Source>>((ref) {
   ];
 });
 
-/// Where `/s/:sourceId` lands before its screen builds: the bound Mydia
-/// instance keeps its unprefixed routes, so its root is `/`; an unknown id
-/// goes home; any other source stays (null).
-String? sourceRootRedirect(
-  String sourceId,
-  List<Source> sources, {
-  SourceId? bound,
-}) {
-  final source = sources.where((s) => s.id.value == sourceId).firstOrNull;
-  if (source == null || source.id == bound) return '/';
-  return null;
-}
+/// Where `/s/:sourceId` lands before its screen builds: an unknown id goes
+/// home; any known source stays (null).
+String? sourceRootRedirect(String sourceId, List<Source> sources) =>
+    sources.any((s) => s.id.value == sourceId) ? null : '/';

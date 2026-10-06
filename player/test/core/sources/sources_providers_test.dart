@@ -118,14 +118,7 @@ void main() {
   });
 
   group('sourceRootRedirect', () {
-    test('sends the bound instance to the existing home', () {
-      expect(
-          sourceRootRedirect(testMydiaSourceId.value, [testMydiaSource],
-              bound: testMydiaSourceId),
-          '/');
-    });
-
-    test('leaves a Mydia that is not bound on its own screen', () {
+    test('leaves a Mydia source on its own screen, not on /', () {
       expect(sourceRootRedirect(testMydiaSourceId.value, [testMydiaSource]),
           isNull);
     });
@@ -139,7 +132,6 @@ void main() {
         sourceRootRedirect(
           _plexSource.id.value,
           [testMydiaSource, _plexSource],
-          bound: testMydiaSourceId,
         ),
         isNull,
       );
