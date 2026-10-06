@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:hive_ce/hive.dart' show Hive;
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
@@ -199,11 +198,10 @@ Future<void> _startApp(CrashReporter crashReporter, LogSink? logSink) async {
           : null,
       inputCapabilities: InputCapabilities.initialize,
       hiveCache: () async {
-        // `initAppHive` plus an explicit `HiveStore.open` rather than
-        // graphql_flutter's `initHiveForFlutter`, which hard-wires the base
-        // path to the user's Documents folder. See `core/storage/app_hive.dart`.
+        // `initAppHive` sets the Hive base path itself, because
+        // `initHiveForFlutter` hard-wires it to the user's Documents folder.
+        // See `core/storage/app_hive.dart`.
         await initAppHive();
-        await HiveStore.open();
       },
       fetchLog: HiveFetchLog.open,
       sourceCache: HiveSourceCache.open,

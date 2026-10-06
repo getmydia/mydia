@@ -11,7 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/app_menu/now_playing.dart';
 import '../../../core/media_session/playing_source.dart';
-import '../../../core/graphql/graphql_provider.dart' show isInstanceHostedWeb;
+import '../../../core/config/web_config.dart' show isInstanceHostedWeb;
 import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/cache/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';

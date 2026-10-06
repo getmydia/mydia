@@ -1,11 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
-    show debugPrint, debugPrintStack, kIsWeb, visibleForTesting;
+    show debugPrint, debugPrintStack, visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../config/web_config.dart';
-import '../player/device_profile.dart';
 import '../cache/fetch_log.dart';
+import 'device_profile.dart';
 
 /// This device's decode-capability profile, probed once per app session and
 /// held in memory for as long as the app runs.
@@ -19,11 +18,11 @@ import '../cache/fetch_log.dart';
 ///
 /// - a request issued before the probe resolves carries no header, which
 ///   degrades to the server's no-profile behavior (correct, by design);
-/// - a request issued after carries it, with no GraphQL client rebuild, no
-///   orphaned in-flight query, and no subscriptions WebSocket reconnect.
+/// - a request issued after carries it, with no client rebuild, no orphaned
+///   in-flight query, and no subscriptions WebSocket reconnect.
 ///
 /// The alternative this replaced, a watched `FutureProvider<DeviceProfile>`
-/// feeding `graphqlClientProvider`, rebuilt the client the moment the probe
+/// feeding the client provider, rebuilt the client the moment the probe
 /// settled. Because the probe constructs and initializes a real native
 /// player and is not fast, that meant the home screen's first queries on
 /// every cold start went out with no header regardless, and then the client
@@ -34,14 +33,14 @@ import '../cache/fetch_log.dart';
 ///
 /// The no-header cold start above has a second-order effect worth spelling
 /// out: the server's no-profile answer is `directPlaySupported: true` for
-/// every file, and `selectFetchPolicy` (see `watch/query_watcher.dart`)
-/// persists whatever a cold key's first fetch returns along with a fetch-log
-/// entry, then serves that persisted answer via `cacheAndNetwork` on every
-/// read within `kFreshnessThreshold`. Because the probe reliably loses that
-/// race, the persisted answer is the uniform-`true` one, and it would keep
-/// being served as current until the freshness window lapsed on its own,
-/// long after the real profile was available. [applyDetectedProfile] closes
-/// that gap by clearing the fetch log the moment the probe first resolves.
+/// every file, and the cache watcher persists whatever a cold key's first
+/// fetch returns along with a fetch-log entry, then serves that persisted
+/// answer on every read within the freshness threshold. Because the probe
+/// reliably loses that race, the persisted answer is the uniform-`true` one,
+/// and it would keep being served as current until the freshness window
+/// lapsed on its own, long after the real profile was available.
+/// [applyDetectedProfile] closes that gap by clearing the fetch log the
+/// moment the probe first resolves.
 final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
   final holder = DeviceProfileHolder.instance;
   final fetchLog = ref.read(fetchLogProvider);
@@ -70,9 +69,8 @@ final deviceProfileHolderProvider = Provider<DeviceProfileHolder>((ref) {
 /// exists to close. A whole-log clear cannot miss a query by name. The cost
 /// is bounded and one-time: at most one extra `networkOnly` fetch per active
 /// query key, paid once per app session, right when the probe resolves, not
-/// on every read thereafter. The GraphQL response cache itself is never
-/// touched, so any query with cached data it can still legitimately serve
-/// keeps serving it; only the fetch log's staleness bookkeeping resets.
+/// on every read thereafter. Only the fetch log's staleness bookkeeping
+/// resets.
 ///
 /// [wasUnset] is read before the write and is what makes this idempotent
 /// without a separate "already cleared" flag: [DeviceProfileHolder.profile]
@@ -102,11 +100,3 @@ Future<void> applyDetectedProfile(
     debugPrintStack(stackTrace: stackTrace);
   }
 }
-
-/// True only when the player is served by a Mydia instance at `/player`.
-///
-/// That build talks to its own origin over plain HTTP. The public build at
-/// web.mydia.dev is served by Cloudflare, has no instance behind it, and must
-/// use the same p2p link the desktop app uses. The instance is the only thing
-/// that injects `window.mydiaConfig`, so its presence is the signal.
-bool get isInstanceHostedWeb => kIsWeb && getWebConfig() != null;

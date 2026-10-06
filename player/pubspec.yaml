@@ -33,8 +33,6 @@ dependencies:
   go_router: ^18.0.1
   collection: ^1.19.1
   gql: ^1.0.1
-  graphql: ^5.2.4
-  graphql_flutter: ^5.1.0
   meta: ^1.19.0
   # >=10.3.1 pulls flutter_secure_storage_darwin >=0.3.2. Earlier darwin builds
   # read the macOS option under the wrong key ("useDataProtectionKeyChain"), so

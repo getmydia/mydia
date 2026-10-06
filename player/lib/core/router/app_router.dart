@@ -40,7 +40,7 @@ import '../../presentation/screens/settings/diagnostics_screen.dart';
 import '../../presentation/screens/player/queue_player_screen.dart';
 import '../../presentation/screens/downloads/downloads_screen.dart';
 import '../../presentation/widgets/app_shell.dart';
-import '../graphql/graphql_provider.dart';
+import '../config/web_config.dart' show isInstanceHostedWeb;
 import 'navigator_keys.dart';
 import 'legacy_routes.dart';
 

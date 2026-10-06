@@ -1,13 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-// `gql` is a transitive dependency reached through graphql_flutter (via
-// graphql -> gql_exec/gql_link). It is not exported by graphql_flutter, so the
-// AST types and parser need direct imports; the same pattern is already used
-// throughout core/graphql/*.dart and the controller tests.
-// ignore: depend_on_referenced_packages
 import 'package:gql/ast.dart';
-// ignore: depend_on_referenced_packages
 import 'package:gql/language.dart' show parseString;
 
 /// Every GraphQL operation the player ships must name a root field the server

@@ -1,12 +1,11 @@
-import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:http/http.dart' as http;
-import 'package:graphql/client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:convert';
+import 'package:gql/language.dart' show printNode;
 
 import 'auth_storage.dart';
 import 'device_info_service.dart';
-import '../graphql/client.dart';
+import '../sources/mydia/mydia_gql_transport.dart';
+import '../sources/mydia/root_typename.dart';
+import '../sources/source_http.dart';
 import '../../graphql/mutations/login.graphql.dart';
 import '../../graphql/mutations/verify_totp.graphql.dart';
 
@@ -15,14 +14,15 @@ sealed class LoginOutcome {
   const LoginOutcome();
 }
 
-/// The session is stored and the user is signed in.
+/// The session is stored and the user is signed in. [AuthService] no longer
+/// stores sessions, so nothing returns this; `LoginController` still ends
+/// loading if it ever arrives.
 class LoginSuccess extends LoginOutcome {
   const LoginSuccess();
 }
 
-/// The server granted a session that nothing has stored yet. Only
-/// [AuthService.requestLogin] returns it; [AuthService.loginWithGraphQL]
-/// stores the grant as home's session and answers [LoginSuccess].
+/// The server granted a session. [AuthService.requestLogin] stores nothing;
+/// the caller decides where the grant goes.
 class LoginGranted extends LoginOutcome {
   const LoginGranted({
     required this.serverUrl,
@@ -38,7 +38,7 @@ class LoginGranted extends LoginOutcome {
 }
 
 /// The password was right and the account has two-factor authentication.
-/// Pass this to [AuthService.verifyTotp] with the user's code.
+/// Pass this to [AuthService.requestTotp] with the user's code.
 class TotpChallenge extends LoginOutcome {
   const TotpChallenge({
     required this.serverUrl,
@@ -54,94 +54,27 @@ class TotpChallenge extends LoginOutcome {
   final String username;
 }
 
-/// Service for managing authentication tokens and server configuration.
+/// Asks a server for a session and keeps the custom relay URL.
 ///
-/// Uses platform-appropriate secure storage to persist sensitive data
-/// like auth tokens and server URLs. On native platforms, uses encrypted
-/// storage. On web, uses localStorage.
+/// Login is unauthenticated, so it goes over a transport with no token. The
+/// result is never stored here: the caller saves it as a source.
 class AuthService {
-  /// [storage] is injectable for tests. Production callers use the default,
-  /// which is the platform-appropriate implementation.
+  /// [storage] and [transportFactory] are injectable for tests. Production
+  /// callers use the defaults.
   AuthService({
     AuthStorage? storage,
     DeviceInfoService? deviceInfo,
-    GraphQLClient Function(String serverUrl)? clientFactory,
+    MydiaGqlTransport Function(String serverUrl)? transportFactory,
   })  : _storage = storage ?? getAuthStorage(),
         _deviceInfo = deviceInfo ?? DeviceInfoService(),
-        _clientFactory =
-            clientFactory ?? ((url) => createGraphQLClient(url, null));
+        _transportFactory = transportFactory ??
+            ((url) => HttpMydiaTransport(serverUrl: url, http: SourceHttp()));
 
   final AuthStorage _storage;
   final DeviceInfoService _deviceInfo;
-  final GraphQLClient Function(String serverUrl) _clientFactory;
+  final MydiaGqlTransport Function(String serverUrl) _transportFactory;
 
-  /// Whether durability can still be guaranteed for credential writes.
-  ///
-  /// True once at least one write has failed to reach secure storage. It does
-  /// not mean every value is lost: writes before and after the failure may
-  /// well have persisted. It means the app can no longer promise that what it
-  /// just stored will be there next launch, which is enough to owe the user a
-  /// warning instead of a success message.
-  bool get storageDegraded => _storage.degraded;
-
-  static const _authTokenKey = 'auth_token';
-  static const _serverUrlKey = 'server_url';
-  static const _userIdKey = 'user_id';
-  static const _usernameKey = 'username';
   static const _relayUrlKey = 'relay_url';
-
-  /// Get the stored authentication token.
-  Future<String?> getToken() async {
-    return await _storage.read(_authTokenKey);
-  }
-
-  /// Store an authentication token securely.
-  Future<void> setToken(String token) async {
-    await _storage.write(_authTokenKey, token);
-  }
-
-  /// Clear the stored authentication token.
-  Future<void> clearToken() async {
-    await _storage.delete(_authTokenKey);
-  }
-
-  /// Get the stored server URL.
-  Future<String?> getServerUrl() async {
-    return await _storage.read(_serverUrlKey);
-  }
-
-  /// Store the server URL.
-  Future<void> setServerUrl(String url) async {
-    // Ensure URL doesn't have trailing slash
-    final normalizedUrl =
-        url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-    await _storage.write(_serverUrlKey, normalizedUrl);
-  }
-
-  /// Clear the stored server URL.
-  Future<void> clearServerUrl() async {
-    await _storage.delete(_serverUrlKey);
-  }
-
-  /// Get the stored user ID.
-  Future<String?> getUserId() async {
-    return await _storage.read(_userIdKey);
-  }
-
-  /// Store the user ID.
-  Future<void> setUserId(String userId) async {
-    await _storage.write(_userIdKey, userId);
-  }
-
-  /// Get the stored username.
-  Future<String?> getUsername() async {
-    return await _storage.read(_usernameKey);
-  }
-
-  /// Store the username.
-  Future<void> setUsername(String username) async {
-    await _storage.write(_usernameKey, username);
-  }
 
   /// Get the stored custom relay URL.
   /// Returns null if no custom relay is configured (will use default).
@@ -162,81 +95,9 @@ class AuthService {
     await _storage.delete(_relayUrlKey);
   }
 
-  /// Check if user is authenticated (has both token and server URL).
-  Future<bool> isAuthenticated() async {
-    final values = await Future.wait([getToken(), getServerUrl()]);
-    return values[0] != null && values[1] != null;
-  }
-
-  /// Store complete session information.
-  Future<void> setSession({
-    required String token,
-    required String serverUrl,
-    required String userId,
-    required String username,
-  }) async {
-    await Future.wait([
-      setToken(token),
-      setServerUrl(serverUrl),
-      setUserId(userId),
-      setUsername(username),
-    ]);
-  }
-
-  /// Clear all stored session data (logout).
-  Future<void> clearSession() async {
-    await Future.wait([
-      clearToken(),
-      clearServerUrl(),
-      _storage.delete(_userIdKey),
-      _storage.delete(_usernameKey),
-    ]);
-  }
-
-  /// Get the complete session information.
-  Future<Map<String, String?>> getSession() async {
-    final results = await Future.wait([
-      getToken(),
-      getServerUrl(),
-      getUserId(),
-      getUsername(),
-    ]);
-
-    return {
-      'token': results[0],
-      'serverUrl': results[1],
-      'userId': results[2],
-      'username': results[3],
-    };
-  }
-
-  /// Login with username and password via GraphQL (recommended).
-  ///
-  /// Returns [LoginSuccess] once the session is stored, or a [TotpChallenge]
-  /// when the account needs a second factor; nothing is stored in that case.
-  /// Throws on failure.
-  Future<LoginOutcome> loginWithGraphQL({
-    required String serverUrl,
-    required String username,
-    required String password,
-  }) async {
-    final outcome = await requestLogin(
-      serverUrl: serverUrl,
-      username: username,
-      password: password,
-    );
-    if (outcome is! LoginGranted) return outcome;
-    try {
-      await _storeGrant(outcome);
-    } catch (e) {
-      throw Exception('Login error: $e');
-    }
-    return const LoginSuccess();
-  }
-
   /// Asks the server for a session without storing anything: a
   /// [LoginGranted], or a [TotpChallenge] when the account needs a code.
-  /// Throws on failure.
+  /// Throws on failure, with the server's own message in the text.
   Future<LoginOutcome> requestLogin({
     required String serverUrl,
     required String username,
@@ -251,29 +112,18 @@ class AuthService {
       final deviceName = await _deviceInfo.getDeviceName();
       final platform = _deviceInfo.getPlatform();
 
-      final client = _clientFactory(normalizedUrl);
-
-      final result = await client.mutate(
-        MutationOptions(
-          document: documentNodeMutationLogin,
-          variables: Variables$Mutation$Login(
-            username: username,
-            password: password,
-            deviceId: deviceId,
-            deviceName: deviceName,
-            platform: platform,
-          ).toJson(),
-          fetchPolicy: FetchPolicy.noCache,
-        ),
+      final data = await _transportFactory(normalizedUrl).send(
+        printNode(documentNodeMutationLogin),
+        Variables$Mutation$Login(
+          username: username,
+          password: password,
+          deviceId: deviceId,
+          deviceName: deviceName,
+          platform: platform,
+        ).toJson(),
       );
 
-      if (result.hasException) {
-        throw Exception('Login failed: ${_graphQLErrorMessage(result)}');
-      }
-
-      final loginData = result.data != null
-          ? Mutation$Login.fromJson(result.data!).login
-          : null;
+      final loginData = Mutation$Login.fromJson(rootMutation(data)).login;
       if (loginData == null) {
         throw Exception('No data returned from login mutation');
       }
@@ -301,64 +151,35 @@ class AuthService {
     }
   }
 
-  /// Completes a login that returned a [TotpChallenge].
-  Future<void> verifyTotp({
-    required TotpChallenge challenge,
-    required String code,
-  }) async {
-    final granted = await requestTotp(challenge: challenge, code: code);
-    try {
-      await _storeGrant(granted);
-    } catch (e) {
-      throw Exception('Verification error: $e');
-    }
-  }
-
   /// Completes a [TotpChallenge] without storing the session.
   Future<LoginGranted> requestTotp({
     required TotpChallenge challenge,
     required String code,
   }) async {
     try {
-      final client = _clientFactory(challenge.serverUrl);
-
-      final result = await client.mutate(
-        MutationOptions(
-          document: documentNodeMutationVerifyTotp,
-          variables: Variables$Mutation$VerifyTotp(
-            challengeToken: challenge.challengeToken,
-            code: code,
-          ).toJson(),
-          fetchPolicy: FetchPolicy.noCache,
-        ),
+      final data = await _transportFactory(challenge.serverUrl).send(
+        printNode(documentNodeMutationVerifyTotp),
+        Variables$Mutation$VerifyTotp(
+          challengeToken: challenge.challengeToken,
+          code: code,
+        ).toJson(),
       );
 
-      if (result.hasException) {
-        throw Exception('Verification failed: ${_graphQLErrorMessage(result)}');
-      }
-
-      final data = result.data != null
-          ? Mutation$VerifyTotp.fromJson(result.data!).verifyTotp
-          : null;
-      if (data == null) {
+      final payload =
+          Mutation$VerifyTotp.fromJson(rootMutation(data)).verifyTotp;
+      if (payload == null) {
         throw Exception('No data returned from verifyTotp mutation');
       }
 
       return _grant(
         serverUrl: challenge.serverUrl,
-        token: data.token,
-        userId: data.user?.id,
-        username: data.user?.username ?? challenge.username,
+        token: payload.token,
+        userId: payload.user?.id,
+        username: payload.user?.username ?? challenge.username,
       );
     } catch (e) {
       throw Exception('Verification error: $e');
     }
-  }
-
-  String _graphQLErrorMessage(QueryResult result) {
-    return result.exception?.graphqlErrors.isNotEmpty == true
-        ? result.exception!.graphqlErrors.first.message
-        : result.exception.toString();
   }
 
   LoginGranted _grant({
@@ -376,212 +197,6 @@ class AuthService {
       userId: userId,
       username: username,
     );
-  }
-
-  Future<void> _storeGrant(LoginGranted g) => setSession(
-        token: g.token,
-        serverUrl: g.serverUrl,
-        userId: g.userId,
-        username: g.username,
-      );
-
-  /// Login with username and password via the REST API (legacy).
-  ///
-  /// Returns a map with session information on success, or throws an exception on failure.
-  /// The backend uses Guardian JWT tokens, which are returned in the response.
-  ///
-  /// NOTE: This method is deprecated. Use [loginWithGraphQL] instead.
-  @Deprecated('Use loginWithGraphQL instead')
-  Future<Map<String, dynamic>> login({
-    required String serverUrl,
-    required String username,
-    required String password,
-  }) async {
-    final normalizedUrl = serverUrl.endsWith('/')
-        ? serverUrl.substring(0, serverUrl.length - 1)
-        : serverUrl;
-
-    final loginUrl = Uri.parse('$normalizedUrl/auth/local/login');
-
-    try {
-      final response = await http.post(
-        loginUrl,
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: {
-          'user[username]': username,
-          'user[password]': password,
-        },
-      );
-
-      if (response.statusCode == 302 || response.statusCode == 200) {
-        // Parse the Set-Cookie header to extract the guardian token
-        final cookies = response.headers['set-cookie'];
-        if (cookies == null) {
-          throw Exception('No session cookie received from server');
-        }
-
-        // Extract guardian_token from cookies
-        // Cookie format: _mydia_key=...; guardian_token=TOKEN; ...
-        final guardianTokenMatch =
-            RegExp(r'guardian_token=([^;]+)').firstMatch(cookies);
-        if (guardianTokenMatch == null) {
-          throw Exception('No guardian token found in response');
-        }
-
-        final token = guardianTokenMatch.group(1)!;
-
-        // Store the session
-        await setSession(
-          token: token,
-          serverUrl: normalizedUrl,
-          userId: '', // Will be populated from user info endpoint if needed
-          username: username,
-        );
-
-        return {
-          'token': token,
-          'serverUrl': normalizedUrl,
-          'username': username,
-        };
-      } else {
-        final errorBody = response.body;
-        throw Exception(
-            'Login failed with status ${response.statusCode}: $errorBody');
-      }
-    } catch (e) {
-      throw Exception('Login error: $e');
-    }
-  }
-
-  /// Storage key for the durable device token handed out during pairing.
-  ///
-  /// Written by `PairingService`; survives access token expiry, which is what
-  /// makes unattended refresh possible.
-  static const _deviceTokenKey = 'pairing_device_token';
-
-  /// Mutation that trades the pairing device token for a fresh access token.
-  ///
-  /// Deliberately unauthenticated on the server: the device token is the proof
-  /// of identity. Written as a raw document so it works over both the HTTP
-  /// client and the P2P link without depending on codegen output.
-  static const refreshAccessTokenMutation = r'''
-mutation RefreshAccessToken($deviceToken: String!) {
-  refreshAccessToken(deviceToken: $deviceToken) {
-    token
-    expiresAt
-  }
-}
-''';
-
-  /// Get the durable pairing device token, if this client was paired.
-  Future<String?> getDeviceToken() async {
-    return await _storage.read(_deviceTokenKey);
-  }
-
-  /// Refresh the access token over HTTP (direct connection mode).
-  ///
-  /// Access tokens expire well before a pairing does, so without this a paired
-  /// client silently drops to unauthenticated and every gated request fails.
-  /// Returns the new token, or null when the client cannot re-authenticate on
-  /// its own and the user has to pair again.
-  Future<String?> refreshToken() async {
-    final deviceToken = await getDeviceToken();
-    final serverUrl = await getServerUrl();
-
-    if (deviceToken == null || serverUrl == null) return null;
-
-    try {
-      // No auth on this client: the mutation is intentionally public.
-      final client = createGraphQLClient(serverUrl, null);
-
-      final result = await client.mutate(
-        MutationOptions(
-          document: gql(refreshAccessTokenMutation),
-          variables: {'deviceToken': deviceToken},
-          fetchPolicy: FetchPolicy.noCache,
-        ),
-      );
-
-      if (result.hasException) {
-        debugPrint(
-            '[AuthService] Access token refresh failed: ${result.exception}');
-        return null;
-      }
-
-      return await _storeRefreshedToken(result.data);
-    } catch (e) {
-      debugPrint('[AuthService] Access token refresh error: $e');
-      return null;
-    }
-  }
-
-  /// Refresh the access token over an arbitrary transport.
-  ///
-  /// The P2P link owns its own transport, so it supplies [send] rather than
-  /// having this service reach into the P2P stack. [send] receives the mutation
-  /// document and variables and returns the decoded `data` map.
-  Future<String?> refreshTokenVia(
-    Future<Map<String, dynamic>> Function(
-      String query,
-      Map<String, dynamic> variables,
-    ) send,
-  ) async {
-    final deviceToken = await getDeviceToken();
-    if (deviceToken == null) return null;
-
-    try {
-      final data = await send(
-        refreshAccessTokenMutation,
-        {'deviceToken': deviceToken},
-      );
-      return await _storeRefreshedToken(data);
-    } catch (e) {
-      debugPrint('[AuthService] Access token refresh error: $e');
-      return null;
-    }
-  }
-
-  /// Persist a refreshed access token so later requests pick it up.
-  Future<String?> _storeRefreshedToken(Map<String, dynamic>? data) async {
-    final payload = data?['refreshAccessToken'];
-    if (payload is! Map) return null;
-
-    final token = payload['token'];
-    if (token is! String || token.isEmpty) return null;
-
-    await setToken(token);
-    debugPrint('[AuthService] Access token refreshed');
-    return token;
-  }
-
-  /// Verify the current token is still valid by making a test API call.
-  Future<bool> verifyToken() async {
-    final token = await getToken();
-    final serverUrl = await getServerUrl();
-
-    if (token == null || serverUrl == null) {
-      return false;
-    }
-
-    try {
-      // Make a simple GraphQL query to test the token
-      final response = await http.post(
-        Uri.parse('$serverUrl/api/graphql'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: json.encode({
-          'query': '{ __typename }',
-        }),
-      );
-
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
   }
 }
 

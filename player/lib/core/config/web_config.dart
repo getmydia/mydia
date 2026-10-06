@@ -4,8 +4,10 @@
 /// This allows the Flutter web player to auto-authenticate without manual login.
 library;
 
-import 'web_config_stub.dart'
-    if (dart.library.js_interop) 'web_config_web.dart' as impl;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+import 'web_config_stub.dart' if (dart.library.js_interop) 'web_config_web.dart'
+    as impl;
 
 /// Configuration injected by Phoenix for web auto-authentication.
 class MydiaWebConfig {
@@ -34,6 +36,14 @@ class MydiaWebConfig {
 ///
 /// Returns null on non-web platforms or if no config was injected.
 MydiaWebConfig? getWebConfig() => impl.getWebConfig();
+
+/// True only when the player is served by a Mydia instance at `/player`.
+///
+/// That build talks to its own origin over plain HTTP. The public build at
+/// web.mydia.dev is served by Cloudflare, has no instance behind it, and must
+/// use the same p2p link the desktop app uses. The instance is the only thing
+/// that injects `window.mydiaConfig`, so its presence is the signal.
+bool get isInstanceHostedWeb => kIsWeb && getWebConfig() != null;
 
 /// Check if running on web platform.
 bool get isWebPlatform => impl.isWebPlatform;

@@ -12,8 +12,7 @@ import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 
-import '../../test_utils/stub_graphql_client.dart';
-import '../../test_utils/stub_link_transport.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
 import '../sources/mydia/fake_mydia_client.dart';
 
 /// A transport that answers from a script instead of dialing a real node.
@@ -139,11 +138,8 @@ const _connectedDevice = CastDevice(
 );
 
 RemoteRoster rosterOf(List<(String, String)> devices) => RemoteRoster(
-      client: fakeMydiaClient(StubLinkTransport(StubLink.responses([
+      client: fakeMydiaClient(ScriptedMydiaTransport.responses([
         {
-          // Root `__typename` included: without it the normalized cache
-          // refuses the write and the query reports a spurious exception.
-          '__typename': 'Query',
           'devices': [
             for (final (id, nodeId) in devices)
               {
@@ -155,7 +151,7 @@ RemoteRoster rosterOf(List<(String, String)> devices) => RemoteRoster(
               }
           ],
         },
-      ]))),
+      ])),
       now: () => DateTime(2026, 8, 20, 12, 0),
     );
 

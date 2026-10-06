@@ -294,9 +294,7 @@ class LoginController extends _$LoginController {
       final errorStr = e.toString();
       if (errorStr.contains('Invalid username or password') ||
           errorStr.contains('Local authentication is disabled')) {
-        errorMessage = errorStr
-            .replaceFirst('Exception: Login failed: ', '')
-            .replaceFirst('Exception: Login error: Exception: ', '');
+        errorMessage = errorStr.replaceFirst('Exception: Login error: ', '');
       } else if (errorStr.contains('401') || errorStr.contains('invalid')) {
         errorMessage = 'Invalid username or password';
       } else if (errorStr.contains('connection') ||

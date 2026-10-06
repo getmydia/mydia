@@ -19,7 +19,7 @@ import 'package:player/presentation/screens/login/login_controller.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 
 class _FakePairing extends PairingService {
   _FakePairing(this.credentials);
@@ -297,7 +297,7 @@ void main() {
   });
 
   test('a URL login saves an account from the granted token', () async {
-    final link = StubLink.responses([
+    final server = ScriptedMydiaTransport.responses([
       {
         '__typename': 'RootMutationType',
         'login': {
@@ -319,7 +319,7 @@ void main() {
     final auth = AuthService(
       storage: authStorage,
       deviceInfo: _FakeDeviceInfo(),
-      clientFactory: (_) => stubClient(link),
+      transportFactory: (_) => server,
     );
     final c = await listening(containerFor(auth: auth));
 
@@ -334,5 +334,26 @@ void main() {
     expect(state.addedSource, isNotNull);
     expect(await authStorage.read('auth_token'), isNull);
     expect(authStorage.keys, isEmpty);
+  });
+
+  test('a server error on a URL login shows the server message', () async {
+    final server = ScriptedMydiaTransport.responses(
+        [graphqlError('Invalid username or password')]);
+    final auth = AuthService(
+      storage: authStorage,
+      deviceInfo: _FakeDeviceInfo(),
+      transportFactory: (_) => server,
+    );
+    final c = await listening(containerFor(auth: auth));
+
+    await c.read(loginControllerProvider.notifier).login(
+          'https://friend.example',
+          'maya',
+          'wrong',
+        );
+
+    final state = c.read(loginControllerProvider);
+    expect(state.success, isFalse);
+    expect(state.error, 'Invalid username or password');
   });
 }

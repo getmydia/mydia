@@ -13,8 +13,7 @@ import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/native/lib.dart';
 
-import '../../test_utils/stub_graphql_client.dart';
-import '../../test_utils/stub_link_transport.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
 import '../../presentation/screens/sources/fake_media_source.dart';
 import '../sources/mydia/fake_mydia_client.dart';
 
@@ -79,8 +78,7 @@ class _FakeP2pStatusNotifier extends P2pStatusNotifier {
 Override _rosterOf(Map<String, dynamic> response) =>
     mergedRosterProvider.overrideWithValue(MergedRoster({
       const SourceId('mydia-a'): RemoteRoster(
-        client:
-            fakeMydiaClient(StubLinkTransport(StubLink.responses([response]))),
+        client: fakeMydiaClient(ScriptedMydiaTransport.responses([response])),
       ),
     }));
 

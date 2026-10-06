@@ -76,7 +76,7 @@ server would reject and still pass.
 
 Put new player operations in `player/lib/graphql/**/*.graphql` and use the
 generated `documentNodeMutationX` and `Variables$Mutation$X` rather than an inline
-string. `player/test/core/graphql/schema_conformance_test.dart` now parses every
+string. `player/test/graphql/schema_conformance_test.dart` now parses every
 document the player ships, inline strings included, and asserts each root field
 exists in the schema, so a regression fails there. That guard is root-fields-only,
 and codegen is still the real validator.

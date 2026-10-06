@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/config/web_config.dart';
 
 void main() {
   group('isInstanceHostedWeb', () {

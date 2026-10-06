@@ -70,7 +70,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _settingsOverlayScopeNode =
       FocusScopeNode(debugLabel: 'settings-overlay-scope');
 
-  bool _isLoadingSavedUrl = true;
   bool _obscurePassword = true;
   bool _showDirectConnection = false;
   bool _showQrScanner = false;
@@ -86,7 +85,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void initState() {
     super.initState();
     _claimCodeController.addListener(_onClaimCodeChanged);
-    _loadSavedServerUrl();
     _loadSavedRelayUrl();
     _setupAnimations();
   }
@@ -115,19 +113,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     ));
 
     _animationController.forward();
-  }
-
-  Future<void> _loadSavedServerUrl() async {
-    final authService = ref.read(authServiceProvider);
-    final savedUrl = await authService.getServerUrl();
-    if (mounted) {
-      setState(() {
-        if (savedUrl != null) {
-          _serverUrlController.text = savedUrl;
-        }
-        _isLoadingSavedUrl = false;
-      });
-    }
   }
 
   Future<void> _loadSavedRelayUrl() async {
@@ -1308,21 +1293,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_isLoadingSavedUrl)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            )
-          else ...[
+          ...[
             _buildTextField(
               controller: _serverUrlController,
               focusNode: _serverUrlFocus,

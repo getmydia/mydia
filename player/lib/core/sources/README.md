@@ -448,7 +448,7 @@ through `mediaSourceProvider` like any other server, and every item opens
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the
-Mydia schema guard (`test/core/graphql/schema_conformance_test.dart`)
+Mydia schema guard (`test/graphql/schema_conformance_test.dart`)
 skips that directory.
 
 ## Adding a source kind
