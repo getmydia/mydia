@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/p2p/local_proxy_service.dart';
+import '../../../core/p2p/media_proxy_factory.dart';
 import '../../../core/sources/lock/source_lock_controller.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
@@ -90,20 +89,10 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
   late final SourcePlayerParams _params =
       SourcePlayerParams.fromUri(widget.uri);
 
-  /// The bound Mydia instance still plays through the player screen's own
-  /// session (cast, library refresh, the Mydia connection, subtitle search,
-  /// downloaded playback), which is what `/player/...` gave it before items
-  /// moved to this route. Every other instance uses [MydiaPlaybackSession]
-  /// until the playback rewrite retires the difference.
-  late final bool _usesBoundSession =
-      ref.read(boundSourceIdProvider) == widget.sourceId;
-
-  /// Built once: the player screen reads its session in `initState`. Null for
-  /// the bound instance, which makes the screen build its own.
+  /// Built once: the player screen reads its session in `initState`.
   late final PlaybackSession? _session = () {
     // A location with no file id cannot name a stream to open.
     if (_params.fileId.isEmpty) return null;
-    if (_usesBoundSession) return null;
     final source = ref.read(mediaSourceProvider(widget.sourceId));
     if (source == null) return null;
     return playbackSessionFor(
@@ -114,7 +103,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
         externalId: widget.itemId,
       ),
       _params.fileId,
-      proxy: () => ref.read(localProxyServiceProvider),
+      proxy: () => ref.read(mediaProxyProvider),
       showId: _params.showId,
       seasonNumber: _params.seasonNumber,
     );
@@ -148,7 +137,7 @@ class _SourcePlayerRouteState extends ConsumerState<SourcePlayerRoute> {
   @override
   Widget build(BuildContext context) {
     final session = _session;
-    if (session == null && !(_usesBoundSession && _params.fileId.isNotEmpty)) {
+    if (session == null) {
       return Scaffold(
         appBar: AppBar(),
         body: const Center(

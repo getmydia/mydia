@@ -13,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// A media_kit player whose `open()` never reports a real track, so
@@ -61,19 +61,19 @@ class _NeverProbesPlatformPlayer extends PlatformPlayer {
 /// A direct-play movie load with no HLS session, no subtitle preference and
 /// no segments -- the same minimal script other player_screen tests use to
 /// reach a playing screen with the least ceremony.
-StubLink _link() {
-  return StubLink((request, index) {
-    if (isOperation(request, 'MovieDetail')) {
+ScriptedMydiaTransport _server() {
+  return ScriptedMydiaTransport((request, index) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(positionSeconds: 0);
     }
-    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-    if (isOperation(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (isOperation(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
-    if (isOperation(request, 'StreamingCandidates')) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(directPlay: true, duration: 5400);
     }
     return <String, dynamic>{
@@ -108,7 +108,7 @@ void main() {
       'does not throw', (tester) async {
     final fake = _NeverProbesPlatformPlayer();
     final container = buildPlayerScreenContainer(
-      link: _link(),
+      server: _server(),
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),

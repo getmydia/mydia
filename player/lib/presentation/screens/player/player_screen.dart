@@ -10,8 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/app_menu/now_playing.dart';
-import '../../../core/connection/connection_provider.dart' as conn;
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/graphql/graphql_provider.dart' show isInstanceHostedWeb;
 import '../../../core/sources/cache/source_rules.dart';
 import '../../../core/cache/watcher_registry.dart';
 import '../../../core/player/audio_language.dart';
@@ -167,10 +166,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
   /// Creates the playback engine. Reused across native source switches.
   final Player Function()? createPlayer;
 
-  /// The server conversation for this playback. Null builds the Mydia
-  /// session from the route, as every Mydia caller does; a third-party
-  /// route passes its own.
-  final PlaybackSession? session;
+  /// The server conversation for this playback. The route builds it.
+  final PlaybackSession session;
 
   /// Creates the window sizer. Null uses [createPlayerWindowSizer]; tests
   /// pass a recording fake to see whether the window was re-attached.
@@ -190,7 +187,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.subtitleTrack,
     this.autoplay = true,
     this.createPlayer,
-    this.session,
+    required this.session,
     this.createWindowSizer,
   });
 
@@ -369,7 +366,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   late final MediaProxy _mediaProxy;
 
   /// Every GraphQL data call this screen makes goes through here.
-  late final PlaybackSession _session;
+  late PlaybackSession _session;
 
   /// Where the local position of the item being played is stored.
   String get _progressKey => progressKey(_session.item);
@@ -768,6 +765,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   /// Keys memory by server: the node address over p2p, the URL over HTTP.
   String? _serverKey;
 
+  /// Whether this playback's bytes cross the p2p link, as its setup said.
+  bool _streamViaP2p = false;
+
   /// Whether the server is serving a playlist covering the whole file.
   ///
   /// False against a server too old to know about `playlistMode`, which is the
@@ -1037,8 +1037,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // initialization branches must honour that, not just the streaming one.
     _resumeOverrideSeconds = widget.resumeSeconds;
 
-    _session =
-        widget.session ?? (throw StateError('PlayerScreen needs a session'));
+    _session = widget.session;
 
     // Before `_initializePlayer`: attach pauses geometry persistence and
     // snapshots the browse window, and the snapshot must be taken before
@@ -1101,6 +1100,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void didUpdateWidget(PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_mediaKeyOf(oldWidget) == _mediaKey) return;
+    // The session is bound to one file, so a new file brings a new session.
+    if (!identical(widget.session, oldWidget.session)) {
+      _session = widget.session;
+    }
     unawaited(_switchToFile(oldWidget));
   }
 
@@ -1752,6 +1755,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final serverKey = setup.memoryKey;
       _memory = memory;
       _serverKey = serverKey;
+      _streamViaP2p = setup.viaP2p;
       _playFileId = playFileId;
       final thumbnails = setup.scrubThumbnails;
       if (thumbnails != null) {
@@ -3715,8 +3719,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       debugPrint('[PlayerScreen] Error stopping local proxy: $e');
     }
 
-    // The controller resolves the client through the same captured field
-    // `ref.listenManual` keeps fresh, so this is safe from dispose().
+    // The controller holds its instance's client, so this is safe from dispose().
     await _playback?.endSession();
   }
 
@@ -5455,7 +5458,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (!_session.features.contains(PlaybackFeature.mydiaConnection)) {
       return LinkPath.http;
     }
-    if (!ref.read(conn.connectionProvider).isP2PMode) return LinkPath.http;
+    if (!_streamViaP2p) return LinkPath.http;
     return linkPathFor(
       isP2P: true,
       type: ref.read(p2pStatusNotifierProvider).peerConnectionType,
@@ -5472,7 +5475,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final usesMydia =
         _session.features.contains(PlaybackFeature.mydiaConnection);
     final status = usesMydia ? ref.read(p2pStatusNotifierProvider) : null;
-    final isP2P = usesMydia && ref.read(conn.connectionProvider).isP2PMode;
+    final isP2P = usesMydia && _streamViaP2p;
     final summary = ConnectionSummary.from(
       isP2P: isP2P,
       type: status?.peerConnectionType ?? P2pConnectionType.none,

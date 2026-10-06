@@ -37,23 +37,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
-import 'package:player/graphql/mutations/set_subtitle_preference.graphql.dart';
-import 'package:player/graphql/queries/media_segments.graphql.dart';
-import 'package:player/graphql/queries/movie_detail.graphql.dart';
-import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
-import 'package:player/graphql/queries/subtitle_content.graphql.dart';
-import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
-import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/widgets/subtitle_track_selector.dart';
 import 'package:player/presentation/widgets/video_controls/panel_controls.dart';
 
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// The server's own subtitle track on the one media file below.
@@ -64,23 +56,9 @@ const _trackTitle = 'English (Signs & Songs)';
 /// what media_kit exposes: a title, a language, and an id of its own.
 const _mpvSubtitleTrack = SubtitleTrack('1', 'Japanese', 'jpn');
 
-/// Whether [request] carries the document [node].
-///
-/// By document, not by `operationName`: `QueryOptions`/`MutationOptions` never
-/// set the name, so `request.operation.operationName` is null for everything
-/// this screen issues. The generated document nodes are const, so this is an
-/// identity comparison against the very node the request was built from -- a
-/// stronger check than matching the printed query text, and the one
-/// `player_screen_subtitle_offsets_cache_test.dart` already relies on.
-///
-/// The node parameter is typed `Object` because `graphql_flutter` does not
-/// re-export the `gql` AST types, so `DocumentNode` cannot be named here.
-bool _carries(Request request, Object node) =>
-    request.operation.document == node;
-
 /// Every `setSubtitlePreference` this screen has written back.
-Iterable<Request> _writes(StubLink link) => link.requests
-    .where((r) => _carries(r, documentNodeMutationSetSubtitlePreference));
+Iterable<ScriptedRequest> _writes(ScriptedMydiaTransport server) =>
+    server.of('SetSubtitlePreference');
 
 /// A media_kit player with no decoder behind it, carrying mpv's own track
 /// list and recording what it was asked to show.
@@ -161,8 +139,8 @@ class _ProbedPlayer extends PlatformPlayer {
   }
 }
 
-/// A [StubLink] that holds each `setSubtitlePreference` for a scripted delay
-/// before it answers.
+/// A [ScriptedMydiaTransport] that holds each `setSubtitlePreference` for a
+/// scripted delay before it answers.
 ///
 /// A stubbed server that answers on receipt cannot reproduce the order this
 /// fixture exists to test: what matters to the real upsert is when a write
@@ -170,8 +148,8 @@ class _ProbedPlayer extends PlatformPlayer {
 /// last one to land the one the show is pinned to. Holding the first write
 /// past the second is what gives the landing order a chance to differ from
 /// the issuing order, and so a chance to be wrong.
-class _DelayedWriteLink extends StubLink {
-  _DelayedWriteLink(super.handler, this.mutationDelays);
+class _DelayedWriteTransport extends ScriptedMydiaTransport {
+  _DelayedWriteTransport(super.handler, this.mutationDelays);
 
   /// How long the nth `setSubtitlePreference` is held before it answers. The
   /// last entry repeats; an empty list holds nothing.
@@ -180,16 +158,23 @@ class _DelayedWriteLink extends StubLink {
   int _writesStarted = 0;
 
   @override
-  Stream<Response> request(Request request, [NextLink? forward]) async* {
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+    String? deviceProfile,
+    Duration? timeout,
+  }) async {
     if (mutationDelays.isNotEmpty &&
-        _carries(request, documentNodeMutationSetSubtitlePreference)) {
+        ScriptedMydiaTransport.operationOf(query) == 'SetSubtitlePreference') {
       final started = _writesStarted++;
       final delay = mutationDelays[started < mutationDelays.length
           ? started
           : mutationDelays.length - 1];
       await Future<void>.delayed(delay);
     }
-    yield* super.request(request, forward);
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
   }
 }
 
@@ -201,18 +186,18 @@ class _DelayedWriteLink extends StubLink {
 /// must not outlive. [language]/[title] shape the picked track, so a test can
 /// make it untagged or give it a title. [mutationDelays] is how long the nth
 /// write is held before it answers, for the tests that need two writes in the
-/// air at once; see [_DelayedWriteLink].
-StubLink _link({
+/// air at once; see [_DelayedWriteTransport].
+ScriptedMydiaTransport _link({
   bool rejectWrite = false,
   bool deliverContent = true,
   String language = 'eng',
   String title = _trackTitle,
   List<Duration> mutationDelays = const [],
 }) {
-  return _DelayedWriteLink((request, index) {
-    if (_carries(request, documentNodeMutationSetSubtitlePreference)) {
+  return _DelayedWriteTransport((request, index) {
+    if (request.operation == 'SetSubtitlePreference') {
       if (rejectWrite) {
-        return graphqlErrorResponse('Invalid subtitle preference');
+        return graphqlError('Invalid subtitle preference');
       }
       return {
         '__typename': 'RootMutationType',
@@ -228,7 +213,7 @@ StubLink _link({
         },
       };
     }
-    if (_carries(request, documentNodeQuerySubtitleContent)) {
+    if (request.operation == 'SubtitleContent') {
       return {
         '__typename': 'RootQueryType',
         'subtitleContent': deliverContent
@@ -236,21 +221,21 @@ StubLink _link({
             : null,
       };
     }
-    if (_carries(request, documentNodeQueryMovieDetail)) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(files: [
         mediaFileWithSubtitle(language: language, title: title, forced: true),
       ]);
     }
-    if (_carries(request, documentNodeQueryMovieSegments)) {
+    if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse();
     }
-    if (_carries(request, documentNodeQuerySubtitleTrackSettings)) {
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
-    if (_carries(request, documentNodeQueryStreamingCandidates)) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
     }
     return <String, dynamic>{
@@ -270,11 +255,11 @@ StubLink _link({
 /// and the sheet both drop an id it does not hold.
 Future<ProviderContainer> _mount(
   WidgetTester tester,
-  StubLink link,
+  ScriptedMydiaTransport link,
   _ProbedPlayer player,
 ) async {
   final container = buildPlayerScreenContainer(
-    link: link,
+    server: link,
     connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),

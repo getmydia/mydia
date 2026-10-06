@@ -10,10 +10,10 @@
 // bug — keying the candidates query on `widget.mediaId`, or shadowing
 // `widget.fileId` with `candidatesResult.fileId` — fails them.
 //
-// The third proves the fix's edge: `player_screen_stale_candidates_test.dart`
-// covers the case where the server *rejects* the selected file (deleted by a
-// quality upgrade) and the screen falls back to whatever the server ranks for
-// the media item instead. That fallback must not fire on a transport failure
+// The third proves the fix's edge: when the server *rejects* the selected
+// file (deleted by a quality upgrade) the screen falls back to whatever the
+// server ranks for the media item instead. That fallback must not fire on a
+// transport failure
 // — a socket error or an unreachable server says nothing about whether the
 // selected file still exists, and firing anyway would silently swap the
 // user's choice for the server's pick over a network blip.
@@ -23,24 +23,24 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead.
-  StubLink linkFor() {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script them
+  // -- dispatch on the operation instead.
+  ScriptedMydiaTransport serverFor() {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
@@ -54,10 +54,10 @@ void main() {
     // `streamingCandidatesResponse` hardcodes fileId 'file-1'. Mounting with
     // 'file-2' makes the two disagree, which is exactly the production case:
     // the user picked one file, the server named another.
-    final link = linkFor();
+    final server = serverFor();
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
@@ -86,10 +86,10 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = linkFor();
+    final server = serverFor();
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
@@ -99,13 +99,13 @@ void main() {
     await pumpPlayerScreen(tester, container, fileId: 'file-2');
     await pumpUntil(
       tester,
-      () => link.requests.any((r) => r.variables.containsKey('contentType')),
+      () => server.requests.any((r) => r.variables.containsKey('contentType')),
     );
 
     // The pre-play queries now fire concurrently, so their position in
-    // `link.requests` is no longer fixed -- pick the `StreamingCandidates`
+    // `server.requests` is no longer fixed -- pick the `StreamingCandidates`
     // call out by the variable unique to it instead.
-    final candidatesVariables = link.requests
+    final candidatesVariables = server.requests
         .firstWhere((r) => r.variables.containsKey('contentType'))
         .variables;
 
@@ -127,25 +127,20 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // The candidates call for the selected file never reaches the server at
-    // all. `http.ClientException` is not special here — `package:graphql`'s
-    // `translateFailure` wraps *any* unrecognized thrown object in an
-    // `UnknownException`, so any exception thrown from the link would give a
-    // non-null `linkException` just the same. It is simply a realistic
-    // stand-in for a real socket error or unreachable server, the shape a
-    // transport failure takes, as opposed to the server answering with a
-    // GraphQL error (see `player_screen_stale_candidates_test.dart`, the
-    // case this one exists to be told apart from).
-    final link = StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+    // all: an unreachable server is the shape a transport failure takes, as
+    // opposed to the server answering with a GraphQL error, which is the
+    // case this one exists to be told apart from.
+    final server = ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       if (request.variables.containsKey('contentType')) {
-        return http.ClientException('Connection refused');
+        return const SourceException.unreachable();
       }
       if (request.variables.containsKey('strategy')) {
         return startStreamingSessionResponse(duration: 5400);
@@ -154,7 +149,7 @@ void main() {
     });
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
@@ -170,11 +165,11 @@ void main() {
     // populates.
     await pumpUntil(
       tester,
-      () => link.requests.any((r) => r.variables.containsKey('strategy')),
+      () => server.requests.any((r) => r.variables.containsKey('strategy')),
     );
 
     final sessionRequest =
-        link.requests.firstWhere((r) => r.variables.containsKey('strategy'));
+        server.requests.firstWhere((r) => r.variables.containsKey('strategy'));
     expect(
       sessionRequest.variables['fileId'],
       'file-2',
@@ -184,7 +179,9 @@ void main() {
     );
 
     expect(
-      link.requests.where((r) => r.variables.containsKey('contentType')).length,
+      server.requests
+          .where((r) => r.variables.containsKey('contentType'))
+          .length,
       1,
       reason: 'the fallback must only re-ask the server when it has '
           'actually answered and rejected the id, never on a transport '

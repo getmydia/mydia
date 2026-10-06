@@ -8,10 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/window/player_window_sizer.dart';
-import 'package:player/graphql/mutations/end_streaming_session.graphql.dart';
 
 import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 class _RecordingSizer implements PlayerWindowSizer {
@@ -45,13 +44,13 @@ void main() {
   testWidgets('a file switch ends the old session and keeps the screen',
       (tester) async {
     var sessions = 0;
-    final link = StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+    final server = ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       if (request.variables.containsKey('strategy')) {
@@ -74,7 +73,7 @@ void main() {
     });
     final proxyService = TrackingLocalProxyService();
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
@@ -82,10 +81,8 @@ void main() {
     addTearDown(container.dispose);
     final sizer = _RecordingSizer();
 
-    Iterable<Object?> endedIds() => link.requests
-        .where((r) =>
-            r.operation.document == documentNodeMutationEndStreamingSession)
-        .map((r) => r.variables['sessionId']);
+    Iterable<Object?> endedIds() =>
+        server.of('EndStreamingSession').map((r) => r.variables['sessionId']);
 
     await mockHttpResponse(
       () async {

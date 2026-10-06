@@ -21,7 +21,7 @@ import 'package:player/presentation/widgets/video_controls/playback_chrome.dart'
 
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// A [PlatformPlayer] that never touches native mpv/web bindings, so the
@@ -110,18 +110,18 @@ Future<(ProviderContainer, _FakePlatformPlayer)> _mountPlayingScreen(
     // The pre-play queries now fire concurrently (see `runIsolated`), so an
     // index-keyed dispatch can no longer script them -- dispatch on the
     // operation instead.
-    link: StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+    server: ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: 0);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
-      if (isOperation(request, 'StreamingCandidates')) {
+      if (request.operation == 'StreamingCandidates') {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;
@@ -370,7 +370,7 @@ void main() {
   // hands `createPlayer` a closure over a single `fake` shared for the
   // whole test, so the player `_initializePlayer` constructs afterwards
   // would reuse that already-closed instance and throw on its first
-  // `open()`. `StubLink`'s handler above now answers by operation name
+  // `open()`. The transport's handler above now answers by operation name
   // (the pre-play queries fire concurrently, see `runIsolated`), so a
   // restart repeating the same four queries is no longer the blocker it
   // once was; covering the restart still needs a `createPlayer` that mints

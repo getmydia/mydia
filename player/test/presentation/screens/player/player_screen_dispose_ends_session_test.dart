@@ -2,7 +2,7 @@
 // dispose() stops the local P2P proxy; this proves the *other* half of
 // `_terminateHlsSession`'s cleanup — actually ending the HLS session on the
 // server via the `EndStreamingSession` mutation — genuinely runs, using the
-// captured `_graphqlClient` rather than the dispose()-time `ref.read` that
+// controller's own client rather than the dispose()-time `ref.read` that
 // used to throw before any of this could happen.
 //
 // The controller owns every session it starts and immediately cleans one up
@@ -13,10 +13,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
-import 'package:player/graphql/mutations/end_streaming_session.graphql.dart';
 
 import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -31,13 +30,13 @@ void main() {
     // on the operation instead. `startStreamingSession` and
     // `endStreamingSession` still fire well after those, so they are told
     // apart by the variables only they carry.
-    final link = StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+    final server = ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       if (request.variables.containsKey('strategy')) {
@@ -50,7 +49,7 @@ void main() {
     });
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.direct(),
       castManager: castManager,
       proxyService: proxyService,
@@ -63,11 +62,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          link.requests
-              .where((r) =>
-                  r.operation.document ==
-                  documentNodeMutationEndStreamingSession)
-              .toList(),
+          server.of('EndStreamingSession'),
           isEmpty,
           reason: 'sanity check: the session must not already be ended before '
               'dispose, or this test proves nothing about dispose() specifically',
@@ -80,10 +75,7 @@ void main() {
         await tester.pumpWidget(const SizedBox());
         expect(tester.takeException(), isNull);
 
-        final endSessionRequests = link.requests
-            .where((r) =>
-                r.operation.document == documentNodeMutationEndStreamingSession)
-            .toList();
+        final endSessionRequests = server.of('EndStreamingSession');
         expect(endSessionRequests, hasLength(1),
             reason: '_terminateHlsSession must have sent the '
                 'EndStreamingSession mutation during dispose()');

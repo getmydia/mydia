@@ -15,4 +15,21 @@ void main() {
     expect(source.contains('Mutation\$'), isFalse);
     expect(source.contains('Fragment\$'), isFalse);
   });
+
+  test('the player screen reads no global server state', () {
+    final src = File('lib/presentation/screens/player/player_screen.dart')
+        .readAsStringSync();
+    for (final banned in [
+      'GraphQLClient',
+      'graphqlClientProvider',
+      'connectionProvider',
+      'boundMydia',
+      'boundSourceId',
+      'serverUrlProvider',
+      'authTokenProvider',
+      'MydiaPlaybackSession(',
+    ]) {
+      expect(src.contains(banned), isFalse, reason: banned);
+    }
+  });
 }

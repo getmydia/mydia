@@ -11,25 +11,25 @@ import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead.
-  StubLink linkFor(Object candidates) {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script them
+  // -- dispatch on the operation instead.
+  ScriptedMydiaTransport serverFor(Object candidates) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: 2700);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return candidates;
@@ -50,7 +50,7 @@ void main() {
   final cases = <String, Future<void> Function(WidgetTester)>{
     'streaming, HLS': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: linkFor(streamingCandidatesResponse(duration: 5400)),
+        server: serverFor(streamingCandidatesResponse(duration: 5400)),
         connectionState: conn.ConnectionState.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -61,7 +61,7 @@ void main() {
     },
     'streaming, direct play': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: linkFor(
+        server: serverFor(
             streamingCandidatesResponse(duration: 5400, directPlay: true)),
         connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
         castManager: CapturingCastSessionManager(),
@@ -73,7 +73,7 @@ void main() {
     },
     'cast target chosen before playback': (tester) async {
       final container = buildPlayerScreenContainer(
-        link: linkFor(streamingCandidatesResponse(duration: 5400)),
+        server: serverFor(streamingCandidatesResponse(duration: 5400)),
         connectionState: conn.ConnectionState.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
@@ -95,7 +95,7 @@ void main() {
       final store = InMemoryPlaybackProgressStore();
       final container = buildPlayerScreenContainer(
         // Offline mode issues no GraphQL at all.
-        link: StubLink((request, callIndex) =>
+        server: ScriptedMydiaTransport((request, callIndex) =>
             throw StateError('offline mode must not issue GraphQL requests')),
         connectionState: conn.ConnectionState.direct(),
         castManager: CapturingCastSessionManager(),

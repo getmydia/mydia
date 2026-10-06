@@ -4,7 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/p2p/media_proxy_factory.dart';
+import '../../../core/router/legacy_routes.dart';
+import '../../../core/sources/sources_providers.dart';
+import '../../../domain/sources/item.dart';
 import 'player_screen.dart';
+import 'session/source_playback_sessions.dart';
 
 /// Represents a single item in the playback queue.
 class QueueItem {
@@ -184,6 +189,31 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
     }
 
     final currentItem = _queue[_currentIndex];
+    final sourceId = ref.watch(legacyMydiaSourceIdProvider);
+    final source =
+        sourceId == null ? null : ref.watch(mediaSourceProvider(sourceId));
+    final session = source == null
+        ? null
+        : playbackSessionFor(
+            source,
+            ItemRef(
+              sourceId: sourceId!,
+              kind: currentItem.type == 'episode'
+                  ? ItemKind.episode
+                  : ItemKind.movie,
+              externalId: currentItem.id,
+            ),
+            currentItem.fileId,
+            proxy: () => ref.read(mediaProxyProvider),
+          );
+    if (session == null) {
+      return const Scaffold(
+        body: Center(
+          key: Key('queue-player-unavailable'),
+          child: Text('This server is not available to play from.'),
+        ),
+      );
+    }
     final hasPrevious = _currentIndex > 0;
     final hasNext = _currentIndex < _queue.length - 1;
 
@@ -197,6 +227,7 @@ class _QueuePlayerScreenState extends ConsumerState<QueuePlayerScreen> {
             mediaId: currentItem.id,
             fileId: currentItem.fileId,
             title: currentItem.title,
+            session: session,
           ),
         ),
 

@@ -14,7 +14,7 @@ import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 import 'session/fake_playback_session.dart';
 import '../../../test_utils/mydia_test_source.dart';
@@ -89,7 +89,7 @@ void main() {
 
     final progressStore = store ?? InMemoryPlaybackProgressStore();
     final container = buildPlayerScreenContainer(
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('an unreachable source must not issue GraphQL')),
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),

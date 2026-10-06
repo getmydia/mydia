@@ -14,7 +14,7 @@ import 'package:player/presentation/widgets/video_controls/cast_chrome_icon.dart
 import 'package:player/presentation/screens/player/player_screen.dart';
 
 import '../../../../test_utils/probed_tracks.dart';
-import '../../../../test_utils/stub_graphql_client.dart';
+import '../../../../test_utils/scripted_mydia_transport.dart';
 import '../../../../test_utils/toast_harness.dart';
 import '../player_screen_test_harness.dart';
 import 'fake_playback_session.dart';
@@ -65,24 +65,23 @@ const _mydiaOnly = [
   'MovieDetail',
 ];
 
-/// Records which Mydia playback operations were sent. `operationName` is
-/// null for everything the player issues, so names come from [isOperation].
-StubLink _recordingLink(List<String> operations) {
-  return StubLink((request, _) {
-    for (final name in _mydiaOnly) {
-      if (isOperation(request, name)) operations.add(name);
+/// Records which Mydia playback operations were sent.
+ScriptedMydiaTransport _recordingServer(List<String> operations) {
+  return ScriptedMydiaTransport((request, _) {
+    if (_mydiaOnly.contains(request.operation)) {
+      operations.add(request.operation);
     }
-    if (isOperation(request, 'MovieDetail')) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(positionSeconds: 0);
     }
-    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-    if (isOperation(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (isOperation(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
-    if (isOperation(request, 'StreamingCandidates')) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(directPlay: true, duration: 5400);
     }
     return <String, dynamic>{
@@ -99,7 +98,7 @@ void main() {
       (tester) async {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
-      link: _recordingLink(operations),
+      server: _recordingServer(operations),
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -126,7 +125,7 @@ void main() {
     final operations = <String>[];
     final container = buildPlayerScreenContainer(
       connectionState: conn.ConnectionState.direct(),
-      link: _recordingLink(operations),
+      server: _recordingServer(operations),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -169,7 +168,7 @@ void main() {
       (tester) async {
     final container = buildPlayerScreenContainer(
       connectionState: conn.ConnectionState.direct(),
-      link: _recordingLink(<String>[]),
+      server: _recordingServer(<String>[]),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -238,7 +237,7 @@ Future<void> _pumpWithSession(
 ) async {
   final container = buildPlayerScreenContainer(
     connectionState: conn.ConnectionState.direct(),
-    link: _recordingLink(<String>[]),
+    server: _recordingServer(<String>[]),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );

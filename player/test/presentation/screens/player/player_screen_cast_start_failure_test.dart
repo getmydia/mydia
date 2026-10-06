@@ -16,7 +16,7 @@ import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_target.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -35,24 +35,24 @@ void main() {
     // local fallback.
     //
     // The pre-play queries now fire concurrently (see `runIsolated`), so an
-    // ordered `StubLink.responses` list can no longer script them -- dispatch
+    // ordered `ScriptedMydiaTransport.responses` list can no longer script them -- dispatch
     // on the operation instead.
-    final link = StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+    final server = ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: 12);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
     });
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,

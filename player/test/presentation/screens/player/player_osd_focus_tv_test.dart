@@ -17,7 +17,7 @@ import 'package:player/presentation/widgets/video_controls/playback_chrome.dart'
 import 'package:player/presentation/widgets/video_controls/transport_cluster.dart';
 
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// A [PlatformPlayer] that never touches native mpv/web bindings, so the real
@@ -120,18 +120,18 @@ Future<void> _mountPlayingScreen(WidgetTester tester) async {
     // The pre-play queries now fire concurrently (see `runIsolated`), so an
     // index-keyed dispatch can no longer script them -- dispatch on the
     // operation instead.
-    link: StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+    server: ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: 0);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
-      if (isOperation(request, 'StreamingCandidates')) {
+      if (request.operation == 'StreamingCandidates') {
         return streamingCandidatesResponse(directPlay: true, duration: 5400);
       }
       final variables = request.variables;

@@ -23,7 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 // The scenario above is the *happy* offline fall-through: the candidates
@@ -43,16 +43,16 @@ void main() {
   setUp(mockPathProviderDocumentsDirectory);
 
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead.
-  StubLink linkFor(Object candidates) {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script them
+  // -- dispatch on the operation instead.
+  ScriptedMydiaTransport serverFor(Object candidates) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return candidates;
@@ -77,11 +77,11 @@ void main() {
     // `streamingCandidatesResponse` hardcodes fileId 'file-1' — the id the
     // server ranked highest for the movie. Direct play must end up streaming
     // that id, never the literal string 'offline'.
-    final link =
-        linkFor(streamingCandidatesResponse(duration: 5400, directPlay: true));
+    final server = serverFor(
+        streamingCandidatesResponse(duration: 5400, directPlay: true));
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       // P2P so the direct-play URL is built by the tracked proxy, not the
       // real media-token service — same choice as
       // player_honors_selected_file_test.dart, for the same reason.
@@ -116,9 +116,9 @@ void main() {
     );
 
     // The pre-play queries now fire concurrently, so their position in
-    // `link.requests` is no longer fixed -- pick the `StreamingCandidates`
+    // `server.requests` is no longer fixed -- pick the `StreamingCandidates`
     // call out by the variable unique to it instead.
-    final candidatesVariables = link.requests
+    final candidatesVariables = server.requests
         .firstWhere((r) => r.variables.containsKey('contentType'))
         .variables;
     expect(
@@ -148,10 +148,10 @@ void main() {
     // streaming candidates call this branch depends on to find anything to
     // play fails outright, standing in for a transient GraphQL error or an
     // unreachable server.
-    final link = linkFor(graphqlErrorResponse('internal server error'));
+    final server = serverFor(graphqlError('internal server error'));
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: server,
       connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
@@ -186,7 +186,7 @@ void main() {
           'failed — there is no server-ranked file to play',
     );
 
-    for (final request in link.requests) {
+    for (final request in server.requests) {
       expect(
         request.variables['fileId'],
         isNot('offline'),

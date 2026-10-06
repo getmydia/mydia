@@ -2,20 +2,19 @@
 // `startStreamingSession`, and what happens against a server whose schema
 // predates them.
 //
-// These assert on `StubLink.requests` rather than on the chrome. The rung a
+// These assert on `ScriptedMydiaTransport.requests` rather than on the chrome. The rung a
 // viewer picks only matters if it reaches the mutation, and the request is
 // where that is decidable — the control's own visibility is a function of
 // `qualityControlAvailable`, which `quality_display_test.dart` pins.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/link_path.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -39,22 +38,13 @@ void main() {
 
   /// Every `startStreamingSession` request the screen made, old document or
   /// legacy one. `strategy` is the variable only these two carry.
-  List<Request> sessionRequests(StubLink link) => link.requests
-      .where((r) => r.variables.containsKey('strategy'))
-      .toList(growable: false);
+  List<ScriptedRequest> sessionRequests(ScriptedMydiaTransport link) =>
+      link.requests
+          .where((r) => r.variables.containsKey('strategy'))
+          .toList(growable: false);
 
-  /// True when [request] carries the named GraphQL operation. Lets a stub
-  /// answer by document rather than by call index, which is what a test with
-  /// more than one `_initializePlayer` pass needs.
-  ///
-  /// Reads the document off `Operation.toString()`, which prints the query
-  /// source. `DocumentNode.toString()` does not — it is the default
-  /// `Instance of 'DocumentNode'`, so matching on it silently matches
-  /// nothing and every request falls through to the stub's default.
-  bool isOperation(Request request, String name) =>
-      request.operation.toString().contains(name);
-
-  Future<void> pumpUntilSessionStarted(WidgetTester tester, StubLink link,
+  Future<void> pumpUntilSessionStarted(
+      WidgetTester tester, ScriptedMydiaTransport link,
       {int count = 1}) async {
     await pumpUntil(tester, () => sessionRequests(link).length >= count);
     // Drains `_waitForPlaylist`'s retry loop so no timer outlives the test;
@@ -64,27 +54,28 @@ void main() {
 
   /// Answers every pre-play query, which now fire concurrently (see
   /// `runIsolated`) and so can no longer be scripted by an ordered
-  /// `StubLink.responses` list. [candidates] answers `StreamingCandidates`;
-  /// [session], when given, answers every `startStreamingSession`/legacy
-  /// call (`strategy` is the variable both carry), numbering attempts from 1
-  /// so a retry test can vary the reply. Anything else -- `endStreamingSession`
-  /// included -- gets `endStreamingSessionResponse()`, the same answer the
-  /// exhausted end of a `StubLink.responses` list used to repeat.
-  StubLink linkFor(
+  /// ordered `ScriptedMydiaTransport.responses` list. [candidates] answers
+  /// `StreamingCandidates`; [session], when given, answers every
+  /// `startStreamingSession`/legacy call (`strategy` is the variable both
+  /// carry), numbering attempts from 1 so a retry test can vary the reply.
+  /// Anything else -- `endStreamingSession` included -- gets
+  /// `endStreamingSessionResponse()`, the same answer the exhausted end of a
+  /// `responses` list used to repeat.
+  ScriptedMydiaTransport linkFor(
     Object candidates, {
     Object Function(int attempt)? session,
   }) {
     var attempts = 0;
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
-      if (isOperation(request, 'StreamingCandidates')) return candidates;
+      if (request.operation == 'StreamingCandidates') return candidates;
       if (request.variables.containsKey('strategy')) {
         attempts++;
         return session?.call(attempts) ?? endStreamingSessionResponse();
@@ -102,7 +93,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -131,7 +122,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -162,7 +153,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -186,9 +177,8 @@ void main() {
       session: (attempt) => attempt == 1
           // Absinthe's verbatim text for an argument the schema does not
           // declare.
-          ? graphqlErrorResponse(
-              'Unknown argument "maxHeight" on field "startStreamingSession" '
-              'of type "RootMutationType".',
+          ? graphqlError(
+              'Unknown argument "maxHeight" on field "startStreamingSession".',
             )
           // The retry must survive a reply with no echoed caps at all, which
           // is the only kind an old server can send.
@@ -196,7 +186,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -242,26 +232,25 @@ void main() {
     // `quality_choice_test.dart` for why).
     //
     // Answered by operation rather than by call index. A second pass does not
-    // re-issue every query — the client's default cache-and-network policy
-    // serves some of them from the cache — so a positional script silently
+    // re-issue every query, so a positional script silently
     // hands the wrong payload to the wrong document.
     var sessionAttempts = 0;
-    final link = StubLink((request, _) {
-      if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+    final link = ScriptedMydiaTransport((request, _) {
+      if (request.operation == 'MovieDetail') return movieDetailResponse();
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
-      if (isOperation(request, 'StreamingCandidates')) {
+      if (request.operation == 'StreamingCandidates') {
         return streamingCandidatesResponse(duration: 5400, height: 2160);
       }
-      if (isOperation(request, 'StartStreamingSession')) {
+      if (request.operation == 'StartStreamingSession') {
         sessionAttempts++;
         return sessionAttempts == 1
-            ? graphqlErrorResponse('Failed to start streaming session')
+            ? graphqlError('Failed to start streaming session')
             : startStreamingSessionResponse(maxBitrate: 4000, maxHeight: 720);
       }
       return endStreamingSessionResponse();
@@ -270,7 +259,7 @@ void main() {
     final settings = FakeSettingsService(defaultQuality: '720p');
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -307,7 +296,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -332,11 +321,11 @@ void main() {
   testWidgets('does not retry a genuine failure', (tester) async {
     final link = linkFor(
       streamingCandidatesResponse(duration: 5400, height: 2160),
-      session: (_) => graphqlErrorResponse('Failed to start streaming session'),
+      session: (_) => graphqlError('Failed to start streaming session'),
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -367,7 +356,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -376,12 +365,12 @@ void main() {
 
     // Seeded before the screen ever reads it, matching the exact shape
     // `streamingCandidatesResponse(directPlay: true, height: 1080)`'s
-    // candidate produces (`avc1.640028` / bucket 1080). `serverUrlProvider`
-    // is overridden to this same URL, which is the memory key for a
-    // non-p2p connection.
+    // candidate produces (`avc1.640028` / bucket 1080). The harness source's
+    // server URL is this same URL, which is the memory key for a non-p2p
+    // connection.
     final memory = await container.read(playbackMemoryProvider.future);
     await memory.recordFailure(
-      'https://mydia.test',
+      'http://test.local',
       const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
       FailureReason.decodeFailed,
       now: DateTime.now(),
@@ -420,18 +409,18 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
     addTearDown(container.dispose);
 
-    // Seeded before the screen ever reads memory, at the same key
-    // `serverUrlProvider` resolves to for a non-p2p connection.
+    // Seeded before the screen ever reads memory, at the harness source's
+    // server URL, the key for a non-p2p connection.
     final memory = await container.read(playbackMemoryProvider.future);
     await memory.recordStall(
-      'https://mydia.test',
+      'http://test.local',
       LinkPath.http,
       6000,
       now: DateTime.now(),
@@ -457,7 +446,7 @@ void main() {
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -467,7 +456,7 @@ void main() {
 
     final memory = await container.read(playbackMemoryProvider.future);
     await memory.recordFailure(
-      'https://mydia.test',
+      'http://test.local',
       const FailureKey(videoCodec: 'avc1.640028', heightBucket: 1080),
       FailureReason.decodeFailed,
       now: DateTime.now(),
@@ -500,7 +489,7 @@ void main() {
     ));
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -508,11 +497,11 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    // Seeded before the screen ever reads memory, at the same key
-    // `serverUrlProvider` resolves to for a non-p2p connection.
+    // Seeded before the screen ever reads memory, at the harness source's
+    // server URL, the key for a non-p2p connection.
     final memory = await container.read(playbackMemoryProvider.future);
     await memory.recordStall(
-      'https://mydia.test',
+      'http://test.local',
       LinkPath.http,
       10685,
       now: DateTime.now(),
@@ -546,7 +535,7 @@ void main() {
     ));
 
     final container = buildPlayerScreenContainer(
-      link: link,
+      server: link,
       connectionState: conn.ConnectionState.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
@@ -557,7 +546,7 @@ void main() {
     // HTTP, so the record describes a different link and must not apply.
     final memory = await container.read(playbackMemoryProvider.future);
     await memory.recordStall(
-      'https://mydia.test',
+      'http://test.local',
       LinkPath.relay,
       8000,
       now: DateTime.now(),

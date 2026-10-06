@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
-import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
@@ -32,14 +30,10 @@ MydiaSource _mydiaSource(LocalProxyService proxy) => MydiaSource(
     );
 
 void main() {
-  Future<PlayerScreen> pump(
-    WidgetTester tester, {
-    required SourceId? bound,
-  }) async {
+  Future<PlayerScreen> pump(WidgetTester tester) async {
     final proxy = LocalProxyService.forTesting();
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        boundSourceIdProvider.overrideWithValue(bound),
         localProxyServiceProvider.overrideWithValue(proxy),
         mediaSourceProvider(sid).overrideWithValue(_mydiaSource(proxy)),
       ],
@@ -56,21 +50,13 @@ void main() {
     return screen;
   }
 
-  testWidgets('the bound instance plays through the screen\'s own session',
+  testWidgets('a Mydia instance gets a session with every feature',
       (tester) async {
-    final screen = await pump(tester, bound: sid);
-    // Null makes the screen build MydiaPlaybackSession (all features), the
-    // session `/player/...` used before items moved to this route. The
-    // `offline` file id reaches it unchanged.
-    expect(screen.session, isNull);
-    expect(screen.fileId, 'offline');
-  });
-
-  testWidgets('another Mydia instance gets the same session with every feature',
-      (tester) async {
-    final screen = await pump(tester, bound: const SourceId('other'));
+    final screen = await pump(tester);
     final session = screen.session;
     expect(session, isA<MydiaPlaybackSession>());
-    expect(session!.features, PlaybackFeature.values.toSet());
+    expect(session.features, PlaybackFeature.values.toSet());
+    // The `offline` file id reaches the screen unchanged.
+    expect(screen.fileId, 'offline');
   });
 }
