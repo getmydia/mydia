@@ -11,6 +11,7 @@ import '../../../domain/sources/source_error.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
+import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_error_view.dart';
 
@@ -94,7 +95,11 @@ class _Body extends ConsumerWidget {
                 key: const Key('source-item-play'),
                 autofocus: true,
                 onPressed: () async {
-                  await context.push(sourcePlayerLocation(detail, version));
+                  await context.push(sourcePlayerLocation(
+                    detail.summary.ref,
+                    fileId: version.id,
+                    title: detail.summary.title,
+                  ));
                   if (!context.mounted) return;
                   // Progress changed while playing.
                   invalidateSourceItemWrites(ref, item);

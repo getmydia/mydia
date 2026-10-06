@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/graphql/watch/query_keys.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/domain/detail/detail_target.dart';
+import 'package:player/domain/sources/item.dart';
+import 'package:player/domain/sources/library.dart';
 import 'package:player/domain/detail/detail_views.dart';
 import 'package:player/domain/models/media_file.dart';
 import 'package:player/presentation/screens/detail/detail_links.dart';
@@ -75,5 +78,50 @@ void main() {
       freshnessKeys(const MydiaTarget(DetailKind.episode, 'e1')),
       [QueryKeys.episodeDetail('e1')],
     );
+  });
+
+  group('source locations', () {
+    const id = SourceId('a:o:s');
+    const ref =
+        ItemRef(sourceId: id, kind: ItemKind.movie, externalId: 'x/y 1');
+
+    test('home, library, search, listings, collection and filter', () {
+      expect(sourceHomeLocation(id), '/s/a:o:s');
+      expect(sourceLibraryLocation(const LibraryRef(sourceId: id, id: 'l/1')),
+          '/s/a:o:s/library/l%2F1');
+      expect(sourceSearchLocation(id), '/s/a:o:s/search');
+      expect(sourceSearchLocation(id, query: 'a b'), '/s/a:o:s/search?q=a+b');
+      expect(sourceListingLocation(id, SourceListing.recentlyAdded),
+          '/s/a:o:s/recently-added');
+      expect(sourceListingLocation(id, SourceListing.continueWatching),
+          '/s/a:o:s/continue-watching');
+      expect(collectionLocation(id, 'x/y'), '/s/a:o:s/collection/x%2Fy');
+      expect(filterLocation(id, 'f 1'), '/s/a:o:s/filter/f%201');
+    });
+
+    test('every listing has a distinct segment under the source', () {
+      final all = [
+        for (final l in SourceListing.values) sourceListingLocation(id, l)
+      ];
+      expect(all.toSet(), hasLength(SourceListing.values.length));
+    });
+
+    test('item locations encode ids and route videos to the item route', () {
+      expect(sourceItemLocation(ref), '/s/a:o:s/movie/x%2Fy%201');
+      expect(
+          sourceItemLocation(const ItemRef(
+              sourceId: id, kind: ItemKind.video, externalId: 'v/1')),
+          '/s/a:o:s/item/video/v%2F1');
+    });
+
+    test('the player location carries kind, file, title and extras', () {
+      expect(
+        sourcePlayerLocation(ref,
+            fileId: 'f1', title: 'Quill Harbor', extra: {'resume': '5'}),
+        '/s/a:o:s/player/x%2Fy%201'
+        '?kind=movie&fileId=f1&title=Quill+Harbor&resume=5',
+      );
+      expect(sourcePlayerLocation(ref), '/s/a:o:s/player/x%2Fy%201?kind=movie');
+    });
   });
 }

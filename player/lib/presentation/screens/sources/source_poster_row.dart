@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/horizontal_rail.dart';
 import '../../widgets/source_artwork.dart';
-import 'source_browse_providers.dart';
+import '../detail/detail_links.dart';
 
 class SourcePosterRow extends StatelessWidget {
   const SourcePosterRow({

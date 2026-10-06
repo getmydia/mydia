@@ -10,6 +10,7 @@ import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/freshness_header.dart';
 import '../../widgets/source_artwork.dart';
+import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_drawer_button.dart';
 import 'source_error_view.dart';

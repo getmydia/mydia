@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/downloads/download_providers.dart';
+import '../detail/detail_links.dart';
 import '../../../core/downloads/download_service.dart';
 import '../../../core/p2p/p2p_service.dart';
 import '../../../core/sources/all_servers_inclusion.dart';
@@ -233,7 +234,7 @@ class _AccountCard extends ConsumerWidget {
                     onPressed: () => showPlexHomeSheet(
                       context,
                       account: account,
-                      onSwitched: (id) => context.go('/s/${id.value}'),
+                      onSwitched: (id) => context.go(sourceHomeLocation(id)),
                     ),
                     child: const Text('Switch user'),
                   ),

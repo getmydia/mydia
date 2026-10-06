@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/sources/capabilities.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/source_error.dart';
@@ -120,8 +119,7 @@ class AllServersHomeScreen extends ConsumerWidget {
     if (choice == null || !c.mounted) return;
     switch (choice) {
       case 'details':
-        await c.push(
-            allServersItemLocation(item.ref, ref.read(boundSourceIdProvider)));
+        await c.push(allServersItemLocation(item.ref));
       case 'remove':
         if (cw == null) return;
         final toaster = Toaster.of(c);

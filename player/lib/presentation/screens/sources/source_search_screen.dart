@@ -12,7 +12,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../widgets/browse_grid.dart';
 import '../../widgets/source_artwork.dart';
-import 'source_browse_providers.dart';
+import '../detail/detail_links.dart';
 import 'source_drawer_button.dart';
 import 'source_error_view.dart';
 

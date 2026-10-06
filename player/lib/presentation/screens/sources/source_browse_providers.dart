@@ -17,7 +17,6 @@ import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/media_source.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
-import '../../../domain/detail/detail_target.dart';
 import '../../../domain/models/media_stream.dart';
 import '../../../domain/sources/collection.dart';
 import '../../../domain/sources/hub.dart';
@@ -25,31 +24,11 @@ import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../../domain/sources/source_error.dart';
 import '../calendar/calendar_window.dart';
-import '../detail/detail_links.dart';
 
 /// The live source for [id], or a not-found error when it is gone.
 MediaSource requireSource(Ref ref, SourceId id) =>
     ref.watch(mediaSourceProvider(id)) ??
     (throw const SourceException.notFound());
-
-String sourceItemLocation(ItemRef ref) => detailKindOf(ref.kind) != null
-    ? detailLocation(SourceTarget(ref))
-    : '/s/${ref.sourceId.value}/item/${ref.kind.name}/${Uri.encodeComponent(ref.externalId)}';
-
-String sourceLibraryLocation(LibraryRef ref) =>
-    '/s/${ref.sourceId.value}/library/${Uri.encodeComponent(ref.id)}';
-
-String sourcePlayerLocation(ItemDetail detail, MediaVersion version) {
-  final ref = detail.summary.ref;
-  return Uri(
-    path: '/s/${ref.sourceId.value}/player/${ref.externalId}',
-    queryParameters: {
-      'kind': ref.kind.name,
-      'fileId': version.id,
-      'title': detail.summary.title,
-    },
-  ).toString();
-}
 
 final sourceLibrariesProvider =
     StreamProvider.autoDispose.family<List<Library>, SourceId>((ref, id) {

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/sources/sources_providers.dart';
+import '../detail/detail_links.dart';
 import 'jellyfin_sign_in_controller.dart';
 
 class JellyfinConnectScreen extends ConsumerStatefulWidget {
@@ -54,7 +55,7 @@ class _JellyfinConnectScreenState extends ConsumerState<JellyfinConnectScreen> {
   Widget build(BuildContext context) {
     final provider = jellyfinSignInProvider(widget.reauthAccountId);
     ref.listen(provider, (_, next) {
-      if (next is JellyfinSignedIn) context.go('/s/${next.source.value}');
+      if (next is JellyfinSignedIn) context.go(sourceHomeLocation(next.source));
     });
     final state = ref.watch(provider);
     return Scaffold(

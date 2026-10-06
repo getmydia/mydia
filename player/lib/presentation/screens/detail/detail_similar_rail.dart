@@ -11,6 +11,7 @@ import '../../../domain/detail/detail_target.dart';
 import '../../../domain/detail/detail_views.dart';
 import '../../widgets/content_rail.dart';
 import '../sources/source_poster_row.dart';
+import 'detail_links.dart';
 import 'source_detail_controllers.dart';
 
 class DetailSimilarRail extends ConsumerWidget {
@@ -43,9 +44,10 @@ class DetailSimilarRail extends ConsumerWidget {
       title: 'Similar in your library',
       collapsible: collapsible,
       items: similar,
-      onItemTap: (id, type) => context.push(
-        type.toLowerCase() == 'movie' ? '/movie/$id' : '/show/$id',
-      ),
+      onItemTap: (id, type) => context.push(detailLocation(MydiaTarget(
+        type.toLowerCase() == 'movie' ? DetailKind.movie : DetailKind.show,
+        id,
+      ))),
     );
   }
 }

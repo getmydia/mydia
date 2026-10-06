@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/sources/connection/source_connection.dart';
+import '../detail/detail_links.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/source_factories.dart';
 import '../../../core/sources/sources_providers.dart';
@@ -140,7 +141,7 @@ class _StashConnectScreenState extends ConsumerState<StashConnectScreen> {
       final record = await saveStashSource(ref,
           uri: uri, apiKey: key, reauthAccountId: widget.reauthAccountId);
       if (!mounted) return;
-      context.go('/s/${record.sources.first.id.value}');
+      context.go(sourceHomeLocation(record.sources.first.id));
     } on SourceException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.kind == SourceErrorKind.unauthorized

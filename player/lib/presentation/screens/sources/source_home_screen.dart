@@ -12,6 +12,7 @@ import '../../../core/sources/sources_providers.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/freshness_header.dart';
+import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
 import 'source_drawer_button.dart';
@@ -121,7 +122,7 @@ class _Header extends StatelessWidget {
             IconButton(
               key: const Key('source-open-search'),
               icon: const Icon(Icons.search),
-              onPressed: () => context.push('/s/${sourceId.value}/search'),
+              onPressed: () => context.push(sourceSearchLocation(sourceId)),
             ),
         ],
       ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/colors.dart';
+import '../../domain/detail/detail_target.dart';
+import '../screens/detail/detail_links.dart';
 
 /// What a card's long-press menu can offer.
 enum MediaContextAction {
@@ -182,11 +184,16 @@ Future<void> showMediaContextMenu(
       onPlay();
     case MediaContextAction.goToShow:
       final showId = target.showId;
-      if (showId != null) await context.push<void>('/show/$showId');
+      if (showId != null) {
+        await context
+            .push<void>(detailLocation(MydiaTarget(DetailKind.show, showId)));
+      }
     case MediaContextAction.episodeDetails:
-      await context.push<void>('/episode/${target.id}');
+      await context.push<void>(
+          detailLocation(MydiaTarget(DetailKind.episode, target.id)));
     case MediaContextAction.movieDetails:
-      await context.push<void>('/movie/${target.id}');
+      await context
+          .push<void>(detailLocation(MydiaTarget(DetailKind.movie, target.id)));
     case MediaContextAction.removeFromContinueWatching:
       onRemoveFromContinueWatching?.call();
   }

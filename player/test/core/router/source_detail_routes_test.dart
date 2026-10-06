@@ -11,7 +11,6 @@ import 'package:player/presentation/screens/detail/detail_links.dart';
 import 'package:player/presentation/screens/episode/episode_detail_screen.dart';
 import 'package:player/presentation/screens/movie/movie_detail_screen.dart';
 import 'package:player/presentation/screens/show/show_detail_screen.dart';
-import 'package:player/presentation/screens/sources/source_browse_providers.dart';
 import 'package:player/presentation/screens/sources/source_error_view.dart';
 import 'package:player/presentation/screens/sources/source_item_screen.dart';
 import 'package:player/presentation/widgets/play_button.dart';

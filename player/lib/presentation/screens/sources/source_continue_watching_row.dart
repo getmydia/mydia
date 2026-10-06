@@ -14,6 +14,7 @@ import '../../../domain/sources/source_error.dart';
 import '../../widgets/media_context_menu.dart';
 import '../../widgets/source_artwork.dart';
 import '../../widgets/toast/toaster.dart';
+import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_poster_row.dart';
 
@@ -93,7 +94,11 @@ Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
     return;
   }
   if (!context.mounted) return;
-  await context.push(sourcePlayerLocation(detail, version));
+  await context.push(sourcePlayerLocation(
+    detail.summary.ref,
+    fileId: version.id,
+    title: detail.summary.title,
+  ));
   if (!context.mounted) return;
   invalidateSourceItemWrites(ref, item);
 }
