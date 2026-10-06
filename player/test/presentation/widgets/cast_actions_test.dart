@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
@@ -98,14 +99,16 @@ void main() {
       return CastSessionManager(
         backend: backend,
         store: InMemoryCastSessionStore(),
-        progressService: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
-        streamingSessions: FakeStreamingSessionService(),
-        resolverFactory: () => CastRouteResolver(
-          isP2pMode: false,
-          serverUrl: 'https://mydia.test',
-          mediaToken: () async => 'tok',
-          lanBaseUrl: () => null,
+        mydiaDeps: (_) async => MydiaCastDeps(
+          progress: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
           streamingSessions: FakeStreamingSessionService(),
+          resolver: () => CastRouteResolver(
+            isP2pMode: false,
+            serverUrl: 'https://mydia.test',
+            mediaToken: () async => 'tok',
+            lanBaseUrl: () => null,
+            streamingSessions: FakeStreamingSessionService(),
+          ),
         ),
         setLanAccess: (_) async {},
         clock: () => DateTime.utc(2026, 8, 3, 12),
@@ -285,6 +288,7 @@ void main() {
       await manager.startCast(
         device: _device,
         request: CastLaunchRequest(
+          sourceId: const SourceId('macct'),
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',

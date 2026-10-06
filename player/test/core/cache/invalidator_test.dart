@@ -1,33 +1,43 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:player/core/cache/cache_watcher.dart';
 import 'package:player/core/cache/fetch_log.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/query_key.dart';
 import 'package:player/core/cache/watcher_registry.dart';
-import 'package:player/core/graphql/watch/query_watcher.dart';
 
 import '../../test_utils/query_keys.dart';
-import '../../test_utils/stub_graphql_client.dart';
 
-const String _pingQuery = r'''
-query Ping {
-  ping {
-    id
-    value
+/// A [CacheWatcher] that counts the automatic refetches it is asked for.
+///
+/// A real watcher restamps its fetch-log entry when its refetch lands, so
+/// this one does too, which is what lets the tests tell "cleared then
+/// restamped" from "cleared and left cold".
+class _FakeWatcher implements CacheWatcher {
+  _FakeWatcher(this.key, this._log, {this.canRefetch});
+
+  @override
+  final QueryKey key;
+  final FetchLog _log;
+
+  /// Mirrors a watcher's decline guard; throwing simulates a broken guard.
+  final bool Function()? canRefetch;
+
+  int refetches = 0;
+
+  @override
+  Future<bool> refetchAutomatically() async {
+    final allowed = canRefetch == null || canRefetch!();
+    if (!allowed) return false;
+    refetches++;
+    await _log.record(key, DateTime(2026, 8, 1));
+    return true;
   }
 }
-''';
-
-Map<String, dynamic> _pingData(String value) => {
-      '__typename': 'Query',
-      'ping': {'__typename': 'Ping', 'id': 'ping-1', 'value': value},
-    };
 
 /// A [FetchLog] that reports when `clearAll()` runs, delegating everything
-/// else to [_inner]. Used to pin the true ordering contract of
-/// `invalidateAll` without depending on the timing of `QueryWatcher`'s
-/// unawaited fetch-log write (see the ordering test below).
+/// else to [_inner]. Pins the ordering contract of `invalidateAll`: the log
+/// is cleared before any live watcher is refetched.
 class _CallOrderFetchLog implements FetchLog {
   _CallOrderFetchLog(this._inner, {required void Function() onClearAll})
       : _onClearAll = onClearAll;
@@ -56,9 +66,8 @@ class _CallOrderFetchLog implements FetchLog {
 }
 
 /// A [FetchLog] that reports when `clearFamily()` runs, delegating everything
-/// else to [_inner]. Same technique as [_CallOrderFetchLog], for the same
-/// reason: pins the clear-before-refetch order for a family target without
-/// depending on the timing of `QueryWatcher`'s unawaited fetch-log write.
+/// else to [_inner]. Same technique as [_CallOrderFetchLog], for a family
+/// target.
 class _FamilyClearOrderFetchLog implements FetchLog {
   _FamilyClearOrderFetchLog(this._inner,
       {required void Function() onClearFamily})
@@ -168,42 +177,18 @@ class _FamilyClearFailingFetchLog implements FetchLog {
   }
 }
 
-QueryWatcher<String> makeWatcher(
-  StubLink link,
-  FetchLog log, {
-  bool Function()? canRefetch,
-  QueryKey? key,
-}) {
-  return QueryWatcher<String>(
-    key: key ?? QueryKeys.home,
-    client: Future<GraphQLClient>.value(stubClient(link)),
-    fetchLog: log,
-    document: gql(_pingQuery),
-    parse: (data) => (data['ping'] as Map<String, dynamic>)['value'] as String,
-    canRefetch: canRefetch,
-  );
-}
-
 void main() {
   group('Invalidator', () {
     test('a live watcher is refetched', () async {
       final log = InMemoryFetchLog();
-      var call = 0;
-      final link = StubLink((_, __) {
-        call++;
-        return _pingData('v$call');
-      });
-      final watcher = makeWatcher(link, log);
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.home, log);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
       await invalidator.invalidate([QueryKeys.home.target]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(link.requests.length, greaterThanOrEqualTo(2));
+      expect(watcher.refetches, 1);
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
@@ -211,22 +196,14 @@ void main() {
         'a live watcher that allows automatic refetch (canRefetch true or '
         'unset) still refetches', () async {
       final log = InMemoryFetchLog();
-      var call = 0;
-      final link = StubLink((_, __) {
-        call++;
-        return _pingData('v$call');
-      });
-      final watcher = makeWatcher(link, log, canRefetch: () => true);
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.home, log, canRefetch: () => true);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
       await invalidator.invalidate([QueryKeys.home.target]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(link.requests.length, greaterThanOrEqualTo(2));
+      expect(watcher.refetches, 1);
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
@@ -242,25 +219,17 @@ void main() {
       // screen is treated as cold on its next fresh mount rather than
       // staying silently stale forever.
       final log = InMemoryFetchLog({QueryKeys.home: DateTime(2026, 7, 28)});
-      var call = 0;
-      final link = StubLink((_, __) {
-        call++;
-        return _pingData('v$call');
-      });
-      final watcher = makeWatcher(link, log, canRefetch: () => false);
-      addTearDown(watcher.close);
+      final watcher =
+          _FakeWatcher(QueryKeys.home, log, canRefetch: () => false);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
-      final requestsBeforeInvalidate = link.requests.length;
-
       await invalidator.invalidate([QueryKeys.home.target]);
 
       expect(
-        link.requests.length,
-        requestsBeforeInvalidate,
+        watcher.refetches,
+        0,
         reason: 'a declining watcher must not be refetched automatically',
       );
       expect(log.lastFetchedAt(QueryKeys.home), isNull);
@@ -283,68 +252,47 @@ void main() {
       final log = InMemoryFetchLog({
         QueryKeys.unwatched: DateTime(2026, 7, 28),
       });
-      final link = StubLink((_, __) => _pingData('v'));
-      final watcher = makeWatcher(link, log);
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.home, log);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
       await invalidator.invalidateAll();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(log.lastFetchedAt(QueryKeys.unwatched), isNull);
-      expect(link.requests.length, greaterThanOrEqualTo(2));
-      // The live watcher's fresh network result restamps its own entry
-      // after clearAll() wipes it, so it survives to the end of the call.
+      expect(watcher.refetches, 1);
+      // The live watcher's refetch restamps its own entry after clearAll()
+      // wipes it, so it survives to the end of the call.
       expect(log.lastFetchedAt(QueryKeys.home), isNotNull);
     });
 
     test(
         'invalidateAll clears the log before refetching any live watcher '
         '(ordering)', () async {
-      // The assertion above (home's entry isNotNull after invalidateAll)
-      // does not actually pin the clear-then-refetch order: QueryWatcher
-      // dispatches its fetch-log write via `unawaited(...)` inside
-      // `_onResult`, so that write is not guaranteed to have landed by the
-      // time `watcher.refetch()`'s own awaited call returns. Verified by
-      // temporarily swapping invalidateAll to refetch-then-clear: the
-      // isNotNull assertion above still passed, because the unawaited write
-      // from the refetch reliably lands after either statement order,
-      // racing back in ahead of the *next* awaited call in the caller
-      // regardless of source order. See the fix report for the full trace.
-      //
-      // What is not racy is exactly when the network request itself is
-      // dispatched: `link.requests` grows synchronously, strictly before
-      // `watcher.refetch()`'s awaited call can return. Snapshotting the
-      // request count at the moment clearAll() runs pins the true ordering
-      // contract without depending on the unawaited write's timing.
+      // The restamp assertion above does not pin the clear-then-refetch
+      // order on its own, so snapshot the refetch count at the moment
+      // clearAll() runs.
       final log = InMemoryFetchLog({
         QueryKeys.unwatched: DateTime(2026, 7, 28),
       });
-      final link = StubLink((_, __) => _pingData('v'));
-      int? requestCountAtClear;
+      late final _FakeWatcher watcher;
+      int? refetchesAtClear;
       final orderTrackingLog = _CallOrderFetchLog(
         log,
-        onClearAll: () => requestCountAtClear = link.requests.length,
+        onClearAll: () => refetchesAtClear = watcher.refetches,
       );
-      final watcher = makeWatcher(link, orderTrackingLog);
-      addTearDown(watcher.close);
+      watcher = _FakeWatcher(QueryKeys.home, orderTrackingLog);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator =
           Invalidator(registry: registry, fetchLog: orderTrackingLog);
 
-      await watcher.stream.first;
-      final requestsBeforeInvalidateAll = link.requests.length;
-
       await invalidator.invalidateAll();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(requestCountAtClear, requestsBeforeInvalidateAll,
+      expect(refetchesAtClear, 0,
           reason: 'clearAll() must run before any live watcher is '
               'refetched, not after');
+      expect(watcher.refetches, 1);
     });
 
     test(
@@ -367,56 +315,33 @@ void main() {
         'invalidateAll still refetches live watchers when clearing the '
         'fetch log throws', () async {
       final log = _ClearAllFailingFetchLog();
-      final link = StubLink((_, __) => _pingData('v'));
-      final watcher = makeWatcher(link, log);
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.home, log);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
-      final requestsBeforeInvalidateAll = link.requests.length;
-
       // Must not throw: a failed clearAll() must not abort before a single
       // watcher gets a chance to refetch.
       await invalidator.invalidateAll();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(link.requests.length, greaterThan(requestsBeforeInvalidateAll));
+      expect(watcher.refetches, 1);
     });
 
     test('a family target refetches every live watcher of that operation',
         () async {
       final log = InMemoryFetchLog();
-      var calls = 0;
-      final link = StubLink((_, __) {
-        calls++;
-        return _pingData('v$calls');
-      });
-      final one = makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
-      final two = makeWatcher(link, log, key: QueryKeys.collectionItems('c2'));
-      addTearDown(one.close);
-      addTearDown(two.close);
+      final one = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
+      final two = _FakeWatcher(QueryKeys.collectionItems('c2'), log);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), one)
         ..register(QueryKeys.collectionItems('c2'), two);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      // `Future.wait` rather than two sequential awaits: both watchers'
-      // initial fetches race the same synchronous stub link, and each
-      // `QueryWatcher._controller` is a broadcast stream that drops a value
-      // pushed while nothing is listening yet. Awaiting `one` to completion
-      // first leaves `two`'s subscription attached too late to catch a
-      // result that already landed, hanging `two.stream.first` forever.
-      // Subscribing to both in the same synchronous step closes that gap.
-      await Future.wait([one.stream.first, two.stream.first]);
-      final before = link.requests.length;
-
       await invalidator.invalidate([Families.collectionItems]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(link.requests.length, greaterThanOrEqualTo(before + 2));
+      expect(one.refetches, 1);
+      expect(two.refetches, 1);
     });
 
     test('a dormant family member has its fetch-log entry cleared', () async {
@@ -435,53 +360,30 @@ void main() {
 
     test('a live family member keeps the record its refetch just wrote',
         () async {
-      // The isNotNull assertion below alone does not pin the
-      // clear-before-refetch order: QueryWatcher dispatches its fetch-log
-      // write via `unawaited(...)` inside `_onResult` (see
-      // `query_watcher.dart`), so that write is not guaranteed to have
-      // landed by the time the refetch's own awaited call returns — a
-      // reordered `_invalidateFamily` that refetches first and clears after
-      // could still leave the entry non-null if the unawaited write races
-      // back in ahead of the clear. What is not racy is exactly when the
-      // network request itself is dispatched: `link.requests` grows
-      // synchronously, strictly before the refetch's awaited call can
-      // return. Snapshotting the request count at the moment
-      // `clearFamily()` runs (via `_FamilyClearOrderFetchLog`, the same
-      // technique `_CallOrderFetchLog` uses for `invalidateAll`) pins the
-      // true ordering contract without depending on the unawaited write's
-      // timing.
+      // Snapshot the refetch count at the moment `clearFamily()` runs, so
+      // the clear-before-refetch order is pinned, then check the refetch
+      // restamped the record: clearing first must not leave a screen that
+      // refreshed a moment ago cold on its next mount.
       final innerLog = InMemoryFetchLog();
-      final link = StubLink((_, __) => _pingData('v1'));
-      int? requestCountAtClear;
+      late final _FakeWatcher watcher;
+      int? refetchesAtClear;
       final orderTrackingLog = _FamilyClearOrderFetchLog(
         innerLog,
-        onClearFamily: () => requestCountAtClear = link.requests.length,
+        onClearFamily: () => refetchesAtClear = watcher.refetches,
       );
-      final watcher = makeWatcher(
-        link,
-        orderTrackingLog,
-        key: QueryKeys.collectionItems('c1'),
-      );
-      addTearDown(watcher.close);
+      watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), orderTrackingLog);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), watcher);
       final invalidator =
           Invalidator(registry: registry, fetchLog: orderTrackingLog);
 
-      await watcher.stream.first;
-      final requestsBeforeInvalidate = link.requests.length;
-
       await invalidator.invalidate([Families.collectionItems]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(requestCountAtClear, requestsBeforeInvalidate,
+      expect(refetchesAtClear, 0,
           reason: 'clearFamily() must run before any live family member is '
               'refetched, not after');
-      // A distinct property from the ordering above: clearing first must
-      // not permanently lose the record — the live watcher's own refetch
-      // has to restamp it, so a screen that refreshed a moment ago does not
-      // stay (or become) cold on its next mount.
+      expect(watcher.refetches, 1);
       expect(
         orderTrackingLog.lastFetchedAt(QueryKeys.collectionItems('c1')),
         isNotNull,
@@ -507,78 +409,49 @@ void main() {
     test('a family clear that throws still refetches the live watchers',
         () async {
       final log = _FamilyClearFailingFetchLog();
-      var calls = 0;
-      final link = StubLink((_, __) {
-        calls++;
-        return _pingData('v$calls');
-      });
-      final watcher =
-          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), watcher);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await watcher.stream.first;
-      final before = link.requests.length;
-
       await invalidator.invalidate([Families.collectionItems]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(link.requests.length, greaterThanOrEqualTo(before + 1));
+      expect(watcher.refetches, 1);
     });
 
     test(
         'a watcher whose refetch throws does not block the rest of the '
         'family', () async {
       // Registration order controls iteration order here: `WatcherRegistry`
-      // stores watchers in a plain `Map` (a `LinkedHashMap`, which Dart
-      // guarantees iterates in insertion order as long as nothing is
-      // removed and reinserted), and `family()` iterates `_watchers.entries`
-      // directly with no reordering. Registering the throwing watcher first
-      // means it is the one `_invalidateFamily`'s loop reaches first, so
-      // this test actually exercises the failure mode an unisolated loop
-      // hits: a throwing watcher processed *second* would let the healthy
-      // one succeed regardless of isolation, proving nothing.
+      // stores watchers in a plain `Map` (a `LinkedHashMap`, which iterates
+      // in insertion order). Registering the throwing watcher first means it
+      // is the one `_invalidateFamily`'s loop reaches first, so this test
+      // actually exercises the failure mode an unisolated loop hits: a
+      // throwing watcher processed *second* would let the healthy one
+      // succeed regardless of isolation, proving nothing.
       final log = InMemoryFetchLog();
-      final throwingLink = StubLink((_, __) => _pingData('bad'));
-      final healthyLink = StubLink((_, __) => _pingData('good'));
-
-      final throwing = makeWatcher(
-        throwingLink,
+      final throwing = _FakeWatcher(
+        QueryKeys.collectionItems('c1'),
         log,
-        key: QueryKeys.collectionItems('c1'),
         canRefetch: () => throw StateError('simulated refetch failure'),
       );
-      final healthy = makeWatcher(
-        healthyLink,
-        log,
-        key: QueryKeys.collectionItems('c2'),
-      );
-      addTearDown(throwing.close);
-      addTearDown(healthy.close);
+      final healthy = _FakeWatcher(QueryKeys.collectionItems('c2'), log);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), throwing)
         ..register(QueryKeys.collectionItems('c2'), healthy);
       final invalidator = Invalidator(registry: registry, fetchLog: log);
 
-      await Future.wait([throwing.stream.first, healthy.stream.first]);
-      final before = healthyLink.requests.length;
-
       await invalidator.invalidate([Families.collectionItems]);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      expect(healthyLink.requests.length, greaterThan(before));
+      expect(healthy.refetches, 1);
     });
 
     test('unregister only removes the watcher it was given', () async {
       final log = InMemoryFetchLog();
-      final first = makeWatcher(StubLink((_, __) => _pingData('a')), log);
-      final second = makeWatcher(StubLink((_, __) => _pingData('b')), log);
-      addTearDown(first.close);
-      addTearDown(second.close);
+      final first = _FakeWatcher(QueryKeys.home, log);
+      final second = _FakeWatcher(QueryKeys.home, log);
 
       final registry = WatcherRegistry()..register(QueryKeys.home, second);
       registry.unregister(QueryKeys.home, first);
@@ -598,13 +471,9 @@ void main() {
   group('WatcherRegistry.family', () {
     test('returns every live watcher for the operation', () {
       final log = InMemoryFetchLog();
-      final link = StubLink((_, __) => _pingData('v1'));
-      final one = makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
-      final two = makeWatcher(link, log, key: QueryKeys.collectionItems('c2'));
-      final other = makeWatcher(link, log);
-      addTearDown(one.close);
-      addTearDown(two.close);
-      addTearDown(other.close);
+      final one = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
+      final two = _FakeWatcher(QueryKeys.collectionItems('c2'), log);
+      final other = _FakeWatcher(QueryKeys.home, log);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), one)
@@ -617,10 +486,7 @@ void main() {
 
     test('an operation name that prefixes another does not match it', () {
       final log = InMemoryFetchLog();
-      final link = StubLink((_, __) => _pingData('v1'));
-      final watcher =
-          makeWatcher(link, log, key: QueryKeys.collectionItems('c1'));
-      addTearDown(watcher.close);
+      final watcher = _FakeWatcher(QueryKeys.collectionItems('c1'), log);
 
       final registry = WatcherRegistry()
         ..register(QueryKeys.collectionItems('c1'), watcher);

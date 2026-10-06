@@ -1,6 +1,6 @@
 // Shared scaffolding for tests that fully mount `PlayerScreen` — building a
 // live `Player`/`ConsumerStatefulWidget` with real Riverpod providers and a
-// real (stubbed-transport) `GraphQLClient`. Not itself a test file (no
+// real `MydiaClient` over a scripted transport. Not itself a test file (no
 // `_test.dart` suffix), so `flutter test` does not try to run it directly.
 //
 // No such harness existed before the fix landed for the dispose()-time
@@ -18,17 +18,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/p2p/media_proxy.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
@@ -41,38 +43,41 @@ import 'package:player/core/settings/settings_service.dart';
 import 'package:player/core/window/player_window_sizer.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/domain/models/download.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/screens/player/session/playback_session.dart';
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
-import '../../../test_utils/stub_link_transport.dart';
-import '../../../core/sources/mydia/fake_mydia_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import '../../../test_utils/toast_harness.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
-/// Reports a fixed [conn.ConnectionState] and skips `ConnectionNotifier`'s
-/// real `_loadStoredState`, which reads platform secure storage — not
-/// available, and not relevant, in a widget test.
-class FixedConnectionNotifier extends conn.ConnectionNotifier {
-  FixedConnectionNotifier(this._state);
+/// How a harness source is reached: [HarnessLink.p2p] gives it a paired
+/// instance's credentials, [HarnessLink.direct] a URL login.
+class HarnessLink {
+  // Not const, so the many call sites do not each need a `const` to satisfy
+  // `prefer_const_constructors`.
+  HarnessLink.direct()
+      : isP2p = false,
+        serverNodeAddr = null;
+  HarnessLink.p2p({this.serverNodeAddr}) : isP2p = true;
 
-  final conn.ConnectionState _state;
-
-  @override
-  conn.ConnectionState build() => _state;
-
-  /// Switches the reported mode mid-test.
-  ///
-  /// The connection a viewer is on is not fixed for the life of a player
-  /// screen — a reconnect can move them between p2p and direct while the
-  /// episode plays — and `PlayerScreen` tracks that through a
-  /// `ref.listenManual`. Anything in `dispose()` keyed on the *current* mode
-  /// therefore has to be exercised against a mode that changed.
-  void switchTo(conn.ConnectionState next) => state = next;
+  final bool isP2p;
+  final String? serverNodeAddr;
 }
+
+/// The credentials a harness source carries for [link].
+MydiaCredentials harnessCredentials(HarnessLink link) => link.isP2p
+    ? MydiaCredentials(
+        instanceId: 'inst-1',
+        accessToken: 'access',
+        nodeAddr: link.serverNodeAddr ?? 'test-node',
+      )
+    : const MydiaCredentials(
+        instanceId: 'inst-1',
+        accessToken: 'access',
+        serverUrl: 'http://test.local',
+      );
 
 class FakeDownloadService extends Fake implements DownloadService {
   FakeDownloadService({this.downloaded});
@@ -244,7 +249,7 @@ class TrackingLocalProxyService extends Fake
     required Object owner,
     required String targetPeer,
     String? authToken,
-    String target = MediaProxy.homeTarget,
+    required String target,
   }) async {
     acquireLease(owner);
     startCalled = true;
@@ -252,25 +257,27 @@ class TrackingLocalProxyService extends Fake
   }
 
   @override
-  String buildHlsUrl(String sessionId) =>
+  String targetBaseUrl(String target) => baseUrl;
+
+  @override
+  String buildHlsUrl(String sessionId, {required String target}) =>
       'http://127.0.0.1:$port/hls/$sessionId/index.m3u8';
 
   @override
-  String buildDirectStreamUrl(String fileId) {
+  String buildDirectStreamUrl(String fileId, {required String target}) {
     directStreamFileIds.add(fileId);
     return 'http://127.0.0.1:$port/direct/$fileId/stream';
   }
 
   @override
-  Future<void> stop(Object owner,
-      {String target = MediaProxy.homeTarget}) async {
+  Future<void> stop(Object owner, {required String target}) => release(owner);
+
+  @override
+  Future<void> release(Object owner) async {
     if (!releaseLease(owner)) return;
     stopped = true;
     _running = false;
   }
-
-  @override
-  Future<void> release(Object owner) => stop(owner);
 
   @override
   Future<void> shutdown() async {
@@ -474,8 +481,9 @@ Map<String, dynamic> preferredSubtitleObject({
 /// `MediaFileFragment` -- see `subtitle_preference.graphql` for why. It fires
 /// chained after the detail query but concurrently with segments and subtitle
 /// offsets (see `_fetchProgressAndEpisodes`'s dartdoc), so an ordered
-/// `StubLink.responses` script can no longer carry it in a fixed slot --
-/// dispatch on the operation instead (see [movieSegmentsResponse]'s dartdoc).
+/// `ScriptedMydiaTransport.responses` script can no longer carry it in a fixed
+/// slot -- dispatch on the operation instead (see [movieSegmentsResponse]'s
+/// dartdoc).
 /// The defaults are the movie all those scripts open on, with no stored
 /// choice on its one file, which is what every test that is not about the
 /// preference wants.
@@ -508,9 +516,9 @@ Map<String, dynamic> subtitlePreferenceResponse({
 ///
 /// `_fetchProgressAndEpisodes` fires this concurrently with the detail query,
 /// the subtitle offsets query, and (via `runIsolated`) streaming candidates,
-/// so an ordered `StubLink.responses` script can no longer carry it in a
-/// fixed slot -- dispatch a `StubLink((request, _) => ...)` on the operation
-/// instead (see `player/docs/testing.md`). Segments travel in their own
+/// so an ordered `ScriptedMydiaTransport.responses` script can no longer carry
+/// it in a fixed slot -- dispatch a `ScriptedMydiaTransport((request, _) => ...)`
+/// on the operation instead (see `player/docs/testing.md`). Segments travel in their own
 /// document on purpose, not inside `MediaFileFragment` — see
 /// `player_screen_segments_isolation_test.dart` for why. The default is
 /// "detection found nothing", which is what every test that is not about
@@ -540,8 +548,8 @@ Map<String, dynamic> movieSegmentsResponse({
 ///
 /// `_fetchProgressAndEpisodes` fires this concurrently with the other
 /// pre-play queries -- see `movieSegmentsResponse`'s dartdoc for why an
-/// ordered `StubLink.responses` script can no longer carry it in a fixed
-/// slot. An empty list here leaves the controller's loaded flag true and
+/// ordered `ScriptedMydiaTransport.responses` script can no longer carry it in
+/// a fixed slot. An empty list here leaves the controller's loaded flag true and
 /// its stored offsets empty, so nothing downstream (mpv's sub-delay, the
 /// sheet's delay row) departs from zero.
 Map<String, dynamic> subtitleTrackSettingsResponse({
@@ -679,22 +687,19 @@ Map<String, dynamic> endStreamingSessionResponse({bool ok = true}) {
 }
 
 /// Builds a [ProviderContainer] with the overrides every `PlayerScreen` mount
-/// needs, wiring [link] as the transport for a real [GraphQLClient] (see
-/// `stub_graphql_client.dart`) and [connectionState]/[castManager]/
-/// [proxyService] for the pieces a real app would resolve from native
-/// services this test has no business touching.
+/// needs, wiring [server] as the transport of the test Mydia source and
+/// [connectionState] as that source's credentials (p2p carries a node
+/// address, direct a URL), with [castManager]/[proxyService] standing in for
+/// the pieces a real app would resolve from native services this test has no
+/// business touching.
 ///
 /// Returns a [ProviderContainer] directly rather than the raw override list:
 /// `Override` (the element type `ProviderContainer.overrides` expects) is not
 /// part of `flutter_riverpod`'s public export surface, so a helper can only
 /// spell its return type by constructing the container itself.
-///
-/// Pass [cache] to hand the client a cache that already holds entries, which
-/// is what lets a test stand in for an install that has played this content
-/// before. Omitted, each container gets its own empty non-persistent cache.
 ProviderContainer buildPlayerScreenContainer({
-  required StubLink link,
-  required conn.ConnectionState connectionState,
+  required ScriptedMydiaTransport server,
+  required HarnessLink connectionState,
   required CapturingCastSessionManager castManager,
   required TrackingLocalProxyService proxyService,
   DownloadedMedia? downloaded,
@@ -704,6 +709,8 @@ ProviderContainer buildPlayerScreenContainer({
   // The bound Mydia instance reports itself unreachable.
   bool offline = false,
   PlaybackProgressStore? progressStore,
+  // Further Mydia instances registered next to the test one.
+  Map<SourceId, MydiaSource> extraSources = const {},
   SettingsService? settingsService,
   // Deliberately not defaulted the way [settingsService] is:
   // `settingsServiceProvider` and `coreSettingsServiceProvider` are two
@@ -712,7 +719,6 @@ ProviderContainer buildPlayerScreenContainer({
   // `coreSettingsServiceProvider` at its real, unoverridden default, which
   // every test but the stats-panel ones already relies on.
   SettingsService? coreSettingsService,
-  GraphQLCache? cache,
   Stream<CastSession?>? castSessionStream,
   // Holds `castSessionManagerProvider`'s own future open until a test
   // completes it, so a load parked inside `_castToTargetIfSet`'s
@@ -729,29 +735,25 @@ ProviderContainer buildPlayerScreenContainer({
   // null.
   Completer<void>? castManagerRequested,
 }) {
+  final creds = harnessCredentials(connectionState);
+  final base = testMydiaSourceOver(server, creds: creds, accountId: 'macct');
+  final MydiaSource source = offline
+      ? MydiaSource(
+          source: base.source,
+          client: base.client,
+          status: ValueNotifier(SourceConnectionStatus.unreachable),
+        )
+      : base;
   return ProviderContainer(overrides: [
-    boundSourceIdProvider.overrideWithValue(testMydiaSourceId),
+    mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
+    for (final entry in extraSources.entries)
+      mediaSourceProvider(entry.key).overrideWithValue(entry.value),
     settingsServiceProvider
         .overrideWithValue(settingsService ?? FakeSettingsService()),
     if (coreSettingsService != null)
       coreSettingsServiceProvider.overrideWithValue(coreSettingsService),
-    boundMydiaProvider.overrideWithValue(offline
-        ? MydiaSource(
-            source: testMydiaSource,
-            client: fakeMydiaClient(StubLinkTransport(link)),
-            status: ValueNotifier(SourceConnectionStatus.unreachable),
-          )
-        : null),
     downloadManagerProvider.overrideWith((ref) async =>
         downloadService ?? FakeDownloadService(downloaded: downloaded)),
-    asyncGraphqlClientProvider
-        .overrideWith((ref) async => stubClient(link, cache: cache)),
-    boundMydiaClientProvider
-        .overrideWithValue(fakeMydiaClient(StubLinkTransport(link))),
-    serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
-    authTokenProvider.overrideWith((ref) async => 'tok'),
-    conn.connectionProvider
-        .overrideWith(() => FixedConnectionNotifier(connectionState)),
     localProxyServiceProvider.overrideWithValue(proxyService),
     castSessionManagerProvider.overrideWith((ref) async {
       final gate = castManagerGate;
@@ -790,10 +792,25 @@ Future<void> pumpPlayerScreen(
   String mediaId = 'movie-1',
   String mediaType = 'movie',
   String fileId = 'file-1',
+  String? showId,
+  int? seasonNumber,
   PlaybackSession? session,
   Player Function()? createPlayer,
   PlayerWindowSizer Function()? createWindowSizer,
 }) async {
+  session ??= MydiaPlaybackSession(
+    source:
+        container.read(mediaSourceProvider(testMydiaSourceId)) as MydiaSource,
+    item: ItemRef(
+      sourceId: testMydiaSourceId,
+      kind: mediaType == 'episode' ? ItemKind.episode : ItemKind.movie,
+      externalId: mediaId,
+    ),
+    fileId: fileId,
+    showId: showId,
+    seasonNumber: seasonNumber,
+    proxy: () => container.read(mediaProxyProvider),
+  );
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
@@ -802,6 +819,8 @@ Future<void> pumpPlayerScreen(
         mediaId: mediaId,
         mediaType: mediaType,
         fileId: fileId,
+        showId: showId,
+        seasonNumber: seasonNumber,
         title: 'The Long Aurora',
         session: session,
         createPlayer: createPlayer,

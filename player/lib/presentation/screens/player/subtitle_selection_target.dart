@@ -18,7 +18,7 @@
 ///   `null` means no attempt is in flight. Every write that means "an attempt
 ///   targeting X" is non-null.
 ///
-/// Pure and free of `Player`, `GraphQLClient` and `State`, like its
+/// Pure and free of `Player`, `MydiaClient` and `State`, like its
 /// neighbours in `subtitle_track_builder.dart`, so the race it describes can
 /// be tested without any of the infrastructure the async code needs.
 library;

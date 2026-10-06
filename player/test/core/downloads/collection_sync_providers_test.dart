@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:player/core/downloads/collection_sync_providers.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/router/legacy_routes.dart';
 import 'package:player/core/sources/source.dart';
 
 const _a = SourceId('acc1:owner:aa11');
@@ -28,7 +28,7 @@ void main() {
   ProviderContainer containerBoundTo(SourceId? bound) {
     final container = ProviderContainer(overrides: [
       collectionSyncBoxProvider.overrideWith((ref) async => box),
-      boundSourceIdProvider.overrideWithValue(bound),
+      legacyMydiaSourceIdProvider.overrideWithValue(bound),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -69,7 +69,7 @@ void main() {
         await c.read(isCollectionSyncedProvider(_b.value, '1').future), isTrue);
   });
 
-  test('a collection-id-only entry belongs to the bound instance', () async {
+  test('a collection-id-only entry belongs to the legacy instance', () async {
     await box.put('1', {'name': 'Saga', 'resolution': '720p'});
     final c = containerBoundTo(_a);
 

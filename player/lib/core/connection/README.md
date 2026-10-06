@@ -146,7 +146,7 @@ If requests fail during direct → relay fallback:
 
 ### Connection indicator shows wrong state
 
-The UI indicator reflects the `connectionProvider` state, which should update when:
+The UI indicator reads the link type of the current source (`sourceViaP2pProvider`), and the peer state from the p2p status, which should update when:
 
 - Initial connection completes (relay or direct)
 - Hot swap completes (relay → direct)

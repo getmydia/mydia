@@ -3,21 +3,24 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/item.dart';
+import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/core/playback/playback_memory.dart';
 import 'package:player/core/playback/playback_memory_providers.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 import 'package:player/domain/models/cast_device.dart';
-import 'package:player/graphql/queries/subtitle_content.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/video_controls/playback_chrome.dart';
 
 import '../../../test_utils/mock_network_images.dart';
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/mydia_test_source.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'player_screen_test_harness.dart';
 
@@ -128,11 +131,11 @@ class _Decoder extends PlatformPlayer {
 /// A small WebVTT body, returned for any `SubtitleContent` request.
 const _vtt = 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello\n';
 
-/// A [StubLink] that can hold `SubtitleContent` until [holdSubtitleContent]
+/// A transport that can hold `SubtitleContent` until [holdSubtitleContent]
 /// completes, and every `startStreamingSession` after the first (a switch's)
 /// until [holdSwitchStart] completes, so a test can pin how a subtitle
 /// fetch and a switch interleave.
-class _GatedLink extends StubLink {
+class _GatedLink extends ScriptedMydiaTransport {
   _GatedLink(
     super.handler, {
     this.holdSubtitleContent,
@@ -151,15 +154,22 @@ class _GatedLink extends StubLink {
   int sessionStartsSeen = 0;
 
   @override
-  Stream<Response> request(Request request, [NextLink? forward]) async* {
-    if (request.operation.document == documentNodeQuerySubtitleContent) {
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+    String? deviceProfile,
+    Duration? timeout,
+  }) async {
+    if (ScriptedMydiaTransport.operationOf(query) == 'SubtitleContent') {
       subtitleContentSeen++;
       await holdSubtitleContent?.future;
-    } else if (request.variables.containsKey('strategy')) {
+    } else if (variables.containsKey('strategy')) {
       sessionStartsSeen++;
       if (sessionStartsSeen > 1) await holdSwitchStart?.future;
     }
-    yield* super.request(request, forward);
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
   }
 }
 
@@ -175,24 +185,24 @@ _GatedLink _server({
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
   // index-keyed dispatch can no longer script them -- dispatch on the
   // operation instead.
-  Object handler(Request request, int index) {
-    if (request.operation.document == documentNodeQuerySubtitleContent) {
+  Object handler(ScriptedRequest request, int index) {
+    if (request.operation == 'SubtitleContent') {
       return {'__typename': 'RootQueryType', 'subtitleContent': _vtt};
     }
-    if (isOperation(request, 'MovieDetail')) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(
         positionSeconds: 0,
         files: withSubtitle ? [mediaFileWithSubtitle()] : null,
       );
     }
-    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-    if (isOperation(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (isOperation(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
-    if (isOperation(request, 'StreamingCandidates')) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(
         directPlay: directPlay,
         duration: 5400,
@@ -204,7 +214,7 @@ _GatedLink _server({
     if (variables.containsKey('strategy')) {
       sessionStarts++;
       if (failSwitchStart && sessionStarts > 1) {
-        return graphqlErrorResponse('Could not start the encoder');
+        return graphqlError('Could not start the encoder');
       }
       return startStreamingSessionResponse(
         sessionId: 'sess-$index',
@@ -241,6 +251,17 @@ Future<void> _mount(
     mediaType: 'movie',
     fileId: 'file-1',
     title: 'The Long Aurora',
+    session: MydiaPlaybackSession(
+      source:
+          container.read(mediaSourceProvider(testMydiaSourceId)) as MydiaSource,
+      item: const ItemRef(
+        sourceId: testMydiaSourceId,
+        kind: ItemKind.movie,
+        externalId: 'movie-1',
+      ),
+      fileId: 'file-1',
+      proxy: () => container.read(mediaProxyProvider),
+    ),
     createPlayer: createPlayer,
     resumeSeconds: resumeSeconds,
   );
@@ -266,7 +287,7 @@ Future<void> _tick(WidgetTester tester) =>
 
 /// End-session requests so far. `_landSwitch` waits for one more: a switch
 /// ends the old session only once the new source has advanced.
-int _endSessionRequests(StubLink link) =>
+int _endSessionRequests(ScriptedMydiaTransport link) =>
     link.requests.where((r) => r.variables.containsKey('sessionId')).length;
 
 /// Seeks to [to], past the transcoded window, which switches sources the
@@ -276,7 +297,7 @@ Future<void> _switchAndLand(
   WidgetTester tester,
   RemotePlayerBinding binding,
   _Decoder decoder,
-  StubLink link, {
+  ScriptedMydiaTransport link, {
   Duration to = const Duration(seconds: 600),
 }) async {
   final opensBefore = decoder.opened.length;
@@ -299,7 +320,7 @@ Future<void> _switchAndLand(
 Future<void> _landSwitch(
   WidgetTester tester,
   _Decoder decoder,
-  StubLink link,
+  ScriptedMydiaTransport link,
   Future<void> switchFuture, {
   required int endsBefore,
 }) async {
@@ -320,8 +341,8 @@ void main() {
     final decoder = _Decoder();
     final sessions = StreamController<CastSession?>.broadcast();
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       castSessionStream: sessions.stream,
@@ -369,8 +390,8 @@ void main() {
       (tester) async {
     final decoder = _Decoder(throwFirstOpen: true);
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -395,8 +416,8 @@ void main() {
     final link = _server(directPlay: true);
     final settings = FakeSettingsService(defaultQuality: 'original');
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: link,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: settings,
@@ -465,8 +486,8 @@ void main() {
       (tester) async {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -486,8 +507,8 @@ void main() {
       (tester) async {
     final decoder = _Decoder(failFirstOpen: true);
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true, playlistMode: 'FULL'),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true, playlistMode: 'FULL'),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -515,8 +536,8 @@ void main() {
     final decoder = _Decoder();
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -573,8 +594,8 @@ void main() {
     final decoder = _Decoder();
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -623,8 +644,8 @@ void main() {
     final decoder = _Decoder();
     final link = _server(directPlay: false);
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -686,8 +707,8 @@ void main() {
       (tester) async {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -728,8 +749,8 @@ void main() {
     final decoder = _Decoder();
     final link = _server(directPlay: true);
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: link,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       settingsService: FakeSettingsService(defaultQuality: 'original'),
@@ -768,8 +789,8 @@ void main() {
       'media_kit reports the switch', (tester) async {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -811,8 +832,8 @@ void main() {
       'it, though nothing reopens', (tester) async {
     final decoder = _Decoder();
     final container = buildPlayerScreenContainer(
-      link: _server(directPlay: true),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(directPlay: true),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -876,8 +897,8 @@ void main() {
         failSwitchStart: failSwitchStart,
       );
       final container = buildPlayerScreenContainer(
-        link: link,
-        connectionState: conn.ConnectionState.direct(),
+        server: link,
+        connectionState: HarnessLink.direct(),
         castManager: CapturingCastSessionManager(),
         proxyService: TrackingLocalProxyService(),
       );
@@ -898,9 +919,8 @@ void main() {
       return (binding, decoder, link);
     }
 
-    int contentRequestCount(StubLink link) => link.requests
-        .where((r) => r.operation.document == documentNodeQuerySubtitleContent)
-        .length;
+    int contentRequestCount(ScriptedMydiaTransport link) =>
+        link.of('SubtitleContent').length;
 
     testWidgets('a picked subtitle is shown again once the switch lands',
         (tester) async {

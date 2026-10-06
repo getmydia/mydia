@@ -3,7 +3,7 @@ import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/auth/device_info_service.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
-import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
 
 class _FakeDeviceInfo extends DeviceInfoService {
   @override
@@ -38,14 +38,14 @@ Map<String, dynamic> _login({
 
 void main() {
   late MockAuthStorage storage;
-  late StubLink link;
+  late ScriptedMydiaTransport server;
 
   AuthService serviceFor(Object response) {
-    link = StubLink.responses([response]);
+    server = ScriptedMydiaTransport.responses([response]);
     return AuthService(
       storage: storage,
       deviceInfo: _FakeDeviceInfo(),
-      clientFactory: (_) => stubClient(link),
+      transportFactory: (_) => server,
     );
   }
 
@@ -103,14 +103,19 @@ void main() {
     expect(storage.keys, isEmpty);
   });
 
-  test('loginWithGraphQL still stores the session', () async {
-    final outcome = await serviceFor(_login()).loginWithGraphQL(
-      serverUrl: 'https://home.example',
-      username: 'maya',
-      password: 'pw',
+  test('login is sent without a token', () async {
+    await serviceFor(_login())
+        .requestLogin(serverUrl: 'http://a.test', username: 'u', password: 'p');
+    expect(server.requests.single.token, isNull);
+  });
+
+  test('a server error keeps the server message in the thrown error', () async {
+    final service = serviceFor(graphqlError('Invalid username or password'));
+    await expectLater(
+      service.requestLogin(
+          serverUrl: 'http://a.test', username: 'u', password: 'p'),
+      throwsA(predicate(
+          (e) => e.toString().contains('Invalid username or password'))),
     );
-    expect(outcome, isA<LoginSuccess>());
-    expect(await storage.read('auth_token'), 'tok');
-    expect(await storage.read('server_url'), 'https://home.example');
   });
 }

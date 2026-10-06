@@ -99,7 +99,7 @@ void main() {
   });
 
   test('a URL login with no id uses the identity the server reports', () async {
-    transport.handlers['GuestInstanceIdentity'] = (_) => {
+    transport.handlers['MydiaInstanceIdentity'] = (_) => {
           'serverCompatibility': {'instanceId': 'reported-1'},
         };
     transport.validTokens = {'tok'};
@@ -277,7 +277,7 @@ void main() {
     );
 
     setUp(() {
-      transport.handlers['GuestInstanceIdentity'] = (_) => {
+      transport.handlers['MydiaInstanceIdentity'] = (_) => {
             'serverCompatibility': {'instanceId': 'reported-uuid'},
           };
       transport.validTokens = {'fresh'};

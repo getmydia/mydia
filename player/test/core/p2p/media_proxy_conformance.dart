@@ -26,6 +26,7 @@ void mediaProxyConformanceTests(
 ) {
   const manifest = '#EXTM3U\n#EXT-X-TARGETDURATION:10\nsegment_000.ts\n';
   const sessionId = 'session-9';
+  const target = 'macct';
 
   group('$name conformance', () {
     late TestP2pService p2p;
@@ -46,6 +47,7 @@ void mediaProxyConformanceTests(
         owner: owner,
         targetPeer: 'peer-1',
         authToken: 'token-1',
+        target: target,
       );
       addTearDown(proxy.shutdown);
     }
@@ -65,11 +67,11 @@ void mediaProxyConformanceTests(
       expect(proxy.baseUrl, isNot(endsWith('/')));
     });
 
-    test('buildHlsUrl is baseUrl plus the manifest path', () async {
+    test('buildHlsUrl is the target base plus the manifest path', () async {
       await startProxy();
       expect(
-        proxy.buildHlsUrl(sessionId),
-        '${proxy.baseUrl}/hls/$sessionId/index.m3u8',
+        proxy.buildHlsUrl(sessionId, target: target),
+        '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8',
       );
     });
 
@@ -78,9 +80,10 @@ void mediaProxyConformanceTests(
         owner: owner,
         targetPeer: 'peer-1',
         authToken: 'token-1',
+        target: target,
       );
-      await proxy.stop(owner);
-      await proxy.stop(owner);
+      await proxy.stop(owner, target: target);
+      await proxy.stop(owner, target: target);
       expect(proxy.isRunning, isFalse);
     });
 
@@ -93,6 +96,7 @@ void mediaProxyConformanceTests(
             owner: who,
             targetPeer: 'peer-1',
             authToken: 'token-1',
+            target: target,
           );
 
       // The next-episode handoff, in the order Flutter actually runs it: the
@@ -105,7 +109,7 @@ void mediaProxyConformanceTests(
         await startAs(other);
         addTearDown(proxy.shutdown);
 
-        await proxy.stop(owner);
+        await proxy.stop(owner, target: target);
 
         expect(proxy.isRunning, isTrue);
       });
@@ -114,8 +118,8 @@ void mediaProxyConformanceTests(
         await startAs(owner);
         await startAs(other);
 
-        await proxy.stop(owner);
-        await proxy.stop(other);
+        await proxy.stop(owner, target: target);
+        await proxy.stop(other, target: target);
 
         expect(proxy.isRunning, isFalse);
       });
@@ -128,7 +132,7 @@ void mediaProxyConformanceTests(
         await startAs(owner);
         await startAs(owner);
 
-        await proxy.stop(owner);
+        await proxy.stop(owner, target: target);
 
         expect(proxy.isRunning, isFalse);
       });
@@ -138,7 +142,7 @@ void mediaProxyConformanceTests(
         await startAs(owner);
         addTearDown(proxy.shutdown);
 
-        await proxy.stop(other);
+        await proxy.stop(other, target: target);
 
         expect(proxy.isRunning, isTrue);
       });
@@ -160,7 +164,7 @@ void mediaProxyConformanceTests(
         await startAs(other);
         addTearDown(proxy.shutdown);
 
-        await proxy.stop(owner);
+        await proxy.stop(owner, target: target);
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
               status: 200,
@@ -168,8 +172,8 @@ void mediaProxyConformanceTests(
               data: utf8.encode(manifest),
             );
 
-        final response =
-            await proxyGet('${proxy.baseUrl}/hls/$sessionId/index.m3u8');
+        final response = await proxyGet(
+            '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
 
         expect(response.status, 200);
         expect(utf8.decode(response.body), manifest);
@@ -186,8 +190,8 @@ void mediaProxyConformanceTests(
             data: utf8.encode(manifest),
           );
 
-      final response =
-          await proxyGet('${proxy.baseUrl}/hls/$sessionId/index.m3u8');
+      final response = await proxyGet(
+          '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
 
       expect(response.status, 200);
       expect(utf8.decode(response.body), manifest);
@@ -208,8 +212,8 @@ void mediaProxyConformanceTests(
       p2p.onSendHlsRequest =
           (_) async => throw Exception('p2p transport failure');
 
-      final response =
-          await proxyGet('${proxy.baseUrl}/hls/$sessionId/index.m3u8');
+      final response = await proxyGet(
+          '${proxy.targetBaseUrl(target)}/hls/$sessionId/index.m3u8');
 
       // A failure that arrives as a 200 with a short body is the worst of
       // both: the player treats it as media and fails much later, somewhere
@@ -237,7 +241,7 @@ void mediaProxyConformanceTests(
       };
 
       final response = await proxyGet(
-        '${proxy.baseUrl}/hls/$sessionId/segment_000.ts',
+        '${proxy.targetBaseUrl(target)}/hls/$sessionId/segment_000.ts',
         range: 'bytes=8-15',
       );
 

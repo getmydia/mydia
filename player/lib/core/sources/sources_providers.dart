@@ -149,24 +149,23 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
     }
   }
 
-  /// Whether [accountId] is the Mydia account the legacy rule binds: the
-  /// migrated legacy instance while it exists, else the earliest added. Read
-  /// from the records and the store, not [boundSourceIdProvider], which
+  /// Whether [accountId] is the account `legacyMydiaSourceIdProvider` names:
+  /// the migrated legacy instance while it exists, else the only Mydia
+  /// instance. Read from the records and the store, not that provider, which
   /// depends on this notifier.
-  Future<bool> _isBoundMydiaAccount(String accountId) async {
+  Future<bool> _isLegacyMydiaAccount(String accountId) async {
     try {
       final mydia = [
         for (final r in _current?.accounts ?? const <SourceAccountRecord>[])
           if (r.account.kind == SourceKind.mydia) r,
-      ]..sort((a, b) => a.addedAtMs.compareTo(b.addedAtMs));
+      ];
       if (mydia.isEmpty) return false;
       final store = await ref.read(sourceStoreProvider.future);
       final legacy = await store.legacyInstanceId();
-      final bound =
-          mydia.where((r) => r.account.id == legacy).firstOrNull ?? mydia.first;
-      return bound.account.id == accountId;
+      if (mydia.any((r) => r.account.id == legacy)) return legacy == accountId;
+      return mydia.length == 1 && mydia.single.account.id == accountId;
     } catch (e) {
-      debugPrint('[Sources] Could not resolve the bound account: $e');
+      debugPrint('[Sources] Could not resolve the legacy account: $e');
       return false;
     }
   }
@@ -174,7 +173,7 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
   Future<void> removeAccount(String accountId) async {
     await _serialise(() async {
       final record = _record(accountId);
-      final wasBound = await _isBoundMydiaAccount(accountId);
+      final wasLegacy = await _isLegacyMydiaAccount(accountId);
       await _write((store) async {
         await store.removeAccount(accountId);
         await _dropAllServersChoices(store, accountId);
@@ -184,11 +183,11 @@ class SourceRecordsNotifier extends AsyncNotifier<SourceSnapshot> {
       }
       // Keyed by id, so it needs no record.
       await _dropCache(accountId);
-      // Legacy bare-id entries record no owner and read as the bound
-      // instance's, so they go with the account the bound rule picked.
+      // Legacy bare-id entries record no owner and read as the legacy
+      // instance's, so they go with the account the legacy rule picked.
       await _dropCollectionSync({
         for (final s in record?.sources ?? const <Source>[]) s.id.value,
-      }, dropUnowned: wasBound);
+      }, dropUnowned: wasLegacy);
     });
     await _deleteDownloads([accountId]);
   }
@@ -375,7 +374,7 @@ final gatedSourceIdsProvider = Provider<Set<SourceId>>((ref) {
 final windowSecureProvider = Provider<bool>((ref) =>
     ref.watch(sourceLockProvider) && ref.watch(sourceLocksProvider).isNotEmpty);
 
-/// Plex, Stash and Jellyfin sources the viewer has added, minus hidden ones
+/// Every source the viewer has added, Mydia included, minus hidden ones
 /// while the app is locked. Everything that lists or counts sources reads
 /// this, so a hidden source leaves no trace, not even in the switcher's
 /// decision to appear.

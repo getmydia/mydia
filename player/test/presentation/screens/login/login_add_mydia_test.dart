@@ -9,17 +9,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/auth/auth_service.dart';
 import 'package:player/core/auth/device_info_service.dart';
 import 'package:player/core/channels/pairing_service.dart';
-import 'package:player/core/connection/connection_provider.dart'
-    show storedRelayUrlProvider;
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/core/sources/store/source_records.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
 import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/presentation/screens/login/login_controller.dart';
 
+import 'package:player/domain/sources/source_error.dart';
+
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 
 class _FakePairing extends PairingService {
   _FakePairing(this.credentials);
@@ -103,6 +104,31 @@ class _TotpAuth extends AuthService {
       );
 }
 
+/// Answers a password with a grant, so the login itself succeeds.
+class _GrantedAuth extends AuthService {
+  _GrantedAuth(MockAuthStorage storage) : super(storage: storage);
+
+  @override
+  Future<LoginOutcome> requestLogin({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async =>
+      LoginGranted(
+        serverUrl: serverUrl,
+        token: 'tok',
+        userId: 'u1',
+        username: username,
+      );
+}
+
+/// A store whose writes fail the way an unreadable disk does.
+class _FailingWriteStore extends InMemorySourceStore {
+  @override
+  Future<void> putAccount(SourceAccountRecord record) async =>
+      throw const SourceException.unreachable();
+}
+
 class _FakeDeviceInfo extends DeviceInfoService {
   @override
   Future<String> getDeviceId() async => 'device-1';
@@ -138,7 +164,6 @@ void main() {
   }) {
     final c = ProviderContainer(overrides: [
       noDownloadsOverride,
-      storedRelayUrlProvider.overrideWith((ref) async => null),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secrets)),
       loginDeviceInfoProvider.overrideWithValue(_FakeDeviceInfo()),
@@ -197,23 +222,23 @@ void main() {
     expect(authStorage.keys, isEmpty);
   });
 
-  test('the first server added is the bound one, the next is not', () async {
+  test('every server added reports its own source, the first included',
+      () async {
     final c = await listening(
         containerFor(pairing: _FakePairing(_credentials('inst-2'))));
     final controller = c.read(loginControllerProvider.notifier);
 
     await controller.pairWithClaimCode('ABC123');
-    expect(c.read(loginControllerProvider).addedIsBound, isTrue);
+    expect(c.read(loginControllerProvider).addedSource,
+        const SourceId('minst-2:owner:inst-2'));
 
     final second = await listening(
         containerFor(pairing: _FakePairing(_credentials('inst-3'))));
     await second
         .read(loginControllerProvider.notifier)
         .pairWithClaimCode('ABC123');
-    // Same store: inst-2 was there first, so inst-3 is not the bound one.
     final state = second.read(loginControllerProvider);
     expect(state.addedSource, const SourceId('minst-3:owner:inst-3'));
-    expect(state.addedIsBound, isFalse);
   });
 
   test('a TOTP login saves an account and writes no legacy key', () async {
@@ -280,6 +305,25 @@ void main() {
     expect(c.read(loginControllerProvider).credentialsNotPersisted, isTrue);
   });
 
+  test(
+      'a failure saving the credentials after a good login shows the save '
+      'message', () async {
+    store = _FailingWriteStore();
+    final c = await listening(containerFor(auth: _GrantedAuth(authStorage)));
+
+    await c.read(loginControllerProvider.notifier).login(
+          'https://friend.example',
+          'maya',
+          'pw',
+        );
+
+    final state = c.read(loginControllerProvider);
+    expect(state.success, isFalse);
+    expect(state.isLoading, isFalse);
+    // The save's own wording, not the login mapping's "Cannot connect".
+    expect(state.error, const SourceException.unreachable().viewerMessage);
+  });
+
   test('an unexpected stored-session outcome ends loading with an error',
       () async {
     final c =
@@ -297,7 +341,7 @@ void main() {
   });
 
   test('a URL login saves an account from the granted token', () async {
-    final link = StubLink.responses([
+    final server = ScriptedMydiaTransport.responses([
       {
         '__typename': 'RootMutationType',
         'login': {
@@ -319,7 +363,7 @@ void main() {
     final auth = AuthService(
       storage: authStorage,
       deviceInfo: _FakeDeviceInfo(),
-      clientFactory: (_) => stubClient(link),
+      transportFactory: (_) => server,
     );
     final c = await listening(containerFor(auth: auth));
 
@@ -334,5 +378,111 @@ void main() {
     expect(state.addedSource, isNotNull);
     expect(await authStorage.read('auth_token'), isNull);
     expect(authStorage.keys, isEmpty);
+  });
+
+  group('password failures are mapped by error kind', () {
+    Future<LoginState> loginFailing(Object failure) async {
+      final auth = AuthService(
+        storage: authStorage,
+        deviceInfo: _FakeDeviceInfo(),
+        transportFactory: (_) => ScriptedMydiaTransport.responses([failure]),
+      );
+      final c = await listening(containerFor(auth: auth));
+      await c.read(loginControllerProvider.notifier).login(
+            'https://friend.example',
+            'maya',
+            'wrong',
+          );
+      final state = c.read(loginControllerProvider);
+      expect(state.success, isFalse);
+      return state;
+    }
+
+    test('unreachable', () async {
+      expect((await loginFailing(const SourceException.unreachable())).error,
+          'Cannot connect to server. Check the URL and your network.');
+    });
+
+    test('not found', () async {
+      expect((await loginFailing(const SourceException.notFound())).error,
+          'Server not found. Check the URL.');
+    });
+
+    test('unauthorized', () async {
+      expect((await loginFailing(const SourceException.unauthorized())).error,
+          'Invalid username or password');
+    });
+
+    test('the server says the credentials are wrong', () async {
+      expect(
+          (await loginFailing(graphqlError('Invalid username or password')))
+              .error,
+          'Invalid username or password');
+    });
+
+    test('the server has local login turned off', () async {
+      expect(
+          (await loginFailing(graphqlError('Local authentication is disabled')))
+              .error,
+          'Local authentication is disabled');
+    });
+
+    test('any other server error', () async {
+      expect((await loginFailing(graphqlError('Something broke'))).error,
+          'Login failed. Please check your credentials.');
+    });
+  });
+
+  group('verification code failures are mapped by error kind', () {
+    Map<String, dynamic> challenge() => {
+          'login': {
+            '__typename': 'LoginPayload',
+            'token': null,
+            'user': null,
+            'expiresIn': 0,
+            'totpRequired': true,
+            'challengeToken': 'challenge',
+          },
+        };
+
+    Future<LoginState> submitFailing(Object failure) async {
+      final auth = AuthService(
+        storage: authStorage,
+        deviceInfo: _FakeDeviceInfo(),
+        transportFactory: (_) => ScriptedMydiaTransport((request, _) =>
+            request.operation == 'VerifyTotp' ? failure : challenge()),
+      );
+      final c = await listening(containerFor(auth: auth));
+      final controller = c.read(loginControllerProvider.notifier);
+      await controller.login('https://friend.example', 'maya', 'pw');
+      expect(c.read(loginControllerProvider).totpChallenge, isNotNull);
+      await controller.submitTotpCode('123456');
+      return c.read(loginControllerProvider);
+    }
+
+    test('unreachable', () async {
+      expect((await submitFailing(const SourceException.unreachable())).error,
+          'Cannot connect to server. Check the URL and your network.');
+    });
+
+    test('too many attempts keeps the challenge', () async {
+      final state = await submitFailing(
+          graphqlError('Too many login attempts. Please try again later.'));
+      expect(state.error, 'Too many login attempts. Please try again later.');
+      expect(state.totpChallenge, isNotNull);
+    });
+
+    test('an expired sign-in drops the challenge', () async {
+      final state = await submitFailing(
+          graphqlError('Sign-in expired, please try again'));
+      expect(state.error, 'Sign-in expired, please try again');
+      expect(state.totpChallenge, isNull);
+    });
+
+    test('a wrong code', () async {
+      final state = await submitFailing(graphqlError('Invalid code'));
+      expect(state.error, 'Invalid code');
+      expect(state.totpChallenge, isNotNull);
+    });
   });
 }

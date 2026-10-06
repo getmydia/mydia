@@ -311,7 +311,7 @@ const guest = Source(
           ]
         }
       };
-  t.handlers['GuestContinueWatching'] = (_) => {'continueWatching': <Object>[]};
+  t.handlers['MydiaContinueWatching'] = (_) => {'continueWatching': <Object>[]};
   t.handlers['RecentlyAddedFull'] = (_) => {
         'recentlyAdded': [
           recentlyAdded('m-4', addedAt: '2024-05-03T00:00:00Z'),

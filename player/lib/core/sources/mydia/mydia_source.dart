@@ -40,12 +40,12 @@ import '../../util/iso_date.dart';
 import '../capabilities.dart';
 import '../media_source.dart';
 import '../source.dart';
-import 'guest_download_job_service.dart';
-import 'guest_proxy.dart';
+import 'mydia_download_job_service.dart';
 import 'mydia_client.dart';
 import 'mydia_filters.dart';
 import 'mydia_mapping.dart';
 import 'mydia_media_info.dart';
+import 'mydia_proxy.dart';
 import 'mydia_transcode_job.dart';
 
 const _moviesLibrary = mydiaMoviesLibrary;
@@ -428,8 +428,8 @@ class MydiaSource extends MediaSource
     return MediaSegment.forFile(data, root: root, fileId: fileId);
   }
 
-  late final GuestDownloadJobService _jobs =
-      GuestDownloadJobService(request: client.request);
+  late final MydiaDownloadJobService _jobs =
+      MydiaDownloadJobService(request: client.request);
 
   @override
   Future<List<DownloadOption>> downloadOptions(ItemRef ref) async =>
@@ -450,7 +450,7 @@ class MydiaSource extends MediaSource
 
   LocalProxyService _proxy() =>
       proxy?.call() ??
-      (throw StateError('A guest download needs a local proxy'));
+      (throw StateError('A Mydia download needs a local proxy'));
 
   Future<DirectFile> _file(String jobId) async {
     final credentials = await client.credentials();
@@ -458,7 +458,7 @@ class MydiaSource extends MediaSource
       // The hold lasts as long as the source: nothing observes a download
       // finishing, so [dispose] is where it is let go.
       _holdsProxy = true;
-      final base = await guestProxyBase(_proxy(), credentials,
+      final base = await mydiaProxyBase(_proxy(), credentials,
           owner: this, target: source.account.id);
       return DirectFile(
           url: MediaRoutes.download(base, jobId), extension: 'mp4');

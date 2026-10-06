@@ -21,36 +21,25 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/domain/sources/source_error.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
-
-/// Whether [request] carries the named query.
-///
-/// `request.operation.operationName` is null for everything this screen
-/// issues, because `QueryOptions` never sets it, and graphql_flutter does not
-/// re-export the `gql` AST node types a document walk would need. What
-/// `Operation.toString()` does give is the printed query text, which names the
-/// operation on its first line.
-bool _isQuery(Request request, String name) =>
-    request.operation.toString().contains('query $name');
 
 /// Answers per operation, so the response script does not depend on the order
 /// the screen happens to issue its queries in.
-StubLink _linkAnsweringSegmentsWith(Object segmentsOutcome) {
-  return StubLink((request, index) {
-    if (_isQuery(request, 'MovieSegments')) return segmentsOutcome;
-    if (_isQuery(request, 'MovieDetail')) {
+ScriptedMydiaTransport _serverAnsweringSegmentsWith(Object segmentsOutcome) {
+  return ScriptedMydiaTransport((request, index) {
+    if (request.operation == 'MovieSegments') return segmentsOutcome;
+    if (request.operation == 'MovieDetail') {
       // 45 minutes into a 90 minute movie, comfortably inside every bound
       // `shouldOfferResume` checks.
       return movieDetailResponse(positionSeconds: 2700);
     }
-    if (_isQuery(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (_isQuery(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
     return streamingCandidatesResponse(duration: 5400, directPlay: true);
@@ -65,15 +54,15 @@ void main() {
 
     // The exact shape an older server answers with: the field does not exist,
     // so validation rejects the document.
-    final link = _linkAnsweringSegmentsWith(
-      graphqlErrorResponse(
+    final server = _serverAnsweringSegmentsWith(
+      graphqlError(
         'Cannot query field "segments" on type "MediaFile".',
       ),
     );
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: server,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -91,7 +80,7 @@ void main() {
     expect(find.text('Start Over'), findsOneWidget);
 
     expect(
-      link.requests.where((r) => _isQuery(r, 'MovieSegments')),
+      server.of('MovieSegments'),
       hasLength(1),
       reason: 'the failing path has to have actually been exercised',
     );
@@ -106,12 +95,13 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // Not every failure arrives as a well-formed GraphQL error response; a
-    // link that throws has to land on the same answer.
-    final link = _linkAnsweringSegmentsWith(Exception('connection reset'));
+    // transport that throws has to land on the same answer.
+    final server =
+        _serverAnsweringSegmentsWith(const SourceException.unreachable());
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: server,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -131,7 +121,7 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final proxyService = TrackingLocalProxyService();
 
-    final link = _linkAnsweringSegmentsWith(const {
+    final server = _serverAnsweringSegmentsWith(const {
       '__typename': 'Query',
       'movie': {
         '__typename': 'Movie',
@@ -154,8 +144,8 @@ void main() {
     });
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: server,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -164,16 +154,16 @@ void main() {
     await pumpPlayerScreen(tester, container);
     await pumpUntil(
       tester,
-      () => link.requests.any((r) => _isQuery(r, 'MovieSegments')),
+      () => server.requests.any((r) => r.operation == 'MovieSegments'),
     );
 
     expect(
-      link.requests.where((r) => _isQuery(r, 'MovieSegments')),
+      server.of('MovieSegments'),
       hasLength(1),
       reason: 'one segments query per playback, not one per detail selection',
     );
     expect(
-      link.requests.where((r) => _isQuery(r, 'MovieDetail')),
+      server.of('MovieDetail'),
       hasLength(1),
       reason: 'the detail query is still its own separate request, and the '
           'segments selection did not ride along inside it',

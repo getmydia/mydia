@@ -19,13 +19,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/video_controls/skip_segment_button.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// A credits segment covering 40:00 to 45:00 of the 90 minute test movie.
@@ -37,9 +35,8 @@ const _outsideCredits = Duration(minutes: 10);
 
 /// The `MediaSegment` shape the server sends.
 ///
-/// `__typename` matters as much as the three selected fields: the normalized
-/// cache refuses a partial write, and a refused write surfaces as
-/// `result.hasException`, which `_fetchSegments` treats as "no segments" —
+/// All three selected fields must be present: a segment the parser cannot
+/// read is dropped, which `_fetchSegments` treats as "no segments" —
 /// indistinguishable from the bug this file is guarding against.
 Map<String, dynamic> _creditsSegment() => {
       '__typename': 'MediaSegment',
@@ -48,24 +45,19 @@ Map<String, dynamic> _creditsSegment() => {
       'endMs': _creditsEndMs,
     };
 
-/// Whether [request] carries the named query. See
-/// `player_screen_segments_isolation_test.dart` for why the operation name is
-/// read out of the printed document rather than `operationName`.
-bool _isQuery(Request request, String name) =>
-    request.operation.toString().contains('query $name');
-
 /// Answers per operation rather than by index, so this script does not break
 /// the moment the screen reorders its startup queries.
-StubLink _link({List<Map<String, dynamic>> segments = const []}) {
-  return StubLink((request, index) {
-    if (_isQuery(request, 'MovieSegments')) {
+ScriptedMydiaTransport _server(
+    {List<Map<String, dynamic>> segments = const []}) {
+  return ScriptedMydiaTransport((request, index) {
+    if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse(segments: segments);
     }
-    if (_isQuery(request, 'MovieDetail')) return movieDetailResponse();
-    if (_isQuery(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'MovieDetail') return movieDetailResponse();
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (_isQuery(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
     return streamingCandidatesResponse(duration: 5400);
@@ -122,8 +114,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      server: _server(segments: [_creditsSegment()]),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -163,8 +155,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      server: _server(segments: [_creditsSegment()]),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -192,8 +184,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      server: _server(segments: [_creditsSegment()]),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -230,8 +222,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      server: _server(segments: [_creditsSegment()]),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,
@@ -258,8 +250,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(segments: [_creditsSegment()]),
-      connectionState: conn.ConnectionState.direct(),
+      server: _server(segments: [_creditsSegment()]),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
       castSessionStream: session.stream,

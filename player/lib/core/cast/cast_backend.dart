@@ -15,11 +15,17 @@ class MydiaContentRef {
   final String? audioTrack;
   final String? subtitleTrack;
 
+  /// The Mydia server instance the item belongs to, sent with `LoadContent`
+  /// so a target signed into several servers resolves it on the right one.
+  /// Null when unknown; the target then guesses.
+  final String? serverInstanceId;
+
   const MydiaContentRef({
     required this.mediaItemId,
     required this.episodeId,
     required this.audioTrack,
     required this.subtitleTrack,
+    this.serverInstanceId,
   });
 }
 

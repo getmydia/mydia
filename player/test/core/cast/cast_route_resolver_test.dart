@@ -189,6 +189,14 @@ void main() {
       expect(route.hlsSessionId, isNull);
     });
 
+    test('a bridge URL carries the instance target the base names', () async {
+      final route = await p2pResolver(
+        lanBaseUrl: 'http://192.0.2.1:8080/t/macct',
+      ).resolve(fileId: 'f1', protocol: CastProtocolKind.dlna);
+
+      expect(route!.mediaUrl, 'http://192.0.2.1:8080/t/macct/direct/f1/stream');
+    });
+
     test('surfaces a session failure as a cast failure', () async {
       sessions.failure = CastFailureKind.unreachable;
 

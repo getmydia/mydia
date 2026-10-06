@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import '../sources/mydia/bound_mydia.dart';
 import '../sources/mydia/mydia_client.dart';
 import '../sources/mydia/mydia_source.dart';
 import '../sources/sources_providers.dart';
@@ -122,10 +121,10 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
   /// The Mydia client of the source being browsed, so the banner speaks about
   /// the server the viewer is looking at. A non-Mydia active source has no
   /// Mydia server to warn about, so it gets none. With no active source at
-  /// all (nothing stored yet) the bound client stands in.
+  /// all (nothing stored yet) there is no server to warn about either.
   MydiaClient? _clientForActiveSource() {
     final active = ref.watch(activeSourceIdProvider);
-    if (active == null) return ref.watch(boundMydiaClientProvider);
+    if (active == null) return null;
     final source = ref.watch(mediaSourceProvider(active));
     return source is MydiaSource ? source.client : null;
   }

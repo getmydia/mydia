@@ -8,8 +8,13 @@ import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/source_error.dart';
+import 'package:player/core/sources/mydia/root_typename.dart';
+import 'package:player/graphql/mutations/start_streaming_session.graphql.dart';
+import 'package:player/graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import 'package:player/graphql/queries/mydia_queries.dart';
+import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 
+import 'fake_mydia_client.dart';
 import 'fake_mydia_transport.dart';
 
 /// Holds the first answer until [gate] completes.
@@ -23,13 +28,14 @@ class _GatedTransport extends FakeMydiaTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     if (_first) {
       _first = false;
       await gate.future;
     }
-    return super
-        .send(query, variables, token: token, deviceProfile: deviceProfile);
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
   }
 }
 
@@ -66,7 +72,7 @@ void main() {
 
   setUp(() {
     transport = FakeMydiaTransport();
-    transport.handlers['GuestInstanceIdentity'] = (_) => {
+    transport.handlers['MydiaInstanceIdentity'] = (_) => {
           'serverCompatibility': {'instanceId': 'inst-2'},
         };
     transport.handlers['RefreshAccessToken'] = (_) => {
@@ -100,9 +106,9 @@ void main() {
     final client = build();
     await client.request(documentNodeQueryMydiaInstanceIdentity);
     expect(transport.calls.map((c) => c.operation), [
-      'GuestInstanceIdentity',
+      'MydiaInstanceIdentity',
       'RefreshAccessToken',
-      'GuestInstanceIdentity',
+      'MydiaInstanceIdentity',
     ]);
     expect(transport.calls[1].vars, {'deviceToken': 'device'});
     expect(transport.calls[1].token, isNull);
@@ -584,7 +590,7 @@ void main() {
       transport.handlers['RefreshAccessToken'] = (_) => refreshCompleter.future;
 
       var rejectedOnce = false;
-      transport.handlers['GuestInstanceIdentity'] = (_) {
+      transport.handlers['MydiaInstanceIdentity'] = (_) {
         if (!rejectedOnce) {
           rejectedOnce = true;
           throw const SourceException.unauthorized();
@@ -696,5 +702,49 @@ void main() {
           (_) => throw const SourceException.unreachable();
       expect(await client.fetchCompatibility(), isNull);
     });
+  });
+
+  test('the fallback gets its own variables and is remembered', () async {
+    final server = FakeMydiaTransport()
+      ..handlers['StartStreamingSession'] = (_) {
+        throw const SourceException.server(
+            'Unknown argument "maxHeight" on field "startStreamingSession".');
+      }
+      ..handlers['StartStreamingSessionLegacy'] = (vars) => {
+            'startStreamingSession': {'sessionId': 's1'}
+          };
+    final client = fakeMydiaClient(server);
+
+    await client.query(
+      documentNodeMutationStartStreamingSession,
+      fallback: documentNodeMutationStartStreamingSessionLegacy,
+      variables: {'fileId': 'f', 'strategy': 'HLS_COPY', 'maxHeight': 720},
+      fallbackVariables: {'fileId': 'f', 'strategy': 'HLS_COPY'},
+    );
+
+    expect(server.calls.last.vars.containsKey('maxHeight'), isFalse);
+    expect(
+        client.isDowngraded(documentNodeMutationStartStreamingSession), isTrue);
+
+    await client.query(
+      documentNodeMutationStartStreamingSession,
+      fallback: documentNodeMutationStartStreamingSessionLegacy,
+      variables: {'fileId': 'g', 'strategy': 'HLS_COPY', 'maxHeight': 720},
+      fallbackVariables: {'fileId': 'g', 'strategy': 'HLS_COPY'},
+    );
+    expect(
+      server.calls.map((c) => c.operation),
+      [
+        'StartStreamingSession',
+        'StartStreamingSessionLegacy',
+        'StartStreamingSessionLegacy'
+      ],
+    );
+  });
+
+  test('rootQuery lets a generated parser read the bare data', () {
+    final parsed = Query$SubtitleTrackSettings.fromJson(
+        rootQuery({'subtitleTrackSettings': <Object>[]}));
+    expect(parsed.subtitleTrackSettings, isEmpty);
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
@@ -5,6 +7,7 @@ import 'package:player/core/cast/cast_route_resolver.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/player/progress_service.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/native/lib.dart';
 
@@ -12,6 +15,9 @@ import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
 import '../sources/mydia/fake_mydia_client.dart';
 import '../sources/mydia/fake_mydia_transport.dart';
+
+/// The Mydia instance the fixtures cast from.
+const _src = SourceId('macct');
 
 /// A server that accepts every progress mutation.
 FakeMydiaTransport _progressServer() {
@@ -29,6 +35,31 @@ List<({String operation, Map<String, dynamic> vars})> _progressCalls(
         if (c.operation.startsWith('Update'))
           (operation: c.operation, vars: c.vars),
     ];
+
+/// A store whose next save can be held open, to interleave a progress tick
+/// with a cast change.
+class _GatedSaveStore extends InMemoryCastSessionStore {
+  Completer<void>? _gate;
+  bool _armed = false;
+  bool blocked = false;
+
+  void blockNextSave() {
+    _gate = Completer<void>();
+    _armed = true;
+  }
+
+  void unblock() => _gate?.complete();
+
+  @override
+  Future<void> save(PersistedCastSession session) async {
+    if (_armed) {
+      _armed = false;
+      blocked = true;
+      await _gate!.future;
+    }
+    await super.save(session);
+  }
+}
 
 /// Minimal [CastBackend] double for the registry/dispatch tests in the
 /// 'multi-protocol routing' group below.
@@ -174,6 +205,7 @@ void main() {
   );
 
   final launch = CastLaunchRequest(
+    sourceId: _src,
     fileId: 'file-1',
     mediaId: 'movie-1',
     mediaType: 'movie',
@@ -206,14 +238,16 @@ void main() {
       // `backend` as primary.
       mydiaBackend: backend,
       store: store,
-      progressService: ProgressService(fakeMydiaClient(server)),
-      streamingSessions: sessions,
-      resolverFactory: () => CastRouteResolver(
-        isP2pMode: isP2pMode,
-        serverUrl: isP2pMode ? null : 'https://mydia.test',
-        mediaToken: () async => isP2pMode ? null : 'tok',
-        lanBaseUrl: () => lanBaseUrl,
+      mydiaDeps: (_) async => MydiaCastDeps(
+        progress: ProgressService(fakeMydiaClient(server)),
         streamingSessions: sessions,
+        resolver: () => CastRouteResolver(
+          isP2pMode: isP2pMode,
+          serverUrl: isP2pMode ? null : 'https://mydia.test',
+          mediaToken: () async => isP2pMode ? null : 'tok',
+          lanBaseUrl: () => lanBaseUrl,
+          streamingSessions: sessions,
+        ),
       ),
       setLanAccess: (enabled) async {
         lanCalls.add(enabled);
@@ -253,14 +287,16 @@ void main() {
       mydiaBackend: resolveMydia == null ? mydia : null,
       resolveMydiaBackend: resolveMydia,
       store: store ?? InMemoryCastSessionStore(),
-      progressService: ProgressService(fakeClient),
-      streamingSessions: sessions,
-      resolverFactory: () => CastRouteResolver(
-        isP2pMode: false,
-        serverUrl: 'https://mydia.test',
-        mediaToken: () async => 'tok',
-        lanBaseUrl: () => null,
+      mydiaDeps: (_) async => MydiaCastDeps(
+        progress: ProgressService(fakeClient),
         streamingSessions: sessions,
+        resolver: () => CastRouteResolver(
+          isP2pMode: false,
+          serverUrl: 'https://mydia.test',
+          mediaToken: () async => 'tok',
+          lanBaseUrl: () => null,
+          streamingSessions: sessions,
+        ),
       ),
       setLanAccess: (enabled) async {},
       clock: () => DateTime.utc(2026, 7, 28, 12),
@@ -364,6 +400,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final secondLaunch = CastLaunchRequest(
+        sourceId: _src,
         fileId: 'file-2',
         mediaId: 'movie-2',
         mediaType: 'movie',
@@ -605,6 +642,7 @@ void main() {
     const knownRuntime = Duration(minutes: 107);
 
     final launchWithDuration = CastLaunchRequest(
+      sourceId: _src,
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',
@@ -711,6 +749,7 @@ void main() {
       final manager = build();
       addTearDown(manager.dispose);
       final episodeLaunch = CastLaunchRequest(
+        sourceId: _src,
         fileId: 'file-3',
         mediaId: 'ep-1',
         mediaType: 'episode',
@@ -744,6 +783,7 @@ void main() {
       final manager = build();
       addTearDown(manager.dispose);
       final withDuration = CastLaunchRequest(
+        sourceId: _src,
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -886,6 +926,7 @@ void main() {
       String? selectedSubtitleTrackId,
     }) async {
       final session = PersistedCastSession(
+        sourceId: _src,
         device: device,
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -1113,6 +1154,7 @@ void main() {
       const mediaUrl = 'https://mydia.test/api/v1/stream/file/file-1';
       final mydiaStore = InMemoryCastSessionStore();
       await mydiaStore.save(PersistedCastSession(
+        sourceId: _src,
         device: mydiaDevice,
         mediaId: 'movie-1',
         mediaType: 'movie',
@@ -1194,6 +1236,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -1214,6 +1257,7 @@ void main() {
     test('preserves showId when reconnecting a stored Mydia episode', () async {
       await store.save(
         PersistedCastSession(
+          sourceId: _src,
           device: const CastDevice(
             id: 'tv-node',
             name: 'Living Room TV',
@@ -1251,6 +1295,7 @@ void main() {
     // in cast_resume_offset_test.dart: the server echoes back 2394s for a
     // request at 2400s (it snapped to the nearest keyframe).
     final launchWithPosition = CastLaunchRequest(
+      sourceId: _src,
       fileId: 'file-1',
       mediaId: 'movie-1',
       mediaType: 'movie',
@@ -1325,6 +1370,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -1424,6 +1470,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-2',
           mediaId: 'movie-2',
           mediaType: 'movie',
@@ -1489,6 +1536,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-2',
           mediaId: 'movie-2',
           mediaType: 'movie',
@@ -1527,14 +1575,16 @@ void main() {
       final manager = CastSessionManager(
         backend: backend,
         store: store,
-        progressService: ProgressService(fakeMydiaClient(server)),
-        streamingSessions: sessions,
-        resolverFactory: () => CastRouteResolver(
-          isP2pMode: true,
-          serverUrl: null,
-          mediaToken: () async => null,
-          lanBaseUrl: () => lanBaseUrl,
+        mydiaDeps: (_) async => MydiaCastDeps(
+          progress: ProgressService(fakeMydiaClient(server)),
           streamingSessions: sessions,
+          resolver: () => CastRouteResolver(
+            isP2pMode: true,
+            serverUrl: null,
+            mediaToken: () async => null,
+            lanBaseUrl: () => lanBaseUrl,
+            streamingSessions: sessions,
+          ),
         ),
         setLanAccess: (enabled) async {
           attempts.add(enabled);
@@ -1997,6 +2047,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2022,6 +2073,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2085,6 +2137,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2107,6 +2160,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2127,6 +2181,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2148,6 +2203,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2173,6 +2229,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2209,6 +2266,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2263,6 +2321,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2297,6 +2356,7 @@ void main() {
       await manager.startCast(
         device: device,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -2884,6 +2944,7 @@ void main() {
       await manager.startCast(
         device: chromecastDevice,
         request: CastLaunchRequest(
+          sourceId: _src,
           fileId: 'file-1',
           mediaId: 'movie-1',
           mediaType: 'movie',
@@ -3161,6 +3222,7 @@ void main() {
       );
 
       final request = CastLaunchRequest(
+        sourceId: _src,
         fileId: 'file-123',
         mediaId: 'ep-456',
         mediaType: 'episode',
@@ -3180,6 +3242,9 @@ void main() {
       expect(loaded.contentRef?.mediaItemId, 'show-789');
       expect(loaded.contentRef?.episodeId, 'ep-456');
       expect(loaded.contentRef?.subtitleTrack, 'sub-1');
+      // The cast names the instance it belongs to, so a target signed into
+      // several servers resolves it on the right one.
+      expect(loaded.contentRef?.serverInstanceId, 'acct');
       expect(loaded.startPosition, const Duration(seconds: 42));
       expect(manager.currentSession?.connectionState,
           CastConnectionState.connected);
@@ -3212,6 +3277,7 @@ void main() {
       );
 
       final request = CastLaunchRequest(
+        sourceId: _src,
         fileId: 'file-999',
         mediaId: 'movie-111',
         mediaType: 'movie',
@@ -3228,6 +3294,222 @@ void main() {
       expect(loaded.contentRef?.mediaItemId, 'movie-111');
       expect(loaded.contentRef?.episodeId, isNull);
       expect(manager.persistedSession?.mediaUrl, 'movie-111');
+    });
+  });
+
+  group('per-instance deps', () {
+    const instanceB = SourceId('macct-b');
+
+    late Map<SourceId, FakeMydiaTransport> servers;
+    late Map<SourceId, int> released;
+    late List<SourceId> asked;
+
+    /// A manager whose deps come from the instance a cast names, one fake
+    /// server per instance. An id missing from [servers] is a removed one.
+    CastSessionManager buildPerInstance() => CastSessionManager(
+          backend: backend,
+          mydiaBackend: backend,
+          store: store,
+          mydiaDeps: (id) async {
+            asked.add(id);
+            final transport = servers[id];
+            if (transport == null) return null;
+            return MydiaCastDeps(
+              progress: ProgressService(fakeMydiaClient(transport)),
+              streamingSessions: sessions,
+              release: () async => released[id] = (released[id] ?? 0) + 1,
+              resolver: () => CastRouteResolver(
+                isP2pMode: false,
+                serverUrl: 'https://mydia.test',
+                mediaToken: () async => 'tok',
+                lanBaseUrl: () => null,
+                streamingSessions: sessions,
+              ),
+            );
+          },
+          setLanAccess: (_) async {},
+          clock: () => DateTime.utc(2026, 7, 28, 12),
+        );
+
+    CastLaunchRequest launchFrom(SourceId id) => CastLaunchRequest(
+          sourceId: id,
+          fileId: 'file-1',
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          title: 'Arrival',
+        );
+
+    setUp(() {
+      servers = {_src: _progressServer(), instanceB: _progressServer()};
+      released = {};
+      asked = [];
+    });
+
+    test('syncs progress through the instance the item came from', () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(instanceB));
+      backend.emitDuration(const Duration(seconds: 200));
+      backend.emitPosition(const Duration(seconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(asked, [instanceB]);
+      expect(_progressCalls(servers[instanceB]!), hasLength(1));
+      expect(_progressCalls(servers[_src]!), isEmpty);
+    });
+
+    test('a cast from a removed instance fails like an unreachable route',
+        () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await expectLater(
+        manager.startCast(
+            device: device, request: launchFrom(const SourceId('gone'))),
+        throwsA(isA<CastBackendException>()
+            .having((e) => e.kind, 'kind', CastFailureKind.unreachable)),
+      );
+
+      expect(backend.connectedDevice, isNull);
+      expect(manager.currentSession, isNull);
+    });
+
+    test('the deps are held until the cast ends, then released once', () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      expect(released, isEmpty);
+
+      await manager.stopCast();
+      expect(released, {_src: 1});
+    });
+
+    test('casting from another instance releases the previous one', () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      await manager.startCast(device: device, request: launchFrom(instanceB));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(released, {_src: 1});
+    });
+
+    test('adopting a receiver session releases the previous cast deps',
+        () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      expect(released, isEmpty);
+
+      await manager.connectTo(const CastDevice(
+        id: 'node-tv',
+        name: 'Living Room',
+        protocol: CastProtocolKind.mydia,
+        metadata: {'nodeId': 'node-tv', 'nowPlayingTitle': 'Harbor Lights'},
+      ));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(released, {_src: 1});
+    });
+
+    test('a tick that began for one cast syncs through that cast', () async {
+      final gated = _GatedSaveStore();
+      store = gated;
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      await manager.startCast(device: device, request: launchFrom(_src));
+      backend.emitDuration(const Duration(seconds: 200));
+      await Future<void>.delayed(Duration.zero);
+
+      // The tick for cast A stops at its persisted-position save.
+      gated.blockNextSave();
+      backend.emitPosition(const Duration(seconds: 100));
+      await Future<void>.delayed(Duration.zero);
+      expect(gated.blocked, isTrue);
+
+      // Cast B adopts its own deps while that tick is still in flight.
+      await manager.startCast(device: device, request: launchFrom(instanceB));
+      // B's start resets the manager's duration; the receiver reports it again.
+      backend.emitDuration(const Duration(seconds: 200));
+      await Future<void>.delayed(Duration.zero);
+      gated.unblock();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(_progressCalls(servers[_src]!), hasLength(1));
+      expect(_progressCalls(servers[instanceB]!), isEmpty);
+    });
+
+    test('a cast that fails to load releases what it resolved', () async {
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+      backend.failNextLoad(CastFailureKind.mediaLoadFailed, times: 10);
+
+      await expectLater(
+        manager.startCast(device: device, request: launchFrom(_src)),
+        throwsA(isA<CastBackendException>()),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(released[_src], greaterThanOrEqualTo(1));
+    });
+
+    test('restoring a record whose instance is gone clears it', () async {
+      await store.save(PersistedCastSession(
+        sourceId: const SourceId('gone'),
+        device: device,
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'Arrival',
+        position: const Duration(minutes: 5),
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 7, 28, 11),
+        mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
+      ));
+      backend.receiverContentUrl =
+          'https://mydia.test/api/v1/stream/file/file-1';
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      expect(await manager.restoreSession(), isFalse);
+      expect(backend.connectedDevice, isNull);
+      expect(await store.load(), isNull);
+    });
+
+    test('a restored cast syncs through its own instance and holds it',
+        () async {
+      await store.save(PersistedCastSession(
+        sourceId: instanceB,
+        device: device,
+        mediaId: 'movie-1',
+        mediaType: 'movie',
+        fileId: 'file-1',
+        title: 'Arrival',
+        position: const Duration(minutes: 5),
+        duration: const Duration(minutes: 100),
+        routeKind: CastRouteKind.directServer,
+        savedAt: DateTime.utc(2026, 7, 28, 11),
+        mediaUrl: 'https://mydia.test/api/v1/stream/file/file-1',
+      ));
+      backend.receiverContentUrl =
+          'https://mydia.test/api/v1/stream/file/file-1';
+      final manager = buildPerInstance();
+      addTearDown(manager.dispose);
+
+      expect(await manager.restoreSession(), isTrue);
+      backend.emitPosition(const Duration(minutes: 6));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(_progressCalls(servers[instanceB]!), hasLength(1));
+      expect(released, isEmpty);
+
+      await manager.stopCast();
+      expect(released, {instanceB: 1});
     });
   });
 }

@@ -15,10 +15,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 
 import '../../../test_utils/mock_network_images.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -53,20 +52,20 @@ void main() {
   }
 
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead. `startStreamingSession` and
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script them
+  // -- dispatch on the operation instead. `startStreamingSession` and
   // `endStreamingSession` still fire well after the resume dialog is
   // answered, so they are told apart by the variables only they carry.
-  StubLink linkFor({int? echoedStartPosition}) {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+  ScriptedMydiaTransport serverFor({int? echoedStartPosition}) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: 2700);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       if (request.variables.containsKey('strategy')) {
@@ -90,11 +89,11 @@ void main() {
     // different, simulating the server clamping to the nearest keyframe.
     // If a regression fed the *requested* value into the timeline instead,
     // the assertion below (looking for the 2695 offset) would fail.
-    final link = linkFor(echoedStartPosition: 2695);
+    final server = serverFor(echoedStartPosition: 2695);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: server,
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -134,11 +133,11 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     // No `startPosition` key at all — the older-server case.
-    final link = linkFor(echoedStartPosition: null);
+    final server = serverFor(echoedStartPosition: null);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: server,
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );

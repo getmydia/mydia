@@ -97,14 +97,16 @@ void main() {
         backend: backend,
         mydiaBackend: backend,
         store: store,
-        progressService: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
-        streamingSessions: mydiaSessions,
-        resolverFactory: () => CastRouteResolver(
-          isP2pMode: false,
-          serverUrl: 'https://mydia.test',
-          mediaToken: () async => 'tok',
-          lanBaseUrl: () => null,
+        mydiaDeps: (_) async => MydiaCastDeps(
+          progress: ProgressService(fakeMydiaClient(FakeMydiaTransport())),
           streamingSessions: mydiaSessions,
+          resolver: () => CastRouteResolver(
+            isP2pMode: false,
+            serverUrl: 'https://mydia.test',
+            mediaToken: () async => 'tok',
+            lanBaseUrl: () => null,
+            streamingSessions: mydiaSessions,
+          ),
         ),
         setLanAccess: (_) async {},
         bindSource: binder ?? (_) async => binding,
@@ -154,6 +156,7 @@ void main() {
     await manager.startCast(
       device: tv,
       request: CastLaunchRequest(
+        sourceId: const SourceId('macct'),
         fileId: 'file-1',
         mediaId: 'movie-1',
         mediaType: 'movie',

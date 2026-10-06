@@ -53,6 +53,9 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   String? _targetPeer;
   String? _authToken;
 
+  /// The one target this proxy serves, whatever it is called.
+  String? _target;
+
   /// Exchanges still delivering bytes to the worker, so [stop] can end them
   /// rather than leaving the worker waiting on a reply that never comes.
   final _inFlight = <_Exchange>{};
@@ -74,33 +77,32 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  String targetBaseUrl(String target) {
-    if (target != MediaProxy.homeTarget) {
-      throw UnsupportedError(
-          'The web media proxy serves the home instance only');
-    }
-    return baseUrl;
-  }
+  String targetBaseUrl(String target) => baseUrl;
 
   @override
-  String buildHlsUrl(String sessionId) => MediaRoutes.hls(baseUrl, sessionId);
+  String buildHlsUrl(String sessionId, {required String target}) =>
+      MediaRoutes.hls(targetBaseUrl(target), sessionId);
 
   @override
-  String buildDirectStreamUrl(String fileId) =>
-      MediaRoutes.directStream(baseUrl, fileId);
+  String buildDirectStreamUrl(String fileId, {required String target}) =>
+      MediaRoutes.directStream(targetBaseUrl(target), fileId);
 
   @override
   Future<void> start({
     required Object owner,
     required String targetPeer,
     String? authToken,
-    String target = MediaProxy.homeTarget,
+    required String target,
   }) async {
-    if (target != MediaProxy.homeTarget) {
-      // A web build is served by one instance and only ever talks to it.
-      throw UnsupportedError(
-          'The web media proxy serves the home instance only');
+    final current = _target;
+    if (current != null && current != target) {
+      // A browser streams from one instance at a time, and Flutter mounts the
+      // incoming player route before disposing the old one, so the next
+      // instance's start lands while the previous is still held. Re-point the
+      // worker; each holder's lease is released by its own stop.
+      debugPrint('[SwProxy] Re-pointing from $current to $target');
     }
+    _target = target;
     acquireLease(owner);
 
     // Assigned before the await so a request that arrives while an already
@@ -125,17 +127,20 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
   }
 
   @override
-  Future<void> stop(Object owner,
-      {String target = MediaProxy.homeTarget}) async {
-    if (target != MediaProxy.homeTarget) return;
+  Future<void> stop(Object owner, {required String target}) async {
+    // Not gated on [target]: the owner may hold a lease taken for a target the
+    // proxy has since been re-pointed away from. The last lease going, for
+    // whichever target, is what tears down.
     if (!releaseLease(owner)) return;
     await _tearDown();
   }
 
-  /// A browser serves only the home target, so releasing everything is
-  /// releasing home.
+  /// A browser serves one target, so releasing everything is releasing it.
   @override
-  Future<void> release(Object owner) => stop(owner);
+  Future<void> release(Object owner) async {
+    final target = _target;
+    if (target != null) await stop(owner, target: target);
+  }
 
   @override
   Future<void> shutdown() async {
@@ -148,6 +153,7 @@ class ServiceWorkerMediaProxy with MediaProxyLeases implements MediaProxy {
     _registration = null;
     _targetPeer = null;
     _authToken = null;
+    _target = null;
 
     // Fail them rather than just closing the port. The worker is waiting on a
     // reply for each one, and a closed port is not an answer: the fetch would

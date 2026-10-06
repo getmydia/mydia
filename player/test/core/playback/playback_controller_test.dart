@@ -2,25 +2,25 @@ import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/playback/playback_controller.dart';
 import 'package:player/core/playback/playback_plan.dart';
-import 'package:player/core/playback/server_features.dart';
 import 'package:player/core/playback/stream_urls.dart';
 import 'package:player/domain/models/quality_rung.dart';
+import 'package:player/domain/sources/source_error.dart';
 
 import '../../presentation/screens/player/player_screen_test_harness.dart';
-import '../../test_utils/stub_graphql_client.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
+import '../sources/mydia/fake_mydia_client.dart';
 
 const _endOk = {'__typename': 'RootMutationType', 'endStreamingSession': true};
 
-/// Routes by variables, since `operationName` is null under StubLink: a
-/// request carrying `sessionId` is EndStreamingSession, anything else is a
-/// StartStreamingSession variant.
-StubLink _link({required List<Object> starts, Object end = _endOk}) {
+/// Routes by operation: EndStreamingSession answers [end], and either start
+/// document answers from [starts] by call index.
+ScriptedMydiaTransport _server(
+    {required List<Object> starts, Object end = _endOk}) {
   var next = 0;
-  return StubLink((request, _) {
-    if (request.variables.containsKey('sessionId')) return end;
+  return ScriptedMydiaTransport((request, _) {
+    if (request.operation == 'EndStreamingSession') return end;
     final i = next < starts.length ? next++ : starts.length - 1;
     return starts[i];
   });
@@ -53,16 +53,14 @@ Future<({int status, String body})> _growingProbe(
     (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
 
 PlaybackController _controller(
-  Link link, {
+  ScriptedMydiaTransport server, {
   bool relayed = false,
-  ServerFeatures? features,
   PlaylistProbe probe = _readyProbe,
   Duration firstAdvanceTimeout = const Duration(seconds: 60),
 }) =>
     PlaybackController(
-      client: () => stubClient(link),
+      client: fakeMydiaClient(server),
       urls: _Urls(),
-      features: features ?? ServerFeatures(),
       relayed: relayed,
       probe: probe,
       wait: (_) async {},
@@ -85,31 +83,24 @@ const _transcode480 = HlsPlan(
 
 const _direct = DirectPlayPlan(reason: PlanReason.directPlayAccepted);
 
-Link _delayedStartLink({
-  required List<Request> requests,
+ScriptedMydiaTransport _delayedStartServer({
   required Future<Map<String, dynamic>> Function(int index) start,
   void Function(String sessionId)? onEnd,
 }) {
   var starts = 0;
-  return Link.function((request, [forward]) async* {
-    requests.add(request);
+  return ScriptedMydiaTransport((request, _) async {
     final sessionId = request.variables['sessionId'] as String?;
-    final Map<String, dynamic> data;
-    if (sessionId == null) {
-      data = await start(starts++);
-    } else {
-      onEnd?.call(sessionId);
-      data = _endOk;
-    }
-    yield Response(data: data, response: const {});
+    if (sessionId == null) return await start(starts++);
+    onEnd?.call(sessionId);
+    return _endOk;
   });
 }
 
 void main() {
   group('open', () {
     test('direct play resolves a URL and starts no session', () async {
-      final link = _link(starts: const []);
-      final controller = _controller(link);
+      final server = _server(starts: const []);
+      final controller = _controller(server);
       final source = await controller.open(_direct,
           fileId: 'file-1',
           startAt: const Duration(seconds: 90),
@@ -122,17 +113,17 @@ void main() {
       expect(source.timeline.startOffset, Duration.zero);
       expect(source.timeline.totalDuration, const Duration(minutes: 40));
       expect(controller.sessionId, isNull);
-      expect(link.requests, isEmpty);
+      expect(server.requests, isEmpty);
     });
 
     test('a copy session asks for HLS_COPY, FULL, no caps', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 's1', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       final source = await controller.open(_copy,
           fileId: 'file-1', startAt: Duration.zero);
-      final vars = link.requests.single.variables;
+      final vars = server.requests.single.variables;
       expect(vars['strategy'], 'HLS_COPY');
       expect(vars['maxBitrate'], isNull);
       expect(vars['maxHeight'], isNull);
@@ -149,15 +140,15 @@ void main() {
 
     test('a WINDOW answer carries the echoed offset and seeks nothing',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(
             sessionId: 's1', startPosition: 598, duration: 2400),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       final source = await controller.open(_transcode480,
           fileId: 'file-1', startAt: const Duration(seconds: 600));
-      expect(link.requests.single.variables['startPosition'], 600);
-      expect(link.requests.single.variables['strategy'], 'TRANSCODE');
+      expect(server.requests.single.variables['startPosition'], 600);
+      expect(server.requests.single.variables['strategy'], 'TRANSCODE');
       expect(source.fullPlaylist, isFalse);
       expect(source.seekOnOpen, isFalse);
       expect(source.timeline.startOffset, const Duration(seconds: 598));
@@ -165,47 +156,48 @@ void main() {
     });
 
     test('a fixed rung sends its caps; a relay tightens them', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(
             sessionId: 's1', maxBitrate: 1500, maxHeight: 480),
       ]);
-      final controller = _controller(link, relayed: true);
+      final controller = _controller(server, relayed: true);
       final source = await controller.open(_transcode480,
           fileId: 'file-1', startAt: Duration.zero);
-      expect(link.requests.single.variables['maxBitrate'], 1500);
-      expect(link.requests.single.variables['maxHeight'], 480);
+      expect(server.requests.single.variables['maxBitrate'], 1500);
+      expect(server.requests.single.variables['maxHeight'], 480);
       expect(source.effectiveRung?.label, '480p');
     });
 
     test('a relay caps an Original copy request to 3000 kbps and 720p',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(
             sessionId: 's1', maxBitrate: 3000, maxHeight: 720),
       ]);
-      final controller = _controller(link, relayed: true);
+      final controller = _controller(server, relayed: true);
       final source = await controller.open(_copy,
           fileId: 'file-1', startAt: Duration.zero);
-      expect(link.requests.single.variables['maxBitrate'], 3000);
-      expect(link.requests.single.variables['maxHeight'], 720);
+      expect(server.requests.single.variables['maxBitrate'], 3000);
+      expect(server.requests.single.variables['maxHeight'], 720);
       expect(source.effectiveRung?.label, '720p');
     });
 
     test('an old server without maxHeight is retried with the legacy document',
         () async {
-      final link = _link(starts: [
-        graphqlErrorResponse('Unknown argument "maxHeight" on field '
+      final server = _server(starts: [
+        graphqlError('Unknown argument "maxHeight" on field '
             '"startStreamingSession" of type "RootMutationType".'),
         legacyStartStreamingSessionResponse(sessionId: 's1'),
       ]);
-      final features = ServerFeatures();
-      final controller = _controller(link, features: features);
+      final controller = _controller(server);
       final source = await controller.open(_copy,
           fileId: 'file-1', startAt: Duration.zero);
-      expect(link.requests, hasLength(2));
-      expect(link.requests.last.variables.containsKey('maxHeight'), isFalse);
-      expect(link.requests.last.variables.containsKey('playlistMode'), isFalse);
-      expect(features.heightCap, isFalse);
+      expect(server.requests, hasLength(2));
+      expect(server.requests.first.operation, 'StartStreamingSession');
+      expect(server.requests.last.operation, 'StartStreamingSessionLegacy');
+      expect(server.requests.last.variables.containsKey('maxHeight'), isFalse);
+      expect(
+          server.requests.last.variables.containsKey('playlistMode'), isFalse);
       expect(source.sessionId, 's1');
       expect(source.fullPlaylist, isFalse);
       // The legacy document echoes no caps, so nothing is claimed.
@@ -213,19 +205,19 @@ void main() {
 
       // The next open skips straight to the legacy document.
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
-      expect(link.requests, hasLength(3));
-      expect(link.requests.last.variables.containsKey('maxHeight'), isFalse);
+      expect(server.requests, hasLength(3));
+      expect(server.requests.last.operation, 'StartStreamingSessionLegacy');
+      expect(server.requests.last.variables.containsKey('maxHeight'), isFalse);
     });
 
     test('a genuine mutation failure is thrown, not retried', () async {
-      final link =
-          _link(starts: [graphqlErrorResponse('Media file not found')]);
-      final controller = _controller(link);
+      final server = _server(starts: [graphqlError('Media file not found')]);
+      final controller = _controller(server);
       await expectLater(
         controller.open(_copy, fileId: 'file-1', startAt: Duration.zero),
         throwsA(isA<Exception>()),
       );
-      expect(link.requests, hasLength(1));
+      expect(server.requests, hasLength(1));
       expect(controller.sessionId, isNull);
     });
 
@@ -241,9 +233,9 @@ void main() {
         return (status: 200, body: 'a.ts\nb.ts\nc.ts\n');
       }
 
-      final link =
-          _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);
-      final controller = _controller(link, probe: probe);
+      final server =
+          _server(starts: [startStreamingSessionResponse(sessionId: 's1')]);
+      final controller = _controller(server, probe: probe);
       final messages = <String>[];
       await controller.open(_copy,
           fileId: 'file-1', startAt: Duration.zero, onProgress: messages.add);
@@ -255,10 +247,10 @@ void main() {
         'a FULL session is still probed once: the probe is its first-fetch retry',
         () async {
       var polls = 0;
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 's1', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link, probe: (url, headers) async {
+      final controller = _controller(server, probe: (url, headers) async {
         polls++;
         return (status: 200, body: 'a.ts\nb.ts\nc.ts\n#EXT-X-ENDLIST\n');
       });
@@ -267,14 +259,13 @@ void main() {
     });
 
     test('a playlist that never becomes ready ends its session', () async {
-      final link =
-          _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);
+      final server =
+          _server(starts: [startStreamingSessionResponse(sessionId: 's1')]);
       var polls = 0;
       final delays = <Duration>[];
       final controller = PlaybackController(
-        client: () => stubClient(link),
+        client: fakeMydiaClient(server),
         urls: _Urls(),
-        features: ServerFeatures(),
         relayed: false,
         probe: (_, __) async {
           polls++;
@@ -297,7 +288,7 @@ void main() {
       ]);
       expect(delays.skip(5), everyElement(const Duration(seconds: 3)));
       expect(controller.sessionId, isNull);
-      expect(link.requests.last.variables['sessionId'], 's1');
+      expect(server.requests.last.variables['sessionId'], 's1');
     });
 
     for (final message in [
@@ -306,22 +297,21 @@ void main() {
       'Cannot query field "playlistMode" on type "StreamingSessionResult".',
     ]) {
       test('uses the legacy document for $message', () async {
-        final link = _link(starts: [
-          graphqlErrorResponse(message),
+        final server = _server(starts: [
+          graphqlError(message),
           legacyStartStreamingSessionResponse(
             sessionId: 'legacy',
             startPosition: 298,
             duration: 2400,
           ),
         ]);
-        final features = ServerFeatures();
-        final source = await _controller(link, features: features).open(
+        final source = await _controller(server).open(
           _transcode480,
           fileId: 'file-1',
           startAt: const Duration(seconds: 300),
         );
-        expect(link.requests, hasLength(2));
-        expect(link.requests.last.variables, {
+        expect(server.requests, hasLength(2));
+        expect(server.requests.last.variables, {
           'fileId': 'file-1',
           'strategy': 'TRANSCODE',
           'maxBitrate': 1500,
@@ -331,42 +321,54 @@ void main() {
         expect(source.timeline.totalDuration, const Duration(seconds: 2400));
         expect(source.seekOnOpen, isFalse);
         expect(source.effectiveRung, isNull);
-        expect(features.heightCap, isFalse);
       });
     }
 
+    test('an unreachable start error carries the viewer message, not "null"',
+        () async {
+      final server = _server(starts: [const SourceException.unreachable()]);
+      await expectLater(
+        _controller(server)
+            .open(_copy, fileId: 'file-1', startAt: Duration.zero),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(contains('Could not reach this server'),
+                isNot(contains('null'))))),
+      );
+    });
+
     for (final failure in <Object>[
-      graphqlErrorResponse('Unauthorized to set maxHeight or playlistMode'),
-      Exception('Unknown argument "maxHeight" in a transport failure'),
+      graphqlError('Unauthorized to set maxHeight or playlistMode'),
+      const SourceException.unreachable(),
     ]) {
       test(
           'does not classify resolver or transport errors as schema skew: '
           '$failure', () async {
-        final link = _link(starts: [failure]);
-        final features = ServerFeatures();
+        final server = _server(starts: [failure]);
         await expectLater(
-          _controller(link, features: features).open(
+          _controller(server).open(
             _copy,
             fileId: 'file-1',
             startAt: Duration.zero,
           ),
           throwsA(isA<Exception>()),
         );
-        expect(link.requests, hasLength(1));
-        expect(features.heightCap, isTrue);
+        expect(server.requests, hasLength(1));
+        expect(server.requests.single.operation, 'StartStreamingSession');
       });
     }
 
     test('FULL ignores the echoed offset and preserves the known runtime',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(
           playlistMode: 'FULL',
           startPosition: 598,
           duration: 1800,
         )
       ]);
-      final source = await _controller(link).open(
+      final source = await _controller(server).open(
         _copy,
         fileId: 'file-1',
         startAt: const Duration(seconds: 600),
@@ -383,14 +385,14 @@ void main() {
       // A server that serves FFmpeg's own growing playlist over p2p while
       // still answering FULL. Trusting the mode put the bar at zero on the
       // resume point and saved that over the real position.
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(
           playlistMode: 'FULL',
           startPosition: 0,
           duration: 2400,
         )
       ]);
-      final source = await _controller(link, probe: _growingProbe).open(
+      final source = await _controller(server, probe: _growingProbe).open(
         _transcode480,
         fileId: 'file-1',
         startAt: const Duration(seconds: 600),
@@ -403,10 +405,10 @@ void main() {
 
     test('a FULL answer starting at zero keeps a zero offset either way',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(playlistMode: 'FULL', duration: 2400)
       ]);
-      final source = await _controller(link, probe: _growingProbe)
+      final source = await _controller(server, probe: _growingProbe)
           .open(_transcode480, fileId: 'file-1', startAt: Duration.zero);
       expect(source.timeline.startOffset, Duration.zero);
     });
@@ -414,17 +416,17 @@ void main() {
 
   group('sessionFile', () {
     test('is null in direct play, which has no session', () async {
-      final controller = _controller(_link(starts: const []));
+      final controller = _controller(_server(starts: const []));
       await controller.open(_direct, fileId: 'file-1', startAt: Duration.zero);
       expect(controller.sessionFile('subs_3.mks'), isNull);
     });
 
     test('addresses a file in the live session the way its playlist is',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 's1', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
 
       final file = controller.sessionFile('subs_3.mks');
@@ -435,11 +437,11 @@ void main() {
 
   group('replaceSource', () {
     test('a failed playlist ends the new session and keeps the old', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old'),
         startStreamingSessionResponse(sessionId: 'new'),
       ]);
-      final controller = _controller(link, probe: (url, headers) async {
+      final controller = _controller(server, probe: (url, headers) async {
         if (url == 'hls://old') return _readyProbe(url, headers);
         return (status: 404, body: '');
       });
@@ -455,16 +457,16 @@ void main() {
       );
       expect(controller.sessionId, 'old');
       expect(controller.switching, isFalse);
-      expect(link.requests.last.variables['sessionId'], 'new');
+      expect(server.requests.last.variables['sessionId'], 'new');
     });
 
     test('waits the full 60 seconds before timing out a switch', () {
       fakeAsync((clock) {
-        final link = _link(starts: [
+        final server = _server(starts: [
           startStreamingSessionResponse(sessionId: 'old'),
           startStreamingSessionResponse(sessionId: 'new'),
         ]);
-        final controller = _controller(link);
+        final controller = _controller(server);
         unawaited(
             controller.open(_copy, fileId: 'file-1', startAt: Duration.zero));
         clock.flushMicrotasks();
@@ -489,14 +491,14 @@ void main() {
         clock.flushMicrotasks();
         clock.elapse(const Duration(seconds: 59));
         expect(controller.switching, isTrue);
-        expect(link.requests, hasLength(2));
+        expect(server.requests, hasLength(2));
         expect(failure, isNull);
         clock.elapse(const Duration(seconds: 1));
         clock.flushMicrotasks();
         expect(failure, isA<TimeoutException>());
         expect(controller.switching, isFalse);
         expect(controller.sessionId, 'old');
-        expect(link.requests.last.variables['sessionId'], 'new');
+        expect(server.requests.last.variables['sessionId'], 'new');
         expect(positions.hasListener, isFalse);
         unawaited(positions.close());
         clock.flushMicrotasks();
@@ -505,9 +507,9 @@ void main() {
 
     test('switching to direct play ends the old session after advancement',
         () async {
-      final link =
-          _link(starts: [startStreamingSessionResponse(sessionId: 'old')]);
-      final controller = _controller(link);
+      final server =
+          _server(starts: [startStreamingSessionResponse(sessionId: 'old')]);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final source = await controller.replaceSource(
         _direct,
@@ -515,7 +517,7 @@ void main() {
         realPosition: const Duration(seconds: 300),
         attach: (source) async {
           expect(source.seekOnOpen, isTrue);
-          expect(link.requests, hasLength(1));
+          expect(server.requests, hasLength(1));
           return Stream.fromIterable(const [
             Duration(seconds: 300),
             Duration(seconds: 301),
@@ -524,15 +526,15 @@ void main() {
       );
       expect(source.url, 'direct://file-1');
       expect(controller.sessionId, isNull);
-      expect(link.requests.last.variables['sessionId'], 'old');
+      expect(server.requests.last.variables['sessionId'], 'old');
     });
     test('starts the new session, attaches, waits, then ends the old one',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old', playlistMode: 'FULL'),
         startStreamingSessionResponse(sessionId: 'new', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
 
       final listening = Completer<void>();
@@ -556,7 +558,8 @@ void main() {
       await attached.future;
       expect(log, ['attach new switching=true']);
       // Nothing ended yet: the old frames are still on screen.
-      expect(link.requests.map((r) => r.variables['sessionId']), [null, null]);
+      expect(
+          server.requests.map((r) => r.variables['sessionId']), [null, null]);
 
       await listening.future;
       positions.add(const Duration(seconds: 300));
@@ -566,17 +569,17 @@ void main() {
       expect(source.sessionId, 'new');
       expect(controller.sessionId, 'new');
       expect(controller.switching, isFalse);
-      expect(link.requests.last.variables['sessionId'], 'old');
-      expect(link.requests.map((r) => r.variables['fileId']),
+      expect(server.requests.last.variables['sessionId'], 'old');
+      expect(server.requests.map((r) => r.variables['fileId']),
           ['file-1', 'file-1', null]);
     });
 
     test('a switch from direct play ends nothing and records the session',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'new', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_direct, fileId: 'file-1', startAt: Duration.zero);
       await controller.replaceSource(
         _transcode480,
@@ -586,16 +589,16 @@ void main() {
             const [Duration(seconds: 10), Duration(seconds: 11)]),
       );
       expect(controller.sessionId, 'new');
-      expect(link.requests.map((r) => r.variables['sessionId']), [null]);
+      expect(server.requests.map((r) => r.variables['sessionId']), [null]);
     });
 
     test('an attach that fails ends the new session and keeps the old',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old', playlistMode: 'FULL'),
         startStreamingSessionResponse(sessionId: 'new', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       await expectLater(
         controller.replaceSource(
@@ -608,16 +611,16 @@ void main() {
       );
       expect(controller.sessionId, 'old');
       expect(controller.switching, isFalse);
-      expect(link.requests.last.variables['sessionId'], 'new');
+      expect(server.requests.last.variables['sessionId'], 'new');
     });
 
     test('a source that never advances times out and keeps the old session',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old', playlistMode: 'FULL'),
         startStreamingSessionResponse(sessionId: 'new', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link,
+      final controller = _controller(server,
           firstAdvanceTimeout: const Duration(milliseconds: 20));
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final stuck = StreamController<Duration>.broadcast();
@@ -635,11 +638,11 @@ void main() {
     });
 
     test('a second switch while one is in flight is refused', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old', playlistMode: 'FULL'),
         startStreamingSessionResponse(sessionId: 'new', playlistMode: 'FULL'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final positions = StreamController<Duration>.broadcast();
       addTearDown(positions.close);
@@ -674,16 +677,14 @@ void main() {
       final requested = Completer<void>();
       final response = Completer<Map<String, dynamic>>();
       final ended = Completer<void>();
-      final requests = <Request>[];
-      final link = _delayedStartLink(
-        requests: requests,
+      final server = _delayedStartServer(
         start: (_) {
           requested.complete();
           return response.future;
         },
         onEnd: (_) => ended.complete(),
       );
-      final controller = _controller(link);
+      final controller = _controller(server);
       final opened = controller
           .open(_copy, fileId: 'file-1', startAt: Duration.zero)
           .then<Object?>(
@@ -697,7 +698,7 @@ void main() {
       expect(await opened, isA<StateError>());
       await ended.future;
       expect(controller.sessionId, isNull);
-      expect(requests.map((request) => request.variables['sessionId']),
+      expect(server.requests.map((request) => request.variables['sessionId']),
           [null, 'late']);
     });
 
@@ -706,9 +707,7 @@ void main() {
       final requested = Completer<void>();
       final response = Completer<Map<String, dynamic>>();
       final lateEnded = Completer<void>();
-      final requests = <Request>[];
-      final link = _delayedStartLink(
-        requests: requests,
+      final server = _delayedStartServer(
         start: (index) {
           if (index == 0) {
             return Future.value(
@@ -721,7 +720,7 @@ void main() {
           if (id == 'late') lateEnded.complete();
         },
       );
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       var attached = false;
       final switched = controller.replaceSource(
@@ -739,7 +738,7 @@ void main() {
       );
       await requested.future;
       await controller.endSession();
-      final endedBeforeResponse = requests
+      final endedBeforeResponse = server.requests
           .map((request) => request.variables['sessionId'])
           .whereType<String>()
           .toList();
@@ -752,7 +751,7 @@ void main() {
       expect(controller.sessionId, isNull);
       expect(controller.switching, isFalse);
       expect(
-          requests
+          server.requests
               .map((request) => request.variables['sessionId'])
               .whereType<String>(),
           ['old', 'late']);
@@ -760,11 +759,11 @@ void main() {
 
     test('ends both sessions without restoring old after an advance wait',
         () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old'),
         startStreamingSessionResponse(sessionId: 'new'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final listening = Completer<void>();
       final positions = StreamController<Duration>.broadcast(
@@ -791,20 +790,20 @@ void main() {
       expect(controller.switching, isFalse);
       expect(retainedListener, isFalse);
       expect(
-          link.requests
+          server.requests
               .map((request) => request.variables['sessionId'])
               .whereType<String>(),
           unorderedEquals(['old', 'new']));
       await controller.endSession();
-      expect(link.requests, hasLength(4));
+      expect(server.requests, hasLength(4));
     });
 
     test('a delayed attach cannot finish a switch after teardown', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old'),
         startStreamingSessionResponse(sessionId: 'new'),
       ]);
-      final controller = _controller(link);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       final attaching = Completer<void>();
       final attached = Completer<Stream<Duration>>();
@@ -831,20 +830,20 @@ void main() {
       expect(controller.sessionId, isNull);
       expect(controller.switching, isFalse);
       expect(
-          link.requests
+          server.requests
               .map((request) => request.variables['sessionId'])
               .whereType<String>(),
           unorderedEquals(['old', 'new']));
     });
 
     test('a torn-down playlist cannot replace a later open', () async {
-      final link = _link(starts: [
+      final server = _server(starts: [
         startStreamingSessionResponse(sessionId: 'old'),
         startStreamingSessionResponse(sessionId: 'current'),
       ]);
       final probing = Completer<void>();
       final probeResult = Completer<({int status, String body})>();
-      final controller = _controller(link, probe: (url, headers) {
+      final controller = _controller(server, probe: (url, headers) {
         if (url == 'hls://old') {
           probing.complete();
           return probeResult.future;
@@ -865,85 +864,40 @@ void main() {
       expect(await oldOpen, isA<StateError>());
       expect(controller.sessionId, 'current');
       expect(
-          link.requests
+          server.requests
               .map((request) => request.variables['sessionId'])
               .whereType<String>(),
           ['old']);
       await controller.endSession();
       expect(
-          link.requests
+          server.requests
               .map((request) => request.variables['sessionId'])
               .whereType<String>(),
           ['old', 'current']);
     });
 
-    test('resolves the current client and tolerates a failed end', () async {
-      final starts =
-          _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);
-      final ends =
-          _link(starts: [], end: graphqlErrorResponse('Already ended'));
-      GraphQLClient? client = stubClient(starts);
-      final controller = PlaybackController(
-        client: () => client,
-        urls: _Urls(),
-        features: ServerFeatures(),
-        relayed: false,
-        probe: _readyProbe,
-        wait: (_) async {},
-      );
+    test('tolerates a failed end', () async {
+      final server = _server(
+          starts: [startStreamingSessionResponse(sessionId: 's1')],
+          end: graphqlError('Already ended'));
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
-      client = stubClient(ends);
       await controller.endSession();
       expect(controller.sessionId, isNull);
-      expect(starts.requests, hasLength(1));
-      expect(ends.requests.single.variables['sessionId'], 's1');
+      expect(
+          server.of('EndStreamingSession').single.variables['sessionId'], 's1');
     });
 
-    test('clears a live session when the client has disappeared', () async {
-      final link =
-          _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);
-      GraphQLClient? client = stubClient(link);
-      final controller = PlaybackController(
-        client: () => client,
-        urls: _Urls(),
-        features: ServerFeatures(),
-        relayed: false,
-        probe: _readyProbe,
-        wait: (_) async {},
-      );
-      await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
-      client = null;
-      await controller.endSession();
-      await controller.endSession();
-      expect(controller.sessionId, isNull);
-      expect(link.requests, hasLength(1));
-    });
     test('ends the current session once, then is a no-op', () async {
-      final link =
-          _link(starts: [startStreamingSessionResponse(sessionId: 's1')]);
-      final controller = _controller(link);
+      final server =
+          _server(starts: [startStreamingSessionResponse(sessionId: 's1')]);
+      final controller = _controller(server);
       await controller.open(_copy, fileId: 'file-1', startAt: Duration.zero);
       await controller.endSession();
       await controller.endSession();
       expect(controller.sessionId, isNull);
-      expect(link.requests.where((r) => r.variables.containsKey('sessionId')),
+      expect(server.requests.where((r) => r.variables.containsKey('sessionId')),
           hasLength(1));
-    });
-
-    test('a missing client is logged, never thrown', () async {
-      final controller = PlaybackController(
-        client: () => null,
-        urls: _Urls(),
-        features: ServerFeatures(),
-        relayed: false,
-        probe: _readyProbe,
-        wait: (_) async {},
-      );
-      await expectLater(
-        controller.open(_copy, fileId: 'file-1', startAt: Duration.zero),
-        throwsA(isA<StateError>()),
-      );
-      await controller.endSession();
     });
   });
 

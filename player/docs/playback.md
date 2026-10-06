@@ -294,7 +294,7 @@ the legacy `startStreamingSession` document on a server that rejects the
 `flutter test` cannot construct a native `Player`, so the screen's playback
 path ends in the error state under test. The decision, the policy and the
 controller are therefore tested as units: scripted candidates, scripted
-`HealthSample`s, and, in `playback_controller_test.dart`, a `StubLink` with a
+`HealthSample`s, and, in `playback_controller_test.dart`, a `ScriptedMydiaTransport` with a
 fake `attach` callback standing in for the screen. Screen tests assert on the
 requests that reach the wire.
 

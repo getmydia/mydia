@@ -141,7 +141,11 @@ class StreamingSetup {
     required this.progress,
     required this.createTransport,
     this.scrubThumbnails,
+    this.viaP2p = false,
   });
+
+  /// Whether the bytes travel over p2p, for the link path and the stats panel.
+  final bool viaP2p;
 
   /// What stall and failure memory key on: Mydia's server URL or p2p node,
   /// or a third-party source's id.

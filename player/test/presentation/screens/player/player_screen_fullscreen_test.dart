@@ -22,7 +22,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/player/fullscreen/fullscreen_backend.dart';
 import 'package:player/core/player/fullscreen/fullscreen_failure.dart';
 import 'package:player/core/player/fullscreen/fullscreen_mode.dart';
@@ -30,7 +29,7 @@ import 'package:player/core/player/fullscreen/fullscreen_report.dart';
 import 'package:player/core/player/fullscreen/fullscreen_report_signal.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -63,23 +62,22 @@ void main() {
     final castManager = CapturingCastSessionManager();
     final container = buildPlayerScreenContainer(
       // The pre-play queries now fire concurrently (see `runIsolated`), so an
-      // ordered `StubLink.responses` list can no longer script them --
-      // dispatch on the operation instead.
-      link: StubLink((request, index) {
-        if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-        if (isOperation(request, 'MovieSegments')) {
+      // ordered `ScriptedMydiaTransport.responses` list can no longer script
+      // them -- dispatch on the operation instead.
+      server: ScriptedMydiaTransport((request, index) {
+        if (request.operation == 'MovieDetail') return movieDetailResponse();
+        if (request.operation == 'MovieSegments') {
           return movieSegmentsResponse();
         }
-        if (isOperation(request, 'SubtitleTrackSettings')) {
+        if (request.operation == 'SubtitleTrackSettings') {
           return subtitleTrackSettingsResponse();
         }
-        if (isOperation(request, 'MovieSubtitlePreference')) {
+        if (request.operation == 'MovieSubtitlePreference') {
           return subtitlePreferenceResponse();
         }
         return streamingCandidatesResponse(duration: 5400);
       }),
-      connectionState:
-          const conn.ConnectionState(type: conn.ConnectionType.direct),
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: TrackingLocalProxyService(),
     );

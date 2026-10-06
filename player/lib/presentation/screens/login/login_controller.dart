@@ -5,7 +5,8 @@ import '../../../core/channels/pairing_service.dart';
 import '../../../core/auth/device_info_service.dart';
 import '../../../core/auth/auth_service.dart';
 import '../../../core/p2p/p2p_service.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
+import '../../../core/sources/mydia/mydia_gql_transport.dart'
+    show MydiaGraphqlError;
 import '../../../core/sources/mydia/mydia_saver.dart';
 import '../../../core/sources/mydia/mydia_credentials.dart';
 import '../../../core/sources/source.dart';
@@ -79,6 +80,59 @@ final loginDeviceInfoProvider =
 String? _saveErrorMessage(Object e) =>
     e is SourceException ? e.viewerMessage : null;
 
+const _cannotConnect =
+    'Cannot connect to server. Check the URL and your network.';
+const _signInExpired = 'Sign-in expired, please try again';
+const _tooManyAttempts = 'Too many login attempts. Please try again later.';
+
+/// What the user sees when the password step fails, chosen by error kind.
+/// A server's own words (a [MydiaGraphqlError]) are matched by text, since
+/// that is all the server sends.
+String _loginErrorMessage(Object e) {
+  if (e is! SourceException) return _loginMessageFromText(e.toString());
+  return switch (e.kind) {
+    SourceErrorKind.unreachable => _cannotConnect,
+    SourceErrorKind.notFound => 'Server not found. Check the URL.',
+    SourceErrorKind.unauthorized => 'Invalid username or password',
+    _ when e is MydiaGraphqlError => _loginMessageFromText(e.viewerMessage),
+    _ => e.viewerMessage,
+  };
+}
+
+String _loginMessageFromText(String text) {
+  if (text.contains('Invalid username or password') ||
+      text.contains('Local authentication is disabled')) {
+    return text.replaceFirst('Exception: Login error: ', '');
+  }
+  if (text.contains('invalid')) return 'Invalid username or password';
+  if (text.contains('connection') ||
+      text.contains('network') ||
+      text.contains('SocketException')) {
+    return _cannotConnect;
+  }
+  return 'Login failed. Please check your credentials.';
+}
+
+/// What the user sees when the verification code step fails.
+String _totpErrorMessage(Object e) {
+  if (e is SourceException) {
+    if (e.kind == SourceErrorKind.unreachable) return _cannotConnect;
+    if (e is MydiaGraphqlError) {
+      final text = e.viewerMessage;
+      if (text.contains('Sign-in expired')) return _signInExpired;
+      if (text.contains('Too many')) return _tooManyAttempts;
+    }
+    return 'Invalid code';
+  }
+  final text = e.toString();
+  if (text.contains('SocketException') ||
+      text.contains('connection') ||
+      text.contains('network')) {
+    return _cannotConnect;
+  }
+  return 'Invalid code';
+}
+
 /// State for the login screen.
 class LoginState {
   const LoginState({
@@ -91,7 +145,6 @@ class LoginState {
     this.credentialsNotPersisted = false,
     this.totpChallenge,
     this.addedSource,
-    this.addedIsBound = false,
   });
 
   final ConnectionMode mode;
@@ -113,10 +166,6 @@ class LoginState {
   /// The Mydia source a successful add produced.
   final SourceId? addedSource;
 
-  /// Whether [addedSource] is the instance the legacy screens serve, which
-  /// the app opens on `/` rather than on the source's own page.
-  final bool addedIsBound;
-
   LoginState copyWith({
     ConnectionMode? mode,
     bool? isLoading,
@@ -128,7 +177,6 @@ class LoginState {
     TotpChallenge? totpChallenge,
     bool clearTotpChallenge = false,
     SourceId? addedSource,
-    bool? addedIsBound,
   }) {
     return LoginState(
       mode: mode ?? this.mode,
@@ -142,7 +190,6 @@ class LoginState {
       totpChallenge:
           clearTotpChallenge ? null : (totpChallenge ?? this.totpChallenge),
       addedSource: addedSource ?? this.addedSource,
-      addedIsBound: addedIsBound ?? this.addedIsBound,
     );
   }
 
@@ -267,12 +314,20 @@ class LoginController extends _$LoginController {
   }) async {
     state = state.copyWith(isLoading: true, error: null);
 
+    final LoginOutcome outcome;
     try {
-      final outcome = await ref.read(authServiceProvider).requestLogin(
+      outcome = await ref.read(authServiceProvider).requestLogin(
             serverUrl: serverUrl,
             username: username,
             password: password,
           );
+    } catch (e) {
+      if (!ref.mounted) return;
+      state = state.copyWith(isLoading: false, error: _loginErrorMessage(e));
+      return;
+    }
+
+    try {
       if (!ref.mounted) return;
       switch (outcome) {
         case TotpChallenge():
@@ -290,33 +345,10 @@ class LoginController extends _$LoginController {
       // Check if still mounted before updating state
       if (!ref.mounted) return;
 
-      final saveMessage = _saveErrorMessage(e);
-      if (saveMessage != null) {
-        state = state.copyWith(isLoading: false, error: saveMessage);
-        return;
-      }
-
-      // Extract a user-friendly error message
-      String errorMessage = 'Login failed. Please check your credentials.';
-
-      final errorStr = e.toString();
-      if (errorStr.contains('Invalid username or password') ||
-          errorStr.contains('Local authentication is disabled')) {
-        errorMessage = errorStr
-            .replaceFirst('Exception: Login failed: ', '')
-            .replaceFirst('Exception: Login error: Exception: ', '');
-      } else if (errorStr.contains('401') || errorStr.contains('invalid')) {
-        errorMessage = 'Invalid username or password';
-      } else if (errorStr.contains('connection') ||
-          errorStr.contains('network') ||
-          errorStr.contains('SocketException')) {
-        errorMessage =
-            'Cannot connect to server. Check the URL and your network.';
-      } else if (errorStr.contains('404')) {
-        errorMessage = 'Server not found. Check the URL.';
-      }
-
-      state = state.copyWith(isLoading: false, error: errorMessage);
+      state = state.copyWith(
+        isLoading: false,
+        error: _saveErrorMessage(e) ?? _loginErrorMessage(e),
+      );
     }
   }
 
@@ -331,40 +363,32 @@ class LoginController extends _$LoginController {
 
     state = state.copyWith(isLoading: true, error: null);
 
+    final LoginGranted granted;
     try {
-      final granted = await ref
+      granted = await ref
           .read(authServiceProvider)
           .requestTotp(challenge: challenge, code: code.trim());
+    } catch (e) {
+      if (!ref.mounted) return;
+      final message = _totpErrorMessage(e);
+      state = state.copyWith(
+        isLoading: false,
+        // An expired challenge cannot be retried with another code.
+        clearTotpChallenge: message == _signInExpired,
+        error: message,
+      );
+      return;
+    }
+
+    try {
       if (!ref.mounted) return;
       await _saveLogin(granted, reauthAccountId);
     } catch (e) {
       if (!ref.mounted) return;
-
-      final errorStr = e.toString();
-      final saveMessage = _saveErrorMessage(e);
-      if (saveMessage != null) {
-        state = state.copyWith(isLoading: false, error: saveMessage);
-      } else if (errorStr.contains('Sign-in expired')) {
-        state = state.copyWith(
-          isLoading: false,
-          clearTotpChallenge: true,
-          error: 'Sign-in expired, please try again',
-        );
-      } else if (errorStr.contains('Too many')) {
-        state = state.copyWith(
-          isLoading: false,
-          error: 'Too many login attempts. Please try again later.',
-        );
-      } else if (errorStr.contains('SocketException') ||
-          errorStr.contains('connection') ||
-          errorStr.contains('network')) {
-        state = state.copyWith(
-          isLoading: false,
-          error: 'Cannot connect to server. Check the URL and your network.',
-        );
-      } else {
-        state = state.copyWith(isLoading: false, error: 'Invalid code');
-      }
+      state = state.copyWith(
+        isLoading: false,
+        error: _saveErrorMessage(e) ?? 'Invalid code',
+      );
     }
   }
 
@@ -410,17 +434,15 @@ class LoginController extends _$LoginController {
       reauthAccountId: reauthAccountId,
     );
     if (!ref.mounted) return;
-    // The record may not have reached the bound-instance provider yet, so
-    // wait for the stores it reads before asking which instance is bound.
+    // The record may not have reached the source providers yet, so wait for
+    // the store before the caller navigates to the new source's page.
     await ref.read(sourceRecordsProvider.future);
-    await ref.read(legacyInstanceIdProvider.future);
     if (!ref.mounted) return;
     state = state.copyWith(
       isLoading: false,
       success: true,
       credentialsNotPersisted: ref.read(sourceSecretsProvider).degraded,
       addedSource: id,
-      addedIsBound: ref.read(boundMydiaProvider)?.source.id == id,
       clearTotpChallenge: true,
       claimCodeStatus: claimCodeStatus,
       claimCodeMessage: claimCodeMessage,

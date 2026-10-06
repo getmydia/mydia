@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:player/core/p2p/local_proxy_service.dart';
 import 'package:player/core/sources/lock/device_auth.dart';
 import 'package:player/core/sources/lock/source_lock_controller.dart';
 import 'package:player/core/sources/source.dart';
@@ -27,8 +28,11 @@ void main() {
     final source = plex.build().source;
     const item = ItemRef(
         sourceId: fakeSourceId, kind: ItemKind.movie, externalId: '101');
-    expect(playbackSessionFor(source, item, '21'), isA<PlexPlaybackSession>());
-    expect(playbackSessionFor(FakeMediaSource(), item, '21'), isNull);
+    final proxy = LocalProxyService.forTesting;
+    expect(playbackSessionFor(source, item, '21', proxy: proxy),
+        isA<PlexPlaybackSession>());
+    expect(playbackSessionFor(FakeMediaSource(), item, '21', proxy: proxy),
+        isNull);
   });
 
   test('reads kind, file and title from the location', () {

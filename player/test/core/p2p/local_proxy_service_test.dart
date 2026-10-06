@@ -34,6 +34,8 @@ void main() {
     /// test needs so the proxy comes up and goes away again.
     late Object owner;
 
+    const target = 'macct';
+
     setUp(() {
       p2p = TestP2pService();
       proxy = LocalProxyService(p2p);
@@ -44,12 +46,16 @@ void main() {
       await proxy.shutdown();
     });
 
-    Future<HttpResult> makeRequest(String path, {String? rangeHeader}) async {
+    /// Requests [path] under the test target, or exactly as given with
+    /// [bare], which the proxy must refuse.
+    Future<HttpResult> makeRequest(String path,
+        {String? rangeHeader, bool bare = false}) async {
       final client = HttpClient();
+      final prefix = bare ? '' : '/t/$target';
 
       try {
         final request = await client
-            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$path'));
+            .getUrl(Uri.parse('http://127.0.0.1:${proxy.port}$prefix$path'));
         if (rangeHeader != null) {
           request.headers.set(HttpHeaders.rangeHeader, rangeHeader);
         }
@@ -73,7 +79,10 @@ void main() {
     group('initialization', () {
       test('starts on loopback address', () async {
         await proxy.start(
-            owner: owner, targetPeer: 'test-peer-id', authToken: 'test-token');
+            owner: owner,
+            targetPeer: 'test-peer-id',
+            authToken: 'test-token',
+            target: target);
 
         expect(proxy.isRunning, isTrue);
         expect(proxy.port, greaterThan(0));
@@ -81,31 +90,40 @@ void main() {
       });
 
       test('throws when not started and buildHlsUrl called', () {
-        expect(
-            () => proxy.buildHlsUrl('session123'), throwsA(isA<StateError>()));
+        expect(() => proxy.buildHlsUrl('session123', target: target),
+            throwsA(isA<StateError>()));
       });
 
       test('throws when not started and buildBaseUrl called', () {
-        expect(
-            () => proxy.buildBaseUrl('session123'), throwsA(isA<StateError>()));
+        expect(() => proxy.buildBaseUrl('session123', target: target),
+            throwsA(isA<StateError>()));
       });
 
       test('can update target peer when already running', () async {
         await proxy.start(
-            owner: owner, targetPeer: 'peer1', authToken: 'token1');
+            owner: owner,
+            targetPeer: 'peer1',
+            authToken: 'token1',
+            target: target);
         await proxy.start(
-            owner: owner, targetPeer: 'peer2', authToken: 'token2');
+            owner: owner,
+            targetPeer: 'peer2',
+            authToken: 'token2',
+            target: target);
 
         expect(proxy.isRunning, isTrue);
       });
 
       test('stop clears all state', () async {
         await proxy.start(
-            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
+            owner: owner,
+            targetPeer: 'test-peer',
+            authToken: 'test-token',
+            target: target);
 
         expect(proxy.isRunning, isTrue);
 
-        await proxy.stop(owner);
+        await proxy.stop(owner, target: target);
 
         expect(proxy.isRunning, isFalse);
         expect(proxy.port, equals(0));
@@ -115,7 +133,10 @@ void main() {
     group('HTTP behavior', () {
       test('returns 404 for non-HLS paths with CORS', () async {
         await proxy.start(
-            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
+            owner: owner,
+            targetPeer: 'test-peer',
+            authToken: 'test-token',
+            target: target);
 
         final response = await makeRequest('/not-hls/path');
 
@@ -125,9 +146,32 @@ void main() {
             response.headers.value('access-control-allow-origin'), equals('*'));
       });
 
+      test('a bare path is not served', () async {
+        await proxy.start(owner: owner, targetPeer: 'peer', target: target);
+
+        final response = await makeRequest('/direct/f1/stream', bare: true);
+
+        expect(response.statusCode, equals(HttpStatus.notFound));
+        expect(p2p.calls, isEmpty);
+      });
+
+      test('two targets, one release frees both', () async {
+        await proxy.start(owner: owner, targetPeer: 'a', target: 'macct-a');
+        await proxy.start(owner: owner, targetPeer: 'b', target: 'macct-b');
+
+        expect(proxy.targetBaseUrl('macct-a'), endsWith('/t/macct-a'));
+
+        await proxy.release(owner);
+
+        expect(proxy.isRunning, isFalse);
+      });
+
       test('returns 400 for invalid HLS path format with CORS', () async {
         await proxy.start(
-            owner: owner, targetPeer: 'test-peer', authToken: 'test-token');
+            owner: owner,
+            targetPeer: 'test-peer',
+            authToken: 'test-token',
+            target: target);
 
         final response = await makeRequest('/hls/');
 
@@ -142,6 +186,7 @@ void main() {
           owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
+          target: target,
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
@@ -177,6 +222,7 @@ void main() {
           owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
+          target: target,
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
@@ -200,6 +246,7 @@ void main() {
           owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
+          target: target,
         );
 
         p2p.onSendHlsRequest = (_) async => testHlsResponse(
@@ -222,6 +269,7 @@ void main() {
           owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
+          target: target,
         );
 
         p2p.onSendHlsRequest =
@@ -241,6 +289,7 @@ void main() {
           owner: owner,
           targetPeer: 'target-peer-id',
           authToken: 'test-auth-token',
+          target: target,
         );
 
         p2p.onSendHlsRequest = (call) async {
@@ -293,14 +342,14 @@ void main() {
           );
         };
 
-        await proxy.start(owner: owner, targetPeer: 'peer-1');
+        await proxy.start(owner: owner, targetPeer: 'peer-1', target: target);
 
         // Deliberately not awaited yet: this request is still open when the
         // teardown runs, which is the state under test.
         final inFlight = makeRequest('/hls/session123/segment_001.ts');
         await started.future;
 
-        await proxy.stop(owner);
+        await proxy.stop(owner, target: target);
         expect(proxy.isRunning, isFalse);
 
         await expectLater(

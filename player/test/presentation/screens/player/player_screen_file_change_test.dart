@@ -12,23 +12,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/cast/cast_content.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
-import 'package:player/graphql/mutations/update_movie_progress.graphql.dart';
-import 'package:player/graphql/queries/media_segments.graphql.dart';
-import 'package:player/graphql/queries/movie_detail.graphql.dart';
-import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
-import 'package:player/graphql/queries/subtitle_content.graphql.dart';
-import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
-import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
+import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+import 'package:player/domain/sources/item.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 import 'package:player/presentation/screens/player/subtitle_preference.dart';
 
+import '../../../test_utils/mydia_test_source.dart';
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import '../../../test_utils/toast_harness.dart';
 import 'player_screen_test_harness.dart';
 
@@ -38,9 +35,21 @@ const _trackTitle = 'English (Signs & Songs)';
 /// The mpv-native track the fake player publishes.
 const _mpvSubtitleTrack = SubtitleTrack('1', 'Japanese', 'jpn');
 
-/// Whether [request] carries the document [node].
-bool _carries(Request request, Object node) =>
-    request.operation.document == node;
+/// The session the route would build for [fileId] of [mediaId].
+MydiaPlaybackSession _sessionFor(String fileId, String mediaId) {
+  final container = _container!;
+  return MydiaPlaybackSession(
+    source:
+        container.read(mediaSourceProvider(testMydiaSourceId)) as MydiaSource,
+    item: ItemRef(
+      sourceId: testMydiaSourceId,
+      kind: ItemKind.movie,
+      externalId: mediaId,
+    ),
+    fileId: fileId,
+    proxy: () => container.read(mediaProxyProvider),
+  );
+}
 
 /// A media_kit player with no decoder behind it, carrying mpv's own track
 /// list and recording what it was asked to show.
@@ -193,19 +202,19 @@ class _ProbedPlayer extends PlatformPlayer {
 /// [onMovieDetail], when it returns non-null, answers `MovieDetail` in its
 /// place -- used to make one file's detail query fail (or answer something
 /// distinct) without touching the other queries every load also makes.
-StubLink _link({
-  Object? Function(Request request)? onPreference,
-  Object? Function(Request request)? onMovieProgress,
-  Object? Function(Request request)? onMovieDetail,
+ScriptedMydiaTransport _link({
+  Object? Function(ScriptedRequest request)? onPreference,
+  Object? Function(ScriptedRequest request)? onMovieProgress,
+  Object? Function(ScriptedRequest request)? onMovieDetail,
 }) {
-  return StubLink((request, index) {
-    if (_carries(request, documentNodeQuerySubtitleContent)) {
+  return ScriptedMydiaTransport((request, index) {
+    if (request.operation == 'SubtitleContent') {
       return {
         '__typename': 'RootQueryType',
         'subtitleContent': 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhi\n',
       };
     }
-    if (_carries(request, documentNodeQueryMovieDetail)) {
+    if (request.operation == 'MovieDetail') {
       final hooked = onMovieDetail?.call(request);
       if (hooked != null) return hooked;
       return movieDetailResponse(files: [
@@ -213,7 +222,7 @@ StubLink _link({
         mediaFileWithSubtitle(fileId: 'file-b'),
       ]);
     }
-    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+    if (request.operation == 'MovieSubtitlePreference') {
       final hooked = onPreference?.call(request);
       if (hooked != null) return hooked;
       return subtitlePreferenceResponse(
@@ -229,13 +238,13 @@ StubLink _link({
         },
       );
     }
-    if (_carries(request, documentNodeQueryMovieSegments)) {
+    if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse();
     }
-    if (_carries(request, documentNodeQuerySubtitleTrackSettings)) {
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (_carries(request, documentNodeQueryStreamingCandidates)) {
+    if (request.operation == 'StreamingCandidates') {
       final id = request.variables['id'] as String? ?? 'file-1';
       return streamingCandidatesResponse(
         duration: 5400,
@@ -243,7 +252,7 @@ StubLink _link({
         fileId: id,
       );
     }
-    if (_carries(request, documentNodeMutationUpdateMovieProgress)) {
+    if (request.operation == 'UpdateMovieProgress') {
       final hooked = onMovieProgress?.call(request);
       if (hooked != null) return hooked;
     }
@@ -266,7 +275,7 @@ var _containerTearDownRegistered = false;
 /// navigation does.
 Future<void> _mount(
   WidgetTester tester,
-  StubLink link,
+  ScriptedMydiaTransport link,
   _ProbedPlayer player, {
   required String fileId,
   String mediaId = 'movie-1',
@@ -274,8 +283,8 @@ Future<void> _mount(
 }) async {
   final firstMount = _container == null;
   _container ??= buildPlayerScreenContainer(
-    link: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    server: link,
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -293,6 +302,7 @@ Future<void> _mount(
         mediaType: 'movie',
         fileId: fileId,
         title: 'The Long Aurora',
+        session: _sessionFor(fileId, mediaId),
         createPlayer: () => Player(platformPlayer: player),
       ),
     ),
@@ -309,13 +319,13 @@ Future<void> _mount(
 /// `createPlayer` call, so a test can tell one file's player from the next.
 Future<void> _mountWithFactory(
   WidgetTester tester,
-  StubLink link,
+  ScriptedMydiaTransport link,
   _ProbedPlayer Function() next, {
   required String fileId,
 }) async {
   _container ??= buildPlayerScreenContainer(
-    link: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    server: link,
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -332,6 +342,7 @@ Future<void> _mountWithFactory(
         mediaType: 'movie',
         fileId: fileId,
         title: 'The Long Aurora',
+        session: _sessionFor(fileId, 'movie-1'),
         createPlayer: () => Player(platformPlayer: next()),
       ),
     ),
@@ -527,10 +538,8 @@ void main() {
     await _mount(tester, link, player, fileId: 'file-b', mediaId: 'movie-2');
     await _pumpUntilSwitched(tester, () => _playingFileId(player) == 'file-b');
 
-    final saves = link.requests
-        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
-        .map((r) => r.variables)
-        .toList();
+    final saves =
+        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
     expect(
       saves.where(
           (v) => v['movieId'] == 'movie-1' && v['positionSeconds'] == 30),
@@ -665,10 +674,8 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
-    final saves = link.requests
-        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
-        .map((r) => r.variables)
-        .toList();
+    final saves =
+        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
     expect(
       saves.where(
           (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 30),
@@ -729,10 +736,8 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 300)));
     await tester.pump();
 
-    final saves = link.requests
-        .where((r) => _carries(r, documentNodeMutationUpdateMovieProgress))
-        .map((r) => r.variables)
-        .toList();
+    final saves =
+        link.of('UpdateMovieProgress').map((r) => r.variables).toList();
     expect(
       saves.where(
           (v) => v['movieId'] == 'movie-2' && v['positionSeconds'] == 37),
@@ -758,7 +763,7 @@ void main() {
           files: [mediaFileWithSubtitle(fileId: 'file-a')],
         );
       }
-      return graphqlErrorResponse('detail unavailable');
+      return graphqlError('detail unavailable');
     });
     final player = _ProbedPlayer();
 
@@ -804,8 +809,8 @@ void main() {
     // Built directly, not through `_mount`'s shared container, so the gate
     // can be threaded onto `castSessionManagerProvider`.
     _container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: link,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: TrackingLocalProxyService(),
       castManagerGate: castManagerGate,

@@ -6,6 +6,8 @@ import '../../domain/models/cast_device.dart';
 import '../../native/lib.dart';
 import '../player/progress_service.dart';
 import '../player/stream_timeline.dart';
+import '../sources/mydia/mydia_instance_id.dart';
+import '../sources/source.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 import 'cast_content.dart';
@@ -255,6 +257,7 @@ class CastLaunchRequest {
 
   /// A Mydia request, taking the ids a caller already has.
   CastLaunchRequest({
+    required SourceId sourceId,
     required String fileId,
     required String mediaId,
     required String mediaType,
@@ -268,6 +271,7 @@ class CastLaunchRequest {
     String? showId,
   }) : this.forContent(
           content: MydiaCastContent(
+            sourceId: sourceId,
             fileId: fileId,
             mediaId: mediaId,
             mediaType: mediaType,
@@ -343,6 +347,24 @@ class PulledSession {
   });
 }
 
+/// What casting a Mydia item needs from the instance that owns it.
+class MydiaCastDeps {
+  const MydiaCastDeps({
+    required this.progress,
+    required this.streamingSessions,
+    required this.resolver,
+    this.release,
+  });
+
+  final ProgressService progress;
+  final CastStreamingSessionService streamingSessions;
+  final CastRouteResolver Function() resolver;
+
+  /// Lets go of whatever the deps hold open for the cast (the instance's
+  /// proxy target). Called once, when the cast ends or another replaces it.
+  final Future<void> Function()? release;
+}
+
 /// Owns the active cast session: routing, playback, progress and persistence.
 class CastSessionManager {
   final CastBackendRegistry _registry;
@@ -364,9 +386,13 @@ class CastSessionManager {
   CastBackend _backend;
 
   final CastSessionStore _store;
-  final ProgressService _progressService;
-  final CastRouteResolver Function() _resolverFactory;
-  final CastStreamingSessionService _streamingSessions;
+  final Future<MydiaCastDeps?> Function(SourceId id) _mydiaDeps;
+
+  /// The deps of the Mydia instance the active cast plays from, resolved once
+  /// when the cast starts. One [ProgressService] per active cast: its
+  /// `timeline` belongs to that cast alone.
+  MydiaCastDeps? _activeDeps;
+
   final Future<void> Function(bool enabled) _setLanAccess;
   final DateTime Function() _clock;
 
@@ -484,9 +510,7 @@ class CastSessionManager {
     CastBackend? mydiaBackend,
     CastBackend? Function()? resolveMydiaBackend,
     required CastSessionStore store,
-    required ProgressService progressService,
-    required CastRouteResolver Function() resolverFactory,
-    required CastStreamingSessionService streamingSessions,
+    required Future<MydiaCastDeps?> Function(SourceId id) mydiaDeps,
     required Future<void> Function(bool enabled) setLanAccess,
     DateTime Function()? clock,
     CastCapabilities? capabilities,
@@ -499,9 +523,7 @@ class CastSessionManager {
         ),
         _backend = backend,
         _store = store,
-        _progressService = progressService,
-        _resolverFactory = resolverFactory,
-        _streamingSessions = streamingSessions,
+        _mydiaDeps = mydiaDeps,
         _setLanAccess = setLanAccess,
         _clock = clock ?? DateTime.now,
         _bindSource = bindSource,
@@ -568,8 +590,66 @@ class CastSessionManager {
     // it before touching any shared state, the same way `connectTo`'s does.
     final generation = ++_connectGeneration;
 
-    final resolver = _resolverFactory();
+    // Resolved once per cast, from the instance the item belongs to. Gone
+    // (removed, or not a Mydia source) reads like a route that cannot be
+    // reached.
+    final MydiaCastDeps? deps;
+    if (request.content case final MydiaCastContent mydia) {
+      deps = await _mydiaDeps(mydia.sourceId);
+      if (deps == null) {
+        throw const CastBackendException(
+          'This Mydia server is no longer available.',
+          CastFailureKind.unreachable,
+        );
+      }
+    } else {
+      deps = null;
+    }
 
+    try {
+      await _startCastOn(backend, device, request, deps, generation);
+    } catch (_) {
+      // A start that failed while still the newest has no cast to keep the
+      // deps for.
+      if (deps != null &&
+          identical(deps, _activeDeps) &&
+          generation == _connectGeneration) {
+        _activeDeps = null;
+      }
+      rethrow;
+    } finally {
+      // Deps that are not the active cast's (a failed or superseded start)
+      // hold nothing once this returns.
+      if (deps != null && !identical(deps, _activeDeps)) {
+        await _releaseDeps(deps);
+      }
+    }
+  }
+
+  /// Makes [deps] the active cast's, letting go of the previous cast's.
+  void _adoptDeps(MydiaCastDeps? deps) {
+    final previous = _activeDeps;
+    _activeDeps = deps;
+    if (previous != null && !identical(previous, deps)) {
+      unawaited(_releaseDeps(previous));
+    }
+  }
+
+  Future<void> _releaseDeps(MydiaCastDeps deps) async {
+    try {
+      await deps.release?.call();
+    } catch (e) {
+      debugPrint('[CastSessionManager] Ignoring deps release error: $e');
+    }
+  }
+
+  Future<void> _startCastOn(
+    CastBackend backend,
+    CastDevice device,
+    CastLaunchRequest request,
+    MydiaCastDeps? deps,
+    int generation,
+  ) async {
     // Captured before any attempt so rollback can tell whether *this* call
     // turned LAN access on, versus it already being on from a session that
     // was mid-switch when this one started.
@@ -589,8 +669,8 @@ class CastSessionManager {
       );
     } else {
       try {
-        route = await _resolveRoute(
-            resolver, request, device, startedServerSessions);
+        route =
+            await _resolveRoute(deps, request, device, startedServerSessions);
       } catch (e) {
         await _abandonStart(lanEnabledBeforeCall, startedServerSessions);
         rethrow;
@@ -652,13 +732,14 @@ class CastSessionManager {
     }
 
     _backend = backend;
+    _adoptDeps(deps);
     _listenToBackend(request);
 
     final CastRoute loaded;
     if (isMydia) {
       try {
         await _loadOnRoute(
-          resolver,
+          deps,
           route,
           device,
           request,
@@ -685,7 +766,7 @@ class CastSessionManager {
     } else {
       try {
         loaded = await _loadWithRetries(
-          resolver,
+          deps,
           backend,
           route,
           device,
@@ -1057,6 +1138,10 @@ class CastSessionManager {
     _cancelSubscriptions();
     _listenForSync();
 
+    // An adopted receiver session has no deps of its own, so the previous
+    // cast's (and the proxy hold they carry) are let go here.
+    _adoptDeps(null);
+
     _persisted = null;
     _lastRequest = null;
     _lastDuration = Duration.zero;
@@ -1192,7 +1277,7 @@ class CastSessionManager {
   /// impossible anyway (no LAN interface, no running proxy), access is turned
   /// straight back off rather than left on for nothing.
   Future<CastRoute?> _resolveRoute(
-    CastRouteResolver resolver,
+    MydiaCastDeps? deps,
     CastLaunchRequest request,
     CastDevice device,
     List<_ServerSession> startedServerSessions, {
@@ -1214,6 +1299,10 @@ class CastSessionManager {
       }
       return route;
     }
+
+    // Every Mydia request resolved its deps before reaching here.
+    if (deps == null) return null;
+    final resolver = deps.resolver();
 
     final wantsBridge = resolver.usesBridge(forceBridge: forceBridge);
     final enabledHere = wantsBridge && !_lanEnabled;
@@ -1237,7 +1326,7 @@ class CastSessionManager {
     final sessionId = route.hlsSessionId;
     if (sessionId != null) {
       startedServerSessions.add(
-        _ServerSession(sessionId, () => _streamingSessions.end(sessionId)),
+        _ServerSession(sessionId, () => deps.streamingSessions.end(sessionId)),
       );
     }
 
@@ -1269,7 +1358,7 @@ class CastSessionManager {
   /// shared `_backend` field — a concurrent connect to a different device
   /// could repoint that field before any of the awaits below settle.
   Future<CastRoute> _loadWithRetries(
-    CastRouteResolver resolver,
+    MydiaCastDeps? deps,
     CastBackend backend,
     CastRoute route,
     CastDevice device,
@@ -1279,7 +1368,7 @@ class CastSessionManager {
   }) async {
     try {
       await _loadOnRoute(
-        resolver,
+        deps,
         route,
         device,
         request,
@@ -1291,7 +1380,7 @@ class CastSessionManager {
       final secondRoute = await _retryRouteFor(
         firstFailure,
         route,
-        resolver,
+        deps,
         device,
         request,
         startedServerSessions,
@@ -1300,7 +1389,7 @@ class CastSessionManager {
 
       try {
         await _loadOnRoute(
-          resolver,
+          deps,
           secondRoute,
           device,
           request,
@@ -1317,7 +1406,7 @@ class CastSessionManager {
         if (!isBridgeEscalationFromDirectMediaLoadFailed) rethrow;
 
         final transcodeRoute = await _resolveRoute(
-          resolver,
+          deps,
           request,
           device,
           startedServerSessions,
@@ -1329,7 +1418,7 @@ class CastSessionManager {
           '[CastSessionManager] Bridge retry also failed, retrying with TRANSCODE',
         );
         await _loadOnRoute(
-          resolver,
+          deps,
           transcodeRoute,
           device,
           request,
@@ -1386,7 +1475,7 @@ class CastSessionManager {
   Future<CastRoute?> _retryRouteFor(
     CastBackendException e,
     CastRoute attempted,
-    CastRouteResolver resolver,
+    MydiaCastDeps? deps,
     CastDevice device,
     CastLaunchRequest request,
     List<_ServerSession> startedServerSessions,
@@ -1401,7 +1490,7 @@ class CastSessionManager {
       }
       debugPrint(
           '[CastSessionManager] Source media rejected, retrying with a transcode');
-      return _resolveRoute(resolver, request, device, startedServerSessions,
+      return _resolveRoute(deps, request, device, startedServerSessions,
           forceTranscode: true);
     }
 
@@ -1413,7 +1502,7 @@ class CastSessionManager {
         debugPrint(
             '[CastSessionManager] Direct route failed, retrying via bridge');
         return _resolveRoute(
-          resolver,
+          deps,
           request,
           device,
           startedServerSessions,
@@ -1437,7 +1526,7 @@ class CastSessionManager {
         // original route — this function only decides the *second*
         // attempt, not the third.
         final bridgeRetry = await _resolveRoute(
-          resolver,
+          deps,
           request,
           device,
           startedServerSessions,
@@ -1457,7 +1546,7 @@ class CastSessionManager {
         debugPrint(
             '[CastSessionManager] Media rejected, retrying with TRANSCODE');
         return _resolveRoute(
-          resolver,
+          deps,
           request,
           device,
           startedServerSessions,
@@ -1488,7 +1577,7 @@ class CastSessionManager {
   /// settle, and a load must land on the connection it actually resolved a
   /// route for, not whatever the field currently names.
   Future<void> _loadOnRoute(
-    CastRouteResolver resolver,
+    MydiaCastDeps? deps,
     CastRoute route,
     CastDevice device,
     CastLaunchRequest request,
@@ -1528,6 +1617,7 @@ class CastSessionManager {
             episodeId: mydia.isEpisode ? mydia.mediaId : null,
             audioTrack: null,
             subtitleTrack: request.selectedSubtitleTrackId,
+            serverInstanceId: mydiaInstanceIdOfSource(mydia.sourceId),
           )
         : null;
 
@@ -1635,7 +1725,7 @@ class CastSessionManager {
   /// a wrong position into the user's watch history.
   void _useTimeline(StreamTimeline timeline) {
     _timeline = timeline;
-    _progressService.timeline = timeline;
+    _activeDeps?.progress.timeline = timeline;
   }
 
   Future<void> _enableLan() async {
@@ -1674,10 +1764,10 @@ class CastSessionManager {
       _sourceProgress ??= _sourceBinding?.openProgress();
     }
 
-    // `_progressService` is a single long-lived instance (this manager is a
-    // keep-alive provider, reused across every cast target for the life of
-    // the app), so its `timeline` must be re-pointed at whatever item is
-    // cast now — the same duration authority `request.duration` already
+    // The active cast's `ProgressService` is resolved once per cast (see
+    // `_activeDeps`), but one instance serves every item cast through it (a
+    // seek restart re-casts the same one), so its `timeline` must be
+    // re-pointed at whatever item is cast now — the same duration authority `request.duration` already
     // gives the receiver's own scrub bar (see `CastLaunchRequest.duration`'s
     // dartdoc).
     //
@@ -1702,7 +1792,7 @@ class CastSessionManager {
 
     _positionSub = _backend.positionStream.listen((position) {
       // Raw to `_syncProgress`: `ProgressService.resolveSync` applies
-      // `timeline.toReal` itself, and `_progressService.timeline` is the same
+      // `timeline.toReal` itself, and the progress service's `timeline` is the same
       // offset timeline `_useTimeline` set. Translating here as well would
       // add the offset twice.
       _updateMediaInfo(position: _timeline.toReal(position));
@@ -1751,6 +1841,11 @@ class CastSessionManager {
     // dividing by it.
     if (_lastDuration <= Duration.zero) return;
 
+    // Read before any await: a tick that starts for one cast must report
+    // through that cast's progress service even if another cast adopts its
+    // deps while the save below is in flight.
+    final progress = _activeDeps?.progress;
+
     final now = _clock();
     final last = _lastProgressSync;
     if (last != null && now.difference(last) < _progressInterval) return;
@@ -1758,7 +1853,7 @@ class CastSessionManager {
 
     final persisted = _persisted;
     if (persisted != null) {
-      // Translated, unlike the value handed to `_progressService` below:
+      // Translated, unlike the value handed to the progress service below:
       // `reconnectStoredSession` feeds this straight back as `startPosition`,
       // so a receiver-relative value would compound the offset on every
       // reconnect.
@@ -1779,14 +1874,15 @@ class CastSessionManager {
     }
 
     if (request.content case final MydiaCastContent mydia) {
+      if (progress == null) return;
       if (mydia.isEpisode) {
-        await _progressService.syncEpisodePosition(
+        await progress.syncEpisodePosition(
           mydia.mediaId,
           position,
           _lastDuration,
         );
       } else {
-        await _progressService.syncMoviePosition(
+        await progress.syncMoviePosition(
           mydia.mediaId,
           position,
           _lastDuration,
@@ -2025,6 +2121,7 @@ class CastSessionManager {
     await _disableLanQuietly();
     if (generation != _connectGeneration) return;
 
+    _adoptDeps(null);
     _persisted = null;
     _lastRequest = null;
     _lastDuration = Duration.zero;
@@ -2074,7 +2171,21 @@ class CastSessionManager {
       return false;
     }
 
+    // The instance the record names may have been removed since: nothing to
+    // sync progress to, so nothing to restore.
+    final MydiaCastDeps? deps;
+    if (stored.content case final MydiaCastContent mydia) {
+      deps = await _mydiaDeps(mydia.sourceId);
+      if (deps == null) {
+        await _store.clear();
+        return false;
+      }
+    } else {
+      deps = null;
+    }
+
     if (!await _receiverStillPlaying(stored, backend)) {
+      if (deps != null) await _releaseDeps(deps);
       await _store.clear();
       return false;
     }
@@ -2083,12 +2194,14 @@ class CastSessionManager {
       await backend.connect(stored.device);
     } catch (e) {
       debugPrint('[CastSessionManager] Reconnect failed: $e');
+      if (deps != null) await _releaseDeps(deps);
       await _store.clear();
       return false;
     }
 
     _backend = backend;
     _persisted = stored;
+    _adoptDeps(deps);
 
     // The progress pump reads a CastLaunchRequest, not a PersistedCastSession
     // — reconstruct an equivalent one from the fields the persisted record
@@ -2116,7 +2229,8 @@ class CastSessionManager {
       // path token are new, and any HLS session id in the old URL is stale.
       // Re-resolve and reload at the stored position — a visible blip, which
       // the design accepts as the cost of the bridge path.
-      if (!await _reloadBridgeSession(stored, request, backend)) {
+      if (!await _reloadBridgeSession(stored, request, backend, deps)) {
+        if (identical(deps, _activeDeps)) _adoptDeps(null);
         await _store.clear();
         return false;
       }
@@ -2179,14 +2293,14 @@ class CastSessionManager {
     PersistedCastSession stored,
     CastLaunchRequest request,
     CastBackend backend,
+    MydiaCastDeps? deps,
   ) async {
     final generation = _connectGeneration;
-    final resolver = _resolverFactory();
     final startedServerSessions = <_ServerSession>[];
 
     try {
       final route = await _resolveRoute(
-        resolver,
+        deps,
         request,
         stored.device,
         startedServerSessions,
@@ -2198,7 +2312,7 @@ class CastSessionManager {
       }
 
       await _loadOnRoute(
-        resolver,
+        deps,
         route,
         stored.device,
         request,
@@ -2275,6 +2389,7 @@ class CastSessionManager {
     final serverSession = _activeServerSession;
     _activeServerSession = null;
     _current = null;
+    _adoptDeps(null);
 
     unawaited(_releaseResources(hadSession, serverSession));
 

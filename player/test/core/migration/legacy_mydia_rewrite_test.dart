@@ -209,6 +209,7 @@ void main() {
         other);
 
     final legacy = PersistedCastSession(
+      sourceId: other,
       device: _device,
       mediaId: 'm1',
       mediaType: 'movie',

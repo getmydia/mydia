@@ -1,0 +1,31 @@
+#import '../fragments/artwork_fragment.graphql'
+#import '../fragments/progress_fragment.graphql'
+
+# Documents only the Mydia source sends.
+
+query MydiaInstanceIdentity {
+  serverCompatibility {
+    instanceId
+  }
+}
+
+query MydiaContinueWatching($first: Int) {
+  continueWatching(first: $first) {
+    id
+    type
+    title
+    showId
+    showTitle
+    seasonNumber
+    episodeNumber
+    artwork {
+      ...ArtworkFragment
+    }
+    progress {
+      ...ProgressFragment
+    }
+    files {
+      id
+    }
+  }
+}

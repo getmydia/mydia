@@ -5,6 +5,7 @@ import 'package:player/core/media_session/now_playing_metadata_resolver.dart';
 import 'package:player/core/media_session/system_media_session.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
+import 'package:player/core/sources/source.dart';
 import 'package:player/native/lib.dart';
 
 import 'fakes.dart';
@@ -22,8 +23,11 @@ void main() {
   late int raises;
   String? artworkResult;
 
+  const playing = SourceId('acct:owner:inst');
+  SourceId? playingSource = playing;
+
   NowPlayingMetadataResolver resolver({String? posterUrl}) =>
-      NowPlayingMetadataResolver((document, variables) async => {
+      NowPlayingMetadataResolver((id, document, variables) async => {
             'movie': {
               'year': 2031,
               'artwork': {'posterUrl': posterUrl},
@@ -44,10 +48,12 @@ void main() {
           return artworkResult;
         },
         raiseWindow: () async => raises++,
+        playingSource: () => playingSource,
         redact: redact ?? () => false,
       );
 
   setUp(() {
+    playingSource = playing;
     controller = RemoteTargetController();
     session = FakeMediaSession();
     artworkRequests = [];
@@ -80,11 +86,28 @@ void main() {
     await bridge.dispose();
   });
 
+  test('with no playing source nothing is looked up and the snapshot stays',
+      () async {
+    playingSource = null;
+    final bridge =
+        build(metadata: resolver(posterUrl: 'https://img.example/orchard.jpg'));
+    await bridge.start();
+    controller.attachPlayer(FakeBinding(buildSnapshot()));
+    await settle();
+
+    final state = session.updates.last;
+    expect(state.title, 'The Glass Orchard');
+    expect(state.subtitle, isNull);
+    expect(state.artworkPath, isNull);
+    expect(artworkRequests, isEmpty);
+    await bridge.dispose();
+  });
+
   test('redacts title, subtitle and artwork while a locked source plays',
       () async {
     var resolved = 0;
     final bridge = build(
-      metadata: NowPlayingMetadataResolver((document, variables) async {
+      metadata: NowPlayingMetadataResolver((id, document, variables) async {
         resolved++;
         return {
           'movie': {
@@ -213,7 +236,7 @@ void main() {
   test('a no-op session skips metadata and artwork lookups entirely', () async {
     final fetchCalls = <Object>[];
     final noopResolver =
-        NowPlayingMetadataResolver((document, variables) async {
+        NowPlayingMetadataResolver((id, document, variables) async {
       fetchCalls.add(document);
       return null;
     });

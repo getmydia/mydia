@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/sources/current_source_status.dart';
 import 'package:player/core/sources/media_source.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/banner_button.dart';
@@ -56,7 +55,6 @@ void main() {
       selectedSourceIdProvider.overrideWith(_Selected.new),
       activeSourceIdProvider
           .overrideWith((ref) => ref.watch(selectedSourceIdProvider)),
-      boundSourceIdProvider.overrideWithValue(null),
       mediaSourceProvider(_idA).overrideWith((ref) {
         builtA++;
         return a;

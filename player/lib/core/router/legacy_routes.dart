@@ -1,9 +1,9 @@
 /// Where the unprefixed pre-instance locations live now.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../sources/mydia/bound_mydia.dart';
 import '../sources/source.dart';
 import '../sources/sources_providers.dart';
 import '../sources/store/source_records.dart';
@@ -80,17 +80,40 @@ String? legacyLocation(
   return null;
 }
 
-/// The migrated instance's source, while its account exists.
+/// The account id the startup migration made of the legacy sign-in, if any.
+final legacyInstanceIdProvider = FutureProvider<String?>((ref) async {
+  final store = await ref.watch(sourceStoreProvider.future);
+  return store.legacyInstanceId();
+});
+
+/// Resolves once [legacyInstanceIdProvider] has, so a reader of
+/// [legacyMydiaSourceIdProvider] sees the migrated id rather than the
+/// single-instance fallback. A failed read is swallowed: it only costs that
+/// id, and the caller proceeds either way.
+Future<void> legacyInstanceIdResolved(WidgetRef ref) async {
+  try {
+    await ref.read(legacyInstanceIdProvider.future);
+  } catch (e) {
+    debugPrint('[LegacyRoutes] Legacy instance id unavailable: $e');
+  }
+}
+
+/// The source an unprefixed pre-instance link or entry belongs to: the
+/// migrated legacy instance while its Mydia account exists, else the only
+/// Mydia instance when there is exactly one (a web install, or any install
+/// that never migrated a legacy sign-in, records no legacy id), else null.
 final legacyMydiaSourceIdProvider = Provider<SourceId?>((ref) {
   final snapshot = ref.watch(sourceRecordsProvider).value;
+  if (snapshot == null) return null;
   final legacy = ref.watch(legacyInstanceIdProvider).value;
-  if (snapshot == null || legacy == null) return null;
-  for (final r in snapshot.accounts) {
-    if (r.account.kind == SourceKind.mydia && r.account.id == legacy) {
-      return mydiaSourceIdOf(r);
-    }
+  final mydia = [
+    for (final r in snapshot.accounts)
+      if (r.account.kind == SourceKind.mydia) r,
+  ];
+  for (final r in mydia) {
+    if (r.account.id == legacy) return mydiaSourceIdOf(r);
   }
-  return null;
+  return mydia.length == 1 ? mydiaSourceIdOf(mydia.single) : null;
 });
 
 /// The ids as one string, so a record write that changes no id compares equal

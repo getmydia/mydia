@@ -5,7 +5,7 @@
 /// apart. Each entry holds {name, resolution, sourceId, collectionId}.
 ///
 /// Entries saved before sources were addressable are keyed by the bare
-/// collection id and belong to the bound Mydia instance (or to the
+/// collection id and belong to the migrated legacy instance (or to the
 /// `sourceId` they recorded). They are still read, and a save or removal
 /// moves them to the new key.
 library;
@@ -13,7 +13,7 @@ library;
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../sources/mydia/bound_mydia.dart';
+import '../router/legacy_routes.dart';
 
 part 'collection_sync_providers.g.dart';
 
@@ -36,7 +36,7 @@ Future<Box<Map<dynamic, dynamic>>> collectionSyncBox(Ref ref) async {
   Box<Map<dynamic, dynamic>> box,
   String sourceId,
   String collectionId,
-  String? boundSourceId,
+  String? legacySourceId,
 ) {
   final key = collectionSyncKey(sourceId, collectionId);
   final current = box.get(key);
@@ -46,7 +46,7 @@ Future<Box<Map<dynamic, dynamic>>> collectionSyncBox(Ref ref) async {
   final legacy = box.get(collectionId);
   if (legacy == null) return null;
   final config = Map<String, String>.from(legacy);
-  final owner = config['sourceId'] ?? boundSourceId;
+  final owner = config['sourceId'] ?? legacySourceId;
   return owner == sourceId ? (key: collectionId, config: config) : null;
 }
 
@@ -58,8 +58,8 @@ Future<bool> isCollectionSynced(
   String collectionId,
 ) async {
   final box = await ref.watch(collectionSyncBoxProvider.future);
-  final bound = ref.watch(boundSourceIdProvider)?.value;
-  return _find(box, sourceId, collectionId, bound) != null;
+  final legacy = ref.watch(legacyMydiaSourceIdProvider)?.value;
+  return _find(box, sourceId, collectionId, legacy) != null;
 }
 
 /// Get the sync config for a collection, or null if not synced.
@@ -71,8 +71,8 @@ Future<Map<String, String>?> collectionSyncConfig(
   String collectionId,
 ) async {
   final box = await ref.watch(collectionSyncBoxProvider.future);
-  final bound = ref.watch(boundSourceIdProvider)?.value;
-  return _find(box, sourceId, collectionId, bound)?.config;
+  final legacy = ref.watch(legacyMydiaSourceIdProvider)?.value;
+  return _find(box, sourceId, collectionId, legacy)?.config;
 }
 
 /// Get all synced collection configs.
@@ -82,15 +82,15 @@ Future<Map<String, String>?> collectionSyncConfig(
 @riverpod
 Future<Map<String, Map<String, String>>> allSyncedCollections(Ref ref) async {
   final box = await ref.watch(collectionSyncBoxProvider.future);
-  final bound = ref.watch(boundSourceIdProvider)?.value;
+  final legacy = ref.watch(legacyMydiaSourceIdProvider)?.value;
   final result = <String, Map<String, String>>{};
   for (final key in box.keys) {
     final raw = box.get(key);
     if (raw == null) continue;
     final config = Map<String, String>.from(raw);
     config['collectionId'] ??= key as String;
-    if (config['sourceId'] == null && bound != null) {
-      config['sourceId'] = bound;
+    if (config['sourceId'] == null && legacy != null) {
+      config['sourceId'] = legacy;
     }
     result[key as String] = config;
   }
@@ -99,11 +99,12 @@ Future<Map<String, Map<String, String>>> allSyncedCollections(Ref ref) async {
 
 /// Deletes every entry that belongs to one of [sourceIds]: the current
 /// `<sourceId>:<collectionId>` keys, and legacy bare-id entries whose recorded
-/// `sourceId` matches. A legacy entry that recorded none is read as the bound
-/// instance's and is left alone unless [dropUnowned] is set: resolving the
-/// bound instance here would make the account store depend on itself, so the
-/// caller, which knows whether the removed account was the bound one, says so.
-/// Runs when an account is removed, so its entries cannot outlive it.
+/// `sourceId` matches. A legacy entry that recorded none is read as the legacy
+/// instance's (`legacyMydiaSourceIdProvider`) and is left alone unless
+/// [dropUnowned] is set: resolving that instance here would make the account
+/// store depend on itself, so the caller, which knows whether the removed
+/// account was the legacy one, says so. Runs when an account is removed, so
+/// its entries cannot outlive it.
 Future<void> deleteCollectionSyncFor(
   Ref ref,
   Set<String> sourceIds, {
@@ -117,8 +118,8 @@ Future<void> deleteCollectionSyncFor(
     if (raw == null) continue;
     final owner = raw['sourceId'] as String?;
     final keyed = sourceIds.any((id) => '$key'.startsWith('$id:'));
-    final legacyBound = dropUnowned && owner == null && !'$key'.contains(':');
-    if (keyed || legacyBound || (owner != null && sourceIds.contains(owner))) {
+    final legacyOwned = dropUnowned && owner == null && !'$key'.contains(':');
+    if (keyed || legacyOwned || (owner != null && sourceIds.contains(owner))) {
       doomed.add(key);
     }
   }
@@ -152,8 +153,8 @@ Future<void> Function({
     required String resolution,
   }) async {
     final box = await ref.read(collectionSyncBoxProvider.future);
-    final bound = ref.read(boundSourceIdProvider)?.value;
-    final found = _find(box, sourceId, collectionId, bound);
+    final legacy = ref.read(legacyMydiaSourceIdProvider)?.value;
+    final found = _find(box, sourceId, collectionId, legacy);
     await box.put(collectionSyncKey(sourceId, collectionId), {
       'name': name,
       'resolution': resolution,
@@ -176,8 +177,8 @@ Future<void> Function(String sourceId, String collectionId)
     removeCollectionSync(Ref ref) {
   return (String sourceId, String collectionId) async {
     final box = await ref.read(collectionSyncBoxProvider.future);
-    final bound = ref.read(boundSourceIdProvider)?.value;
-    final found = _find(box, sourceId, collectionId, bound);
+    final legacy = ref.read(legacyMydiaSourceIdProvider)?.value;
+    final found = _find(box, sourceId, collectionId, legacy);
     if (found != null) await box.delete(found.key);
     _invalidate(ref, sourceId, collectionId);
   };

@@ -202,7 +202,7 @@ void main() {
   test('continue watching maps movies and episodes; remove sends the id',
       () async {
     final b = build();
-    b.t.handlers['GuestContinueWatching'] = (_) => {
+    b.t.handlers['MydiaContinueWatching'] = (_) => {
           'continueWatching': [
             {
               'id': 'm-1',
@@ -236,7 +236,7 @@ void main() {
   test('removing an episode from continue watching sends its show id',
       () async {
     final b = build();
-    b.t.handlers['GuestContinueWatching'] = (_) => {
+    b.t.handlers['MydiaContinueWatching'] = (_) => {
           'continueWatching': [
             {
               'id': 'e-1',

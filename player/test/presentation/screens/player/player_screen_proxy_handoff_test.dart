@@ -22,38 +22,32 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:player/core/p2p/media_proxy_factory.dart';
+import 'package:player/core/sources/mydia/mydia_credentials.dart';
+import 'package:player/domain/sources/item.dart';
+import 'package:player/presentation/screens/player/player_screen.dart';
+import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/mydia_test_source.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
-
-/// Whether [request] carries the named operation.
-///
-/// `request.operation.operationName` is null for everything this screen
-/// issues, because `QueryOptions` never sets it. The printed query text names
-/// the operation on its first line, which is what is left to match on.
-bool _isOperation(Request request, String name) =>
-    request.operation.toString().contains(name);
 
 /// Answers per operation rather than per call index, so the script does not
 /// depend on the order the screen happens to issue its queries in.
-StubLink _link() {
-  return StubLink((request, _) {
-    if (_isOperation(request, 'query MovieSegments')) {
-      return movieSegmentsResponse();
-    }
-    if (_isOperation(request, 'query MovieDetail')) {
-      return movieDetailResponse();
-    }
-    if (_isOperation(request, 'query SubtitleTrackSettings')) {
-      return subtitleTrackSettingsResponse();
-    }
-    if (_isOperation(request, 'query MovieSubtitlePreference')) {
-      return subtitlePreferenceResponse();
-    }
-    if (_isOperation(request, 'endStreamingSession')) {
-      return endStreamingSessionResponse();
+ScriptedMydiaTransport _server() {
+  return ScriptedMydiaTransport((request, _) {
+    switch (request.operation) {
+      case 'MovieSegments':
+        return movieSegmentsResponse();
+      case 'MovieDetail':
+        return movieDetailResponse();
+      case 'SubtitleTrackSettings':
+        return subtitleTrackSettingsResponse();
+      case 'MovieSubtitlePreference':
+        return subtitlePreferenceResponse();
+      case 'EndStreamingSession':
+        return endStreamingSessionResponse();
     }
     return streamingCandidatesResponse(duration: 5400, directPlay: true);
   });
@@ -66,8 +60,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );
@@ -83,7 +77,8 @@ void main() {
     // built its stream URL against it by the time the outgoing screen is
     // disposed.
     final incoming = Object();
-    await proxyService.start(owner: incoming, targetPeer: 'node-addr');
+    await proxyService.start(
+        owner: incoming, targetPeer: 'node-addr', target: 'macct');
     addTearDown(proxyService.shutdown);
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -98,19 +93,18 @@ void main() {
             'it');
   });
 
-  // `_isP2PMode` tracks the *current* connection mode, not the one this
-  // screen took the proxy under, and a reconnect can move a viewer between
-  // the two mid-episode. Gating the release on it means a screen that started
-  // the proxy over p2p and ended up on a direct connection never lets go —
-  // and because the hold is keyed on a State that is now gone, nothing can
-  // ever release it and the proxy is stuck up for the rest of the session.
+  // The release must not depend on how the screen that replaces this one
+  // reaches its server. A screen that started the proxy over p2p and is
+  // replaced by one playing another instance directly must still let go, and
+  // because the hold is keyed on a State that is now gone, nothing else can
+  // ever release it: the proxy would be stuck up for the rest of the session.
   testWidgets('dispose() releases its hold even if the mode changed since',
       (tester) async {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );
@@ -121,10 +115,38 @@ void main() {
     expect(proxyService.isRunning, isTrue,
         reason: 'sanity check: the screen took the proxy while on p2p');
 
-    // The viewer reconnects onto a direct connection mid-playback.
-    (container.read(conn.connectionProvider.notifier)
-            as FixedConnectionNotifier)
-        .switchTo(conn.ConnectionState.direct());
+    // The viewer moves on to a different instance reached directly: its
+    // screen takes no proxy hold at all.
+    final direct = testMydiaSourceOver(
+      _server(),
+      creds: const MydiaCredentials(
+        instanceId: 'inst-2',
+        accessToken: 'access',
+        serverUrl: 'http://other.test',
+      ),
+      accountId: 'other',
+    );
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: PlayerScreen(
+          key: const ValueKey('direct-instance'),
+          mediaId: 'movie-1',
+          mediaType: 'movie',
+          fileId: 'file-1',
+          session: MydiaPlaybackSession(
+            source: direct,
+            item: ItemRef(
+              sourceId: direct.source.id,
+              kind: ItemKind.movie,
+              externalId: 'movie-1',
+            ),
+            fileId: 'file-1',
+            proxy: () => container.read(mediaProxyProvider),
+          ),
+        ),
+      ),
+    ));
     await tester.pump();
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -141,8 +163,8 @@ void main() {
     final proxyService = TrackingLocalProxyService();
 
     final container = buildPlayerScreenContainer(
-      link: _link(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: CapturingCastSessionManager(),
       proxyService: proxyService,
     );

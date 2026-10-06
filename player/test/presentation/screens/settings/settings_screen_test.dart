@@ -2,7 +2,7 @@
 // clashes with the app's. Tasks 2 and 7 hit this too.
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +10,6 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:player/core/build_channel.dart';
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/downloads/download_providers.dart';
 import 'package:player/core/downloads/download_service.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
@@ -37,7 +36,8 @@ import 'package:player/presentation/screens/settings/widgets/settings_identity.d
 import 'package:player/presentation/screens/settings/widgets/settings_row.dart';
 
 import '../../../test_utils/dock_harness.dart';
-import '../../../core/sources/mydia/bound_mydia_harness.dart' show mydiaRecord;
+import '../../../core/sources/mydia/mydia_account_harness.dart'
+    show mydiaRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';
@@ -57,15 +57,6 @@ import '../../../test_utils/toast_harness.dart';
 /// wall and solved it the same way.
 late Box<dynamic> _remoteControlBox;
 var _remoteControlBoxCounter = 0;
-
-class _FakeConnectionNotifier extends ConnectionNotifier {
-  _FakeConnectionNotifier(this._state);
-
-  final ConnectionState _state;
-
-  @override
-  ConnectionState build() => _state;
-}
 
 class _FakeP2pStatusNotifier extends P2pStatusNotifier {
   _FakeP2pStatusNotifier(this._status);
@@ -196,11 +187,6 @@ Future<void> _pump(
       overrides: [
         settingsControllerProvider.overrideWith(
           () => _FakeSettingsController(value: settings, fail: fail),
-        ),
-        connectionProvider.overrideWith(
-          () => _FakeConnectionNotifier(
-            const ConnectionState(type: ConnectionType.direct),
-          ),
         ),
         p2pStatusNotifierProvider.overrideWith(
           () => _FakeP2pStatusNotifier(_status),

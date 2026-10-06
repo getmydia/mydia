@@ -11,7 +11,7 @@ import '../../../core/sources/sources_providers.dart';
 class AddSourceScreen extends ConsumerWidget {
   const AddSourceScreen({super.key, this.isWeb = kIsWeb});
 
-  /// Third-party sources do not exist on web, so a guest Mydia added there
+  /// Third-party sources do not exist on web, so a second Mydia added there
   /// would vanish. Overridable for tests.
   final bool isWeb;
 

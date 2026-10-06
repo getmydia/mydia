@@ -18,7 +18,7 @@ import 'package:player/core/sources/store/source_store.dart';
 
 import '../../test_utils/mock_auth_storage.dart';
 import '../../test_utils/no_downloads.dart';
-import 'mydia/bound_mydia_harness.dart' show mydiaRecord;
+import 'mydia/mydia_account_harness.dart' show mydiaRecord;
 import 'store/source_json_test.dart' show plexRecord;
 
 /// Holds All servers choices but refuses to save new ones.
@@ -136,23 +136,33 @@ void main() {
       return (c, box);
     }
 
-    test('go with the bound instance', () async {
-      final (c, box) = await setUpMydia('sync-bound-removal-test');
+    test('go with the only Mydia instance', () async {
+      final (c, box) = await setUpMydia('sync-only-removal-test');
+      await c.read(sourceRecordsProvider.notifier).removeAccount('mb');
       await c.read(sourceRecordsProvider.notifier).removeAccount('ma');
       expect(box.keys, isEmpty);
     });
 
     test('stay when another instance is removed', () async {
-      final (c, box) = await setUpMydia('sync-unbound-removal-test');
+      final (c, box) = await setUpMydia('sync-other-removal-test');
+      await store.setLegacyInstanceId('ma');
       await c.read(sourceRecordsProvider.notifier).removeAccount('mb');
       expect(box.keys.toSet(), {'1', '2'});
     });
 
-    test('follow the migrated legacy instance, not the earliest', () async {
+    test('belong to nobody when several instances and no legacy one', () async {
+      final (c, box) = await setUpMydia('sync-ambiguous-removal-test');
+      await c.read(sourceRecordsProvider.notifier).removeAccount('ma');
+      expect(box.keys.toSet(), {'1'});
+    });
+
+    test('follow the migrated legacy instance', () async {
       final (c, box) = await setUpMydia('sync-legacy-removal-test');
       await store.setLegacyInstanceId('mb');
       await c.read(sourceRecordsProvider.notifier).removeAccount('ma');
       expect(box.keys.toSet(), {'1'});
+      await c.read(sourceRecordsProvider.notifier).removeAccount('mb');
+      expect(box.keys, isEmpty);
     });
   });
 

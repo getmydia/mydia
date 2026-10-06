@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../cache/poster_cache_manager.dart';
 import '../remote/remote_target_controller.dart';
+import '../sources/source.dart';
 import '../sources/lock/source_lock_controller.dart';
 import '../window/desktop_window.dart';
 import 'media_session_state.dart';
 import 'now_playing_metadata_resolver.dart';
 import 'platform_media_session.dart';
+import 'playing_source.dart';
 import 'system_media_session.dart';
 
 bool _never() => false;
@@ -27,8 +29,10 @@ class MediaSessionBridge {
     required NowPlayingMetadataResolver resolver,
     required ArtworkLoader loadArtwork,
     required Future<void> Function() raiseWindow,
+    required SourceId? Function() playingSource,
     bool Function() redact = _never,
   })  : _redact = redact,
+        _playingSource = playingSource,
         _controller = controller,
         _createSession = createSession,
         _resolver = resolver,
@@ -41,6 +45,7 @@ class MediaSessionBridge {
   final ArtworkLoader _loadArtwork;
   final Future<void> Function() _raiseWindow;
   final bool Function() _redact;
+  final SourceId? Function() _playingSource;
 
   SystemMediaSession _session = NoopMediaSession();
   final _subscriptions = <StreamSubscription<Object?>>[];
@@ -77,9 +82,16 @@ class MediaSessionBridge {
     NowPlayingMetadata? metadata;
     String? artworkPath;
     final redacted = _redact();
+    // With no playing source (a remote-driven player the screen has not
+    // claimed) the snapshot's own title stays and nothing is looked up.
+    final sourceId = _playingSource();
     if (first != null && !redacted) {
-      metadata = await _resolver.resolve(
-          mediaItemId: first.mediaItemId, episodeId: first.episodeId);
+      if (sourceId != null) {
+        metadata = await _resolver.resolve(
+            sourceId: sourceId,
+            mediaItemId: first.mediaItemId,
+            episodeId: first.episodeId);
+      }
       final url = metadata?.posterUrl;
       if (url != null) {
         final load = _artwork.putIfAbsent(url, () => _safeLoad(url));
@@ -165,6 +177,7 @@ final mediaSessionBridgeProvider = Provider<MediaSessionBridge>((ref) {
     loadArtwork: (url) async =>
         (await PosterCacheManager().getSingleFile(url)).path,
     raiseWindow: raiseDesktopWindow,
+    playingSource: () => ref.read(playingSourceProvider).current,
     redact: () => ref.read(sourceLockProvider.notifier).holding,
   );
   ref.onDispose(() => unawaited(bridge.dispose()));

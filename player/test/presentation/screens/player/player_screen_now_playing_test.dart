@@ -8,12 +8,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/core/app_menu/now_playing.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/core/media_session/playing_source.dart';
 import 'package:player/core/remote/remote_control_intent.dart';
 import 'package:player/core/remote/remote_target_controller.dart';
 
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 /// A media_kit player with no decoder that publishes tracks on open and
@@ -61,19 +61,19 @@ class _FakePlatformPlayer extends PlatformPlayer {
 
 /// The minimal direct-play movie script, as in
 /// `player_screen_dispose_during_tracks_wait_test.dart`.
-StubLink _link() {
-  return StubLink((request, index) {
-    if (isOperation(request, 'MovieDetail')) {
+ScriptedMydiaTransport _server() {
+  return ScriptedMydiaTransport((request, index) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(positionSeconds: 0);
     }
-    if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-    if (isOperation(request, 'SubtitleTrackSettings')) {
+    if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (isOperation(request, 'MovieSubtitlePreference')) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse();
     }
-    if (isOperation(request, 'StreamingCandidates')) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(directPlay: true, duration: 5400);
     }
     return <String, dynamic>{
@@ -88,8 +88,8 @@ void main() {
       (tester) async {
     final fake = _FakePlatformPlayer();
     final container = buildPlayerScreenContainer(
-      link: _link(),
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'test-node'),
+      server: _server(),
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'test-node'),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
     );
@@ -114,6 +114,9 @@ void main() {
           'has no next episode',
     );
 
+    expect(container.read(playingSourceProvider).current, isNotNull,
+        reason: 'the screen names the instance that owns what it plays');
+
     container.read(remoteTargetControllerProvider).submit(
           const TransportIntent(TransportAction.pause),
         );
@@ -122,6 +125,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
+    expect(container.read(playingSourceProvider).current, isNull);
     expect(publisher.current, isNull,
         reason: 'a disposed player must leave the Dock with no controls');
   });

@@ -3,17 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'test_utils/bound_mydia_override.dart';
 import 'test_utils/mydia_test_source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/app.dart';
-import 'package:player/core/sources/mydia/bound_mydia.dart';
-import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/domain/models/cast_device.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
 import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
@@ -47,15 +42,12 @@ void main() {
     addTearDown(tester.view.reset);
 
     final container = ProviderContainer(overrides: [
-      ...boundMydiaOverrides(),
+      sourcesLoadingProvider.overrideWithValue(false),
+      hasMydiaProvider.overrideWithValue(true),
       // The router sends `/` to the active source, and to /sources/add when
       // there is none, so the shell only mounts with a source stored.
       thirdPartySourcesProvider.overrideWithValue(const [testMydiaSource]),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      asyncGraphqlClientProvider
-          .overrideWith((ref) => Completer<GraphQLClient>().future),
-      asyncBoundMydiaClientProvider
-          .overrideWith((ref) => Completer<MydiaClient>().future),
       castSessionProvider.overrideWith((ref) => Stream.value(_session)),
       castSessionManagerProvider
           .overrideWith((ref) => Completer<CastSessionManager>().future),

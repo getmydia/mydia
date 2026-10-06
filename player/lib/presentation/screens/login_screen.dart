@@ -70,7 +70,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   final _settingsOverlayScopeNode =
       FocusScopeNode(debugLabel: 'settings-overlay-scope');
 
-  bool _isLoadingSavedUrl = true;
   bool _obscurePassword = true;
   bool _showDirectConnection = false;
   bool _showQrScanner = false;
@@ -86,7 +85,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void initState() {
     super.initState();
     _claimCodeController.addListener(_onClaimCodeChanged);
-    _loadSavedServerUrl();
     _loadSavedRelayUrl();
     _setupAnimations();
   }
@@ -115,19 +113,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     ));
 
     _animationController.forward();
-  }
-
-  Future<void> _loadSavedServerUrl() async {
-    final authService = ref.read(authServiceProvider);
-    final savedUrl = await authService.getServerUrl();
-    if (mounted) {
-      setState(() {
-        if (savedUrl != null) {
-          _serverUrlController.text = savedUrl;
-        }
-        _isLoadingSavedUrl = false;
-      });
-    }
   }
 
   Future<void> _loadSavedRelayUrl() async {
@@ -263,10 +248,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }
 
     final added = state.addedSource;
-    // The instance the legacy screens serve opens on `/`; any other server
-    // opens on its own page.
-    context.go(
-        added == null || state.addedIsBound ? '/' : sourceHomeLocation(added));
+    // A new server opens on its own page.
+    context.go(added == null ? '/' : sourceHomeLocation(added));
   }
 
   Future<void> _pairWithQrData(QrPairingData qrData) async {
@@ -1310,95 +1293,79 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_isLoadingSavedUrl)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                ),
+          _buildTextField(
+            controller: _serverUrlController,
+            focusNode: _serverUrlFocus,
+            label: 'Server URL',
+            hint: 'https://mydia.example.com',
+            icon: Icons.dns_outlined,
+            enabled: !loginState.isLoading,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) => _usernameFocus.requestFocus(),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a server URL';
+              }
+              if (!value.startsWith('http://') &&
+                  !value.startsWith('https://')) {
+                return 'URL must start with http:// or https://';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          _buildTextField(
+            controller: _usernameController,
+            focusNode: _usernameFocus,
+            label: 'Username',
+            icon: Icons.person_outline_rounded,
+            enabled: !loginState.isLoading,
+            textInputAction: TextInputAction.next,
+            onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a username';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 14),
+          _buildTextField(
+            controller: _passwordController,
+            focusNode: _passwordFocus,
+            label: 'Password',
+            icon: Icons.lock_outline_rounded,
+            enabled: !loginState.isLoading,
+            obscureText: _obscurePassword,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _handleLogin(),
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
+                color: AppColors.textSecondary,
+                size: 18,
               ),
-            )
-          else ...[
-            _buildTextField(
-              controller: _serverUrlController,
-              focusNode: _serverUrlFocus,
-              label: 'Server URL',
-              hint: 'https://mydia.example.com',
-              icon: Icons.dns_outlined,
-              enabled: !loginState.isLoading,
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => _usernameFocus.requestFocus(),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a server URL';
-                }
-                if (!value.startsWith('http://') &&
-                    !value.startsWith('https://')) {
-                  return 'URL must start with http:// or https://';
-                }
-                return null;
+              onPressed: () {
+                setState(() => _obscurePassword = !_obscurePassword);
               },
             ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Please enter a password';
+              }
+              return null;
+            },
+          ),
+          if (loginState.error != null &&
+              loginState.mode == ConnectionMode.direct) ...[
             const SizedBox(height: 14),
-            _buildTextField(
-              controller: _usernameController,
-              focusNode: _usernameFocus,
-              label: 'Username',
-              icon: Icons.person_outline_rounded,
-              enabled: !loginState.isLoading,
-              textInputAction: TextInputAction.next,
-              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a username';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-            _buildTextField(
-              controller: _passwordController,
-              focusNode: _passwordFocus,
-              label: 'Password',
-              icon: Icons.lock_outline_rounded,
-              enabled: !loginState.isLoading,
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _handleLogin(),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  color: AppColors.textSecondary,
-                  size: 18,
-                ),
-                onPressed: () {
-                  setState(() => _obscurePassword = !_obscurePassword);
-                },
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter a password';
-                }
-                return null;
-              },
-            ),
-            if (loginState.error != null &&
-                loginState.mode == ConnectionMode.direct) ...[
-              const SizedBox(height: 14),
-              _buildErrorMessage(loginState.error!),
-            ],
-            SizedBox(height: isCompact ? 20 : 24),
-            _buildLoginButton(loginState),
+            _buildErrorMessage(loginState.error!),
           ],
+          SizedBox(height: isCompact ? 20 : 24),
+          _buildLoginButton(loginState),
         ],
       ),
     );

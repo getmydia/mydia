@@ -56,15 +56,11 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "MovieSubtitlePreference" => %{"id" => s.movie.id},
       "EpisodeSubtitlePreference" => %{"id" => s.episode.id},
       "Search" => %{"query" => "Crawl", "first" => 5},
-      "TvShowsList" => %{"first" => 5},
-      "MoviesList" => %{"first" => 5},
-      "GuestInstanceIdentity" => %{},
-      "GuestContinueWatching" => %{"first" => 10},
+      "MydiaInstanceIdentity" => %{},
+      "MydiaContinueWatching" => %{"first" => 10},
       "Calendar" => %{"start" => "2000-01-01", "end" => "2100-01-01"},
       "Collections" => %{"first" => 10},
       "CollectionItems" => %{"collectionId" => s.collection.id, "first" => 10},
-      "ContinueWatchingFull" => %{"first" => 10},
-      "ContinueWatchingFullLegacy" => %{"first" => 10},
       "HomeRows" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
       "HomeRowsLegacy" => %{"recentlyAddedLimit" => 10, "favoritesLimit" => 10},
       "MoviesFiltered" => %{
@@ -113,8 +109,7 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
       "MarkEpisodeWatched" => %{"episodeId" => s.episode.id},
       "MarkEpisodeUnwatched" => %{"episodeId" => s.episode.id},
       "MarkSeasonWatched" => %{"showId" => s.show.id, "seasonNumber" => 1},
-      "MarkSeasonUnwatched" => %{"showId" => s.show.id, "seasonNumber" => 1},
-      "MarkEpisodesUpToWatched" => %{"episodeId" => s.episode.id}
+      "MarkSeasonUnwatched" => %{"showId" => s.show.id, "seasonNumber" => 1}
     }
   end
 

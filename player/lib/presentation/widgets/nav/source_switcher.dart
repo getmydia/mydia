@@ -19,7 +19,6 @@ import '../focus_highlight.dart';
 import 'all_servers_nav_list.dart' show allServersRoot, isAllServersLocation;
 import '../../../domain/navigation/source_nav.dart' show sourceIdFromLocation;
 import 'source_picker.dart';
-import '../../../core/sources/mydia/bound_mydia.dart';
 
 class SourceSwitcher extends ConsumerWidget {
   const SourceSwitcher({
@@ -40,18 +39,14 @@ class SourceSwitcher extends ConsumerWidget {
   final ValueChanged<String>? onSwitchSource;
 
   /// The source the header names: the one in a `/s/<id>` location,
-  /// otherwise the [bound] Mydia instance, whose screens are every other
-  /// location. The remembered pick only decides when none is bound, on
-  /// screens such as `/sources/manage`.
+  /// otherwise the remembered pick, on screens such as `/sources/manage`.
   static Source currentFor(
     List<Source> sources,
     String location,
-    SourceId? active, {
-    SourceId? bound,
-  }) {
+    SourceId? active,
+  ) {
     final fromLocation = sourceIdFromLocation(location);
     return sources.where((s) => s.id.value == fromLocation).firstOrNull ??
-        sources.where((s) => s.id == bound).firstOrNull ??
         sources.where((s) => s.id == active).firstOrNull ??
         sources.first;
   }
@@ -60,9 +55,8 @@ class SourceSwitcher extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sources = ref.watch(switchableSourcesProvider);
     if (sources.isEmpty) return const SizedBox.shrink();
-    final current = currentFor(
-        sources, location, ref.watch(activeSourceIdProvider),
-        bound: ref.watch(boundSourceIdProvider));
+    final current =
+        currentFor(sources, location, ref.watch(activeSourceIdProvider));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -110,10 +104,7 @@ class SourceSwitcher extends ConsumerWidget {
             '?account=${source.account.id}');
       case PickSource(:final source):
         ref.read(selectedSourceIdProvider.notifier).select(source.id);
-        (onSwitchSource ?? onNavigate)(
-            source.id == ref.read(boundSourceIdProvider)
-                ? '/'
-                : sourceHomeLocation(source.id));
+        (onSwitchSource ?? onNavigate)(sourceHomeLocation(source.id));
       case SwitchUser(:final account):
         await showPlexHomeSheet(
           anchorContext,

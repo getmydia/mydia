@@ -9,7 +9,6 @@ import 'package:player/core/sources/current_source_status.dart';
 import 'package:go_router/go_router.dart';
 import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
-import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/cache/freshness.dart';
@@ -279,7 +278,6 @@ void main() {
                 hasData: true,
               ),
             })),
-        boundSourceIdProvider.overrideWithValue(null),
         activeSourceIdProvider.overrideWithValue(idA),
         sourceStatusProvider(idA)
             .overrideWithValue(SourceConnectionStatus.unreachable),

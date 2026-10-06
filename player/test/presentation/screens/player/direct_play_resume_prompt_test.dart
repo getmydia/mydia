@@ -24,25 +24,24 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead.
-  StubLink linkFor({required int positionSeconds}) {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script them
+  // -- dispatch on the operation instead.
+  ScriptedMydiaTransport serverFor({required int positionSeconds}) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: positionSeconds);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
@@ -56,13 +55,13 @@ void main() {
     // 45 minutes into a 90 minute movie: comfortably inside every bound
     // `shouldOfferResume` checks, so the only thing that can suppress the
     // dialog is the call site being gone.
-    final link = linkFor(positionSeconds: 2700);
+    final server = serverFor(positionSeconds: 2700);
 
     // P2P, so the direct-play URL comes from the stub proxy rather than the
     // real media-token service.
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: server,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -92,11 +91,11 @@ void main() {
 
     // 12 seconds in — below `kMinResumeThresholdSeconds`. The prompt must be
     // gated by `shouldOfferResume`, not shown unconditionally.
-    final link = linkFor(positionSeconds: 12);
+    final server = serverFor(positionSeconds: 12);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+      server: server,
+      connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
       castManager: castManager,
       proxyService: proxyService,
     );

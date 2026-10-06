@@ -1,11 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:player/app.dart';
 import 'package:player/core/cast/cast_providers.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/storage/app_hive.dart';
 import 'package:player/native/frb_generated.dart';
 
@@ -24,11 +22,10 @@ Future<void> ensureTestBootstrap() {
 Future<void> _runBootstrap() async {
   await RustLib.init();
   MediaKit.ensureInitialized();
-  // The same pair `main` runs, and for the same reason: `initHiveForFlutter`
+  // The same call `main` runs, and for the same reason: `initHiveForFlutter`
   // would put every box in the user's Documents folder, which under the E2E
   // container is `/root`. See `core/storage/app_hive.dart`.
   await initAppHive();
-  await HiveStore.open();
 }
 
 /// Replaces the app with an empty widget, after giving its startup work time
@@ -38,8 +35,8 @@ Future<void> _runBootstrap() async {
 /// returns, or pending async work runs on into the next test. Doing that
 /// straight away is what broke the shared-isolate run:
 ///
-/// `MyApp`'s startup reads `asyncGraphqlClientProvider.future` (remote-control
-/// init and the cast-session restore both do). Unmounting replaces the
+/// `MyApp`'s startup reads `castSessionManagerProvider.future` (the
+/// cast-session restore does). Unmounting replaces the
 /// `ProviderScope`, which disposes the whole `ProviderContainer`. If that
 /// provider is still in its loading state at that moment, Riverpod raises
 /// `StateError: The provider ... was disposed during loading state, yet no
@@ -102,10 +99,6 @@ Future<void> unmountApp(
 /// chain that, on an unauthenticated app, never resolves, which is the exact
 /// state this is trying to avoid being in at disposal.
 bool _startupLoading(ProviderContainer container) {
-  if (container.exists(asyncGraphqlClientProvider) &&
-      container.read(asyncGraphqlClientProvider).isLoading) {
-    return true;
-  }
   if (container.exists(castSessionManagerProvider) &&
       container.read(castSessionManagerProvider).isLoading) {
     return true;

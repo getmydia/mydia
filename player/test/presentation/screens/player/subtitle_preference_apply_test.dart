@@ -22,40 +22,17 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:media_kit/media_kit.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
-import 'package:player/graphql/queries/media_segments.graphql.dart';
-import 'package:player/graphql/queries/movie_detail.graphql.dart';
-import 'package:player/graphql/queries/streaming_candidates.graphql.dart';
-import 'package:player/graphql/queries/subtitle_content.graphql.dart';
-import 'package:player/graphql/queries/subtitle_preference.graphql.dart';
-import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 import 'package:player/presentation/screens/player/player_screen.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
 
 import '../../../test_utils/probed_tracks.dart';
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
-/// Whether [request] carries the document [node].
-///
-/// By document, not by `operationName`: `QueryOptions` never sets the name, so
-/// `request.operation.operationName` is null for everything this screen
-/// issues. The generated document nodes are const, so this is an identity
-/// comparison against the very node the query was built from -- a stronger
-/// check than matching the printed query text, and the one
-/// `player_screen_subtitle_offsets_cache_test.dart` already relies on.
-///
-/// The node parameter is typed `Object` because `graphql_flutter` does not
-/// re-export the `gql` AST types, so `DocumentNode` cannot be named here.
-bool _carries(Request request, Object node) =>
-    request.operation.document == node;
-
 /// How many times the screen asked the server for a subtitle body.
-int _subtitleContentRequests(StubLink link) => link.requests
-    .where((r) => _carries(r, documentNodeQuerySubtitleContent))
-    .length;
+int _subtitleContentRequests(ScriptedMydiaTransport server) =>
+    server.of('SubtitleContent').length;
 
 /// The subtitle track mpv reports once it has probed the container.
 ///
@@ -206,12 +183,12 @@ Map<String, dynamic> _embeddedEnglishFile() => mediaFileWithSubtitle(
 /// act between `open()` and mpv's probe.
 Future<void> _mount(
   WidgetTester tester,
-  StubLink link,
+  ScriptedMydiaTransport link,
   _ProbedPlayer player,
 ) async {
   final container = buildPlayerScreenContainer(
-    link: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    server: link,
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );
@@ -224,16 +201,16 @@ Future<void> _mount(
   await pumpUntil(tester, () => player.opened);
 }
 
-/// A [StubLink] whose next subtitle-body fetch can be held open, so a test can
-/// land a track-list revision inside that window.
+/// A [ScriptedMydiaTransport] whose next subtitle-body fetch can be held open,
+/// so a test can land a track-list revision inside that window.
 ///
 /// The window is what the revision cases below need: mpv publishes its probe
 /// results while the preference's own body fetch is still resolving, and
 /// embedded extraction can take seconds, so a revision lands mid-apply rather
 /// than before or after it. A gate makes that interleaving deterministic
 /// instead of a matter of microtask scheduling.
-class _GateableStubLink extends StubLink {
-  _GateableStubLink(super.handler);
+class _GateableTransport extends ScriptedMydiaTransport {
+  _GateableTransport(super.handler);
 
   /// Holds the next `SubtitleContent` request open until completed, then
   /// clears itself: only the first body fetch is gated.
@@ -243,48 +220,56 @@ class _GateableStubLink extends StubLink {
   bool subtitleContentHeld = false;
 
   @override
-  Stream<Response> request(Request request, [NextLink? forward]) async* {
+  Future<Map<String, dynamic>> send(
+    String query,
+    Map<String, dynamic> variables, {
+    String? token,
+    String? deviceProfile,
+    Duration? timeout,
+  }) async {
     final hold = holdSubtitleContent;
-    if (hold != null && _carries(request, documentNodeQuerySubtitleContent)) {
+    if (hold != null &&
+        ScriptedMydiaTransport.operationOf(query) == 'SubtitleContent') {
       holdSubtitleContent = null;
       subtitleContentHeld = true;
       await hold.future;
     }
-    yield* super.request(request, forward);
+    return super.send(query, variables,
+        token: token, deviceProfile: deviceProfile, timeout: timeout);
   }
 }
 
 /// The scripted responses a direct-play movie load consumes, with
 /// [preferredSubtitle] answered by the standalone preference query rather than
 /// by the detail response.
-_GateableStubLink _link({
+_GateableTransport _link({
   Map<String, dynamic>? preferredSubtitle,
   Map<String, dynamic>? file,
 }) {
-  return _GateableStubLink((request, index) {
-    if (_carries(request, documentNodeQuerySubtitleContent)) {
+  return _GateableTransport((request, index) {
+    if (request.operation == 'SubtitleContent') {
       return {
         '__typename': 'RootQueryType',
         'subtitleContent': 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nhello\n',
       };
     }
-    if (_carries(request, documentNodeQueryMovieDetail)) {
+    if (request.operation == 'MovieDetail') {
       return movieDetailResponse(files: [file ?? mediaFileWithSubtitle()]);
     }
-    if (_carries(request, documentNodeQueryMovieSubtitlePreference)) {
+    if (request.operation == 'MovieSubtitlePreference') {
       return subtitlePreferenceResponse(
         root: 'movie',
         id: 'movie-1',
         preferences: {'file-1': preferredSubtitle},
       );
     }
-    if (_carries(request, documentNodeQueryMovieSegments)) {
+    if (request.operation == 'MovieSegments') {
       return movieSegmentsResponse();
     }
-    if (_carries(request, documentNodeQuerySubtitleTrackSettings)) {
+    if (request.operation == 'SubtitleTrackSettings') {
       return subtitleTrackSettingsResponse();
     }
-    if (_carries(request, documentNodeQueryStreamingCandidates)) {
+    if (request.operation == 'StreamingCandidates') {
       return streamingCandidatesResponse(duration: 5400, directPlay: true);
     }
     if (request.variables.containsKey('strategy')) {
@@ -314,13 +299,13 @@ _GateableStubLink _link({
 /// on the state at that identified point instead.
 Future<void> _pump(
   WidgetTester tester,
-  StubLink link,
+  ScriptedMydiaTransport link,
   _ProbedPlayer player, {
   bool Function()? settled,
 }) async {
   final container = buildPlayerScreenContainer(
-    link: link,
-    connectionState: conn.ConnectionState.p2p(serverNodeAddr: 'node-addr'),
+    server: link,
+    connectionState: HarnessLink.p2p(serverNodeAddr: 'node-addr'),
     castManager: CapturingCastSessionManager(),
     proxyService: TrackingLocalProxyService(),
   );

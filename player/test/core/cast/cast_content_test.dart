@@ -35,28 +35,37 @@ void main() {
     expect(back.mediaUrl, record.mediaUrl);
   });
 
-  test('a record with no content kind reads as Mydia', () {
-    final back = PersistedCastSession.fromMap({
-      'device': device.toJson(),
-      'mediaId': 'm1',
-      'mediaType': 'episode',
-      'fileId': 'f1',
-      'showId': 's1',
-      'title': 'Lanterns',
-      'positionSeconds': 10,
-      'routeKind': 'direct',
-      'savedAt': savedAt.toIso8601String(),
-    });
+  test('a record with no content kind or instance reads as the legacy Mydia',
+      () {
+    final back = PersistedCastSession.fromMap(
+      {
+        'device': device.toJson(),
+        'mediaId': 'm1',
+        'mediaType': 'episode',
+        'fileId': 'f1',
+        'showId': 's1',
+        'title': 'Lanterns',
+        'positionSeconds': 10,
+        'routeKind': 'direct',
+        'savedAt': savedAt.toIso8601String(),
+      },
+      legacyMydia: const SourceId('macct'),
+    );
 
     expect(
       back.content,
       const MydiaCastContent(
-          fileId: 'f1', mediaId: 'm1', mediaType: 'episode', showId: 's1'),
+          sourceId: SourceId('macct'),
+          fileId: 'f1',
+          mediaId: 'm1',
+          mediaType: 'episode',
+          showId: 's1'),
     );
   });
 
   test('a Mydia record still writes the legacy keys', () {
     final map = PersistedCastSession(
+      sourceId: const SourceId('macct'),
       device: device,
       mediaId: 'm1',
       mediaType: 'movie',

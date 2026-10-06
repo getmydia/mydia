@@ -22,7 +22,8 @@ import 'package:player/core/sources/store/source_store.dart';
 import 'package:player/domain/models/remote_device.dart';
 import 'package:player/presentation/screens/sources/mydia_instance_screen.dart';
 
-import '../../../core/sources/mydia/bound_mydia_harness.dart' show mydiaRecord;
+import '../../../core/sources/mydia/mydia_account_harness.dart'
+    show mydiaRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/no_downloads.dart';
 import '../../../test_utils/toast_harness.dart';

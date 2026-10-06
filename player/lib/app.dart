@@ -20,7 +20,6 @@ import 'core/window/window_frame_state_source.dart';
 import 'presentation/widgets/window_chrome/desktop_window_chrome.dart';
 import 'presentation/widgets/toast/toast_layer.dart';
 import 'core/providers/providers.dart';
-import 'core/sources/mydia/bound_mydia.dart';
 import 'core/cache/resume_gate.dart';
 import 'core/cache/watcher_registry.dart';
 import 'core/cast/cast_providers.dart';
@@ -37,6 +36,7 @@ import 'core/remote/remote_control_receiver.dart';
 import 'core/remote/remote_control_settings.dart';
 import 'core/remote/merged_roster.dart';
 import 'core/remote/remote_target_controller.dart';
+import 'core/router/legacy_routes.dart';
 import 'core/router/navigator_keys.dart';
 import 'core/scroll/app_scroll_behavior.dart';
 import 'presentation/screens/detail/load_content_fetchers.dart';
@@ -93,10 +93,10 @@ Future<void> handleControlRequest({
 /// Deliberately not "have we ever attempted" — an opt-out or a transient
 /// startup failure (no reachable server yet, a registration error) must stay
 /// retryable for the rest of the launch, not just for the first
-/// bound-instance change. What actually latches this closed is a
+/// source change. What actually latches this closed is a
 /// receiver successfully wired ([succeed]): from then on every further call
-/// is a no-op, whether the setting flips off and back on or the bound
-/// instance re-emits.
+/// is a no-op, whether the setting flips off and back on or a source
+/// re-emits.
 ///
 /// Extracted as its own class — like [handleControlRequest] above — because
 /// `_initRemoteControlIfEnabled` itself cannot be exercised by a widget test
@@ -219,24 +219,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Reattach to a cast session left running by a previous app launch, on
     // builds that can actually cast.
     //
-    // Deliberately gated on a bound server rather than fired at startup. The
-    // cast stack awaits `asyncGraphqlClientProvider`, which stays in the
-    // loading state until a Mydia server is bound. Kicking it off before
-    // then leaves that chain in flight indefinitely, and if the container is
-    // disposed while it is still loading — app teardown, or an integration
-    // test finishing on the pairing screen — Riverpod completes the pending
-    // future with a StateError from inside `castSessionManagerProvider`'s own
-    // body, where no caller can catch it. It surfaces as an unhandled async
-    // error and fails the test run. Restoring a cast session before auth is
-    // meaningless anyway: there is no reachable server yet.
+    // Deliberately gated on a stored Mydia account rather than fired at
+    // startup. Restoring a cast session before one exists is meaningless
+    // anyway: there is no instance to sync progress to or reach.
     //
     // Starting remote control shares the same gate for the same reason:
-    // `NodeRegistration` and `RemoteRoster` both need a signed-in GraphQL
-    // client too.
-    ref.listenManual<String?>(
-      boundAccountIdProvider,
+    // `NodeRegistration` and `RemoteRoster` both need a Mydia instance.
+    ref.listenManual<bool>(
+      hasMydiaProvider,
       (previous, next) {
-        if (next == null) return;
+        if (!next) return;
         _restoreCastSession();
         unawaited(_initRemoteControlIfEnabled());
       },
@@ -250,15 +242,13 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // wired (see `RemoteControlInitGate`), so re-invoking it here on every
     // change is safe, and is what makes the settings switch take effect for
     // the rest of this launch instead of only the next one. Gated on auth
-    // the same way `_initRemoteControlIfEnabled` itself is — see that
-    // method's own dartdoc for why reading `asyncGraphqlClientProvider`
-    // before a server is bound is not merely pointless but actively harmful in
-    // tests.
+    // the same way `_initRemoteControlIfEnabled` itself is: with no Mydia
+    // server stored there is nothing to register with.
     ref.listenManual<AsyncValue<bool>>(
       remoteControlEnabledProvider,
       (previous, next) {
         if (next.value != true) return;
-        if (ref.read(boundMydiaProvider) == null) return;
+        if (!ref.read(hasMydiaProvider)) return;
         unawaited(_initRemoteControlIfEnabled());
       },
     );
@@ -284,9 +274,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     unawaited(_windowFrame.load());
   }
 
-  /// Whether a restore has already been attempted this launch. The bound
-  /// instance can re-emit (a token refresh, a reconnect) and restoring is a
-  /// once-per-launch action.
+  /// Whether a restore has already been attempted this launch. The
+  /// `hasMydiaProvider` listener can fire again (a Mydia server added later)
+  /// and restoring is a once-per-launch action.
   bool _castRestoreAttempted = false;
 
   Future<void> _restoreCastSession() async {
@@ -295,6 +285,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     _castRestoreAttempted = true;
 
     try {
+      // The persisted record's decode reads `legacyMydiaSourceIdProvider`,
+      // which needs this id. Restoring before it resolves would drop a
+      // pre-upgrade record on first launch. A failed read must not block the
+      // restore: it only costs that migration fallback.
+      await legacyInstanceIdResolved(ref);
+      if (!mounted) return;
       final manager = await ref.read(castSessionManagerProvider.future);
       if (!mounted) return;
       await manager.restoreSession();
@@ -304,9 +300,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   /// Whether the controllable-device startup path still needs to run. Not a
-  /// once-per-launch flag: the bound instance can re-emit
-  /// and [remoteControlEnabledProvider] can flip from off to on mid-launch,
-  /// and either must be able to retry an opt-out or a transient failure.
+  /// once-per-launch flag: the `hasMydiaProvider` listener can fire again
+  /// (a Mydia server added after startup) and [remoteControlEnabledProvider]
+  /// can flip from off to on mid-launch, and either must be able to retry an
+  /// opt-out or a transient failure.
   /// What actually stops wiring a second receiver onto
   /// [P2pService.onControlRequest] is [RemoteControlInitGate.succeed] —
   /// once one attempt actually wires [_controlRequestSubscription], every

@@ -34,7 +34,8 @@ import 'sources_providers.dart';
 import 'store/source_secrets.dart';
 import 'stash/stash_client.dart';
 import 'stash/stash_media_source.dart';
-import '../graphql/graphql_provider.dart' show deviceProfileHolderProvider;
+import '../player/device_profile_provider.dart'
+    show deviceProfileHolderProvider;
 
 final sourceHttpProvider = Provider<SourceHttp>((ref) => SourceHttp());
 
@@ -341,7 +342,8 @@ class _LazyMydiaTransport implements MydiaGqlTransport {
     Map<String, dynamic> variables, {
     String? token,
     String? deviceProfile,
+    Duration? timeout,
   }) async =>
-      (await _resolve())
-          .send(query, variables, token: token, deviceProfile: deviceProfile);
+      (await _resolve()).send(query, variables,
+          token: token, deviceProfile: deviceProfile, timeout: timeout);
 }

@@ -18,7 +18,14 @@ class SettingsBadge extends ConsumerWidget {
   /// Overrides the platform-support check. Tests only, as in [UpdateBanner].
   final bool? supportedOverride;
 
-  const SettingsBadge({super.key, this.supportedOverride});
+  /// The shell location the badge sits in, for the source it describes.
+  final String location;
+
+  const SettingsBadge({
+    super.key,
+    required this.location,
+    this.supportedOverride,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -32,7 +39,10 @@ class SettingsBadge extends ConsumerWidget {
         !PlatformFeatures.isMacOS &&
         ref.watch(updateProvider).availableUpdate != null;
 
-    return ConnectionStatusDot(updatePending: updatePending);
+    return ConnectionStatusDot(
+      location: location,
+      updatePending: updatePending,
+    );
   }
 }
 
@@ -50,8 +60,12 @@ class SettingsSidebarRow extends ConsumerWidget {
   /// Forwarded to the wrapped [SidebarRow]. See its docs.
   final FocusNode? focusNode;
 
+  /// The shell location, for the badge's source.
+  final String location;
+
   const SettingsSidebarRow({
     super.key,
+    required this.location,
     required this.isSelected,
     required this.isDisabled,
     required this.onTap,
@@ -70,7 +84,7 @@ class SettingsSidebarRow extends ConsumerWidget {
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
-      badge: const SettingsBadge(),
+      badge: SettingsBadge(location: location),
       isEditing: isEditing,
       isHidden: isHidden,
       editingTrailing: editingTrailing,
@@ -85,8 +99,12 @@ class SettingsNavItem extends ConsumerWidget {
   final bool isDisabled;
   final VoidCallback onTap;
 
+  /// The shell location, for the badge's source.
+  final String location;
+
   const SettingsNavItem({
     super.key,
+    required this.location,
     required this.isSelected,
     required this.isDisabled,
     required this.onTap,
@@ -101,7 +119,7 @@ class SettingsNavItem extends ConsumerWidget {
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: onTap,
-      badge: const SettingsBadge(),
+      badge: SettingsBadge(location: location),
     );
   }
 }

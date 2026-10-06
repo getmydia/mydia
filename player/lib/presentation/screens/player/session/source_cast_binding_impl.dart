@@ -8,6 +8,7 @@ import '../../../../core/cast/cast_content.dart';
 import '../../../../core/cast/cast_route_resolver.dart';
 import '../../../../core/cast/receiver_profile.dart';
 import '../../../../core/cast/source_cast_binding.dart';
+import '../../../../core/p2p/local_proxy_service.dart';
 import '../../../../core/playback/playback_plan.dart';
 import '../../../../core/playback/simple_playback_transport.dart';
 import '../../../../core/player/periodic_progress_reporter.dart';
@@ -15,7 +16,6 @@ import '../../../../core/sources/sources_providers.dart';
 import '../../../../domain/models/cast_device.dart';
 import '../../../../domain/models/quality_rung.dart';
 import '../../../../domain/sources/source_error.dart';
-import 'mydia_source_playback_session.dart';
 import 'playback_session_types.dart';
 import 'source_playback_session.dart';
 import 'source_playback_sessions.dart';
@@ -138,9 +138,13 @@ Future<SourceCastBinding> bindSourceCast(
       CastFailureKind.unknown,
     );
   }
-  final session = playbackSessionFor(media, content.item, content.versionId);
-  if (session is! SourcePlaybackSession ||
-      session is MydiaSourcePlaybackSession) {
+  final session = playbackSessionFor(
+    media,
+    content.item,
+    content.versionId,
+    proxy: () => ref.read(localProxyServiceProvider),
+  );
+  if (session is! SourcePlaybackSession) {
     throw const CastBackendException(
       'Casting is not available for this server.',
       CastFailureKind.unknown,

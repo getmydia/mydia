@@ -7,10 +7,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 import 'package:player/core/playback/playback_progress_store.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
@@ -35,12 +34,12 @@ void main() {
       ..writeAsBytesSync(const [0]);
 
     final container = buildPlayerScreenContainer(
-      // Offline mode issues no GraphQL at all; the stub link must never be
+      // Offline mode issues no GraphQL at all; the scripted server must never be
       // hit, so unlike most tests in this directory it has no scripted
       // responses to play back and throws if a request ever reaches it.
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -100,9 +99,9 @@ void main() {
 
   testWidgets('offline playback without a download says so', (tester) async {
     final container = buildPlayerScreenContainer(
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       offline: true,
@@ -135,9 +134,9 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -185,9 +184,9 @@ void main() {
     final store = InMemoryPlaybackProgressStore();
 
     final container = buildPlayerScreenContainer(
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('offline mode must not issue GraphQL requests')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),
@@ -238,19 +237,19 @@ void main() {
     final container = buildPlayerScreenContainer(
       // The "already downloaded, still online" branch reaches
       // `_fetchProgressAndEpisodes`, whose queries now fire concurrently
-      // (see `runIsolated`), so an ordered `StubLink.responses` list can no
+      // (see `runIsolated`), so an ordered `ScriptedMydiaTransport.responses` list can no
       // longer script them -- dispatch on the operation instead.
-      link: StubLink((request, index) {
-        if (isOperation(request, 'MovieDetail')) return movieDetailResponse();
-        if (isOperation(request, 'MovieSegments')) {
+      server: ScriptedMydiaTransport((request, index) {
+        if (request.operation == 'MovieDetail') return movieDetailResponse();
+        if (request.operation == 'MovieSegments') {
           return movieSegmentsResponse();
         }
-        if (isOperation(request, 'SubtitleTrackSettings')) {
+        if (request.operation == 'SubtitleTrackSettings') {
           return subtitleTrackSettingsResponse();
         }
         return subtitlePreferenceResponse();
       }),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloaded: downloadedItem(filePath: tempFile.path, runtimeMinutes: 90),

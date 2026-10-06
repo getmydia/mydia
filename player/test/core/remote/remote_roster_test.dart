@@ -1,20 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
-// ignore: depend_on_referenced_packages
-import 'package:gql/language.dart' show printNode;
-import 'package:graphql_flutter/graphql_flutter.dart' show Request;
 import 'package:player/core/remote/remote_roster.dart';
 import 'package:player/domain/sources/source_error.dart';
 
-import '../../test_utils/stub_graphql_client.dart';
-import '../../test_utils/stub_link_transport.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
 import '../sources/mydia/fake_mydia_client.dart';
 import '../sources/mydia/fake_mydia_transport.dart';
 
-/// The root `__typename` is not decoration: without it the normalized cache
-/// refuses to write the result and the query reports a spurious exception,
-/// which reads exactly like the code under test being broken.
 Map<String, dynamic> devicesResponse(List<Map<String, dynamic>> devices) => {
-      '__typename': 'Query',
       'devices': devices,
     };
 
@@ -35,13 +27,17 @@ Map<String, dynamic> device(
       if (online != null) 'online': online,
     };
 
-RemoteRoster rosterWith(StubLink link, DateTime Function() now) => RemoteRoster(
-      client: fakeMydiaClient(StubLinkTransport(link)),
+RemoteRoster rosterWith(
+  ScriptedMydiaTransport server,
+  DateTime Function() now,
+) =>
+    RemoteRoster(
+      client: fakeMydiaClient(server),
       now: now,
     );
 
-bool asksForOnline(Request request) =>
-    printNode(request.operation.document).contains('online');
+bool asksForOnline(ScriptedRequest request) =>
+    request.operation == 'OnlineDevices';
 
 void main() {
   final fixedClock = DateTime(2026, 8, 20, 12, 0);
@@ -49,7 +45,7 @@ void main() {
   group('RemoteRoster', () {
     test('lists only the devices that have a node id', () async {
       final roster = rosterWith(
-        StubLink.responses([
+        ScriptedMydiaTransport.responses([
           devicesResponse([
             device('d1', 'Living Room', 'node-a'),
             device('d2', 'Old Tablet', null),
@@ -66,7 +62,7 @@ void main() {
 
     test('allows a peer that is in the roster', () async {
       final roster = rosterWith(
-        StubLink.responses([
+        ScriptedMydiaTransport.responses([
           devicesResponse([device('d1', 'Living Room', 'node-a')])
         ]),
         () => fixedClock,
@@ -77,7 +73,7 @@ void main() {
 
     test('refuses a peer that is not in the roster', () async {
       final roster = rosterWith(
-        StubLink.responses([
+        ScriptedMydiaTransport.responses([
           devicesResponse([device('d1', 'Living Room', 'node-a')])
         ]),
         () => fixedClock,
@@ -87,7 +83,7 @@ void main() {
     });
 
     test('refetches for an unknown peer, in case it was just paired', () async {
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([device('d1', 'Living Room', 'node-a')]),
         devicesResponse([
           device('d1', 'Living Room', 'node-a'),
@@ -96,7 +92,7 @@ void main() {
       ]);
 
       var clock = fixedClock;
-      final roster = rosterWith(link, () => clock);
+      final roster = rosterWith(server, () => clock);
 
       expect(await roster.allows('node-b'), isFalse,
           reason: 'the first fetch predates the pairing');
@@ -110,11 +106,11 @@ void main() {
     test(
         'throttles the unknown-peer refetch so a stranger cannot hammer the server',
         () async {
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([device('d1', 'Living Room', 'node-a')]),
       ]);
 
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
 
       for (var i = 0; i < 20; i++) {
         expect(await roster.allows('node-intruder-$i'), isFalse);
@@ -122,32 +118,33 @@ void main() {
 
       // The clock never advances past the one minute throttle, so twenty
       // strangers buy at most the initial fetch plus one refetch.
-      // StubLink.responses repeats its last entry, so a short script is fine.
-      expect(link.requests.length, lessThanOrEqualTo(2));
+      // ScriptedMydiaTransport.responses repeats its last entry, so a short
+      // script is fine.
+      expect(server.requests.length, lessThanOrEqualTo(2));
     });
 
     test('omits revoked devices from the picker list', () async {
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([
           device('d1', 'Kitchen', 'a' * 64),
           device('d2', 'Old Tablet', 'b' * 64, isRevoked: true),
         ]),
       ]);
 
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
       final entries = await roster.entries();
 
       expect(entries.map((e) => e.id), ['d1']);
     });
 
     test('refuses a revoked device that tries to drive this one', () async {
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([
           device('d2', 'Old Tablet', 'b' * 64, isRevoked: true),
         ]),
       ]);
 
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
 
       expect(await roster.allows('b' * 64), isFalse);
     });
@@ -156,7 +153,7 @@ void main() {
   group('RemoteRoster.onlineEntries', () {
     test('keeps only devices the server reports online', () async {
       final roster = rosterWith(
-        StubLink.responses([
+        ScriptedMydiaTransport.responses([
           devicesResponse([
             device('d1', 'Hall Screen', 'a' * 64, online: true),
             device('d2', 'Attic Tablet', 'b' * 64, online: false),
@@ -177,7 +174,7 @@ void main() {
         () async {
       // A screen switched on a moment ago must be probed on the very next
       // scan, not after the roster's 15 minute TTL.
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([
           device('d1', 'Hall Screen', 'a' * 64, online: false),
         ]),
@@ -185,28 +182,28 @@ void main() {
           device('d1', 'Hall Screen', 'a' * 64, online: true),
         ]),
       ]);
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
 
       expect(await roster.onlineEntries(), isEmpty);
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
-      expect(link.requests.length, 2);
+      expect(server.requests.length, 2);
     });
 
     test('falls back to every device when the server predates online',
         () async {
-      final link = StubLink((request, _) => asksForOnline(request)
-          ? graphqlErrorResponse(
-              'Cannot query field "online" on type "RemoteDevice".')
+      final server = ScriptedMydiaTransport((request, _) => asksForOnline(
+              request)
+          ? graphqlError('Cannot query field "online" on type "RemoteDevice".')
           : devicesResponse([
               device('d1', 'Hall Screen', 'a' * 64),
               device('d2', 'Attic Tablet', 'b' * 64),
             ]));
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
 
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1', 'd2']);
 
-      expect(link.requests.where(asksForOnline).length, 1,
+      expect(server.requests.where(asksForOnline).length, 1,
           reason: 'an old server is detected once, not re-asked every scan');
     });
 
@@ -250,18 +247,20 @@ void main() {
 
     test('recognises the unknown-field error when it arrives over p2p',
         () async {
-      // P2pGraphQLLink wraps the server's message in the Exception's text.
-      final link = StubLink((request, _) => asksForOnline(request)
-          ? graphqlErrorResponse('Exception: Cannot query field "online" '
-              'on type "RemoteDevice".')
-          : devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]));
-      final roster = rosterWith(link, () => fixedClock);
+      // The p2p transport can wrap the server's message in the text of an
+      // Exception, so the match is on the message, not the whole string.
+      final server =
+          ScriptedMydiaTransport((request, _) => asksForOnline(request)
+              ? graphqlError('Exception: Cannot query field "online" '
+                  'on type "RemoteDevice".')
+              : devicesResponse([device('d1', 'Hall Screen', 'a' * 64)]));
+      final roster = rosterWith(server, () => fixedClock);
 
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
     });
 
     test('answers the last list it had when a fetch fails', () async {
-      final link = StubLink.responses([
+      final server = ScriptedMydiaTransport.responses([
         devicesResponse([
           device('d1', 'Hall Screen', 'a' * 64, online: true),
         ]),
@@ -270,7 +269,7 @@ void main() {
           device('d1', 'Hall Screen', 'a' * 64, online: false),
         ]),
       ]);
-      final roster = rosterWith(link, () => fixedClock);
+      final roster = rosterWith(server, () => fixedClock);
 
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1']);
       expect((await roster.onlineEntries()).map((e) => e.id), ['d1'],
@@ -281,7 +280,7 @@ void main() {
 
     test('answers an empty list when the very first fetch fails', () async {
       final roster = rosterWith(
-        StubLink.responses([Exception('connection reset')]),
+        ScriptedMydiaTransport.responses([Exception('connection reset')]),
         () => fixedClock,
       );
 
@@ -292,7 +291,7 @@ void main() {
       // entries() also backs allows(). An offline device may still drive this
       // one the moment it wakes up.
       final roster = rosterWith(
-        StubLink((request, _) => devicesResponse([
+        ScriptedMydiaTransport((request, _) => devicesResponse([
               device('d1', 'Hall Screen', 'a' * 64,
                   online: asksForOnline(request) ? false : null),
             ])),

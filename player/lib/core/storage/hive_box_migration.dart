@@ -28,8 +28,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 /// `hive_box_migration_test.dart` asserts this list against the box-name
 /// constants declared across `lib/`.
 const kMydiaHiveBoxes = <String>[
-  // graphql_flutter's normalized cache. `HiveStore.defaultBoxName`, spelled
-  // out rather than imported so this list stays a plain data declaration.
+  // graphql_flutter's normalized cache, no longer opened; listed so its old
+  // file is moved and then deleted.
   'graphqlClientStore',
   'mydia_fetch_log',
   'window_geometry',

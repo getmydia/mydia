@@ -6,15 +6,16 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 
 import '../../domain/models/cast_device.dart';
 import '../../presentation/screens/player/session/source_cast_binding_impl.dart';
-import '../connection/connection_provider.dart';
-import '../graphql/graphql_provider.dart';
 import '../p2p/local_proxy_service.dart';
 import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
 import '../remote/ambient_targets.dart';
 import '../remote/merged_roster.dart';
-import '../sources/mydia/bound_mydia.dart';
-import '../sources/mydia/mydia_instance_id.dart';
+import '../router/legacy_routes.dart';
+import '../sources/mydia/mydia_proxy.dart';
+import '../sources/mydia/mydia_source.dart';
+import '../sources/source.dart';
+import '../sources/sources_providers.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 import 'cast_route_resolver.dart';
@@ -104,10 +105,6 @@ final mydiaCastBackendProvider = Provider<CastBackend?>((ref) {
   final backend = MydiaCastBackend(
     roster: roster,
     instancesOf: roster.instancesOf,
-    // The cast manager plays the bound instance's items, so that is the
-    // server a target must resolve them on.
-    serverInstanceId:
-        mydiaInstanceIdOfAccount(ref.watch(boundAccountIdProvider)),
     transport: P2pControlTransport(host),
     selfNodeId: selfNodeId,
   );
@@ -235,22 +232,75 @@ final castSessionStoreProvider = FutureProvider<CastSessionStore>((ref) async {
   final box =
       await Hive.openBox<Map<dynamic, dynamic>>(HiveCastSessionStore.boxName);
   ref.onDispose(() => unawaited(box.close()));
-  return HiveCastSessionStore(box);
+  // Read when a record is loaded: a record from before casts named their
+  // instance belongs to the migrated one.
+  return HiveCastSessionStore(
+    box,
+    legacyMydia: () => ref.read(legacyMydiaSourceIdProvider),
+  );
 });
+
+/// The cast dependencies of the Mydia instance [id], or null when it is gone.
+///
+/// Over p2p the bridge URL needs the instance's proxy target running, and a
+/// cast can start with no player open (a restore, a reconnect), so the target
+/// is held here for the cast's lifetime and released with [MydiaCastDeps.release].
+Future<MydiaCastDeps?> mydiaCastDepsFor(Ref ref, SourceId id) async {
+  final source = ref.read(mediaSourceProvider(id));
+  if (source is! MydiaSource) return null;
+  final client = source.client;
+  final credentials = await client.credentials();
+  final proxy = ref.read(localProxyServiceProvider);
+  final target = source.source.account.id;
+  final streamingSessions = MydiaCastStreamingSessionService(client);
+
+  final holdsTarget = credentials.isP2p;
+  if (holdsTarget) {
+    await mydiaProxyBase(proxy, credentials,
+        owner: streamingSessions, target: target);
+  }
+
+  return MydiaCastDeps(
+    progress: ProgressService(client),
+    streamingSessions: streamingSessions,
+    release: holdsTarget
+        ? () => proxy.stop(streamingSessions, target: target)
+        : null,
+    resolver: () => CastRouteResolver(
+      isP2pMode: credentials.isP2p,
+      serverUrl: credentials.serverUrl,
+      // Awaited, not sampled: a synchronous read on the first cast would
+      // yield no token at all — leaving the receiver to 401. Refreshing
+      // first also keeps a long-idle app from handing out an expired one.
+      mediaToken: () async {
+        try {
+          return await client.ensureValidMediaToken();
+        } catch (e) {
+          // A token is optional (LAN deployments without pairing work
+          // without one); failing to fetch it must not kill the cast.
+          return null;
+        }
+      },
+      // Read at resolve time rather than captured: the LAN base URL does not
+      // exist until LAN access has been enabled, which by definition happens
+      // after this builds. The target prefix is what the proxy serves.
+      lanBaseUrl: () {
+        final lan = proxy.lanBaseUrl;
+        return lan == null ? null : '$lan/t/$target';
+      },
+      streamingSessions: streamingSessions,
+    ),
+  );
+}
 
 final castSessionManagerProvider =
     FutureProvider<CastSessionManager>((ref) async {
   final store = await ref.watch(castSessionStoreProvider.future);
 
-  // Deliberately `read`, not `watch`: watching rebuilds this provider — and
-  // therefore disposes a live CastSessionManager and its session — every time
-  // the GraphQL client is refreshed for reasons that have nothing to do with
-  // casting (a token refresh, an auth-state re-check). The client is used
-  // only for progress sync and streaming-session bookkeeping, neither of
-  // which is worth dropping an in-flight cast over.
-  final client = await ref.read(asyncBoundMydiaClientProvider.future);
+  // Deliberately `read`, not `watch`: rebuilding disposes a live
+  // CastSessionManager and its session, and nothing a cast uses (the
+  // instance's client, the proxy) is worth dropping an in-flight cast over.
   final proxy = ref.read(localProxyServiceProvider);
-  final streamingSessions = MydiaCastStreamingSessionService(client);
 
   final manager = CastSessionManager(
     backend: ref.read(castBackendProvider),
@@ -263,31 +313,7 @@ final castSessionManagerProvider =
     capabilities: ref.read(castCapabilitiesProvider),
     bindSource: (content) => bindSourceCast(ref, content),
     store: store,
-    progressService: ProgressService(client),
-    resolverFactory: () => CastRouteResolver(
-      isP2pMode: ref.read(connectionProvider).isP2PMode,
-      serverUrl: ref.read(serverUrlProvider).whenOrNull(data: (url) => url),
-      // Awaited, not sampled: a synchronous read on the first cast would
-      // yield no token at all — leaving the receiver to 401. Refreshing
-      // first also keeps a long-idle app from handing out an expired one.
-      mediaToken: () async {
-        try {
-          return await ref
-              .read(boundMydiaClientProvider)
-              ?.ensureValidMediaToken();
-        } catch (e) {
-          // A token is optional (LAN deployments without pairing work
-          // without one); failing to fetch it must not kill the cast.
-          return null;
-        }
-      },
-      // Read at resolve time rather than captured here: the LAN base URL
-      // does not exist until LAN access has been enabled, which by
-      // definition happens after this provider builds.
-      lanBaseUrl: () => proxy.lanBaseUrl,
-      streamingSessions: streamingSessions,
-    ),
-    streamingSessions: streamingSessions,
+    mydiaDeps: (id) => mydiaCastDepsFor(ref, id),
     setLanAccess: proxy.setLanAccess,
   );
 
@@ -351,19 +377,10 @@ final castDiscoveryProvider =
 });
 
 final castSessionProvider = StreamProvider<CastSession?>((ref) async* {
-  // `castSessionManagerProvider` awaits `asyncGraphqlClientProvider`, which
-  // does not resolve until the user is authenticated — see that provider's
-  // own dartdoc and `_restoreCastSession`'s in app.dart, which both guard
-  // the same await for the same reason. `CastMiniController` watches this
-  // provider (via `.value`, not `.future`) the moment auth reports
-  // `authenticated`, on every screen, which is what starts this generator
-  // running; it does not wait for `_restoreCastSession`/
-  // `_initRemoteControlIfEnabled` to have already finished with the same
-  // chain first.
-  //
-  // If the container is disposed while this await is still pending,
+  // `castSessionManagerProvider` awaits the cast session store's Hive box.
+  // If the container is disposed while that await is still pending,
   // Riverpod completes it with a StateError raised from inside
-  // `asyncGraphqlClientProvider`'s own disposal. A plain `FutureProvider`
+  // the provider's own disposal. A plain `FutureProvider`
   // awaiting another `FutureProvider` is safe by construction — Riverpod
   // preserves its in-flight future across disposal so a late result still
   // resolves it cleanly (`ElementWithFuture.dispose`'s "preserve" branch).

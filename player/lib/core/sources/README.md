@@ -20,9 +20,10 @@ The Mydia login that predates this layer is migrated at startup into an
 ordinary account (`core/migration/`), and its stored data moves to that
 account's `SourceId`. There is no fixed source id: every Mydia server is a
 stored account with a `MydiaSource`, and its screens are the same `/s/<id>/...`
-screens every other source uses. Playback still goes through one of them, the
-bound instance (`boundMydiaProvider` in `mydia/bound_mydia.dart`): the
-migrated account while it exists, else the first Mydia added.
+screens every other source uses. No Mydia instance is special. The migrated
+account is only remembered (`legacyInstanceIdProvider`, resolved to a source by
+`legacyMydiaSourceIdProvider`) so old unprefixed links and pre-instance
+download-sync entries find their owner.
 
 The source switcher groups servers by account, with a caption per account.
 
@@ -118,7 +119,7 @@ is per source: there is no global auth state.
 
 HLS uses `playlistMode: FULL` and `SimplePlaybackTransport`, with the bearer
 token on the stream. Over p2p the local proxy serves an instance at
-`/t/<accountId>/...`, and the bound instance also keeps the bare path. The
+`/t/<accountId>/...`. The
 player screen lets go of its targets with `MediaProxy.release(owner)`, which
 releases every target that owner took.
 
@@ -143,22 +144,36 @@ the orphan download sweep never deletes them.
 
 The `legacy_instance_id` marker is written last, so a run that died earlier
 starts over, and a run after the marker repeats only the data steps. The
-migration only reads the legacy keys: nothing deletes them before the stage
-that retires `AuthService` and the pairing storage, which also keeps a
-downgrade working.
+migration stays for installs that skip releases: it only reads the legacy
+keys. Once the marker is recorded (or there is no legacy sign-in to migrate),
+`purgeLegacyMydiaStorage` (`core/migration/legacy_storage_purge.dart`) runs at
+startup and deletes those keys and the `graphqlClientStore` box left by the
+old GraphQL cache. `relay_url` stays, because the login screen still uses it.
+A purge that cannot decide keeps the data. `legacyInstanceIdProvider` (in
+`core/router/legacy_routes.dart`) is read only by that file, to resolve old
+links; `legacyMydiaSourceIdProvider` turns it into the source an unprefixed
+link or pre-instance entry belongs to: the legacy account while it exists,
+else the only Mydia instance, else null.
 
-### The bound instance
+Login is `AuthService`, which sends its mutations over an unauthenticated
+`MydiaGqlTransport` (`transportFactory` is injectable) and maps failures by
+error kind, not by message text.
 
-Browsing, search, details, the Mydia settings, the device list and node
-registration read the instance that owns the item or the route (see Screens
-and Cast). Playback does not yet: the player screen, `MydiaPlaybackSession`,
-`castSessionManagerProvider`, `ProgressService`, the download job services and
-`graphqlClientProvider` ride one instance. `boundMydiaProvider`
-(`mydia/bound_mydia.dart`) is the account named by `legacy_instance_id` while
-that account exists, else the first Mydia account added. The GraphQL client is
-a `TransportLink` over its `MydiaClient`, so those services share its token and
-refresh. Signing out removes the bound instance, and the first Mydia left
-becomes bound. The shell's offline state follows the route's source.
+### Per-instance reads
+
+Browsing, search, details, playback, the Mydia settings, the device list and
+node registration read the instance that owns the item or the route (see
+Screens and Cast). The shell's offline state follows the route's source, else
+the active one. A test (`no_bound_instance_test.dart`) keeps any one instance
+from becoming special again.
+
+Removing an account also drops its collection auto-sync entries, including
+legacy bare-id entries that recorded no owner when the removed account is the
+one `legacyMydiaSourceIdProvider` names, so they cannot rebind to the next
+Mydia server.
+
+Per-instance link facts (`sourceViaP2pProvider`, `sourceServerUrlProvider` in
+`mydia/source_link.dart`) are read from that source's own credentials.
 
 ### Web
 
@@ -227,6 +242,11 @@ Subtitles:
 Progress goes to the source's own reporter from the receiver's position. The
 persisted cast record keeps no stream URL, because it carries the credential.
 
+A Mydia cast carries its instance: `MydiaCastContent.sourceId`.
+`CastSessionManager(mydiaDeps:)` resolves that instance's deps per cast
+(`mydiaCastDepsFor` in `cast_providers.dart`), and the bridge URL is the
+target's LAN base, `'$lan/t/$target'`.
+
 ### Mydia players
 
 Every Mydia instance lists the player devices paired to it, and a device
@@ -240,9 +260,10 @@ paired to several instances is one entry.
   `MergedRoster.instancesOf(nodeId)` names those instances. A remote load
   content command resolves the item on the server it names
   (`serverInstanceId`) when a local instance with that id lists the sender,
-  else on the first instance that lists the sender, never the bound one. The
-  fallback exists because the instance id can take a different form on each
-  device (see above).
+  else on the first instance that lists the sender. The sender fills the name
+  from the cast's own instance (`MydiaContentRef.serverInstanceId`, read off
+  `MydiaCastContent.sourceId`). The fallback exists because the instance id
+  can take a different form on each device (see above).
 - Registration is `NodeRegistrations` (`core/remote/node_registration_providers.dart`):
   one `NodeRegistrationService` per Mydia account, each registering this
   device's node id with its own server. An account's registration restarts
@@ -254,8 +275,6 @@ paired to several instances is one entry.
   settings screen, `/sources/manage/:sourceId` (`MydiaInstanceScreen`).
   `/settings/devices` redirects there.
 
-The cast session itself (`castSessionManagerProvider`) still runs on the
-bound instance.
 
 ## HTTP and errors
 
@@ -334,8 +353,23 @@ and crash redactors know both header names.
 
 ## Playback
 
-`PlaybackSession` is the player screen's only view of a server. Mydia's
-session wraps the GraphQL calls, `PlaybackController` and the p2p proxy.
+`PlaybackSession` is the player screen's only view of a server. Mydia's is
+`MydiaPlaybackSession`
+(`presentation/screens/player/session/mydia_playback_session.dart`): one per
+instance, over that instance's `MydiaClient`, wrapping the GraphQL calls,
+`PlaybackController` and the p2p proxy. The route builds every session
+(`source_player_route.dart`, and `queue_player_screen.dart` through
+`legacyMydiaSourceIdProvider`), so no session is shared between instances.
+Over p2p its streams go through `/t/<accountId>/` on the local proxy, and a
+bare path gets a 404; the web proxy serves its one target at its root. The
+`StartStreamingSession` downgrade for older servers is
+`MydiaClient.query(fallback:, fallbackVariables:)`, remembered per instance
+(`isDowngraded`). GraphQL errors arrive as `MydiaGraphqlError`, carrying the
+partial `data` when the server sent some over HTTP. `subtitleContent` has its
+own 45 second timeout. The screen claims the `PlayingSource` holder
+(`core/media_session/playing_source.dart`) so the OS now-playing bridge knows
+which instance owns what is playing. Downloads and offline progress are
+attributed by `ItemRef` and flushed through each instance's `ProgressSync`.
 Plex, Stash and Jellyfin share `SourcePlaybackSession` (data from the
 neutral item detail) and `SimplePlaybackTransport` (no readiness probe: all
 serve a complete HLS playlist). Jellyfin asks the server first
@@ -458,7 +492,7 @@ through `mediaSourceProvider` like any other server, and every item opens
 ## Tests
 
 The Stash GraphQL documents under `stash/` target Stash's schema, so the
-Mydia schema guard (`test/core/graphql/schema_conformance_test.dart`)
+Mydia schema guard (`test/graphql/schema_conformance_test.dart`)
 skips that directory.
 
 ## Adding a source kind

@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/p2p/media_proxy_web.dart';
 
 import 'media_proxy_conformance.dart';
+import 'test_p2p_service.dart';
 
 void main() {
   // The same suite the loopback proxy runs, against a real Service Worker in
@@ -24,4 +25,28 @@ void main() {
     'ServiceWorkerMediaProxy',
     ServiceWorkerMediaProxy.new,
   );
+
+  // A browser serves one instance at its root, under whatever name it has.
+  test(
+      're-points to a second target, and tears down only when both holders '
+      'release', () async {
+    final proxy = ServiceWorkerMediaProxy(TestP2pService());
+    final first = Object();
+    final second = Object();
+    await proxy.start(owner: first, targetPeer: 'peer', target: 'macct');
+    addTearDown(proxy.shutdown);
+
+    expect(proxy.targetBaseUrl('macct'), proxy.baseUrl);
+
+    // The incoming route starts before the outgoing one is disposed.
+    await proxy.start(owner: second, targetPeer: 'peer2', target: 'other');
+    expect(proxy.isRunning, isTrue);
+
+    // The old holder releases its lease for the old target.
+    await proxy.stop(first, target: 'macct');
+    expect(proxy.isRunning, isTrue);
+
+    await proxy.stop(second, target: 'other');
+    expect(proxy.isRunning, isFalse);
+  });
 }

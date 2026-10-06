@@ -6,25 +6,24 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:player/core/cast/cast_target.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 
 void main() {
   // The pre-play queries now fire concurrently (see `runIsolated`), so an
-  // ordered `StubLink.responses` list can no longer script them -- dispatch
-  // on the operation instead.
-  StubLink linkFor({required int positionSeconds}) {
-    return StubLink((request, index) {
-      if (isOperation(request, 'MovieDetail')) {
+  // ordered `ScriptedMydiaTransport.responses` list can no longer script
+  // them -- dispatch on the operation instead.
+  ScriptedMydiaTransport linkFor({required int positionSeconds}) {
+    return ScriptedMydiaTransport((request, index) {
+      if (request.operation == 'MovieDetail') {
         return movieDetailResponse(positionSeconds: positionSeconds);
       }
-      if (isOperation(request, 'MovieSegments')) return movieSegmentsResponse();
-      if (isOperation(request, 'SubtitleTrackSettings')) {
+      if (request.operation == 'MovieSegments') return movieSegmentsResponse();
+      if (request.operation == 'SubtitleTrackSettings') {
         return subtitleTrackSettingsResponse();
       }
-      if (isOperation(request, 'MovieSubtitlePreference')) {
+      if (request.operation == 'MovieSubtitlePreference') {
         return subtitlePreferenceResponse();
       }
       return streamingCandidatesResponse(duration: 5400);
@@ -40,8 +39,8 @@ void main() {
     final link = linkFor(positionSeconds: 2700);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -75,8 +74,8 @@ void main() {
     final link = linkFor(positionSeconds: 2700);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );
@@ -101,8 +100,8 @@ void main() {
     final link = linkFor(positionSeconds: 12);
 
     final container = buildPlayerScreenContainer(
-      link: link,
-      connectionState: conn.ConnectionState.direct(),
+      server: link,
+      connectionState: HarnessLink.direct(),
       castManager: castManager,
       proxyService: proxyService,
     );

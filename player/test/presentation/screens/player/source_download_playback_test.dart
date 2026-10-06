@@ -6,15 +6,18 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart' as conn;
+import 'package:player/presentation/screens/downloads/download_locations.dart';
+import 'package:player/presentation/screens/sources/source_player_route.dart';
+import '../../../test_utils/toast_harness.dart';
 import 'package:player/core/playback/local_playback_progress.dart';
 import 'package:player/core/playback/playback_progress_store.dart';
 import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/domain/models/download.dart';
 import 'package:player/domain/sources/item.dart';
 
-import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/scripted_mydia_transport.dart';
 import 'player_screen_test_harness.dart';
 import 'session/fake_playback_session.dart';
 import '../../../test_utils/mydia_test_source.dart';
@@ -89,9 +92,9 @@ void main() {
 
     final progressStore = store ?? InMemoryPlaybackProgressStore();
     final container = buildPlayerScreenContainer(
-      link: StubLink((request, callIndex) =>
+      server: ScriptedMydiaTransport((request, callIndex) =>
           throw StateError('an unreachable source must not issue GraphQL')),
-      connectionState: conn.ConnectionState.direct(),
+      connectionState: HarnessLink.direct(),
       castManager: CapturingCastSessionManager(),
       proxyService: TrackingLocalProxyService(),
       downloadService: service,
@@ -185,5 +188,142 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
+  });
+
+  group('two Mydia instances', () {
+    const idA = testMydiaSourceId;
+    const idB = SourceId('macctb:owner:inst-1');
+
+    ScriptedMydiaTransport serverB() => ScriptedMydiaTransport((request, i) {
+          switch (request.operation) {
+            case 'MovieDetail':
+              return movieDetailResponse();
+            case 'MovieSegments':
+              return movieSegmentsResponse();
+            case 'SubtitleTrackSettings':
+              return subtitleTrackSettingsResponse();
+            case 'MovieSubtitlePreference':
+              return subtitlePreferenceResponse();
+            case 'StreamingCandidates':
+              return streamingCandidatesResponse(duration: 5400);
+          }
+          return endStreamingSessionResponse();
+        });
+
+    /// Both instances registered. A's transport fails every request: B's
+    /// screen must not ask it, and A's own offline playback only gets
+    /// swallowed metadata failures from it.
+    ({
+      ProviderContainer container,
+      ScriptedMydiaTransport a,
+      ScriptedMydiaTransport b,
+      _KeyedDownloadService service
+    }) mount({
+      required String aFile,
+    }) {
+      final a = ScriptedMydiaTransport((request, i) =>
+          throw StateError('instance A was asked: ${request.operation}'));
+      final b = serverB();
+      final service = _KeyedDownloadService({
+        const ItemRef(sourceId: idA, kind: ItemKind.movie, externalId: '10'):
+            DownloadedMedia(
+          id: 'dl-a',
+          mediaId: '10',
+          sourceId: idA.value,
+          title: 'Quill Harbor',
+          quality: 'original',
+          filePath: aFile,
+          fileSize: 1,
+          mediaType: 'movie',
+          downloadedAt: DateTime(2026, 1, 1),
+          runtime: 90,
+        ),
+      });
+      final container = buildPlayerScreenContainer(
+        server: a,
+        connectionState: HarnessLink.direct(),
+        castManager: CapturingCastSessionManager(),
+        proxyService: TrackingLocalProxyService(),
+        downloadService: service,
+        extraSources: {
+          idB: testMydiaSourceOver(
+            b,
+            accountId: 'macctb',
+            creds: harnessCredentials(HarnessLink.direct()),
+          ),
+        },
+      );
+      addTearDown(container.dispose);
+      return (container: container, a: a, b: b, service: service);
+    }
+
+    Future<void> openRoute(
+      WidgetTester tester,
+      ProviderContainer container,
+      String location,
+      SourceId id,
+    ) async {
+      final uri = Uri.parse(location);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          builder: toastLayerBuilder,
+          home: SourcePlayerRoute(sourceId: id, itemId: '10', uri: uri),
+        ),
+      ));
+      await tester.pump();
+    }
+
+    testWidgets('B streams from B and never opens A\'s download',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('mydia_two_inst_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final aFile = File('${dir.path}/a.mkv')..writeAsBytesSync(const [0]);
+      final m = mount(aFile: aFile.path);
+
+      await tester.runAsync(() async {
+        await openRoute(tester, m.container,
+            '/s/${idB.value}/player/10?kind=movie&fileId=f-b', idB);
+        await pumpUntilReal(
+            tester, () => m.b.of('StreamingCandidates').isNotEmpty);
+      });
+
+      expect(m.b.of('StreamingCandidates'), isNotEmpty);
+      expect(m.a.requests, isEmpty);
+      expect(
+          m.service.asked,
+          isNot(contains(const ItemRef(
+              sourceId: idA, kind: ItemKind.movie, externalId: '10'))));
+      expect(find.textContaining('MediaKit.ensureInitialized'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('A\'s download location plays A\'s local file', (tester) async {
+      final dir = Directory.systemTemp.createTempSync('mydia_two_inst_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final aFile = File('${dir.path}/a.mkv')..writeAsBytesSync(const [0]);
+      final m = mount(aFile: aFile.path);
+      final location = downloadedPlayLocation(m.service.byItem.values.single);
+
+      await tester.runAsync(() async {
+        await openRoute(tester, m.container, location, idA);
+        await pumpUntilReal(
+          tester,
+          () => find
+              .textContaining('MediaKit.ensureInitialized')
+              .evaluate()
+              .isNotEmpty,
+        );
+      });
+
+      expect(find.textContaining('MediaKit.ensureInitialized'), findsOneWidget,
+          reason: 'the load reached the media_kit player on the local file');
+      expect(m.b.requests, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+    });
   });
 }

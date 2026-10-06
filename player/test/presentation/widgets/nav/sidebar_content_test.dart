@@ -1,7 +1,6 @@
-import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/connection/connection_provider.dart';
 import 'package:player/core/navigation/sidebar_layout_providers.dart';
 import 'package:player/core/navigation/sidebar_layout_store.dart';
 import 'package:player/core/sources/media_source.dart';
@@ -17,11 +16,6 @@ class _MydiaLike extends FakeCapableSource {
   @override
   Set<SourceCapability> get capabilities =>
       {...super.capabilities, SourceCapability.continueWatching};
-}
-
-class _StubConnectionNotifier extends ConnectionNotifier {
-  @override
-  ConnectionState build() => ConnectionState.direct();
 }
 
 Future<void> _pump(
@@ -41,7 +35,6 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        connectionProvider.overrideWith(_StubConnectionNotifier.new),
         sidebarLayoutStoreProvider
             .overrideWithValue(store ?? InMemorySidebarLayoutStore()),
         // A Mydia-like source is the active one, so every location without a

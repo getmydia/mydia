@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/sources/current_source_status.dart';
-import '../../core/sources/mydia/bound_mydia.dart';
 import '../../core/sources/sources_providers.dart';
 import '../../core/theme/colors.dart';
 import 'banner_button.dart';
@@ -30,7 +29,6 @@ class _OfflineBannerState extends ConsumerState<OfflineBanner> {
       // Rebuilding the source re-probes its connection.
       final id = statusSourceIdFor(
         widget.location,
-        bound: ref.read(boundSourceIdProvider),
         active: ref.read(activeSourceIdProvider),
       );
       if (id != null) ref.invalidate(mediaSourceProvider(id));

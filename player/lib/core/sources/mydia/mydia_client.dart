@@ -16,6 +16,7 @@ import '../../player/device_profile.dart';
 import '../media_source.dart';
 import 'mydia_credentials.dart';
 import 'mydia_gql_transport.dart';
+import 'root_typename.dart';
 import 'schema_downgrade.dart';
 
 typedef GetDeviceProfile = FutureOr<DeviceProfile?> Function();
@@ -62,6 +63,7 @@ class MydiaClient {
   Future<Map<String, dynamic>> request(
     DocumentNode document, [
     Map<String, dynamic> variables = const {},
+    Duration? timeout,
   ]) async {
     final query = printNode(document);
     final sentWith = (await credentials()).accessToken;
@@ -69,7 +71,7 @@ class MydiaClient {
     final headerValue = profile?.toHeaderValue();
     try {
       return await _send(query, variables, sentWith,
-          deviceProfile: headerValue);
+          deviceProfile: headerValue, timeout: timeout);
     } on SourceException catch (e) {
       if (e.kind != SourceErrorKind.unauthorized) rethrow;
       // A refresh may have finished while this request was in flight.
@@ -85,7 +87,8 @@ class MydiaClient {
         rethrow;
       }
       try {
-        return await _send(query, variables, fresh, deviceProfile: headerValue);
+        return await _send(query, variables, fresh,
+            deviceProfile: headerValue, timeout: timeout);
       } on SourceException catch (retry) {
         if (retry.kind == SourceErrorKind.unauthorized) _onUnauthorized();
         rethrow;
@@ -95,14 +98,20 @@ class MydiaClient {
 
   final Set<String> _downgradedOps = {};
 
+  /// Whether this server has answered [document] with its fallback.
+  bool isDowngraded(DocumentNode document) =>
+      _downgradedOps.contains(_operationName(document));
+
   Future<Map<String, dynamic>> query(
     DocumentNode document, {
     DocumentNode? fallback,
     Map<String, dynamic> variables = const {},
+    Map<String, dynamic>? fallbackVariables,
   }) async {
     final opName = _operationName(document);
+    final downgradedVariables = fallbackVariables ?? variables;
     if (fallback != null && opName != null && _downgradedOps.contains(opName)) {
-      return request(fallback, variables);
+      return request(fallback, downgradedVariables);
     }
 
     try {
@@ -110,7 +119,7 @@ class MydiaClient {
     } catch (e) {
       if (fallback != null && isUnknownFieldError(e)) {
         if (opName != null) _downgradedOps.add(opName);
-        return request(fallback, variables);
+        return request(fallback, downgradedVariables);
       }
       rethrow;
     }
@@ -170,13 +179,13 @@ class MydiaClient {
       if (rawCompat is! Map) return null;
 
       final compatMap = Map<String, dynamic>.from(rawCompat);
-      final payload = <String, dynamic>{
-        '__typename': data['__typename'] ?? 'RootQueryType',
+      final payload = rootQuery({
+        ...data,
         'serverCompatibility': {
           '__typename': 'ServerCompatibility',
           ...compatMap,
         },
-      };
+      });
 
       final compat =
           Query$ServerCompatibility.fromJson(payload).serverCompatibility;
@@ -197,10 +206,11 @@ class MydiaClient {
     Map<String, dynamic> variables,
     String? token, {
     String? deviceProfile,
+    Duration? timeout,
   }) async {
     try {
       final data = await _transport.send(query, variables,
-          token: token, deviceProfile: deviceProfile);
+          token: token, deviceProfile: deviceProfile, timeout: timeout);
       _status.value = _transport.reachedVia;
       return data;
     } on SourceException catch (e) {
@@ -259,9 +269,7 @@ class MydiaClient {
         documentNodeMutationRefreshMediaToken,
         Variables$Mutation$RefreshMediaToken(token: mediaToken).toJson(),
       );
-      final payload = data['__typename'] != null
-          ? data
-          : {...data, '__typename': 'RootMutationType'};
+      final payload = rootMutation(data);
       final refreshed =
           Mutation$RefreshMediaToken.fromJson(payload).refreshMediaToken;
       if (refreshed != null) {

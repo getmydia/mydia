@@ -1,9 +1,8 @@
 /// The one place Mydia Player decides where its Hive boxes live.
 ///
-/// Call [initAppHive] instead of `Hive.initFlutter()` or graphql_flutter's
-/// `initHiveForFlutter()`. Both of those default their base path to
-/// `getApplicationDocumentsDirectory()` with no subdirectory, which on every
-/// desktop platform is the user's own Documents folder -- so the app used to
+/// Call [initAppHive] instead of `Hive.initFlutter()`. That defaults its base
+/// path to `getApplicationDocumentsDirectory()` with no subdirectory, which on
+/// every desktop platform is the user's own Documents folder -- so the app used to
 /// drop fifteen boxes' worth of loose `.hive` and `.lock` files straight into
 /// it. On Windows that folder is normally redirected into OneDrive, which then
 /// syncs live database files while Hive is writing them.
@@ -33,7 +32,7 @@ Future<void>? _init;
 ///
 /// Memoized rather than merely idempotent: several independent startup steps
 /// need Hive ready before they open their own box -- window geometry (before
-/// the first frame), the GraphQL cache, the fetch log, the download database
+/// the first frame), the source store, the fetch log, the download database
 /// -- and the subtitle sheet opens one lazily from `initState` with no
 /// container in reach. They all call this and only the first does any work.
 ///
