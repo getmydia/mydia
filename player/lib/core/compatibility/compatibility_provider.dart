@@ -4,6 +4,9 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../sources/mydia/bound_mydia.dart';
+import '../sources/mydia/mydia_client.dart';
+import '../sources/mydia/mydia_source.dart';
+import '../sources/sources_providers.dart';
 import 'compatibility.dart';
 import 'compatibility_verdict.dart';
 
@@ -86,7 +89,7 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
   @override
   Future<CompatibilityState> build() async {
     final playerVersion = await ref.watch(playerVersionProvider.future);
-    final client = ref.watch(boundMydiaClientProvider);
+    final client = _clientForActiveSource();
 
     final server = await client?.fetchCompatibility();
     final verdict = evaluateCompatibility(
@@ -114,6 +117,17 @@ class CompatibilityNotifier extends AsyncNotifier<CompatibilityState> {
       debugPrint('[CompatibilityNotifier] could not read dismissals: $e');
       return state;
     }
+  }
+
+  /// The Mydia client of the source being browsed, so the banner speaks about
+  /// the server the viewer is looking at. A non-Mydia active source has no
+  /// Mydia server to warn about, so it gets none. With no active source at
+  /// all (nothing stored yet) the bound client stands in.
+  MydiaClient? _clientForActiveSource() {
+    final active = ref.watch(activeSourceIdProvider);
+    if (active == null) return ref.watch(boundMydiaClientProvider);
+    final source = ref.watch(mediaSourceProvider(active));
+    return source is MydiaSource ? source.client : null;
   }
 
   /// The floor the losing side failed to clear, for the banner copy.

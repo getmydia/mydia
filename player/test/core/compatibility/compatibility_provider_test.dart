@@ -10,7 +10,14 @@ import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/domain/sources/source_error.dart';
 
+import 'package:player/core/sources/media_source.dart';
+import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/source.dart';
+import 'package:player/core/sources/sources_providers.dart';
+
+import '../../presentation/screens/sources/fake_media_source.dart';
 import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/mydia_source_test.dart' show guest;
 import '../sources/mydia/fake_mydia_transport.dart';
 
 /// A server at the player's current recommended floor, with both of its own
@@ -297,5 +304,45 @@ void main() {
     expect(state.verdict, CompatibilityVerdict.playerUpdateRecommended);
     expect(state.dismissed, isTrue);
     expect(state.showBanner, isFalse);
+  });
+
+  group('follows the active source', () {
+    const a = SourceId('mydia-a');
+    const b = SourceId('mydia-b');
+
+    // A is at parity; B is a server whose own floor the player is below.
+    Future<CompatibilityState> stateFor(SourceId? active,
+        {MediaSource? other}) async {
+      final box = await memoryBox();
+      final container = ProviderContainer(overrides: [
+        boundMydiaClientProvider.overrideWithValue(null),
+        activeSourceIdProvider.overrideWithValue(active),
+        mediaSourceProvider(a).overrideWithValue(
+            MydiaSource(source: guest, client: serverAnswering(okResponse()))),
+        mediaSourceProvider(b).overrideWithValue(MydiaSource(
+            source: guest, client: serverAnswering(okResponse(min: '99.0.0')))),
+        mediaSourceProvider(const SourceId('plex')).overrideWithValue(other),
+        playerVersionProvider.overrideWith(
+            (ref) async => Compatibility.recommendedServerVersion),
+        compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
+      ]);
+      addTearDown(container.dispose);
+      return container.read(compatibilityProvider.future);
+    }
+
+    test('shows on the instance below the minimum, not on the other', () async {
+      final onA = await stateFor(a);
+      expect(onA.showBanner, isFalse);
+      final onB = await stateFor(b);
+      expect(onB.verdict, CompatibilityVerdict.playerUpdateRequired);
+      expect(onB.showBanner, isTrue);
+    });
+
+    test('a non-Mydia active source shows no Mydia warning', () async {
+      final state =
+          await stateFor(const SourceId('plex'), other: FakeMediaSource());
+      expect(state.verdict, CompatibilityVerdict.unknown);
+      expect(state.showBanner, isFalse);
+    });
   });
 }
