@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/plex/plex_identity.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_factories.dart';
@@ -20,11 +18,6 @@ import '../../../core/sources/plex/plex_home_fixtures.dart';
 import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/toast_harness.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// plexRecord's server is `abc123`; Pip sees it under that id.
 const _kidResources = '''
@@ -67,7 +60,6 @@ void main() {
       return http.Response('', 404);
     });
     final container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: client)),

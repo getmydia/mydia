@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/sources/store/source_secrets.dart';
@@ -13,11 +11,6 @@ import '../../../core/sources/store/source_json_test.dart' show plexRecord;
 import '../../../test_utils/mock_auth_storage.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
-class _Authenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.authenticated);
-}
-
 Future<String> _pump(WidgetTester tester, SourceLock lock) async {
   final store = InMemorySourceStore();
   final record = plexRecord().copyWith(serverLocks: {'abc123': lock});
@@ -25,7 +18,6 @@ Future<String> _pump(WidgetTester tester, SourceLock lock) async {
   await store.putAccount(record);
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      authStateProvider.overrideWith(_Authenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(MockAuthStorage())),
     ],

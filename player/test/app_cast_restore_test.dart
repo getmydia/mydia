@@ -5,27 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/app.dart';
-import 'package:player/core/auth/auth_status.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/cast_mini_controller.dart';
-
-/// Auth notifier whose state the test drives directly.
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 void main() {
   /// Restoring a cast session builds `castSessionManagerProvider`, whose body
   /// awaits `asyncGraphqlClientProvider`. That provider stays in the loading
-  /// state until the user authenticates, so starting the chain beforehand
+  /// state until a Mydia server is bound, so starting the chain beforehand
   /// leaves it in flight indefinitely. If the container is then disposed while
   /// it is still loading — app teardown, or an integration test finishing on
   /// the pairing screen — Riverpod completes the pending future with a
@@ -34,7 +25,7 @@ void main() {
   /// how this surfaced in the Player E2E suite.
   ///
   /// These pin the gate that prevents it: the cast stack is untouched until
-  /// auth reports `authenticated`, and is reached once it does.
+  /// a Mydia server is bound, and is reached once it is.
   group('MyApp cast session restore', () {
     late bool managerBuilt;
 
@@ -42,8 +33,10 @@ void main() {
     // real pre-auth behaviour; the manager override awaits it exactly as the
     // real provider body does, so a regression reproduces the original race
     // rather than a sanitised version of it.
-    buildOverrides(AsyncValue<AuthStatus> auth) => [
-          authStateProvider.overrideWith(() => _FakeAuthNotifier(auth)),
+    buildOverrides({required bool bound}) => [
+          sourcesLoadingProvider.overrideWithValue(false),
+          boundAccountIdProvider.overrideWithValue(bound ? 'macct' : null),
+          boundMydiaProvider.overrideWithValue(null),
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
           asyncGraphqlClientProvider
@@ -58,30 +51,31 @@ void main() {
     setUp(() => managerBuilt = false);
 
     Future<void> pumpApp(
-      WidgetTester tester,
-      AsyncValue<AuthStatus> auth,
-    ) async {
+      WidgetTester tester, {
+      required bool bound,
+    }) async {
       await tester.pumpWidget(ProviderScope(
-        overrides: buildOverrides(auth),
+        overrides: buildOverrides(bound: bound),
         child: const MyApp(),
       ));
       await tester.pump();
     }
 
-    testWidgets('does not touch the cast stack while auth is loading',
+    testWidgets('does not touch the cast stack while no server is bound',
         (tester) async {
-      await pumpApp(tester, const AsyncValue.loading());
+      await pumpApp(tester, bound: false);
 
       expect(managerBuilt, isFalse,
-          reason: 'the cast stack must not be built while auth is still '
-              'loading — its GraphQL dependency cannot resolve yet');
+          reason: 'the cast stack must not be built before a server is '
+              'bound — its GraphQL dependency cannot resolve yet');
     });
 
-    testWidgets('restores once the user is authenticated', (tester) async {
-      await pumpApp(tester, const AsyncValue.data(AuthStatus.authenticated));
+    testWidgets('restores once a server is bound', (tester) async {
+      await pumpApp(tester, bound: true);
 
       expect(managerBuilt, isTrue,
-          reason: 'gating on auth must not disable restore outright');
+          reason: 'gating on a bound server must not disable restore '
+              'outright');
     });
   });
 
@@ -91,7 +85,7 @@ void main() {
   /// initialising the chain pre-auth, which is what actually tripped the E2E
   /// pairing test.
   group('CastMiniController', () {
-    testWidgets('does not build the cast stack before authentication',
+    testWidgets('does not build the cast stack without a Mydia account',
         (tester) async {
       var managerBuilt = false;
 
@@ -99,8 +93,7 @@ void main() {
         overrides: [
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
-          authStateProvider.overrideWith(
-              () => _FakeAuthNotifier(const AsyncValue.loading())),
+          hasMydiaProvider.overrideWithValue(false),
           asyncGraphqlClientProvider
               .overrideWith((ref) => Completer<GraphQLClient>().future),
           castSessionManagerProvider.overrideWith((ref) async {
@@ -116,8 +109,8 @@ void main() {
       await tester.pump();
 
       expect(managerBuilt, isFalse,
-          reason: 'the mini controller must not reach the cast stack while '
-              'auth is unresolved');
+          reason: 'the mini controller must not reach the cast stack with '
+              'no Mydia account');
     });
   });
 
@@ -125,7 +118,7 @@ void main() {
   /// and `_initRemoteControlIfEnabled`, but with no guard: `CastMiniController`
   /// starts it running (via `.value`, a plain sync watch — see the "the mini
   /// controller must not reach the cast stack" test above for how little it
-  /// takes) the moment auth reports `authenticated`, on every screen, and its
+  /// takes) the moment a Mydia account exists, on every screen, and its
   /// body reads `castSessionManagerProvider.future` with no try/catch of its
   /// own.
   ///
@@ -151,8 +144,7 @@ void main() {
         overrides: [
           castCapabilitiesProvider
               .overrideWithValue(const CastCapabilities.full()),
-          authStateProvider.overrideWith(() => _FakeAuthNotifier(
-              const AsyncValue.data(AuthStatus.authenticated))),
+          hasMydiaProvider.overrideWithValue(true),
           // Rejects on a real delay chosen to land after this test disposes
           // the tree below — the "late arrival" that has nowhere to go once
           // `castSessionProvider`'s own subscription is already torn down.

@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 // advanced/library-author types (see `test/test_utils/riverpod_helpers.dart`).
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/current_source_status.dart';
+import 'package:player/core/sources/media_source.dart'
+    show SourceConnectionStatus;
 import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/cache/invalidation_target.dart';
 import 'package:player/core/cache/query_key.dart';
@@ -21,15 +22,6 @@ class _StubFreshnessRegistry extends FreshnessRegistry {
 
   @override
   Map<QueryKey, Freshness> build() => _initial;
-}
-
-class _StubAuthState extends AuthStateNotifier {
-  _StubAuthState(this._status);
-
-  final AuthStatus _status;
-
-  @override
-  AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
 }
 
 /// Records exactly which targets the widget asked to be invalidated, so
@@ -49,7 +41,7 @@ class _RecordingInvalidator implements Invalidator {
 Future<void> pumpHeader(
   WidgetTester tester, {
   required Map<QueryKey, Freshness> freshness,
-  AuthStatus authStatus = AuthStatus.authenticated,
+  SourceConnectionStatus status = SourceConnectionStatus.remote,
   // Nullable rather than `= const [QueryKeys.home]`: `QueryKey` is no longer
   // const-constructible (see `query_key.dart`), so a `QueryKeys.home`
   // reference cannot appear in a default parameter value, which Dart
@@ -62,7 +54,7 @@ Future<void> pumpHeader(
       overrides: [
         freshnessRegistryProvider
             .overrideWith(() => _StubFreshnessRegistry(freshness)),
-        authStateProvider.overrideWith(() => _StubAuthState(authStatus)),
+        currentSourceStatusProvider.overrideWithValue(status),
         ...extraOverrides,
       ],
       child: MaterialApp(
@@ -193,7 +185,7 @@ void main() {
     // OfflineBanner is already showing and explains the situation better.
     await pumpHeader(
       tester,
-      authStatus: AuthStatus.offlineMode,
+      status: SourceConnectionStatus.unreachable,
       freshness: {
         QueryKeys.home: Freshness(
           fetchedAt: now.subtract(const Duration(days: 1)),

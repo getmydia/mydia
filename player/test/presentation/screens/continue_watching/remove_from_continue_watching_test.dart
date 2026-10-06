@@ -12,11 +12,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
 import 'package:player/domain/models/home_data.dart';
+import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/home/home_controller.dart';
 
+import '../../../core/sources/mydia/fake_mydia_client.dart';
 import '../../../test_utils/riverpod_helpers.dart';
 import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/stub_link_transport.dart';
 
 Map<String, dynamic> _artwork() => {
       '__typename': 'Artwork',
@@ -137,6 +141,8 @@ ProviderContainer _container(Link link) {
   final container = ProviderContainer(
     overrides: [
       asyncGraphqlClientProvider.overrideWith((ref) async => stubClient(link)),
+      asyncBoundMydiaClientProvider.overrideWith(
+          (ref) async => fakeMydiaClient(StubLinkTransport(link))),
     ],
   );
   addTearDown(container.dispose);
@@ -223,7 +229,7 @@ void main() {
         container
             .read(homeControllerProvider.notifier)
             .removeFromContinueWatching('mv-1'),
-        throwsA(isA<OperationException>()),
+        throwsA(isA<SourceException>()),
       );
 
       final ids = container

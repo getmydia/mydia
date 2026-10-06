@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/auth/auth_status.dart';
+import '../../core/sources/sources_providers.dart';
 import '../../core/cast/cast_backend.dart';
 import '../../core/cast/cast_providers.dart';
 import '../../core/cast/cast_seek.dart';
 import '../../core/cast/cast_session_manager.dart' show PulledSession;
 import '../../core/cast/cast_target.dart';
-import '../../core/graphql/graphql_provider.dart';
 import '../../core/remote/ambient_dismissals.dart';
 import '../../core/remote/ambient_targets.dart';
 import '../../core/remote/load_content_navigation.dart';
@@ -194,17 +193,16 @@ class _CastMiniControllerState extends ConsumerState<CastMiniController> {
     final hasMydia = ref.watch(mydiaCastBackendProvider) != null;
     if (!capabilities.any && !hasMydia) return null;
 
-    // Gate on authentication before touching anything else in the cast stack.
+    // Gate on a Mydia server before touching anything else in the cast stack.
     // `isCastingProvider` reaches `castSessionManagerProvider`, whose body
     // awaits `asyncGraphqlClientProvider` — and that provider does not resolve
-    // until the user is authenticated. Building the chain beforehand leaves it
+    // until a Mydia server is stored. Building the chain beforehand leaves it
     // loading indefinitely on every screen, and when the container is disposed
     // while it is still pending (app teardown, or an integration test finishing
     // on the pairing screen) Riverpod completes it with a StateError that
     // escapes as an unhandled async error. There is also nothing to show: you
     // cannot be casting before you have a server.
-    final auth = ref.watch(authStateProvider);
-    if (auth.value != AuthStatus.authenticated) return null;
+    if (!ref.watch(hasMydiaProvider)) return null;
 
     final session = ref.watch(castSessionProvider).value;
     final target = ref.watch(castTargetProvider);

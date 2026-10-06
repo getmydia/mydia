@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 
-import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
 import '../../../core/cache/watcher_registry.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
 import '../../../graphql/mutations/remove_from_continue_watching.graphql.dart';
 import '../../widgets/toast/toaster.dart';
 
@@ -30,19 +29,13 @@ Future<void> removeFromContinueWatching(Ref ref, String mediaItemId) async {
   // other surface showing a card the server has already hidden.
   final invalidator = ref.read(invalidatorProvider);
 
-  final client = await ref.read(asyncGraphqlClientProvider.future);
-  final result = await client.mutate(
-    MutationOptions(
-      document: documentNodeMutationRemoveFromContinueWatching,
-      variables: Variables$Mutation$RemoveFromContinueWatching(
-        mediaItemId: mediaItemId,
-      ).toJson(),
-    ),
+  final client = await ref.read(asyncBoundMydiaClientProvider.future);
+  await client.request(
+    documentNodeMutationRemoveFromContinueWatching,
+    Variables$Mutation$RemoveFromContinueWatching(
+      mediaItemId: mediaItemId,
+    ).toJson(),
   );
-
-  if (result.hasException) {
-    throw result.exception!;
-  }
 
   await invalidator.invalidate(InvalidationRules.continueWatchingRemoved());
 }

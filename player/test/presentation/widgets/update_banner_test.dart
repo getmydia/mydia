@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/sources/current_source_status.dart';
+import 'package:player/core/sources/media_source.dart'
+    show SourceConnectionStatus;
 import 'package:player/core/compatibility/compatibility_provider.dart';
 import 'package:player/core/compatibility/compatibility_verdict.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/update/update_dismissal_provider.dart';
 import 'package:player/core/update/update_provider.dart';
 import 'package:player/domain/models/available_update.dart';
@@ -62,14 +63,6 @@ class _ErrorCompatibilityNotifier extends CompatibilityNotifier {
   }
 }
 
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._status);
-  final AuthStatus _status;
-
-  @override
-  AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
-}
-
 AppUpdate _update({String version = '0.15.0'}) => AppUpdate(
       version: version,
       downloadUrl: 'https://example.invalid/player-linux-v$version.tar.gz',
@@ -90,7 +83,7 @@ Future<_FakeDismissalNotifier> _pump(
   Set<String> dismissed = const <String>{},
   CompatibilityState compatibility = _compatible,
   CompatibilityNotifier Function()? compatibilityOverride,
-  AuthStatus auth = AuthStatus.authenticated,
+  SourceConnectionStatus status = SourceConnectionStatus.remote,
   bool supported = true,
   List<Uri>? launched,
 }) async {
@@ -105,7 +98,7 @@ Future<_FakeDismissalNotifier> _pump(
           compatibilityOverride ??
               () => _FakeCompatibilityNotifier(compatibility),
         ),
-        authStateProvider.overrideWith(() => _FakeAuthNotifier(auth)),
+        currentSourceStatusProvider.overrideWithValue(status),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -332,7 +325,7 @@ void main() {
         tester,
         state:
             UpdateState(currentVersion: '0.14.2', availableUpdate: _update()),
-        auth: AuthStatus.offlineMode,
+        status: SourceConnectionStatus.unreachable,
       );
 
       expect(find.byType(Text), findsNothing);

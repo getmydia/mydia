@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/sources/current_source_status.dart';
+import 'package:player/core/sources/media_source.dart'
+    show SourceConnectionStatus;
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/graphql/graphql_provider.dart';
@@ -211,20 +213,11 @@ class _PinnedFreshnessRegistry extends FreshnessRegistry {
   void clear(QueryKey key) {}
 }
 
-/// `FreshnessHeader` renders nothing at all in offline mode, so the auth state
-/// has to be pinned to authenticated for the in-flight line to show.
-class _StubAuthState extends AuthStateNotifier {
-  _StubAuthState(this._status);
-
-  final AuthStatus _status;
-
-  @override
-  AsyncValue<AuthStatus> build() => AsyncValue.data(_status);
-}
-
 List<Override> refreshingOverrides() => [
-      authStateProvider
-          .overrideWith(() => _StubAuthState(AuthStatus.authenticated)),
+      // `FreshnessHeader` renders nothing at all when the source is
+      // unreachable, so the status is pinned for the in-flight line to show.
+      currentSourceStatusProvider
+          .overrideWithValue(SourceConnectionStatus.remote),
       freshnessRegistryProvider.overrideWith(
         () => _PinnedFreshnessRegistry({
           QueryKeys.moviesList: Freshness(

@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/mydia/mydia_saver.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/source.dart';
@@ -15,11 +13,6 @@ import 'package:player/domain/sources/source_error.dart';
 
 import '../../../test_utils/mock_auth_storage.dart';
 import 'fake_mydia_transport.dart';
-
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
 
 /// Records whether the secret was already stored when the record landed.
 class _OrderingStore extends InMemorySourceStore {
@@ -64,7 +57,6 @@ void main() {
     store = _OrderingStore(secretStorage);
     transport = FakeMydiaTransport();
     container = ProviderContainer(overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(secretStorage)),
     ]);

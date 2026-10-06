@@ -1,8 +1,6 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/jellyfin/jellyfin_identity.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/source_factories.dart';
@@ -16,11 +14,6 @@ import 'package:player/presentation/screens/sources/jellyfin_sign_in_controller.
 import '../../../core/sources/jellyfin/fake_jellyfin_server.dart';
 import '../../../test_utils/mock_auth_storage.dart';
 
-class _Unauthenticated extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() => const AsyncData(AuthStatus.unauthenticated);
-}
-
 ({
   ProviderContainer container,
   FakeJellyfinServer server,
@@ -32,7 +25,6 @@ class _Unauthenticated extends AuthStateNotifier {
   final storage = MockAuthStorage();
   final container = ProviderContainer(
     overrides: [
-      authStateProvider.overrideWith(_Unauthenticated.new),
       sourceStoreProvider.overrideWith((ref) async => store),
       sourceSecretsProvider.overrideWithValue(SourceSecrets(storage)),
       sourceHttpProvider.overrideWithValue(SourceHttp(client: server.client)),

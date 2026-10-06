@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'test_utils/bound_mydia_override.dart';
 import 'package:player/app.dart';
-import 'package:player/core/auth/auth_status.dart';
+import 'package:player/core/sources/mydia/bound_mydia.dart';
+import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/core/cast/cast_session_manager.dart';
@@ -16,15 +18,6 @@ import 'package:player/presentation/widgets/nav/desktop_sidebar.dart';
 import 'package:player/presentation/widgets/toast/toast_layer.dart';
 import 'package:player/presentation/widgets/toast/toast_models.dart';
 import 'package:player/presentation/widgets/toast/toaster.dart';
-
-class _FakeAuthNotifier extends AuthStateNotifier {
-  _FakeAuthNotifier(this._initial);
-
-  final AsyncValue<AuthStatus> _initial;
-
-  @override
-  AsyncValue<AuthStatus> build() => _initial;
-}
 
 const _device = CastDevice(
   id: 'd1',
@@ -52,11 +45,12 @@ void main() {
     addTearDown(tester.view.reset);
 
     final container = ProviderContainer(overrides: [
+      ...boundMydiaOverrides(),
       castCapabilitiesProvider.overrideWithValue(const CastCapabilities.full()),
-      authStateProvider.overrideWith(() =>
-          _FakeAuthNotifier(const AsyncValue.data(AuthStatus.authenticated))),
       asyncGraphqlClientProvider
           .overrideWith((ref) => Completer<GraphQLClient>().future),
+      asyncBoundMydiaClientProvider
+          .overrideWith((ref) => Completer<MydiaClient>().future),
       castSessionProvider.overrideWith((ref) => Stream.value(_session)),
       castSessionManagerProvider
           .overrideWith((ref) => Completer<CastSessionManager>().future),

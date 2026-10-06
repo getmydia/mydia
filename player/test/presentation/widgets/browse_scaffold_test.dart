@@ -1,22 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/cache/freshness.dart';
 import 'package:player/core/graphql/watch/query_keys.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_providers.dart';
 import 'package:player/presentation/widgets/browse_scaffold.dart';
-
-/// Mirrors the stub in `freshness_header_test.dart`. The real
-/// `AuthStateNotifier` reaches for secure storage on build, which a widget
-/// test has no business doing.
-class _StubAuthState extends AuthStateNotifier {
-  @override
-  AsyncValue<AuthStatus> build() =>
-      const AsyncValue.data(AuthStatus.authenticated);
-}
 
 const _bodyKey = Key('browse-scaffold-test-body');
 
@@ -44,7 +33,6 @@ Future<void> pumpScaffold(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authStateProvider.overrideWith(_StubAuthState.new),
         castCapabilitiesProvider
             .overrideWithValue(const CastCapabilities.full()),
       ],
@@ -145,7 +133,6 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            authStateProvider.overrideWith(_StubAuthState.new),
             castCapabilitiesProvider
                 .overrideWithValue(const CastCapabilities.full()),
           ],

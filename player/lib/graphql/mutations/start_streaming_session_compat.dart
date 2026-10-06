@@ -11,7 +11,7 @@
 /// predates full-playlist support, i.e. exactly what `WINDOW` already means.
 ///
 /// Shared by every caller that parses this mutation's result --
-/// `PlayerScreen`'s own session start and `GraphqlCastStreamingSessionService`
+/// `PlayerScreen`'s own session start and `MydiaCastStreamingSessionService`
 /// -- so this compatibility handling lives in one place instead of being
 /// re-derived, or forgotten, at each call site.
 Map<String, dynamic> withPlaylistModeDefault(Map<String, dynamic> data) {

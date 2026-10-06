@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:player/core/auth/auth_status.dart';
-import 'package:player/core/graphql/graphql_provider.dart';
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/presentation/widgets/nav/source_nav_list.dart';
 
@@ -13,26 +11,17 @@ class _NotSearchable extends FakeMediaSource {
   T? as<T extends Object>() => null;
 }
 
-class _Auth extends AuthStateNotifier {
-  _Auth(this.status);
-
-  final AuthStatus status;
-
-  @override
-  AsyncValue<AuthStatus> build() => AsyncData(status);
-}
-
 Future<List<String>> _pump(
   WidgetTester tester, {
   FakeMediaSource? source,
-  AuthStatus auth = AuthStatus.authenticated,
+  bool hasMydia = true,
   String location = '/s/acc1:owner:aa11',
   FocusNode? focusNode,
 }) async {
   final navigations = <String>[];
   await tester.pumpWidget(ProviderScope(
     overrides: [
-      authStateProvider.overrideWith(() => _Auth(auth)),
+      hasMydiaProvider.overrideWithValue(hasMydia),
       mediaSourceProvider(fakeSourceId)
           .overrideWithValue(source ?? FakeMediaSource()),
     ],
@@ -90,9 +79,9 @@ void main() {
     expect(find.text('Servers'), findsNothing);
   });
 
-  testWidgets('no Settings row without a Mydia sign-in', (tester) async {
-    // `/settings` redirects back to the source's home without Mydia auth.
-    await _pump(tester, auth: AuthStatus.unauthenticated);
+  testWidgets('no Settings row without a Mydia account', (tester) async {
+    // `/settings` redirects back to the source's home without Mydia.
+    await _pump(tester, hasMydia: false);
     expect(find.byKey(const ValueKey('source-nav-settings')), findsNothing);
   });
 

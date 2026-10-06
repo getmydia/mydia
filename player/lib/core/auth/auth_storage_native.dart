@@ -62,7 +62,7 @@ class NativeAuthStorage implements AuthStorage {
   /// Keychain and keystore reads are slow on some platforms, and startup used
   /// to read the same token and server URL two or three times each through
   /// separate providers. Static for the same reason [_memoryStorage] is:
-  /// `PairingService`, `SessionTeardown` and `AuthService` each hold their own
+  /// `PairingService` and `AuthService` each hold their own
   /// instance, and they must all see each other's writes.
   static final Map<String, String?> _readCache = <String, String?>{};
 

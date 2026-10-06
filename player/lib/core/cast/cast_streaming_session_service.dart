@@ -1,10 +1,11 @@
 import 'package:flutter/foundation.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
 
+import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session_compat.dart';
 import '../../graphql/schema.graphql.dart';
+import '../sources/mydia/mydia_client.dart';
 import 'cast_backend.dart';
 
 /// Starts and ends the server-side HLS sessions a bridged Chromecast route
@@ -42,11 +43,10 @@ abstract class CastStreamingSessionService {
   Future<void> end(String sessionId);
 }
 
-class GraphqlCastStreamingSessionService
-    implements CastStreamingSessionService {
-  final GraphQLClient _client;
+class MydiaCastStreamingSessionService implements CastStreamingSessionService {
+  final MydiaClient _client;
 
-  const GraphqlCastStreamingSessionService(this._client);
+  const MydiaCastStreamingSessionService(this._client);
 
   @override
   Future<({String sessionId, Duration startOffset})> start({
@@ -54,29 +54,28 @@ class GraphqlCastStreamingSessionService
     required bool transcode,
     Duration startPosition = Duration.zero,
   }) async {
-    final result = await _client.mutate(MutationOptions(
-      document: documentNodeMutationStartStreamingSession,
-      variables: Variables$Mutation$StartStreamingSession(
-        fileId: fileId,
-        strategy: transcode
-            ? Enum$StreamingStrategy.TRANSCODE
-            : Enum$StreamingStrategy.HLS_COPY,
-        startPosition:
-            startPosition > Duration.zero ? startPosition.inSeconds : null,
-      ).toJson(),
-    ));
-
-    if (result.hasException) {
+    final Map<String, dynamic> data;
+    try {
+      data = await _client.request(
+        documentNodeMutationStartStreamingSession,
+        Variables$Mutation$StartStreamingSession(
+          fileId: fileId,
+          strategy: transcode
+              ? Enum$StreamingStrategy.TRANSCODE
+              : Enum$StreamingStrategy.HLS_COPY,
+          startPosition:
+              startPosition > Duration.zero ? startPosition.inSeconds : null,
+        ).toJson(),
+      );
+    } on SourceException catch (e) {
       throw CastBackendException(
-        'Could not start a streaming session: ${result.exception}',
+        'Could not start a streaming session: ${e.message ?? e.viewerMessage}',
         CastFailureKind.unreachable,
       );
     }
 
-    final data = result.data;
-    final session = data == null
-        ? null
-        : Mutation$StartStreamingSession.fromJson(withPlaylistModeDefault(data))
+    final session =
+        Mutation$StartStreamingSession.fromJson(withPlaylistModeDefault(data))
             .startStreamingSession;
 
     if (session == null) {
@@ -95,11 +94,10 @@ class GraphqlCastStreamingSessionService
   @override
   Future<void> end(String sessionId) async {
     try {
-      await _client.mutate(MutationOptions(
-        document: documentNodeMutationEndStreamingSession,
-        variables: Variables$Mutation$EndStreamingSession(sessionId: sessionId)
-            .toJson(),
-      ));
+      await _client.request(
+        documentNodeMutationEndStreamingSession,
+        Variables$Mutation$EndStreamingSession(sessionId: sessionId).toJson(),
+      );
     } catch (e) {
       debugPrint(
           '[CastStreamingSession] Ignoring end error for $sessionId: $e');

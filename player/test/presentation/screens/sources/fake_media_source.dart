@@ -77,6 +77,9 @@ class FakeMediaSource extends MediaSource implements WatchedState, Searchable {
   final browseCalls = <(BrowseQuery, Cursor?)>[];
   final _status = ValueNotifier(SourceConnectionStatus.local);
 
+  /// Moves the reported connection, the way a probe result would.
+  void setStatus(SourceConnectionStatus status) => _status.value = status;
+
   static const movies = LibraryRef(sourceId: fakeSourceId, id: 'movies');
   static const shows = LibraryRef(sourceId: fakeSourceId, id: 'shows');
 

@@ -11,7 +11,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:go_router/go_router.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import '../../../core/app_menu/now_playing.dart';
-import '../../../core/auth/auth_status.dart';
+import '../../../core/sources/current_source_status.dart';
 import '../../../core/connection/connection_provider.dart' as conn;
 import '../../../core/graphql/graphql_provider.dart';
 import '../../../core/graphql/watch/invalidation_rules.dart';
@@ -1083,21 +1083,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             seasonNumber: widget.seasonNumber,
           ),
           sourceId: () => _boundSourceId,
-          offline: () => ref.read(authStateProvider).maybeWhen(
-                data: (s) => s == AuthStatus.offlineMode,
-                orElse: () => false,
-              ),
+          offline: () =>
+              isOffline(ref.read(boundMydiaProvider)?.statusListenable.value),
           streaming: MydiaStreamingDeps(
             serverUrl: () => ref.read(serverUrlProvider.future),
             authToken: () => ref.read(authTokenProvider.future),
             connection: () => ref.read(conn.connectionProvider),
             mediaProxy: () => ref.read(mediaProxyProvider),
-            mediaToken: () async {
-              final service =
-                  await ref.read(asyncMediaTokenServiceProvider.future);
-              await service.ensureValidToken();
-              return service.getToken();
-            },
+            mediaToken: () async =>
+                ref.read(boundMydiaClientProvider)?.ensureValidMediaToken(),
             serverFeatures: () => ref.read(serverFeaturesProvider),
             adoptClient: (client) => _graphqlClient = client,
             boundClient: () => ref.read(boundMydiaClientProvider),

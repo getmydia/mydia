@@ -5,7 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/build_channel.dart';
 import '../../../core/connection/connection_provider.dart';
 import '../../../core/connection/connection_summary.dart';
-import '../../../core/graphql/graphql_provider.dart';
+import '../../../core/sources/mydia/bound_mydia.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../core/layout/dock_insets.dart';
 import '../../../core/layout/window_chrome_inset.dart';
 import '../../../core/p2p/p2p_service.dart';
@@ -23,6 +24,7 @@ import '../../../domain/models/user_settings.dart';
 import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/connection_tone_color.dart';
 import '../../widgets/hls_quality_selector.dart';
+import '../../widgets/toast/toaster.dart';
 import '../../widgets/window_chrome/window_title_row.dart';
 import '../sources/manage_sources_screen.dart';
 import 'settings_controller.dart';
@@ -141,7 +143,7 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Sign out'),
-        content: const Text('Sign out of this server on this device?'),
+        content: const Text('Remove this server from this device?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -157,11 +159,19 @@ class SettingsScreen extends ConsumerWidget {
 
     if (confirmed != true || !context.mounted) return;
 
-    // One call. AuthStateNotifier.logout() owns the whole teardown and
-    // outlives the router redirect that unmounts this screen, which is why
-    // the ordering this used to juggle no longer matters. No explicit
-    // context.go() needed.
-    await ref.read(authStateProvider.notifier).logout();
+    final toaster = Toaster.of(context);
+    try {
+      // The binding is only known once the stored sources have loaded.
+      await ref.read(sourceRecordsProvider.future);
+      await ref.read(legacyInstanceIdProvider.future);
+      final account = ref.read(boundMydiaProvider)?.source.account;
+      if (account == null) return;
+      // Removing the bound account sends the router on: to another server, or
+      // to add-a-server when none is left.
+      await removeMydiaInstance(ref, account);
+    } catch (_) {
+      toaster.show('Could not remove this server.', kind: ToastKind.error);
+    }
   }
 }
 
