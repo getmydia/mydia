@@ -33,7 +33,8 @@ import 'package:player/presentation/widgets/nav/bottom_nav.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
-import '../../test_utils/stub_graphql_client.dart';
+import '../../core/sources/mydia/fake_mydia_client.dart';
+import '../../core/sources/mydia/fake_mydia_transport.dart';
 import '../../test_utils/toast_harness.dart';
 
 class _FakeAuthNotifier extends AuthStateNotifier {
@@ -139,9 +140,7 @@ class _ManagerHarness {
 _ManagerHarness _buildManagerHarness() {
   final backend = FakeCastBackend();
   final sessions = FakeStreamingSessionService();
-  final client = stubClient(
-    StubLink((request, callIndex) => const {'__typename': 'Query'}),
-  );
+  final client = fakeMydiaClient(FakeMydiaTransport());
 
   final manager = CastSessionManager(
     backend: backend,
@@ -168,9 +167,7 @@ _ManagerHarness _buildManagerHarness() {
 _ManagerHarness _buildMydiaManagerHarness() {
   final backend = FakeMydiaCastBackend();
   final sessions = FakeStreamingSessionService();
-  final client = stubClient(
-    StubLink((request, callIndex) => const {'__typename': 'Query'}),
-  );
+  final client = fakeMydiaClient(FakeMydiaTransport());
 
   final manager = CastSessionManager(
     backend: backend,

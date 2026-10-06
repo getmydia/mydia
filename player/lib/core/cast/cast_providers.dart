@@ -13,6 +13,7 @@ import '../p2p/p2p_service.dart';
 import '../player/progress_service.dart';
 import '../remote/ambient_targets.dart';
 import '../remote/remote_roster.dart';
+import '../sources/mydia/bound_mydia.dart';
 import 'cast_backend.dart';
 import 'cast_capabilities.dart';
 import 'cast_route_resolver.dart';
@@ -251,6 +252,8 @@ final castSessionManagerProvider =
   // only for progress sync and streaming-session bookkeeping, neither of
   // which is worth dropping an in-flight cast over.
   final client = await ref.read(asyncGraphqlClientProvider.future);
+  final mydiaClient = ref.read(boundMydiaClientProvider);
+  if (mydiaClient == null) throw StateError('No Mydia server');
   final proxy = ref.read(localProxyServiceProvider);
   final streamingSessions = GraphqlCastStreamingSessionService(client);
 
@@ -265,7 +268,7 @@ final castSessionManagerProvider =
     capabilities: ref.read(castCapabilitiesProvider),
     bindSource: (content) => bindSourceCast(ref, content),
     store: store,
-    progressService: ProgressService(client),
+    progressService: ProgressService(mydiaClient),
     resolverFactory: () => CastRouteResolver(
       isP2pMode: ref.read(connectionProvider).isP2PMode,
       serverUrl: ref.read(serverUrlProvider).whenOrNull(data: (url) => url),

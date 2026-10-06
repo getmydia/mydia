@@ -46,6 +46,8 @@ import 'package:player/presentation/screens/player/session/playback_session.dart
 import 'package:player/presentation/screens/settings/settings_controller.dart';
 
 import '../../../test_utils/stub_graphql_client.dart';
+import '../../../test_utils/stub_link_transport.dart';
+import '../../../core/sources/mydia/fake_mydia_client.dart';
 import '../../../test_utils/toast_harness.dart';
 import '../../../test_utils/mydia_test_source.dart';
 
@@ -748,6 +750,8 @@ ProviderContainer buildPlayerScreenContainer({
         downloadService ?? FakeDownloadService(downloaded: downloaded)),
     asyncGraphqlClientProvider
         .overrideWith((ref) async => stubClient(link, cache: cache)),
+    boundMydiaClientProvider
+        .overrideWithValue(fakeMydiaClient(StubLinkTransport(link))),
     serverUrlProvider.overrideWith((ref) async => 'https://mydia.test'),
     authTokenProvider.overrideWith((ref) async => 'tok'),
     conn.connectionProvider

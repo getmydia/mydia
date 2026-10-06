@@ -6,7 +6,8 @@ import 'package:player/core/playback/stream_urls.dart';
 import 'package:player/core/player/progress_reporter.dart';
 import 'package:player/core/player/progress_service.dart';
 
-import '../../test_utils/stub_graphql_client.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
 class _NoUrls implements StreamUrls {
   @override
@@ -28,7 +29,7 @@ void main() {
       relayed: false,
     );
     expect(controller, isA<PlaybackTransport>());
-    expect(ProgressService(stubClient(StubLink.responses(const [{}]))),
+    expect(ProgressService(fakeMydiaClient(FakeMydiaTransport())),
         isA<ProgressReporter>());
   });
 }

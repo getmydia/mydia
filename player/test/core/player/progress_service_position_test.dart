@@ -1,44 +1,43 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/core/player/stream_timeline.dart';
 
-import 'progress_service_position_test.mocks.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
 
-@GenerateMocks([GraphQLClient])
 void main() {
-  late MockGraphQLClient client;
+  late FakeMydiaTransport server;
   late ProgressService service;
 
+  List<String> sent() => [
+        for (final c in server.calls)
+          if (c.operation.startsWith('Update')) c.operation,
+      ];
+
   setUp(() {
-    client = MockGraphQLClient();
-    service = ProgressService(client);
-    when(client.mutate<Object?>(any)).thenAnswer(
-      (_) async => QueryResult(
-        source: QueryResultSource.network,
-        data: const {},
-        options: QueryOptions(document: gql('{ __typename }')),
-      ),
-    );
+    server = FakeMydiaTransport();
+    server.handlers['UpdateMovieProgress'] = (_) => {};
+    server.handlers['UpdateEpisodeProgress'] = (_) => {};
+    service = ProgressService(fakeMydiaClient(server));
   });
 
   group('syncMoviePosition', () {
     test('sends a mutation for a valid position', () async {
-      await service.syncMoviePosition(
+      final ok = await service.syncMoviePosition(
         'movie-1',
         const Duration(seconds: 30),
         const Duration(seconds: 120),
       );
 
-      verify(client.mutate<Object?>(any)).called(1);
+      expect(ok, isTrue);
+      expect(sent(), ['UpdateMovieProgress']);
+      expect(server.calls.single.vars['movieId'], 'movie-1');
     });
 
     test('skips the mutation when duration is zero', () async {
       await service.syncMoviePosition('movie-1', Duration.zero, Duration.zero);
 
-      verifyNever(client.mutate<Object?>(any));
+      expect(sent(), isEmpty);
     });
 
     test('skips the mutation when position exceeds duration', () async {
@@ -48,7 +47,31 @@ void main() {
         const Duration(seconds: 120),
       );
 
-      verifyNever(client.mutate<Object?>(any));
+      expect(sent(), isEmpty);
+    });
+
+    test('is false, not thrown, when the server is unreachable', () async {
+      server.unreachable = true;
+
+      final ok = await service.syncMoviePosition(
+        'movie-1',
+        const Duration(seconds: 30),
+        const Duration(seconds: 120),
+      );
+
+      expect(ok, isFalse);
+    });
+
+    test('is false when the server answers with an error', () async {
+      server.handlers['UpdateMovieProgress'] = (_) => throw Exception('boom');
+
+      final ok = await service.syncMoviePosition(
+        'movie-1',
+        const Duration(seconds: 30),
+        const Duration(seconds: 120),
+      );
+
+      expect(ok, isFalse);
     });
   });
 
@@ -60,7 +83,7 @@ void main() {
         const Duration(seconds: 120),
       );
 
-      verify(client.mutate<Object?>(any)).called(1);
+      expect(sent(), ['UpdateEpisodeProgress']);
     });
   });
 

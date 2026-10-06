@@ -1100,6 +1100,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             },
             serverFeatures: () => ref.read(serverFeaturesProvider),
             adoptClient: (client) => _graphqlClient = client,
+            boundClient: () => ref.read(boundMydiaClientProvider),
           ),
         );
 

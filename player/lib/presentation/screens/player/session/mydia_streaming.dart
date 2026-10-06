@@ -8,6 +8,7 @@ import 'package:graphql_flutter/graphql_flutter.dart';
 import '../../../../core/connection/connection_provider.dart' as conn;
 import '../../../../core/p2p/media_proxy.dart';
 import '../../../../core/playback/server_features.dart';
+import '../../../../core/sources/mydia/mydia_client.dart';
 
 class MydiaStreamingDeps {
   const MydiaStreamingDeps({
@@ -18,7 +19,11 @@ class MydiaStreamingDeps {
     required this.mediaToken,
     required this.serverFeatures,
     required this.adoptClient,
+    required this.boundClient,
   });
+
+  /// The bound Mydia instance's client, which progress reports go through.
+  final MydiaClient? Function() boundClient;
 
   final Future<String?> Function() serverUrl;
   final Future<String?> Function() authToken;

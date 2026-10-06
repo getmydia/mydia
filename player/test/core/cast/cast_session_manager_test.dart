@@ -1,7 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:player/core/cast/cast_backend.dart';
 import 'package:player/core/cast/cast_capabilities.dart';
 import 'package:player/core/cast/cast_route_resolver.dart';
@@ -9,12 +6,29 @@ import 'package:player/core/cast/cast_session_manager.dart';
 import 'package:player/core/cast/cast_session_store.dart';
 import 'package:player/core/player/progress_service.dart';
 import 'package:player/domain/models/cast_device.dart';
-import 'package:player/graphql/mutations/update_episode_progress.graphql.dart';
 import 'package:player/native/lib.dart';
 
 import '../../test_utils/fake_cast_backend.dart';
 import '../../test_utils/fake_streaming_session_service.dart';
-import 'cast_session_manager_test.mocks.dart';
+import '../sources/mydia/fake_mydia_client.dart';
+import '../sources/mydia/fake_mydia_transport.dart';
+
+/// A server that accepts every progress mutation.
+FakeMydiaTransport _progressServer() {
+  final server = FakeMydiaTransport();
+  server.handlers['UpdateMovieProgress'] = (_) => {};
+  server.handlers['UpdateEpisodeProgress'] = (_) => {};
+  return server;
+}
+
+/// The progress mutations a server received.
+List<({String operation, Map<String, dynamic> vars})> _progressCalls(
+        FakeMydiaTransport server) =>
+    [
+      for (final c in server.calls)
+        if (c.operation.startsWith('Update'))
+          (operation: c.operation, vars: c.vars),
+    ];
 
 /// Minimal [CastBackend] double for the registry/dispatch tests in the
 /// 'multi-protocol routing' group below.
@@ -146,7 +160,6 @@ FlutterPlaybackSnapshot _snapshot({
       sequence: sequence ?? BigInt.one,
     );
 
-@GenerateMocks([GraphQLClient])
 void main() {
   const device = CastDevice(
     id: 'd1',
@@ -169,7 +182,7 @@ void main() {
 
   late FakeCastBackend backend;
   late InMemoryCastSessionStore store;
-  late MockGraphQLClient client;
+  late FakeMydiaTransport server;
   late FakeStreamingSessionService sessions;
   late List<bool> lanCalls;
 
@@ -193,7 +206,7 @@ void main() {
       // `backend` as primary.
       mydiaBackend: backend,
       store: store,
-      progressService: ProgressService(client),
+      progressService: ProgressService(fakeMydiaClient(server)),
       streamingSessions: sessions,
       resolverFactory: () => CastRouteResolver(
         isP2pMode: isP2pMode,
@@ -233,14 +246,7 @@ void main() {
     required FakeStreamingSessionService sessions,
     CastSessionStore? store,
   }) {
-    final fakeClient = MockGraphQLClient();
-    when(fakeClient.mutate<Object?>(any)).thenAnswer(
-      (_) async => QueryResult(
-        source: QueryResultSource.network,
-        data: const {},
-        options: QueryOptions(document: gql('{ __typename }')),
-      ),
-    );
+    final fakeClient = fakeMydiaClient(_progressServer());
 
     return CastSessionManager(
       backend: chromecast,
@@ -264,18 +270,11 @@ void main() {
   setUp(() {
     backend = FakeCastBackend();
     store = InMemoryCastSessionStore();
-    client = MockGraphQLClient();
+    server = _progressServer();
     sessions = FakeStreamingSessionService();
     lanCalls = [];
     lanBaseUrl = null;
     hasLanInterface = true;
-    when(client.mutate<Object?>(any)).thenAnswer(
-      (_) async => QueryResult(
-        source: QueryResultSource.network,
-        data: const {},
-        options: QueryOptions(document: gql('{ __typename }')),
-      ),
-    );
   });
 
   group('startCast', () {
@@ -377,7 +376,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 5));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate<Object?>(any));
+      expect(_progressCalls(server), isEmpty);
     });
   });
 
@@ -666,7 +665,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verify(client.mutate<Object?>(any)).called(1);
+      expect(_progressCalls(server), hasLength(1));
     });
 
     test('does not sync before a duration is known', () async {
@@ -677,7 +676,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate<Object?>(any));
+      expect(_progressCalls(server), isEmpty);
     });
 
     /// `-1` is the Chromecast's "I don't know" placeholder, not a length.
@@ -692,7 +691,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verifyNever(client.mutate<Object?>(any));
+      expect(_progressCalls(server), isEmpty);
     });
 
     test('updates the persisted position', () async {
@@ -726,10 +725,9 @@ void main() {
       // Counting calls alone would pass even if syncMoviePosition and
       // syncEpisodePosition were swapped — assert on the actual mutation
       // document sent, not just that *a* mutation fired.
-      final captured = verify(client.mutate<Object?>(captureAny)).captured;
-      expect(captured, hasLength(1));
-      final options = captured.single as MutationOptions;
-      expect(options.document, same(documentNodeMutationUpdateEpisodeProgress));
+      final calls = _progressCalls(server);
+      expect(calls, hasLength(1));
+      expect(calls.single.operation, 'UpdateEpisodeProgress');
     });
 
     /// `CastSessionManager` owns one long-lived `ProgressService` instance
@@ -760,11 +758,10 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      final captured = verify(client.mutate<Object?>(captureAny)).captured;
-      expect(captured, hasLength(1));
-      final options = captured.single as MutationOptions;
-      expect(options.variables['durationSeconds'], 6420);
-      expect(options.variables['positionSeconds'], 100);
+      final calls = _progressCalls(server);
+      expect(calls, hasLength(1));
+      expect(calls.single.vars['durationSeconds'], 6420);
+      expect(calls.single.vars['positionSeconds'], 100);
     });
   });
 
@@ -1010,7 +1007,7 @@ void main() {
       backend.emitPosition(const Duration(seconds: 100));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
-      verify(client.mutate<Object?>(any)).called(1);
+      expect(_progressCalls(server), hasLength(1));
     });
 
     test('marks a restored session stale when the receiver disconnects',
@@ -1530,7 +1527,7 @@ void main() {
       final manager = CastSessionManager(
         backend: backend,
         store: store,
-        progressService: ProgressService(client),
+        progressService: ProgressService(fakeMydiaClient(server)),
         streamingSessions: sessions,
         resolverFactory: () => CastRouteResolver(
           isP2pMode: true,
