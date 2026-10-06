@@ -133,7 +133,30 @@ ItemSummary? plexSummary(SourceId sourceId, Map<String, dynamic> m) {
     sortTitle: m['titleSort'] as String?,
     addedAt: _epoch(m['addedAt']),
     lastPlayedAt: _epoch(m['lastViewedAt']),
+    externalIds: plexExternalIds(m['Guid']),
   );
+}
+
+/// The catalogue ids in a Plex `Guid` array (`tmdb://42`, `imdb://tt...`).
+/// Plex only sends it when asked with `includeGuids=1`.
+ExternalIds plexExternalIds(Object? guids) {
+  String? tmdb, tvdb, imdb;
+  for (final g in guids is List ? guids : const []) {
+    final id = g is Map ? g['id'] : null;
+    if (id is! String) continue;
+    final sep = id.indexOf('://');
+    if (sep <= 0 || sep + 3 >= id.length) continue;
+    final value = id.substring(sep + 3);
+    switch (id.substring(0, sep)) {
+      case 'tmdb':
+        tmdb ??= value;
+      case 'tvdb':
+        tvdb ??= value;
+      case 'imdb':
+        imdb ??= value;
+    }
+  }
+  return ExternalIds(tmdb: tmdb, tvdb: tvdb, imdb: imdb);
 }
 
 /// Plex's own Continue Watching and On Deck hubs. The Continue Watching row
