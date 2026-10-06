@@ -29,6 +29,12 @@ import 'source_pages.dart';
 
 enum _ViewMode { grid, list }
 
+/// Remembered sorts decoded this session, by `<sourceId>/<libraryId>`. A key
+/// present with a null value means storage held nothing. Lives for the app
+/// session, so only the first visit to a library can wait on storage.
+final rememberedSortsProvider =
+    Provider<Map<String, BrowseQuery?>>((ref) => {});
+
 SortOption? _sortOption(Library info, BrowseQuery query) {
   final options = info.sortOptions;
   return options.where((o) => o.id == query.sortId).firstOrNull ??
@@ -109,19 +115,31 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
 
   /// True until the remembered sort has been read, so the library never
   /// fetches under the default and then again under the stored order.
-  late bool _loadingSort = _remembers;
+  late bool _loadingSort = _remembers && !_cache.containsKey(_sortKey);
+
+  /// Sorts already read this session, so a repeat visit needs no storage.
+  late final Map<String, BrowseQuery?> _cache =
+      ref.read(rememberedSortsProvider);
+
+  /// The query a first build starts from: a saved filter's, else the
+  /// remembered sort when this session already knows it.
+  BrowseQuery? get _seed =>
+      widget.initialQuery ?? (_remembers ? _cache[_sortKey] : null);
+
+  /// How long the first storage read may hold the library back.
+  static const _readTimeout = Duration(milliseconds: 300);
 
   @override
   void initState() {
     super.initState();
-    if (_remembers) _loadSort();
+    if (_loadingSort) _loadSort();
     // A provider cannot be written while the tree builds, so the seed lands
     // after it; `build` already answers with the seed until then, so the
     // first fetch is the right one.
     Future.microtask(() {
       if (!mounted) return;
       _seeded = true;
-      final initial = widget.initialQuery;
+      final initial = _seed;
       final notifier = ref.read(libraryQueryProvider(widget.library).notifier);
       if (initial != null &&
           ref.read(libraryQueryProvider(widget.library)) == _defaultQuery) {
@@ -132,14 +150,20 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
 
   Future<void> _loadSort() async {
     BrowseQuery? stored;
+    var answered = false;
     try {
-      final raw =
-          await ref.read(coreSettingsServiceProvider).getLibrarySort(_sortKey);
+      final raw = await ref
+          .read(coreSettingsServiceProvider)
+          .getLibrarySort(_sortKey)
+          .timeout(_readTimeout);
       stored = _decodeSort(raw);
+      answered = true;
     } catch (_) {
-      // An unreadable preference is the default order, not an error.
+      // A stalled or unreadable preference is the default order, not an
+      // error. A late answer is dropped: the first page is already up.
     }
     if (!mounted) return;
+    if (answered) _cache.putIfAbsent(_sortKey, () => stored);
     if (stored != null &&
         ref.read(libraryQueryProvider(widget.library)) == _defaultQuery) {
       ref.read(libraryQueryProvider(widget.library).notifier).set(stored);
@@ -150,6 +174,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   Future<void> _setQuery(BrowseQuery query) async {
     ref.read(libraryQueryProvider(widget.library).notifier).set(query);
     if (!_remembers) return;
+    _cache[_sortKey] = query;
     try {
       await ref
           .read(coreSettingsServiceProvider)
@@ -189,7 +214,7 @@ class _SourceLibraryScreenState extends ConsumerState<SourceLibraryScreen> {
   }
 
   BrowseQuery _effective(BrowseQuery stored) {
-    final initial = widget.initialQuery;
+    final initial = _seed;
     return !_seeded && initial != null && stored == _defaultQuery
         ? initial
         : stored;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -45,7 +47,78 @@ Future<void> pumpLibrary(WidgetTester tester, FakeMediaSource fake,
   await tester.pumpAndSettle();
 }
 
+/// Storage whose reads count, and optionally never answer.
+class _CountingStorage extends MockAuthStorage {
+  _CountingStorage({this.stall = false});
+
+  final bool stall;
+  int reads = 0;
+
+  @override
+  Future<String?> read(String key) {
+    reads++;
+    return stall ? Completer<String?>().future : super.read(key);
+  }
+}
+
 void main() {
+  testWidgets('a stalled storage read falls back to the default order',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = FakeMediaSource();
+    await tester
+        .pumpWidget(_libraryApp(fake, storage: _CountingStorage(stall: true)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(fake.browseCalls, isEmpty, reason: 'still waiting on storage');
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(fake.browseCalls.first.$1, const BrowseQuery());
+    expect(find.byKey(const ValueKey('source-poster-m1')), findsOneWidget);
+  });
+
+  testWidgets('a second visit in the session needs no storage read',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final storage = _CountingStorage();
+    await SettingsService(storage: storage)
+        .setLibrarySort('${fakeSourceId.value}/movies', 'added|asc');
+    final container = ProviderContainer(overrides: [
+      mediaSourceProvider(fakeSourceId).overrideWithValue(FakeMediaSource()),
+      coreSettingsServiceProvider
+          .overrideWithValue(SettingsService(storage: storage)),
+      sourceArtworkProvider.overrideWith((ref, key) async => null),
+    ]);
+    addTearDown(container.dispose);
+    Widget app() => UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            home: SourceLibraryScreen(library: FakeMediaSource.movies),
+          ),
+        );
+
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+    expect(storage.reads, 1);
+
+    await tester.pumpWidget(const SizedBox());
+    final fake = FakeMediaSource();
+    container.updateOverrides([
+      mediaSourceProvider(fakeSourceId).overrideWithValue(fake),
+      coreSettingsServiceProvider
+          .overrideWithValue(SettingsService(storage: storage)),
+      sourceArtworkProvider.overrideWith((ref, key) async => null),
+    ]);
+    await tester.pumpWidget(app());
+    await tester.pump();
+    expect(storage.reads, 1);
+    await tester.pumpAndSettle();
+    expect(fake.browseCalls.first.$1.sortId, 'added');
+    expect(fake.browseCalls.first.$1.descending, isFalse);
+  });
+
   testWidgets('the direction toggle flips descending in the query',
       (tester) async {
     final fake = FakeMediaSource();
