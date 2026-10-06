@@ -9,12 +9,16 @@ import '../../../core/sources/cache/source_keys.dart';
 import '../../../core/sources/capabilities.dart';
 import '../../../core/sources/source.dart';
 import '../../../core/sources/sources_providers.dart';
+import '../../../core/startup/startup_timeline.dart';
+import '../../../domain/sources/hub.dart';
 import '../../../domain/sources/item.dart';
 import '../../../domain/sources/library.dart';
+import '../../widgets/ambient_backdrop_provider.dart';
 import '../../widgets/freshness_header.dart';
 import '../detail/detail_links.dart';
 import 'source_browse_providers.dart';
 import 'source_continue_watching_row.dart';
+import 'source_home_hero.dart';
 import 'source_drawer_button.dart';
 import 'source_error_view.dart';
 import 'source_poster_row.dart';
@@ -36,10 +40,32 @@ class SourceHomeScreen extends ConsumerWidget {
     }
   }
 
+  /// The first Continue Watching item, else the first item of the first hub.
+  /// A failed or loading row has no value and falls through.
+  ItemSummary? _heroItem(WidgetRef ref) {
+    final resuming = ref.watch(sourceContinueWatchingProvider(sourceId));
+    if (resuming.value?.firstOrNull case final item?) return item;
+    final hubs = ref.watch(sourceHubsProvider(sourceId)).value;
+    for (final hub in hubs ?? const <Hub>[]) {
+      if (hub.items.firstOrNull case final item?) return item;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final source = ref.watch(mediaSourceProvider(sourceId));
     final libraries = ref.watch(sourceLibrariesProvider(sourceId));
+    final hero = _heroItem(ref);
+    if (libraries.hasValue) {
+      StartupTimeline.app
+        ..mark('home_first_data')
+        ..logOnce();
+    }
+    // Nothing to feature, or nothing to show yet: the calm static backdrop.
+    if (hero == null || !libraries.hasValue) {
+      publishBackdropSource(ref, BackdropSource.none);
+    }
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -64,6 +90,13 @@ class SourceHomeScreen extends ConsumerWidget {
                             title: source?.displayName ?? 'Server',
                             sourceId: sourceId,
                             searchable: source?.as<Searchable>() != null),
+                        if (hero != null)
+                          SourceHomeHero(
+                            key: ValueKey(
+                                'source-home-hero-${hero.ref.externalId}'),
+                            sourceId: sourceId,
+                            item: hero,
+                          ),
                         SourceContinueWatchingRow(sourceId: sourceId),
                         _Rows(sourceId: sourceId, libraries: value),
                       ],

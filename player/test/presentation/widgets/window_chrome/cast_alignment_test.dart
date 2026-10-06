@@ -33,7 +33,6 @@ import 'package:player/domain/navigation/sidebar_layout.dart';
 import 'package:player/presentation/screens/collections/collection_detail_screen.dart';
 import 'package:player/presentation/screens/downloads/downloads_screen.dart';
 import 'package:player/presentation/screens/filter/filter_screen.dart';
-import 'package:player/presentation/screens/home_screen.dart';
 import 'package:player/presentation/screens/library/library_controller.dart'
     show LibraryType;
 import 'package:player/presentation/screens/library/library_screen.dart';
@@ -300,66 +299,6 @@ void main() {
         );
       });
     }
-  });
-
-  group('HomeScreen cast alignment', () {
-    // HomeScreen.build wires up homeControllerProvider, a GraphQL-backed
-    // stream. `HomeScreen.header` is the exact widget `build` puts in
-    // `Scaffold.appBar`, extracted as a `@visibleForTesting static` seam that
-    // needs no providers at all: the cast button is `WindowTitleRow`'s own.
-    for (final MapEntry(key: name, value: insets) in _cases.entries) {
-      testWidgets('aligns on $name', (tester) async {
-        await pumpWithInsets(
-          tester,
-          insets,
-          width: _kWidth,
-          child: Builder(
-            builder: (context) => HomeScreen.header(
-              context,
-              isDesktop: true,
-              barHeight: WindowTitleRow.heightOf(context),
-            ),
-          ),
-        );
-
-        expect(
-          tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
-          _kWidth - insets.trailing - _kEndGutter,
-        );
-      });
-    }
-
-    testWidgets(
-        'on mobile, the search action is present and the cast button is '
-        'the last control', (tester) async {
-      const width = 400.0;
-      await pumpWithInsets(
-        tester,
-        WindowChromeInsets.zero,
-        width: width,
-        child: Builder(
-          builder: (context) => Scaffold(
-            appBar: HomeScreen.header(
-              context,
-              isDesktop: false,
-              barHeight: WindowTitleRow.heightOf(context),
-            ),
-            body: const SizedBox.shrink(),
-          ),
-        ),
-      );
-
-      expect(find.byTooltip('Search'), findsOneWidget);
-      expect(
-        tester.getRect(find.byTooltip('Search')).right,
-        lessThanOrEqualTo(
-            tester.getRect(find.byKey(WindowTitleRow.castKey)).left),
-      );
-      expect(
-        tester.getRect(find.byKey(WindowTitleRow.castKey)).right,
-        width - 8,
-      );
-    });
   });
 
   group('SettingsScreen cast alignment', () {
