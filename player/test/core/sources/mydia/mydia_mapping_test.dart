@@ -237,4 +237,17 @@ void main() {
       };
     expect(movieSummary(s, m).poster, isNull);
   });
+
+  test('movie and show summaries carry catalogue ids', () {
+    final m = movieSummary(s, {
+      'id': '1',
+      'title': 'The Invented Voyage',
+      'tmdbId': 42,
+      'imdbId': 'tt0000042'
+    });
+    expect(m.externalIds, const ExternalIds(tmdb: '42', imdb: 'tt0000042'));
+    final sh = showSummary(
+        s, {'id': '2', 'title': 'Invented Harbour', 'tvdbId': 9001});
+    expect(sh.externalIds, const ExternalIds(tvdb: '9001'));
+  });
 }

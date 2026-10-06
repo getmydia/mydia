@@ -87,6 +87,12 @@ MediaVersion mediaVersion(Map<String, dynamic> file, {int? durationSeconds}) {
   );
 }
 
+ExternalIds _ids(Map<String, dynamic> m) => ExternalIds(
+      tmdb: m['tmdbId']?.toString(),
+      tvdb: m['tvdbId']?.toString(),
+      imdb: m['imdbId'] as String?,
+    );
+
 ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
   final artwork = _map(m['artwork']);
   return ItemSummary(
@@ -101,6 +107,7 @@ ItemSummary movieSummary(SourceId sid, Map<String, dynamic> m) {
     defaultVersionId: _firstFileId(m['files']),
     addedAt: _instant(m['addedAt']),
     lastPlayedAt: _instant(_map(m['progress'])['lastWatchedAt']),
+    externalIds: _ids(m),
   );
 }
 
@@ -116,6 +123,7 @@ ItemSummary showSummary(SourceId sid, Map<String, dynamic> s) {
     childCount: s['seasonCount'] as int?,
     overview: s['overview'] as String?,
     addedAt: _instant(s['addedAt']),
+    externalIds: _ids(s),
   );
 }
 

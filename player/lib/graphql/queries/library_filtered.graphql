@@ -4,6 +4,9 @@ query MoviesFiltered($first: Int, $after: String, $sort: SortInput, $category: M
       node {
         id
         title
+        tmdbId
+        tvdbId
+        imdbId
         year
         overview
         runtime
@@ -47,6 +50,9 @@ query TvShowsFiltered($first: Int, $after: String, $sort: SortInput, $category: 
       node {
         id
         title
+        tmdbId
+        tvdbId
+        imdbId
         year
         overview
         status
