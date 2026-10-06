@@ -14,6 +14,7 @@ import '../../../core/downloads/download_providers.dart';
 import '../../../core/downloads/download_queue_providers.dart';
 import '../../../core/downloads/storage_quota_providers.dart';
 import '../../../core/sources/source.dart';
+import '../../../core/sources/sources_providers.dart';
 import '../../../domain/models/download.dart';
 import '../../../domain/models/download_settings.dart';
 import '../../../domain/models/storage_settings.dart';
@@ -163,6 +164,18 @@ class DownloadsScreen extends ConsumerWidget {
     final sortedItems = items.values.toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
+    // Ids repeat across servers, so once downloads come from more than one
+    // each card names its server.
+    final sources = ref.watch(sourcesProvider);
+    final labelled = items.values.map((g) => g.sourceId).toSet().length > 1;
+    String? serverLabel(DownloadGroup group) => labelled
+        ? sources
+                .where((s) => s.id == group.sourceId)
+                .firstOrNull
+                ?.displayName ??
+            'Removed server'
+        : null;
+
     // This screen's own `WindowTitleRow` (built by `header`) draws into the
     // title-bar band, so the body has to sit under `removeBand`: otherwise
     // the ambient `MediaQuery.padding.top` still carries the band and every
@@ -230,8 +243,9 @@ class DownloadsScreen extends ConsumerWidget {
                         ),
                         delegate: SliverChildBuilderDelegate(
                           (context, index) {
-                            return _buildGridItem(
-                                context, ref, sortedItems[index]);
+                            final group = sortedItems[index];
+                            return _buildGridItem(context, ref, group,
+                                serverLabel: serverLabel(group));
                           },
                           childCount: sortedItems.length,
                         ),
@@ -326,7 +340,8 @@ class DownloadsScreen extends ConsumerWidget {
   }
 
   Widget _buildGridItem(
-      BuildContext context, WidgetRef ref, DownloadGroup group) {
+      BuildContext context, WidgetRef ref, DownloadGroup group,
+      {String? serverLabel}) {
     final isActive = group.activeTasks.isNotEmpty;
     final DownloadTask? activeTask = isActive ? group.activeTasks.first : null;
 
@@ -520,6 +535,18 @@ class DownloadsScreen extends ConsumerWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+
+                if (serverLabel != null)
+                  Text(
+                    serverLabel,
+                    key: Key('download-group-source-${group.sourceId.value}'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                    ),
+                  ),
 
                 // Episode title for active series downloads
                 if (activeTask != null && group.type == GroupType.series)

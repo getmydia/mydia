@@ -349,7 +349,7 @@ final gatedSourceIdsProvider = Provider<Set<SourceId>>((ref) {
 final windowSecureProvider = Provider<bool>((ref) =>
     ref.watch(sourceLockProvider) && ref.watch(sourceLocksProvider).isNotEmpty);
 
-/// Plex, Stash and Jellyfin sources the viewer has added, minus hidden ones
+/// Every source the viewer has added, Mydia included, minus hidden ones
 /// while the app is locked. Everything that lists or counts sources reads
 /// this, so a hidden source leaves no trace, not even in the switcher's
 /// decision to appear.

@@ -10,6 +10,7 @@ import 'package:player/core/sources/capabilities.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/domain/sources/item.dart';
 import '../../test_utils/mydia_test_source.dart';
+import '../../test_utils/scripted_mydia_transport.dart';
 
 class _Sync implements ProgressSync {
   final pushed = <(String, int, bool)>[];
@@ -103,6 +104,37 @@ void main() {
     expect(plex.pushed, [('1', 95, true)]);
     expect(jelly.pushed, isEmpty);
     expect(store.unsynced().map((r) => r.key).toSet(), {'acc2:u1:bb22|2'});
+  });
+
+  test('two Mydia instances each receive only their own records', () async {
+    final transportA = ScriptedMydiaTransport((_, __) => <String, dynamic>{});
+    final transportB = ScriptedMydiaTransport((_, __) => <String, dynamic>{});
+    final a = testMydiaSourceOver(transportA, accountId: 'macct');
+    final b = testMydiaSourceOver(transportB, accountId: 'macctb');
+    expect(a.source.id, isNot(b.source.id));
+
+    final store = InMemoryPlaybackProgressStore();
+    // Under 95% of 100 s, so neither also marks the item watched.
+    await store.save(_p(a.source.id.value, '10', 11));
+    await store.save(_p(b.source.id.value, '10', 22));
+
+    final synced = await flushSourceProgress(
+      store: store,
+      syncFor: (id) => id == a.source.id ? a : b,
+      reachable: (_) => true,
+      now: DateTime(2026, 2),
+    );
+
+    expect(synced, 2);
+    final sentA = transportA.requests.map((r) => r.variables).toList();
+    final sentB = transportB.requests.map((r) => r.variables).toList();
+    expect(sentA, [
+      {'movieId': '10', 'positionSeconds': 11, 'durationSeconds': 100}
+    ]);
+    expect(sentB, [
+      {'movieId': '10', 'positionSeconds': 22, 'durationSeconds': 100}
+    ]);
+    expect(store.unsynced(), isEmpty);
   });
 
   test('invalidates once per source with an accepted push, not failures',

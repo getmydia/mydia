@@ -23,6 +23,7 @@ import 'package:player/core/sources/media_source.dart'
     show SourceConnectionStatus;
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/core/sources/mydia/mydia_source.dart';
+import 'package:player/core/sources/source.dart' show SourceId;
 import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/core/p2p/media_proxy_factory.dart';
 import 'package:player/presentation/screens/player/session/mydia_playback_session.dart';
@@ -707,6 +708,8 @@ ProviderContainer buildPlayerScreenContainer({
   // The bound Mydia instance reports itself unreachable.
   bool offline = false,
   PlaybackProgressStore? progressStore,
+  // Further Mydia instances registered next to the test one.
+  Map<SourceId, MydiaSource> extraSources = const {},
   SettingsService? settingsService,
   // Deliberately not defaulted the way [settingsService] is:
   // `settingsServiceProvider` and `coreSettingsServiceProvider` are two
@@ -742,6 +745,8 @@ ProviderContainer buildPlayerScreenContainer({
       : base;
   return ProviderContainer(overrides: [
     mediaSourceProvider(testMydiaSourceId).overrideWithValue(source),
+    for (final entry in extraSources.entries)
+      mediaSourceProvider(entry.key).overrideWithValue(entry.value),
     settingsServiceProvider
         .overrideWithValue(settingsService ?? FakeSettingsService()),
     if (coreSettingsService != null)
