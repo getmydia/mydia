@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import '../../core/player/stream_timeline.dart';
+import '../../core/player/video_scaling.dart';
+import 'pinch_tracker.dart';
 
 /// Gesture controls for mobile playback
 ///
@@ -26,6 +28,10 @@ class GestureControls extends StatefulWidget {
   /// target is beyond what has been transcoded so far.
   final Future<void> Function(Duration realTarget) onSeekToReal;
 
+  /// Two-finger pinch: spread for Fill, pinch for Fit. Null registers
+  /// nothing, and taps and drags behave exactly as before.
+  final ValueChanged<VideoScaling>? onPinch;
+
   final Widget child;
 
   const GestureControls({
@@ -33,6 +39,7 @@ class GestureControls extends StatefulWidget {
     required this.player,
     required this.timeline,
     required this.onSeekToReal,
+    this.onPinch,
     required this.child,
   });
 
@@ -52,6 +59,8 @@ class _GestureControlsState extends State<GestureControls> {
   double _brightness = 1.0;
 
   Offset? _lastDoubleTapPosition;
+
+  final PinchTracker _pinch = PinchTracker();
 
   @override
   void initState() {
@@ -148,28 +157,47 @@ class _GestureControlsState extends State<GestureControls> {
 
   @override
   Widget build(BuildContext context) {
+    // Wrap child with gesture detection using translucent behavior.
+    // This ensures the child's own gesture detectors (e.g. tap-to-show
+    // video controls) are also hit-tested and participate in the arena.
+    Widget gestures = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTapDown: (details) {
+        _lastDoubleTapPosition = details.localPosition;
+      },
+      onDoubleTap: _handleDoubleTap,
+      onVerticalDragUpdate: (details) {
+        // Two fingers down is a pinch: a diagonal spread must not also nudge
+        // volume or brightness.
+        if (_pinch.pinching) return;
+        final screenWidth = context.size?.width ?? 0;
+        final isRight = details.localPosition.dx > screenWidth / 2;
+        if (isRight) {
+          _handleVerticalDragRight(details.delta.dy);
+        } else {
+          _handleVerticalDragLeft(details.delta.dy);
+        }
+      },
+      child: widget.child,
+    );
+    final onPinch = widget.onPinch;
+    if (onPinch != null) {
+      // A Listener, not onScale*: see `onPinch` and `PinchTracker`.
+      gestures = Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (e) => _pinch.down(e.pointer, e.position),
+        onPointerMove: (e) => _pinch.move(e.pointer, e.position),
+        onPointerUp: (e) {
+          final result = _pinch.up(e.pointer);
+          if (result != null) onPinch(result);
+        },
+        onPointerCancel: (e) => _pinch.cancel(e.pointer),
+        child: gestures,
+      );
+    }
     return Stack(
       children: [
-        // Wrap child with gesture detection using translucent behavior.
-        // This ensures the child's own gesture detectors (e.g. tap-to-show
-        // video controls) are also hit-tested and participate in the arena.
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onDoubleTapDown: (details) {
-            _lastDoubleTapPosition = details.localPosition;
-          },
-          onDoubleTap: _handleDoubleTap,
-          onVerticalDragUpdate: (details) {
-            final screenWidth = context.size?.width ?? 0;
-            final isRight = details.localPosition.dx > screenWidth / 2;
-            if (isRight) {
-              _handleVerticalDragRight(details.delta.dy);
-            } else {
-              _handleVerticalDragLeft(details.delta.dy);
-            }
-          },
-          child: widget.child,
-        ),
+        gestures,
         // Seek indicator
         if (_showSeekIndicator)
           IgnorePointer(

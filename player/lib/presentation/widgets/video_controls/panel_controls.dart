@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
+import 'chrome_top_bar.dart' show scalingIcon, scalingTooltip;
 import 'control_button.dart';
 
 /// Volume control for the panel's left group: a mute toggle and an
@@ -176,7 +178,7 @@ class _VolumeClusterState extends State<VolumeCluster> {
   }
 }
 
-/// The panel's right group: subtitles, audio, quality, fullscreen.
+/// The panel's right group: subtitles, audio, quality, fullscreen or scaling.
 class SecondaryCluster extends StatelessWidget {
   final VoidCallback? onSubtitleTap;
   final VoidCallback? onAudioTap;
@@ -191,6 +193,14 @@ class SecondaryCluster extends StatelessWidget {
   /// player screen hides it on a browser with no fullscreen route.
   final VoidCallback? onFullscreenTap;
   final VoidCallback? onAlwaysOnTopTap;
+
+  /// Fit/Fill toggle. Wired only on the remote tier, where it takes the slot
+  /// the fullscreen button leaves empty, so the cluster stays within the
+  /// four-button budget `PanelMetrics.showQuality` documents (a fifth button
+  /// overflows the tablet and mobile tiers). Pointer and touch tiers get it
+  /// in `ChromeTopBar` instead. When null it is omitted.
+  final VoidCallback? onScalingTap;
+  final VideoScaling scaling;
 
   /// Gates the audio button, and only the audio button. There is no subtitle
   /// equivalent on purpose: the subtitles button opens its sheet whatever the
@@ -209,6 +219,8 @@ class SecondaryCluster extends StatelessWidget {
     this.onQualityTap,
     this.onFullscreenTap,
     this.onAlwaysOnTopTap,
+    this.onScalingTap,
+    this.scaling = VideoScaling.fit,
     this.audioTrackCount = 0,
     this.selectedAudioLabel,
     this.selectedSubtitleLabel,
@@ -222,6 +234,7 @@ class SecondaryCluster extends StatelessWidget {
   static const Key audioKey = Key('secondary-audio');
   static const Key qualityKey = Key('secondary-quality');
   static const Key fullscreenKey = Key('secondary-fullscreen');
+  static const Key scalingKey = Key('secondary-scaling');
   static const Key alwaysOnTopKey = Key('secondary-always-on-top');
   static const Key alwaysOnTopRotationKey =
       Key('secondary-always-on-top-rotation');
@@ -310,6 +323,17 @@ class SecondaryCluster extends StatelessWidget {
             size: 32,
             tooltip: isFullscreen ? 'Exit fullscreen' : 'Fullscreen',
             onTap: onFullscreenTap,
+          ),
+        ],
+        if (onScalingTap != null) ...[
+          SizedBox(width: gap),
+          ControlButton(
+            key: scalingKey,
+            icon: scalingIcon(scaling),
+            iconSize: 18,
+            size: 32,
+            tooltip: scalingTooltip(scaling),
+            onTap: onScalingTap,
           ),
         ],
         if (onAlwaysOnTopTap != null) ...[

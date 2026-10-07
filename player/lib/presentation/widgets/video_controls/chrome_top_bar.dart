@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/player/video_scaling.dart';
 import '../../../core/theme/depth_tokens.dart';
 import '../glass_surface.dart';
+
+/// The glyph for the mode in effect, shared by the top-bar pill and the TV
+/// cluster button so the two never disagree.
+IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
+      VideoScaling.fit => Icons.fit_screen_rounded,
+      VideoScaling.fill => Icons.crop_free_rounded,
+    };
+
+/// The tooltip naming the mode in effect, shown on both scaling controls.
+String scalingTooltip(VideoScaling scaling) => switch (scaling) {
+      VideoScaling.fit => 'Scaling: Fit',
+      VideoScaling.fill => 'Scaling: Fill',
+    };
 
 /// A 36px-tall pill in the OSD material ([GlassSurface.osd]).
 ///
@@ -74,7 +88,7 @@ class GlassPill extends StatelessWidget {
   }
 }
 
-/// The playback screen's top chrome: back, title, and cast pills.
+/// The playback screen's top chrome: back, title, scaling and cast pills.
 ///
 /// Replaces the former left-aligned chevron-and-title row that lived in
 /// `player_screen.dart`, so all playback chrome is owned by one widget.
@@ -102,6 +116,14 @@ class ChromeTopBar extends StatelessWidget {
   /// cursor. When null the pill renders but is inert, like the back pill.
   final VoidCallback? onCastTap;
 
+  /// Fit/Fill toggle. When null the pill is omitted: the remote tier puts
+  /// this control in `SecondaryCluster` instead, because the top bar takes
+  /// no focus there.
+  final VoidCallback? onScalingTap;
+
+  /// The mode in effect, which picks the pill's glyph.
+  final VideoScaling scaling;
+
   const ChromeTopBar({
     super.key,
     this.title,
@@ -109,80 +131,125 @@ class ChromeTopBar extends StatelessWidget {
     this.showBack = true,
     this.castAction,
     this.onCastTap,
+    this.onScalingTap,
+    this.scaling = VideoScaling.fit,
   });
 
   static const Key backKey = Key('chrome-back');
   static const Key titleKey = Key('chrome-title');
   static const Key castKey = Key('chrome-cast');
+  static const Key scalingKey = Key('chrome-scaling');
+
+  /// Bar width from which the title gets half the row (flex 2 against two
+  /// side slots of flex 1) instead of a third.
+  ///
+  /// At 560px a quarter of the bar is 140px, comfortably over the roughly
+  /// 93px the scaling and cast pills need side by side (two icon pills of
+  /// about 44.5px and an 8px gap). Below it the side slots get a little over
+  /// a third each ([narrowSideFlex] against [narrowTitleFlex] for the title),
+  /// which keeps back, scaling and cast inside their slots on a 320px phone
+  /// once the chrome's 16px side padding is taken off.
+  static const double wideBreakpoint = 560.0;
+  static const int narrowSideFlex = 9;
+  static const int narrowTitleFlex = 8;
 
   @override
   Widget build(BuildContext context) {
     final titleText = title;
     final cast = castAction;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: !showBack
-                ? const SizedBox.shrink()
-                : GlassPill(
-                    key: backKey,
-                    onTap: onBack,
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.chevron_left_rounded),
-                        SizedBox(width: 2),
-                        Text('Back'),
-                      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= wideBreakpoint;
+        final sideFlex = wide ? 1 : narrowSideFlex;
+        final titleFlex = wide ? 2 : narrowTitleFlex;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              flex: sideFlex,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: !showBack
+                    ? const SizedBox.shrink()
+                    : GlassPill(
+                        key: backKey,
+                        onTap: onBack,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chevron_left_rounded),
+                            SizedBox(width: 2),
+                            Text('Back'),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+            if (titleText != null)
+              Flexible(
+                // The two side slots stay equal so the title remains centered.
+                // Half the row for the title on wide bars, a little under a
+                // third below [wideBreakpoint] where the side slots need the
+                // room for the scaling and cast pills. The title pill
+                // ellipsizes.
+                flex: titleFlex,
+                // A bare Flexible only bounds its child's max width; Flutter
+                // anchors a loose-fit child (GlassPill shrink-wraps to its own
+                // text width) to the *leading* edge of its allotted slot, not
+                // the slot's center. Without this Center, the title pill sits
+                // left-aligned within the middle 50% of the row instead of
+                // centered on the row as a whole — confirmed via
+                // tester.getRect in chrome_top_bar_test.dart (a bug that a
+                // property assertion like "title pill exists" cannot catch).
+                child: Center(
+                  child: GlassPill(
+                    key: titleKey,
+                    child: Text(
+                      titleText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xCCFFFFFF), // white @ 0.80
+                      ),
                     ),
-                  ),
-          ),
-        ),
-        if (titleText != null)
-          Flexible(
-            flex: 2,
-            // A bare Flexible only bounds its child's max width; Flutter
-            // anchors a loose-fit child (GlassPill shrink-wraps to its own
-            // text width) to the *leading* edge of its allotted slot, not
-            // the slot's center. Without this Center, the title pill sits
-            // left-aligned within the middle 50% of the row instead of
-            // centered on the row as a whole — confirmed via
-            // tester.getRect in chrome_top_bar_test.dart (a bug that a
-            // property assertion like "title pill exists" cannot catch).
-            child: Center(
-              child: GlassPill(
-                key: titleKey,
-                child: Text(
-                  titleText,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xCCFFFFFF), // white @ 0.80
                   ),
                 ),
               ),
+            Expanded(
+              flex: sideFlex,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onScalingTap != null)
+                      Tooltip(
+                        message: scalingTooltip(scaling),
+                        child: GlassPill(
+                          key: scalingKey,
+                          onTap: onScalingTap,
+                          child: Icon(scalingIcon(scaling)),
+                        ),
+                      ),
+                    if (onScalingTap != null && cast != null)
+                      const SizedBox(width: 8),
+                    if (cast != null)
+                      GlassPill(
+                        key: castKey,
+                        onTap: onCastTap,
+                        child: cast,
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: cast == null
-                ? const SizedBox.shrink()
-                : GlassPill(
-                    key: castKey,
-                    onTap: onCastTap,
-                    child: cast,
-                  ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

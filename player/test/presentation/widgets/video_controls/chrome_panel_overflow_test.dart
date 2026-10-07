@@ -70,7 +70,16 @@ import 'package:player/presentation/widgets/video_controls/video_progress_bar.da
 /// `showAlwaysOnTop` gates those same widths off in production (see its
 /// dartdoc in `chrome_panel.dart`). Consulting the real gate here would make
 /// [alwaysOnTop] a no-op everywhere it is passed `true`.
-Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
+///
+/// [scaling] mirrors the TV composition: remote never shows fullscreen, so
+/// the scaling button takes its slot. It passes `onFullscreenTap: null` and
+/// wires `onScalingTap` instead, keeping the cluster at four buttons.
+Widget _panel(
+  double width, {
+  bool quality = false,
+  bool alwaysOnTop = false,
+  bool scaling = false,
+}) {
   final metrics = PanelMetrics.forWidth(width);
   return MaterialApp(
     home: Scaffold(
@@ -100,7 +109,8 @@ Widget _panel(double width, {bool quality = false, bool alwaysOnTop = false}) {
             // fullscreen route at all. Passing null would omit it (see
             // `SecondaryCluster.onFullscreenTap`), quietly shrinking the very
             // budget these widths exist to measure.
-            onFullscreenTap: () {},
+            onFullscreenTap: scaling ? null : () {},
+            onScalingTap: scaling ? () {} : null,
             onAlwaysOnTopTap: alwaysOnTop ? () {} : null,
           ),
           scrubber: ProgressBarSurface(
@@ -316,4 +326,20 @@ void main() {
       },
     );
   }
+
+  group('TV tier: scaling in place of fullscreen', () {
+    for (final width in _passingWidths) {
+      testWidgets('fits at ${width}px with quality wired', (tester) async {
+        tester.view.physicalSize = Size(width, 600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(_panel(width, quality: true, scaling: true));
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(SecondaryCluster.scalingKey), findsOneWidget);
+        expect(find.byKey(SecondaryCluster.fullscreenKey), findsNothing);
+      });
+    }
+  });
 }

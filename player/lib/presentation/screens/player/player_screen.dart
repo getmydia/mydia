@@ -27,6 +27,7 @@ import '../../../core/player/image_subtitle_sidecar.dart';
 import '../../../core/player/subtitle_delay.dart';
 import '../../../core/player/subtitle_render.dart';
 import '../../../core/player/video_output_config.dart';
+import '../../../core/player/video_scaling.dart';
 import '../../../core/player/scrub_controller.dart';
 import '../../../core/player/scrub_thumbnails.dart';
 import '../../../core/player/thumbnail_service.dart';
@@ -938,6 +939,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // leaks into the browse/library window behind this one.
   bool _isAlwaysOnTop = false;
 
+  /// Fit or Fill. Starts at Fit and is replaced by the saved choice once
+  /// [VideoScalingPrefs] answers, which is a box read and lands before the
+  /// first frame of video in practice. A choice made before that answer
+  /// arrives wins: see [_scalingTouched].
+  VideoScaling _scaling = VideoScaling.fit;
+
+  /// Set once the user has picked a mode, so a late [_loadScaling] cannot
+  /// overwrite it with the older saved value.
+  bool _scalingTouched = false;
+
   /// Skippable segments for the file being played. See [SegmentSkipper].
   final SegmentSkipper _segmentSkipper = SegmentSkipper();
 
@@ -1019,6 +1030,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_loadScaling());
     _invalidator = ref.read(invalidatorProvider);
     _mediaProxy = ref.read(mediaProxyProvider);
     _remoteTargetController = ref.read(remoteTargetControllerProvider);
@@ -4638,6 +4650,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         _fullscreen.exit();
       case KeyToggleAlwaysOnTop():
         _toggleAlwaysOnTop();
+      case KeyToggleScaling():
+        _toggleScaling();
       case KeyNudgeSubtitle(:final deltaMs):
         _subtitleDelay.nudge(deltaMs);
       case KeyCancelUpNext():
@@ -4733,6 +4747,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     setState(() => _isAlwaysOnTop = !_isAlwaysOnTop);
     setWindowAlwaysOnTop(_isAlwaysOnTop);
   }
+
+  Future<void> _loadScaling() async {
+    final saved = await VideoScalingPrefs.load();
+    if (_scalingTouched) return;
+    if (mounted && saved != _scaling) setState(() => _scaling = saved);
+  }
+
+  /// The one entry point for the button, the `A` key and the pinch.
+  /// Setting the mode already in effect does nothing, so a second pinch the
+  /// same way does not toast again.
+  void _setScaling(VideoScaling next) {
+    if (next == _scaling) return;
+    _scalingTouched = true;
+    setState(() => _scaling = next);
+    unawaited(VideoScalingPrefs.save(next));
+    _showToast(next.toastMessage);
+  }
+
+  void _toggleScaling() => _setScaling(_scaling.toggled);
 
   @override
   void dispose() {
@@ -5358,6 +5391,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           onFullscreenTap:
               _fullscreen.available.value ? _fullscreen.toggle : null,
           onAlwaysOnTopTap: _toggleAlwaysOnTop,
+          onScalingTap: _toggleScaling,
+          scaling: _scaling,
           onPreviousEpisode: _upNext.hasPrevious ? _upNext.playPrevious : null,
           onNextEpisode: _upNext.hasNext ? _upNext.playNext : null,
           onActivity: _upNext.noteInput,
@@ -5370,6 +5405,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               selected: _selectedQuality, effective: _effectiveQuality),
         ),
         fill: Colors.black,
+        fit: _scaling.boxFit,
       ),
     );
 
@@ -5380,6 +5416,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         player: player,
         timeline: _timeline,
         onSeekToReal: seekToReal,
+        onPinch: _setScaling,
         child: videoPlayer,
       );
     }
