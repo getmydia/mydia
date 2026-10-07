@@ -90,4 +90,51 @@ defmodule Mydia.Library.StorageReadSitesTest do
     unloaded = %{mf | library_path: %Ecto.Association.NotLoaded{}}
     assert {:error, :library_path_not_preloaded} = ThumbnailGenerator.generate_cover(unloaded)
   end
+
+  describe "embedded subtitles" do
+    alias Mydia.Subtitles.{Delivery, Extractor}
+
+    setup %{tmp_dir: tmp_dir} do
+      {media_file, loc} = Mydia.S3Helpers.s3_media_file!(tmp_dir: tmp_dir, subtitles: true)
+      on_exit(fn -> Mydia.S3Helpers.delete_prefix!(loc) end)
+      %{sub_file: media_file}
+    end
+
+    test "embedded subtitle tracks are listed from S3", %{sub_file: mf} do
+      assert [%{embedded: true, language: "eng", format: "srt"}] =
+               Extractor.list_subtitle_tracks(mf)
+    end
+
+    test "an embedded track is extracted from S3", %{sub_file: mf} do
+      [%{track_id: track_id}] = Extractor.list_subtitle_tracks(mf)
+      assert {:ok, path} = Extractor.extract_subtitle_track(mf, track_id)
+      assert File.read!(path) =~ "First invented cue"
+      File.rm(path)
+    end
+
+    test "Delivery serves embedded track content from S3", %{sub_file: mf} do
+      [%{track_id: track_id}] = Extractor.list_subtitle_tracks(mf)
+      assert {:ok, content} = Delivery.content(mf, track_id, "srt")
+      assert content =~ "Second invented cue"
+    end
+
+    test "a failed extraction leaks no presigned URL", %{sub_file: mf} do
+      log =
+        ExUnit.CaptureLog.capture_log([level: :debug], fn ->
+          assert {:error, reason} = Extractor.extract_subtitle_track(mf, 99)
+          refute inspect(reason) =~ "X-Amz-"
+          assert {:error, reason} = Delivery.content(mf, 99, "srt")
+          refute inspect(reason) =~ "X-Amz-"
+        end)
+
+      refute log =~ "X-Amz-"
+    end
+
+    test "a missing object is :media_file_not_found", %{sub_file: mf} do
+      gone = %{mf | relative_path: "nope/missing.mp4"}
+      assert Extractor.list_subtitle_tracks(gone) == []
+      assert {:error, :media_file_not_found} = Extractor.extract_subtitle_track(gone, 2)
+      assert {:error, :media_file_not_found} = Delivery.content(gone, 2, "srt")
+    end
+  end
 end

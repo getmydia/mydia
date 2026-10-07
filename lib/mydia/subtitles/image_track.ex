@@ -30,6 +30,7 @@ defmodule Mydia.Subtitles.ImageTrack do
 
   alias Mydia.Library.MediaFile
   alias Mydia.Plugins.SingleFlight
+  alias Mydia.Storage
   alias Mydia.Subtitles.Delivery
   alias Mydia.Subtitles.Extractor
   alias Mydia.Subtitles.Format
@@ -122,14 +123,7 @@ defmodule Mydia.Subtitles.ImageTrack do
     end
   end
 
-  defp source(media_file) do
-    with path when is_binary(path) <- MediaFile.absolute_path(media_file),
-         {:ok, stat} <- File.stat(path) do
-      {:ok, path, stat}
-    else
-      _ -> {:error, :media_file_not_found}
-    end
-  end
+  defp source(media_file), do: Delivery.media_input(media_file)
 
   # Under `Mydia.TaskSupervisor`, so the copy outlives the request that
   # started it. Every poll that finds no file starts a task too; while a
@@ -183,7 +177,7 @@ defmodule Mydia.Subtitles.ImageTrack do
 
       {:error, output} ->
         File.rm(tmp)
-        reason = String.slice(output, 0, 500)
+        reason = output |> Storage.redact_text() |> String.slice(0, 500)
         Logger.warning("Image subtitle copy failed", path: cached, reason: reason)
         File.write!(failed_marker(cached), reason)
     end

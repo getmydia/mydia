@@ -61,18 +61,40 @@ defmodule Mydia.S3Helpers do
   Generates a 2s video with ffmpeg, uploads it under a fresh prefix and returns
   an unsaved `%MediaFile{}` pointing at it (library path preloaded). Creates the
   storage backend row when missing. Returns `{media_file, location}`; the caller
-  deletes the prefix. Options: `:relative_path`, `:tmp_dir`.
+  deletes the prefix. Options: `:relative_path`, `:tmp_dir`,
+  `:subtitles` (embeds a two-cue English mov_text track).
   """
   def s3_media_file!(opts \\ []) do
     relative_path = Keyword.get(opts, :relative_path, "Invented Film (2031)/film.mp4")
     tmp_dir = Keyword.get_lazy(opts, :tmp_dir, fn -> System.tmp_dir!() end)
     video = Path.join(tmp_dir, "s3-helper-#{System.unique_integer([:positive])}.mp4")
 
+    subtitle_args =
+      if Keyword.get(opts, :subtitles, false) do
+        srt = Path.join(tmp_dir, "s3-helper-#{System.unique_integer([:positive])}.srt")
+
+        File.write!(srt, """
+        1
+        00:00:00,000 --> 00:00:01,000
+        First invented cue
+
+        2
+        00:00:01,000 --> 00:00:02,000
+        Second invented cue
+        """)
+
+        ~w(-f srt -i) ++
+          [srt] ++ ~w(-map 0 -map 1 -map 2 -c:s mov_text -metadata:s:s:0 language=eng)
+      else
+        []
+      end
+
     {_, 0} =
       System.cmd(
         "ffmpeg",
         ~w(-y -loglevel error -f lavfi -i testsrc=duration=2:size=160x120:rate=10
-           -f lavfi -i sine=duration=2 -shortest -c:v libx264 -c:a aac) ++ [video]
+           -f lavfi -i sine=duration=2) ++
+          subtitle_args ++ ~w(-shortest -c:v libx264 -c:a aac) ++ [video]
       )
 
     backend = backend()
