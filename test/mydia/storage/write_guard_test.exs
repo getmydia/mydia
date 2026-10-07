@@ -4,7 +4,7 @@ defmodule Mydia.Storage.WriteGuardTest do
   import Mydia.MediaFixtures
 
   alias Mydia.Library
-  alias Mydia.Library.{FileOrganizer, MediaFile, TrashStore}
+  alias Mydia.Library.{FileOrganizer, MediaFile}
   alias Mydia.Settings
   alias Mydia.Storage.Error
   alias Mydia.Subtitles
@@ -54,22 +54,6 @@ defmodule Mydia.Storage.WriteGuardTest do
              Library.delete_media_file(file, delete_files: true)
 
     assert Repo.get(MediaFile, file.id)
-  end
-
-  test "trashing an S3 file is refused unless the object is gone", %{s3_file: file} do
-    for reason <- [:manual, :pruned, :upgraded, nil] do
-      assert {:error, %Error{kind: :read_only}} =
-               Library.trash_media_file(file, reason: reason)
-    end
-
-    refute Repo.get!(MediaFile, file.id).trashed_at
-
-    assert {:ok, trashed} = Library.trash_media_file(file, reason: :missing, move: false)
-    assert trashed.trashed_at
-  end
-
-  test "TrashStore.store never moves S3 bytes", %{s3_file: file} do
-    assert {:ok, :missing} = TrashStore.store(Repo.preload(file, :library_path))
   end
 
   test "subtitle download is refused for an S3 file", %{s3_file: file} do

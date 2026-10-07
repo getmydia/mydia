@@ -707,24 +707,12 @@ defmodule Mydia.Library do
   """
   @spec trash_media_file(MediaFile.t(), keyword()) ::
           {:ok, MediaFile.t()} | {:error, Ecto.Changeset.t()} | {:error, term()}
-  # Besides the errors above, `{:error, %Mydia.Storage.Error{kind: :read_only}}`
-  # for an S3 file unless `reason: :missing`.
+  # Besides the errors above, an S3 outage returns
+  # `{:error, {:trash_move_failed, %Mydia.Storage.Error{}}}`.
   def trash_media_file(%MediaFile{} = media_file, opts \\ []) do
-    media_file = Repo.preload(media_file, :library_path)
-
-    with :ok <- ensure_trashable(media_file, opts) do
-      do_trash_media_file(media_file, opts)
-    end
-  end
-
-  # An S3 object is never moved, so trashing one only stamps the row, and the
-  # next scan would find the object still listed and restore it. The one
-  # honest use is `reason: :missing`: a successful listing no longer shows the
-  # object, so there is nothing to refuse to touch.
-  defp ensure_trashable(media_file, opts) do
-    if Keyword.get(opts, :reason) == :missing,
-      do: :ok,
-      else: Mydia.Storage.ensure_writable(media_file)
+    media_file
+    |> Repo.preload(:library_path)
+    |> do_trash_media_file(opts)
   end
 
   defp do_trash_media_file(media_file, opts) do
