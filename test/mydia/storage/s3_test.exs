@@ -4,6 +4,7 @@ defmodule Mydia.Storage.S3Test do
   # Must precede the contract case: its tests are defined at `use` time and a
   # @moduletag only applies to tests defined after it.
   @moduletag :s3
+  @moduletag :tmp_dir
 
   use Mydia.StorageContractCase
 

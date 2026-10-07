@@ -72,6 +72,135 @@ defmodule Mydia.Storage.Local do
     end
   end
 
+  @impl true
+  def put_file(%Location{root: root}, rel, local_path, _opts) do
+    dest = Path.join(root, rel)
+
+    with :ok <- mkdir_parent(dest) do
+      case File.cp(local_path, dest) do
+        :ok -> :ok
+        {:error, reason} -> {:error, Error.from_posix(reason, dest)}
+      end
+    end
+  end
+
+  @impl true
+  def put_binary(%Location{root: root}, rel, data, opts) do
+    dest = Path.join(root, rel)
+
+    with :ok <- if(Keyword.get(opts, :mkdir, false), do: mkdir_parent(dest), else: :ok) do
+      if Keyword.get(opts, :exclusive, false),
+        do: write_exclusive(dest, data),
+        else: write_atomic(dest, data)
+    end
+  end
+
+  @impl true
+  def copy(%Location{root: from_root}, from_rel, %Location{root: to_root}, to_rel) do
+    from = Path.join(from_root, from_rel)
+    to = Path.join(to_root, to_rel)
+
+    with :ok <- mkdir_parent(to) do
+      case File.cp(from, to) do
+        :ok -> :ok
+        {:error, reason} -> {:error, Error.from_posix(reason, from)}
+      end
+    end
+  end
+
+  @impl true
+  def move(
+        %Location{root: from_root} = from_loc,
+        from_rel,
+        %Location{root: to_root} = to_loc,
+        to_rel
+      ) do
+    from = Path.join(from_root, from_rel)
+    to = Path.join(to_root, to_rel)
+
+    with :ok <- mkdir_parent(to) do
+      case File.rename(from, to) do
+        :ok ->
+          :ok
+
+        {:error, :exdev} ->
+          with :ok <- copy(from_loc, from_rel, to_loc, to_rel) do
+            case delete(from_loc, from_rel) do
+              :ok ->
+                :ok
+
+              {:error, _} = error ->
+                File.rm(to)
+                error
+            end
+          end
+
+        {:error, reason} ->
+          {:error, Error.from_posix(reason, from)}
+      end
+    end
+  end
+
+  @impl true
+  def delete(%Location{root: root}, rel) do
+    path = Path.join(root, rel)
+
+    case File.rm(path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, Error.from_posix(reason, path)}
+    end
+  end
+
+  @impl true
+  def delete_prefix(%Location{root: root}, rel_dir) do
+    case File.rm_rf(Path.join(root, rel_dir)) do
+      {:ok, _} -> :ok
+      {:error, reason, path} -> {:error, Error.from_posix(reason, path)}
+    end
+  end
+
+  @impl true
+  def ls(%Location{root: root}, rel_dir) do
+    dir = Path.join(root, rel_dir)
+
+    case File.ls(dir) do
+      {:ok, names} -> {:ok, names}
+      {:error, reason} -> {:error, Error.from_posix(reason, dir)}
+    end
+  end
+
+  defp write_exclusive(dest, data) do
+    case File.write(dest, data, [:exclusive]) do
+      :ok -> :ok
+      {:error, reason} -> {:error, Error.from_posix(reason, dest)}
+    end
+  end
+
+  # Write to a sibling and rename over the target, so a reader never sees half
+  # a file. This is what the NFO writer has always done.
+  defp write_atomic(dest, data) do
+    tmp = dest <> ".tmp"
+
+    with :ok <- File.write(tmp, data),
+         :ok <- File.rename(tmp, dest) do
+      :ok
+    else
+      {:error, reason} ->
+        File.rm(tmp)
+        {:error, Error.from_posix(reason, dest)}
+    end
+  end
+
+  defp mkdir_parent(path) do
+    dir = Path.dirname(path)
+
+    case File.mkdir_p(dir) do
+      :ok -> :ok
+      {:error, reason} -> {:error, Error.from_posix(reason, dir)}
+    end
+  end
+
   defp pread_loop(_io, _path, pos, stop, acc, _fun) when pos >= stop, do: {:ok, acc}
 
   defp pread_loop(io, path, pos, stop, acc, fun) do

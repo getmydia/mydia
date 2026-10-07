@@ -46,6 +46,18 @@ defmodule Mydia.Storage.Location do
   @spec key(t(), String.t()) :: String.t()
   def key(%__MODULE__{kind: :s3, prefix: prefix}, relative_path), do: prefix <> relative_path
 
+  @doc "The same location narrowed to `rel_dir` (a directory relative to it)."
+  @spec child(t(), String.t()) :: t()
+  def child(%__MODULE__{} = loc, rel_dir) when rel_dir in ["", ".", "/"], do: loc
+
+  def child(%__MODULE__{kind: :local, root: root, uri: uri} = loc, rel_dir),
+    do: %{loc | root: Path.join(root, rel_dir), uri: Path.join(uri, rel_dir)}
+
+  def child(%__MODULE__{kind: :s3, prefix: prefix, uri: uri} = loc, rel_dir) do
+    rel_dir = String.trim(rel_dir, "/")
+    %{loc | prefix: prefix <> rel_dir <> "/", uri: Path.join(uri, rel_dir)}
+  end
+
   defp normalize_prefix(prefix) do
     case prefix |> String.split("/", trim: true) |> Enum.join("/") do
       "" -> ""

@@ -95,6 +95,24 @@ defmodule Mydia.Storage.S3 do
     end
   end
 
+  # Write operations arrive with the S3 write path; until then they refuse.
+  @impl true
+  def put_file(_loc, _rel, _local_path, _opts), do: not_implemented()
+  @impl true
+  def put_binary(_loc, _rel, _data, _opts), do: not_implemented()
+  @impl true
+  def copy(_from, _from_rel, _to, _to_rel), do: not_implemented()
+  @impl true
+  def move(_from, _from_rel, _to, _to_rel), do: not_implemented()
+  @impl true
+  def delete(_loc, _rel), do: not_implemented()
+  @impl true
+  def delete_prefix(_loc, _rel_dir), do: not_implemented()
+  @impl true
+  def ls(_loc, _rel_dir), do: not_implemented()
+
+  defp not_implemented, do: {:error, Error.new(:provider, "not implemented")}
+
   # Retries are off: a retried request would replay bytes the fold already consumed.
   @impl true
   def stream_range(%Location{backend: b} = loc, rel, offset, length, acc, fun) do

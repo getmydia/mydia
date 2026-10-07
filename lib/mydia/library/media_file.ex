@@ -192,6 +192,22 @@ defmodule Mydia.Library.MediaFile do
   def absolute_path(%__MODULE__{}), do: nil
 
   @doc """
+  Where the file lives as a string: the absolute path for a local library,
+  `s3://<backend>/<key>` for an S3 one. Hand it to `Mydia.Storage.at/1` or the
+  `Mydia.Storage.*_path` helpers, never to `File`. nil when the library path is
+  not loaded.
+  """
+  @spec storage_path(t()) :: String.t() | nil
+  def storage_path(%__MODULE__{
+        relative_path: rel,
+        library_path: %Mydia.Settings.LibraryPath{path: path}
+      })
+      when is_binary(rel) and is_binary(path),
+      do: Path.join(path, rel)
+
+  def storage_path(%__MODULE__{}), do: nil
+
+  @doc """
   Files that still exist: untrashed, extras included.
 
   Use this where you want every file on disk, such as the file list on the
