@@ -264,6 +264,36 @@ void main() {
       expect(titleRect.center.dx, closeTo(rowRect.center.dx, 1.0));
     });
 
+    for (final width in const [320.0, 360.0]) {
+      testWidgets('title, back, scaling and cast all fit at ${width}px',
+          (tester) async {
+        tester.view.physicalSize = Size(width, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _host(ChromeTopBar(
+            title: 'A reasonably long episode title',
+            onBack: () {},
+            onScalingTap: () {},
+            castAction: const Icon(Icons.cast_rounded),
+            onCastTap: () {},
+          )),
+        );
+
+        expect(tester.takeException(), isNull);
+        for (final key in [
+          ChromeTopBar.backKey,
+          ChromeTopBar.scalingKey,
+          ChromeTopBar.castKey,
+        ]) {
+          final rect = tester.getRect(find.byKey(key));
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(width));
+        }
+      });
+    }
+
     testWidgets('omits the scaling pill when no handler is wired',
         (tester) async {
       await tester.pumpWidget(_host(const ChromeTopBar()));

@@ -11,6 +11,7 @@ IconData scalingIcon(VideoScaling scaling) => switch (scaling) {
       VideoScaling.fill => Icons.crop_free_rounded,
     };
 
+/// The tooltip naming the mode in effect, shown on both scaling controls.
 String scalingTooltip(VideoScaling scaling) => switch (scaling) {
       VideoScaling.fit => 'Scaling: Fit',
       VideoScaling.fill => 'Scaling: Fill',
@@ -168,7 +169,11 @@ class ChromeTopBar extends StatelessWidget {
         ),
         if (titleText != null)
           Flexible(
-            flex: 2,
+            // Equal thirds: the two side slots stay the same width so the
+            // title remains centered, and each gets enough room for the
+            // scaling and cast pills side by side on a 320px phone. The
+            // title pill ellipsizes.
+            flex: 1,
             // A bare Flexible only bounds its child's max width; Flutter
             // anchors a loose-fit child (GlassPill shrink-wraps to its own
             // text width) to the *leading* edge of its allotted slot, not
