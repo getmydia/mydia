@@ -37,7 +37,7 @@ query HomeRows($recentlyAddedLimit: Int, $favoritesLimit: Int) {
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
 query HomeRowsNoIds($recentlyAddedLimit: Int, $favoritesLimit: Int) {
   recentlyAdded(first: $recentlyAddedLimit) {
     id

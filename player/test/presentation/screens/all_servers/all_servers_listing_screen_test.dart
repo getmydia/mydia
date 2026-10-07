@@ -65,6 +65,25 @@ void main() {
     expect(find.textContaining('+1'), findsNothing);
   });
 
+  testWidgets('shows an empty message when the chosen kind has no items',
+      (t) async {
+    final sa = fakeServer('a');
+    await pump(
+        t,
+        [
+          FakeMergedSource(sa, recent: [
+            item(sa, 'm1', addedAt: DateTime.utc(2024, 1, 2)),
+          ]),
+          FakeMergedSource(fakeServer('b')),
+        ],
+        listing: AllServersListing.recentlyAdded);
+    expect(find.byKey(const Key('all-listing-empty')), findsNothing);
+    await t.tap(find.byKey(const Key('all-listing-kind-shows')));
+    await t.pumpAndSettle();
+    expect(find.byKey(const Key('all-listing-empty')), findsOneWidget);
+    expect(find.byType(AllServersPoster), findsNothing);
+  });
+
   testWidgets('the kind argument picks the starting filter', (t) async {
     final sa = fakeServer('a');
     final a = FakeMergedSource(sa, recent: [

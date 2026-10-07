@@ -58,6 +58,13 @@ void main() {
     expect(find.text('Server b'), findsOneWidget);
   });
 
+  testWidgets('shows an empty message when no server has collections',
+      (t) async {
+    await pump(t, [FakeMergedSource(fakeServer('a'))]);
+    expect(find.byKey(const Key('all-collections-empty')), findsOneWidget);
+    expect(find.byType(CollectionCard), findsNothing);
+  });
+
   testWidgets('tapping a card opens that server\'s collection', (t) async {
     final a = serverWith('a'), b = serverWith('b');
     final pushed = await pump(t, [a, b]);

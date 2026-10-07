@@ -8,6 +8,7 @@ import '../../../domain/sources/collection.dart';
 import '../../widgets/collection_card.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
+import '../sources/source_listing_screen.dart' show SourceEmptyState;
 import 'all_servers_banner.dart';
 import 'all_servers_providers.dart';
 
@@ -40,6 +41,10 @@ class AllServersCollectionsScreen extends ConsumerWidget {
                 SourceErrorView(error: error, onRetry: retry),
               _ when merged == null =>
                 const Center(child: CircularProgressIndicator()),
+              _ when collections.isEmpty => const SourceEmptyState(
+                  key: Key('all-collections-empty'),
+                  title: 'Nothing here yet.',
+                ),
               _ => RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(allServersCollectionsProvider);

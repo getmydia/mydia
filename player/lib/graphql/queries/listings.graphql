@@ -16,7 +16,7 @@ query UnwatchedListing($first: Int, $after: String, $types: [MediaType], $catego
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
 query UnwatchedListingNoIds($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
   unwatched(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
     id
@@ -50,7 +50,7 @@ query FavoritesListing($first: Int, $after: String, $types: [MediaType], $catego
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
 query FavoritesListingNoIds($first: Int, $after: String, $types: [MediaType], $category: MediaCategory, $sort: SortInput) {
   favorites(first: $first, after: $after, types: $types, category: $category, sort: $sort) {
     id

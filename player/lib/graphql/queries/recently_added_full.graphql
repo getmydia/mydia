@@ -20,7 +20,7 @@ query RecentlyAddedFull($first: Int) {
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
 query RecentlyAddedFullNoIds($first: Int) {
   recentlyAdded(first: $first) {
     id

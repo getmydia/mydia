@@ -104,7 +104,8 @@ class AllServersHomeScreen extends ConsumerWidget {
             KeyedSubtree(
               key: const Key('all-home-hero'),
               child: SourceHomeHero(
-                key: ValueKey('all-hero-${hero.ref.externalId}'),
+                key: ValueKey(
+                    'all-hero-${hero.ref.sourceId.value}-${hero.ref.externalId}'),
                 sourceId: hero.ref.sourceId,
                 item: hero,
               ),

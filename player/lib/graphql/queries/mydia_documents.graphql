@@ -33,7 +33,7 @@ query MydiaContinueWatching($first: Int) {
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on ContinueWatchingItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on ContinueWatchingItem.
 query MydiaContinueWatchingNoIds($first: Int) {
   continueWatching(first: $first) {
     id

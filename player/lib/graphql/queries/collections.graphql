@@ -29,7 +29,7 @@ query CollectionItems($collectionId: ID!, $first: Int) {
   }
 }
 
-# Before the catalogue ids (tmdbId, tvdbId, imdbId) on RecentlyAddedItem.
+# Servers before 0.17.0 lack tmdbId/tvdbId/imdbId on RecentlyAddedItem.
 query CollectionItemsNoIds($collectionId: ID!, $first: Int) {
   collectionItems(collectionId: $collectionId, first: $first) {
     id

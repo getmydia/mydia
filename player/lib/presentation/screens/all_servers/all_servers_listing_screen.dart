@@ -11,6 +11,7 @@ import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
 import '../sources/source_drawer_button.dart';
 import '../sources/source_error_view.dart';
+import '../sources/source_listing_screen.dart' show SourceEmptyState;
 import 'all_servers_banner.dart';
 import 'all_servers_cards.dart';
 import 'all_servers_providers.dart';
@@ -105,6 +106,10 @@ class _AllServersListingScreenState
                 SourceErrorView(error: error, onRetry: retry),
               _ when merged == null =>
                 const Center(child: CircularProgressIndicator()),
+              _ when items.isEmpty => const SourceEmptyState(
+                  key: Key('all-listing-empty'),
+                  title: 'Nothing here yet.',
+                ),
               _ => RefreshIndicator(
                   onRefresh: () async {
                     ref.invalidate(provider);
