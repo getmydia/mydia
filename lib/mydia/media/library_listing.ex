@@ -62,68 +62,6 @@ defmodule Mydia.Media.LibraryListing do
                 last_aired_desc next_aired_asc next_aired_desc
                 episode_count_asc episode_count_desc)
 
-  @type page :: %{
-          rows: [LibraryRow.t()],
-          has_more?: boolean(),
-          visible_ids: MapSet.t(binary()),
-          empty?: boolean(),
-          total_size: non_neg_integer(),
-          description_match_start_id: binary() | nil
-        }
-
-  @doc """
-  One page of a listing.
-
-  `rows` is the page, with `user_id`'s playback progress. `visible_ids` covers
-  every row the search and filters match, not only the page, so select-all can
-  use it. `limit: 0` skips the progress query when only `visible_ids` is needed.
-  `total_size` is the bytes on disk across every matching row, not only the
-  page, so a filtered listing can report what the filter actually costs.
-
-  While searching, rows whose title, original title or year match come first
-  and rows that match only through their overview follow, each group in
-  `:sort_by` order. `description_match_start_id` is the id of the first
-  overview-only row across the whole result, not only the page, or nil when
-  there is none, so the caller can mark where that group starts.
-
-  Filter options go to `Mydia.Media.media_items_query/2`, along with the
-  scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
-  `:monitored`, `:library_path_id`. Applied in memory: `:search`, `:quality`,
-  `:progress`, `:sort_by`, then `:offset` (default 0) and `:limit`.
-  """
-  @spec page(Scope.t(), keyword()) :: page()
-  def page(%Scope{} = scope, opts) do
-    user_id = Keyword.fetch!(opts, :user_id)
-    limit = Keyword.fetch!(opts, :limit)
-    offset = Keyword.get(opts, :offset, 0)
-    query = Keyword.get(opts, :search) || ""
-
-    {title_rows, description_rows} =
-      scope
-      |> Media.media_items_query(Keyword.take(opts, @filter_keys))
-      |> build_rows()
-      |> filter_quality(Keyword.get(opts, :quality))
-      |> filter_progress(Keyword.get(opts, :progress))
-      |> search(query)
-
-    # Sorted after the search so a sort that queries per row (added_*) only
-    # sees the matches, not the whole filtered library.
-    sort_by = Keyword.get(opts, :sort_by)
-    title_rows = sort(title_rows, sort_by)
-    description_rows = sort(description_rows, sort_by)
-
-    rows = title_rows ++ description_rows
-
-    %{
-      rows: rows |> Enum.drop(offset) |> Enum.take(limit) |> put_progress(user_id),
-      has_more?: length(rows) > offset + limit,
-      visible_ids: MapSet.new(rows, & &1.id),
-      empty?: rows == [],
-      total_size: rows |> Enum.map(& &1.total_size) |> Enum.sum(),
-      description_match_start_id: description_rows |> List.first() |> row_id()
-    }
-  end
-
   @doc "The sort keys `:sort_by` accepts. Anything else sorts by title, A to Z."
   @spec sort_keys() :: [String.t()]
   def sort_keys, do: @sort_keys
@@ -131,8 +69,14 @@ defmodule Mydia.Media.LibraryListing do
   @doc """
   The whole listing, evaluated once.
 
-  Takes `page/2`'s options without `:offset`. `ids` is every match in final
-  order; `rows` holds the first `:limit` of them with `user_id`'s playback
+  Filter options go to `Mydia.Media.media_items_query/2`, along with the
+  scope's access restrictions: `:base_query`, `:exclude_categories`, `:type`,
+  `:monitored`, `:library_path_id`. Applied in memory: `:search`, `:quality`,
+  `:progress`, `:sort_by`. While searching, rows whose title, original title
+  or year match come first and overview-only matches follow, each group in
+  `:sort_by` order; `description_match_start_id` marks where that group
+  starts. `visible_ids` and `total_size` cover every match. `ids` is every
+  match in final order; `rows` holds the first `:limit` of them with `user_id`'s playback
   progress. Build later rows with `rows/3` from a slice of `ids`. `limit: 0`
   skips the progress query when only the figures are needed.
   """

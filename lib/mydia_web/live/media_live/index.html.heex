@@ -12,8 +12,8 @@
           <h1 id="section-heading" class="text-3xl font-bold">{@page_title}</h1>
         </div>
         <%!-- What the active search and filters actually match, and cost.
-              Both figures come from LibraryListing.page/2, which already
-              walks every matching row before it paginates. --%>
+              Both figures come from LibraryListing.snapshot/2, which already
+              walks every matching row before it slices. --%>
         <div :if={@loading?} class="skeleton h-9 w-48 mt-1"></div>
         <div :if={not @loading?} class="stats stats-horizontal bg-transparent mt-1">
           <div class="stat px-0 pr-6 py-0">
@@ -275,6 +275,15 @@
           <% end %>
         </select>
       </.form>
+      <.button
+        :if={@filtered?}
+        id="library-reset-filters"
+        type="button"
+        phx-click="clear_filters"
+        class="btn btn-ghost btn-sm self-center gap-1"
+      >
+        <.icon name="hero-x-mark" class="w-4 h-4" /> Clear filters
+      </.button>
     </div>
 
     <div :if={@show_anime_nudge} id="anime-nudge" class="alert alert-info mb-4">

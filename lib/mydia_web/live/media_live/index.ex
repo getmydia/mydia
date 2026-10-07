@@ -19,6 +19,7 @@ defmodule MydiaWeb.MediaLive.Index do
   alias MydiaWeb.Live.Helpers.GridDensity
   alias MydiaWeb.Live.Helpers.PosterFields, as: PosterFieldsPref
   alias MydiaWeb.MediaLive.DiskRemovalFlash
+  alias MydiaWeb.MediaLive.Index.ListingParams
 
   import MydiaWeb.Formatters, only: [format_file_size: 1]
   import MydiaWeb.GridDensityComponents
@@ -27,8 +28,7 @@ defmodule MydiaWeb.MediaLive.Index do
 
   require Logger
 
-  @items_per_page 50
-  @items_per_scroll 25
+  @items_per_scroll 50
   @auto_search_confirm_threshold 50
 
   # Ten is enough anime to be a nuisance in a mixed list and few enough that a
@@ -54,14 +54,11 @@ defmodule MydiaWeb.MediaLive.Index do
      |> assign(:view_mode, :grid)
      |> GridDensity.assign_current(session)
      |> PosterFieldsPref.assign_current()
-     |> assign(:search_query, "")
-     |> assign(:filter_progress, nil)
-     |> assign(:filter_monitored, nil)
-     |> assign(:filter_quality, nil)
-     |> assign(:filter_library, nil)
+     |> assign_listing_params(%ListingParams{})
+     |> assign(:page_key, nil)
+     |> assign(:listing_ids, [])
+     |> assign(:loaded_count, 0)
      |> assign(:library_options, [])
-     |> assign(:sort_by, "title_asc")
-     |> assign(:page, 0)
      |> assign(:has_more, false)
      |> assign(:loading?, true)
      |> assign(:media_items_empty?, false)
@@ -93,8 +90,24 @@ defmodule MydiaWeb.MediaLive.Index do
   end
 
   @impl true
+  # /movies, /tv and /sections/:id share this process across live navigation.
+  # The page itself (title, library options, section rules) is only set up
+  # when the route changes; a patch that only changes the URL's listing state,
+  # including load_more's own `shown` patch, goes straight to the listing.
   def handle_params(params, _url, socket) do
-    {:noreply, apply_action(socket, socket.assigns.live_action, params)}
+    page_key = {socket.assigns.live_action, params["id"]}
+
+    socket =
+      if page_key == socket.assigns.page_key do
+        apply_listing_params(socket, params, false)
+      else
+        socket
+        |> assign(:page_key, page_key)
+        |> apply_action(socket.assigns.live_action, params)
+        |> apply_listing_params(params, true)
+      end
+
+    {:noreply, socket}
   end
 
   defp apply_action(socket, :movies, _params) do
@@ -103,7 +116,6 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:filter_type, "movie")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> assign_library_options(:movies)
-    |> load_media_items_when_connected()
   end
 
   defp apply_action(socket, :tv_shows, _params) do
@@ -112,7 +124,6 @@ defmodule MydiaWeb.MediaLive.Index do
     |> assign(:filter_type, "tv_show")
     |> assign(:show_anime_nudge, anime_nudge?(socket))
     |> assign_library_options(:tv_shows)
-    |> load_media_items_when_connected()
   end
 
   defp apply_action(socket, :section, %{"id" => id}) do
@@ -123,12 +134,8 @@ defmodule MydiaWeb.MediaLive.Index do
         # mount/3 does not assign :filter_type; only :movies and :tv_shows do.
         # The library scan handlers read it unguarded, and their existing
         # {nil, _} clause is the right behaviour for a section. Likewise
-        # :filter_library/:library_options: /movies, /tv and /sections/:id
-        # share this module and live_session, so navigating between them
-        # patches the existing process instead of remounting it, and a
-        # library chosen on /movies would otherwise leak into a section.
+        # :library_options, which sections do not have.
         |> assign(:filter_type, nil)
-        |> assign(:filter_library, nil)
         |> assign(:library_options, [])
         |> assign(:section, collection)
         |> assign(:section_owned?, collection.user_id == socket.assigns.current_user.id)
@@ -147,7 +154,6 @@ defmodule MydiaWeb.MediaLive.Index do
         socket
         |> assign(:section_query, query)
         |> assign(:section_error, false)
-        |> load_media_items_when_connected()
 
       {:error, reason} ->
         Logger.warning("Section #{collection.id} has unusable rules: #{inspect(reason)}")
@@ -161,6 +167,8 @@ defmodule MydiaWeb.MediaLive.Index do
         |> assign(:total_size, 0)
         |> assign(:description_match_start_id, nil)
         |> assign(:has_more, false)
+        |> assign(:listing_ids, [])
+        |> assign(:loaded_count, 0)
         |> stream(:media_items, [], reset: true)
     end
   end
@@ -187,7 +195,8 @@ defmodule MydiaWeb.MediaLive.Index do
   # and LibraryPathSync normally persists them as real rows anyway. A selection
   # that no longer fits (a disabled library, or the other page's type) resets,
   # and so does one on a page with fewer than two options, where the select is
-  # hidden and the user could not clear it.
+  # hidden and the user could not clear it. The selection itself now comes from
+  # the URL and is validated by library_choices/1.
   defp assign_library_options(socket, action) do
     types = Map.fetch!(@library_types, action)
 
@@ -197,13 +206,9 @@ defmodule MydiaWeb.MediaLive.Index do
         &(&1.type in types and not Settings.runtime_config?(&1))
       )
 
-    selected = socket.assigns.filter_library
-    keep? = length(options) >= 2 and Enum.any?(options, &(&1.id == selected))
-
     socket
     |> assign(:library_options, options)
     |> assign(:library_labels, LibraryPath.display_names(options))
-    |> assign(:filter_library, if(keep?, do: selected))
   end
 
   @impl true
@@ -213,8 +218,7 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply,
      socket
      |> assign(:view_mode, view_mode)
-     |> assign(:page, 0)
-     |> load_media_items(reset: true)}
+     |> load_media_items()}
   end
 
   def handle_event("set_grid_density", %{"density" => density}, socket) do
@@ -233,8 +237,7 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply,
      socket
      |> PosterFieldsPref.put(fields)
-     |> assign(:page, 0)
-     |> load_media_items(reset: true)}
+     |> load_media_items()}
   end
 
   def handle_event("reset_poster_fields", _params, socket) do
@@ -243,78 +246,49 @@ defmodule MydiaWeb.MediaLive.Index do
     {:noreply,
      socket
      |> PosterFieldsPref.put(defaults)
-     |> assign(:page, 0)
-     |> load_media_items(reset: true)}
+     |> load_media_items()}
   end
 
   def handle_event("search", params, socket) do
-    Logger.debug("Search params: #{inspect(params)}")
-
     query = params["search"] || params["value"] || ""
-
-    {:noreply,
-     socket
-     |> assign(:search_query, query)
-     |> assign(:page, 0)
-     |> assign(:selected_ids, MapSet.new())
-     |> load_media_items(reset: true)}
+    {:noreply, patch_listing(socket, %{current_listing_params(socket.assigns) | search: query})}
   end
 
   def handle_event("filter", params, socket) do
-    Logger.debug("Filter params: #{inspect(params)}")
+    current = current_listing_params(socket.assigns)
 
-    progress =
-      case params["progress"] do
-        "missing" -> :missing
-        "partial" -> :partial
-        "downloaded" -> :downloaded
-        _ -> nil
-      end
+    form = %{
+      "q" => current.search,
+      "library" => params["library"],
+      "progress" => params["progress"],
+      "monitored" => params["monitored"],
+      "quality" => params["quality"],
+      "sort" => params["sort_by"] || current.sort
+    }
 
-    monitored =
-      case params["monitored"] do
-        "all" -> nil
-        "true" -> true
-        "false" -> false
-        _ -> nil
-      end
-
-    quality =
-      case params["quality"] do
-        "" -> nil
-        q when q in ["720p", "1080p", "2160p"] -> q
-        _ -> nil
-      end
-
-    library =
-      Enum.find_value(socket.assigns.library_options, fn lp ->
-        if lp.id == params["library"], do: lp.id
-      end)
-
-    sort_by = params["sort_by"] || socket.assigns.sort_by
-    Logger.debug("Sort by: #{inspect(sort_by)}")
-
-    {:noreply,
-     socket
-     |> assign(:filter_progress, progress)
-     |> assign(:filter_monitored, monitored)
-     |> assign(:filter_quality, quality)
-     |> assign(:filter_library, library)
-     |> assign(:sort_by, sort_by)
-     |> assign(:page, 0)
-     |> assign(:selected_ids, MapSet.new())
-     |> load_media_items(reset: true)}
+    {:noreply, patch_listing(socket, ListingParams.parse(form, library_choices(socket)))}
   end
 
+  def handle_event("clear_filters", _params, socket) do
+    {:noreply, patch_listing(socket, %ListingParams{})}
+  end
+
+  # Replies so the LoadMoreSentinel hook knows the batch has landed.
   def handle_event("load_more", _params, socket) do
-    if socket.assigns.has_more do
-      {:noreply,
-       socket
-       |> update(:page, &(&1 + 1))
-       |> load_media_items(reset: false)}
-    else
-      {:noreply, socket}
-    end
+    socket =
+      if socket.assigns.has_more do
+        socket = load_next_batch(socket)
+        params = current_listing_params(socket.assigns)
+
+        push_patch(socket,
+          to: ListingParams.path(listing_base_path(socket.assigns), params),
+          replace: true
+        )
+      else
+        socket
+      end
+
+    {:reply, %{}, socket}
   end
 
   # Sent by a card's hover checkbox. Unknown or filtered-out ids are accepted
@@ -408,7 +382,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> put_flash(:info, "#{count} #{pluralize_items(count)} set to monitored")
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
-         |> load_media_items(reset: true)}
+         |> load_media_items()}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to update items")}
@@ -425,7 +399,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> put_flash(:info, "#{count} #{pluralize_items(count)} set to unmonitored")
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
-         |> load_media_items(reset: true)}
+         |> load_media_items()}
 
       {:error, _reason} ->
         {:noreply, put_flash(socket, :error, "Failed to update items")}
@@ -517,7 +491,7 @@ defmodule MydiaWeb.MediaLive.Index do
      |> put_flash(:info, message)
      |> assign(:selection_mode, false)
      |> assign(:selected_ids, MapSet.new())
-     |> load_media_items(reset: true)}
+     |> load_media_items()}
   end
 
   def handle_event("show_delete_confirmation", _params, socket) do
@@ -559,7 +533,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_delete_modal, false)
          |> assign(:delete_files, false)
-         |> load_media_items(reset: true)}
+         |> load_media_items()}
 
       {:error, _reason} ->
         {:noreply,
@@ -601,7 +575,7 @@ defmodule MydiaWeb.MediaLive.Index do
          |> assign(:selection_mode, false)
          |> assign(:selected_ids, MapSet.new())
          |> assign(:show_batch_edit_modal, false)
-         |> load_media_items(reset: true)}
+         |> load_media_items()}
 
       {:error, _reason} ->
         {:noreply,
@@ -853,7 +827,7 @@ defmodule MydiaWeb.MediaLive.Index do
           deleted_files: deleted_files
         })
         |> put_flash(:info, message)
-        |> load_media_items(reset: true)
+        |> load_media_items()
       else
         socket
       end
@@ -929,45 +903,122 @@ defmodule MydiaWeb.MediaLive.Index do
   # The HTTP render paints a skeleton and loads nothing. The connected mount
   # runs handle_params again moments later, so loading here doubled the cost
   # of every full page load.
-  defp load_media_items_when_connected(socket) do
-    if connected?(socket), do: load_media_items(socket, reset: true), else: socket
+  defp load_media_items_when_connected(socket, limit) do
+    if connected?(socket), do: load_media_items(socket, limit), else: socket
   end
 
-  defp load_media_items(socket, opts) do
-    reset? = Keyword.get(opts, :reset, false)
-    page = if reset?, do: 0, else: socket.assigns.page
-    offset = if page == 0, do: 0, else: @items_per_page + (page - 1) * @items_per_scroll
-    limit = if page == 0, do: @items_per_page, else: @items_per_scroll
+  # A fresh snapshot. Without a limit it keeps as many rows as are on screen,
+  # so a reload after a bulk action does not throw the user back to the top.
+  defp load_media_items(socket, limit \\ nil)
 
-    listing =
-      LibraryListing.page(
+  defp load_media_items(%{assigns: %{section_error: true}} = socket, _limit), do: socket
+
+  defp load_media_items(socket, limit) do
+    limit = limit || max(socket.assigns.loaded_count, ListingParams.first_page())
+
+    snapshot =
+      LibraryListing.snapshot(
         socket.assigns.current_scope,
-        listing_opts(socket.assigns, offset: offset, limit: limit)
+        listing_opts(socket.assigns, limit: limit)
       )
+
+    loaded = length(snapshot.rows)
 
     socket
-    |> assign(:has_more, listing.has_more?)
+    |> assign(:listing_ids, snapshot.ids)
+    |> assign(:loaded_count, loaded)
+    |> assign(:has_more, loaded < length(snapshot.ids))
     |> assign(:loading?, false)
-    |> assign(:media_items_empty?, reset? and listing.empty?)
-    # Every matching id, not only the page, for "Select All".
-    |> assign(:all_visible_ids, listing.visible_ids)
-    |> assign(:total_size, listing.total_size)
-    # Every page carries the same id, computed over the whole result, so the
-    # divider lands on the right card whichever page brings it in.
-    |> assign(:description_match_start_id, listing.description_match_start_id)
-    |> stream(:media_items, listing.rows, reset: reset?)
+    |> assign(:media_items_empty?, snapshot.empty?)
+    # Every matching id, not only the rendered rows, for "Select All".
+    |> assign(:all_visible_ids, snapshot.visible_ids)
+    |> assign(:total_size, snapshot.total_size)
+    |> assign(:description_match_start_id, snapshot.description_match_start_id)
+    |> stream(:media_items, snapshot.rows, reset: true)
   end
 
-  # Selects everything the current filters match, including items past the
-  # rendered page. limit: 0 skips loading progress for rows nobody renders.
-  defp select_all_visible(socket) do
-    %{visible_ids: ids} =
-      LibraryListing.page(
-        socket.assigns.current_scope,
-        listing_opts(socket.assigns, offset: 0, limit: 0)
-      )
+  # The next batch, from the snapshot's order. Advances by ids, not by rows
+  # returned, so an item deleted since the snapshot is skipped, not retried.
+  defp load_next_batch(socket) do
+    %{listing_ids: ids, loaded_count: loaded} = socket.assigns
+    batch = Enum.slice(ids, loaded, @items_per_scroll)
+    loaded = loaded + length(batch)
 
-    assign(socket, :selected_ids, ids)
+    rows =
+      LibraryListing.rows(socket.assigns.current_scope, batch, socket.assigns.current_user.id)
+
+    socket
+    |> assign(:loaded_count, loaded)
+    |> assign(:has_more, loaded < length(ids))
+    |> stream(:media_items, rows)
+  end
+
+  # Selects everything the current filters match, including rows not rendered.
+  defp select_all_visible(socket),
+    do: assign(socket, :selected_ids, socket.assigns.all_visible_ids)
+
+  defp apply_listing_params(%{redirected: redirected} = socket, _params, _force?)
+       when not is_nil(redirected),
+       do: socket
+
+  defp apply_listing_params(socket, params, force?) do
+    parsed = ListingParams.parse(params, library_choices(socket))
+
+    if force? or not ListingParams.same_listing?(parsed, current_listing_params(socket.assigns)) do
+      socket
+      |> assign_listing_params(parsed)
+      |> assign(:selected_ids, MapSet.new())
+      |> load_media_items_when_connected(parsed.shown)
+    else
+      socket
+    end
+  end
+
+  # The select is hidden below two options, where a chosen library could not
+  # be cleared, so it is only honoured from two up.
+  defp library_choices(%{assigns: %{library_options: [_, _ | _] = options}}),
+    do: Enum.map(options, & &1.id)
+
+  defp library_choices(_socket), do: []
+
+  defp assign_listing_params(socket, %ListingParams{} = params) do
+    socket
+    |> assign(:search_query, params.search)
+    |> assign(:filter_library, params.library)
+    |> assign(:filter_progress, params.progress)
+    |> assign(:filter_monitored, params.monitored)
+    |> assign(:filter_quality, params.quality)
+    |> assign(:sort_by, params.sort)
+    |> assign(:filtered?, ListingParams.filtered?(params))
+  end
+
+  defp current_listing_params(assigns) do
+    %ListingParams{
+      search: assigns.search_query,
+      library: assigns.filter_library,
+      progress: assigns.filter_progress,
+      monitored: assigns.filter_monitored,
+      quality: assigns.filter_quality,
+      sort: assigns.sort_by,
+      shown: max(assigns.loaded_count, ListingParams.first_page())
+    }
+  end
+
+  defp listing_base_path(%{live_action: :movies}), do: ~p"/movies"
+  defp listing_base_path(%{live_action: :tv_shows}), do: ~p"/tv"
+
+  defp listing_base_path(%{live_action: :section, section: section}),
+    do: ~p"/sections/#{section.id}"
+
+  # Filter, search and sort changes replace the history entry rather than
+  # adding one, so Back from a title lands on the list in its latest state.
+  defp patch_listing(socket, %ListingParams{} = params) do
+    params = %{params | shown: ListingParams.first_page()}
+
+    push_patch(socket,
+      to: ListingParams.path(listing_base_path(socket.assigns), params),
+      replace: true
+    )
   end
 
   defp listing_opts(assigns, page_opts) do
