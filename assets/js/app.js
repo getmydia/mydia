@@ -509,7 +509,9 @@ window.addEventListener("phx:download_export", (e) => {
 window.addEventListener("mydia:copy-href", (e) => {
   const href = e.target.href;
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(href);
+    navigator.clipboard
+      .writeText(href)
+      .catch(() => window.prompt("Copy this link", href));
   } else {
     window.prompt("Copy this link", href);
   }

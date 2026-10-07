@@ -26,7 +26,10 @@ defmodule MydiaWeb.StreamLinkController do
          %MediaFile{} = file <- get_active_file(file_id),
          :ok <- MediaAccess.authorize_media_file_for_scope(Scope.for_user(user), file),
          {:ok, path} <- on_disk_path(file) do
-      RangeHelper.send_file_ranged(conn, path)
+      # The URL is a per-user bearer credential; keep shared caches away from it.
+      conn
+      |> put_resp_header("cache-control", "private, no-store")
+      |> RangeHelper.send_file_ranged(path)
     else
       _ -> send_resp(conn, 404, "Not found")
     end

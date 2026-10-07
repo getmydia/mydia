@@ -38,6 +38,7 @@ defmodule MydiaWeb.StreamLinkControllerTest do
     assert conn.status == 200
     assert get_resp_header(conn, "accept-ranges") == ["bytes"]
     assert get_resp_header(conn, "content-length") == ["#{@size}"]
+    assert get_resp_header(conn, "cache-control") == ["private, no-store"]
   end
 
   test "serves a byte range", %{conn: conn, user: user, media_file: file} do

@@ -410,6 +410,7 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
             </div>
             <p class="text-xs text-base-content/60 mt-1">
               Opens in your default video app, or paste it into VLC, mpv or Infuse.
+              Anyone with this link can stream the file, so share it like a password.
             </p>
           </div>
           <%!-- Quality Information --%>
