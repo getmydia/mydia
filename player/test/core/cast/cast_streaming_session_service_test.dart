@@ -14,6 +14,7 @@ Map<String, dynamic> _started({int? startPosition}) => {
         'sessionId': 'sess-1',
         'duration': null,
         'startPosition': startPosition,
+        'playlistMode': 'WINDOW',
       },
     };
 
@@ -71,35 +72,19 @@ void main() {
     );
   });
 
-  test('an old server is downgraded once, then goes straight to legacy',
-      () async {
+  test('a schema rejection is a cast backend failure, sent once', () async {
     final scripted = ScriptedMydiaTransport((request, _) {
-      if (request.operation == 'StartStreamingSession') {
-        return graphqlError('Unknown argument "maxHeight" on field '
-            '"startStreamingSession" of type "RootMutationType".');
-      }
-      return _started(startPosition: 7);
+      return graphqlError('Unknown argument "maxHeight" on field '
+          '"startStreamingSession" of type "RootMutationType".');
     });
     final old = MydiaCastStreamingSessionService(fakeMydiaClient(scripted));
 
-    final first = await old.start(
-      fileId: 'file-1',
-      transcode: false,
-      startPosition: const Duration(seconds: 5),
+    await expectLater(
+      old.start(fileId: 'file-1', transcode: false),
+      throwsA(isA<CastBackendException>()),
     );
-    expect(first.sessionId, 'sess-1');
-    expect(first.startOffset, const Duration(seconds: 7));
-    expect(scripted.requests.map((r) => r.operation),
-        ['StartStreamingSession', 'StartStreamingSessionLegacy']);
-    final retry = scripted.requests.last.variables;
-    expect(retry['fileId'], 'file-1');
-    expect(retry['startPosition'], 5);
-    expect(retry.containsKey('maxHeight'), isFalse);
-    expect(retry.containsKey('playlistMode'), isFalse);
-
-    await old.start(fileId: 'file-2', transcode: true);
-    expect(scripted.requests, hasLength(3));
-    expect(scripted.requests.last.operation, 'StartStreamingSessionLegacy');
+    expect(
+        scripted.requests.map((r) => r.operation), ['StartStreamingSession']);
   });
 
   test('ending a session never throws', () async {

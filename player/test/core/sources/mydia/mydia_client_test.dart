@@ -9,8 +9,6 @@ import 'package:player/core/sources/mydia/mydia_client.dart';
 import 'package:player/core/sources/mydia/mydia_credentials.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/core/sources/mydia/root_typename.dart';
-import 'package:player/graphql/mutations/start_streaming_session.graphql.dart';
-import 'package:player/graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import 'package:player/graphql/queries/mydia_queries.dart';
 import 'package:player/graphql/queries/subtitle_track_settings.graphql.dart';
 
@@ -688,147 +686,55 @@ void main() {
       expect(await client.fetchCompatibility(), isNull);
     });
 
-    test('returns null on transport failure or unknown field error', () async {
+    test('returns null on transport failure', () async {
       final client = build();
 
-      // Unknown field error (older server without this field)
-      transport.handlers['ServerCompatibility'] = (_) =>
-          throw const SourceException.server(
-              'Cannot query field "serverCompatibility"');
-      expect(await client.fetchCompatibility(), isNull);
-
-      // Transport failure / unreachable
       transport.handlers['ServerCompatibility'] =
           (_) => throw const SourceException.unreachable();
       expect(await client.fetchCompatibility(), isNull);
     });
+
+    test('flags a server that rejects the query as predating it', () async {
+      final client = build();
+
+      transport.handlers['ServerCompatibility'] = (_) =>
+          throw const SourceException.server(
+              'Cannot query field "serverCompatibility"');
+      final info = await client.fetchCompatibility();
+
+      expect(info, isNotNull);
+      expect(info!.predatesQuery, isTrue);
+    });
   });
 
   test('the fallback gets its own variables and is remembered', () async {
+    final current = parseString(r'mutation StartThing($id: ID!, $cap: Int) '
+        r'{ startThing(id: $id, cap: $cap) { id } }');
+    final fallback = parseString(
+        r'mutation StartThingFallback($id: ID!) { startThing(id: $id) { id } }');
     final server = FakeMydiaTransport()
-      ..handlers['StartStreamingSession'] = (_) {
+      ..handlers['StartThing'] = (_) {
         throw const SourceException.server(
-            'Unknown argument "maxHeight" on field "startStreamingSession".');
+            'Unknown argument "cap" on field "startThing".');
       }
-      ..handlers['StartStreamingSessionLegacy'] = (vars) => {
-            'startStreamingSession': {'sessionId': 's1'}
+      ..handlers['StartThingFallback'] = (vars) => {
+            'startThing': {'id': vars['id']}
           };
     final client = fakeMydiaClient(server);
 
-    await client.query(
-      documentNodeMutationStartStreamingSession,
-      fallback: documentNodeMutationStartStreamingSessionLegacy,
-      variables: {'fileId': 'f', 'strategy': 'HLS_COPY', 'maxHeight': 720},
-      fallbackVariables: {'fileId': 'f', 'strategy': 'HLS_COPY'},
-    );
+    await client.query(current,
+        fallback: fallback,
+        variables: {'id': 'f', 'cap': 720},
+        fallbackVariables: {'id': 'f'});
+    expect(server.calls.last.vars.containsKey('cap'), isFalse);
 
-    expect(server.calls.last.vars.containsKey('maxHeight'), isFalse);
-    expect(
-        client.isDowngraded(documentNodeMutationStartStreamingSession), isTrue);
-
-    await client.query(
-      documentNodeMutationStartStreamingSession,
-      fallback: documentNodeMutationStartStreamingSessionLegacy,
-      variables: {'fileId': 'g', 'strategy': 'HLS_COPY', 'maxHeight': 720},
-      fallbackVariables: {'fileId': 'g', 'strategy': 'HLS_COPY'},
-    );
-    expect(
-      server.calls.map((c) => c.operation),
-      [
-        'StartStreamingSession',
-        'StartStreamingSessionLegacy',
-        'StartStreamingSessionLegacy'
-      ],
-    );
-  });
-
-  group('a chain of fallbacks', () {
-    const unknown = SourceException.server('Cannot query field "tmdbId"');
-    Map<String, dynamic> reject(Map<String, dynamic> _) => throw unknown;
-    final main = documentNodeQueryHomeRows;
-    final noIds = documentNodeQueryHomeRowsNoIds;
-    final legacy = documentNodeQueryHomeRowsLegacy;
-
-    Future<Map<String, dynamic>> run(MydiaClient c) =>
-        c.query(main, fallbacks: [noIds, legacy], variables: const {'n': 1});
-
-    test('the first fallback answers when the main document is rejected',
-        () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = reject
-        ..handlers['HomeRowsNoIds'] = (_) => {'ok': 'noids'};
-      final client = fakeMydiaClient(server);
-
-      expect(await run(client), {'ok': 'noids'});
-      expect(
-          server.calls.map((c) => c.operation), ['HomeRows', 'HomeRowsNoIds']);
-      expect(client.isDowngraded(main), isTrue);
-    });
-
-    test('the second answers when the first is also rejected', () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = reject
-        ..handlers['HomeRowsNoIds'] = reject
-        ..handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
-      final client = fakeMydiaClient(server);
-
-      expect(await run(client), {'ok': 'legacy'});
-      expect(server.calls.map((c) => c.operation),
-          ['HomeRows', 'HomeRowsNoIds', 'HomeRowsLegacy']);
-    });
-
-    test('the deepest level that worked is remembered', () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = reject
-        ..handlers['HomeRowsNoIds'] = reject
-        ..handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
-      final client = fakeMydiaClient(server);
-
-      await run(client);
-      server.calls.clear();
-      await run(client);
-
-      expect(server.calls.map((c) => c.operation), ['HomeRowsLegacy']);
-    });
-
-    test('a remembered level still falls further on a later rejection',
-        () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = reject
-        ..handlers['HomeRowsNoIds'] = (_) => {'ok': 'noids'};
-      final client = fakeMydiaClient(server);
-      await run(client);
-
-      server.handlers['HomeRowsNoIds'] = reject;
-      server.handlers['HomeRowsLegacy'] = (_) => {'ok': 'legacy'};
-      server.calls.clear();
-
-      expect(await run(client), {'ok': 'legacy'});
-      expect(server.calls.map((c) => c.operation),
-          ['HomeRowsNoIds', 'HomeRowsLegacy']);
-    });
-
-    test('any other error is rethrown without falling back', () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = (_) {
-          throw const SourceException.server('boom');
-        };
-      final client = fakeMydiaClient(server);
-
-      await expectLater(run(client), throwsA(isA<SourceException>()));
-      expect(server.calls.map((c) => c.operation), ['HomeRows']);
-      expect(client.isDowngraded(main), isFalse);
-    });
-
-    test('an unknown field on the last fallback is rethrown', () async {
-      final server = FakeMydiaTransport()
-        ..handlers['HomeRows'] = reject
-        ..handlers['HomeRowsNoIds'] = reject
-        ..handlers['HomeRowsLegacy'] = reject;
-      final client = fakeMydiaClient(server);
-
-      await expectLater(run(client), throwsA(isA<SourceException>()));
-    });
+    await client.query(current,
+        fallback: fallback,
+        variables: {'id': 'g', 'cap': 720},
+        fallbackVariables: {'id': 'g'});
+    expect(server.calls.map((c) => c.operation),
+        ['StartThing', 'StartThingFallback', 'StartThingFallback']);
+    expect(server.calls.last.vars, {'id': 'g'});
   });
 
   test('rootQuery lets a generated parser read the bare data', () {

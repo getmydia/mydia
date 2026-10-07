@@ -362,14 +362,11 @@ instance, over that instance's `MydiaClient`, wrapping the GraphQL calls,
 `legacyMydiaSourceIdProvider`), so no session is shared between instances.
 Over p2p its streams go through `/t/<accountId>/` on the local proxy, and a
 bare path gets a 404; the web proxy serves its one target at its root. The
-`StartStreamingSession` downgrade for older servers is
-`MydiaClient.query(fallback:, fallbackVariables:)`, remembered per instance
-(`isDowngraded`). `fallbacks: [...]` is the ordered chain for operations with
-more than one older shape (the rails and search try `<Op>NoIds`, without the
-catalogue ids, before any `Legacy`), remembering the deepest level that worked.
-GraphQL errors arrive as `MydiaGraphqlError`, carrying the partial `data` when
-the server sent some over HTTP. `subtitleContent` has its own 45 second timeout.
-The screen claims the `PlayingSource` holder
+player requires server 0.15.0 (`Compatibility.minServerVersion`), so
+`StartStreamingSession` has one document and no downgrade. GraphQL errors
+arrive as `MydiaGraphqlError`, carrying the partial `data` when the server
+sent some over HTTP. `subtitleContent` has its own 45 second timeout. The
+screen claims the `PlayingSource` holder
 (`core/media_session/playing_source.dart`) so the OS now-playing bridge knows
 which instance owns what is playing. Downloads and offline progress are
 attributed by `ItemRef` and flushed through each instance's `ProgressSync`.
@@ -499,7 +496,8 @@ in sort order wins. A merged card shows "Server +N". Ids come from Plex
 `ProviderIds`, and Mydia `tmdbId`, `tvdbId` and `imdbId` on movies, shows and
 the rail and search item types. Mydia episodes and Stash items never match.
 A Mydia server without the rail and search fields is queried through its
-`<Op>NoIds` and then `...Legacy` documents (`MydiaClient.query(fallbacks:)`).
+`<Op>NoIds` document, the single fallback (`MydiaClient.query(fallback:)`), for
+servers before 0.17.0 that lack the catalogue ids on rail and search items.
 
 The All servers sidebar is the one shared, editable sidebar layout resolved
 against `/all` routes. Rows with no merged view are hidden, and a fixed

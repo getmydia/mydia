@@ -132,7 +132,6 @@ class MydiaInstanceScreen extends ConsumerWidget {
               account?.displayName ?? 'Server',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            showCast: false,
             decorate: (row) => ColoredBox(
               color: Theme.of(context).appBarTheme.backgroundColor ??
                   AppColors.background,

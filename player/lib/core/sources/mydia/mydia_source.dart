@@ -269,7 +269,7 @@ class MydiaSource extends MediaSource
   }) async {
     final data = await client.query(
       doc,
-      fallbacks: [noIds],
+      fallback: noIds,
       variables: {...vars, 'first': pageSize, 'after': cursor?.value},
     );
     final raw = _maps(data[field]);
@@ -383,7 +383,7 @@ class MydiaSource extends MediaSource
   Future<List<ItemSummary>> search(String query) async {
     final data = await client.query(
       documentNodeQuerySearch,
-      fallbacks: [documentNodeQuerySearchNoIds],
+      fallback: documentNodeQuerySearchNoIds,
       variables: {'query': query, 'first': _searchLimit},
     );
     final search = data['search'];
@@ -400,7 +400,7 @@ class MydiaSource extends MediaSource
   Future<List<ItemSummary>> continueWatching() async {
     final data = await client.query(
       documentNodeQueryMydiaContinueWatching,
-      fallbacks: [documentNodeQueryMydiaContinueWatchingNoIds],
+      fallback: documentNodeQueryMydiaContinueWatchingNoIds,
       variables: const {'first': _rowLimit},
     );
     return [
@@ -483,10 +483,7 @@ class MydiaSource extends MediaSource
   Future<List<ItemSummary>> recentlyAdded() async {
     final data = await client.query(
       documentNodeQueryRecentlyAddedFull,
-      fallbacks: [
-        documentNodeQueryRecentlyAddedFullNoIds,
-        documentNodeQueryRecentlyAddedFullLegacy,
-      ],
+      fallback: documentNodeQueryRecentlyAddedFullNoIds,
       variables: const {'first': _rowLimit},
     );
     return [
@@ -510,7 +507,7 @@ class MydiaSource extends MediaSource
     if (cursor != null) return const Page(items: []);
     final data = await client.query(
       documentNodeQueryCollectionItems,
-      fallbacks: [documentNodeQueryCollectionItemsNoIds],
+      fallback: documentNodeQueryCollectionItemsNoIds,
       variables: {'collectionId': collectionId, 'first': _collectionLimit},
     );
     return Page(items: [
@@ -550,14 +547,11 @@ class MydiaSource extends MediaSource
   @override
   Future<List<MediaFileInfo>> mediaInfo(ItemRef ref) async {
     final movie = ref.kind == ItemKind.movie;
-    final data = await client.query(
+    final data = await _q(
       movie
           ? documentNodeQueryMovieMediaInfo
           : documentNodeQueryEpisodeMediaInfo,
-      fallback: movie
-          ? documentNodeQueryMovieMediaInfoLegacy
-          : documentNodeQueryEpisodeMediaInfoLegacy,
-      variables: {'id': ref.externalId},
+      {'id': ref.externalId},
     );
     final node = data[movie ? 'movie' : 'episode'];
     final files = node is Map<String, dynamic> ? node['files'] : null;
@@ -566,13 +560,12 @@ class MydiaSource extends MediaSource
 
   @override
   Future<List<Hub>> hubs() async {
-    final data = await client.query(documentNodeQueryHomeRows, fallbacks: [
-      documentNodeQueryHomeRowsNoIds,
-      documentNodeQueryHomeRowsLegacy,
-    ], variables: const {
-      'recentlyAddedLimit': _rowLimit,
-      'favoritesLimit': 10,
-    });
+    final data = await client.query(documentNodeQueryHomeRows,
+        fallback: documentNodeQueryHomeRowsNoIds,
+        variables: const {
+          'recentlyAddedLimit': _rowLimit,
+          'favoritesLimit': 10,
+        });
     Hub row(String hubId, String title, Object? list) => Hub(
           id: hubId,
           title: title,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,13 +9,15 @@ import 'package:player/core/sources/sources_providers.dart';
 import 'package:player/domain/sources/item.dart';
 import 'package:player/domain/sources/source_error.dart';
 import 'package:player/presentation/screens/all_servers/all_servers_home_screen.dart';
+import 'package:player/presentation/screens/home/home_loading_skeleton.dart';
 import 'package:player/presentation/widgets/source_artwork.dart';
+import 'package:player/presentation/widgets/window_chrome/window_title_row.dart';
 
 import '../../../domain/merged/fake_merged_source.dart';
 import '../../../test_utils/toast_harness.dart';
 
-Future<List<String>> pump(
-    WidgetTester tester, List<MediaSource> sources) async {
+Future<List<String>> pump(WidgetTester tester, List<MediaSource> sources,
+    {bool settle = true}) async {
   final pushed = <String>[];
   final router = GoRouter(routes: [
     GoRoute(
@@ -38,7 +42,11 @@ Future<List<String>> pump(
     ],
     child: MaterialApp.router(routerConfig: router, builder: toastLayerBuilder),
   ));
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump();
+  }
   return pushed;
 }
 
@@ -100,6 +108,22 @@ void main() {
     expect(find.byKey(const Key('all-favorites')), findsNothing);
   });
 
+  testWidgets('the desktop bar is titled All servers', (t) async {
+    // The helper's setSurfaceSize leaves the view at 800 logical px, which is
+    // the phone layout; the view itself has to be widened.
+    t.view.physicalSize = const Size(1280, 900);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+    await pump(t, [serverWith('a')]);
+    expect(
+      find.descendant(
+        of: find.byType(WindowTitleBar),
+        matching: find.text('All servers'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a failed server shows the banner; retry reloads', (t) async {
     final a = serverWith('a');
     final down = FakeMergedSource(fakeServer('d'))
@@ -134,5 +158,21 @@ void main() {
     await pump(t, []);
     expect(find.byKey(const Key('source-error-retry')), findsNothing);
     expect(find.text('Nothing to show yet.'), findsOneWidget);
+  });
+
+  testWidgets('has the cast button and no in-list title', (t) async {
+    await pump(t, [serverWith('a')]);
+    expect(find.byKey(WindowTitleRow.castKey), findsOneWidget);
+    expect(find.text('All servers'), findsNothing);
+  });
+
+  testWidgets('loading shows the skeleton', (t) async {
+    final gate = Completer<void>();
+    final a = serverWith('a')..gate = gate;
+    await pump(t, [a], settle: false);
+    expect(find.byType(HomeLoadingSkeleton), findsOneWidget);
+    // Release the call so the source's timeout timer is not left pending.
+    gate.complete();
+    await t.pumpAndSettle();
   });
 }

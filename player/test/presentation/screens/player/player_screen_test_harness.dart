@@ -656,29 +656,6 @@ Map<String, dynamic> startStreamingSessionResponse({
   };
 }
 
-/// What a server that predates the height cap answers the legacy document
-/// with: no `maxBitrate` or `maxHeight` keys at all, because its schema has
-/// no such fields for that document to select.
-///
-/// Distinct from passing nulls to [startStreamingSessionResponse], which
-/// still sends the keys and so would not exercise the generated `fromJson`
-/// reading them as absent.
-Map<String, dynamic> legacyStartStreamingSessionResponse({
-  String sessionId = 'sess-1',
-  double? duration,
-  int? startPosition,
-}) {
-  return {
-    '__typename': 'RootMutationType',
-    'startStreamingSession': {
-      '__typename': 'StreamingSessionResult',
-      'sessionId': sessionId,
-      'duration': duration,
-      'startPosition': startPosition,
-    },
-  };
-}
-
 Map<String, dynamic> endStreamingSessionResponse({bool ok = true}) {
   return {
     '__typename': 'RootMutationType',

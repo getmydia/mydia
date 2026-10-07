@@ -5,10 +5,7 @@ export 'collections.graphql.dart'
         documentNodeQueryCollectionItems,
         documentNodeQueryCollectionItemsNoIds;
 export 'home_rows.graphql.dart'
-    show
-        documentNodeQueryHomeRows,
-        documentNodeQueryHomeRowsNoIds,
-        documentNodeQueryHomeRowsLegacy;
+    show documentNodeQueryHomeRows, documentNodeQueryHomeRowsNoIds;
 export 'library_filtered.graphql.dart'
     show documentNodeQueryMoviesFiltered, documentNodeQueryTvShowsFiltered;
 export 'listings.graphql.dart'
@@ -25,5 +22,4 @@ export 'mydia_documents.graphql.dart'
 export 'recently_added_full.graphql.dart'
     show
         documentNodeQueryRecentlyAddedFull,
-        documentNodeQueryRecentlyAddedFullNoIds,
-        documentNodeQueryRecentlyAddedFullLegacy;
+        documentNodeQueryRecentlyAddedFullNoIds;

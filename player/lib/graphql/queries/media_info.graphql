@@ -19,35 +19,3 @@ query EpisodeMediaInfo($id: ID!) {
     }
   }
 }
-
-query MovieMediaInfoLegacy($id: ID!) {
-  movie(id: $id) {
-    id
-    title
-    files {
-      id
-      size
-      bitrate
-      resolution
-      codec
-      audioCodec
-      hdrFormat
-    }
-  }
-}
-
-query EpisodeMediaInfoLegacy($id: ID!) {
-  episode(id: $id) {
-    id
-    title
-    files {
-      id
-      size
-      bitrate
-      resolution
-      codec
-      audioCodec
-      hdrFormat
-    }
-  }
-}

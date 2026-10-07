@@ -16,8 +16,6 @@ import '../../domain/models/quality_rung.dart';
 import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
-import '../../graphql/mutations/start_streaming_session_compat.dart';
-import '../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../../graphql/schema.graphql.dart';
 import '../player/stream_timeline.dart';
 import '../player/web_session_limits.dart';
@@ -66,8 +64,9 @@ class PlaybackSource {
   /// Null for direct play.
   final String? sessionId;
 
-  /// The rung the server said it applied, for the label. Null when the
-  /// server did not say (the legacy document selects no echo fields).
+  /// The rung the server said it applied, for the label. A 0.15 server always
+  /// echoes the caps, so null means `effectiveRungLabel` could not place them:
+  /// a bitrate cap with no positive height.
   final QualityRung? effectiveRung;
 }
 
@@ -220,15 +219,8 @@ class PlaybackController implements PlaybackTransport {
           (echoedDuration == null
               ? null
               : Duration(milliseconds: (echoedDuration * 1000).round()));
-      // Only a server that echoes caps gets to label the stream. The legacy
-      // document selects none, so reading them there would label a capped
-      // stream Original.
-      final effective =
-          !_client.isDowngraded(documentNodeMutationStartStreamingSession)
-              ? effectiveRungLabel(
-                  maxHeight: session.maxHeight,
-                  maxBitrateKbps: session.maxBitrate)
-              : null;
+      final effective = effectiveRungLabel(
+          maxHeight: session.maxHeight, maxBitrateKbps: session.maxBitrate);
 
       final resolved = _urls.hls(session.sessionId);
       debugPrint('[PlaybackController] HLS URL: ${resolved.url}');
@@ -292,9 +284,7 @@ class PlaybackController implements PlaybackTransport {
     if (lifetime.isCompleted) throw StateError('Playback ended');
   }
 
-  /// The session-start mutation with its legacy fallback, as the screen ran
-  /// it: the current document first, and on a server that rejects `maxHeight`
-  /// or `playlistMode` the legacy document, remembered per connection.
+  /// Starts the server-side HLS session for [plan].
   Future<Mutation$StartStreamingSession$startStreamingSession> _startSession(
     HlsPlan plan, {
     required String fileId,
@@ -310,33 +300,25 @@ class PlaybackController implements PlaybackTransport {
     final maxBitrate = tighterCap(plan.rung.maxBitrateKbps, limits.maxBitrate);
     final maxHeight = tighterCap(plan.rung.height, limits.maxHeight);
 
-    final base = Variables$Mutation$StartStreamingSessionLegacy(
+    final variables = Variables$Mutation$StartStreamingSession(
       fileId: fileId,
       strategy: strategy,
       maxBitrate: maxBitrate,
+      maxHeight: maxHeight,
       startPosition: startPosition,
+      playlistMode: Enum$PlaylistMode.FULL,
     ).toJson();
-    final full = <String, dynamic>{
-      ...base,
-      if (maxHeight != null) 'maxHeight': maxHeight,
-      'playlistMode': 'FULL',
-    };
 
     final Map<String, dynamic> response;
     try {
-      response = await _client.query(
-        documentNodeMutationStartStreamingSession,
-        fallback: documentNodeMutationStartStreamingSessionLegacy,
-        variables: full,
-        fallbackVariables: base,
-      );
+      response = await _client.request(
+          documentNodeMutationStartStreamingSession, variables);
     } on SourceException catch (e) {
       throw Exception('Failed to start streaming session: '
           '${e.message ?? e.viewerMessage}');
     }
-    final data = Mutation$StartStreamingSession.fromJson(
-      rootMutation(withPlaylistModeDefault(response)),
-    );
+    final data =
+        Mutation$StartStreamingSession.fromJson(rootMutation(response));
     final session = data.startStreamingSession;
     if (session == null) {
       throw Exception('No session data returned from server');

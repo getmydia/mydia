@@ -63,12 +63,18 @@ List<Override> activeServer(MydiaClient client) => [
 
 /// A server answering [response], or refusing the query as a server
 /// predating the feature does when [response] is null.
-MydiaClient serverAnswering(Map<String, dynamic>? response) {
+///
+/// With [unreachable], a null [response] is a dead connection instead, which
+/// says nothing about the server's age.
+MydiaClient serverAnswering(Map<String, dynamic>? response,
+    {bool unreachable = false}) {
   final transport = FakeMydiaTransport();
   transport.handlers['ServerCompatibility'] = (_) =>
       response ??
-      (throw const SourceException.server(
-          'Cannot query field "serverCompatibility"'));
+      (unreachable
+          ? throw const SourceException.unreachable()
+          : throw const SourceException.server(
+              'Cannot query field "serverCompatibility"'));
   return fakeMydiaClient(transport);
 }
 
@@ -123,13 +129,33 @@ void main() {
     expect(state.requiredVersion, '0.9.0');
   });
 
-  test('a failed query yields unknown and no banner', () async {
+  test('a server that predates the compatibility query requires an update',
+      () async {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.9.0',
       response: null,
       box: box,
     );
+
+    final state = await container.read(compatibilityProvider.future);
+
+    expect(state.verdict, CompatibilityVerdict.serverUpdateRequired);
+    expect(state.showBanner, isTrue);
+    expect(state.requiredVersion, Compatibility.minServerVersion);
+    expect(state.serverVersion, isNull);
+  });
+
+  test('an unreachable server yields unknown and no banner', () async {
+    final box = await memoryBox();
+    final container = ProviderContainer(
+      overrides: [
+        ...activeServer(serverAnswering(null, unreachable: true)),
+        playerVersionProvider.overrideWith((ref) async => '0.9.0'),
+        compatibilityDismissalBoxProvider.overrideWith((ref) async => box),
+      ],
+    );
+    addTearDown(container.dispose);
 
     final state = await container.read(compatibilityProvider.future);
 
@@ -141,8 +167,7 @@ void main() {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
 
@@ -162,8 +187,7 @@ void main() {
     final box = await memoryBox();
     final container = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
 
@@ -188,8 +212,7 @@ void main() {
 
     final first = harness(
       playerVersion: '0.8.0',
-      response:
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+      response: okResponse(min: '0.7.0'),
       box: box,
     );
     await first.read(compatibilityProvider.future);
@@ -200,7 +223,7 @@ void main() {
     final second = harness(
       playerVersion: '0.8.0',
       response:
-          okResponse(version: '0.10.0', min: '0.7.0', recommended: '0.10.0'),
+          okResponse(version: '99.0.0', min: '0.7.0', recommended: '99.0.0'),
       box: box,
     );
     final state = await second.read(compatibilityProvider.future);
@@ -262,7 +285,7 @@ void main() {
       retry: (retryCount, error) => null,
       overrides: [
         ...activeServer(serverAnswering(
-          okResponse(version: '0.9.0', min: '0.7.0', recommended: '0.9.0'),
+          okResponse(min: '0.7.0'),
         )),
         playerVersionProvider.overrideWith((ref) async => '0.8.0'),
         compatibilityDismissalBoxProvider
@@ -281,7 +304,7 @@ void main() {
       () async {
     final box = await memoryBox();
     const playerVersion = '0.8.0';
-    const serverVersion = '0.9.0';
+    const serverVersion = Compatibility.recommendedServerVersion;
 
     // Same pre-seeding mechanism as the required-verdict test above, but here
     // the verdict is dismissible, so the seeded key should take effect. This

@@ -96,39 +96,28 @@ class MydiaClient {
     }
   }
 
-  /// How far down its fallback chain each operation has had to go on this
-  /// server, by operation name. Absent means the main document works.
-  final Map<String, int> _fallbackLevels = {};
+  final Set<String> _downgradedOps = {};
 
-  /// Whether this server has answered [document] with one of its fallbacks.
-  bool isDowngraded(DocumentNode document) =>
-      (_fallbackLevels[_operationName(document)] ?? 0) > 0;
-
-  /// Sends [document]; on an unknown-field error tries [fallback] and then each
-  /// of [fallbacks] in order, remembering the deepest level that worked so
-  /// later calls start there. A server never gets newer again, so the memory
-  /// only moves down.
   Future<Map<String, dynamic>> query(
     DocumentNode document, {
     DocumentNode? fallback,
-    List<DocumentNode> fallbacks = const [],
     Map<String, dynamic> variables = const {},
     Map<String, dynamic>? fallbackVariables,
   }) async {
     final opName = _operationName(document);
-    final chain = [document, if (fallback != null) fallback, ...fallbacks];
-    var level = opName == null
-        ? 0
-        : (_fallbackLevels[opName] ?? 0).clamp(0, chain.length - 1);
-    while (true) {
-      try {
-        return await request(chain[level],
-            level == 0 ? variables : fallbackVariables ?? variables);
-      } catch (e) {
-        if (level == chain.length - 1 || !isUnknownFieldError(e)) rethrow;
-        level++;
-        if (opName != null) _fallbackLevels[opName] = level;
+    final downgradedVariables = fallbackVariables ?? variables;
+    if (fallback != null && opName != null && _downgradedOps.contains(opName)) {
+      return request(fallback, downgradedVariables);
+    }
+
+    try {
+      return await request(document, variables);
+    } catch (e) {
+      if (fallback != null && isUnknownFieldError(e)) {
+        if (opName != null) _downgradedOps.add(opName);
+        return request(fallback, downgradedVariables);
       }
+      rethrow;
     }
   }
 
@@ -177,8 +166,9 @@ class MydiaClient {
 
   /// Fetches the server's compatibility declaration, or null if we cannot tell.
   ///
-  /// Returns null on older servers predating this feature, an absent declaration,
-  /// or any transport/parsing failure.
+  /// Returns [ServerCompatibilityInfo.predatesQuery] when the server rejects
+  /// the query as an unknown field. Returns null on an absent declaration or
+  /// any transport/parsing failure.
   Future<ServerCompatibilityInfo?> fetchCompatibility() async {
     try {
       final data = await request(documentNodeQueryServerCompatibility);
@@ -203,7 +193,13 @@ class MydiaClient {
         minPlayerVersion: compat.minPlayerVersion,
         recommendedPlayerVersion: compat.recommendedPlayerVersion,
       );
-    } catch (_) {
+    } catch (e) {
+      // A schema rejection means the server predates the query (0.14.0), which
+      // is below the supported floor. Any other failure says nothing about its
+      // age.
+      if (isUnknownFieldError(e)) {
+        return const ServerCompatibilityInfo.predatesQuery();
+      }
       return null;
     }
   }

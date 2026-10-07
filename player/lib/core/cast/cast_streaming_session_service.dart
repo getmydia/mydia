@@ -3,8 +3,6 @@ import 'package:flutter/foundation.dart';
 import '../../domain/sources/source_error.dart';
 import '../../graphql/mutations/end_streaming_session.graphql.dart';
 import '../../graphql/mutations/start_streaming_session.graphql.dart';
-import '../../graphql/mutations/start_streaming_session_compat.dart';
-import '../../graphql/mutations/start_streaming_session_legacy.graphql.dart';
 import '../sources/mydia/root_typename.dart';
 import '../../graphql/schema.graphql.dart';
 import '../sources/mydia/mydia_client.dart';
@@ -29,8 +27,7 @@ abstract class CastStreamingSessionService {
   /// The echoed value, not the requested one, is authoritative: the server
   /// clamps the request against the runtime, and a copied stream can only
   /// begin on a keyframe, which the server finds and echoes for MKV and MP4
-  /// sources (MPEG-TS still echoes the requested offset). An older server
-  /// omits the field, which correctly yields zero.
+  /// sources (MPEG-TS still echoes the requested offset).
   ///
   /// Throws [CastBackendException] when the server refuses, so the manager's
   /// existing escalation ladder can treat it like any other route failure.
@@ -58,22 +55,16 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
   }) async {
     final Map<String, dynamic> data;
     try {
-      // The cast path sends no caps or playlist mode, so both documents take
-      // the same variables. A server that rejects the full document's fields
-      // is downgraded once per instance, as local playback does.
-      final variables = Variables$Mutation$StartStreamingSessionLegacy(
-        fileId: fileId,
-        strategy: transcode
-            ? Enum$StreamingStrategy.TRANSCODE
-            : Enum$StreamingStrategy.HLS_COPY,
-        startPosition:
-            startPosition > Duration.zero ? startPosition.inSeconds : null,
-      ).toJson();
-      data = await _client.query(
+      data = await _client.request(
         documentNodeMutationStartStreamingSession,
-        fallback: documentNodeMutationStartStreamingSessionLegacy,
-        variables: variables,
-        fallbackVariables: variables,
+        Variables$Mutation$StartStreamingSession(
+          fileId: fileId,
+          strategy: transcode
+              ? Enum$StreamingStrategy.TRANSCODE
+              : Enum$StreamingStrategy.HLS_COPY,
+          startPosition:
+              startPosition > Duration.zero ? startPosition.inSeconds : null,
+        ).toJson(),
       );
     } on SourceException catch (e) {
       throw CastBackendException(
@@ -83,7 +74,7 @@ class MydiaCastStreamingSessionService implements CastStreamingSessionService {
     }
 
     final session = Mutation$StartStreamingSession.fromJson(
-      rootMutation(withPlaylistModeDefault(data)),
+      rootMutation(data),
     ).startStreamingSession;
 
     if (session == null) {

@@ -50,16 +50,21 @@ validates only the files, and an inline string gets no schema check.
 
 ## Fallbacks for older servers
 
-When a field is newer than some servers, keep the old shape as a second
-operation named `<Op>Legacy` and put a comment above it naming the server
-version that dropped the need for it. Send the pair with
+When a field is newer than some servers the player still supports, keep the
+old shape as a second operation named `<Op>Legacy` and put a comment above it
+naming the server version that introduced the field. Send the pair with
 `MydiaClient.query(document, fallback: legacyDocument)`: an unknown-field error
-retries the fallback, and the client remembers the downgrade for that instance
-(`isDowngraded`). Pass `fallbackVariables` when the fallback takes different
-variables. When a document has several older shapes (a `<Op>NoIds` that only
-drops newer fields, then `<Op>Legacy`), pass them newest first as
-`fallbacks: [...]`: each unknown-field error tries the next, and the deepest
-level that worked is remembered per operation.
+retries the fallback, and the client remembers the downgrade for that instance.
+Pass `fallbackVariables` when the fallback takes different variables.
+
+Delete the pair once `Compatibility.minServerVersion` reaches that version.
+`compareCore` ignores prerelease suffixes, so the floor has to be the first core
+version whose every build carries the field, not the release whose betas
+introduced it. No `*Legacy` documents remain at the 0.15.0 floor.
+The `<Op>NoIds` documents are the one fallback for the rail, listing and search
+operations: servers before 0.17.0 lack the catalogue ids (`tmdbId`, `tvdbId`,
+`imdbId`) on those items, and the floor is 0.15.0, so `<Op>NoIds` is that same
+operation without them.
 
 ## Guards
 

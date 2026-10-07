@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/sources/source.dart';
 import '../../../domain/sources/library.dart';
 import '../../widgets/browse_grid.dart';
-import '../sources/source_drawer_button.dart';
+import '../../widgets/browse_scaffold.dart';
 import '../sources/source_error_view.dart';
 import 'all_servers_banner.dart';
 import 'all_servers_cards.dart';
@@ -37,13 +37,15 @@ class AllServersGridScreen extends ConsumerWidget {
     ];
     void retry() => ref.invalidate(allServersGridProvider(kind));
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: SourceDrawerButton.maybe(context),
-        title: Text(kind == LibraryKind.shows ? 'TV Shows' : 'Movies'),
-      ),
-      body: Column(
+    return BrowseScaffold(
+      icon: kind == LibraryKind.shows ? Icons.tv_rounded : Icons.movie_rounded,
+      title: kind == LibraryKind.shows ? 'TV Shows' : 'Movies',
+      // Merged across servers, so no single cache key describes it.
+      queryKeys: const [],
+      onRefresh: () async => retry(),
+      body: (context, scrollTopPadding) => Column(
         children: [
+          SizedBox(height: scrollTopPadding),
           SizedBox(
             height: 48,
             child: ListView(
@@ -87,7 +89,8 @@ class AllServersGridScreen extends ConsumerWidget {
                     return false;
                   },
                   child: BrowseGrid(
-                    scrollTopPadding: 8,
+                    // The Column above already reserved the bar's height.
+                    scrollTopPadding: 0,
                     itemCount: items.length,
                     itemBuilder: (context, index) => AllServersPoster(
                       item: items[index],
