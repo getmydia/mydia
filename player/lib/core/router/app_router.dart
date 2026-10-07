@@ -249,9 +249,16 @@ GoRouter appRouter(Ref ref) {
   // Where an old unprefixed location lands depends on which instances exist.
   ref.listen(legacyMydiaSourceIdProvider, (_, __) => refreshNotifier.refresh());
   ref.listen(mydiaSourceIdsProvider, (_, __) => refreshNotifier.refresh());
-  // Whether `/` opens All servers depends on how many servers it includes.
-  ref.listen(
-      allServersIncludedCountProvider, (_, __) => refreshNotifier.refresh());
+  // Whether `/` and `/all*` open All servers depends on how many servers it
+  // includes. The redirects read this cached value rather than the provider:
+  // a refresh fired by another listener runs them in the middle of Riverpod's
+  // flush, and reading the provider there rebuilt its source list a second
+  // time in the same frame, which Riverpod rejects.
+  var includedCount = ref.read(allServersIncludedCountProvider);
+  ref.listen(allServersIncludedCountProvider, (_, count) {
+    includedCount = count;
+    refreshNotifier.refresh();
+  });
   // A relock while a gated screen is open sends it to /unlock.
   ref.listen(gatedSourceIdsProvider, (_, __) => refreshNotifier.refresh());
 
@@ -283,7 +290,7 @@ GoRouter appRouter(Ref ref) {
           legacy: ref.read(legacyMydiaSourceIdProvider),
           mydia: ref.read(mydiaSourceIdsProvider),
           active: ref.read(activeSourceIdProvider),
-          allServers: ref.read(allServersIncludedCountProvider) >= 2,
+          allServers: includedCount >= 2,
         ),
       );
       if (target != null) {
@@ -445,7 +452,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => const AllServersHomeScreen(),
           ),
@@ -454,7 +461,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_movies',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.movies),
@@ -464,7 +471,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_shows',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) =>
                 const AllServersGridScreen(kind: LibraryKind.shows),
@@ -474,7 +481,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_search',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => const AllServersSearchScreen(),
           ),
@@ -483,7 +490,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_continue_watching',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => const AllServersListingScreen(
                 listing: AllServersListing.continueWatching),
@@ -493,7 +500,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_recently_added',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => AllServersListingScreen(
               listing: AllServersListing.recentlyAdded,
@@ -509,7 +516,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_favorites',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => const AllServersListingScreen(
                 listing: AllServersListing.favorites),
@@ -519,7 +526,7 @@ GoRouter appRouter(Ref ref) {
             name: 'all_servers_collections',
             redirect: (context, state) => allServersRouteRedirect(
               sourcesLoading: ref.read(sourcesLoadingProvider),
-              included: ref.read(allServersIncludedCountProvider),
+              included: includedCount,
             ),
             builder: (context, state) => const AllServersCollectionsScreen(),
           ),
