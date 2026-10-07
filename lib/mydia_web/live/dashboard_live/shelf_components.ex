@@ -3,6 +3,7 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
   use MydiaWeb, :html
 
   import MydiaWeb.DiscoverComponents, only: [trending_card: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_rail: 1]
 
   alias MydiaWeb.DashboardLive.ShelfRail
 
@@ -21,7 +22,7 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
       <%!-- items-start keeps each wrapper at its content height. A stretched
             flex item has a definite height, so the card's h-full would grow to
             fill the tallest column and push the reason out of view. --%>
-      <div class="flex items-start gap-3 overflow-x-auto snap-x scroll-smooth pb-2">
+      <.poster_rail class="items-start">
         <div
           :for={item <- @rail.items}
           id={"#{@rail.id}-item-#{item.shelf_item_id}"}
@@ -51,7 +52,7 @@ defmodule MydiaWeb.DashboardLive.ShelfComponents do
             Not interested
           </button>
         </div>
-      </div>
+      </.poster_rail>
     </div>
     """
   end

@@ -6,7 +6,7 @@ defmodule MydiaWeb.DiscoverComponents do
   use Phoenix.Component
 
   import MydiaWeb.CoreComponents, only: [icon: 1, poster_figure: 1]
-  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1]
+  import MydiaWeb.PosterCardComponents, only: [poster_card_body: 1, poster_rail: 1]
 
   alias Mydia.Metadata.ImageUrl
   alias Mydia.Metadata.Ref
@@ -261,11 +261,7 @@ defmodule MydiaWeb.DiscoverComponents do
         <div :if={@badge != []} class="flex-shrink-0">{render_slot(@badge)}</div>
       </div>
 
-      <div
-        :if={@open?}
-        id={if @collapsible, do: "#{@id}-items"}
-        class="flex gap-3 overflow-x-auto snap-x scroll-smooth pb-2"
-      >
+      <.poster_rail :if={@open?} id={if @collapsible, do: "#{@id}-items"}>
         <div
           :for={item <- @items}
           id={rail_item_id(@id, item, @media_type)}
@@ -286,7 +282,7 @@ defmodule MydiaWeb.DiscoverComponents do
             poster_size="w342"
           />
         </div>
-      </div>
+      </.poster_rail>
     </div>
     """
   end
