@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:player/core/sources/all_servers_inclusion.dart';
 import 'package:player/core/sources/media_source.dart';
 import 'package:player/core/sources/source.dart';
 import 'package:player/core/sources/sources_providers.dart';
@@ -80,8 +81,14 @@ void main() {
     expect(now.first, same(home));
     expect(now, hasLength(2));
     expect(now.last, same(fakes[idOf('d')]));
-    // The router lands from the count, so it must match the list.
-    expect(container.read(allServersIncludedCountProvider), now.length);
+    // The router counts allServersIncluded directly, so it must match.
+    expect(
+        allServersIncluded(
+          container.read(sourcesProvider),
+          container.read(allServersChoicesProvider),
+          container.read(gatedSourceIdsProvider),
+        ),
+        hasLength(now.length));
   });
 
   test('setActive does not rebuild the reader or refetch rows', () async {

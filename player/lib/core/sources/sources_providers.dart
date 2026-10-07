@@ -496,27 +496,16 @@ final allServersSourcesProvider = Provider<List<MediaSource>>((ref) {
   ]);
 });
 
-/// How many servers All servers includes. The router decides where `/` and
-/// `/all*` land from this, so both read one number. It never touches a media
-/// source, which keeps the router's listener from holding them mounted, and
-/// it changes only when the count does.
-final allServersIncludedCountProvider = Provider<int>(
-    (ref) => ref.watch(_allServersIncludedRecordsProvider).length);
-
 /// The saved sources that count as included. A `mediaSourceProvider` is null
 /// only for an id that is no longer saved, which this list cannot hold, so
-/// its length is the length of [allServersSourcesProvider].
-final _allServersIncludedRecordsProvider = Provider<List<Source>>((ref) {
-  final choices = ref.watch(allServersChoicesProvider);
-  final gated = ref.watch(gatedSourceIdsProvider);
-  return [
-    for (final s in ref.watch(sourcesProvider))
-      if (!s.account.needsReauth &&
-          !gated.contains(s.id) &&
-          includedInAllServers(s, choices))
-        s,
-  ];
-});
+/// the router, which counts [allServersIncluded] directly, agrees with
+/// [allServersSourcesProvider].
+final _allServersIncludedRecordsProvider =
+    Provider<List<Source>>((ref) => allServersIncluded(
+          ref.watch(sourcesProvider),
+          ref.watch(allServersChoicesProvider),
+          ref.watch(gatedSourceIdsProvider),
+        ));
 
 /// An unmodifiable list whose equality is element-wise identity.
 class _IdentityList extends UnmodifiableListView<MediaSource> {

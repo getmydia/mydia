@@ -1,7 +1,7 @@
-// Pairing adds sources in quick succession while the router listens for how
-// many servers All servers includes. That listener must not keep the media
-// source instances mounted, or a refresh inside the scheduler flush rebuilds
-// the list twice in one frame.
+// Pairing adds sources in quick succession while the router decides whether
+// `/` opens All servers. The router must not hold the All servers provider
+// chain: a refresh inside the scheduler flush rebuilt it twice in one frame,
+// and holding it tripped an assertion when the container was disposed.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -70,8 +70,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    // The router decides from a count; it never builds a media source.
-    expect(container.read(allServersIncludedCountProvider), 3);
+    // The router counts saved sources; it never builds a media source.
     expect(mediaBuilt, 0);
+
+    router.go('/');
+    await tester.pumpAndSettle();
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/all');
   });
 }
