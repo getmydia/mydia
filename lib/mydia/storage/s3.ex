@@ -67,16 +67,15 @@ defmodule Mydia.Storage.S3 do
 
     case Req.request(Request.new(b), method: :head, url: Request.object_url(b, key)) do
       {:ok, %Req.Response{status: 200} = resp} ->
-        size =
-          resp
-          |> Req.Response.get_header("content-length")
-          |> List.first("0")
-          |> String.to_integer()
+        with {:ok, size} <- content_length(resp, display(loc, rel)) do
+          mtime =
+            resp
+            |> Req.Response.get_header("last-modified")
+            |> List.first()
+            |> Request.parse_time()
 
-        mtime =
-          resp |> Req.Response.get_header("last-modified") |> List.first() |> Request.parse_time()
-
-        {:ok, %Entry{relative_path: rel, size: size, mtime: mtime}}
+          {:ok, %Entry{relative_path: rel, size: size, mtime: mtime}}
+        end
 
       other ->
         {:error, Request.map_error(other, display(loc, rel))}
@@ -160,6 +159,17 @@ defmodule Mydia.Storage.S3 do
 
       {:error, reason} ->
         {:halt, {req, Req.Response.put_private(resp, :halted, reason)}}
+    end
+  end
+
+  # Never raise on a provider's header: anything but a plain non-negative
+  # integer is a provider fault.
+  defp content_length(resp, display) do
+    value = resp |> Req.Response.get_header("content-length") |> List.first("0")
+
+    case Integer.parse(value) do
+      {size, ""} when size >= 0 -> {:ok, size}
+      _ -> {:error, Error.new(:provider, "invalid content-length from provider for #{display}")}
     end
   end
 
