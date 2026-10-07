@@ -24,8 +24,12 @@ defmodule Mydia.Storage.S3 do
 
     case Req.request(req,
            method: :get,
-           url: Request.bucket_url(b),
-           params: [{"list-type", "2"}, {"max-keys", "1"}, {"prefix", prefix}]
+           url:
+             Request.bucket_query_url(b, [
+               {"list-type", "2"},
+               {"max-keys", "1"},
+               {"prefix", prefix}
+             ])
          ) do
       {:ok, %Req.Response{status: 200}} -> :ok
       other -> {:error, Request.map_error(other, "s3://#{b.name}/#{prefix}")}
@@ -66,7 +70,7 @@ defmodule Mydia.Storage.S3 do
         if(delimiter?, do: [{"delimiter", "/"}], else: []) ++
         if(token, do: [{"continuation-token", token}], else: [])
 
-    case Req.request(Request.new(b), method: :get, url: Request.bucket_url(b), params: params) do
+    case Req.request(Request.new(b), method: :get, url: Request.bucket_query_url(b, params)) do
       {:ok, %Req.Response{status: 200, body: body}} ->
         {contents, next} = Request.parse_list(body)
         acc = acc ++ contents

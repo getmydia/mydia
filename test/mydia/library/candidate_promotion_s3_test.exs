@@ -99,16 +99,19 @@ defmodule Mydia.Library.CandidatePromotionS3Test do
     assert Repo.get(ImportCandidate, ctx.candidate.id)
   end
 
-  test "a queued delete on an S3 candidate is refused and recorded as failed", ctx do
+  test "a queued delete on an unreachable S3 candidate is recorded as failed", ctx do
     {1, _} =
       Repo.update_all(from(c in ImportCandidate, where: c.id == ^ctx.candidate.id),
         set: [queued_op: "delete"]
       )
 
+    # Nothing answers on the endpoint: the delete cannot be told from an outage.
+    Bypass.down(ctx.bypass)
+
     assert {:ok, %{deleted: 0, failed: 1}} = ImportCandidates.drain_delete(ctx.lp.id)
 
     stored = Repo.get!(ImportCandidate, ctx.candidate.id)
     assert is_nil(stored.queued_op)
-    assert stored.queue_error =~ "read-only"
+    assert stored.queue_error =~ "cannot reach storage"
   end
 end

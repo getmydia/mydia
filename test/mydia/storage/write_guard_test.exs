@@ -3,7 +3,6 @@ defmodule Mydia.Storage.WriteGuardTest do
 
   import Mydia.MediaFixtures
 
-  alias Mydia.Library
   alias Mydia.Library.{FileOrganizer, MediaFile}
   alias Mydia.Settings
   alias Mydia.Storage.Error
@@ -43,17 +42,6 @@ defmodule Mydia.Storage.WriteGuardTest do
              FileOrganizer.place_file(src, "s3://m/movies/A/a.mkv", expected_size: 1)
 
     assert File.exists?(src)
-  end
-
-  test "unpreloaded S3 media files are refused too", %{s3_file: file} do
-    assert %Ecto.Association.NotLoaded{} = file.library_path
-
-    assert {:error, %Error{kind: :read_only}} = Library.delete_media_file_from_disk(file)
-
-    assert {:error, %Error{kind: :read_only}} =
-             Library.delete_media_file(file, delete_files: true)
-
-    assert Repo.get(MediaFile, file.id)
   end
 
   test "subtitle download is refused for an S3 file", %{s3_file: file} do

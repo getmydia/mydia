@@ -49,6 +49,15 @@ defmodule Mydia.Storage.S3.Request do
     URI.to_string(%URI{uri | host: "#{b.bucket}.#{uri.host}", path: nil})
   end
 
+  @doc """
+  The bucket URL with `params` as an RFC 3986 query string. Req's own `:params`
+  encodes a space as `+`, which the SigV4 canonical query does not, so a prefix
+  holding a space (any "Title (Year)" folder) fails with a signature mismatch.
+  """
+  @spec bucket_query_url(StorageBackend.t(), [{String.t(), String.t()}]) :: String.t()
+  def bucket_query_url(b, params),
+    do: bucket_url(b) <> "?" <> URI.encode_query(params, :rfc3986)
+
   @spec object_url(StorageBackend.t(), String.t()) :: String.t()
   def object_url(b, key), do: bucket_url(b) <> "/" <> encode_key(key)
 

@@ -31,6 +31,8 @@ defmodule Mydia.Library.ItemFolders do
   alias Mydia.Repo
   alias Mydia.Settings
   alias Mydia.Settings.LibraryPath
+  alias Mydia.Storage
+  alias Mydia.Storage.Location
 
   @type blocker :: {:media_file | :import_candidate | :video | :unreadable, String.t()}
 
@@ -102,11 +104,19 @@ defmodule Mydia.Library.ItemFolders do
   the folder exactly as it is; `{:kept, path, {:error, posix}}` when
   `File.rm_rf/1` stopped partway; or `:absent` when the folder or its library
   root does not exist. An unmounted share must never read as a delete.
+
+  On S3 a folder is a key prefix: it is removed with every object under it,
+  a prefix with no objects or one that cannot be listed is `:absent`, and a
+  failed removal is `{:kept, path, {:error, kind}}`.
   """
   @spec finish(Folder.t()) ::
           {:removed, String.t()}
-          | {:kept, String.t(), {:blocked, [blocker()]} | {:error, File.posix()}}
+          | {:kept, String.t(),
+             {:blocked, [blocker()]} | {:error, File.posix() | Mydia.Storage.Error.kind()}}
           | :absent
+  def finish(%Folder{library_path: %LibraryPath{path: "s3://" <> _}} = folder),
+    do: finish_object_folder(folder)
+
   def finish(%Folder{} = folder) do
     if File.dir?(folder.library_path.path) and File.dir?(folder.absolute) do
       case blockers(folder) do
@@ -123,6 +133,40 @@ defmodule Mydia.Library.ItemFolders do
       end
     else
       :absent
+    end
+  end
+
+  # A prefix with no objects is a folder that is not there. A listing error
+  # is :absent too: an outage must never read as a delete.
+  defp finish_object_folder(%Folder{} = folder) do
+    with {:ok, loc} <- Storage.location(folder.library_path),
+         {:ok, [_ | _]} <- Storage.list(Location.child(loc, folder.relative)) do
+      case blockers(folder) do
+        [] ->
+          case Storage.delete_prefix(loc, folder.relative) do
+            :ok ->
+              Logger.info("Removed item folder", path: folder.absolute)
+              {:removed, folder.absolute}
+
+            {:error, %Storage.Error{kind: kind} = error} ->
+              Logger.warning("Could not remove item folder",
+                path: folder.absolute,
+                reason: error.message
+              )
+
+              {:kept, folder.absolute, {:error, kind}}
+          end
+
+        blockers ->
+          Logger.info("Kept item folder: it holds other media",
+            path: folder.absolute,
+            blockers: inspect(blockers)
+          )
+
+          {:kept, folder.absolute, {:blocked, blockers}}
+      end
+    else
+      _ -> :absent
     end
   end
 
@@ -145,7 +189,7 @@ defmodule Mydia.Library.ItemFolders do
   end
 
   defp ignore_paths(files) do
-    files |> Enum.map(&MediaFile.absolute_path/1) |> Enum.reject(&is_nil/1)
+    files |> Enum.map(&MediaFile.storage_path/1) |> Enum.reject(&is_nil/1)
   end
 
   # LIKE narrows the rows in SQL, with an explicit ESCAPE so a `%` or `_` in a
@@ -172,6 +216,24 @@ defmodule Mydia.Library.ItemFolders do
   # A trashed row's bytes already live in the trash, not in this folder.
   defp only_active(query, MediaFile), do: where(query, [r], is_nil(r.trashed_at))
   defp only_active(query, ImportCandidate), do: query
+
+  defp disk_blockers(
+         %Folder{library_path: %LibraryPath{path: "s3://" <> _} = lp} = folder,
+         skip,
+         limit
+       ) do
+    with {:ok, loc} <- Storage.location(lp),
+         {:ok, entries} <- Storage.list(Location.child(loc, folder.relative)) do
+      entries
+      |> Enum.map(&Path.join(folder.absolute, &1.relative_path))
+      |> Enum.sort()
+      |> Enum.filter(&foreign_video?(&1, Path.basename(&1), skip))
+      |> Enum.take(limit)
+      |> Enum.map(&{:video, Path.relative_to(&1, lp.path)})
+    else
+      {:error, _} -> [{:unreadable, folder.relative}]
+    end
+  end
 
   defp disk_blockers(%Folder{} = folder, skip, limit) do
     folder.absolute
@@ -225,7 +287,7 @@ defmodule Mydia.Library.ItemFolders do
 
   defp anchor_folder(%MediaFile{library_path: %LibraryPath{path: root} = library_path} = file)
        when is_binary(root) do
-    with absolute when is_binary(absolute) <- MediaFile.absolute_path(file),
+    with absolute when is_binary(absolute) <- MediaFile.storage_path(file),
          %{anchor_path: relative} when relative != "" <- PathAnchor.anchor_for(absolute, root) do
       [
         %Folder{
@@ -248,7 +310,7 @@ defmodule Mydia.Library.ItemFolders do
   end
 
   defp holds_library_root?(%Folder{absolute: absolute}, roots) do
-    expanded = Path.expand(absolute)
+    expanded = Dirs.normalize(absolute)
     Enum.any?(roots, &(&1 == expanded or Dirs.inside?(&1, expanded)))
   end
 
@@ -260,7 +322,7 @@ defmodule Mydia.Library.ItemFolders do
 
     (db_paths ++ runtime_paths)
     |> Enum.reject(&is_nil/1)
-    |> Enum.map(&Path.expand/1)
+    |> Enum.map(&Dirs.normalize/1)
     |> Enum.uniq()
   end
 end

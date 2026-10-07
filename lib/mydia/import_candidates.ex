@@ -1760,14 +1760,9 @@ defmodule Mydia.ImportCandidates do
   # Every outcome takes the row out of the queue (deleted, or its marker
   # cleared), which is what keeps `drain_delete_pages/4` from fetching it again.
   defp delete_queued_candidate(%ImportCandidate{} = candidate, opts, acc) do
-    with :ok <- Mydia.Storage.ensure_writable(candidate.library_path),
-         path when is_binary(path) <- ImportCandidate.absolute_path(candidate) do
-      claim_and_delete(candidate, Path.expand(path), opts, acc)
+    with path when is_binary(path) <- ImportCandidate.absolute_path(candidate) do
+      claim_and_delete(candidate, Mydia.Library.Dirs.normalize(path), opts, acc)
     else
-      {:error, %Mydia.Storage.Error{} = error} ->
-        record_delete_failure(candidate, {:storage, error})
-        %{acc | failed: acc.failed + 1}
-
       nil ->
         record_delete_failure(candidate, :path_not_resolved)
         %{acc | failed: acc.failed + 1}
@@ -1835,7 +1830,7 @@ defmodule Mydia.ImportCandidates do
   end
 
   defp path_under_root(path, {library_path_id, root}) when is_binary(root) do
-    prefix = (root |> Path.expand() |> String.trim_trailing("/")) <> "/"
+    prefix = (root |> Mydia.Library.Dirs.normalize() |> String.trim_trailing("/")) <> "/"
 
     if String.starts_with?(path, prefix),
       do: [{library_path_id, String.replace_prefix(path, prefix, "")}],
@@ -1855,6 +1850,10 @@ defmodule Mydia.ImportCandidates do
     case Mydia.Library.delete_path_from_disk(path) do
       :ok ->
         %{acc | deleted: acc.deleted + 1}
+
+      {:error, %Mydia.Storage.Error{} = error} ->
+        restore_failed_candidate(candidate, {:storage, error})
+        %{acc | failed: acc.failed + 1}
 
       {:error, reason} ->
         restore_failed_candidate(candidate, reason)
