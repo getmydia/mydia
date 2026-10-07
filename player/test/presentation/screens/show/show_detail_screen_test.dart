@@ -139,7 +139,8 @@ void main() {
     expect(tester.widget<HeroPlayControl>(hero).files, hasLength(2));
     // The best version is picked after real device detection, which the
     // fake clock cannot advance: poll in real time, then pump the result.
-    for (var i = 0; i < 50; i++) {
+    // The loop exits on first success; the bound only matters on a loaded runner.
+    for (var i = 0; i < 250; i++) {
       if (find
           .descendant(of: hero, matching: find.text('1080p'))
           .evaluate()

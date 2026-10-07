@@ -112,8 +112,8 @@ class _SourceContinueWatchingRowState
 
 enum _Action { details, remove }
 
-/// Plays the item's best version for this screen. The session resumes from the detail's
-/// saved position on its own.
+/// Plays the item's best version for this screen. The session resumes from
+/// the detail's saved position on its own.
 Future<void> _play(BuildContext context, WidgetRef ref, ItemRef item) async {
   final source = ref.read(mediaSourceProvider(item.sourceId));
   if (source == null) return;

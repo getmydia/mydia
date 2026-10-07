@@ -113,7 +113,7 @@ void main() {
       ),
     );
     final v = movieViewFromSource(d, features: features);
-    expect(v.progress?.lastWatchedAt, isNotNull);
+    expect(v.progress?.lastWatchedAt, '2026-03-04T00:00:00.000Z');
   });
 
   test('a target names its item, and only some kinds have a detail screen', () {
