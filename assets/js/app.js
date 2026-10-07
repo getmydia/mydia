@@ -502,20 +502,32 @@ window.addEventListener("phx:download_export", (e) => {
   URL.revokeObjectURL(url);
 });
 
-// Copy a link's absolute URL. Stream links are relative hrefs, so a.href is
-// the browser-resolved URL including the host the user is on. The Clipboard
-// API needs a secure context; on plain-HTTP LAN installs fall back to a
-// prompt the user can copy from.
+// Copy a link's absolute URL. Stream links are relative, so resolve against
+// the page: a.href is already absolute, a button's data-href is not. The
+// Clipboard API needs a secure context; on plain-HTTP LAN installs fall back
+// to a prompt the user can copy from. On success the element gets
+// data-copied for two seconds so its label can say so.
 window.addEventListener("mydia:copy-href", (e) => {
-  const href = e.target.href;
+  const el = e.target;
+  const href = el.href || new URL(el.dataset.href, window.location.href).href;
+  const flagCopied = () => {
+    el.setAttribute("data-copied", "");
+    clearTimeout(el._copiedTimer);
+    el._copiedTimer = setTimeout(() => el.removeAttribute("data-copied"), 2000);
+  };
   if (navigator.clipboard && window.isSecureContext) {
     navigator.clipboard
       .writeText(href)
+      .then(flagCopied)
       .catch(() => window.prompt("Copy this link", href));
   } else {
     window.prompt("Copy this link", href);
   }
 });
+
+// daisyUI focus dropdowns stay open while a button inside them has focus.
+// Menu items dispatch this after pushing their event so the menu closes.
+window.addEventListener("mydia:blur", (e) => e.target.blur());
 
 // Shift+click range selection for batch edit checkboxes
 const BatchSelect = {

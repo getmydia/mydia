@@ -757,6 +757,176 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   end
 
   @doc """
+  The action strip shared by movie version rows and episode file rows.
+
+  Visible: Play (when `play_url` is set), Copy stream link, Subtitles, Details.
+  Everything else sits in the more menu so the row stays readable. `container`
+  picks the container-query size variants; the class strings are spelled out
+  in full below because Tailwind cannot see interpolated class names.
+  """
+  attr :file, :map, required: true
+  attr :container, :string, required: true, values: ~w(mfrow eprow)
+  attr :item_label, :string, required: true
+  attr :subtitle_button_id, :string, required: true
+  attr :current_user_id, :string, default: nil
+  attr :transcode_jobs, :list, default: []
+  attr :play_url, :string, default: nil
+  attr :demotable?, :boolean, default: false
+
+  def file_actions(assigns) do
+    resolutions =
+      available_transcode_resolutions(
+        assigns.file,
+        Map.new(assigns.transcode_jobs, fn j -> {j.resolution, j} end)
+      )
+
+    assigns =
+      assign(assigns,
+        square: file_action_square_class(assigns.container),
+        primary: file_action_primary_class(assigns.container),
+        icon: file_action_icon_class(assigns.container),
+        resolutions: resolutions
+      )
+
+    ~H"""
+    <div class="flex flex-wrap items-center justify-end gap-1 flex-shrink-0">
+      <a
+        :if={@play_url}
+        id={"play-#{@file.id}"}
+        href={@play_url}
+        class={@square}
+        title="Play this file"
+      >
+        <.icon name="hero-play-solid" class={@icon} />
+      </a>
+      <button
+        :if={@current_user_id}
+        id={"stream-link-#{@file.id}"}
+        type="button"
+        data-href={MydiaWeb.StreamLink.path(@current_user_id, @file)}
+        phx-click={JS.dispatch("mydia:copy-href")}
+        class={["group", @primary]}
+        title="Copy a link to paste into VLC, mpv or Infuse. Anyone with it can stream this file."
+      >
+        <.icon name="hero-link" class={"#{@icon} group-data-[copied]:hidden"} />
+        <.icon name="hero-check" class={"#{@icon} hidden group-data-[copied]:inline-block"} />
+        <span class="group-data-[copied]:hidden">Copy stream link</span>
+        <span class="hidden group-data-[copied]:inline">Copied</span>
+      </button>
+      <button
+        id={@subtitle_button_id}
+        type="button"
+        phx-click="open_subtitle_manage"
+        phx-value-media-file-id={@file.id}
+        class={@square}
+        aria-label="Manage subtitles"
+        title="Subtitles"
+      >
+        <.icon name="hero-language" class={@icon} />
+      </button>
+      <button
+        id={"file-details-open-#{@file.id}"}
+        type="button"
+        phx-click="show_file_details"
+        phx-value-file-id={@file.id}
+        class={@square}
+        aria-label="View file details"
+        title="View file details"
+      >
+        <.icon name="hero-information-circle" class={@icon} />
+      </button>
+      <div class="dropdown dropdown-end">
+        <div tabindex="0" role="button" class={@square} aria-label="More file actions" title="More">
+          <.icon name="hero-ellipsis-horizontal" class={@icon} />
+        </div>
+        <ul
+          id={"file-actions-menu-#{@file.id}"}
+          tabindex="0"
+          class="dropdown-content menu bg-base-100 rounded-box z-[1] w-56 p-2 shadow-lg border border-base-300"
+        >
+          <li>
+            <button
+              id={"mark-preferred-#{@file.id}"}
+              type="button"
+              phx-click={JS.push("mark_file_preferred") |> JS.dispatch("mydia:blur")}
+              phx-value-file-id={@file.id}
+              class="gap-2"
+            >
+              <.icon name="hero-star" class="w-4 h-4" /> Mark as preferred
+            </button>
+          </li>
+          <%= if @resolutions != [] do %>
+            <li class="menu-title">Pre-transcode</li>
+            <li :for={res <- @resolutions}>
+              <button
+                id={"pre-transcode-#{@file.id}-#{res}"}
+                type="button"
+                phx-click={JS.push("pre_transcode") |> JS.dispatch("mydia:blur")}
+                phx-value-media-file-id={@file.id}
+                phx-value-resolution={res}
+                class="gap-2"
+              >
+                <.icon name="hero-wrench" class="w-4 h-4" /> {res}
+              </button>
+            </li>
+          <% end %>
+          <div class="divider my-1"></div>
+          <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the download
+                icon everywhere else in the app. --%>
+          <li :if={@demotable?}>
+            <button
+              id={"demote-#{@file.id}"}
+              type="button"
+              phx-click={JS.push("demote_to_extra") |> JS.dispatch("mydia:blur")}
+              phx-value-id={@file.id}
+              class="gap-2"
+            >
+              <.icon name="hero-chevron-double-down" class="w-4 h-4" /> Move to extras
+            </button>
+          </li>
+          <%!-- Recovery for a file the matcher attached to the wrong item.
+                The file is fine; it is filed against the wrong thing, so
+                Delete is the wrong answer. --%>
+          <li>
+            <button
+              id={"not-this-item-#{@file.id}"}
+              type="button"
+              phx-click={JS.push("not_this_item") |> JS.dispatch("mydia:blur")}
+              phx-value-file-id={@file.id}
+              class="gap-2"
+              aria-label={"This file is not this #{@item_label}"}
+            >
+              <.icon name="hero-arrow-uturn-left" class="w-4 h-4" /> Not this {@item_label}
+            </button>
+          </li>
+          <div class="divider my-1"></div>
+          <li>
+            <button
+              id={"file-delete-#{@file.id}"}
+              type="button"
+              phx-click={JS.push("show_file_delete_confirm") |> JS.dispatch("mydia:blur")}
+              phx-value-file-id={@file.id}
+              class="gap-2 text-error"
+            >
+              <.icon name="hero-trash" class="w-4 h-4" /> Delete file
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+    """
+  end
+
+  defp file_action_square_class("mfrow"), do: "btn btn-ghost btn-square @md/mfrow:btn-sm"
+  defp file_action_square_class("eprow"), do: "btn btn-ghost btn-square @md/eprow:btn-xs"
+
+  defp file_action_primary_class("mfrow"), do: "btn btn-primary gap-1.5 @md/mfrow:btn-sm"
+  defp file_action_primary_class("eprow"), do: "btn btn-primary gap-1.5 @md/eprow:btn-xs"
+
+  defp file_action_icon_class("mfrow"), do: "w-5 h-5"
+  defp file_action_icon_class("eprow"), do: "w-4 h-4"
+
+  @doc """
   Media files section, showing the files that belong to this item directly and
   to no episode.
 
@@ -794,6 +964,7 @@ defmodule MydiaWeb.MediaLive.Show.Components do
   attr :refreshing_file_metadata, :boolean, required: true
   attr :transcode_jobs, :map, default: %{}
   attr :media_file_subtitle_tracks, :map, default: %{}
+  attr :current_user_id, :string, default: nil
 
   def media_files_section(assigns) do
     files = Enum.filter(all_media_files(assigns.media_item), &is_nil(&1.episode_id))
@@ -917,120 +1088,16 @@ defmodule MydiaWeb.MediaLive.Show.Components do
                       id={"file-#{file.id}"}
                     />
                   </div>
-                  <%!-- Right side: Icon-only action buttons --%>
-                  <div class="flex items-center justify-end gap-1 flex-shrink-0">
-                    <button
-                      id={"subtitle-open-file-#{file.id}"}
-                      type="button"
-                      phx-click="open_subtitle_manage"
-                      phx-value-media-file-id={file.id}
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label="Manage subtitles"
-                      title="Subtitles"
-                    >
-                      <.icon name="hero-language" class="w-5 h-5" />
-                    </button>
-                    <% available_resolutions =
-                      available_transcode_resolutions(
-                        file,
-                        Map.new(Map.get(@transcode_jobs, file.id, []), fn j -> {j.resolution, j} end)
-                      ) %>
-                    <%= if available_resolutions != [] do %>
-                      <div class="dropdown dropdown-end">
-                        <div
-                          tabindex="0"
-                          role="button"
-                          class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                          title="Pre-transcode"
-                        >
-                          <.icon name="hero-wrench" class="w-5 h-5" />
-                        </div>
-                        <ul
-                          tabindex="0"
-                          class="dropdown-content menu bg-base-100 rounded-box z-[1] w-44 p-2 shadow"
-                        >
-                          <li :for={res <- available_resolutions}>
-                            <button
-                              type="button"
-                              phx-click="pre_transcode"
-                              phx-value-media-file-id={file.id}
-                              phx-value-resolution={res}
-                            >
-                              {res}
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
-                    <% end %>
-                    <button
-                      type="button"
-                      phx-click="show_file_details"
-                      phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label="View file details"
-                      title="View file details"
-                    >
-                      <.icon name="hero-information-circle" class="w-5 h-5" />
-                    </button>
-                    <button
-                      type="button"
-                      phx-click="mark_file_preferred"
-                      phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label="Mark this file as preferred"
-                      title="Mark as preferred"
-                    >
-                      <.icon name="hero-star" class="w-5 h-5" />
-                    </button>
-                    <%!-- Recovery for a file the matcher attached to the wrong
-                          item. Delete is the only other control on this row,
-                          and it is the wrong answer: the file is fine, it is
-                          filed against the wrong thing. --%>
-                    <button
-                      id={"not-this-item-#{file.id}"}
-                      type="button"
-                      phx-click="not_this_item"
-                      phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label={
-                        if @media_item.type == "movie",
-                          do: "This file is not this movie",
-                          else: "This file is not this show"
-                      }
-                      title={
-                        if @media_item.type == "movie",
-                          do: "Not this movie",
-                          else: "Not this show"
-                      }
-                    >
-                      <.icon name="hero-arrow-uturn-left" class="w-5 h-5" />
-                    </button>
-                    <button
-                      id={"file-delete-#{file.id}"}
-                      type="button"
-                      phx-click="show_file_delete_confirm"
-                      phx-value-file-id={file.id}
-                      class="btn btn-ghost btn-square text-error hover:bg-error hover:text-error-content @md/mfrow:btn-sm"
-                      aria-label="Delete this file"
-                      title="Delete file"
-                    >
-                      <.icon name="hero-trash" class="w-5 h-5" />
-                    </button>
-                    <%!-- Not a tray/arrow icon: `hero-arrow-down-tray` is the
-                          download icon everywhere else in the app, including the
-                          hero button on this same page. --%>
-                    <button
-                      id={"demote-#{file.id}"}
-                      type="button"
-                      class="btn btn-ghost btn-square @md/mfrow:btn-sm"
-                      aria-label="Move this file to extras"
-                      title="This is an extra, not a version"
-                      phx-click="demote_to_extra"
-                      phx-value-id={file.id}
-                    >
-                      <.icon name="hero-chevron-double-down" class="w-5 h-5" />
-                    </button>
-                  </div>
+                  <%!-- Right side: actions. See file_actions/1. --%>
+                  <.file_actions
+                    file={file}
+                    container="mfrow"
+                    item_label={if @media_item.type == "movie", do: "movie", else: "show"}
+                    subtitle_button_id={"subtitle-open-file-#{file.id}"}
+                    current_user_id={@current_user_id}
+                    transcode_jobs={Map.get(@transcode_jobs, file.id, [])}
+                    demotable?={true}
+                  />
                 </div>
                 <%!-- Pre-transcode status and controls --%>
                 <.transcode_controls

@@ -39,14 +39,21 @@ defmodule MydiaWeb.MediaLive.Show.StreamLinkTest do
       %{conn: conn, user: user, item: item, media_file: file}
     end
 
-    test "movie rows leave the link to the file details modal", %{
+    test "movie rows copy their stream link", %{
       conn: conn,
+      user: user,
       item: item,
       media_file: file
     } do
       {:ok, view, _html} = live(conn, ~p"/media/#{item.id}")
 
-      refute has_element?(view, "#stream-link-#{file.id}")
+      [href] =
+        render(view)
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query("#stream-link-#{file.id}")
+        |> LazyHTML.attribute("data-href")
+
+      assert verified(href) == {:ok, {user.id, file.id}}
     end
 
     test "the file details modal shows the link and a copy button", %{

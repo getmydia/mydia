@@ -285,7 +285,7 @@ defmodule MydiaWeb.MediaLive.Show.MediaFilesSectionTest do
     end
 
     test "action buttons stay full-size until the column is wide", %{html: html} do
-      class = class_of(html, "#file-delete-file-1")
+      class = class_of(html, "#subtitle-open-file-file-1")
 
       assert class =~ "@md/mfrow:btn-sm"
       refute has_bare?(class, "btn-sm")
