@@ -982,13 +982,16 @@ defmodule MydiaWeb.MediaLive.Show.Modals do
           <%= if @existing do %>
             <div
               id="manual-search-existing"
-              class="flex items-center gap-2 text-sm mt-1 min-w-0"
+              class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm mt-1 min-w-0"
             >
               <.icon name="hero-archive-box" class="w-4 h-4 text-base-content/60 shrink-0" />
               <span class="text-base-content/70 shrink-0">On disk:</span>
               <%= case @existing.kind do %>
                 <% :file -> %>
-                  <span class="font-mono text-xs truncate" title={@existing.filename}>
+                  <span
+                    class="font-mono text-xs truncate min-w-0 basis-full sm:basis-auto"
+                    title={@existing.filename}
+                  >
                     {@existing.filename}
                   </span>
                   <span :if={@existing.resolution} class="badge badge-sm badge-ghost shrink-0">
