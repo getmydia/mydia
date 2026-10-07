@@ -41,7 +41,20 @@ defmodule MydiaWeb.Schema.UnrestrictedOperationCorpusTest do
   # operation name => exact error message expected with seeded data, and why.
   @expected_errors %{}
 
+  # `<Op>NoIds` documents are the same operation minus the external-id fields,
+  # so they take exactly the variables of `<Op>`.
+  @no_ids_ops ~w(CollectionItems HomeRows UnwatchedListing FavoritesListing
+                 MydiaContinueWatching RecentlyAddedFull Search)
+
   defp variables(s) do
+    base = base_variables(s)
+
+    Enum.reduce(@no_ids_ops, base, fn op, acc ->
+      Map.put(acc, op <> "NoIds", Map.fetch!(base, op))
+    end)
+  end
+
+  defp base_variables(s) do
     %{
       "TvShowDetail" => %{"id" => s.show.id},
       "EpisodeDetail" => %{"id" => s.episode.id},
