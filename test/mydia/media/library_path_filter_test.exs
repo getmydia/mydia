@@ -93,21 +93,21 @@ defmodule Mydia.Media.LibraryPathFilterTest do
     refute orphan.id in ids_in(b)
   end
 
-  test "LibraryListing.page/2 applies the filter", %{movies_a: a, movies_b: b} do
+  test "LibraryListing.snapshot/2 applies the filter", %{movies_a: a, movies_b: b} do
     in_a = media_item_fixture(%{type: "movie", title: "Glasswing"})
     media_file_fixture(%{media_item_id: in_a.id, library_path_id: a.id})
     in_b = media_item_fixture(%{type: "movie", title: "Moth Harbour"})
     media_file_fixture(%{media_item_id: in_b.id, library_path_id: b.id})
 
-    page =
-      LibraryListing.page(Scope.unrestricted(),
+    snapshot =
+      LibraryListing.snapshot(Scope.unrestricted(),
         user_id: Ecto.UUID.generate(),
         type: "movie",
         library_path_id: a.id,
         limit: 50
       )
 
-    assert in_a.id in page.visible_ids
-    refute in_b.id in page.visible_ids
+    assert in_a.id in snapshot.visible_ids
+    refute in_b.id in snapshot.visible_ids
   end
 end
