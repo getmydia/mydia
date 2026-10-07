@@ -254,9 +254,12 @@ jobs:
       # failed to start fails the job instead of silently skipping those tests.
       - name: Start RustFS
         run: |
-          nohup devenv shell -- mydia-s3 > rustfs.log 2>&1 &
-          endpoint=$(devenv shell -- printenv MYDIA_TEST_S3_ENDPOINT)
-          for i in $(seq 1 60); do curl -s -o /dev/null "$endpoint" && exit 0; sleep 1; done
+          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
+          # devenv shell prints its banner on stdout, so capturing `printenv`
+          # through it yields the banner too. Poll from inside one shell instead.
+          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
           cat rustfs.log
           exit 1
 
@@ -447,9 +450,12 @@ jobs:
       # failed to start fails the job instead of silently skipping those tests.
       - name: Start RustFS
         run: |
-          nohup devenv shell -- mydia-s3 > rustfs.log 2>&1 &
-          endpoint=$(devenv shell -- printenv MYDIA_TEST_S3_ENDPOINT)
-          for i in $(seq 1 60); do curl -s -o /dev/null "$endpoint" && exit 0; sleep 1; done
+          nohup devenv shell -- mydia-s3 < /dev/null > rustfs.log 2>&1 &
+          # devenv shell prints its banner on stdout, so capturing `printenv`
+          # through it yields the banner too. Poll from inside one shell instead.
+          if devenv shell -- bash -c 'for i in $(seq 1 60); do curl -s -o /dev/null "$MYDIA_TEST_S3_ENDPOINT" && exit 0; sleep 1; done; exit 1'; then
+            exit 0
+          fi
           cat rustfs.log
           exit 1
 
