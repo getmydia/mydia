@@ -17,6 +17,9 @@ defmodule Mydia.P2p.Server do
   alias Mydia.Streaming.DeviceProfile
   alias Mydia.Streaming.HlsSession
   alias Mydia.Streaming.SessionFiles
+
+  # The chunk NIFs used to feed S3 files from Elixir. Tests swap in a recorder.
+  @p2p_nif Application.compile_env(:mydia, :p2p_nif, Mydia.P2p)
   alias MydiaWeb.Schema.Middleware.Logging, as: GraphQLLogging
 
   # What a peer is told when handling its request failed unexpectedly.
@@ -752,37 +755,91 @@ defmodule Mydia.P2p.Server do
   end
 
   defp stream_direct_file(resource, stream_id, media_file, user, req) do
-    case Mydia.Library.MediaFile.absolute_path(media_file) do
-      nil ->
+    case Mydia.Storage.source(media_file) do
+      {:error, _} ->
         Logger.warning("Direct stream: cannot resolve path for file #{media_file.id}")
         send_hls_error(resource, stream_id, 404, "File path not found")
 
-      absolute_path ->
-        if File.exists?(absolute_path) do
-          # Start or reuse a direct play session for tracking
-          case Mydia.Streaming.HlsSessionSupervisor.start_direct_session(
-                 media_file.id,
-                 user.id
-               ) do
-            {:ok, pid, :started} ->
-              Logger.info(
-                "P2P Direct Play started: file=#{media_file.id}, path=#{Path.basename(absolute_path)}"
-              )
+      {:ok, source} ->
+        if Mydia.Storage.exists?(source) do
+          track_direct_session(media_file, user, source.path)
 
-              Mydia.Streaming.DirectPlaySession.heartbeat(pid)
-
-            {:ok, pid, :existing} ->
-              Mydia.Streaming.DirectPlaySession.heartbeat(pid)
-
-            _ ->
-              :ok
+          case source.location.kind do
+            :local -> stream_hls_file(resource, stream_id, source.path, req)
+            :s3 -> stream_storage_file(resource, stream_id, source, req)
           end
-
-          stream_hls_file(resource, stream_id, absolute_path, req)
         else
-          Logger.warning("Direct stream: file not found at #{absolute_path}")
+          Logger.warning("Direct stream: file not found at #{Mydia.Storage.redact(source.path)}")
+
           send_hls_error(resource, stream_id, 404, "File not found on disk")
         end
+    end
+  end
+
+  # Start or reuse a direct play session for tracking
+  defp track_direct_session(media_file, user, display_path) do
+    case Mydia.Streaming.HlsSessionSupervisor.start_direct_session(media_file.id, user.id) do
+      {:ok, pid, :started} ->
+        Logger.info(
+          "P2P Direct Play started: file=#{media_file.id}, path=#{Path.basename(display_path)}"
+        )
+
+        Mydia.Streaming.DirectPlaySession.heartbeat(pid)
+
+      {:ok, pid, :existing} ->
+        Mydia.Streaming.DirectPlaySession.heartbeat(pid)
+
+      _ ->
+        :ok
+    end
+  end
+
+  # Object storage has no path for Rust to open, so the bytes are read in
+  # Elixir and pushed through the chunk NIFs.
+  @doc false
+  def stream_storage_file(resource, stream_id, source, req) do
+    case Mydia.Storage.stat(source) do
+      {:ok, %{size: file_size}} ->
+        push_storage_range(resource, stream_id, source, req, file_size)
+
+      {:error, %Mydia.Storage.Error{kind: :not_found}} ->
+        send_hls_error(resource, stream_id, 404, "Not found")
+
+      {:error, _} ->
+        send_hls_error(resource, stream_id, 502, "Storage unavailable")
+    end
+  end
+
+  defp push_storage_range(resource, stream_id, source, req, file_size) do
+    {status, offset, length, content_range} =
+      case parse_range(req.range_start, req.range_end, file_size) do
+        {:full, _} ->
+          {200, 0, file_size, nil}
+
+        {:partial, range_start, range_end, content_length} ->
+          {206, range_start, content_length, "bytes #{range_start}-#{range_end}/#{file_size}"}
+      end
+
+    header = %P2p.HlsResponseHeader{
+      status: status,
+      content_type: SessionFiles.content_type(source.path),
+      content_length: length,
+      content_range: content_range,
+      cache_control: hls_cache_control(source.path)
+    }
+
+    with "ok" <- @p2p_nif.send_hls_header(resource, stream_id, header),
+         {:ok, _} <-
+           Mydia.Storage.stream_range(source, offset, length, nil, fn data, acc ->
+             case @p2p_nif.send_hls_chunk(resource, stream_id, data) do
+               "ok" -> {:ok, acc}
+               other -> {:error, other}
+             end
+           end) do
+      @p2p_nif.finish_hls_stream(resource, stream_id)
+    else
+      {:error, reason} -> log_stream_failure(reason, "storage")
+      other -> log_stream_failure(other, "storage")
     end
   end
 
