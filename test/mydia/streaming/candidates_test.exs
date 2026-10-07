@@ -427,6 +427,60 @@ defmodule Mydia.Streaming.CandidatesTest do
     end
   end
 
+  describe "ensure_codec_info/1 on an S3 file" do
+    setup do
+      bypass = Bypass.open()
+      test_pid = self()
+
+      Bypass.stub(bypass, :any, :any, fn conn ->
+        send(test_pid, {:s3_request, conn.method})
+        # Forbidden is not retried by Req and is not "the file is missing".
+        Plug.Conn.resp(conn, 403, "")
+      end)
+
+      {:ok, _} =
+        Mydia.Settings.create_storage_backend(%{
+          name: "cands",
+          endpoint: "http://localhost:#{bypass.port}",
+          bucket: "lib",
+          access_key_id: "k",
+          secret_access_key: "s"
+        })
+
+      library_path = %Mydia.Settings.LibraryPath{path: "s3://cands/movies"}
+
+      file = %MediaFile{
+        id: Ecto.UUID.generate(),
+        relative_path: "film.mkv",
+        library_path: library_path,
+        analyzed_at: DateTime.utc_now() |> DateTime.truncate(:second),
+        codec: "h264",
+        metadata: %Mydia.Library.Structs.FileMetadata{duration: 5400.5}
+      }
+
+      %{s3_file: file}
+    end
+
+    test "makes no storage call when codec info and duration are already present", %{
+      s3_file: file
+    } do
+      assert Candidates.ensure_codec_info(file) == file
+      refute_received {:s3_request, _}
+    end
+
+    test "an unanalyzed file on an unreachable backend is not charged an attempt", %{
+      s3_file: file
+    } do
+      # Persisted so a (wrongly) bumped counter would be visible.
+      {media_file, target} = seed_unanalyzed("u6_s3_unanalyzed")
+      File.rm(target)
+
+      unanalyzed = %{file | id: media_file.id, analyzed_at: nil, codec: nil}
+      assert Candidates.ensure_codec_info(unanalyzed) == unanalyzed
+      assert Repo.get!(MediaFile, media_file.id).analysis_attempts == 0
+    end
+  end
+
   # Helpers
 
   defp seed_unanalyzed(prefix) do

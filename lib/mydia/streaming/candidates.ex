@@ -85,10 +85,11 @@ defmodule Mydia.Streaming.Candidates do
   Ensures codec info is present on a media file, extracting on-the-fly if needed.
   """
   def ensure_codec_info(media_file) do
-    with {:ok, source} <- Mydia.Storage.source(media_file),
-         true <- Mydia.Storage.exists?(source) do
-      maybe_extract_codec_info(media_file, source)
-    else
+    # No existence check here: for S3 that is a HEAD per call, and the
+    # already-analyzed path needs no storage access at all. The branches that
+    # do read the file stat it themselves (or check first, below).
+    case Mydia.Storage.source(media_file) do
+      {:ok, source} -> maybe_extract_codec_info(media_file, source)
       _ -> media_file
     end
   end
@@ -230,7 +231,10 @@ defmodule Mydia.Streaming.Candidates do
   defp maybe_extract_codec_info(%MediaFile{analyzed_at: nil} = media_file, source) do
     max_attempts = Application.get_env(:mydia, :file_analysis_max_attempts, @default_max_attempts)
 
-    if media_file.analysis_attempts < max_attempts do
+    # The existence check stays on this branch: a failed analysis is charged as
+    # an attempt, and a missing file or an unreachable backend must not use
+    # the attempts up.
+    if media_file.analysis_attempts < max_attempts and Mydia.Storage.exists?(source) do
       result = FileAnalyzer.analyze(source)
 
       case Library.apply_analysis(media_file, result) do
@@ -246,7 +250,8 @@ defmodule Mydia.Streaming.Candidates do
           media_file
       end
     else
-      # Attempt ceiling already hit; do not retry forever on every play.
+      # Attempt ceiling already hit (do not retry forever on every play), or
+      # the file cannot be read right now.
       media_file
     end
   end
