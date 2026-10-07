@@ -62,6 +62,7 @@ let
   pgPort = portBase + 2;
   flutterPort = portBase + 3;
   httpsPort = portBase + 4;
+  s3Port = portBase + 5;
 
   # ── Shared caches outside any worktree (KTD4 / R11) ─────────────────────────
   # Immutable/derived downloads are shared so a second worktree's first run
@@ -150,6 +151,9 @@ in
 
     # Database CLI (SQLite is the default adapter)
     sqlite
+
+    # S3 server for storage tests and local S3 libraries (MinIO is archived)
+    rustfs
 
     # Media processing
     ffmpeg
@@ -249,6 +253,12 @@ in
     DATABASE_HOST = "127.0.0.1";
     DATABASE_PORT = lib.mkDefault (toString pgPort);
     DATABASE_USER = lib.mkDefault (builtins.getEnv "USER");
+
+    # RustFS S3 server (see scripts.mydia-s3). Read by test/support/s3_helpers.ex.
+    MYDIA_TEST_S3_ENDPOINT = "http://127.0.0.1:${toString s3Port}";
+    MYDIA_TEST_S3_ACCESS_KEY_ID = "mydia";
+    MYDIA_TEST_S3_SECRET_ACCESS_KEY = "mydia-dev-secret";
+    MYDIA_TEST_S3_BUCKET = "mydia-test";
   }
   # Wallaby browser tests. Linux-gated alongside the chromium/chromedriver
   # packages above — interpolating a Linux-only derivation's store path here is
@@ -280,8 +290,22 @@ in
     initialDatabases = [ { name = "mydia_dev"; } { name = "mydia_test"; } ];
   };
 
+  # ── RustFS (S3 storage tests and local S3 libraries) ────────────────────────
+  # MinIO is archived; RustFS is the S3 server for dev and CI. Data lives in the
+  # per-worktree state dir. `mydia-s3` is also what CI runs, so both start the
+  # server the same way.
+  scripts.mydia-s3.exec = ''
+    mkdir -p "$DEVENV_STATE/rustfs"
+    exec rustfs server \
+      --address "127.0.0.1:${toString s3Port}" \
+      --access-key "$MYDIA_TEST_S3_ACCESS_KEY_ID" \
+      --secret-key "$MYDIA_TEST_S3_SECRET_ACCESS_KEY" \
+      "$DEVENV_STATE/rustfs"
+  '';
+
   # ── Long-running processes (R5) ─────────────────────────────────────────────
   processes.phoenix.exec = "mix phx.server";
+  processes.rustfs.exec = "mydia-s3";
 
   # The dev database is created and migrated by mydia:ecto, which is deliberately
   # NOT a shell-entry task (see below). Nothing else migrates it: skip_migrations?/0
